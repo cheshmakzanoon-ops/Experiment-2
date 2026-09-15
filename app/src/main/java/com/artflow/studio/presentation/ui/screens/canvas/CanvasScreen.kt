@@ -3,6 +3,7 @@ package com.artflow.studio.presentation.ui.screens.canvas
 import android.view.ViewGroup
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
@@ -15,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.presentation.ui.components.brush.AdvancedBrushSettingsPanel
 import com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView
 import com.artflow.studio.presentation.ui.viewmodel.CanvasUiState
 import com.artflow.studio.presentation.ui.viewmodel.CanvasViewModel
@@ -178,12 +180,12 @@ fun CanvasScreen(
                 }
             }
 
-            // Brush settings dialog
+            // Brush settings dialog - Now with Advanced Brush Settings Panel
             if (showBrushSettings) {
-                BrushSettingsDialog(
+                AdvancedBrushSettingsDialog(
                     brushParams = brushParams,
-                    onDismiss = { showBrushSettings = false },
-                    onSave = { /* TODO: Save brush preset */ }
+                    onBrushParamsChanged = { viewModel.updateBrushParams(it) },
+                    onDismiss = { showBrushSettings = false }
                 )
             }
         }
@@ -191,48 +193,48 @@ fun CanvasScreen(
 }
 
 /**
- * Brush settings dialog for advanced brush configuration
+ * Brush settings dialog with advanced brush configuration panel
  */
 @Composable
-private fun BrushSettingsDialog(
+private fun AdvancedBrushSettingsDialog(
     brushParams: BrushParams,
-    onDismiss: () -> Unit,
-    onSave: () -> Unit
+    onBrushParamsChanged: (BrushParams) -> Unit,
+    onDismiss: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Brush Settings") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(
-                    androidx.compose.foundation.rememberScrollState()
-                ),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+        title = { 
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Advanced brush settings coming in Phase 9")
-                
-                // Placeholder for future brush parameters
-                OutlinedTextField(
-                    value = brushParams.smoothing.toString(),
-                    onValueChange = { },
-                    label = { Text("Smoothing") },
-                    enabled = false
-                )
-                
-                OutlinedTextField(
-                    value = brushParams.spacing.toString(),
-                    onValueChange = { },
-                    label = { Text("Spacing") },
-                    enabled = false
-                )
+                Text("Advanced Brush Settings")
+                Badge {
+                    Text("Phase 9")
+                }
             }
         },
+        text = {
+            AdvancedBrushSettingsPanel(
+                brushParams = brushParams,
+                onBrushParamsChanged = onBrushParamsChanged,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 500.dp)
+            )
+        },
         confirmButton = {
-            TextButton(onClick = {
-                onSave()
-                onDismiss()
-            }) {
+            TextButton(onClick = onDismiss) {
                 Text("Done")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = {
+                // Reset to default brush params
+                onBrushParamsChanged(BrushParams())
+            }) {
+                Text("Reset to Default")
             }
         }
     )
