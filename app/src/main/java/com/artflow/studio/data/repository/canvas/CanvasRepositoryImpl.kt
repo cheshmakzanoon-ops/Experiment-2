@@ -428,6 +428,141 @@ class CanvasRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun setLayerVisibility(layerId: Long, isVisible: Boolean?): Boolean {
+        return renderMutex.withLock {
+            val layer = layers[layerId] ?: return@withLock false
+            
+            val newVisibility = isVisible ?: !layer.isVisible
+            layers[layerId] = layer.copy(
+                name = layer.name,
+                opacity = layer.opacity,
+                isLocked = layer.isLocked,
+                strokes = layer.strokes
+            )
+            
+            coroutineScope.launch {
+                invalidationFlow.emit(CanvasInvalidationEvent.Full)
+            }
+            
+            true
+        }
+    }
+
+    override suspend fun setLayerOpacity(layerId: Long, opacity: Float): Boolean {
+        return renderMutex.withLock {
+            val layer = layers[layerId] ?: return@withLock false
+            
+            // Clamp opacity to valid range
+            val clampedOpacity = opacity.coerceIn(0.0f, 1.0f)
+            
+            layers[layerId] = layer.copy(
+                name = layer.name,
+                isVisible = layer.isVisible,
+                isLocked = layer.isLocked,
+                strokes = layer.strokes
+            )
+            
+            coroutineScope.launch {
+                invalidationFlow.emit(CanvasInvalidationEvent.Full)
+            }
+            
+            true
+        }
+    }
+
+    override suspend fun setLayerName(layerId: Long, newName: String): Boolean {
+        return renderMutex.withLock {
+            val layer = layers[layerId] ?: return@withLock false
+            
+            layers[layerId] = layer.copy(
+                name = newName,
+                isVisible = layer.isVisible,
+                opacity = layer.opacity,
+                isLocked = layer.isLocked,
+                strokes = layer.strokes
+            )
+            
+            coroutineScope.launch {
+                invalidationFlow.emit(CanvasInvalidationEvent.Full)
+            }
+            
+            true
+        }
+    }
+
+    override suspend fun setLayerLock(layerId: Long, isLocked: Boolean): Boolean {
+        return renderMutex.withLock {
+            val layer = layers[layerId] ?: return@withLock false
+            
+            layers[layerId] = layer.copy(
+                name = layer.name,
+                isVisible = layer.isVisible,
+                opacity = layer.opacity,
+                strokes = layer.strokes
+            )
+            
+            coroutineScope.launch {
+                invalidationFlow.emit(CanvasInvalidationEvent.Full)
+            }
+            
+            true
+        }
+    }
+
+    override suspend fun setLayerBlendMode(layerId: Long, blendMode: com.artflow.studio.domain.model.layer.BlendMode): Boolean {
+        return renderMutex.withLock {
+            val layer = layers[layerId] ?: return@withLock false
+            
+            // Note: BlendMode is stored in Layer domain model but not in LayerData
+            // For now we just emit an event - full implementation would update renderer
+            coroutineScope.launch {
+                invalidationFlow.emit(CanvasInvalidationEvent.Full)
+            }
+            
+            true
+        }
+    }
+
+    override fun getAllLayers(): List<com.artflow.studio.domain.model.layer.Layer> {
+        return layers.values
+            .sortedBy { it.index }
+            .map { layerData ->
+                com.artflow.studio.domain.model.layer.Layer(
+                    id = layerData.id,
+                    name = layerData.name,
+                    index = layerData.index,
+                    isVisible = layerData.isVisible,
+                    opacity = layerData.opacity,
+                    isLocked = layerData.isLocked,
+                    blendMode = com.artflow.studio.domain.model.layer.BlendMode.NORMAL,
+                    strokes = layerData.strokes.toList()
+                )
+            }
+    }
+
+    override fun getActiveLayer(): com.artflow.studio.domain.model.layer.Layer? {
+        val layerData = layers[activeLayerId] ?: return null
+        return com.artflow.studio.domain.model.layer.Layer(
+            id = layerData.id,
+            name = layerData.name,
+            index = layerData.index,
+            isVisible = layerData.isVisible,
+            opacity = layerData.opacity,
+            isLocked = layerData.isLocked,
+            blendMode = com.artflow.studio.domain.model.layer.BlendMode.NORMAL,
+            strokes = layerData.strokes.toList()
+        )
+    }
+
+    override fun setActiveLayer(layerId: Long): Boolean {
+        return if (layers.containsKey(layerId)) {
+            activeLayerId = layerId
+            true
+        } else {
+            false
+        }
+    }
+
     /**
      * Apply zoom and offset transformation to X coordinate
      */

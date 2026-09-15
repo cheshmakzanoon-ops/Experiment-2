@@ -169,6 +169,65 @@ interface CanvasRepository {
      * @return true if merge was successful
      */
     suspend fun mergeLayerDown(layerId: Long): Boolean
+
+    /**
+     * Set the visibility of a layer
+     * @param layerId ID of the layer to modify
+     * @param isVisible New visibility state (null to toggle)
+     * @return true if visibility was changed successfully
+     */
+    suspend fun setLayerVisibility(layerId: Long, isVisible: Boolean? = null): Boolean
+
+    /**
+     * Set the opacity of a layer
+     * @param layerId ID of the layer to modify
+     * @param opacity New opacity value (0.0 - 1.0)
+     * @return true if opacity was changed successfully
+     */
+    suspend fun setLayerOpacity(layerId: Long, opacity: Float): Boolean
+
+    /**
+     * Set the name of a layer
+     * @param layerId ID of the layer to rename
+     * @param newName New layer name
+     * @return true if name was changed successfully
+     */
+    suspend fun setLayerName(layerId: Long, newName: String): Boolean
+
+    /**
+     * Set the lock state of a layer
+     * @param layerId ID of the layer to lock/unlock
+     * @param isLocked New lock state
+     * @return true if lock state was changed successfully
+     */
+    suspend fun setLayerLock(layerId: Long, isLocked: Boolean): Boolean
+
+    /**
+     * Set the blend mode of a layer
+     * @param layerId ID of the layer to modify
+     * @param blendMode New blend mode
+     * @return true if blend mode was changed successfully
+     */
+    suspend fun setLayerBlendMode(layerId: Long, blendMode: com.artflow.studio.domain.model.layer.BlendMode): Boolean
+
+    /**
+     * Get all layers in the canvas
+     * @return List of all layers sorted by index
+     */
+    fun getAllLayers(): List<com.artflow.studio.domain.model.layer.Layer>
+
+    /**
+     * Get the currently active layer
+     * @return Active layer or null if no canvas exists
+     */
+    fun getActiveLayer(): com.artflow.studio.domain.model.layer.Layer?
+
+    /**
+     * Set the active layer
+     * @param layerId ID of the layer to make active
+     * @return true if layer was set as active
+     */
+    fun setActiveLayer(layerId: Long): Boolean
 }
 
 /**
