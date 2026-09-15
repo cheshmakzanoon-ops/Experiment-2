@@ -1,35 +1,105 @@
-```
+```kotlin
 # Compiled and build artifacts
 *.class
-*.o
-*.obj
-*.out
-build/
-target/
+*.dex
+*.so
+*.aar
+*.apk
+*.jar
 
 # Dependencies
-__pycache__/
-.mypy_cache/
-.pytest_cache/
-.coverage
-coverage/
-htmlcov/
+node_modules/
+.libs/
 
-# Logs and temp files
+# Build outputs
+build/
+dist/
+out/
+target/
+
+# Gradle
+.gradle/
+.gradle/
+!gradle/wrapper/
+
+# Local configuration file (sdk path, etc)
+local.properties
+
+# Android Studio generated files
+captures/
+*.keystore
+*.jks
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.db
+
+# Logs
 *.log
-*.tmp
-*.swp
 
 # Environment
 .env
 .env.local
 *.env.*
 
-# Editors
-.vscode/
-.idea/
+# Coverage reports
+coverage/
+*.gcov
+*.lcov
+*.profdata
 
-# System files
+# Temporary files
+*.tmp
+*.temp
+*~
 .DS_Store
 Thumbs.db
+
+# Python (if any Python components)
+__pycache__/
+*.pyc
+*.pyo
+.Python
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.nox/
+
+# MyPy
+.mypy_cache/
+
+# PyTest
+.pytest_cache/
+
+# VSCode
+.vscode/
+
+# Compressed files
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
 ```
