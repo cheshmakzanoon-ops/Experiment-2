@@ -1,34 +1,58 @@
 package com.artflow.studio.core.brush
 
+import android.graphics.Canvas
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.model.brush.StrokePoint
+import com.artflow.studio.domain.model.texture.BrushTexture
+import com.artflow.studio.domain.repository.texture.TextureRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
  * Core brush engine implementation for ArtFlow
- * Implements Phase 7: Brush Engine Foundation and Phase 9: Advanced Brush Parameters
+ * Implements Phase 7: Brush Engine Foundation, Phase 9: Advanced Brush Parameters,
+ * and Phase 10: Brush Textures & Stamps
  * 
  * This singleton manages brush stroke rendering with advanced features:
  * - Pressure sensitivity (size, opacity, color)
  * - Velocity-based dynamics
  * - Stroke smoothing and interpolation
  * - Color jitter and dynamics
- * - Texture mapping support
+ * - Texture mapping support (Phase 10)
+ * - Stamp-based brushes (Phase 10)
  * - Tilt influence
  */
 @Singleton
-class BrushEngine @Inject constructor() {
+class BrushEngine @Inject constructor(
+    private val textureMapper: TextureMapper,
+    private val textureRepository: TextureRepository
+) {
+
+    private val coroutineScope = CoroutineScope(Dispatchers.Default)
 
     private var currentStrokeBuilder: StrokeBuilder? = null
     private var activeBrushParams: BrushParams = BrushParams()
     private var currentColor: Int = android.graphics.Color.BLACK
     private var currentLayerId: Long = 0
+    private var currentTexture: BrushTexture? = null
+    
+    // Texture offset accumulator for continuous texture mapping along strokes
+    private var textureOffsetU: Float = 0f
+    private var textureOffsetV: Float = 0f
     
     private val strokeListeners = mutableListOf<(Stroke) -> Unit>()
     private val pointListeners = mutableListOf<(StrokePoint) -> Unit>()
+    
+    // State flow for loaded texture
+    private val _currentTexture = MutableStateFlow<BrushTexture?>(null)
+    val currentTextureFlow: StateFlow<BrushTexture?> = _currentTexture.asStateFlow()
 
     /**
      * Configure the brush engine with new parameters
