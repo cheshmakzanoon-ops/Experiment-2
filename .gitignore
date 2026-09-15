@@ -1,17 +1,14 @@
-```
 # Compiled and build artifacts
+*.class
 *.o
 *.obj
+*.exe
+*.dll
 *.so
 *.a
-*.dll
-*.exe
-*.class
+*.out
 *.pyc
 __pycache__/
-*.swp
-*.swo
-*.tmp
 
 # Dependencies
 node_modules/
@@ -19,17 +16,20 @@ venv/
 .venv/
 .env
 .env.local
-.env.*
+*.env.*
 
 # Build directories
-build/
 dist/
+build/
 target/
 .gradle/
 
 # IDE files
 .vscode/
 .idea/
+*.swp
+*.swo
+*.tmp
 
 # System files
 .DS_Store
@@ -42,6 +42,10 @@ Thumbs.db
 coverage/
 htmlcov/
 .coverage
+
+# Python specific
+.mypy_cache/
+.pytest_cache/
 
 # Compressed files
 *.zip
@@ -62,8 +66,3 @@ htmlcov/
 *.Z
 *.lz
 *.lzo
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.tar.zst
-```
