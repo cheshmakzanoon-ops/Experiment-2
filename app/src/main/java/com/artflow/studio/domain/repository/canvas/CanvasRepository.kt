@@ -112,6 +112,63 @@ interface CanvasRepository {
      * Dispose of canvas resources
      */
     fun dispose()
+
+    /**
+     * Add a new layer to the canvas
+     * @param name Layer name (optional, will auto-generate if null)
+     * @param index Position in layer stack (null = above active layer)
+     * @param opacity Initial opacity (0.0 - 1.0)
+     * @return Created Layer object
+     */
+    suspend fun addLayer(
+        name: String? = null,
+        index: Int? = null,
+        opacity: Float = 1.0f
+    ): com.artflow.studio.domain.model.layer.Layer
+
+    /**
+     * Remove a layer from the canvas
+     * @param layerId ID of the layer to remove
+     * @return True if removed successfully, false otherwise
+     */
+    suspend fun removeLayer(layerId: Long): Boolean
+
+    /**
+     * Reorder a layer in the layer stack
+     * @param layerId ID of the layer to move
+     * @param newIndex New position in the layer stack
+     * @return True if reordered successfully, false otherwise
+     */
+    suspend fun reorderLayer(layerId: Long, newIndex: Int): Boolean
+
+    /**
+     * Duplicate an existing layer
+     * @param layerId ID of the layer to duplicate
+     * @return ID of the newly created duplicated layer, or null if failed
+     */
+    suspend fun duplicateLayer(layerId: Long): Long?
+
+    /**
+     * Merge two layers (source into target)
+     * @param sourceLayerId ID of the source layer (will be removed)
+     * @param targetLayerId ID of the target layer (will contain merged content)
+     * @return True if merged successfully, false otherwise
+     */
+    suspend fun mergeLayers(sourceLayerId: Long, targetLayerId: Long): Boolean
+
+    /**
+     * Merge all visible layers into a single layer
+     * @param keepOriginals Whether to keep original layers after merge
+     * @return ID of the merged layer
+     */
+    suspend fun mergeVisibleLayers(keepOriginals: Boolean = false): Long?
+
+    /**
+     * Merge down - merge current layer with the layer below it
+     * @param layerId ID of the layer to merge down
+     * @return true if merge was successful
+     */
+    suspend fun mergeLayerDown(layerId: Long): Boolean
 }
 
 /**
