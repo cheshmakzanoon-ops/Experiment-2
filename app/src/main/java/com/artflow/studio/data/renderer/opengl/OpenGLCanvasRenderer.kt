@@ -347,26 +347,32 @@ class OpenGLCanvasRenderer @Inject constructor() : GLSurfaceView.Renderer {
      * Add a stroke to be rendered
      */
     fun addStroke(stroke: Stroke) {
-        strokes.add(stroke)
-        needsRedraw = true
+        synchronized(strokes) {
+            strokes.add(stroke)
+            needsRedraw = true
+        }
     }
 
     /**
      * Remove a stroke from rendering
      */
     fun removeStroke(strokeId: Long) {
-        strokes.removeAll { it.id == strokeId }
-        strokeBuffers.remove(strokeId)
-        needsRedraw = true
+        synchronized(strokes) {
+            strokes.removeAll { it.id == strokeId }
+            strokeBuffers.remove(strokeId)
+            needsRedraw = true
+        }
     }
 
     /**
      * Clear all strokes
      */
     fun clearAllStrokes() {
-        strokes.clear()
-        strokeBuffers.clear()
-        needsRedraw = true
+        synchronized(strokes) {
+            strokes.clear()
+            strokeBuffers.clear()
+            needsRedraw = true
+        }
     }
 
     /**
@@ -398,7 +404,7 @@ class OpenGLCanvasRenderer @Inject constructor() : GLSurfaceView.Renderer {
     /**
      * Observe canvas invalidation events
      */
-    override fun observeCanvasInvalidation(): Flow<CanvasInvalidationEvent> {
+    fun observeCanvasInvalidation(): Flow<CanvasInvalidationEvent> {
         return invalidationFlow
     }
 
@@ -410,8 +416,10 @@ class OpenGLCanvasRenderer @Inject constructor() : GLSurfaceView.Renderer {
             GLES20.glDeleteProgram(programId)
             programId = 0
         }
-        strokeBuffers.clear()
-        strokes.clear()
+        synchronized(strokes) {
+            strokeBuffers.clear()
+            strokes.clear()
+        }
         coroutineScope.cancel()
     }
 }
