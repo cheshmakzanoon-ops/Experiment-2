@@ -1,39 +1,45 @@
 package com.artflow.studio.presentation.ui.screens.canvas
 
-import androidx.compose.foundation.Canvas
+import android.view.ViewGroup
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView
+import com.artflow.studio.presentation.ui.viewmodel.CanvasUiState
+import com.artflow.studio.presentation.ui.viewmodel.CanvasViewModel
 
 /**
  * Canvas screen for drawing and painting
+ * Integrates OpenGL-accelerated canvas with Jetpack Compose UI
  */
 @Composable
 fun CanvasScreen(
     projectId: Long,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    viewModel: CanvasViewModel = hiltViewModel()
 ) {
-    var scale by remember { mutableStateOf(1f) }
-    var offsetX by remember { mutableStateOf(0f) }
-    var offsetY by remember { mutableStateOf(0f) }
+    val uiState by viewModel.uiState.collectAsState()
+    val brushParams by viewModel.brushParams.collectAsState()
     
-    val paths = remember { mutableStateListOf<Path>() }
-    var currentPath by remember { mutableStateOf(Path()) }
-    var isDrawing by remember { mutableStateOf(false) }
-    
+    var showBrushSettings by remember { mutableStateOf(false) }
+
+    // Initialize canvas on first composition
+    LaunchedEffect(Unit) {
+        // Create a 1920x1080 canvas at 72 DPI (standard HD)
+        viewModel.createNewCanvas(width = 1920, height = 1080, dpi = 72)
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -44,14 +50,73 @@ fun CanvasScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { /* TODO: Save */ }) {
-                        // Save icon placeholder
+                    IconButton(onClick = { 
+                        viewModel.saveCanvas(projectId)
+                    }) {
+                        Icon(
+                            androidx.compose.material.icons.Icons.Default.Save,
+                            contentDescription = "Save"
+                        )
                     }
-                    IconButton(onClick = { /* TODO: Show tools */ }) {
-                        // Tools icon placeholder
+                    IconButton(onClick = { showBrushSettings = !showBrushSettings }) {
+                        Icon(
+                            androidx.compose.material.icons.Icons.Default.Settings,
+                            contentDescription = "Brush Settings"
+                        )
                     }
                 }
             )
+        },
+        bottomBar = {
+            // Brush controls
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(80.dp),
+                shadowElevation = 8.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Brush size slider
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            "Size: ${brushParams.size.toInt()}",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                        Slider(
+                            value = brushParams.size,
+                            onValueChange = { viewModel.updateBrushSize(it) },
+                            valueRange = 1f..100f
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.width(16.dp))
+                    
+                    // Opacity slider
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            "Opacity: ${(brushParams.opacity * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                        Slider(
+                            value = brushParams.opacity,
+                            onValueChange = { viewModel.updateBrushOpacity(it) },
+                            valueRange = 0.1f..1f
+                        )
+                    }
+                }
+            }
         }
     ) { paddingValues ->
         Box(
@@ -60,81 +125,115 @@ fun CanvasScreen(
                 .padding(paddingValues)
                 .background(Color.LightGray)
         ) {
-            // Drawing canvas with gesture support
-            Canvas(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(Unit) {
-                        detectTransformGestures { centroid, pan, zoom, rotation ->
-                            scale *= zoom
-                            offsetX += pan.x
-                            offsetY += pan.y
+            // OpenGL Canvas View
+            when (val state = uiState) {
+                is CanvasUiState.Initializing,
+                is CanvasUiState.Loading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+                
+                is CanvasUiState.Ready -> {
+                    AndroidView(
+                        factory = { context ->
+                            ArtFlowCanvasView(context).apply {
+                                layoutParams = ViewGroup.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.MATCH_PARENT
+                                )
+                                initializeCanvas(1920, 1080, 72)
+                                setBrushParams(brushParams)
+                            }
+                        },
+                        update = { view ->
+                            view.setBrushParams(brushParams)
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                
+                is CanvasUiState.Error -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "Error: ${state.message}",
+                                color = Color.Red,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Button(onClick = { 
+                                viewModel.createNewCanvas(1920, 1080, 72)
+                            }) {
+                                Text("Retry")
+                            }
                         }
                     }
-                    .pointerInput(Unit) {
-                        detectDragGestures(
-                            onDragStart = { offset ->
-                                isDrawing = true
-                                currentPath = Path().apply {
-                                    moveTo(offset.x, offset.y)
-                                }
-                            },
-                            onDrag = { change, dragAmount ->
-                                if (isDrawing) {
-                                    currentPath.lineTo(change.position.x, change.position.y)
-                                    paths.add(currentPath)
-                                }
-                            },
-                            onDragEnd = {
-                                isDrawing = false
-                                currentPath = Path()
-                            }
-                        )
-                    }
-            ) {
-                // Draw white background
-                drawRect(Color.White)
-                
-                // Draw all completed paths
-                paths.forEach { path ->
-                    drawPath(
-                        path = path,
-                        color = Color.Black,
-                        style = Stroke(
-                            width = 5.dp.toPx(),
-                            cap = StrokeCap.Round
-                        )
-                    )
-                }
-                
-                // Draw current path being drawn
-                if (isDrawing) {
-                    drawPath(
-                        path = currentPath,
-                        color = Color.Black,
-                        style = Stroke(
-                            width = 5.dp.toPx(),
-                            cap = StrokeCap.Round
-                        )
-                    )
                 }
             }
-            
-            // Brush size indicator (temporary UI)
-            Surface(
-                modifier = Modifier
-                    .align(androidx.compose.ui.Alignment.BottomCenter)
-                    .padding(16.dp),
-                shape = MaterialTheme.shapes.medium,
-                shadowElevation = 8.dp
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Text("Basic Canvas - Phase 5 Target", style = MaterialTheme.typography.bodySmall)
-                }
+
+            // Brush settings dialog
+            if (showBrushSettings) {
+                BrushSettingsDialog(
+                    brushParams = brushParams,
+                    onDismiss = { showBrushSettings = false },
+                    onSave = { /* TODO: Save brush preset */ }
+                )
             }
         }
     }
+}
+
+/**
+ * Brush settings dialog for advanced brush configuration
+ */
+@Composable
+private fun BrushSettingsDialog(
+    brushParams: BrushParams,
+    onDismiss: () -> Unit,
+    onSave: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Brush Settings") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(
+                    androidx.compose.foundation.rememberScrollState()
+                ),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text("Advanced brush settings coming in Phase 9")
+                
+                // Placeholder for future brush parameters
+                OutlinedTextField(
+                    value = brushParams.smoothing.toString(),
+                    onValueChange = { },
+                    label = { Text("Smoothing") },
+                    enabled = false
+                )
+                
+                OutlinedTextField(
+                    value = brushParams.spacing.toString(),
+                    onValueChange = { },
+                    label = { Text("Spacing") },
+                    enabled = false
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onSave()
+                onDismiss()
+            }) {
+                Text("Done")
+            }
+        }
+    )
 }

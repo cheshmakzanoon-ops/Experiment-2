@@ -2,6 +2,8 @@ package com.artflow.studio.data.renderer.opengl
 
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
+import javax.microedition.khronos.egl.EGLConfig
+import javax.microedition.khronos.opengles.GL10
 import com.artflow.studio.domain.repository.canvas.CanvasInvalidationEvent
 import com.artflow.studio.domain.repository.canvas.CanvasSize
 import kotlinx.coroutines.CoroutineScope
@@ -218,7 +220,7 @@ class OpenGLCanvasRenderer @Inject constructor() : GLSurfaceView.Renderer {
         canvasDpi = dpi
         
         // Trigger full redraw
-        coroutineScope.launchWhenStarted {
+        coroutineScope.launch {
             invalidationFlow.emit(CanvasInvalidationEvent.Full)
         }
     }
