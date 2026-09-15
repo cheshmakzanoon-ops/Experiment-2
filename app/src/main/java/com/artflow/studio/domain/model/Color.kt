@@ -1,7 +1,5 @@
 package com.artflow.studio.domain.model
 
-import androidx.compose.ui.graphics.Color
-
 /**
  * Domain model representing a color with ARGB components
  * Used throughout the app for brush colors, shape fills, etc.
@@ -26,24 +24,27 @@ data class Color(
      * Convert to Android Compose Color
      */
     fun toComposeColor(): androidx.compose.ui.graphics.Color {
-        return androidx.compose.ui.graphics.Color(alpha, red, green, blue)
+        // androidx.compose.ui.graphics.Color's parameter order is (red, green, blue, alpha).
+        return androidx.compose.ui.graphics.Color(red, green, blue, alpha)
     }
 
     /**
-     * Convert to Android Graphics Color (Int)
+     * Convert to Android Graphics Color (Int).
+     *
+     * Implemented directly instead of delegating to `android.graphics.Color.argb` so the
+     * domain layer stays free of Android framework calls and is unit-testable on the JVM.
      */
     fun toAndroidColor(): Int {
-        return android.graphics.Color.argb(alpha, red, green, blue)
+        return ((alpha and 0xFF) shl 24) or
+            ((red and 0xFF) shl 16) or
+            ((green and 0xFF) shl 8) or
+            (blue and 0xFF)
     }
 
     /**
-     * Convert to HSV representation
+     * Convert to HSV representation (hue 0-360, saturation 0-1, value 0-1)
      */
-    fun toHSV(): FloatArray {
-        val hsv = FloatArray(3)
-        android.graphics.Color.colorToHSV(toAndroidColor(), hsv)
-        return hsv
-    }
+    fun toHSV(): FloatArray = rgbToHsv(toAndroidColor())
 
     /**
      * Create a copy with modified alpha
@@ -109,14 +110,67 @@ data class Color(
          * @param alpha Alpha (0-255)
          */
         fun fromHSV(hue: Float, saturation: Float, value: Float, alpha: Int = 255): Color {
-            val hsv = floatArrayOf(hue, saturation, value)
-            val rgb = android.graphics.Color.HSVToColor(hsv)
+            val rgb = hsvToRgb(hue, saturation, value)
             return Color(
-                alpha = alpha,
+                alpha = alpha.coerceIn(0, 255),
                 red = (rgb shr 16) and 0xFF,
                 green = (rgb shr 8) and 0xFF,
                 blue = rgb and 0xFF
             )
+        }
+
+        /**
+         * Convert a packed ARGB int to HSV. Pure Kotlin so it works off-device.
+         * @return `[hue 0-360, saturation 0-1, value 0-1]`
+         */
+        fun rgbToHsv(argb: Int): FloatArray {
+            val r = ((argb shr 16) and 0xFF) / 255f
+            val g = ((argb shr 8) and 0xFF) / 255f
+            val b = (argb and 0xFF) / 255f
+
+            val max = maxOf(r, g, b)
+            val min = minOf(r, g, b)
+            val delta = max - min
+
+            var hue = when {
+                delta == 0f -> 0f
+                max == r -> 60f * (((g - b) / delta) % 6f)
+                max == g -> 60f * (((b - r) / delta) + 2f)
+                else -> 60f * (((r - g) / delta) + 4f)
+            }
+            if (hue < 0f) hue += 360f
+
+            val saturation = if (max == 0f) 0f else delta / max
+            return floatArrayOf(hue, saturation, max)
+        }
+
+        /**
+         * Convert HSV to a packed, fully opaque ARGB int. Pure Kotlin so it works off-device.
+         */
+        fun hsvToRgb(hue: Float, saturation: Float, value: Float): Int {
+            val s = saturation.coerceIn(0f, 1f)
+            val v = value.coerceIn(0f, 1f)
+            val h = ((hue % 360f) + 360f) % 360f
+
+            val c = v * s
+            val hp = h / 60f
+            val x = c * (1f - kotlin.math.abs((hp % 2f) - 1f))
+
+            val (r1, g1, b1) = when {
+                hp < 1f -> Triple(c, x, 0f)
+                hp < 2f -> Triple(x, c, 0f)
+                hp < 3f -> Triple(0f, c, x)
+                hp < 4f -> Triple(0f, x, c)
+                hp < 5f -> Triple(x, 0f, c)
+                else -> Triple(c, 0f, x)
+            }
+
+            val m = v - c
+            val r = ((r1 + m) * 255f).toInt().coerceIn(0, 255)
+            val g = ((g1 + m) * 255f).toInt().coerceIn(0, 255)
+            val b = ((b1 + m) * 255f).toInt().coerceIn(0, 255)
+
+            return (0xFF shl 24) or (r shl 16) or (g shl 8) or b
         }
 
         /**

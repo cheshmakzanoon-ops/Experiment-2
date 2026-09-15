@@ -88,8 +88,7 @@ fun AdjustmentLayerPanel(
         if (adjustmentLayers.isEmpty()) {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .wrapContentAlignment(),
+                    .fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -331,6 +330,6 @@ private fun getAdjustmentIcon(type: AdjustmentType): androidx.compose.ui.graphic
         AdjustmentType.INVERT -> Icons.Default.InvertColors
         AdjustmentType.POSTERIZE -> Icons.Default.FilterVintage
         AdjustmentType.SELECTIVE_COLOR -> Icons.Default.Gradient
-        AdjustmentType.GRADIENT_MAP -> Icons.Default.GradientVertical
+        AdjustmentType.GRADIENT_MAP -> Icons.Default.Tune
     }
 }

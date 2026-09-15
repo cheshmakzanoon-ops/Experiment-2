@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.repository.canvas.CanvasInvalidationEvent
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
-import com.artflow.studio.domain.usecase.canvas.BeginStroke
 import com.artflow.studio.domain.usecase.canvas.CreateCanvas
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,7 +20,6 @@ import javax.inject.Inject
 @HiltViewModel
 class CanvasViewModel @Inject constructor(
     private val createCanvas: CreateCanvas,
-    private val beginStroke: BeginStroke,
     private val canvasRepository: CanvasRepository
 ) : ViewModel() {
 
@@ -73,7 +71,7 @@ class CanvasViewModel @Inject constructor(
                 is CanvasInvalidationEvent.Region -> {
                     // Trigger partial redraw of specific region
                     _uiState.value = (_uiState.value as? CanvasUiState.Ready)?.copy(
-                        dirtyRegion = event.left to event.right to event.top to event.bottom
+                        dirtyRegion = (event.left to event.top) to (event.right to event.bottom)
                     ) ?: _uiState.value
                 }
                 is CanvasInvalidationEvent.StrokeCompleted -> {
@@ -91,7 +89,7 @@ class CanvasViewModel @Inject constructor(
      */
     fun onStrokeBegin(x: Float, y: Float, pressure: Float) {
         val params = _brushParams.value
-        currentStrokeId = beginStroke(x, y, pressure, params, activeLayerId)
+        currentStrokeId = canvasRepository.beginStroke(x, y, pressure, params, activeLayerId)
     }
 
     /**

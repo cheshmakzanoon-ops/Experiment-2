@@ -222,7 +222,7 @@ class LayerMaskManager @Inject constructor() {
         // Set up paint for grayscale brush
         paint.apply {
             color = Color.rgb(grayValue, grayValue, grayValue)
-            this.radius = radius
+            isAntiAlias = true
             maskFilter = if (mask.featherRadius > 0) {
                 android.graphics.BlurMaskFilter(mask.featherRadius, android.graphics.BlurMaskFilter.Blur.NORMAL)
             } else {

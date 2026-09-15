@@ -202,12 +202,12 @@ class SelectionManager @Inject constructor() {
 
         saveHistoryState(SelectionOperation.INVERT, oldSelection = currentSelection)
 
-        // Create inverse path using odd-even fill rule
+        // Subtract the current selection from the full canvas rectangle.
+        // Path.op(DIFFERENCE) performs a real boolean subtraction, unlike adding the
+        // selection path again (which is what the old code attempted and could not do).
         val inversePath = Path().apply {
-            // Add outer rectangle (canvas bounds)
             addRect(0f, 0f, canvasWidth, canvasHeight, Path.Direction.CW)
-            // Add the original selection path in opposite direction
-            addPath(currentSelection.path, Path.Direction.CCW)
+            op(currentSelection.path, Path.Op.DIFFERENCE)
         }
 
         val inverseBounds = RectF(0f, 0f, canvasWidth, canvasHeight)

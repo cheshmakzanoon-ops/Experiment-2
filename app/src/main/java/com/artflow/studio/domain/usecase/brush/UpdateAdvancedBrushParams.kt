@@ -331,7 +331,7 @@ class UpdateAdvancedBrushParams @Inject constructor(
      * @param paramType Parameter type
      * @return Default value for the parameter
      */
-    fun getDefaultValue(paramType: ParamType): Any {
+    fun getDefaultValue(paramType: ParamType): Any? {
         return when (paramType) {
             ParamType.SIZE -> 20f
             ParamType.OPACITY -> 1.0f

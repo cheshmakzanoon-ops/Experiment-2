@@ -132,16 +132,16 @@ class CanvasGestureListener(
     private val onLongPress: () -> Unit = {}
 ) : android.view.GestureDetector.SimpleOnGestureListener() {
     
-    override fun onDoubleTap(e: MotionEvent?): Boolean {
+    override fun onDoubleTap(e: MotionEvent): Boolean {
         onDoubleTap()
         return true
     }
     
-    override fun onLongPress(e: MotionEvent?) {
+    override fun onLongPress(e: MotionEvent) {
         onLongPress()
     }
     
-    override fun onDown(e: MotionEvent?): Boolean {
+    override fun onDown(e: MotionEvent): Boolean {
         return true
     }
 }

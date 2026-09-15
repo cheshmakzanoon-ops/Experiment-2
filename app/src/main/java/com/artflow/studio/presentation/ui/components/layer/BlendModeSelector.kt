@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.artflow.studio.presentation.ui.components.layer
 
 import androidx.compose.foundation.background
@@ -217,6 +219,7 @@ private fun BlendModePreview(
 /**
  * Compact blend mode dropdown selector for layer panel
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BlendModeDropdown(
     selectedBlendMode: BlendMode,
@@ -269,26 +272,5 @@ fun BlendModeDropdown(
     }
 }
 
-/**
- * Human-readable display name for blend modes
- */
-private val BlendMode.displayName: String
-    get() = when (this) {
-        BlendMode.NORMAL -> "Normal"
-        BlendMode.MULTIPLY -> "Multiply"
-        BlendMode.SCREEN -> "Screen"
-        BlendMode.OVERLAY -> "Overlay"
-        BlendMode.DARKEN -> "Darken"
-        BlendMode.LIGHTEN -> "Lighten"
-        BlendMode.COLOR_DODGE -> "Color Dodge"
-        BlendMode.COLOR_BURN -> "Color Burn"
-        BlendMode.HARD_LIGHT -> "Hard Light"
-        BlendMode.SOFT_LIGHT -> "Soft Light"
-        BlendMode.DIFFERENCE -> "Difference"
-        BlendMode.EXCLUSION -> "Exclusion"
-        BlendMode.HUE -> "Hue"
-        BlendMode.SATURATION -> "Saturation"
-        BlendMode.COLOR -> "Color"
-        BlendMode.LUMINOSITY -> "Luminosity"
-        BlendMode.PASS_THROUGH -> "Pass Through"
-    }
+// NOTE: display names for blend modes come from BlendMode.displayName in the domain model;
+// this file previously redeclared it as a private extension that was shadowed by the member.

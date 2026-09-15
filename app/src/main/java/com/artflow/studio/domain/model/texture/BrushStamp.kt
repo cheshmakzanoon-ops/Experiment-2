@@ -12,6 +12,7 @@ data class BrushStamp(
     val isProcedural: Boolean = false,       // True if generated algorithmically
     val rotationSteps: Int = 1,              // Number of rotation variants (1 = no rotation)
     val scaleVariants: Int = 1,              // Number of scale variants
+    val isCustom: Boolean = false,           // True if user-created
     val createdAt: Long = System.currentTimeMillis()
 ) {
     /**

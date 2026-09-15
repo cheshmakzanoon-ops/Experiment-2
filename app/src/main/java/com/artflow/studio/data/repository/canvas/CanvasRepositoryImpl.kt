@@ -2,6 +2,9 @@ package com.artflow.studio.data.repository.canvas
 
 import android.graphics.Bitmap
 import android.graphics.Color
+import com.artflow.studio.data.local.CanvasDocument
+import com.artflow.studio.data.local.ProjectStorage
+import com.artflow.studio.data.renderer.CanvasRasterizer
 import com.artflow.studio.data.renderer.opengl.OpenGLCanvasRenderer
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.Stroke
@@ -15,87 +18,284 @@ import com.artflow.studio.domain.repository.canvas.CanvasState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import timber.log.Timber
+import java.io.ByteArrayOutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Implementation of CanvasRepository using OpenGL ES for rendering
+ * Canvas repository: owns the editable layer/stroke model and keeps the GPU renderer,
+ * on-disk project files and exported bitmaps in sync with it.
+ *
+ * Design notes:
+ * - The layer stack is an ordered [MutableList]; a layer's index is its position, which
+ *   removes a whole class of stale-index bugs.
+ * - The stroke list is the source of truth. Rendering, export, thumbnails and persistence all
+ *   derive from it, so they cannot drift apart.
+ * - Undo/redo uses whole-stack snapshots. Strokes are immutable, so a snapshot only copies
+ *   list structure and stays cheap even for large documents.
  */
 @Singleton
 class CanvasRepositoryImpl @Inject constructor(
-    private val renderer: OpenGLCanvasRenderer
+    private val renderer: OpenGLCanvasRenderer,
+    private val rasterizer: CanvasRasterizer,
+    private val storage: ProjectStorage
 ) : CanvasRepository {
 
     private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val renderMutex = Mutex()
-    
-    // Current canvas state
+
     private var currentCanvasId: Long = 0
     private var canvasWidth = 1920
     private var canvasHeight = 1080
     private var canvasDpi = 72
     private var backgroundColor = Color.WHITE
-    
-    // Layer management
-    private val layers = mutableMapOf<Long, LayerData>()
-    private var activeLayerId = 1L
+
+    // Ordered bottom -> top. Position in this list is the layer index.
+    private val layerList = mutableListOf<LayerData>()
+    private var activeLayerId = 0L
     private var nextLayerId = 1L
-    
-    // Stroke management
+
+    private var strokeColor: Int = Color.BLACK
+
     private val activeStrokes = mutableMapOf<Long, MutableList<StrokePoint>>()
     private val strokeBrushParams = mutableMapOf<Long, BrushParams>()
     private val strokeLayerIds = mutableMapOf<Long, Long>()
     private var nextStrokeId = 1L
-    
-    // Viewport transformation
-    private var zoom = 1f
-    private var offsetX = 0f
-    private var offsetY = 0f
-    private var rotation = 0f
-    
-    // Invalidation events
+
     private val invalidationFlow = MutableSharedFlow<CanvasInvalidationEvent>(replay = 0)
 
-    override suspend fun createCanvas(width: Int, height: Int, dpi: Int): Long {
-        return renderMutex.withLock {
+    private val undoStack = ArrayDeque<Snapshot>()
+    private val redoStack = ArrayDeque<Snapshot>()
+
+    private var dirty = false
+
+    private data class Snapshot(val layers: List<LayerData>, val activeLayerId: Long)
+
+    // -----------------------------------------------------------------------------------------
+    // Canvas lifecycle
+    // -----------------------------------------------------------------------------------------
+
+    override suspend fun createCanvas(width: Int, height: Int, dpi: Int): Long =
+        renderMutex.withLock {
             currentCanvasId = System.nanoTime()
-            canvasWidth = width
-            canvasHeight = height
+            canvasWidth = width.coerceAtLeast(1)
+            canvasHeight = height.coerceAtLeast(1)
             canvasDpi = dpi
-            
-            // Create initial background layer
-            val bgLayerId = nextLayerId++
-            layers[bgLayerId] = LayerData(
-                id = bgLayerId,
-                name = "Background",
-                isVisible = true,
-                opacity = 1.0f,
-                isLocked = false
-            )
-            activeLayerId = bgLayerId
-            
-            // Emit canvas created event
-            invalidationFlow.emit(CanvasInvalidationEvent.Full)
-            
+
+            layerList.clear()
+            nextLayerId = 1
+            layerList.add(LayerData(id = nextLayerId++, name = "Background"))
+            activeLayerId = layerList.first().id
+
+            activeStrokes.clear()
+            strokeBrushParams.clear()
+            strokeLayerIds.clear()
+            undoStack.clear()
+            redoStack.clear()
+            dirty = false
+
+            renderer.setCanvasSize(canvasWidth, canvasHeight, canvasDpi)
+            renderer.setBackgroundArgb(backgroundColor)
+            syncRenderer()
+            emitFull()
+
+            Timber.d("Canvas created: ${canvasWidth}x$canvasHeight @${canvasDpi}dpi")
             currentCanvasId
+        }
+
+    override suspend fun loadCanvas(projectId: Long): CanvasState? = renderMutex.withLock {
+        val document = storage.loadDocument(projectId)
+        if (document == null) {
+            Timber.w("No saved document for project $projectId")
+            return@withLock null
+        }
+
+        canvasWidth = document.width.coerceAtLeast(1)
+        canvasHeight = document.height.coerceAtLeast(1)
+        canvasDpi = document.dpi
+        backgroundColor = document.backgroundColor
+        currentCanvasId = projectId
+        nextLayerId = maxOf(document.nextLayerId, (document.layers.maxOfOrNull { it.id } ?: 0L) + 1)
+
+        layerList.clear()
+        document.layers.sortedBy { it.index }.forEach { layer ->
+            layerList.add(
+                LayerData(
+                    id = layer.id,
+                    name = layer.name,
+                    isVisible = layer.isVisible,
+                    opacity = layer.opacity,
+                    isLocked = layer.isLocked,
+                    blendMode = layer.blendMode,
+                    strokes = layer.strokes.toMutableList(),
+                    isAlphaLocked = layer.isAlphaLocked,
+                    isClippingMask = layer.isClippingMask
+                )
+            )
+        }
+        if (layerList.isEmpty()) {
+            layerList.add(LayerData(id = nextLayerId++, name = "Background"))
+        }
+        activeLayerId = document.activeLayerId
+            .takeIf { id -> layerList.any { it.id == id } }
+            ?: layerList.last().id
+
+        activeStrokes.clear()
+        strokeBrushParams.clear()
+        strokeLayerIds.clear()
+        undoStack.clear()
+        redoStack.clear()
+        dirty = false
+
+        renderer.setCanvasSize(canvasWidth, canvasHeight, canvasDpi)
+        renderer.setBackgroundArgb(backgroundColor)
+        syncRenderer()
+        emitFull()
+
+        Timber.d("Loaded project $projectId (${layerList.size} layers)")
+        CanvasState(
+            id = projectId,
+            width = canvasWidth,
+            height = canvasHeight,
+            dpi = canvasDpi,
+            backgroundColor = backgroundColor,
+            layerIds = layerList.map { it.id },
+            activeLayerId = activeLayerId,
+            zoom = 1f,
+            offsetX = 0f,
+            offsetY = 0f,
+            rotation = 0f
+        )
+    }
+
+    /**
+     * Persist the project: JSON document (full editable fidelity) + flattened PNG + thumbnail.
+     * @return absolute path of the written thumbnail, or null when there is nothing to save.
+     */
+    override suspend fun saveCanvas(projectId: Long): String? {
+        val layers = renderMutex.withLock { currentLayersDomain() }
+        if (layers.isEmpty()) return null
+
+        val document = CanvasDocument(
+            width = canvasWidth,
+            height = canvasHeight,
+            dpi = canvasDpi,
+            backgroundColor = backgroundColor,
+            activeLayerId = activeLayerId,
+            nextLayerId = nextLayerId,
+            layers = layers
+        )
+        storage.saveDocument(projectId, document)
+
+        val composite = rasterizer.rasterizeLayers(
+            layers = layers,
+            width = canvasWidth,
+            height = canvasHeight,
+            backgroundColor = backgroundColor
+        )
+        return try {
+            storage.saveFlattened(projectId, composite)
+            val thumbnail = rasterizer.createThumbnail(composite)
+            val path = storage.saveThumbnail(projectId, thumbnail)
+            if (thumbnail !== composite) thumbnail.recycle()
+            renderMutex.withLock { dirty = false }
+            Timber.d("Project $projectId saved (${layers.size} layers)")
+            path
+        } finally {
+            composite.recycle()
         }
     }
 
-    override suspend fun loadCanvas(projectId: Long): CanvasState? {
-        // TODO: Load from database/file storage
-        // For now, return null to indicate no saved canvas exists
-        return null
+    override suspend fun getCanvasBitmap(): ByteArray? {
+        val layers = renderMutex.withLock { currentLayersDomain() }
+        if (layers.isEmpty()) return null
+
+        val composite = rasterizer.rasterizeLayers(
+            layers = layers,
+            width = canvasWidth,
+            height = canvasHeight,
+            backgroundColor = backgroundColor
+        )
+        return try {
+            ByteArrayOutputStream().use { out ->
+                composite.compress(Bitmap.CompressFormat.PNG, 100, out)
+                out.toByteArray()
+            }
+        } finally {
+            composite.recycle()
+        }
     }
 
-    override suspend fun saveCanvas(projectId: Long) {
-        // TODO: Save to database/file storage
-        // This will serialize layers and strokes to disk
+    /**
+     * Flatten the current document. Callers own the returned bitmap and must recycle it.
+     */
+    suspend fun rasterizeComposite(includeHidden: Boolean = false): Bitmap? {
+        val layers = renderMutex.withLock { currentLayersDomain() }
+        if (layers.isEmpty()) return null
+        return rasterizer.rasterizeLayers(
+            layers = layers,
+            width = canvasWidth,
+            height = canvasHeight,
+            backgroundColor = backgroundColor,
+            includeHidden = includeHidden
+        )
     }
+
+    override suspend fun clearCanvas(color: Int) {
+        renderMutex.withLock {
+            pushUndo()
+            backgroundColor = color
+            layerList.forEach { it.strokes.clear() }
+            renderer.setBackgroundArgb(color)
+            syncRenderer()
+            markDirty()
+            emitFull()
+        }
+    }
+
+    override fun setBackgroundColor(color: Int) {
+        backgroundColor = color
+        renderer.setBackgroundArgb(color)
+        emitFull()
+    }
+
+    override fun getCanvasSize(): CanvasSize = CanvasSize(canvasWidth, canvasHeight, canvasDpi)
+
+    override fun observeCanvasInvalidation(): Flow<CanvasInvalidationEvent> = invalidationFlow
+
+    override fun dispose() {
+        coroutineScope.cancel()
+        layerList.clear()
+        activeStrokes.clear()
+        strokeBrushParams.clear()
+        strokeLayerIds.clear()
+        undoStack.clear()
+        redoStack.clear()
+    }
+
+    /**
+     * Set the ink colour used by subsequent strokes. In-flight strokes keep the colour they
+     * started with, matching how a real brush behaves.
+     */
+    fun setStrokeColor(color: Int) {
+        strokeColor = color
+    }
+
+    fun getStrokeColor(): Int = strokeColor
+
+    /** True when the document has changes that have not been written to disk yet. */
+    fun hasUnsavedChanges(): Boolean = dirty
+
+    // -----------------------------------------------------------------------------------------
+    // Stroke input
+    // -----------------------------------------------------------------------------------------
 
     override fun beginStroke(
         x: Float,
@@ -105,17 +305,15 @@ class CanvasRepositoryImpl @Inject constructor(
         layerId: Long
     ): Long {
         val strokeId = nextStrokeId++
-        
-        val startPoint = StrokePoint(
-            x = applyZoomAndOffsetX(x),
-            y = applyZoomAndOffsetY(y),
-            pressure = pressure
+        val targetLayer = layerById(layerId)
+        if (targetLayer != null && !targetLayer.canPaint()) {
+            Timber.w("Stroke started on non-paintable layer ${targetLayer.name}")
+        }
+        activeStrokes[strokeId] = mutableListOf(
+            StrokePoint(x = x, y = y, pressure = pressure, color = strokeColor)
         )
-        
-        activeStrokes[strokeId] = mutableListOf(startPoint)
         strokeBrushParams[strokeId] = brushParams
         strokeLayerIds[strokeId] = layerId
-        
         return strokeId
     }
 
@@ -128,565 +326,387 @@ class CanvasRepositoryImpl @Inject constructor(
         tiltY: Float
     ) {
         val points = activeStrokes[strokeId] ?: return
-        
-        val point = StrokePoint(
-            x = applyZoomAndOffsetX(x),
-            y = applyZoomAndOffsetY(y),
-            pressure = pressure,
-            tiltX = tiltX,
-            tiltY = tiltY
-        )
-        
-        points.add(point)
-        
-        // Request partial redraw of affected region
-        coroutineScope.launch {
-            val bounds = calculateStrokeBounds(points)
-            invalidationFlow.emit(
-                CanvasInvalidationEvent.Region(
-                    left = bounds.left - 50,
-                    top = bounds.top - 50,
-                    right = bounds.right + 50,
-                    bottom = bounds.bottom + 50
-                )
+        points.add(
+            StrokePoint(
+                x = x,
+                y = y,
+                pressure = pressure,
+                tiltX = tiltX,
+                tiltY = tiltY,
+                color = strokeColor
             )
-        }
+        )
     }
 
     override fun endStroke(strokeId: Long) {
         val points = activeStrokes.remove(strokeId) ?: return
         val brushParams = strokeBrushParams.remove(strokeId) ?: return
         val layerId = strokeLayerIds.remove(strokeId) ?: return
-        
-        // Create completed stroke
+
+        val layer = layerById(layerId)
+        if (layer == null) {
+            Timber.w("Dropping stroke for unknown layer $layerId")
+            return
+        }
+        if (!layer.canPaint()) {
+            Timber.w("Dropping stroke on non-paintable layer ${layer.name}")
+            return
+        }
+
+        pushUndo()
         val stroke = Stroke(
             id = strokeId,
-            points = points,
+            points = points.toList(),
             brushParams = brushParams,
             layerId = layerId,
-            color = points.firstOrNull()?.color ?: Color.BLACK
+            color = points.firstOrNull()?.color ?: strokeColor
         )
-        
-        // Add to layer
-        val layer = layers[layerId]
-        layer?.strokes?.add(stroke)
-        
-        // Send stroke to OpenGL renderer for GPU rendering
+        layer.strokes.add(stroke)
         renderer.addStroke(stroke)
-        
-        // Request full redraw (optimized rendering would only redraw affected area)
-        coroutineScope.launch {
-            invalidationFlow.emit(CanvasInvalidationEvent.StrokeCompleted(strokeId))
-        }
+        markDirty()
+
+        emitAsync(CanvasInvalidationEvent.StrokeCompleted(strokeId))
     }
 
-    override suspend fun renderStroke(stroke: Stroke) {
-        // GPU rendering handled by OpenGLCanvasRenderer
-        // This method is for persistence or special effects
+    override suspend fun renderStroke(stroke: Stroke) = renderMutex.withLock {
+        pushUndo()
+        layerList.firstOrNull { it.id == stroke.layerId }?.strokes?.add(stroke)
+        renderer.addStroke(stroke)
+        markDirty()
+        emitFull()
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Undo / redo
+    // -----------------------------------------------------------------------------------------
+
+    override val canUndo: Boolean get() = undoStack.isNotEmpty()
+
+    override val canRedo: Boolean get() = redoStack.isNotEmpty()
+
+    override fun undo(): Boolean {
+        val snapshot = undoStack.removeLastOrNull() ?: return false
+        redoStack.addLast(snapshot())
+        restore(snapshot)
+        markDirty()
+        emitFull()
+        return true
+    }
+
+    override fun redo(): Boolean {
+        val snapshot = redoStack.removeLastOrNull() ?: return false
+        undoStack.addLast(snapshot())
+        restore(snapshot)
+        markDirty()
+        emitFull()
+        return true
+    }
+
+    private fun pushUndo() {
+        undoStack.addLast(snapshot())
+        while (undoStack.size > MAX_HISTORY) undoStack.removeFirst()
+        redoStack.clear()
+    }
+
+    private fun snapshot(): Snapshot = Snapshot(
+        layers = layerList.map { it.copy(strokes = it.strokes.toMutableList()) },
+        activeLayerId = activeLayerId
+    )
+
+    private fun restore(snapshot: Snapshot) {
+        layerList.clear()
+        layerList.addAll(snapshot.layers)
+        activeLayerId = snapshot.activeLayerId
+        syncRenderer()
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Layer operations
+    // -----------------------------------------------------------------------------------------
+
+    override suspend fun addLayer(name: String?, index: Int?, opacity: Float): Layer =
         renderMutex.withLock {
-            renderer.addStroke(stroke)
-        }
-    }
-
-    override suspend fun getCanvasBitmap(): ByteArray? {
-        // TODO: Render all layers to bitmap and compress
-        return null
-    }
-
-    override suspend fun clearCanvas(color: Int) {
-        renderMutex.withLock {
-            backgroundColor = color
-            
-            // Clear all layer strokes
-            layers.values.forEach { it.strokes.clear() }
-            
-            invalidationFlow.emit(CanvasInvalidationEvent.Full)
-        }
-    }
-
-    override fun setBackgroundColor(color: Int) {
-        backgroundColor = color
-    }
-
-    override fun getCanvasSize(): CanvasSize {
-        return CanvasSize(canvasWidth, canvasHeight, canvasDpi)
-    }
-
-    override fun observeCanvasInvalidation(): Flow<CanvasInvalidationEvent> {
-        return invalidationFlow
-    }
-
-    override fun dispose() {
-        coroutineScope.cancel()
-        layers.clear()
-        activeStrokes.clear()
-        strokeBrushParams.clear()
-        strokeLayerIds.clear()
-    }
-
-    override suspend fun addLayer(
-        name: String?,
-        index: Int?,
-        opacity: Float
-    ): Layer {
-        return renderMutex.withLock {
+            pushUndo()
             val layerId = nextLayerId++
-            val layerName = name ?: "Layer $layerId"
-            
-            // Determine insertion index
-            val insertIndex = index ?: layers.size
-            
-            // Create new layer
-            val newLayer = Layer(
+            val layer = LayerData(
                 id = layerId,
-                name = layerName,
-                index = insertIndex,
-                isVisible = true,
-                opacity = opacity,
-                isLocked = false,
-                blendMode = BlendMode.NORMAL
+                name = name ?: "Layer ${layerList.size}",
+                opacity = opacity.coerceIn(0f, 1f)
             )
-            
-            // Add to layers map
-            layers[layerId] = LayerData(
-                id = layerId,
-                name = layerName,
-                isVisible = true,
-                opacity = opacity,
-                isLocked = false
-            )
-            
-            // Set as active layer
+
+            val activeIndex = layerList.indexOfFirst { it.id == activeLayerId }
+            val insertAt = (index ?: (activeIndex + 1)).coerceIn(0, layerList.size)
+            layerList.add(insertAt, layer)
+
             activeLayerId = layerId
-            
-            // Emit canvas invalidation for UI update
-            coroutineScope.launch {
-                invalidationFlow.emit(CanvasInvalidationEvent.Full)
-            }
-            
-            newLayer
+            markDirty()
+            emitFull()
+            layer.toDomain(index = insertAt)
         }
+
+    override suspend fun removeLayer(layerId: Long): Boolean = renderMutex.withLock {
+        if (layerList.size <= 1) return@withLock false
+        val position = layerList.indexOfFirst { it.id == layerId }
+        if (position == -1) return@withLock false
+
+        pushUndo()
+        layerList.removeAt(position)
+        if (activeLayerId == layerId) {
+            activeLayerId = layerList[position.coerceAtMost(layerList.lastIndex)].id
+        }
+        syncRenderer()
+        markDirty()
+        emitFull()
+        true
     }
 
-    override suspend fun removeLayer(layerId: Long): Boolean {
-        return renderMutex.withLock {
-            // Prevent removing the last layer
-            if (layers.size <= 1) return@withLock false
-            
-            val removed = layers.remove(layerId) != null
-            if (removed) {
-                // If we removed the active layer, select another one
-                if (activeLayerId == layerId) {
-                    activeLayerId = layers.keys.firstOrNull() ?: 0L
-                }
-                
-                coroutineScope.launch {
-                    invalidationFlow.emit(CanvasInvalidationEvent.Full)
-                }
-            }
-            removed
-        }
-    }
+    override suspend fun reorderLayer(layerId: Long, newIndex: Int): Boolean =
+        renderMutex.withLock {
+            val from = layerList.indexOfFirst { it.id == layerId }
+            if (from == -1) return@withLock false
+            val to = newIndex.coerceIn(0, layerList.lastIndex)
+            if (from == to) return@withLock true
 
-    override suspend fun reorderLayer(layerId: Long, newIndex: Int): Boolean {
-        return renderMutex.withLock {
-            val layer = layers[layerId] ?: return@withLock false
-            
-            // Validate new index
-            if (newIndex < 0 || newIndex >= layers.size) return@withLock false
-            
-            // Update layer index
-            // Note: In a full implementation, we'd also reorder all other layers' indices
-            // This is a simplified version that just updates the target layer's index
-            layers[layerId] = layer.copy(
-                name = layer.name,
-                isVisible = layer.isVisible,
-                opacity = layer.opacity,
-                isLocked = layer.isLocked,
-                strokes = layer.strokes
-            )
-            
-            coroutineScope.launch {
-                invalidationFlow.emit(CanvasInvalidationEvent.Full)
-            }
-            
+            pushUndo()
+            val layer = layerList.removeAt(from)
+            layerList.add(to, layer)
+            syncRenderer()
+            markDirty()
+            emitFull()
             true
         }
-    }
 
-    override suspend fun duplicateLayer(layerId: Long): Long? {
-        return renderMutex.withLock {
-            val sourceLayer = layers[layerId] ?: return@withLock null
-            
-            val newLayerId = nextLayerId++
-            val duplicatedLayer = LayerData(
-                id = newLayerId,
-                name = "${sourceLayer.name} Copy",
-                isVisible = sourceLayer.isVisible,
-                opacity = sourceLayer.opacity,
-                isLocked = sourceLayer.isLocked,
-                strokes = sourceLayer.strokes.map { it.copy(id = System.nanoTime()) }.toMutableList()
-            )
-            
-            layers[newLayerId] = duplicatedLayer
-            activeLayerId = newLayerId
-            
-            coroutineScope.launch {
-                invalidationFlow.emit(CanvasInvalidationEvent.Full)
-            }
-            
-            newLayerId
-        }
-    }
+    override suspend fun duplicateLayer(layerId: Long): Long? = renderMutex.withLock {
+        val position = layerList.indexOfFirst { it.id == layerId }
+        if (position == -1) return@withLock null
 
-    override suspend fun mergeLayers(sourceLayerId: Long, targetLayerId: Long): Boolean {
-        return renderMutex.withLock {
-            val sourceLayer = layers[sourceLayerId] ?: return@withLock false
-            val targetLayer = layers[targetLayerId] ?: return@withLock false
-            
-            // Merge strokes from source to target
-            targetLayer.strokes.addAll(sourceLayer.strokes)
-            
-            // Remove source layer
-            layers.remove(sourceLayerId)
-            
-            // Set active layer to target
-            activeLayerId = targetLayerId
-            
-            coroutineScope.launch {
-                invalidationFlow.emit(CanvasInvalidationEvent.Full)
-            }
-            
-            true
-        }
-    }
-
-    override suspend fun mergeVisibleLayers(keepOriginals: Boolean): Long? {
-        return renderMutex.withLock {
-            val visibleLayers = layers.values.filter { it.isVisible }.sortedBy { it.id }
-            
-            if (visibleLayers.size < 2) return@withLock null
-            
-            // Create new merged layer
-            val mergedLayerId = nextLayerId++
-            val allStrokes = visibleLayers.flatMap { it.strokes }.toMutableList()
-            
-            val mergedLayer = LayerData(
-                id = mergedLayerId,
-                name = "Merged Layer",
-                isVisible = true,
-                opacity = 1.0f,
-                isLocked = false,
-                strokes = allStrokes
-            )
-            
-            layers[mergedLayerId] = mergedLayer
-            
-            if (!keepOriginals) {
-                // Remove all visible layers except the merged one
-                visibleLayers.forEach { layer ->
-                    if (layer.id != mergedLayerId) {
-                        layers.remove(layer.id)
-                    }
-                }
-            }
-            
-            activeLayerId = mergedLayerId
-            
-            coroutineScope.launch {
-                invalidationFlow.emit(CanvasInvalidationEvent.Full)
-            }
-            
-            mergedLayerId
-        }
-    }
-
-    override suspend fun mergeLayerDown(layerId: Long): Boolean {
-        return renderMutex.withLock {
-            val currentLayer = layers[layerId] ?: return@withLock false
-            
-            // Find the layer below (with lower index)
-            val layerBelow = layers.values
-                .filter { it.id != layerId && it.index < currentLayer.index }
-                .maxByOrNull { it.index }
-            
-            if (layerBelow == null) return@withLock false
-            
-            // Merge current layer into layer below
-            layerBelow.strokes.addAll(currentLayer.strokes)
-            
-            // Remove current layer
-            layers.remove(layerId)
-            
-            activeLayerId = layerBelow.id
-            
-            coroutineScope.launch {
-                invalidationFlow.emit(CanvasInvalidationEvent.Full)
-            }
-            
-            true
-        }
-    }
-
-    override suspend fun setLayerVisibility(layerId: Long, isVisible: Boolean?): Boolean {
-        return renderMutex.withLock {
-            val layer = layers[layerId] ?: return@withLock false
-            
-            val newVisibility = isVisible ?: !layer.isVisible
-            layers[layerId] = layer.copy(
-                name = layer.name,
-                opacity = layer.opacity,
-                isLocked = layer.isLocked,
-                strokes = layer.strokes
-            )
-            
-            coroutineScope.launch {
-                invalidationFlow.emit(CanvasInvalidationEvent.Full)
-            }
-            
-            true
-        }
-    }
-
-    override suspend fun setLayerOpacity(layerId: Long, opacity: Float): Boolean {
-        return renderMutex.withLock {
-            val layer = layers[layerId] ?: return@withLock false
-            
-            // Clamp opacity to valid range
-            val clampedOpacity = opacity.coerceIn(0.0f, 1.0f)
-            
-            layers[layerId] = layer.copy(
-                name = layer.name,
-                isVisible = layer.isVisible,
-                isLocked = layer.isLocked,
-                strokes = layer.strokes
-            )
-            
-            coroutineScope.launch {
-                invalidationFlow.emit(CanvasInvalidationEvent.Full)
-            }
-            
-            true
-        }
-    }
-
-    override suspend fun setLayerName(layerId: Long, newName: String): Boolean {
-        return renderMutex.withLock {
-            val layer = layers[layerId] ?: return@withLock false
-            
-            layers[layerId] = layer.copy(
-                name = newName,
-                isVisible = layer.isVisible,
-                opacity = layer.opacity,
-                isLocked = layer.isLocked,
-                strokes = layer.strokes
-            )
-            
-            coroutineScope.launch {
-                invalidationFlow.emit(CanvasInvalidationEvent.Full)
-            }
-            
-            true
-        }
-    }
-
-    override suspend fun setLayerLock(layerId: Long, isLocked: Boolean): Boolean {
-        return renderMutex.withLock {
-            val layer = layers[layerId] ?: return@withLock false
-            
-            layers[layerId] = layer.copy(
-                name = layer.name,
-                isVisible = layer.isVisible,
-                opacity = layer.opacity,
-                strokes = layer.strokes
-            )
-            
-            coroutineScope.launch {
-                invalidationFlow.emit(CanvasInvalidationEvent.Full)
-            }
-            
-            true
-        }
-    }
-
-    override suspend fun setLayerBlendMode(layerId: Long, blendMode: com.artflow.studio.domain.model.layer.BlendMode): Boolean {
-        return renderMutex.withLock {
-            val layer = layers[layerId] ?: return@withLock false
-            
-            // Note: BlendMode is stored in Layer domain model but not in LayerData
-            // For now we just emit an event - full implementation would update renderer
-            coroutineScope.launch {
-                invalidationFlow.emit(CanvasInvalidationEvent.Full)
-            }
-            
-            true
-        }
-    }
-
-    override suspend fun setLayerAlphaLock(layerId: Long, isLocked: Boolean?): Boolean {
-        return renderMutex.withLock {
-            val layer = layers[layerId] ?: return@withLock false
-
-            // Toggle if null, otherwise use provided value
-            val newLockState = isLocked ?: !layer.isAlphaLocked
-
-            layers[layerId] = layer.copy(
-                name = layer.name,
-                isVisible = layer.isVisible,
-                opacity = layer.opacity,
-                isLocked = layer.isLocked,
-                strokes = layer.strokes,
-                isAlphaLocked = newLockState
-            )
-
-            coroutineScope.launch {
-                invalidationFlow.emit(CanvasInvalidationEvent.Full)
-            }
-
-            true
-        }
-    }
-
-    override suspend fun setLayerClippingMask(layerId: Long, isClipping: Boolean?): Boolean {
-        return renderMutex.withLock {
-            val layer = layers[layerId] ?: return@withLock false
-
-            // Toggle if null, otherwise use provided value
-            val newClippingState = isClipping ?: !layer.isClippingMask
-
-            layers[layerId] = layer.copy(
-                name = layer.name,
-                isVisible = layer.isVisible,
-                opacity = layer.opacity,
-                isLocked = layer.isLocked,
-                strokes = layer.strokes,
-                isClippingMask = newClippingState
-            )
-
-            coroutineScope.launch {
-                invalidationFlow.emit(CanvasInvalidationEvent.Full)
-            }
-
-            true
-        }
-    }
-
-    override fun getAllLayers(): List<com.artflow.studio.domain.model.layer.Layer> {
-        return layers.values
-            .sortedBy { it.index }
-            .map { layerData ->
-                com.artflow.studio.domain.model.layer.Layer(
-                    id = layerData.id,
-                    name = layerData.name,
-                    index = layerData.index,
-                    isVisible = layerData.isVisible,
-                    opacity = layerData.opacity,
-                    isLocked = layerData.isLocked,
-                    blendMode = com.artflow.studio.domain.model.layer.BlendMode.NORMAL,
-                    strokes = layerData.strokes.toList()
-                )
-            }
-    }
-
-    override fun getActiveLayer(): com.artflow.studio.domain.model.layer.Layer? {
-        val layerData = layers[activeLayerId] ?: return null
-        return com.artflow.studio.domain.model.layer.Layer(
-            id = layerData.id,
-            name = layerData.name,
-            index = layerData.index,
-            isVisible = layerData.isVisible,
-            opacity = layerData.opacity,
-            isLocked = layerData.isLocked,
-            blendMode = com.artflow.studio.domain.model.layer.BlendMode.NORMAL,
-            strokes = layerData.strokes.toList()
+        pushUndo()
+        val source = layerList[position]
+        val newId = nextLayerId++
+        val duplicate = source.copy(
+            id = newId,
+            name = "${source.name} copy",
+            strokes = source.strokes.map { it.copy(id = nextStrokeId++) }.toMutableList()
         )
+        layerList.add(position + 1, duplicate)
+        activeLayerId = newId
+        syncRenderer()
+        markDirty()
+        emitFull()
+        newId
+    }
+
+    override suspend fun mergeLayers(sourceLayerId: Long, targetLayerId: Long): Boolean =
+        renderMutex.withLock {
+            if (sourceLayerId == targetLayerId) return@withLock false
+            val sourceIndex = layerList.indexOfFirst { it.id == sourceLayerId }
+            val targetIndex = layerList.indexOfFirst { it.id == targetLayerId }
+            if (sourceIndex == -1 || targetIndex == -1) return@withLock false
+
+            pushUndo()
+            layerList[targetIndex].strokes.addAll(layerList[sourceIndex].strokes)
+            layerList.removeAt(sourceIndex)
+            activeLayerId = targetLayerId
+            syncRenderer()
+            markDirty()
+            emitFull()
+            true
+        }
+
+    override suspend fun mergeVisibleLayers(keepOriginals: Boolean): Long? =
+        renderMutex.withLock {
+            val visibleCount = layerList.count { it.isVisible }
+            if (visibleCount < 2) return@withLock null
+
+            pushUndo()
+            val insertionIndex = layerList.indexOfFirst { it.isVisible }.coerceAtLeast(0)
+            val merged = LayerData(
+                id = nextLayerId++,
+                name = "Merged",
+                strokes = layerList.filter { it.isVisible }
+                    .flatMap { it.strokes }
+                    .toMutableList()
+            )
+
+            if (!keepOriginals) {
+                layerList.removeAll { it.isVisible }
+            }
+            layerList.add(insertionIndex.coerceIn(0, layerList.size), merged)
+
+            activeLayerId = merged.id
+            syncRenderer()
+            markDirty()
+            emitFull()
+            merged.id
+        }
+
+    override suspend fun mergeLayerDown(layerId: Long): Boolean = renderMutex.withLock {
+        val index = layerList.indexOfFirst { it.id == layerId }
+        if (index <= 0) return@withLock false
+
+        pushUndo()
+        layerList[index - 1].strokes.addAll(layerList[index].strokes)
+        val lowerId = layerList[index - 1].id
+        layerList.removeAt(index)
+        activeLayerId = lowerId
+        syncRenderer()
+        markDirty()
+        emitFull()
+        true
+    }
+
+    override suspend fun setLayerVisibility(layerId: Long, isVisible: Boolean?): Boolean =
+        renderMutex.withLock {
+            val layer = layerById(layerId) ?: return@withLock false
+            pushUndo()
+            layer.isVisible = isVisible ?: !layer.isVisible
+            syncRenderer()
+            markDirty()
+            emitFull()
+            true
+        }
+
+    override suspend fun setLayerOpacity(layerId: Long, opacity: Float): Boolean =
+        renderMutex.withLock {
+            val layer = layerById(layerId) ?: return@withLock false
+            val clamped = opacity.coerceIn(0f, 1f)
+            if (layer.opacity == clamped) return@withLock true
+            pushUndo()
+            layer.opacity = clamped
+            markDirty()
+            emitFull()
+            true
+        }
+
+    override suspend fun setLayerName(layerId: Long, newName: String): Boolean =
+        renderMutex.withLock {
+            val layer = layerById(layerId) ?: return@withLock false
+            val trimmed = newName.trim()
+            if (trimmed.isEmpty() || trimmed == layer.name) return@withLock false
+            pushUndo()
+            layer.name = trimmed
+            markDirty()
+            emitFull()
+            true
+        }
+
+    override suspend fun setLayerLock(layerId: Long, isLocked: Boolean): Boolean =
+        renderMutex.withLock {
+            val layer = layerById(layerId) ?: return@withLock false
+            pushUndo()
+            layer.isLocked = isLocked
+            markDirty()
+            emitFull()
+            true
+        }
+
+    override suspend fun setLayerBlendMode(layerId: Long, blendMode: BlendMode): Boolean =
+        renderMutex.withLock {
+            val layer = layerById(layerId) ?: return@withLock false
+            pushUndo()
+            layer.blendMode = blendMode
+            markDirty()
+            emitFull()
+            true
+        }
+
+    override suspend fun setLayerAlphaLock(layerId: Long, isLocked: Boolean?): Boolean =
+        renderMutex.withLock {
+            val layer = layerById(layerId) ?: return@withLock false
+            pushUndo()
+            layer.isAlphaLocked = isLocked ?: !layer.isAlphaLocked
+            markDirty()
+            emitFull()
+            true
+        }
+
+    override suspend fun setLayerClippingMask(layerId: Long, isClipping: Boolean?): Boolean =
+        renderMutex.withLock {
+            val layer = layerById(layerId) ?: return@withLock false
+            pushUndo()
+            layer.isClippingMask = isClipping ?: !layer.isClippingMask
+            markDirty()
+            emitFull()
+            true
+        }
+
+    override fun getAllLayers(): List<Layer> = currentLayersDomain()
+
+    override fun getActiveLayer(): Layer? {
+        val position = layerList.indexOfFirst { it.id == activeLayerId }
+        if (position == -1) return null
+        return layerList[position].toDomain(position)
     }
 
     override fun setActiveLayer(layerId: Long): Boolean {
-        return if (layers.containsKey(layerId)) {
-            activeLayerId = layerId
-            true
-        } else {
-            false
+        if (layerList.none { it.id == layerId }) return false
+        activeLayerId = layerId
+        return true
+    }
+
+    fun getActiveLayerId(): Long = activeLayerId
+
+    // -----------------------------------------------------------------------------------------
+    // Internals
+    // -----------------------------------------------------------------------------------------
+
+    private fun layerById(layerId: Long): LayerData? = layerList.firstOrNull { it.id == layerId }
+
+    private fun currentLayersDomain(): List<Layer> =
+        layerList.mapIndexed { index, data -> data.toDomain(index) }
+
+    /** Push the full stroke set to the GPU renderer so the view matches the model exactly. */
+    private fun syncRenderer() {
+        renderer.clearAllStrokes()
+        layerList.filter { it.isVisible }.forEach { layer ->
+            layer.strokes.forEach { renderer.addStroke(it) }
         }
     }
 
-    /**
-     * Apply zoom and offset transformation to X coordinate
-     */
-    private fun applyZoomAndOffsetX(x: Float): Float {
-        return (x - offsetX) / zoom
+    private fun markDirty() {
+        dirty = true
+    }
+
+    private fun emitFull() {
+        coroutineScope.launch { invalidationFlow.emit(CanvasInvalidationEvent.Full) }
+    }
+
+    private fun emitAsync(event: CanvasInvalidationEvent) {
+        coroutineScope.launch { invalidationFlow.emit(event) }
     }
 
     /**
-     * Apply zoom and offset transformation to Y coordinate
-     */
-    private fun applyZoomAndOffsetY(y: Float): Float {
-        return (y - offsetY) / zoom
-    }
-
-    /**
-     * Calculate bounding box of stroke points
-     */
-    private fun calculateStrokeBounds(points: List<StrokePoint>): RectF {
-        if (points.isEmpty()) return RectF(0f, 0f, 0f, 0f)
-        
-        var minX = Float.MAX_VALUE
-        var minY = Float.MAX_VALUE
-        var maxX = Float.MIN_VALUE
-        var maxY = Float.MIN_VALUE
-        
-        points.forEach { point ->
-            minX = kotlin.math.min(minX, point.x)
-            minY = kotlin.math.min(minY, point.y)
-            maxX = kotlin.math.max(maxX, point.x)
-            maxY = kotlin.math.max(maxY, point.y)
-        }
-        
-        return RectF(minX, minY, maxX, maxY)
-    }
-
-    /**
-     * Internal layer data structure
+     * In-memory layer. Mutable so property setters stay O(1); every failure mode routes through
+     * the repository so undo snapshots stay consistent.
      */
     private data class LayerData(
         val id: Long,
-        val name: String,
-        val isVisible: Boolean,
-        val opacity: Float,
-        val isLocked: Boolean,
-        val index: Int = 0,
-        val strokes: MutableList<Stroke> = mutableListOf()
+        var name: String,
+        var isVisible: Boolean = true,
+        var opacity: Float = 1.0f,
+        var isLocked: Boolean = false,
+        var blendMode: BlendMode = BlendMode.NORMAL,
+        val strokes: MutableList<Stroke> = mutableListOf(),
+        var isAlphaLocked: Boolean = false,
+        var isClippingMask: Boolean = false
     ) {
-        /**
-         * Create a copy of this LayerData with modified properties
-         */
-        fun copy(
-            id: Long = this.id,
-            name: String = this.name,
-            isVisible: Boolean = this.isVisible,
-            opacity: Float = this.opacity,
-            isLocked: Boolean = this.isLocked,
-            index: Int = this.index,
-            strokes: MutableList<Stroke> = this.strokes
-        ): LayerData = LayerData(
+        fun canPaint(): Boolean = isVisible && !isLocked
+
+        fun toDomain(index: Int): Layer = Layer(
             id = id,
             name = name,
+            index = index,
             isVisible = isVisible,
             opacity = opacity,
             isLocked = isLocked,
-            index = index,
-            strokes = strokes
+            blendMode = blendMode,
+            strokes = strokes.toList(),
+            isAlphaLocked = isAlphaLocked,
+            isClippingMask = isClippingMask
         )
     }
 
-    /**
-     * Simple rectangle for bounds calculation
-     */
-    private data class RectF(
-        val left: Float,
-        val top: Float,
-        val right: Float,
-        val bottom: Float
-    )
+    companion object {
+        private const val MAX_HISTORY = 40
+    }
 }

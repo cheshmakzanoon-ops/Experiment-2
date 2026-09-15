@@ -147,8 +147,8 @@ class StrokeBuilder(
     private fun applyTapering(points: List<StrokePoint>): List<StrokePoint> {
         if (points.size < 4) return points
         
-        val startTaper = brushParams.startTaper.coerceIn(0f, 1f)
-        val endTaper = brushParams.endTaper.coerceIn(0f, 1f)
+        val startTaper = brushParams.taperStart.coerceIn(0f, 1f)
+        val endTaper = brushParams.taperEnd.coerceIn(0f, 1f)
         
         if (startTaper <= 0f && endTaper <= 0f) return points
         

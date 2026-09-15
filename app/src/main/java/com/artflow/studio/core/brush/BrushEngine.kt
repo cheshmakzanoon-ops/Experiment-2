@@ -1,8 +1,8 @@
 package com.artflow.studio.core.brush
 
-import android.graphics.Canvas
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.Stroke
+import com.artflow.studio.domain.model.brush.StrokeBuilder
 import com.artflow.studio.domain.model.brush.StrokePoint
 import com.artflow.studio.domain.model.texture.BrushTexture
 import com.artflow.studio.domain.repository.texture.TextureRepository
@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject

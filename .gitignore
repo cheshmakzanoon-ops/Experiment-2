@@ -1,35 +1,50 @@
-```
-# Compiled and build artifacts
-*.class
-*.o
-*.obj
-*.out
-build/
-target/
-
-# Dependencies
+# Gradle / Android build output
 .gradle/
-__pycache__/
-.mypy_cache/
-.pytest_cache/
-node_modules/
-venv/
-.venv/
-dist/
+build/
+app/build/
+.cxx/
+.externalNativeBuild/
+captures/
+release/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+*.jar
+*.hprof
 
-# Editors
-.vscode/
+# The Gradle wrapper jar must be tracked so ./gradlew works from a fresh clone
+!gradle/wrapper/gradle-wrapper.jar
+
+# Native build artifacts
+*.o
+*.so
+obj/
+libs/
+
+# Local configuration (machine-specific, must never be committed)
+local.properties
+keystore.properties
+*.jks
+*.keystore
+
+# IDE
 .idea/
+*.iml
+.vscode/
 *.swp
 *.swo
+
+# OS
+.DS_Store
+Thumbs.db
 
 # Logs and temp files
 *.log
 *.tmp
 
-# System files
-.DS_Store
-Thumbs.db
+# Environment files
 .env
 .env.local
 *.env.*
@@ -39,7 +54,7 @@ coverage/
 htmlcov/
 .coverage
 
-# Compressed files
+# Compressed archives
 *.zip
 *.gz
 *.tar
@@ -50,16 +65,7 @@ htmlcov/
 *.rar
 *.zst
 *.lz4
-*.lzh
 *.cab
 *.arj
 *.rpm
 *.deb
-*.Z
-*.lz
-*.lzo
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.tar.zst
-```

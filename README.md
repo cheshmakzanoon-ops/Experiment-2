@@ -1,383 +1,272 @@
-# ArtFlow - Professional Digital Art Studio for Android
+# ArtFlow — Digital Art Studio for Android
 
-## 🎨 Overview
+ArtFlow is an Android digital-painting application built with Kotlin and Jetpack Compose.
+The repository is a **work-in-progress skeleton**: the architecture, domain models, managers
+and dependency-injection graph exist, but many user-facing features are still stubs.
 
-**ArtFlow** is a comprehensive digital art application designed exclusively for Android devices, inspired by the renowned Procreate app for iPad. This powerful mobile studio brings professional-grade drawing, painting, and illustration tools to the palm of your hand, leveraging the full potential of Android tablets and smartphones with stylus support.
-
-Whether you're a professional illustrator, concept artist, hobbyist, or beginner, ArtFlow provides an intuitive yet feature-rich environment that adapts to your creative workflow. With native support for pressure-sensitive styluses (including Samsung S-Pen, Wacom, and other Bluetooth styluses), multi-touch gestures, and a highly optimized rendering engine, ArtFlow delivers a seamless and responsive drawing experience that rivals desktop applications.
-
----
-
-## ✨ Key Features
-
-### 🖌️ Advanced Brush Engine
-- **100+ Pre-installed Brushes**: Pencils, pens, markers, watercolors, oils, airbrushes, charcoals, and experimental brushes
-- **Custom Brush Creator**: Design your own brushes with adjustable parameters:
-  - Shape grain and texture mapping
-  - Stroke tapering and pressure curves
-  - Color dynamics (hue, saturation, brightness jitter)
-  - Scatter, rotation, and count controls
-  - Wet mix and blending properties
-- **Brush Studios**: Organize brushes into customizable sets and import/export brush packs
-- **Pressure Sensitivity**: Full utilization of stylus pressure for dynamic stroke variation
-- **Tilt Support**: Natural shading effects using stylus tilt angle
-
-### 🎭 Layer System
-- **Unlimited Layers**: Create complex compositions with as many layers as your device can handle
-- **Layer Types**: Pixel, vector, fill, and clipping mask layers
-- **Blend Modes**: Normal, multiply, screen, overlay, darken, lighten, color dodge, burn, hue, saturation, luminosity, and more
-- **Layer Opacity & Alpha Lock**: Precise control over transparency and protected painting areas
-- **Layer Masks**: Non-destructive editing with grayscale masks
-- **Adjustment Layers**: Apply color corrections, filters, and effects non-destructively
-- **Layer Groups**: Organize layers into collapsible folders for better workflow management
-
-### 🎨 Color Management
-- **Advanced Color Picker**: RGB, HSV, CMYK, and traditional color wheel interfaces
-- **Color Harmony Tools**: Complementary, analogous, triadic, and split-complementary schemes
-- **Custom Palettes**: Create, save, and organize unlimited color palettes
-- **Color History**: Quick access to recently used colors
-- **Gradient Maps**: Apply sophisticated color grading to your artwork
-- **Eyedropper Tool**: Sample colors directly from your canvas in real-time
-
-### 🖼️ Canvas & Workspace
-- **Resolution Support**: Up to 8K resolution canvases (device-dependent)
-- **Aspect Ratios**: Preset templates for social media, print, web, and custom dimensions
-- **DPI Settings**: 72-600 DPI for screen and print workflows
-- **Symmetry Drawing**: Vertical, horizontal, quadrant, and radial symmetry guides
-- **Perspective Guides**: 1-point, 2-point, and 3-point perspective grids
-- **Isometric Grids**: Perfect for technical illustrations and game art
-- **Reference Window**: Floating resizable window for reference images
-
-### ⚡ Performance & Technology
-- **GPU-Accelerated Rendering**: OpenGL ES 3.0+ and Vulkan support for smooth performance
-- **Multi-threaded Processing**: Utilizes all CPU cores for complex operations
-- **Optimized Memory Management**: Intelligent caching and tile-based rendering for large canvases
-- **Low Latency Input**: Sub-20ms stylus latency on supported devices
-- **Autosave & Recovery**: Automatic backup every 30 seconds with crash recovery
-- **Undo/Redo Stack**: 100+ levels of undo history with visual history browser
-
-### 🛠️ Professional Tools
-- **Selection Tools**: Freehand, lasso, rectangular, elliptical, and magic wand selections
-- **Transform Tools**: Scale, rotate, skew, distort, and perspective transform
-- **Liquify Tool**: Push, twirl, pinch, and bloat effects for organic adjustments
-- **Smudge & Blend**: Realistic paint mixing and blending simulation
-- **Clone Stamp**: Duplicate areas of your artwork seamlessly
-- **Healing Brush**: Remove imperfections and blend textures
-- **Text Tool**: Add and edit vector-based text with font customization
-- **Shape Tools**: Vector rectangles, ellipses, polygons, and lines
-
-### 📤 Export & Sharing
-- **File Formats**: 
-  - Native `.artflow` project files (preserves all layers and editability)
-  - PSD (Photoshop compatibility with layers)
-  - PNG (transparent background support)
-  - JPEG (adjustable quality)
-  - TIFF (lossless compression)
-  - PDF (vector text and shapes)
-  - Animated GIF and APNG
-  - MP4 timelapse videos
-- **Export Options**: 
-  - Batch export multiple layers or artboards
-  - Custom resolution scaling (50%-400%)
-  - Color profile embedding (sRGB, Adobe RGB, Display P3)
-- **Direct Sharing**: Share to social media, cloud storage, or other apps
-
-### 🎬 Animation Assist
-- **Frame-by-Frame Animation**: Create traditional animations with onion skinning
-- **Timeline Interface**: Visual timeline with playback controls
-- **Onion Skinning**: See previous and next frames with customizable opacity
-- **FPS Control**: 1-60 FPS export options
-- **Light Table Mode**: Trace over animation frames
-- **Export Animations**: GIF, APNG, or video sequence exports
-
-### 🌐 Cloud & Collaboration
-- **Cloud Sync**: Automatic backup to Google Drive, Dropbox, or proprietary cloud
-- **Project Versioning**: Save and restore previous versions of your artwork
-- **Collaborative Layers**: Share projects with team members for collaborative editing
-- **Asset Library**: Cloud-synced brushes, palettes, and templates across devices
-
-### ♿ Accessibility & UX
-- **Customizable UI**: Rearrange toolbars, adjust icon sizes, dark/light themes
-- **Gesture Controls**: Two-finger tap (undo), three-finger tap (redo), pinch (zoom), rotate canvas
-- **Left-Handed Mode**: Mirror interface for left-handed artists
-- **Stylus Button Mapping**: Customize stylus button functions
-- **Voice Commands**: Hands-free tool switching (experimental)
-- **Tutorial System**: Interactive tutorials for beginners
+> **Documentation accuracy note.** Earlier revisions of this README described a finished
+> product (100+ brushes, PSD/animation export, cloud sync, collaboration, Vulkan rendering).
+> None of that is implemented. This file now describes what is actually in the repository.
+> See [Project status](#-project-status) for the precise list of what works and what does not.
 
 ---
 
-## 📱 System Requirements
+## 🎨 What is implemented
 
-### Minimum Requirements
-- **OS**: Android 8.0 (API Level 26) or higher
-- **RAM**: 4 GB
-- **Storage**: 500 MB free space
-- **Screen**: 1280x720 resolution
-- **Processor**: Quad-core 1.8 GHz or equivalent
+### Canvas & rendering
+- `GLSurfaceView`-based canvas (`ArtFlowCanvasView`) driven by `OpenGLCanvasRenderer`
+- OpenGL **ES 2.0** rendering (`GLES20`) that draws stroke points as point sprites via
+  `glDrawArrays(GL_POINTS, …)`
+- Separation between the logical canvas (`CanvasRepositoryImpl`) and the GL renderer
+- Zoom / pan / pinch gestures handled in `ArtFlowCanvasView.onTouchEvent`
+- A dedicated gesture helper (`CanvasGestureDetector`) for two/three-finger taps and rotation
 
-### Recommended Requirements
-- **OS**: Android 11.0 (API Level 30) or higher
-- **RAM**: 8 GB or more
-- **Storage**: 2 GB+ free space (SSD preferred)
-- **Screen**: 2560x1600 resolution or higher
-- **Processor**: Octa-core 2.4 GHz or equivalent
-- **Stylus**: Pressure-sensitive stylus with at least 2048 pressure levels
+### Brush engine
+- `BrushEngine` + `StrokeBuilder` producing pressure-sensitive strokes
+- Stroke smoothing and start/end tapering
+- Advanced parameters: size / opacity / hue / saturation / brightness jitter, scatter,
+  count, spacing, wet mix, flow, tilt influence, velocity dynamics
+- Pressure-curve types (linear, ease-in, ease-out, ease-in-out)
+- Brush preset factory (`CreateBrushPreset`) and preset catalog (`UpdateAdvancedBrushParams`)
+- Texture *models* and a `TextureMapper` for textured dabs (texture assets are not bundled)
 
-### Optimized Devices
-- Samsung Galaxy Tab S series (S8, S9, Ultra)
-- Lenovo Tab P series
-- Xiaomi Pad series
-- Huawei MatePad Pro
-- Google Pixel Tablet
-- ASUS Zenbook Pro Duo (with stylus)
+### Layers
+- `LayerManager`: add / remove / reorder / duplicate / merge, visibility, opacity, rename,
+  lock, alpha lock, clipping masks, and a partial undo/redo history
+- `LayerMaskManager`: create, paint, fill, invert, feather and thumbnail grayscale masks
+- `LayerGroupManager`: nested groups, layer-to-group membership, expansion state
+- `AdjustmentLayerManager`: eight adjustment types with validated parameter ranges
+
+### Selection, shapes and transforms
+- `SelectionManager`: rectangle, ellipse, freehand, lasso
+- `ColorSelectionAlgorithm`: magic-wand selection (flood fill + global colour matching)
+  with tolerance, anti-aliasing and progress reporting
+- `ShapeManager` + vector shape models (rectangle, ellipse, polygon, line)
+- `TransformManager`: translate, rotate, scale, skew, perspective, distortion and snapping
+
+### Data & architecture
+- Room persistence for projects, brushes and settings (`ProjectDao`, `BrushDao`, `SettingsDao`)
+- Clean-ish layering: `domain` (models + repository interfaces + use cases),
+  `data` (Room, repositories, renderers), `presentation` (Compose UI + ViewModels)
+- Hilt dependency injection across all layers
+- Timber logging, Coil for image loading, Navigation Compose for routing
+- Project gallery with project creation and canvas navigation
 
 ---
 
-## 🏗️ Architecture Overview
+## 🚧 Project status
 
-### Tech Stack
-- **Language**: Kotlin (primary), Java (legacy modules)
-- **UI Framework**: Jetpack Compose for modern UI components
-- **Graphics Engine**: Custom OpenGL ES 3.0 / Vulkan renderer
-- **Architecture**: MVVM (Model-View-ViewModel) with Clean Architecture principles
-- **Dependency Injection**: Hilt (Dagger)
-- **Async Operations**: Kotlin Coroutines + Flow
-- **Local Database**: Room (for project metadata, settings, assets)
-- **File Storage**: Jetpack Storage Access Framework
-- **Image Processing**: RenderScript + custom native libraries (C++)
-- **Animation**: Lottie for UI animations, custom engine for canvas animations
+The table below reflects the code that is currently in the repository.
 
-### Project Structure
-```
-app/
-├── src/main/
-│   ├── java/com/artflow/studio/
-│   │   ├── core/                    # Core engine classes
-│   │   │   ├── renderer/            # OpenGL/Vulkan rendering pipeline
-│   │   │   ├── brush/               # Brush engine and algorithms
-│   │   │   ├── layer/               # Layer management system
-│   │   │   ├── color/               # Color models and conversions
-│   │   │   └── geometry/            # Mathematical utilities
-│   │   ├── domain/                  # Business logic layer
-│   │   │   ├── model/               # Data models
-│   │   │   ├── repository/          # Repository interfaces
-│   │   │   └── usecase/             # Use case implementations
-│   │   ├── data/                    # Data layer
-│   │   │   ├── local/               # Local storage, database
-│   │   │   ├── remote/              # Cloud services
-│   │   │   └── repository/          # Repository implementations
-│   │   ├── presentation/            # UI layer
-│   │   │   ├── ui/                  # Compose screens
-│   │   │   ├── viewmodel/           # ViewModels
-│   │   │   └── components/          # Reusable UI components
-│   │   ├── di/                      # Dependency injection modules
-│   │   └── util/                    # Utilities and extensions
-│   ├── jni/                         # Native C++ code
-│   │   ├── renderer/                # Native rendering optimizations
-│   │   ├── brush/                   # Native brush algorithms
-│   │   └── filters/                 # Image filter implementations
-│   └── res/                         # Resources
-├── build.gradle.kts
-└── proguard-rules.pro
+| Area | Status |
+|------|--------|
+| Project gallery (list + create) | Implemented, thumbnails are placeholders |
+| Canvas screen + GL surface | Implemented; renderer draws flat point sprites |
+| Brush engine + parameters | Implemented (CPU-side models and logic) |
+| Timed brush textures | Models + mapper implemented; **no texture assets** shipped |
+| Layers / masks / groups / adjustments | Managers implemented; UI panels present but not all wired |
+| Selection / shapes / transforms | Managers implemented; UI panels are partial |
+| Undo / redo | Partial (layer and transform histories; merge/redo incomplete) |
+| Save / load projects | Room metadata only — canvas pixels are **not** serialized |
+| Export (PNG/JPEG/PSD/PDF/GIF/MP4) | **Not implemented** (see `Phase 38–40` in `agent.md`) |
+| Cloud sync / collaboration | **Not implemented** |
+| Animation timeline / timelapse | **Not implemented** |
+| Settings, tutorials, accessibility | **Not implemented** |
+| Native C++ brush engine | Built via CMake, **not wired** into the Kotlin render path |
+
+`TODO` markers in the source indicate the intended follow-up work. Use:
+
+```bash
+grep -rn "TODO" app/src/main
 ```
 
 ---
 
-## 🚀 Getting Started
+## 📱 System requirements
+
+- **OS**: Android 8.0 (API 26) or higher
+- **Target SDK**: 34
+- **RAM**: 4 GB recommended for large canvases
+- **Stylus**: pressure-sensitive stylus optional; finger input falls back to
+  `MotionEvent.size` as a pressure proxy
+
+---
+
+## 🏗️ Architecture
+
+### Tech stack
+
+- **Language**: Kotlin (there are **no Java sources**)
+- **UI**: Jetpack Compose with Material 3 (dark-first theme)
+- **Graphics**: OpenGL ES 2.0 through `GLSurfaceView` / `GLES20`
+- **Native**: C++ via CMake + NDK (JNI), currently unused by the render path
+- **Architecture**: MVVM with a layered `domain` / `data` / `presentation` split
+- **DI**: Hilt (Dagger)
+- **Async**: Kotlin Coroutines + Flow / StateFlow
+- **Persistence**: Room
+- **Image loading**: Coil
+- **Logging**: Timber
+
+The top-level Gradle build also declares the Kotlin serialization plugin as
+`apply false`; no module currently enables it.
+
+### Actual project structure
+
+```
+app/src/main/java/com/artflow/studio/
+├── core/                       # Stateful engine/managers (singletons)
+│   ├── brush/                  # BrushEngine, TextureMapper
+│   ├── layer/                  # Layer, LayerGroup, LayerMask, AdjustmentLayer managers
+│   ├── selection/              # SelectionManager, ColorSelectionAlgorithm
+│   ├── shape/                  # ShapeManager
+│   └── transform/              # TransformManager
+├── domain/
+│   ├── model/                  # Color, Project, brush/, layer/, selection/, shape/, texture/, transform/
+│   ├── repository/             # Project / canvas / texture repository interfaces
+│   └── usecase/                # One class per operation (canvas, layer, brush, selection, shape, transform, texture)
+├── data/
+│   ├── local/                  # Room database, DAOs, entities
+│   ├── repository/             # Repository implementations
+│   └── renderer/               # OpenGL renderer + JNI wrapper
+├── di/                         # Hilt modules
+└── presentation/
+    └── ui/                     # Compose app, screens, components, theme, ViewModels
+
+app/src/main/jni/               # C++ sources built by CMakeLists.txt
+app/src/test/                   # JVM unit tests (JUnit)
+```
+
+There are no `core/renderer`, `core/color` or `core/geometry` packages (an earlier version
+of this document claimed otherwise); the renderer lives in `data/renderer`.
+
+---
+
+## 🚀 Getting started
 
 ### Prerequisites
-- Android Studio Hedgehog (2023.1.1) or later
-- JDK 17 or higher
-- Android SDK 34 (or latest)
-- NDK r25c or later (for native code)
-- Git
+- Android Studio Hedgehog (2023.1.1) or later, **or** a local Gradle install
+- JDK 17
+- Android SDK with API 34
+- NDK (only required to build the native `libartflow-brush` module)
 
-### Installation Steps
+### ⚠️ No Gradle wrapper is committed
 
-1. **Clone the Repository**
+`gradlew` / `gradle/wrapper/` are **not** part of the repository, so the historically
+documented `./gradlew …` commands do not work in a fresh clone. Either:
+
+1. Open the project in Android Studio (it will supply a compatible Gradle), or
+2. Generate the wrapper once, then use `./gradlew`:
+
 ```bash
-git clone https://github.com/yourusername/artflow-android.git
-cd artflow-android
+gradle wrapper --gradle-version 8.2
 ```
 
-2. **Open in Android Studio**
-   - Launch Android Studio
-   - Select "Open an Existing Project"
-   - Navigate to the cloned directory
-
-3. **Sync Dependencies**
-   - Android Studio will automatically sync Gradle dependencies
-   - Ensure you have internet connection for first-time setup
-
-4. **Build Configuration**
-   - Create `local.properties` with your SDK path:
-   ```properties
-   sdk.dir=/path/to/Android/Sdk
-   ndk.dir=/path/to/Android/ndk
-   ```
-
-5. **Run the Application**
-   - Connect an Android device or start an emulator
-   - Click the "Run" button or press `Shift + F10`
-   - Select your target device
-
-### Build Variants
-- **debug**: Development build with logging enabled
-- **release**: Optimized production build
-- **benchmark**: Performance testing build
+Configuration notes:
+- `minSdk = 26`, `targetSdk = 34`, `compileSdk = 34`
+- Build variants: `debug`, `release`, `benchmark`
+- Java/Kotlin target: 17
+- `app/src/main/jni/CMakeLists.txt` builds the shared library `libartflow-brush.so`
 
 ---
 
 ## 🧪 Testing
 
-### Unit Tests
+JVM unit tests live in `app/src/test`:
+
 ```bash
+# Using the wrapper (after generating it)
 ./gradlew testDebugUnitTest
+
+# Or with a local Gradle install
+gradle testDebugUnitTest
 ```
 
-### Instrumentation Tests
-```bash
-./gradlew connectedAndroidTest
-```
-
-### Benchmark Tests
-```bash
-./gradlew benchmark
-```
+There is currently **no instrumentation test source set** (`app/src/androidTest` does not
+exist), and no benchmark module, so `connectedAndroidTest` and `benchmark` have nothing to
+run yet.
 
 ---
 
-## 📦 Building for Release
+## 📦 Building for release
 
-1. **Generate Keystore** (if not exists)
+1. Generate a keystore:
+
 ```bash
 keytool -genkey -v -keystore artflow-release.keystore -alias artflow -keyalg RSA -keysize 2048 -validity 10000
 ```
 
-2. **Configure Signing**
-   - Add keystore details to `~/.gradle/gradle.properties`:
-   ```properties
-   ARTFLOW_RELEASE_STORE_FILE=/path/to/keystore
-   ARTFLOW_RELEASE_KEY_ALIAS=artflow
-   ARTFLOW_RELEASE_PASSWORD=your_password
-   ARTFLOW_KEY_PASSWORD=your_key_password
-   ```
+2. Provide signing credentials through `~/.gradle/gradle.properties` (the release build type
+   declares `minifyEnabled = true`; add a `signingConfig` block to `app/build.gradle.kts`
+   if you want signed output).
 
-3. **Build Release APK**
+3. Build:
+
 ```bash
-./gradlew assembleRelease
+gradle assembleRelease
+gradle bundleRelease
 ```
 
-4. **Build Release Bundle (Play Store)**
-```bash
-./gradlew bundleRelease
-```
+`local.properties` (SDK/NDK paths) and keystores are git-ignored — never commit them.
 
 ---
 
 ## 🤝 Contributing
 
-We welcome contributions from the community! Please follow these guidelines:
+1. Fork the repository and create a feature branch.
+2. Make your changes and add/update tests.
+3. Ensure the project builds and tests pass.
+4. Open a pull request.
 
-### Contribution Process
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Write/update tests
-5. Ensure all tests pass
-6. Commit your changes (`git commit -m 'Add amazing feature'`)
-7. Push to the branch (`git push origin feature/amazing-feature`)
-8. Open a Pull Request
+### Code style
+Follow the [Kotlin coding conventions](https://kotlinlang.org/docs/coding-conventions.html).
 
-### Code Style
-- Follow [Kotlin Coding Conventions](https://kotlinlang.org/docs/coding-conventions.html)
-- Use ktlint for linting: `./gradlew ktlintCheck`
-- Format code: `./gradlew ktlintFormat`
+`ktlint` and `detekt` are **not** configured in this repository, so `./gradlew ktlintCheck`
+and `./gradlew ktlintFormat` (mentioned in older revisions of this document) do not exist.
+Adding them would require the corresponding plugins and configuration.
 
-### Commit Messages
-- Use conventional commits format:
-  - `feat:` New features
-  - `fix:` Bug fixes
-  - `docs:` Documentation changes
-  - `style:` Code style changes
-  - `refactor:` Code refactoring
-  - `test:` Test additions/changes
-  - `chore:` Maintenance tasks
+### Commit messages
+Conventional commits are preferred: `feat:`, `fix:`, `docs:`, `style:`, `refactor:`,
+`test:`, `chore:`.
 
 ---
 
 ## 📄 License
 
-This project is licensed under the **GNU General Public License v3.0** - see the [LICENSE](LICENSE) file for details.
-
-### Commercial Use
-For commercial licensing options, enterprise support, or white-label solutions, please contact: **licensing@artflow.studio**
-
----
-
-## 🙏 Acknowledgments
-
-- Inspired by Procreate (Savage Interactive Pty Ltd)
-- Built with love by the open-source community
-- Special thanks to all contributors and beta testers
-
----
-
-## 📞 Support & Community
-
-- **Documentation**: https://docs.artflow.studio
-- **Issue Tracker**: https://github.com/yourusername/artflow-android/issues
-- **Discussions**: https://github.com/yourusername/artflow-android/discussions
-- **Discord Community**: https://discord.gg/artflow
-- **Twitter**: @ArtFlowApp
-- **Email**: support@artflow.studio
+This project is licensed under the **GNU General Public License v3.0** — see the
+[LICENSE](LICENSE) file for the full text.
 
 ---
 
 ## 🗺️ Roadmap
 
-### Phase 1 (Q1 2025) - Foundation
-- [x] Core rendering engine
-- [x] Basic brush system
-- [x] Layer management
-- [ ] Export functionality
+The detailed 50-phase plan lives in [`agent.md`](agent.md). Summarised:
 
-### Phase 2 (Q2 2025) - Professional Features
-- [ ] Advanced brush editor
-- [ ] Animation assist
-- [ ] PSD import/export
-- [ ] Cloud sync
-
-### Phase 3 (Q3 2025) - AI Integration
-- [ ] AI-assisted sketching
-- [ ] Smart selection tools
-- [ ] Style transfer filters
-- [ ] Auto-colorization
-
-### Phase 4 (Q4 2025) - Collaboration
-- [ ] Multi-user editing
-- [ ] Real-time collaboration
-- [ ] Asset marketplace
-- [ ] Tutorial platform
+- **Foundation (1–8)**: project setup, DI, core architecture, design system, canvas, input,
+  brush engine, layers — *substantially present*
+- **Core drawing (9–16)**: advanced brush params, textures, colour dynamics, blend modes,
+  selection, transform, alpha lock, masks — *models and managers present, UI partial*
+- **Professional tools (17–24)**: smudge, liquify, clone, heal, gradient, fill, text, shapes —
+  *mostly not implemented*
+- **Advanced layers (25–30)**: adjustments, groups, reference layers, filters, smart objects —
+  *adjustments and groups implemented, the rest not*
+- **Colour & canvas (31–36)**: pickers, palettes, symmetry, perspective, canvas properties,
+  quick menu — *not implemented*
+- **File operations (37–42)**: save, PNG/JPEG, PSD, PDF, gallery, cloud sync — *gallery only*
+- **Animation & advanced (43–50)**: timeline, animation export, timelapse, performance,
+  tutorials, settings, QA, release — *not implemented*
 
 ---
 
-## 📊 Performance Benchmarks
+## 📞 Support
 
-| Device | Canvas Size | Brush Latency | Max Layers | RAM Usage |
-|--------|-------------|---------------|------------|-----------|
-| Galaxy Tab S9 Ultra | 4096x4096 | 12ms | 250+ | 3.2 GB |
-| Pixel Tablet | 3000x3000 | 18ms | 180+ | 2.8 GB |
-| Lenovo Tab P12 | 4096x4096 | 15ms | 220+ | 3.0 GB |
-
-*Results may vary based on canvas complexity and brush type.*
+- Issue tracker: open an issue on the repository hosting this project
+- The `https://docs.artflow.studio`, Discord, and email addresses used in earlier revisions of
+  this document are placeholders and do not resolve
 
 ---
 
 <div align="center">
 
-**Made with ❤️ for Android Artists Everywhere**
-
-[Website](https://artflow.studio) • [Documentation](https://docs.artflow.studio) • [Report Bug](https://github.com/yourusername/artflow-android/issues)
+**Built with Kotlin and Jetpack Compose for Android artists**
 
 </div>

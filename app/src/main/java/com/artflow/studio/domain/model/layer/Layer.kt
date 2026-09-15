@@ -1,11 +1,13 @@
 package com.artflow.studio.domain.model.layer
 
 import com.artflow.studio.domain.model.brush.Stroke
+import kotlinx.serialization.Serializable
 
 /**
  * Domain model representing a layer in the canvas
  * Layers are stacked and composited to create the final image
  */
+@Serializable
 data class Layer(
     val id: Long,
     val name: String,
@@ -64,6 +66,7 @@ data class Layer(
  * Layer blend modes for compositing
  * Implements Phase 12: Blend Modes
  */
+@Serializable
 enum class BlendMode(val displayName: String) {
     NORMAL("Normal"),
     MULTIPLY("Multiply"),
@@ -94,6 +97,7 @@ enum class BlendMode(val displayName: String) {
 /**
  * Represents a layer group (folder) for organizing layers
  */
+@Serializable
 data class LayerGroup(
     val id: Long,
     val name: String,
@@ -104,6 +108,30 @@ data class LayerGroup(
     val isExpanded: Boolean = true,    // UI state for group expansion
     val parentGroupId: Long? = null
 ) {
+    /**
+     * Create a copy of this group with modified properties.
+     * Used by LayerGroupManager for immutable updates.
+     */
+    fun copyWith(
+        id: Long = this.id,
+        name: String = this.name,
+        index: Int = this.index,
+        layerIds: List<Long> = this.layerIds,
+        subGroupIds: List<Long> = this.subGroupIds,
+        isVisible: Boolean = this.isVisible,
+        isExpanded: Boolean = this.isExpanded,
+        parentGroupId: Long? = this.parentGroupId
+    ): LayerGroup = LayerGroup(
+        id = id,
+        name = name,
+        index = index,
+        layerIds = layerIds,
+        subGroupIds = subGroupIds,
+        isVisible = isVisible,
+        isExpanded = isExpanded,
+        parentGroupId = parentGroupId
+    )
+
     /**
      * Total number of layers in this group (including nested)
      */

@@ -40,12 +40,6 @@ class LayerGroupManager @Inject constructor() {
         index: Int = _groups.value.size,
         parentGroupId: Long? = null
     ): LayerGroup? {
-        // Prevent circular nesting (can't add group to itself or its descendants)
-        if (parentGroupId != null && isDescendantOf(parentGroupId, parentGroupId)) {
-            Timber.e("Cannot create group: would create circular reference")
-            return null
-        }
-
         val groupName = name ?: "Group ${nextGroupId}"
         val group = LayerGroup(
             id = nextGroupId++,
@@ -59,15 +53,31 @@ class LayerGroupManager @Inject constructor() {
         )
 
         val updatedGroups = _groups.value.toMutableList()
-        
+
         // Adjust indices of groups at or above the insertion point
         updatedGroups.forEachIndexed { i, g ->
             if (g.index >= index && g.parentGroupId == parentGroupId) {
                 updatedGroups[i] = g.copyWith(index = g.index + 1)
             }
         }
-        
+
         updatedGroups.add(group)
+
+        // Register the new group on its parent. Without this the parent's subGroupIds
+        // never lists the child, so recursive traversal (layer collection, duplication)
+        // silently misses nested groups.
+        if (parentGroupId != null) {
+            val parentIndex = updatedGroups.indexOfFirst { it.id == parentGroupId }
+            if (parentIndex == -1) {
+                Timber.e("Cannot create group: parent $parentGroupId not found")
+                return null
+            }
+            val parent = updatedGroups[parentIndex]
+            updatedGroups[parentIndex] = parent.copyWith(
+                subGroupIds = parent.subGroupIds + group.id
+            )
+        }
+
         _groups.value = updatedGroups
         
         Timber.d("Layer group created: ${group.name} at index $index${parentGroupId?.let { " under parent $it" } ?: ""}")

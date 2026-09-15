@@ -3,17 +3,15 @@ package com.artflow.studio.data.repository.texture
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import androidx.core.graphics.drawable.toBitmap
-import coil.ImageLoader
-import coil.request.ImageRequest
 import com.artflow.studio.domain.model.texture.BrushStamp
 import com.artflow.studio.domain.model.texture.BrushTexture
 import com.artflow.studio.domain.repository.texture.TextureRepository
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
@@ -28,7 +26,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class TextureRepositoryImpl @Inject constructor(
-    private val context: Context
+    @ApplicationContext private val context: Context
 ) : TextureRepository {
     
     // In-memory cache for quick access
@@ -42,10 +40,8 @@ class TextureRepositoryImpl @Inject constructor(
     override fun getAllTextures(): Flow<List<BrushTexture>> = _textures.asStateFlow()
     
     override fun getTexturesByCategory(category: BrushTexture.TextureCategory): Flow<List<BrushTexture>> {
-        return _textures.asStateFlow().let { flow ->
-            kotlinx.coroutines.flow.map(flow) { textures ->
-                textures.filter { it.category == category }
-            }
+        return _textures.asStateFlow().map { textures ->
+            textures.filter { it.category == category }
         }
     }
     
@@ -155,10 +151,8 @@ class TextureRepositoryImpl @Inject constructor(
     override fun getAllStamps(): Flow<List<BrushStamp>> = _stamps.asStateFlow()
     
     override fun getStampsByCategory(category: BrushStamp.StampCategory): Flow<List<BrushStamp>> {
-        return _stamps.asStateFlow().let { flow ->
-            kotlinx.coroutines.flow.map(flow) { stamps ->
-                stamps.filter { it.category == category }
-            }
+        return _stamps.asStateFlow().map { stamps ->
+            stamps.filter { it.category == category }
         }
     }
     
@@ -357,7 +351,7 @@ class TextureRepositoryImpl @Inject constructor(
                 BrushTexture("smooth_paper", "Smooth Paper", BrushTexture.TextureCategory.PAPER)
             )
             
-            builtInTextures.forEach { textureCache[it.id] = texture }
+            builtInTextures.forEach { textureCache[it.id] = it }
             _textures.value = textureCache.values.toList()
         }
     }

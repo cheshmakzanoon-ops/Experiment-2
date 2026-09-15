@@ -1,11 +1,13 @@
 package com.artflow.studio.domain.model.brush
 
 import android.graphics.Color
+import kotlinx.serialization.Serializable
 
 /**
  * Represents a point in a stroke with pressure and tilt information
  * Implements Phase 7: Brush Engine Foundation - Stroke Point Model
  */
+@Serializable
 data class StrokePoint(
     val x: Float,
     val y: Float,
@@ -39,6 +41,7 @@ data class StrokePoint(
  * Represents a complete stroke with all its points
  * Implements Phase 7: Brush Engine Foundation - Stroke Model
  */
+@Serializable
 data class Stroke(
     val id: Long = System.nanoTime(),
     val points: List<StrokePoint>,
@@ -55,8 +58,8 @@ data class Stroke(
         
         var minX = Float.MAX_VALUE
         var minY = Float.MAX_VALUE
-        var maxX = Float.MIN_VALUE
-        var maxY = Float.MIN_VALUE
+        var maxX = -Float.MAX_VALUE
+        var maxY = -Float.MAX_VALUE
         
         points.forEach { point ->
             minX = kotlin.math.min(minX, point.x)

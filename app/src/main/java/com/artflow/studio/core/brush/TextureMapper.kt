@@ -167,9 +167,9 @@ class TextureMapper @Inject constructor() {
         
         // Tint the mask with brush color
         val colorFilter = ColorMatrixColorFilter(floatArrayOf(
-            0f, 0f, 0f, 0f, android.graphics.Color.red(color),
-            0f, 0f, 0f, 0f, android.graphics.Color.green(color),
-            0f, 0f, 0f, 0f, android.graphics.Color.blue(color),
+            0f, 0f, 0f, 0f, android.graphics.Color.red(color).toFloat(),
+            0f, 0f, 0f, 0f, android.graphics.Color.green(color).toFloat(),
+            0f, 0f, 0f, 0f, android.graphics.Color.blue(color).toFloat(),
             0f, 0f, 0f, params.opacity, 0f
         ))
         

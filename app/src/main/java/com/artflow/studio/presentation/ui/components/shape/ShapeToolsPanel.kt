@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.artflow.studio.presentation.ui.components.shape
 
 import androidx.compose.foundation.background
@@ -269,9 +271,9 @@ fun ShapePropertiesPanel(
                             red = it
                             onFillColorChanged(
                                 ArtFlowColor(
-                                    (red * 255).toInt(),
-                                    (green * 255).toInt(),
-                                    (blue * 255).toInt()
+                                    red = (red * 255).toInt(),
+                                    green = (green * 255).toInt(),
+                                    blue = (blue * 255).toInt()
                                 )
                             )
                         },
@@ -284,9 +286,9 @@ fun ShapePropertiesPanel(
                             green = it
                             onFillColorChanged(
                                 ArtFlowColor(
-                                    (red * 255).toInt(),
-                                    (green * 255).toInt(),
-                                    (blue * 255).toInt()
+                                    red = (red * 255).toInt(),
+                                    green = (green * 255).toInt(),
+                                    blue = (blue * 255).toInt()
                                 )
                             )
                         },
@@ -299,9 +301,9 @@ fun ShapePropertiesPanel(
                             blue = it
                             onFillColorChanged(
                                 ArtFlowColor(
-                                    (red * 255).toInt(),
-                                    (green * 255).toInt(),
-                                    (blue * 255).toInt()
+                                    red = (red * 255).toInt(),
+                                    green = (green * 255).toInt(),
+                                    blue = (blue * 255).toInt()
                                 )
                             )
                         },

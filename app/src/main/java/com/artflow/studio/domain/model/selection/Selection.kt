@@ -2,6 +2,7 @@ package com.artflow.studio.domain.model.selection
 
 import android.graphics.Path
 import android.graphics.RectF
+import android.graphics.Region
 import kotlin.math.sqrt
 
 /**
@@ -17,10 +18,23 @@ data class Selection(
     val isActive: Boolean = true
 ) {
     /**
-     * Check if a point is inside the selection
+     * Check if a point is inside the selection.
+     *
+     * [Path] has no point-in-path test, so we rasterise the path into a [Region]
+     * within the selection bounds. Points outside the bounds are rejected first,
+     * which keeps the common case cheap.
      */
     fun containsPoint(x: Float, y: Float): Boolean {
-        return path.contains(x, y)
+        if (!bounds.contains(x, y)) return false
+        val clip = Region(
+            bounds.left.toInt(),
+            bounds.top.toInt(),
+            bounds.right.toInt() + 1,
+            bounds.bottom.toInt() + 1
+        )
+        val region = Region()
+        if (!region.setPath(path, clip)) return false
+        return region.contains(x.toInt(), y.toInt())
     }
 
     /**
@@ -42,20 +56,6 @@ data class Selection(
         path.computeBounds(pathBounds, true)
         // This is a rough approximation - actual implementation would use pixel counting
         return pathBounds.width() * pathBounds.height() * 0.7f
-    }
-
-    /**
-     * Create a copy of this selection with modified properties
-     */
-    fun copy(
-        id: Long = this.id,
-        type: SelectionType = this.type,
-        path: Path = Path(this.path),
-        bounds: RectF = RectF(this.bounds),
-        createdAt: Long = this.createdAt,
-        isActive: Boolean = this.isActive
-    ): Selection {
-        return Selection(id, type, path, bounds, createdAt, isActive)
     }
 }
 
@@ -124,8 +124,9 @@ data class FloodFillResult(
             tolerance: Int,
             contiguous: Boolean = true
         ): FloodFillResult {
-            val width = pixels.size
-            val height = pixels.firstOrNull()?.size ?: return FloodFillResult(emptyList(), RectF(), 0, 0)
+            // `pixels` is indexed as [y][x]: the outer array holds rows, each row holds pixels.
+            val height = pixels.size
+            val width = pixels.firstOrNull()?.size ?: return FloodFillResult(emptyList(), RectF(), 0, 0)
             
             if (startX !in 0 until width || startY !in 0 until height) {
                 return FloodFillResult(emptyList(), RectF(), 0, 0)

@@ -4,14 +4,18 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.PointMode
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.dp
 import com.artflow.studio.domain.model.brush.BrushParams
 
@@ -19,6 +23,7 @@ import com.artflow.studio.domain.model.brush.BrushParams
  * Advanced brush settings panel for configuring detailed brush parameters
  * Implements Phase 9: Advanced Brush Parameters
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdvancedBrushSettingsPanel(
     brushParams: BrushParams,
@@ -309,7 +314,7 @@ private fun BrushPreviewWidget(
                 start = Offset(20f, canvasHeight / 2),
                 end = Offset(canvasWidth - 20f, canvasHeight / 2),
                 strokeWidth = effectiveSize * 0.5f,
-                cap = Stroke.Cap.Round
+                cap = StrokeCap.Round
             )
         }
         
@@ -359,7 +364,7 @@ private fun BrushSettingsSection(
                 )
                 IconButton(onClick = { expanded = !expanded }) {
                     Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Default.ExpandMore,
+                        imageVector = Icons.Default.ExpandMore,
                         contentDescription = if (expanded) "Collapse" else "Expand",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.rotate(if (expanded) 0f else -90f)
@@ -418,6 +423,7 @@ private fun LabeledSlider(
 /**
  * Pressure curve selector with visual preview
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PressureCurveSelector(
     selectedCurve: BrushParams.PressureCurve,
@@ -475,6 +481,9 @@ private fun PressureCurvePreview(
     curve: BrushParams.PressureCurve,
     modifier: Modifier = Modifier
 ) {
+    // Resolved outside the draw lambda: MaterialTheme is @Composable and cannot be
+    // read from inside DrawScope.
+    val curveColor = MaterialTheme.colorScheme.primary
     Canvas(
         modifier = modifier
     ) {
@@ -522,8 +531,8 @@ private fun PressureCurvePreview(
         if (points.size > 1) {
             drawPoints(
                 points = points,
-                pointMode = androidx.compose.ui.graphics.drawscope.PointMode.Polygon,
-                color = MaterialTheme.colorScheme.primary,
+                pointMode = PointMode.Polygon,
+                color = curveColor,
                 strokeWidth = 3f
             )
         }

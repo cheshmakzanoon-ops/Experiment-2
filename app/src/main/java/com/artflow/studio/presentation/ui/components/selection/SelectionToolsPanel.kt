@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.artflow.studio.presentation.ui.components.selection
 
 import androidx.compose.foundation.background
@@ -33,12 +35,9 @@ fun SelectionToolsPanel(
     var magicWandTolerance by remember { mutableStateOf(32) }
     var featherRadius by remember { mutableStateOf(0f) }
 
-    val hasSelection by selectionManager.hasActiveSelection()
-        .let { flow -> 
-            // Workaround: we need to collect the state properly
-            // For now, use a simplified approach
-            remember { mutableStateOf(false) } 
-        }
+    // Observe the live selection state so the operation buttons enable/disable correctly.
+    val activeSelection by selectionManager.selection.collectAsState()
+    val hasSelection = activeSelection != null
 
     Column(
         modifier = modifier
@@ -65,7 +64,7 @@ fun SelectionToolsPanel(
                     selected = selectedTool == SelectionTool.RECTANGLE,
                     onClick = {
                         selectedTool = SelectionTool.RECTANGLE
-                        onSelectionToolChanged(it)
+                        onSelectionToolChanged(SelectionTool.RECTANGLE)
                     }
                 )
             }
@@ -76,18 +75,18 @@ fun SelectionToolsPanel(
                     selected = selectedTool == SelectionTool.ELLIPSE,
                     onClick = {
                         selectedTool = SelectionTool.ELLIPSE
-                        onSelectionToolChanged(it)
+                        onSelectionToolChanged(SelectionTool.ELLIPSE)
                     }
                 )
             }
             item {
                 SelectionToolButton(
-                    icon = Icons.Draw,
+                    icon = Icons.Default.Draw,
                     label = "Freehand",
                     selected = selectedTool == SelectionTool.FREEHAND,
                     onClick = {
                         selectedTool = SelectionTool.FREEHAND
-                        onSelectionToolChanged(it)
+                        onSelectionToolChanged(SelectionTool.FREEHAND)
                     }
                 )
             }
@@ -98,19 +97,19 @@ fun SelectionToolsPanel(
                     selected = selectedTool == SelectionTool.LASSO,
                     onClick = {
                         selectedTool = SelectionTool.LASSO
-                        onSelectionToolChanged(it)
+                        onSelectionToolChanged(SelectionTool.LASSO)
                     }
                 )
             }
             item {
                 SelectionToolButton(
-                    icon = Icons.AutoFixHigh,
+                    icon = Icons.Default.AutoFixHigh,
                     label = "Magic Wand",
                     selected = selectedTool == SelectionTool.MAGIC_WAND,
                     onClick = {
                         selectedTool = SelectionTool.MAGIC_WAND
                         showMagicWandOptions = true
-                        onSelectionToolChanged(it)
+                        onSelectionToolChanged(SelectionTool.MAGIC_WAND)
                     }
                 )
             }
@@ -203,13 +202,13 @@ fun SelectionToolsPanel(
                 icon = Icons.Default.Clear,
                 label = "Deselect",
                 onClick = { selectionManager.clearSelection() },
-                enabled = hasSelection.value
+                enabled = hasSelection
             )
             SelectionOperationButton(
                 icon = Icons.Default.InvertColors,
                 label = "Invert",
                 onClick = { /* Invert selection */ },
-                enabled = hasSelection.value
+                enabled = hasSelection
             )
             SelectionOperationButton(
                 icon = Icons.Default.BlurOn,
@@ -219,19 +218,19 @@ fun SelectionToolsPanel(
                         selectionManager.featherSelection(featherRadius)
                     }
                 },
-                enabled = hasSelection.value
+                enabled = hasSelection
             )
             SelectionOperationButton(
                 icon = Icons.Default.ContentCut,
                 label = "Cut",
                 onClick = { /* Cut selection */ },
-                enabled = hasSelection.value
+                enabled = hasSelection
             )
             SelectionOperationButton(
                 icon = Icons.Default.ContentCopy,
                 label = "Copy",
                 onClick = { /* Copy selection */ },
-                enabled = hasSelection.value
+                enabled = hasSelection
             )
         }
 

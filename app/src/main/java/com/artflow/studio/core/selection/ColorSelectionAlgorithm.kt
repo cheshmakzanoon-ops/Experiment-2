@@ -1,12 +1,16 @@
 package com.artflow.studio.core.selection
 
 import android.graphics.Bitmap
+import android.graphics.Path
+import android.graphics.RectF
 import androidx.annotation.IntRange
 import com.artflow.studio.domain.model.selection.Selection
+import com.artflow.studio.domain.model.selection.SelectionType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -35,6 +39,9 @@ class ColorSelectionAlgorithm @Inject constructor() {
 
     // Currently active selection job for cancellation
     private var activeSelectionJob: kotlinx.coroutines.Job? = null
+
+    // Monotonic id source for generated selections
+    private var nextSelectionId = 1L
 
     /**
      * Perform magic wand selection based on color similarity
@@ -293,13 +300,40 @@ class ColorSelectionAlgorithm @Inject constructor() {
             mask
         }
 
+        // Convert the pixel mask into a Path so it maps onto the domain Selection model.
+        val path = Path().apply {
+            for (row in 0 until height) {
+                var col = 0
+                while (col < width) {
+                    if (!finalMask[row][col]) {
+                        col++
+                        continue
+                    }
+                    // Coalesce a horizontal run of selected pixels into one rectangle.
+                    var runEnd = col
+                    while (runEnd < width && finalMask[row][runEnd]) {
+                        runEnd++
+                    }
+                    val left = (minX + col).toFloat()
+                    val top = (minY + row).toFloat()
+                    addRect(left, top, (minX + runEnd).toFloat(), top + 1f, Path.Direction.CW)
+                    col = runEnd
+                }
+            }
+        }
+
+        val bounds = RectF(
+            minX.toFloat(),
+            minY.toFloat(),
+            (minX + width).toFloat(),
+            (minY + height).toFloat()
+        )
+
         return Selection(
-            offsetX = minX,
-            offsetY = minY,
-            width = width,
-            height = height,
-            mask = finalMask,
-            featherRadius = if (antiAlias) 1 else 0
+            id = nextSelectionId++,
+            type = SelectionType.MAGIC_WAND,
+            path = path,
+            bounds = bounds
         )
     }
 

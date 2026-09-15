@@ -21,7 +21,11 @@ class UpdateAdvancedBrushParamsTest {
             object : com.artflow.studio.domain.repository.canvas.CanvasRepository {
                 override suspend fun createCanvas(width: Int, height: Int, dpi: Int): Long = 1L
                 override suspend fun loadCanvas(projectId: Long) = null
-                override suspend fun saveCanvas(projectId: Long) {}
+                override suspend fun saveCanvas(projectId: Long): String? = null
+                override fun undo(): Boolean = false
+                override fun redo(): Boolean = false
+                override val canUndo: Boolean get() = false
+                override val canRedo: Boolean get() = false
                 override fun beginStroke(x: Float, y: Float, pressure: Float, brushParams: BrushParams, layerId: Long): Long = 1L
                 override fun continueStroke(strokeId: Long, x: Float, y: Float, pressure: Float, tiltX: Float, tiltY: Float) {}
                 override fun endStroke(strokeId: Long) {}
@@ -30,7 +34,8 @@ class UpdateAdvancedBrushParamsTest {
                 override suspend fun clearCanvas(color: Int) {}
                 override fun setBackgroundColor(color: Int) {}
                 override fun getCanvasSize() = com.artflow.studio.domain.repository.canvas.CanvasSize(100, 100, 72)
-                override fun observeCanvasInvalidation() = kotlinx.coroutines.flow.flow { }
+                override fun observeCanvasInvalidation() =
+                    kotlinx.coroutines.flow.emptyFlow<com.artflow.studio.domain.repository.canvas.CanvasInvalidationEvent>()
                 override fun dispose() {}
                 override suspend fun addLayer(name: String?, index: Int?, opacity: Float) = 
                     com.artflow.studio.domain.model.layer.Layer(1, "Layer 1", 0)
@@ -45,6 +50,8 @@ class UpdateAdvancedBrushParamsTest {
                 override suspend fun setLayerName(layerId: Long, newName: String): Boolean = true
                 override suspend fun setLayerLock(layerId: Long, isLocked: Boolean): Boolean = true
                 override suspend fun setLayerBlendMode(layerId: Long, blendMode: com.artflow.studio.domain.model.layer.BlendMode): Boolean = true
+                override suspend fun setLayerAlphaLock(layerId: Long, isLocked: Boolean?): Boolean = true
+                override suspend fun setLayerClippingMask(layerId: Long, isClipping: Boolean?): Boolean = true
                 override fun getAllLayers(): List<com.artflow.studio.domain.model.layer.Layer> = emptyList()
                 override fun getActiveLayer(): com.artflow.studio.domain.model.layer.Layer? = null
                 override fun setActiveLayer(layerId: Long): Boolean = true

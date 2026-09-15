@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.artflow.studio.presentation.ui.screens.canvas
 
 import android.view.ViewGroup
@@ -6,6 +8,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,6 +29,7 @@ import com.artflow.studio.presentation.ui.viewmodel.CanvasViewModel
  * Canvas screen for drawing and painting
  * Integrates OpenGL-accelerated canvas with Jetpack Compose UI
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CanvasScreen(
     projectId: Long,
@@ -56,13 +61,13 @@ fun CanvasScreen(
                         viewModel.saveCanvas(projectId)
                     }) {
                         Icon(
-                            androidx.compose.material.icons.Icons.Default.Save,
+                            Icons.Default.Save,
                             contentDescription = "Save"
                         )
                     }
                     IconButton(onClick = { showBrushSettings = !showBrushSettings }) {
                         Icon(
-                            androidx.compose.material.icons.Icons.Default.Settings,
+                            Icons.Default.Settings,
                             contentDescription = "Brush Settings"
                         )
                     }

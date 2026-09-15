@@ -120,7 +120,7 @@ class TransformManager @Inject constructor() {
         
         val currentState = _transformState.value
         val uniformScale = config.enableUniformScale || scaleFactorY == null
-        val scaleY = if (uniformScale) scaleFactorX else scaleFactorY
+        val scaleY = if (uniformScale) scaleFactorX else scaleFactorY!!
         
         // Clamp scale values
         val newScaleX = currentState.scaleX * scaleFactorX
@@ -318,7 +318,7 @@ class TransformManager @Inject constructor() {
         val startAngle = kotlin.math.atan2(startY - pivotY, startX - pivotX)
         val currentAngle = kotlin.math.atan2(currentY - pivotY, currentX - pivotX)
         
-        val deltaAngle = kotlin.math.toDegrees(currentAngle - startAngle).toFloat()
+        val deltaAngle = Math.toDegrees((currentAngle - startAngle).toDouble()).toFloat()
         rotate(deltaAngle)
     }
 
@@ -338,7 +338,7 @@ class TransformManager @Inject constructor() {
         val startAngle = kotlin.math.atan2(startY - pivotY, startX - pivotX)
         val currentAngle = kotlin.math.atan2(currentY - pivotY, currentX - pivotX)
         
-        return kotlin.math.toDegrees(currentAngle - startAngle).toFloat()
+        return Math.toDegrees((currentAngle - startAngle).toDouble()).toFloat()
     }
 
     /**

@@ -14,10 +14,34 @@ Before beginning Phase 1, understand these core principles:
 - **MVVM Pattern**: Model-View-ViewModel for UI architecture
 - **Dependency Injection**: Hilt for all dependency management
 - **Reactive Programming**: Kotlin Flow and StateFlow for reactive data streams
-- **GPU Acceleration**: OpenGL ES 3.0+ / Vulkan for rendering
-- **Native Performance**: C++ via JNI for performance-critical operations
+- **GPU Acceleration**: OpenGL ES for rendering. The current renderer uses OpenGL ES 2.0 (`GLSurfaceView` + `GLES20`); ES 3.x and Vulkan are aspirational targets, not implemented.
+- **Native Performance**: C++ via JNI for performance-critical operations. The CMake module builds `libartflow-brush.so`, but nothing in the Kotlin render path calls it yet.
 - **Test-Driven Development**: Write tests before or alongside implementation
 - **Progressive Enhancement**: Build MVP first, then add advanced features
+
+---
+
+## Status of this plan
+
+This document is a **plan**, and the checkboxes below track intent rather than completed work.
+The inventory below maps each phase to what actually exists in the repository today, so the
+plan and the code agree. Update it as phases land.
+
+| Phases | Scope | Status in this repository |
+|--------|-------|---------------------------|
+| 1–8 | Setup, DI, architecture, design system, canvas, input, brush, layers | **Substantially implemented.** No Gradle wrapper, no CONTRIBUTING.md, no ktlint/detekt config. Canvas renders via OpenGL ES 2.0. |
+| 9–16 | Advanced brush params, textures, colour dynamics, blend modes, selection, transform, alpha lock, masks | **Models, managers and use cases implemented.** Texture *assets* are not bundled; much of the UI is partial. |
+| 17–24 | Smudge, liquify, clone stamp, healing, gradient, paint bucket, text, shapes | **Only shape tools are implemented** (`ShapeManager` + vector shape models). The rest are not started. |
+| 25–30 | Adjustment layers, layer groups, reference layers, layer linking, filter layers, smart objects | **Adjustment layers and layer groups implemented.** Reference layers, linking, filter layers and smart objects are not started. |
+| 31–36 | Colour picker, palettes, symmetry, perspective guides, canvas properties, quick menu | **Not implemented.** No colour-picker, palette, symmetry or perspective modules exist. |
+| 37–42 | Save system, PNG/JPEG export, PSD, PDF, gallery, cloud sync | **Gallery only.** Room stores project *metadata*; canvas pixels, export formats and cloud sync are not implemented. |
+| 43–50 | Animation timeline, animation export, timelapse, performance, tutorials, settings, QA, release | **Not implemented.** No animation, tutorial, settings or analytics modules exist. |
+
+### Verification
+
+This project has no committed Gradle wrapper and cannot be built with the documented
+`./gradlew` commands until `gradle wrapper` is run (or the project is opened in Android Studio).
+See the [README](README.md#-getting-started).
 
 ---
 

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Foreground layer for the adaptive launcher icon. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.55"
+        android:scaleY="0.55">
+        <!-- Brush body -->
+        <path
+            android:fillColor="#FFFF6B5C"
+            android:pathData="M52,18 L68,34 L48,62 L36,74 L30,80 L30,66 L42,52 Z" />
+        <!-- Paint dab -->
+        <path
+            android:fillColor="#FF5C7CFA"
+            android:pathData="M74,66 m-14,0 a14,14 0 1,1 28,0 a14,14 0 1,1 -28,0" />
+    </group>
+</vector>

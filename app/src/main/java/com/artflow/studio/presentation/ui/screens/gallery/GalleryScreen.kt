@@ -20,6 +20,7 @@ import com.artflow.studio.presentation.ui.viewmodel.MainViewModel
 /**
  * Gallery screen displaying all projects
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GalleryScreen(
     onNavigateToCanvas: (Long) -> Unit,
@@ -131,6 +132,7 @@ private fun ProjectGrid(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ProjectCard(
     project: Project,

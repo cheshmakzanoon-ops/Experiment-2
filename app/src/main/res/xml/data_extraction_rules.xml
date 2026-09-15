@@ -3,11 +3,19 @@
     <cloud-backup>
         <!-- Include app-specific data -->
         <include domain="sharedpref" path="." />
-        <include domain="database" path="artflow.db" />
+        <!-- Must match ArtFlowDatabase.DATABASE_NAME ("artflow_database"). -->
+        <include domain="database" path="artflow_database" />
         <include domain="file" path="./artwork" />
-        
+
         <!-- Exclude temporary and cache files -->
         <exclude domain="file" path="./cache" />
         <exclude domain="file" path="./temp" />
     </cloud-backup>
+    <device-transfer>
+        <include domain="sharedpref" path="." />
+        <include domain="database" path="artflow_database" />
+        <include domain="file" path="./artwork" />
+        <exclude domain="file" path="./cache" />
+        <exclude domain="file" path="./temp" />
+    </device-transfer>
 </data-extraction-rules>

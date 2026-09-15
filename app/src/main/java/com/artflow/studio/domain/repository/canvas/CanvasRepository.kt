@@ -28,10 +28,29 @@ interface CanvasRepository {
     suspend fun loadCanvas(projectId: Long): CanvasState?
 
     /**
-     * Save the current canvas state
+     * Save the current canvas state to project storage.
      * @param projectId Project ID to save to
+     * @return absolute path of the written thumbnail, or null if there was nothing to save
      */
-    suspend fun saveCanvas(projectId: Long)
+    suspend fun saveCanvas(projectId: Long): String?
+
+    /**
+     * Undo the most recent canvas operation.
+     * @return true when something was undone
+     */
+    fun undo(): Boolean
+
+    /**
+     * Redo the most recently undone operation.
+     * @return true when something was redone
+     */
+    fun redo(): Boolean
+
+    /** Whether there is an operation available to undo */
+    val canUndo: Boolean
+
+    /** Whether there is an operation available to redo */
+    val canRedo: Boolean
 
     /**
      * Begin a new stroke

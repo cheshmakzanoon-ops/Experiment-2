@@ -95,41 +95,6 @@ data class TransformState(
         matrix.mapRect(transformedBounds)
         return transformedBounds
     }
-
-    /**
-     * Create a copy with modified properties
-     */
-    fun copy(
-        translationX: Float = this.translationX,
-        translationY: Float = this.translationY,
-        rotation: Float = this.rotation,
-        scaleX: Float = this.scaleX,
-        scaleY: Float = this.scaleY,
-        skewX: Float = this.skewX,
-        skewY: Float = this.skewY,
-        pivotX: Float = this.pivotX,
-        pivotY: Float = this.pivotY,
-        perspectiveX: Float = this.perspectiveX,
-        perspectiveY: Float = this.perspectiveY,
-        isDistortionMode: Boolean = this.isDistortionMode,
-        distortionCorners: List<Pair<Float, Float>> = this.distortionCorners
-    ): TransformState {
-        return TransformState(
-            translationX = translationX,
-            translationY = translationY,
-            rotation = rotation,
-            scaleX = scaleX,
-            scaleY = scaleY,
-            skewX = skewX,
-            skewY = skewY,
-            pivotX = pivotX,
-            pivotY = pivotY,
-            perspectiveX = perspectiveX,
-            perspectiveY = perspectiveY,
-            isDistortionMode = isDistortionMode,
-            distortionCorners = distortionCorners
-        )
-    }
 }
 
 /**

@@ -1,10 +1,13 @@
 package com.artflow.studio.domain.model.brush
 
+import kotlinx.serialization.Serializable
+
 /**
  * Domain model representing brush parameters
  * Used by the brush engine to control stroke rendering
  * Implements Phase 9: Advanced Brush Parameters
  */
+@Serializable
 data class BrushParams(
     val size: Float = 20f,                    // Brush size in pixels
     val opacity: Float = 1.0f,                // Opacity 0.0 - 1.0
@@ -51,6 +54,7 @@ data class BrushParams(
     /**
      * Pressure curve types for mapping stylus pressure
      */
+    @Serializable
     enum class PressureCurve {
         LINEAR,       // Direct 1:1 mapping
         EASE_IN,      // Gradual start, sharp end
@@ -143,8 +147,7 @@ data class BrushParams(
             return baseColor
         }
         
-        val hsv = FloatArray(3)
-        android.graphics.Color.colorToHSV(baseColor, hsv)
+        val hsv = com.artflow.studio.domain.model.Color.rgbToHsv(baseColor)
         
         // Apply hue jitter
         if (hueJitter > 0f) {
@@ -178,6 +181,8 @@ data class BrushParams(
             hsv[2] *= (0.5f + pressureFactor * 0.5f) // Darker at low pressure
         }
         
-        return android.graphics.Color.HSVToColor(hsv)
+        // Preserve the base colour's alpha channel; only hue/sat/value are modulated.
+        val rgb = com.artflow.studio.domain.model.Color.hsvToRgb(hsv[0], hsv[1], hsv[2])
+        return (baseColor and 0xFF000000.toInt()) or (rgb and 0x00FFFFFF)
     }
 }

@@ -8,11 +8,11 @@ import androidx.core.math.MathUtils
 import com.artflow.studio.data.renderer.opengl.OpenGLCanvasRenderer
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
-import com.artflow.studio.domain.usecase.canvas.BeginStroke
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -31,9 +31,6 @@ class ArtFlowCanvasView @JvmOverloads constructor(
 
     @Inject
     lateinit var canvasRepository: CanvasRepository
-
-    @Inject
-    lateinit var beginStroke: BeginStroke
 
     private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
@@ -67,18 +64,29 @@ class ArtFlowCanvasView @JvmOverloads constructor(
         private const val TOUCH_TIMEOUT = 200 // ms before considering as pan instead of draw
     }
 
+    // GLSurfaceView.setRenderer() may only be called once.
+    private var rendererAttached = false
+
     init {
         // Set up OpenGL ES 2.0 context
         setEGLContextClientVersion(2)
-
-        // Set the renderer
-        setRenderer(renderer)
 
         // Render only when there's a change (better performance)
         renderMode = RENDERMODE_WHEN_DIRTY
 
         // Enable touch events
         isFocusableInTouchMode = true
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+
+        // Hilt injects @Inject fields after the constructor has run, so the renderer is
+        // only available once the view is attached to the window.
+        if (!rendererAttached) {
+            rendererAttached = true
+            setRenderer(renderer)
+        }
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -121,7 +129,7 @@ class ArtFlowCanvasView @JvmOverloads constructor(
         val x = event.getX(pointerIndex)
         val y = event.getY(pointerIndex)
 
-        when (action) {
+        return when (action) {
             MotionEvent.ACTION_DOWN -> {
                 lastTouchX = x
                 lastTouchY = y
@@ -135,14 +143,20 @@ class ArtFlowCanvasView @JvmOverloads constructor(
                 val canvasX = (x - offsetX) / scale
                 val canvasY = (y - offsetY) / scale
                 
-                currentStrokeId = beginStroke(canvasX, canvasY, getPressureFromEvent(event), currentBrushParams, activeLayerId)
+                currentStrokeId = canvasRepository.beginStroke(
+                    canvasX,
+                    canvasY,
+                    getPressureFromEvent(event),
+                    currentBrushParams,
+                    activeLayerId
+                )
                 invalidate()
                 true
             }
 
             MotionEvent.ACTION_MOVE -> {
                 val pointerIndex = event.findPointerIndex(activePointerId)
-                if (pointerIndex == -1) return@onTouchEvent
+                if (pointerIndex == -1) return@onTouchEvent true
                 
                 val currentX = event.getX(pointerIndex)
                 val currentY = event.getY(pointerIndex)
@@ -243,9 +257,10 @@ class ArtFlowCanvasView @JvmOverloads constructor(
      * Handles both stylus and finger input
      */
     private fun getPressureFromEvent(event: MotionEvent): Float {
+        val toolType = event.getToolType(0)
         return when {
-            event.toolType == MotionEvent.TOOL_TYPE_STYLUS ||
-            event.toolType == MotionEvent.TOOL_TYPE_ERASER -> {
+            toolType == MotionEvent.TOOL_TYPE_STYLUS ||
+            toolType == MotionEvent.TOOL_TYPE_ERASER -> {
                 // Use actual stylus pressure
                 event.pressure
             }

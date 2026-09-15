@@ -125,7 +125,7 @@ private fun TextureItem(
             ) {
                 Text(
                     text = texture.category.name.lowercase().take(8),
-                    style = MaterialTheme.typonomy.labelSmall,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -143,7 +143,7 @@ private fun TextureItem(
                 Text(
                     text = texture.name,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onScrim,
+                    color = MaterialTheme.colorScheme.surface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.align(Alignment.Center)

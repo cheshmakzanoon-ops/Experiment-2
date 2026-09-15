@@ -4,35 +4,38 @@
     <color name="artflow_primary">#FF6B5C</color>
     <color name="artflow_primary_dark">#E55A4C</color>
     <color name="artflow_primary_light">#FF8A7C</color>
-    
+
+    <!-- Launcher icon background (referenced by the adaptive icon) -->
+    <color name="ic_launcher_background">#FF1A1A1A</color>
+
     <!-- Background colors -->
     <color name="artflow_background">#FF1A1A1A</color>
     <color name="artflow_surface">#FF2D2D2D</color>
     <color name="artflow_surface_variant">#FF3D3D3D</color>
-    
+
     <!-- Canvas background (checkerboard pattern base) -->
     <color name="canvas_background_white">#FFFFFFFF</color>
     <color name="canvas_background_gray">#FFE0E0E0</color>
-    
+
     <!-- Text colors -->
     <color name="text_primary">#FFFFFFFF</color>
     <color name="text_secondary">#B3FFFFFF</color>
     <color name="text_disabled">#66FFFFFF</color>
-    
+
     <!-- UI element colors -->
     <color name="toolbar_background">#DD2D2D2D</color>
     <color name="layer_panel_background">#DD1A1A1A</color>
     <color name="brush_panel_background">#DD2D2D2D</color>
-    
+
     <!-- Accent colors for tools -->
     <color name="tool_selected">#FF6B5C</color>
     <color name="tool_unselected">#808080</color>
-    
+
     <!-- Status colors -->
     <color name="success">#FF4CAF50</color>
     <color name="warning">#FFFFC107</color>
     <color name="error">#FFF44336</color>
-    
+
     <!-- Transparent overlays -->
     <color name="overlay_dark">#80000000</color>
     <color name="overlay_light">#80FFFFFF</color>

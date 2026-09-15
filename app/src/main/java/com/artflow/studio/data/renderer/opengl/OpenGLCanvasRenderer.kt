@@ -10,6 +10,7 @@ import com.artflow.studio.domain.repository.canvas.CanvasSize
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
@@ -76,10 +77,6 @@ class OpenGLCanvasRenderer @Inject constructor() : GLSurfaceView.Renderer {
         GLES20.glEnable(GLES20.GL_BLEND)
         GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
         
-        // Enable point size for brush dabs
-        GLES20.glEnable(GLES20.GL_POINT_SMOOTH)
-        GLES20.glHint(GLES20.GL_POINT_SMOOTH_HINT, GLES20.GL_NICEST)
-        
         // Initialize shaders
         initializeShaders()
         
@@ -103,7 +100,13 @@ class OpenGLCanvasRenderer @Inject constructor() : GLSurfaceView.Renderer {
     }
 
     override fun onDrawFrame(unused: GL10?) {
-        // Clear the screen
+        // Apply the canvas background on the GL thread, then clear.
+        GLES20.glClearColor(
+            backgroundColor[0],
+            backgroundColor[1],
+            backgroundColor[2],
+            backgroundColor[3]
+        )
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT or GLES20.GL_DEPTH_BUFFER_BIT)
         
         if (!needsRedraw && strokes.isEmpty()) return
@@ -391,7 +394,35 @@ class OpenGLCanvasRenderer @Inject constructor() : GLSurfaceView.Renderer {
      */
     fun setBackgroundColor(r: Float, g: Float, b: Float, a: Float) {
         backgroundColor = floatArrayOf(r, g, b, a)
-        GLES20.glClearColor(r, g, b, a)
+        needsRedraw = true
+    }
+
+    /**
+     * Set the background from a packed ARGB int.
+     *
+     * The GL clear colour is applied on the GL thread in [onDrawFrame]; issuing GL calls from
+     * the main thread here would be a silent no-op (or an EGL error).
+     */
+    fun setBackgroundArgb(argb: Int) {
+        backgroundColor = floatArrayOf(
+            android.graphics.Color.red(argb) / 255f,
+            android.graphics.Color.green(argb) / 255f,
+            android.graphics.Color.blue(argb) / 255f,
+            android.graphics.Color.alpha(argb) / 255f
+        )
+        needsRedraw = true
+    }
+
+    /**
+     * Replace the entire rendered stroke set (used after loading a project or an undo).
+     */
+    fun setStrokes(newStrokes: List<Stroke>) {
+        synchronized(strokes) {
+            strokes.clear()
+            strokes.addAll(newStrokes)
+            strokeBuffers.clear()
+            needsRedraw = true
+        }
     }
 
     /**

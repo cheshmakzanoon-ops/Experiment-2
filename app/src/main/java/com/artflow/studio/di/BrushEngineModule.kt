@@ -1,6 +1,8 @@
 package com.artflow.studio.di
 
 import com.artflow.studio.core.brush.BrushEngine
+import com.artflow.studio.core.brush.TextureMapper
+import com.artflow.studio.domain.repository.texture.TextureRepository
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -17,7 +19,10 @@ object BrushEngineModule {
 
     @Provides
     @Singleton
-    fun provideBrushEngine(): BrushEngine {
-        return BrushEngine()
+    fun provideBrushEngine(
+        textureMapper: TextureMapper,
+        textureRepository: TextureRepository
+    ): BrushEngine {
+        return BrushEngine(textureMapper, textureRepository)
     }
 }

@@ -2,6 +2,7 @@ package com.artflow.studio.core.layer
 
 import com.artflow.studio.domain.model.layer.AdjustmentLayer
 import com.artflow.studio.domain.model.layer.AdjustmentType
+import com.artflow.studio.domain.model.layer.BlendMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
