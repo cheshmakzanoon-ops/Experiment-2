@@ -211,6 +211,24 @@ interface CanvasRepository {
     suspend fun setLayerBlendMode(layerId: Long, blendMode: com.artflow.studio.domain.model.layer.BlendMode): Boolean
 
     /**
+     * Set the alpha lock state of a layer
+     * Alpha lock restricts painting to only existing opaque pixels
+     * @param layerId ID of the layer to modify
+     * @param isLocked New alpha lock state (null to toggle)
+     * @return true if alpha lock state was changed successfully
+     */
+    suspend fun setLayerAlphaLock(layerId: Long, isLocked: Boolean? = null): Boolean
+
+    /**
+     * Set the clipping mask state of a layer
+     * Clipping mask restricts painting to the content of the layer below
+     * @param layerId ID of the layer to modify
+     * @param isClipping New clipping mask state (null to toggle)
+     * @return true if clipping mask state was changed successfully
+     */
+    suspend fun setLayerClippingMask(layerId: Long, isClipping: Boolean? = null): Boolean
+
+    /**
      * Get all layers in the canvas
      * @return List of all layers sorted by index
      */

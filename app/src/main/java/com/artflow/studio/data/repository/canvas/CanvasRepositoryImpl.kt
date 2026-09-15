@@ -523,6 +523,54 @@ class CanvasRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun setLayerAlphaLock(layerId: Long, isLocked: Boolean?): Boolean {
+        return renderMutex.withLock {
+            val layer = layers[layerId] ?: return@withLock false
+
+            // Toggle if null, otherwise use provided value
+            val newLockState = isLocked ?: !layer.isAlphaLocked
+
+            layers[layerId] = layer.copy(
+                name = layer.name,
+                isVisible = layer.isVisible,
+                opacity = layer.opacity,
+                isLocked = layer.isLocked,
+                strokes = layer.strokes,
+                isAlphaLocked = newLockState
+            )
+
+            coroutineScope.launch {
+                invalidationFlow.emit(CanvasInvalidationEvent.Full)
+            }
+
+            true
+        }
+    }
+
+    override suspend fun setLayerClippingMask(layerId: Long, isClipping: Boolean?): Boolean {
+        return renderMutex.withLock {
+            val layer = layers[layerId] ?: return@withLock false
+
+            // Toggle if null, otherwise use provided value
+            val newClippingState = isClipping ?: !layer.isClippingMask
+
+            layers[layerId] = layer.copy(
+                name = layer.name,
+                isVisible = layer.isVisible,
+                opacity = layer.opacity,
+                isLocked = layer.isLocked,
+                strokes = layer.strokes,
+                isClippingMask = newClippingState
+            )
+
+            coroutineScope.launch {
+                invalidationFlow.emit(CanvasInvalidationEvent.Full)
+            }
+
+            true
+        }
+    }
+
     override fun getAllLayers(): List<com.artflow.studio.domain.model.layer.Layer> {
         return layers.values
             .sortedBy { it.index }
