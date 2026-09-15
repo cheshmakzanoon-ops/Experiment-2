@@ -2,6 +2,7 @@ package com.artflow.studio.data.repository.canvas
 
 import android.graphics.Bitmap
 import android.graphics.Color
+import com.artflow.studio.data.renderer.opengl.OpenGLCanvasRenderer
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.model.brush.StrokePoint
@@ -24,7 +25,9 @@ import javax.inject.Singleton
  * Implementation of CanvasRepository using OpenGL ES for rendering
  */
 @Singleton
-class CanvasRepositoryImpl @Inject constructor() : CanvasRepository {
+class CanvasRepositoryImpl @Inject constructor(
+    private val renderer: OpenGLCanvasRenderer
+) : CanvasRepository {
 
     private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val renderMutex = Mutex()
@@ -166,6 +169,9 @@ class CanvasRepositoryImpl @Inject constructor() : CanvasRepository {
         val layer = layers[layerId]
         layer?.strokes?.add(stroke)
         
+        // Send stroke to OpenGL renderer for GPU rendering
+        renderer.addStroke(stroke)
+        
         // Request full redraw (optimized rendering would only redraw affected area)
         coroutineScope.launch {
             invalidationFlow.emit(CanvasInvalidationEvent.StrokeCompleted(strokeId))
@@ -176,8 +182,7 @@ class CanvasRepositoryImpl @Inject constructor() : CanvasRepository {
         // GPU rendering handled by OpenGLCanvasRenderer
         // This method is for persistence or special effects
         renderMutex.withLock {
-            // Implementation will use OpenGL shaders to render the stroke
-            // to the appropriate layer texture
+            renderer.addStroke(stroke)
         }
     }
 
