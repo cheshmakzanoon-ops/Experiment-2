@@ -2,8 +2,9 @@ package com.artflow.studio.data.renderer.opengl
 
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
-import javax.microedition.khronos.egl.EGLConfig
-import javax.microedition.khronos.opengles.GL10
+import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.Stroke
+import com.artflow.studio.domain.model.brush.StrokePoint
 import com.artflow.studio.domain.repository.canvas.CanvasInvalidationEvent
 import com.artflow.studio.domain.repository.canvas.CanvasSize
 import kotlinx.coroutines.CoroutineScope
@@ -12,8 +13,12 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import javax.inject.Inject
 import javax.inject.Singleton
+import javax.microedition.khronos.egl.EGLConfig
+import javax.microedition.khronos.opengles.GL10
 
 /**
  * OpenGL ES 2.0 implementation of GLSurfaceView.Renderer
@@ -47,12 +52,21 @@ class OpenGLCanvasRenderer @Inject constructor() : GLSurfaceView.Renderer {
     private var positionHandle = 0
     private var colorHandle = 0
     private var matrixHandle = 0
+    private var sizeHandle = 0
+    private var pressureHandle = 0
+    
+    // Stroke data buffers
+    private val strokes = mutableListOf<Stroke>()
+    private val strokeBuffers = mutableMapOf<Long, StrokeGLBuffer>()
     
     // Invalidation event flow
     private val invalidationFlow = MutableSharedFlow<CanvasInvalidationEvent>(replay = 0)
     
     // Initialized flag
     private var isInitialized = false
+    
+    // Dirty flag for rendering
+    private var needsRedraw = true
 
     override fun onSurfaceCreated(unused: GL10?, config: EGLConfig?) {
         // Set clear color to white
@@ -61,6 +75,10 @@ class OpenGLCanvasRenderer @Inject constructor() : GLSurfaceView.Renderer {
         // Enable blending for smooth brush strokes
         GLES20.glEnable(GLES20.GL_BLEND)
         GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
+        
+        // Enable point size for brush dabs
+        GLES20.glEnable(GLES20.GL_POINT_SMOOTH)
+        GLES20.glHint(GLES20.GL_POINT_SMOOTH_HINT, GLES20.GL_NICEST)
         
         // Initialize shaders
         initializeShaders()
@@ -80,11 +98,15 @@ class OpenGLCanvasRenderer @Inject constructor() : GLSurfaceView.Renderer {
             canvasWidth = width
             canvasHeight = height
         }
+        
+        needsRedraw = true
     }
 
     override fun onDrawFrame(unused: GL10?) {
         // Clear the screen
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT or GLES20.GL_DEPTH_BUFFER_BIT)
+        
+        if (!needsRedraw && strokes.isEmpty()) return
         
         // Use our shader program
         GLES20.glUseProgram(programId)
@@ -92,37 +114,59 @@ class OpenGLCanvasRenderer @Inject constructor() : GLSurfaceView.Renderer {
         // Apply transformations
         applyTransformations()
         
-        // TODO: Render all layers and strokes here
-        // This will be implemented in subsequent phases
+        // Render all strokes
+        renderAllStrokes()
         
-        // Draw placeholder for now
-        drawPlaceholder()
+        needsRedraw = false
     }
 
     /**
      * Initialize OpenGL shaders
      */
     private fun initializeShaders() {
-        // Vertex shader - simple pass-through
+        // Vertex shader - supports position, color, size, and pressure
         val vertexShaderCode = """
             uniform mat4 u_Matrix;
-            attribute vec4 a_Position;
+            attribute vec2 a_Position;
             attribute vec4 a_Color;
+            attribute float a_Size;
+            attribute float a_Pressure;
+            
             varying vec4 v_Color;
+            varying float v_Size;
+            varying float v_Pressure;
             
             void main() {
-                gl_Position = u_Matrix * a_Position;
+                gl_Position = u_Matrix * vec4(a_Position, 0.0, 1.0);
+                gl_PointSize = a_Size * (1.0 + a_Pressure * 0.5);
                 v_Color = a_Color;
+                v_Size = a_Size;
+                v_Pressure = a_Pressure;
             }
         """.trimIndent()
         
-        // Fragment shader - solid color with alpha
+        // Fragment shader - smooth circle with alpha
         val fragmentShaderCode = """
             precision mediump float;
             varying vec4 v_Color;
+            varying float v_Size;
+            varying float v_Pressure;
             
             void main() {
-                gl_FragColor = v_Color;
+                // Calculate distance from center of point
+                vec2 coord = gl_PointCoord - vec2(0.5);
+                float dist = length(coord);
+                
+                // Discard pixels outside the circle
+                if (dist > 0.5) {
+                    discard;
+                }
+                
+                // Apply soft edge
+                float alpha = 1.0 - smoothstep(0.3, 0.5, dist);
+                alpha *= v_Color.a * (0.7 + 0.3 * v_Pressure);
+                
+                gl_FragColor = vec4(v_Color.rgb, alpha);
             }
         """.trimIndent()
         
@@ -139,6 +183,8 @@ class OpenGLCanvasRenderer @Inject constructor() : GLSurfaceView.Renderer {
         // Get attribute and uniform handles
         positionHandle = GLES20.glGetAttribLocation(programId, "a_Position")
         colorHandle = GLES20.glGetAttribLocation(programId, "a_Color")
+        sizeHandle = GLES20.glGetAttribLocation(programId, "a_Size")
+        pressureHandle = GLES20.glGetAttribLocation(programId, "a_Pressure")
         matrixHandle = GLES20.glGetUniformLocation(programId, "u_Matrix")
     }
 
@@ -165,50 +211,122 @@ class OpenGLCanvasRenderer @Inject constructor() : GLSurfaceView.Renderer {
      * Apply current transformation matrix
      */
     private fun applyTransformations() {
-        // Simple identity matrix for now
-        // Will implement proper matrix math in next phase
+        // Create orthographic projection matrix
+        val left = -offsetX / scale
+        val right = (viewWidth - offsetX) / scale
+        val bottom = (viewHeight - offsetY) / scale
+        val top = -offsetY / scale
+        
         val matrix = floatArrayOf(
-            1f, 0f, 0f, 0f,
-            0f, 1f, 0f, 0f,
+            2f / (right - left), 0f, 0f, 0f,
+            0f, 2f / (top - bottom), 0f, 0f,
             0f, 0f, 1f, 0f,
-            0f, 0f, 0f, 1f
+            -(right + left) / (right - left), -(top + bottom) / (top - bottom), 0f, 1f
         )
         
         GLES20.glUniformMatrix4fv(matrixHandle, 1, false, matrix, 0)
     }
 
     /**
-     * Draw a placeholder to verify rendering works
+     * Render all strokes to the canvas
      */
-    private fun drawPlaceholder() {
-        // Simple test triangle
-        val triangle = floatArrayOf(
-            // X, Y, Z, R, G, B, A
-            0f, 0.5f, 0f, 1f, 0f, 0f, 1f,  // Top vertex (red)
-            -0.5f, -0.5f, 0f, 0f, 1f, 0f, 1f,  // Bottom left (green)
-            0.5f, -0.5f, 0f, 0f, 0f, 1f, 1f   // Bottom right (blue)
-        )
+    private fun renderAllStrokes() {
+        strokes.forEach { stroke ->
+            renderStroke(stroke)
+        }
+    }
+
+    /**
+     * Render a single stroke using point sprites
+     */
+    private fun renderStroke(stroke: Stroke) {
+        if (stroke.points.isEmpty()) return
         
-        val vertexBuffer = java.nio.ByteBuffer.allocateDirect(triangle.size * 4)
-            .order(java.nio.ByteOrder.nativeOrder())
+        val points = stroke.points
+        val brushParams = stroke.brushParams
+        
+        // Extract color from stroke
+        val r = ((stroke.color shr 16) and 0xFF) / 255f
+        val g = ((stroke.color shr 8) and 0xFF) / 255f
+        val b = (stroke.color and 0xFF) / 255f
+        val a = brushParams.opacity
+        
+        // Create buffers for this stroke
+        val vertexData = FloatArray(points.size * 2)
+        val colorData = FloatArray(points.size * 4)
+        val sizeData = FloatArray(points.size)
+        val pressureData = FloatArray(points.size)
+        
+        points.forEachIndexed { index, point ->
+            vertexData[index * 2] = point.x
+            vertexData[index * 2 + 1] = point.y
+            
+            // Apply pressure to color alpha
+            val pressureAlpha = when {
+                brushParams.pressureToOpacity > 0 -> {
+                    0.5f + (point.pressure * brushParams.pressureToOpacity)
+                }
+                else -> 1f
+            }
+            
+            colorData[index * 4] = r
+            colorData[index * 4 + 1] = g
+            colorData[index * 4 + 2] = b
+            colorData[index * 4 + 3] = a * pressureAlpha
+            
+            // Apply pressure to size
+            val sizeMultiplier = when {
+                brushParams.pressureToSize > 0 -> {
+                    0.5f + (point.pressure * brushParams.pressureToSize)
+                }
+                else -> 1f
+            }
+            sizeData[index] = brushParams.size * sizeMultiplier
+            pressureData[index] = point.pressure
+        }
+        
+        // Create and populate buffers
+        val vertexBuffer = ByteBuffer.allocateDirect(vertexData.size * 4)
+            .order(ByteOrder.nativeOrder())
             .asFloatBuffer()
-        vertexBuffer.put(triangle)
-        vertexBuffer.position(0)
+        vertexBuffer.put(vertexData).position(0)
         
-        // Set position data
-        GLES20.glVertexAttribPointer(positionHandle, 3, GLES20.GL_FLOAT, false, 7 * 4, vertexBuffer)
+        val colorBuffer = ByteBuffer.allocateDirect(colorData.size * 4)
+            .order(ByteOrder.nativeOrder())
+            .asFloatBuffer()
+        colorBuffer.put(colorData).position(0)
+        
+        val sizeBuffer = ByteBuffer.allocateDirect(sizeData.size * 4)
+            .order(ByteOrder.nativeOrder())
+            .asFloatBuffer()
+        sizeBuffer.put(sizeData).position(0)
+        
+        val pressureBuffer = ByteBuffer.allocateDirect(pressureData.size * 4)
+            .order(ByteOrder.nativeOrder())
+            .asFloatBuffer()
+        pressureBuffer.put(pressureData).position(0)
+        
+        // Enable vertex attributes
         GLES20.glEnableVertexAttribArray(positionHandle)
+        GLES20.glVertexAttribPointer(positionHandle, 2, GLES20.GL_FLOAT, false, 0, vertexBuffer)
         
-        // Set color data
-        vertexBuffer.position(3)
-        GLES20.glVertexAttribPointer(colorHandle, 4, GLES20.GL_FLOAT, false, 7 * 4, vertexBuffer)
         GLES20.glEnableVertexAttribArray(colorHandle)
+        GLES20.glVertexAttribPointer(colorHandle, 4, GLES20.GL_FLOAT, false, 0, colorBuffer)
         
-        // Draw
-        GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, 3)
+        GLES20.glEnableVertexAttribArray(sizeHandle)
+        GLES20.glVertexAttribPointer(sizeHandle, 1, GLES20.GL_FLOAT, false, 0, sizeBuffer)
         
+        GLES20.glEnableVertexAttribArray(pressureHandle)
+        GLES20.glVertexAttribPointer(pressureHandle, 1, GLES20.GL_FLOAT, false, 0, pressureBuffer)
+        
+        // Draw points
+        GLES20.glDrawArrays(GLES20.GL_POINTS, 0, points.size)
+        
+        // Disable vertex attributes
         GLES20.glDisableVertexAttribArray(positionHandle)
         GLES20.glDisableVertexAttribArray(colorHandle)
+        GLES20.glDisableVertexAttribArray(sizeHandle)
+        GLES20.glDisableVertexAttribArray(pressureHandle)
     }
 
     /**
@@ -226,6 +344,32 @@ class OpenGLCanvasRenderer @Inject constructor() : GLSurfaceView.Renderer {
     }
 
     /**
+     * Add a stroke to be rendered
+     */
+    fun addStroke(stroke: Stroke) {
+        strokes.add(stroke)
+        needsRedraw = true
+    }
+
+    /**
+     * Remove a stroke from rendering
+     */
+    fun removeStroke(strokeId: Long) {
+        strokes.removeAll { it.id == strokeId }
+        strokeBuffers.remove(strokeId)
+        needsRedraw = true
+    }
+
+    /**
+     * Clear all strokes
+     */
+    fun clearAllStrokes() {
+        strokes.clear()
+        strokeBuffers.clear()
+        needsRedraw = true
+    }
+
+    /**
      * Update viewport transformation
      */
     fun setTransformation(scale: Float, offsetX: Float, offsetY: Float, rotation: Float) {
@@ -233,6 +377,7 @@ class OpenGLCanvasRenderer @Inject constructor() : GLSurfaceView.Renderer {
         this.offsetX = offsetX
         this.offsetY = offsetY
         this.rotation = rotation
+        needsRedraw = true
     }
 
     /**
@@ -265,6 +410,19 @@ class OpenGLCanvasRenderer @Inject constructor() : GLSurfaceView.Renderer {
             GLES20.glDeleteProgram(programId)
             programId = 0
         }
+        strokeBuffers.clear()
+        strokes.clear()
         coroutineScope.cancel()
     }
 }
+
+/**
+ * OpenGL buffer data for a stroke
+ */
+private data class StrokeGLBuffer(
+    val vertexBuffer: java.nio.FloatBuffer,
+    val colorBuffer: java.nio.FloatBuffer,
+    val sizeBuffer: java.nio.FloatBuffer,
+    val pressureBuffer: java.nio.FloatBuffer,
+    val pointCount: Int
+)
