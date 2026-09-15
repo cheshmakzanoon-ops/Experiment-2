@@ -159,6 +159,54 @@ fun AdvancedBrushSettingsPanel(
             )
         }
 
+        // Jitter Section - Phase 9: Advanced Brush Parameters
+        BrushSettingsSection(title = "Jitter & Randomization") {
+            // Size Jitter
+            LabeledSlider(
+                label = "Size Jitter",
+                value = brushParams.sizeJitter,
+                onValueChange = { onBrushParamsChanged(brushParams.copy(sizeJitter = it)) },
+                valueRange = 0f..1f,
+                valueDisplay = "%.0f%%".format(brushParams.sizeJitter * 100)
+            )
+            
+            // Opacity Jitter
+            LabeledSlider(
+                label = "Opacity Jitter",
+                value = brushParams.opacityJitter,
+                onValueChange = { onBrushParamsChanged(brushParams.copy(opacityJitter = it)) },
+                valueRange = 0f..1f,
+                valueDisplay = "%.0f%%".format(brushParams.opacityJitter * 100)
+            )
+            
+            // Hue Jitter
+            LabeledSlider(
+                label = "Hue Jitter",
+                value = brushParams.hueJitter,
+                onValueChange = { onBrushParamsChanged(brushParams.copy(hueJitter = it)) },
+                valueRange = 0f..1f,
+                valueDisplay = "%.0f%%".format(brushParams.hueJitter * 100)
+            )
+            
+            // Saturation Jitter
+            LabeledSlider(
+                label = "Saturation Jitter",
+                value = brushParams.saturationJitter,
+                onValueChange = { onBrushParamsChanged(brushParams.copy(saturationJitter = it)) },
+                valueRange = 0f..1f,
+                valueDisplay = "%.0f%%".format(brushParams.saturationJitter * 100)
+            )
+            
+            // Brightness Jitter
+            LabeledSlider(
+                label = "Brightness Jitter",
+                value = brushParams.brightnessJitter,
+                onValueChange = { onBrushParamsChanged(brushParams.copy(brightnessJitter = it)) },
+                valueRange = 0f..1f,
+                valueDisplay = "%.0f%%".format(brushParams.brightnessJitter * 100)
+            )
+        }
+
         // Rotation Section
         BrushSettingsSection(title = "Rotation") {
             // Brush Rotation
