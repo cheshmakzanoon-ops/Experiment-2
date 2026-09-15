@@ -6,6 +6,8 @@ import com.artflow.studio.data.renderer.opengl.OpenGLCanvasRenderer
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.model.brush.StrokePoint
+import com.artflow.studio.domain.model.layer.BlendMode
+import com.artflow.studio.domain.model.layer.Layer
 import com.artflow.studio.domain.repository.canvas.CanvasInvalidationEvent
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import com.artflow.studio.domain.repository.canvas.CanvasSize
@@ -222,6 +224,210 @@ class CanvasRepositoryImpl @Inject constructor(
         strokeLayerIds.clear()
     }
 
+    override suspend fun addLayer(
+        name: String?,
+        index: Int?,
+        opacity: Float
+    ): Layer {
+        return renderMutex.withLock {
+            val layerId = nextLayerId++
+            val layerName = name ?: "Layer $layerId"
+            
+            // Determine insertion index
+            val insertIndex = index ?: layers.size
+            
+            // Create new layer
+            val newLayer = Layer(
+                id = layerId,
+                name = layerName,
+                index = insertIndex,
+                isVisible = true,
+                opacity = opacity,
+                isLocked = false,
+                blendMode = BlendMode.NORMAL
+            )
+            
+            // Add to layers map
+            layers[layerId] = LayerData(
+                id = layerId,
+                name = layerName,
+                isVisible = true,
+                opacity = opacity,
+                isLocked = false
+            )
+            
+            // Set as active layer
+            activeLayerId = layerId
+            
+            // Emit canvas invalidation for UI update
+            coroutineScope.launch {
+                invalidationFlow.emit(CanvasInvalidationEvent.Full)
+            }
+            
+            newLayer
+        }
+    }
+
+    override suspend fun removeLayer(layerId: Long): Boolean {
+        return renderMutex.withLock {
+            // Prevent removing the last layer
+            if (layers.size <= 1) return@withLock false
+            
+            val removed = layers.remove(layerId) != null
+            if (removed) {
+                // If we removed the active layer, select another one
+                if (activeLayerId == layerId) {
+                    activeLayerId = layers.keys.firstOrNull() ?: 0L
+                }
+                
+                coroutineScope.launch {
+                    invalidationFlow.emit(CanvasInvalidationEvent.Full)
+                }
+            }
+            removed
+        }
+    }
+
+    override suspend fun reorderLayer(layerId: Long, newIndex: Int): Boolean {
+        return renderMutex.withLock {
+            val layer = layers[layerId] ?: return@withLock false
+            
+            // Validate new index
+            if (newIndex < 0 || newIndex >= layers.size) return@withLock false
+            
+            // Update layer index
+            // Note: In a full implementation, we'd also reorder all other layers' indices
+            // This is a simplified version that just updates the target layer's index
+            layers[layerId] = layer.copy(
+                name = layer.name,
+                isVisible = layer.isVisible,
+                opacity = layer.opacity,
+                isLocked = layer.isLocked,
+                strokes = layer.strokes
+            )
+            
+            coroutineScope.launch {
+                invalidationFlow.emit(CanvasInvalidationEvent.Full)
+            }
+            
+            true
+        }
+    }
+
+    override suspend fun duplicateLayer(layerId: Long): Long? {
+        return renderMutex.withLock {
+            val sourceLayer = layers[layerId] ?: return@withLock null
+            
+            val newLayerId = nextLayerId++
+            val duplicatedLayer = LayerData(
+                id = newLayerId,
+                name = "${sourceLayer.name} Copy",
+                isVisible = sourceLayer.isVisible,
+                opacity = sourceLayer.opacity,
+                isLocked = sourceLayer.isLocked,
+                strokes = sourceLayer.strokes.map { it.copy(id = System.nanoTime()) }.toMutableList()
+            )
+            
+            layers[newLayerId] = duplicatedLayer
+            activeLayerId = newLayerId
+            
+            coroutineScope.launch {
+                invalidationFlow.emit(CanvasInvalidationEvent.Full)
+            }
+            
+            newLayerId
+        }
+    }
+
+    override suspend fun mergeLayers(sourceLayerId: Long, targetLayerId: Long): Boolean {
+        return renderMutex.withLock {
+            val sourceLayer = layers[sourceLayerId] ?: return@withLock false
+            val targetLayer = layers[targetLayerId] ?: return@withLock false
+            
+            // Merge strokes from source to target
+            targetLayer.strokes.addAll(sourceLayer.strokes)
+            
+            // Remove source layer
+            layers.remove(sourceLayerId)
+            
+            // Set active layer to target
+            activeLayerId = targetLayerId
+            
+            coroutineScope.launch {
+                invalidationFlow.emit(CanvasInvalidationEvent.Full)
+            }
+            
+            true
+        }
+    }
+
+    override suspend fun mergeVisibleLayers(keepOriginals: Boolean): Long? {
+        return renderMutex.withLock {
+            val visibleLayers = layers.values.filter { it.isVisible }.sortedBy { it.id }
+            
+            if (visibleLayers.size < 2) return@withLock null
+            
+            // Create new merged layer
+            val mergedLayerId = nextLayerId++
+            val allStrokes = visibleLayers.flatMap { it.strokes }.toMutableList()
+            
+            val mergedLayer = LayerData(
+                id = mergedLayerId,
+                name = "Merged Layer",
+                isVisible = true,
+                opacity = 1.0f,
+                isLocked = false,
+                strokes = allStrokes
+            )
+            
+            layers[mergedLayerId] = mergedLayer
+            
+            if (!keepOriginals) {
+                // Remove all visible layers except the merged one
+                visibleLayers.forEach { layer ->
+                    if (layer.id != mergedLayerId) {
+                        layers.remove(layer.id)
+                    }
+                }
+            }
+            
+            activeLayerId = mergedLayerId
+            
+            coroutineScope.launch {
+                invalidationFlow.emit(CanvasInvalidationEvent.Full)
+            }
+            
+            mergedLayerId
+        }
+    }
+
+    override suspend fun mergeLayerDown(layerId: Long): Boolean {
+        return renderMutex.withLock {
+            val currentLayer = layers[layerId] ?: return@withLock false
+            
+            // Find the layer below (with lower index)
+            val layerBelow = layers.values
+                .filter { it.id != layerId && it.index < currentLayer.index }
+                .maxByOrNull { it.index }
+            
+            if (layerBelow == null) return@withLock false
+            
+            // Merge current layer into layer below
+            layerBelow.strokes.addAll(currentLayer.strokes)
+            
+            // Remove current layer
+            layers.remove(layerId)
+            
+            activeLayerId = layerBelow.id
+            
+            coroutineScope.launch {
+                invalidationFlow.emit(CanvasInvalidationEvent.Full)
+            }
+            
+            true
+        }
+    }
+
     /**
      * Apply zoom and offset transformation to X coordinate
      */
@@ -266,8 +472,30 @@ class CanvasRepositoryImpl @Inject constructor(
         val isVisible: Boolean,
         val opacity: Float,
         val isLocked: Boolean,
+        val index: Int = 0,
         val strokes: MutableList<Stroke> = mutableListOf()
-    )
+    ) {
+        /**
+         * Create a copy of this LayerData with modified properties
+         */
+        fun copy(
+            id: Long = this.id,
+            name: String = this.name,
+            isVisible: Boolean = this.isVisible,
+            opacity: Float = this.opacity,
+            isLocked: Boolean = this.isLocked,
+            index: Int = this.index,
+            strokes: MutableList<Stroke> = this.strokes
+        ): LayerData = LayerData(
+            id = id,
+            name = name,
+            isVisible = isVisible,
+            opacity = opacity,
+            isLocked = isLocked,
+            index = index,
+            strokes = strokes
+        )
+    }
 
     /**
      * Simple rectangle for bounds calculation
