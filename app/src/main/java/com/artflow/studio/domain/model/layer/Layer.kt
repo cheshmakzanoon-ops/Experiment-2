@@ -62,25 +62,33 @@ data class Layer(
 
 /**
  * Layer blend modes for compositing
+ * Implements Phase 12: Blend Modes
  */
-enum class BlendMode {
-    NORMAL,
-    MULTIPLY,
-    SCREEN,
-    OVERLAY,
-    DARKEN,
-    LIGHTEN,
-    COLOR_DODGE,
-    COLOR_BURN,
-    HARD_LIGHT,
-    SOFT_LIGHT,
-    DIFFERENCE,
-    EXCLUSION,
-    HUE,
-    SATURATION,
-    COLOR,
-    LUMINOSITY,
-    PASS_THROUGH  // For layer groups
+enum class BlendMode(val displayName: String) {
+    NORMAL("Normal"),
+    MULTIPLY("Multiply"),
+    SCREEN("Screen"),
+    OVERLAY("Overlay"),
+    DARKEN("Darken"),
+    LIGHTEN("Lighten"),
+    COLOR_DODGE("Color Dodge"),
+    COLOR_BURN("Color Burn"),
+    HARD_LIGHT("Hard Light"),
+    SOFT_LIGHT("Soft Light"),
+    DIFFERENCE("Difference"),
+    EXCLUSION("Exclusion"),
+    HUE("Hue"),
+    SATURATION("Saturation"),
+    COLOR("Color"),
+    LUMINOSITY("Luminosity"),
+    PASS_THROUGH("Pass Through");  // For layer groups
+    
+    companion object {
+        /**
+         * Get all blend modes available for regular layers (excludes PASS_THROUGH)
+         */
+        fun getLayerBlendModes(): List<BlendMode> = entries.filter { it != PASS_THROUGH }
+    }
 }
 
 /**

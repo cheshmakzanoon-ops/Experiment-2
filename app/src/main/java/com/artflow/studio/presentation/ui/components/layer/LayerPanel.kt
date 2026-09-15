@@ -175,7 +175,7 @@ fun LayerListItem(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = layer.blendMode.name.lowercase().replace("_", " "),
+                        text = layer.blendMode.displayName,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary
                     )
