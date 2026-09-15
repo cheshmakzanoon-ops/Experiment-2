@@ -1,27 +1,22 @@
-```
 # Compiled and build artifacts
 *.class
 *.o
 *.obj
 *.so
-*.a
 *.dll
 *.exe
 *.out
-build/
-dist/
+*.a
 
 # Dependencies
-.gradle/
-target/
-__pycache__/
-.mypy_cache/
-.pytest_cache/
 node_modules/
 venv/
 .venv/
-julia-*/
-zig*/
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+target/
+.gradle/
 
 # Logs and temp files
 *.log
@@ -70,4 +65,3 @@ htmlcov/
 *.tar.bz2
 *.tar.xz
 *.tar.zst
-```
