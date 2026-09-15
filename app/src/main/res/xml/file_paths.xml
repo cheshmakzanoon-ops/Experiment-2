@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Exported artwork files -->
+    <external-files-path
+        name="artwork"
+        path="artwork" />
+    
+    <!-- Temporary export files -->
+    <cache-path
+        name="export_cache"
+        path="export" />
+    
+    <!-- Shared images -->
+    <external-files-path
+        name="shared_images"
+        path="shared" />
+</paths>

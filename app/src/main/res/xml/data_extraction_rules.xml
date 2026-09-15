@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <!-- Include app-specific data -->
+        <include domain="sharedpref" path="." />
+        <include domain="database" path="artflow.db" />
+        <include domain="file" path="./artwork" />
+        
+        <!-- Exclude temporary and cache files -->
+        <exclude domain="file" path="./cache" />
+        <exclude domain="file" path="./temp" />
+    </cloud-backup>
+</data-extraction-rules>
