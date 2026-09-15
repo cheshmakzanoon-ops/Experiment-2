@@ -4,6 +4,7 @@ import android.content.Context
 import android.opengl.GLSurfaceView
 import android.util.AttributeSet
 import android.view.MotionEvent
+import androidx.core.math.MathUtils
 import com.artflow.studio.data.renderer.opengl.OpenGLCanvasRenderer
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
@@ -46,6 +47,26 @@ class ArtFlowCanvasView @JvmOverloads constructor(
     // Active layer
     private var activeLayerId = 1L
 
+    // Gesture handling for zoom/pan
+    private var scale = 1f
+    private var offsetX = 0f
+    private var offsetY = 0f
+    private var lastTouchX = 0f
+    private var lastTouchY = 0f
+    private var activePointerId = INVALID_POINTER_ID
+    private var isPanning = false
+    
+    // Pinch-to-zoom
+    private var oldDist = 1f
+    private var newDist = 1f
+    private val minScale = 0.1f
+    private val maxScale = 5f
+
+    companion object {
+        private const val INVALID_POINTER_ID = -1
+        private const val TOUCH_TIMEOUT = 200 // ms before considering as pan instead of draw
+    }
+
     init {
         // Set up OpenGL ES 2.0 context
         setEGLContextClientVersion(2)
@@ -61,25 +82,106 @@ class ArtFlowCanvasView @JvmOverloads constructor(
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        val x = event.x
-        val y = event.y
-        val pressure = getPressureFromEvent(event)
+        val action = event.actionMasked
+        val pointerIndex = event.actionIndex
+        
+        // Handle pinch-to-zoom for two-finger gestures
+        if (event.pointerCount > 1) {
+            when (action) {
+                MotionEvent.ACTION_POINTER_DOWN -> {
+                    oldDist = spacing(event)
+                    isPanning = true
+                    isDrawing = false
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    newDist = spacing(event)
+                    if (oldDist > 10f) { // Avoid jitter
+                        val deltaScale = newDist / oldDist
+                        val newScale = MathUtils.clamp(scale * deltaScale, minScale, maxScale)
+                        
+                        // Zoom towards the center point between fingers
+                        val midX = (event.getX(0) + event.getX(1)) / 2
+                        val midY = (event.getY(0) + event.getY(1)) / 2
+                        
+                        // Adjust offset to zoom towards finger position
+                        offsetX = midX - (midX - offsetX) * (newScale / scale)
+                        offsetY = midY - (midY - offsetY) * (newScale / scale)
+                        
+                        scale = newScale
+                        renderer.setTransformation(scale, offsetX, offsetY, 0f)
+                        invalidate()
+                    }
+                    oldDist = newDist
+                }
+            }
+            return true
+        }
 
-        when (event.actionMasked) {
+        // Single finger handling for drawing and panning
+        val x = event.getX(pointerIndex)
+        val y = event.getY(pointerIndex)
+
+        when (action) {
             MotionEvent.ACTION_DOWN -> {
+                lastTouchX = x
+                lastTouchY = y
+                activePointerId = event.getPointerId(0)
+                
+                // Start in drawing mode, switch to pan if movement exceeds threshold
                 isDrawing = true
-                currentStrokeId = beginStroke(x, y, pressure, currentBrushParams, activeLayerId)
-                invalidate() // Request redraw
+                isPanning = false
+                
+                // Transform coordinates for canvas space
+                val canvasX = (x - offsetX) / scale
+                val canvasY = (y - offsetY) / scale
+                
+                currentStrokeId = beginStroke(canvasX, canvasY, getPressureFromEvent(event), currentBrushParams, activeLayerId)
+                invalidate()
                 true
             }
 
             MotionEvent.ACTION_MOVE -> {
-                if (isDrawing) {
-                    coroutineScope.launch {
-                        canvasRepository.continueStroke(currentStrokeId, x, y, pressure)
+                val pointerIndex = event.findPointerIndex(activePointerId)
+                if (pointerIndex == -1) return@onTouchEvent
+                
+                val currentX = event.getX(pointerIndex)
+                val currentY = event.getY(pointerIndex)
+                
+                val dx = currentX - lastTouchX
+                val dy = currentY - lastTouchY
+                
+                // Check if movement is significant enough to consider panning
+                if (!isPanning && (kotlin.math.abs(dx) > 10f || kotlin.math.abs(dy) > 10f)) {
+                    // If we were drawing, end the stroke and switch to panning
+                    if (isDrawing) {
+                        isDrawing = false
+                        coroutineScope.launch {
+                            canvasRepository.endStroke(currentStrokeId)
+                        }
+                        isPanning = true
                     }
-                    invalidate() // Request redraw
                 }
+                
+                if (isPanning) {
+                    // Pan the canvas
+                    offsetX += dx
+                    offsetY += dy
+                    renderer.setTransformation(scale, offsetX, offsetY, 0f)
+                    invalidate()
+                } else if (isDrawing) {
+                    // Continue drawing stroke
+                    val canvasX = (currentX - offsetX) / scale
+                    val canvasY = (currentY - offsetY) / scale
+                    val pressure = getPressureFromEvent(event)
+                    
+                    coroutineScope.launch {
+                        canvasRepository.continueStroke(currentStrokeId, canvasX, canvasY, pressure)
+                    }
+                    invalidate()
+                }
+                
+                lastTouchX = currentX
+                lastTouchY = currentY
                 true
             }
 
@@ -90,18 +192,50 @@ class ArtFlowCanvasView @JvmOverloads constructor(
                     }
                     isDrawing = false
                 }
+                isPanning = false
+                activePointerId = INVALID_POINTER_ID
                 true
             }
 
             MotionEvent.ACTION_CANCEL -> {
                 if (isDrawing) {
                     isDrawing = false
+                    coroutineScope.launch {
+                        canvasRepository.endStroke(currentStrokeId)
+                    }
+                }
+                isPanning = false
+                activePointerId = INVALID_POINTER_ID
+                true
+            }
+
+            MotionEvent.ACTION_POINTER_UP -> {
+                // Reset for single finger operation
+                val pointerIndex = event.actionIndex
+                val ptrId = event.getPointerId(pointerIndex)
+                if (ptrId == activePointerId) {
+                    val newPointerIndex = if (pointerIndex == 0) 1 else 0
+                    if (newPointerIndex < event.pointerCount) {
+                        activePointerId = event.getPointerId(newPointerIndex)
+                        lastTouchX = event.getX(newPointerIndex)
+                        lastTouchY = event.getY(newPointerIndex)
+                    }
                 }
                 true
             }
 
             else -> false
         }
+    }
+
+    /**
+     * Calculate the distance between the first two fingers
+     */
+    private fun spacing(event: MotionEvent): Float {
+        if (event.pointerCount < 2) return 0f
+        val x = event.getX(0) - event.getX(1)
+        val y = event.getY(0) - event.getY(1)
+        return kotlin.math.sqrt(x * x + y * y)
     }
 
     /**
@@ -148,7 +282,28 @@ class ArtFlowCanvasView @JvmOverloads constructor(
      * Set zoom and pan transformation
      */
     fun setTransformation(scale: Float, offsetX: Float, offsetY: Float, rotation: Float = 0f) {
+        this.scale = scale
+        this.offsetX = offsetX
+        this.offsetY = offsetY
         renderer.setTransformation(scale, offsetX, offsetY, rotation)
+    }
+
+    /**
+     * Get current transformation values
+     */
+    fun getTransformation(): TransformationData {
+        return TransformationData(scale, offsetX, offsetY)
+    }
+
+    /**
+     * Reset view to default transformation
+     */
+    fun resetTransformation() {
+        scale = 1f
+        offsetX = 0f
+        offsetY = 0f
+        renderer.setTransformation(scale, offsetX, offsetY, 0f)
+        invalidate()
     }
 
     /**
@@ -163,4 +318,13 @@ class ArtFlowCanvasView @JvmOverloads constructor(
         renderer.dispose()
         coroutineScope.cancel()
     }
+    
+    /**
+     * Data class holding transformation state
+     */
+    data class TransformationData(
+        val scale: Float,
+        val offsetX: Float,
+        val offsetY: Float
+    )
 }
