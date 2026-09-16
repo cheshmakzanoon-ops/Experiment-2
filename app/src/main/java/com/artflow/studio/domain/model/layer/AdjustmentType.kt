@@ -1,63 +1,10 @@
 package com.artflow.studio.domain.model.layer
 
 /**
- * Represents an adjustment layer for non-destructive color corrections
- * Adjustment layers apply effects to all layers below them without modifying original pixels
- */
-data class AdjustmentLayer(
-    val id: Long,
-    val name: String,
-    val index: Int,
-    val isVisible: Boolean = true,
-    val opacity: Float = 1.0f,
-    val adjustmentType: AdjustmentType,
-    val parameters: Map<String, Float> = emptyMap(),
-    val isEnabled: Boolean = true,
-    val blendMode: BlendMode = BlendMode.NORMAL,
-    val parentGroupId: Long? = null
-) {
-    /**
-     * Check if this adjustment layer can affect underlying layers
-     */
-    fun canApply(): Boolean = isVisible && isEnabled
-
-    /**
-     * Get a specific parameter value with default fallback
-     */
-    fun getParameter(key: String, defaultValue: Float = 0f): Float {
-        return parameters[key] ?: defaultValue
-    }
-
-    /**
-     * Create a copy with modified properties
-     */
-    fun copyWith(
-        id: Long = this.id,
-        name: String = this.name,
-        index: Int = this.index,
-        isVisible: Boolean = this.isVisible,
-        opacity: Float = this.opacity,
-        adjustmentType: AdjustmentType = this.adjustmentType,
-        parameters: Map<String, Float> = this.parameters,
-        isEnabled: Boolean = this.isEnabled,
-        blendMode: BlendMode = this.blendMode,
-        parentGroupId: Long? = this.parentGroupId
-    ): AdjustmentLayer = AdjustmentLayer(
-        id = id,
-        name = name,
-        index = index,
-        isVisible = isVisible,
-        opacity = opacity,
-        adjustmentType = adjustmentType,
-        parameters = parameters,
-        isEnabled = isEnabled,
-        blendMode = blendMode,
-        parentGroupId = parentGroupId
-    )
-}
-
-/**
- * Enumeration of available adjustment types
+ * Enumeration of available adjustment types for adjustment layers.
+ *
+ * Adjustment layers are stored as ordinary [Layer]s whose `adjustmentType` is set; the compositor
+ * applies them non-destructively below the layer.
  */
 enum class AdjustmentType(
     val displayName: String,
@@ -180,18 +127,4 @@ enum class AdjustmentType(
      * Check if this adjustment type has parameters
      */
     fun hasParameters(): Boolean = defaultParameters.isNotEmpty()
-}
-
-/**
- * Event types for adjustment layer operations
- */
-sealed class AdjustmentLayerEvent {
-    data class AdjustmentLayerAdded(val layer: AdjustmentLayer) : AdjustmentLayerEvent()
-    data class AdjustmentLayerRemoved(val layerId: Long) : AdjustmentLayerEvent()
-    data class AdjustmentLayerModified(val layerId: Long, val changes: Map<String, Any>) : AdjustmentLayerEvent()
-    data class AdjustmentLayerVisibilityChanged(val layerId: Long, val isVisible: Boolean) : AdjustmentLayerEvent()
-    data class AdjustmentLayerEnabledChanged(val layerId: Long, val isEnabled: Boolean) : AdjustmentLayerEvent()
-    data class AdjustmentLayerOpacityChanged(val layerId: Long, val opacity: Float) : AdjustmentLayerEvent()
-    data class AdjustmentLayerParameterChanged(val layerId: Long, val parameter: String, val value: Float) : AdjustmentLayerEvent()
-    object AdjustmentLayersReordered : AdjustmentLayerEvent()
 }

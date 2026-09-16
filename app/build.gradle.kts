@@ -30,12 +30,6 @@ val keystoreProperties = Properties().apply {
 val hasReleaseSigning = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
     .all { !keystoreProperties.getProperty(it).isNullOrBlank() }
 
-/**
- * The native brush module needs the NDK. CI and JVM-only builds can skip it with
- * `./gradlew assembleDebug -PnoNativeBuild`; local builds compile it by default.
- */
-val nativeBuildEnabled = !project.hasProperty("noNativeBuild")
-
 android {
     namespace = "com.artflow.studio"
     compileSdk = 34
@@ -48,13 +42,6 @@ android {
         versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
-        if (nativeBuildEnabled) {
-            // NDK configuration
-            ndk {
-                abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
-            }
-        }
     }
 
     signingConfigs {
@@ -110,14 +97,6 @@ android {
 
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.4"
-    }
-
-    if (nativeBuildEnabled) {
-        externalNativeBuild {
-            cmake {
-                path = file("src/main/jni/CMakeLists.txt")
-            }
-        }
     }
 
     packaging {

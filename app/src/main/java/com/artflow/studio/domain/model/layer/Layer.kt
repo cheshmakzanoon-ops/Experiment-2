@@ -56,9 +56,6 @@ data class Layer(
     /** Phase 28: layers sharing a non-null link move and transform together. */
     val linkGroupId: Long? = null,
 
-    /** Phase 30: embedded smart object instance instead of owned pixels. */
-    val smartObjectId: String? = null,
-
     /** Hidden from the layer list but still composited (used by text layers before rasterising). */
     val isInternal: Boolean = false
 ) {
@@ -67,21 +64,12 @@ data class Layer(
      */
     fun canEdit(): Boolean = !isLocked && isVisible
 
-    /** Layer kinds the UI shows differently. */
-    fun type(): LayerType = when {
-        isReference -> LayerType.REFERENCE
-        adjustmentType != null -> LayerType.ADJUSTMENT
-        smartObjectId != null -> LayerType.SMART_OBJECT
-        filterType != null -> LayerType.FILTER
-        else -> LayerType.PIXEL
-    }
-
     /** True when the layer has pixel data that tools can modify. */
     fun hasRaster(): Boolean = rasterFile != null
 
     /** True when painting on this layer is allowed (visible, unlocked, not a reference/adjustment). */
     fun acceptsPaint(): Boolean =
-        isVisible && !isLocked && !isReference && adjustmentType == null && smartObjectId == null
+        isVisible && !isLocked && !isReference && adjustmentType == null
 
     /** True when the layer has an active mask that must be applied during compositing. */
     fun hasActiveMask(): Boolean = maskFile != null && maskEnabled
@@ -115,7 +103,6 @@ data class Layer(
         filterAmount: Float = this.filterAmount,
         isReference: Boolean = this.isReference,
         linkGroupId: Long? = this.linkGroupId,
-        smartObjectId: String? = this.smartObjectId,
         isInternal: Boolean = this.isInternal
     ): Layer = Layer(
         id = id,
@@ -143,7 +130,6 @@ data class Layer(
         filterAmount = filterAmount,
         isReference = isReference,
         linkGroupId = linkGroupId,
-        smartObjectId = smartObjectId,
         isInternal = isInternal
     )
 }
@@ -205,87 +191,4 @@ enum class BlendMode(val displayName: String) {
     }
 }
 
-/**
- * Represents a layer group (folder) for organizing layers
- */
-@Serializable
-data class LayerGroup(
-    val id: Long,
-    val name: String,
-    val index: Int,
-    val layerIds: List<Long>,          // Ordered list of layer IDs in this group
-    val subGroupIds: List<Long> = emptyList(), // Nested groups
-    val isVisible: Boolean = true,
-    val isExpanded: Boolean = true,    // UI state for group expansion
-    val parentGroupId: Long? = null
-) {
-    /**
-     * Create a copy of this group with modified properties.
-     * Used by LayerGroupManager for immutable updates.
-     */
-    fun copyWith(
-        id: Long = this.id,
-        name: String = this.name,
-        index: Int = this.index,
-        layerIds: List<Long> = this.layerIds,
-        subGroupIds: List<Long> = this.subGroupIds,
-        isVisible: Boolean = this.isVisible,
-        isExpanded: Boolean = this.isExpanded,
-        parentGroupId: Long? = this.parentGroupId
-    ): LayerGroup = LayerGroup(
-        id = id,
-        name = name,
-        index = index,
-        layerIds = layerIds,
-        subGroupIds = subGroupIds,
-        isVisible = isVisible,
-        isExpanded = isExpanded,
-        parentGroupId = parentGroupId
-    )
 
-    /**
-     * Total number of layers in this group (including nested)
-     */
-    fun getTotalLayerCount(groups: List<LayerGroup>): Int {
-        var count = layerIds.size
-        subGroupIds.forEach { subGroupId ->
-            groups.find { it.id == subGroupId }?.let { subGroup ->
-                count += subGroup.getTotalLayerCount(groups)
-            }
-        }
-        return count
-    }
-}
-
-/**
- * Layer type enumeration for different layer kinds
- */
-enum class LayerType(val displayName: String) {
-    PIXEL("Pixel"),              // Standard raster layer
-    VECTOR("Vector"),            // Vector-based layer
-    FILL("Fill"),                // Solid colour / pattern fill layer
-    ADJUSTMENT("Adjustment"),    // Adjustment layer for colour corrections
-    CLIPPING_MASK("Clipping"),   // Clipping mask layer
-    MASK("Mask"),                // Layer mask (grayscale)
-    REFERENCE("Reference"),      // Reference image, never composited
-    FILTER("Filter"),            // Non-destructive filter layer
-    SMART_OBJECT("Smart Object") // Embedded reusable content
-}
-
-/**
- * Event types for layer operations
- */
-sealed class LayerEvent {
-    data class LayerAdded(val layer: Layer) : LayerEvent()
-    data class LayerRemoved(val layerId: Long) : LayerEvent()
-    data class LayerMoved(val layerId: Long, val newIndex: Int) : LayerEvent()
-    data class LayerVisibilityChanged(val layerId: Long, val isVisible: Boolean) : LayerEvent()
-    data class LayerOpacityChanged(val layerId: Long, val opacity: Float) : LayerEvent()
-    data class LayerRenamed(val layerId: Long, val newName: String) : LayerEvent()
-    data class LayerLockChanged(val layerId: Long, val isLocked: Boolean) : LayerEvent()
-    data class LayerBlendModeChanged(val layerId: Long, val blendMode: BlendMode) : LayerEvent()
-    data class LayerSelected(val layerId: Long) : LayerEvent()
-    data class LayerDuplicated(val originalLayerId: Long, val newLayerId: Long) : LayerEvent()
-    data class LayerMerged(val sourceLayerId: Long, val targetLayerId: Long) : LayerEvent()
-    object LayersReordered : LayerEvent()
-}

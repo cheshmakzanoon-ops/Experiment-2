@@ -269,7 +269,6 @@ class CanvasRepositoryImpl @Inject constructor(
             adjustmentParams = layer.adjustmentParameters.toMutableMap(),
             filterType = layer.filterType,
             filterAmount = layer.filterAmount,
-            smartObjectId = layer.smartObjectId,
             isInternal = layer.isInternal
         )
         data.raster = loadRaster(projectId, layer.rasterFile)
@@ -1661,7 +1660,6 @@ class CanvasRepositoryImpl @Inject constructor(
         var adjustmentParams: MutableMap<String, Float> = mutableMapOf(),
         var filterType: FilterType? = null,
         var filterAmount: Float = 0f,
-        var smartObjectId: String? = null,
         var isInternal: Boolean = false
     ) {
         var raster: PixelBuffer? = null
@@ -1677,7 +1675,7 @@ class CanvasRepositoryImpl @Inject constructor(
         var maskOwned: Boolean = true
 
         fun canPaint(): Boolean = isVisible && !isLocked && !isReference &&
-            adjustmentType == null && smartObjectId == null
+            adjustmentType == null
 
         /** Copy for an undo snapshot: shares pixel buffers (copy-on-write) and copies the list. */
         fun snapshotCopy(): LayerData = LayerData(
@@ -1699,7 +1697,6 @@ class CanvasRepositoryImpl @Inject constructor(
             adjustmentParams = adjustmentParams.toMutableMap(),
             filterType = filterType,
             filterAmount = filterAmount,
-            smartObjectId = smartObjectId,
             isInternal = isInternal
         ).also {
             it.raster = raster
@@ -1740,7 +1737,6 @@ class CanvasRepositoryImpl @Inject constructor(
                 adjustmentParams = adjustmentParams.toMutableMap(),
                 filterType = filterType,
                 filterAmount = filterAmount,
-                smartObjectId = smartObjectId,
                 isInternal = isInternal
             ).also { fresh ->
                 fresh.raster = raster
@@ -1771,7 +1767,6 @@ class CanvasRepositoryImpl @Inject constructor(
             filterAmount = filterAmount,
             isReference = isReference,
             linkGroupId = linkGroupId,
-            smartObjectId = smartObjectId,
             isInternal = isInternal
         )
     }
