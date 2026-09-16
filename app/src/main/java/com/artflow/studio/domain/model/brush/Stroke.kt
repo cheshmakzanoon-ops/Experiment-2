@@ -48,7 +48,14 @@ data class Stroke(
     val brushParams: BrushParams,
     val layerId: Long,
     val color: Int,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    /**
+     * Eraser strokes subtract coverage from the layer instead of painting.
+     *
+     * Keeping the flag on the stroke (rather than pre-processing it away) means the compositor
+     * replays it exactly like it was drawn, so a saved document reopens identical to the screen.
+     */
+    val isEraser: Boolean = false
 ) {
     /**
      * Get the bounding box of the stroke

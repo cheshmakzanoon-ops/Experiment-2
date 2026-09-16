@@ -1,83 +1,86 @@
 package com.artflow.studio.domain.repository.canvas
 
+import com.artflow.studio.core.animation.AnimationTimeline
+import com.artflow.studio.core.pixels.IntBounds
+import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.pixels.SelectionMask
+import com.artflow.studio.domain.model.animation.AnimationFrame
+import com.artflow.studio.domain.model.animation.AnimationSettings
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.Stroke
-import com.artflow.studio.domain.model.brush.StrokePoint
+import com.artflow.studio.domain.model.layer.AdjustmentType
+import com.artflow.studio.domain.model.layer.BlendMode
+import com.artflow.studio.domain.model.layer.FilterType
+import com.artflow.studio.domain.model.layer.Layer
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 
 /**
- * Repository interface for canvas operations
- * Defines the contract for canvas rendering and layer management
+ * The editor's document API.
+ *
+ * `CanvasRepository` owns the editable document: layer stacks, pixel data, masks, adjustment and
+ * filter parameters, animation frames and undo history. Everything in it is expressed in terms of
+ * [PixelBuffer] (pure Kotlin pixel data) or immutable domain models, which is what lets the tools
+ * stay testable and lets the compositor be shared by the live canvas, the saved file and exports.
  */
 interface CanvasRepository {
 
-    /**
-     * Initialize a new canvas with specified dimensions
-     * @param width Canvas width in pixels
-     * @param height Canvas height in pixels
-     * @param dpi Canvas DPI
-     * @return Canvas ID
-     */
+    // -----------------------------------------------------------------------------------------
+    // Canvas lifecycle
+    // -----------------------------------------------------------------------------------------
+
+    /** Creates a blank canvas of [width] x [height]. Returns the canvas id. */
     suspend fun createCanvas(width: Int, height: Int, dpi: Int): Long
 
     /**
-     * Load an existing canvas from storage
-     * @param projectId Project ID to load
-     * @return Canvas state or null if not found
+     * Loads the saved project, or creates a blank canvas when there is nothing saved yet.
+     * This is the entry point used when the editor screen opens.
      */
+    suspend fun loadOrCreate(projectId: Long, width: Int, height: Int, dpi: Int): CanvasState?
+
+    /** Loads a saved project. Returns null when no document exists. */
     suspend fun loadCanvas(projectId: Long): CanvasState?
 
+    /** True when an autosave newer than the last explicit save exists. */
+    suspend fun hasRecovery(projectId: Long): Boolean
+
+    /** Restores the autosave copy; used by the crash-recovery prompt. */
+    suspend fun recoverAutosave(projectId: Long): CanvasState?
+
     /**
-     * Save the current canvas state to project storage.
-     * @param projectId Project ID to save to
-     * @return absolute path of the written thumbnail, or null if there was nothing to save
+     * Persists the document: full-fidelity JSON plus a flattened PNG and a gallery thumbnail.
+     * @return the thumbnail path, or null when there was nothing to save.
      */
     suspend fun saveCanvas(projectId: Long): String?
 
-    /**
-     * Undo the most recent canvas operation.
-     * @return true when something was undone
-     */
-    fun undo(): Boolean
+    /** Writes the rolling autosave without touching the saved document. */
+    suspend fun autosave(projectId: Long)
 
-    /**
-     * Redo the most recently undone operation.
-     * @return true when something was redone
-     */
-    fun redo(): Boolean
+    /** True when there are unsaved changes. */
+    fun hasUnsavedChanges(): Boolean
 
-    /** Whether there is an operation available to undo */
-    val canUndo: Boolean
+    /** Total undo steps currently held. */
+    val undoDepth: Int
 
-    /** Whether there is an operation available to redo */
-    val canRedo: Boolean
+    /** Total redo steps currently held. */
+    val redoDepth: Int
 
-    /**
-     * Begin a new stroke
-     * @param x Starting X coordinate
-     * @param y Starting Y coordinate
-     * @param pressure Initial pressure value
-     * @param brushParams Current brush parameters
-     * @param layerId Target layer ID
-     * @return Stroke ID
-     */
+    /** The project this canvas belongs to, or 0 when unsaved. */
+    fun projectId(): Long
+
+    // -----------------------------------------------------------------------------------------
+    // Strokes
+    // -----------------------------------------------------------------------------------------
+
     fun beginStroke(
         x: Float,
         y: Float,
         pressure: Float,
         brushParams: BrushParams,
-        layerId: Long
+        layerId: Long,
+        isEraser: Boolean = false
     ): Long
 
-    /**
-     * Continue an existing stroke with a new point
-     * @param strokeId Stroke to continue
-     * @param x X coordinate
-     * @param y Y coordinate
-     * @param pressure Pressure value
-     * @param tiltX Tilt angle on X axis
-     * @param tiltY Tilt angle on Y axis
-     */
     fun continueStroke(
         strokeId: Long,
         x: Float,
@@ -87,189 +90,271 @@ interface CanvasRepository {
         tiltY: Float = 0f
     )
 
-    /**
-     * End the current stroke
-     * @param strokeId Stroke to end
-     */
     fun endStroke(strokeId: Long)
 
-    /**
-     * Render a complete stroke to the canvas texture
-     * @param stroke The stroke to render
-     */
-    suspend fun renderStroke(stroke: Stroke)
+    /** Strokes currently in flight, so the canvas view can render the live stroke. */
+    fun activeStroke(strokeId: Long): Stroke?
 
     /**
-     * Get the current canvas as a bitmap (for export/thumbnail)
-     * @return Bitmap data or null
+     * Symmetry guide applied to every committed stroke (Phase 33).
+     *
+     * The repository owns this because the mirrored copies have to be baked into the layer pixels
+     * together with the original, or the saved file would only contain one of them.
      */
-    suspend fun getCanvasBitmap(): ByteArray?
+    fun setSymmetry(settings: com.artflow.studio.core.symmetry.SymmetryEngine.Settings)
 
     /**
-     * Clear the entire canvas
-     * @param color Color to fill with (default white)
+     * Asks listeners to re-composite without changing the document.
+     *
+     * Interactive pixel tools (smudge, clone, heal, liquify) mutate the layer buffer directly
+     * during a gesture and call this to update the on-screen preview; nothing is written to disk
+     * until the gesture commits.
      */
-    suspend fun clearCanvas(color: Int = -1)
+    fun requestPreviewRefresh()
+
+    /** Replaces the stroke list of a layer (transform commits, symmetry replay). */
+    suspend fun replaceLayerStrokes(layerId: Long, strokes: List<Stroke>): Boolean
+
+    // -----------------------------------------------------------------------------------------
+    // Pixel editing
+    // -----------------------------------------------------------------------------------------
 
     /**
-     * Set the background color of the canvas
-     * @param color ARGB color value
+     * An open pixel-editing session on one layer.
+     *
+     * Interactive tools (smudge, clone, heal, liquify) call [CanvasRepository.beginRasterEdit]
+     * once for the gesture and then mutate the buffer repeatedly, which keeps the undo history at
+     * one entry per gesture instead of one per pointer sample.
      */
-    fun setBackgroundColor(color: Int)
+    class RasterEditSession internal constructor(
+        val layerId: Long,
+        val buffer: PixelBuffer,
+        internal val snapshotToken: Long
+    )
 
-    /**
-     * Get current canvas dimensions
-     */
-    fun getCanvasSize(): CanvasSize
+    /** The layer's pixel buffer, loading it from disk on first access. */
+    suspend fun layerPixels(layerId: Long): PixelBuffer?
 
-    /**
-     * Observe canvas invalidation events for rendering
-     */
-    fun observeCanvasInvalidation(): Flow<CanvasInvalidationEvent>
+    /** Starts an editing session, pushing a single undo entry for the whole gesture. */
+    suspend fun beginRasterEdit(layerId: Long): RasterEditSession?
 
-    /**
-     * Dispose of canvas resources
-     */
-    fun dispose()
+    /** Writes a fresh version file for the session's layer and invalidates the canvas. */
+    suspend fun commitRasterEdit(session: RasterEditSession, description: String): Boolean
 
-    /**
-     * Add a new layer to the canvas
-     * @param name Layer name (optional, will auto-generate if null)
-     * @param index Position in layer stack (null = above active layer)
-     * @param opacity Initial opacity (0.0 - 1.0)
-     * @return Created Layer object
-     */
-    suspend fun addLayer(
-        name: String? = null,
-        index: Int? = null,
-        opacity: Float = 1.0f
-    ): com.artflow.studio.domain.model.layer.Layer
+    /** Throws the session's changes away and restores the pre-gesture pixels. */
+    suspend fun cancelRasterEdit(session: RasterEditSession)
 
-    /**
-     * Remove a layer from the canvas
-     * @param layerId ID of the layer to remove
-     * @return True if removed successfully, false otherwise
-     */
+    /** One-shot pixel edit: snapshots, applies [edit], persists and invalidates. */
+    suspend fun applyRasterEdit(
+        layerId: Long,
+        description: String,
+        edit: (PixelBuffer) -> Unit
+    ): Boolean
+
+    /** Replaces a layer's pixels wholesale (image import, text rasterisation, paste). */
+    suspend fun setLayerPixels(layerId: Long, buffer: PixelBuffer, description: String): Boolean
+
+    /** Sets the ink colour used by subsequent strokes. */
+    fun setStrokeColor(color: Int)
+
+    fun getStrokeColor(): Int
+
+    // -----------------------------------------------------------------------------------------
+    // Selection
+    // -----------------------------------------------------------------------------------------
+
+    /** The active selection, or null when nothing is selected. */
+    fun selection(): SelectionMask?
+
+    /** Replaces the selection (null clears it). */
+    fun setSelection(mask: SelectionMask?)
+
+    /** Clears the selection. */
+    fun clearSelection()
+
+    // -----------------------------------------------------------------------------------------
+    // Layers
+    // -----------------------------------------------------------------------------------------
+
+    suspend fun addLayer(name: String? = null, index: Int? = null, opacity: Float = 1.0f): Layer
+
     suspend fun removeLayer(layerId: Long): Boolean
 
-    /**
-     * Reorder a layer in the layer stack
-     * @param layerId ID of the layer to move
-     * @param newIndex New position in the layer stack
-     * @return True if reordered successfully, false otherwise
-     */
     suspend fun reorderLayer(layerId: Long, newIndex: Int): Boolean
 
-    /**
-     * Duplicate an existing layer
-     * @param layerId ID of the layer to duplicate
-     * @return ID of the newly created duplicated layer, or null if failed
-     */
     suspend fun duplicateLayer(layerId: Long): Long?
 
-    /**
-     * Merge two layers (source into target)
-     * @param sourceLayerId ID of the source layer (will be removed)
-     * @param targetLayerId ID of the target layer (will contain merged content)
-     * @return True if merged successfully, false otherwise
-     */
     suspend fun mergeLayers(sourceLayerId: Long, targetLayerId: Long): Boolean
 
-    /**
-     * Merge all visible layers into a single layer
-     * @param keepOriginals Whether to keep original layers after merge
-     * @return ID of the merged layer
-     */
     suspend fun mergeVisibleLayers(keepOriginals: Boolean = false): Long?
 
-    /**
-     * Merge down - merge current layer with the layer below it
-     * @param layerId ID of the layer to merge down
-     * @return true if merge was successful
-     */
     suspend fun mergeLayerDown(layerId: Long): Boolean
 
-    /**
-     * Set the visibility of a layer
-     * @param layerId ID of the layer to modify
-     * @param isVisible New visibility state (null to toggle)
-     * @return true if visibility was changed successfully
-     */
+    /** Flattens the layer stack into a single layer (destructive, undoable). */
+    suspend fun flattenAllLayers(): Long?
+
     suspend fun setLayerVisibility(layerId: Long, isVisible: Boolean? = null): Boolean
 
-    /**
-     * Set the opacity of a layer
-     * @param layerId ID of the layer to modify
-     * @param opacity New opacity value (0.0 - 1.0)
-     * @return true if opacity was changed successfully
-     */
     suspend fun setLayerOpacity(layerId: Long, opacity: Float): Boolean
 
-    /**
-     * Set the name of a layer
-     * @param layerId ID of the layer to rename
-     * @param newName New layer name
-     * @return true if name was changed successfully
-     */
     suspend fun setLayerName(layerId: Long, newName: String): Boolean
 
-    /**
-     * Set the lock state of a layer
-     * @param layerId ID of the layer to lock/unlock
-     * @param isLocked New lock state
-     * @return true if lock state was changed successfully
-     */
     suspend fun setLayerLock(layerId: Long, isLocked: Boolean): Boolean
 
-    /**
-     * Set the blend mode of a layer
-     * @param layerId ID of the layer to modify
-     * @param blendMode New blend mode
-     * @return true if blend mode was changed successfully
-     */
-    suspend fun setLayerBlendMode(layerId: Long, blendMode: com.artflow.studio.domain.model.layer.BlendMode): Boolean
+    suspend fun setLayerBlendMode(layerId: Long, blendMode: BlendMode): Boolean
 
-    /**
-     * Set the alpha lock state of a layer
-     * Alpha lock restricts painting to only existing opaque pixels
-     * @param layerId ID of the layer to modify
-     * @param isLocked New alpha lock state (null to toggle)
-     * @return true if alpha lock state was changed successfully
-     */
     suspend fun setLayerAlphaLock(layerId: Long, isLocked: Boolean? = null): Boolean
 
-    /**
-     * Set the clipping mask state of a layer
-     * Clipping mask restricts painting to the content of the layer below
-     * @param layerId ID of the layer to modify
-     * @param isClipping New clipping mask state (null to toggle)
-     * @return true if clipping mask state was changed successfully
-     */
     suspend fun setLayerClippingMask(layerId: Long, isClipping: Boolean? = null): Boolean
 
-    /**
-     * Get all layers in the canvas
-     * @return List of all layers sorted by index
-     */
-    fun getAllLayers(): List<com.artflow.studio.domain.model.layer.Layer>
+    /** Marks a layer as a reference image (visible on the reference panel, never composited). */
+    suspend fun setLayerReference(layerId: Long, isReference: Boolean): Boolean
 
-    /**
-     * Get the currently active layer
-     * @return Active layer or null if no canvas exists
-     */
-    fun getActiveLayer(): com.artflow.studio.domain.model.layer.Layer?
+    /** Links several layers so they move and transform together (Phase 28). */
+    suspend fun linkLayers(layerIds: List<Long>): Boolean
 
-    /**
-     * Set the active layer
-     * @param layerId ID of the layer to make active
-     * @return true if layer was set as active
-     */
+    suspend fun unlinkLayer(layerId: Long): Boolean
+
+    fun getAllLayers(): List<Layer>
+
+    fun getActiveLayer(): Layer?
+
     fun setActiveLayer(layerId: Long): Boolean
+
+    fun getActiveLayerId(): Long
+
+    // -----------------------------------------------------------------------------------------
+    // Masks, adjustments and filters
+    // -----------------------------------------------------------------------------------------
+
+    /** Adds a layer mask, optionally initialised from a selection. */
+    suspend fun addLayerMask(layerId: Long, fromSelection: SelectionMask? = null): Boolean
+
+    suspend fun removeLayerMask(layerId: Long): Boolean
+
+    suspend fun invertLayerMask(layerId: Long): Boolean
+
+    suspend fun setLayerMaskEnabled(layerId: Long, enabled: Boolean): Boolean
+
+    suspend fun setLayerMaskDensity(layerId: Long, density: Float): Boolean
+
+    suspend fun setLayerMaskFeather(layerId: Long, radius: Float): Boolean
+
+    /** Paints on a layer mask (white reveals, black hides). */
+    suspend fun paintLayerMask(layerId: Long, x: Float, y: Float, radius: Float, reveal: Boolean): Boolean
+
+    /** Adds an adjustment layer at [index] (top when null). */
+    suspend fun addAdjustmentLayer(type: AdjustmentType, index: Int? = null): Layer?
+
+    suspend fun setAdjustmentParameter(layerId: Long, key: String, value: Float): Boolean
+
+    suspend fun setAdjustmentParameters(layerId: Long, values: Map<String, Float>): Boolean
+
+    suspend fun resetAdjustment(layerId: Long): Boolean
+
+    /** Adds a filter layer above the active layer. */
+    suspend fun addFilterLayer(type: FilterType, index: Int? = null): Layer?
+
+    suspend fun setFilterAmount(layerId: Long, amount: Float): Boolean
+
+    /** Bakes a filter layer's effect into the layer below it. */
+    suspend fun rasterizeFilterLayer(layerId: Long): Boolean
+
+    // -----------------------------------------------------------------------------------------
+    // Canvas operations
+    // -----------------------------------------------------------------------------------------
+
+    suspend fun resizeCanvas(
+        width: Int,
+        height: Int,
+        resample: Boolean,
+        anchor: com.artflow.studio.core.canvas.CanvasOperations.Anchor = com.artflow.studio.core.canvas.CanvasOperations.Anchor.CENTER
+    ): Boolean
+
+    suspend fun cropCanvas(bounds: IntBounds): Boolean
+
+    suspend fun rotateCanvas(degrees: Int): Boolean
+
+    suspend fun flipCanvas(vertical: Boolean): Boolean
+
+    suspend fun trimTransparent(): Boolean
+
+    suspend fun setCanvasDpi(dpi: Int): Boolean
+
+    suspend fun setCanvasBackgroundColor(color: Int): Boolean
+
+    suspend fun clearCanvas(color: Int = -1)
+
+    /** Applies an adjustment to every layer (destructive, undoable). */
+    suspend fun applyAdjustmentToCanvas(
+        type: AdjustmentType,
+        parameters: Map<String, Float>,
+        toAllLayers: Boolean
+    ): Boolean
+
+    // -----------------------------------------------------------------------------------------
+    // Animation
+    // -----------------------------------------------------------------------------------------
+
+    /** The timeline state; collected by the UI. */
+    val timeline: StateFlow<AnimationTimeline.State>
+
+    fun frames(): List<AnimationFrame>
+
+    fun activeFrameIndex(): Int
+
+    suspend fun addFrame(duplicateCurrent: Boolean)
+
+    /** @return true when a frame was actually removed (never removes the last frame). */
+    suspend fun deleteFrame(index: Int): Boolean
+
+    suspend fun moveFrame(from: Int, to: Int): Boolean
+
+    suspend fun selectFrame(index: Int)
+
+    suspend fun setFrameDuration(index: Int, durationMs: Int): Boolean
+
+    suspend fun updateAnimationSettings(settings: AnimationSettings)
+
+    /** Composites every frame; used by animation export and playback preview. */
+    suspend fun compositeAllFrames(maxFrames: Int = 240): List<PixelBuffer>
+
+    // -----------------------------------------------------------------------------------------
+    // Compositing and invalidation
+    // -----------------------------------------------------------------------------------------
+
+    /** Flattens the document. Callers own the returned buffer. */
+    suspend fun compositeBuffer(
+        includeHidden: Boolean = false,
+        applyAdjustments: Boolean = true
+    ): PixelBuffer?
+
+    /** Layer rasters alongside their properties, for PSD export. */
+    suspend fun layerBuffers(): List<Pair<Layer, PixelBuffer>>
+
+    /** PNG bytes of the flattened document (flattened preview / saving). */
+    suspend fun getCanvasBitmap(): ByteArray?
+
+    /** Canvas dimensions. */
+    fun getCanvasSize(): CanvasSize
+
+    /** Background colour as ARGB. */
+    fun getBackgroundColor(): Int
+
+    /** Observe invalidation events so the canvas view knows when to re-upload its texture. */
+    fun observeCanvasInvalidation(): Flow<CanvasInvalidationEvent>
+
+    /** Undo the most recent operation. Returns true when something was undone. */
+    fun undo(): Boolean
+
+    /** Redo the most recently undone operation. */
+    fun redo(): Boolean
+
+    /** Releases caches. The repository is a singleton, so this only frees memory. */
+    fun dispose()
 }
 
-/**
- * Represents the complete state of a canvas
- */
+/** Complete state of a canvas, returned after creating or loading a project. */
 data class CanvasState(
     val id: Long,
     val width: Int,
@@ -281,30 +366,25 @@ data class CanvasState(
     val zoom: Float,
     val offsetX: Float,
     val offsetY: Float,
-    val rotation: Float
+    val rotation: Float,
+    val frameCount: Int = 1,
+    val activeFrameIndex: Int = 0,
+    val hasUnsavedChanges: Boolean = false
 )
 
-/**
- * Canvas dimensions
- */
+/** Canvas dimensions. */
 data class CanvasSize(
     val width: Int,
     val height: Int,
     val dpi: Int
 )
 
-/**
- * Event indicating what part of the canvas needs redrawing
- */
+/** What part of the canvas needs redrawing. */
 sealed class CanvasInvalidationEvent {
-    /**
-     * Full canvas redraw needed
-     */
+    /** Full canvas redraw needed. */
     object Full : CanvasInvalidationEvent()
 
-    /**
-     * Partial redraw needed for specific region
-     */
+    /** Partial redraw for a region. */
     data class Region(
         val left: Float,
         val top: Float,
@@ -312,8 +392,12 @@ sealed class CanvasInvalidationEvent {
         val bottom: Float
     ) : CanvasInvalidationEvent()
 
-    /**
-     * A stroke was completed
-     */
+    /** A stroke was completed. */
     data class StrokeCompleted(val strokeId: Long) : CanvasInvalidationEvent()
+
+    /** The layer stack changed (add/remove/reorder/visibility). */
+    object LayersChanged : CanvasInvalidationEvent()
+
+    /** The active frame changed. */
+    data class FrameChanged(val index: Int) : CanvasInvalidationEvent()
 }

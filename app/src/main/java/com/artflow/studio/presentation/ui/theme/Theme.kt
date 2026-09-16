@@ -2,93 +2,105 @@ package com.artflow.studio.presentation.ui.theme
 
 import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.*
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.Density
 import androidx.core.view.WindowCompat
+import com.artflow.studio.domain.model.settings.AccentChoice
+import com.artflow.studio.domain.model.settings.AppSettings
+import com.artflow.studio.domain.model.settings.ThemeMode
+
+/** Accessibility and motion flags the whole UI can read without threading them through props. */
+data class ArtFlowThemeFlags(
+    val highContrast: Boolean = false,
+    val reduceMotion: Boolean = false,
+    val largeTouchTargets: Boolean = false
+)
+
+val LocalArtFlowFlags = staticCompositionLocalOf { ArtFlowThemeFlags() }
 
 /**
- * Dark color scheme for ArtFlow - optimized for creative work
+ * Dark scheme. The studio is a dark room: chrome recedes, artwork stays bright.
  */
-private val DarkColorScheme = darkColorScheme(
-    primary = ArtFlowPrimary,
+private fun darkScheme(accent: Color, highContrast: Boolean) = darkColorScheme(
+    primary = accent,
     onPrimary = Color.White,
-    primaryContainer = ArtFlowPrimaryVariant,
+    primaryContainer = accent.copy(alpha = if (highContrast) 0.42f else 0.28f),
     onPrimaryContainer = Color.White,
-    
     secondary = ArtFlowSecondary,
     onSecondary = Color.White,
     secondaryContainer = ArtFlowSecondaryVariant,
     onSecondaryContainer = Color.White,
-    
     tertiary = ArtFlowSecondary,
     onTertiary = Color.White,
-    tertiaryContainer = ArtFlowSecondaryVariant,
-    onTertiaryContainer = Color.White,
-    
-    background = ArtFlowBackground,
-    onBackground = TextPrimary,
-    
-    surface = ArtFlowSurface,
-    onSurface = TextPrimary,
-    surfaceVariant = ArtFlowSurfaceVariant,
-    onSurfaceVariant = TextSecondary,
-    
+    background = if (highContrast) Color(0xFF0E0E10) else ArtFlowBackground,
+    onBackground = if (highContrast) Color.White else TextPrimary,
+    surface = if (highContrast) Color(0xFF1C1C20) else ArtFlowSurface,
+    onSurface = if (highContrast) Color.White else TextPrimary,
+    surfaceVariant = if (highContrast) Color(0xFF303036) else ArtFlowSurfaceVariant,
+    onSurfaceVariant = if (highContrast) Color(0xFFEDEDED) else TextSecondary,
+    outline = if (highContrast) Color(0xFFBFBFBF) else Color(0xFF6E6E76),
+    outlineVariant = if (highContrast) Color(0xFF8A8A92) else Color(0xFF4A4A52),
     error = Error,
-    onError = Color.White,
-    
-    outline = Color.Gray
+    onError = Color.White
 )
 
-/**
- * Light color scheme for ArtFlow
- */
-private val LightColorScheme = lightColorScheme(
-    primary = ArtFlowPrimary,
+private fun lightScheme(accent: Color, highContrast: Boolean) = lightColorScheme(
+    primary = accent,
     onPrimary = Color.White,
-    primaryContainer = ArtFlowPrimaryLight,
-    onPrimaryContainer = Color.Black,
-    
+    primaryContainer = accent.copy(alpha = if (highContrast) 0.30f else 0.18f),
+    onPrimaryContainer = Color(0xFF16181D),
     secondary = ArtFlowSecondary,
     onSecondary = Color.White,
-    secondaryContainer = ArtFlowSecondaryVariant,
-    onSecondaryContainer = Color.White,
-    
+    secondaryContainer = ArtFlowSecondaryVariant.copy(alpha = 0.25f),
+    onSecondaryContainer = Color(0xFF16181D),
     tertiary = ArtFlowSecondary,
     onTertiary = Color.White,
-    tertiaryContainer = ArtFlowSecondaryVariant,
-    onTertiaryContainer = Color.White,
-    
     background = CanvasWhite,
-    onBackground = Color.Black,
-    
-    surface = Color.White,
-    onSurface = Color.Black,
-    surfaceVariant = Color.LightGray,
-    onSurfaceVariant = Color.DarkGray,
-    
+    onBackground = Color(0xFF14161B),
+    surface = Color(0xFFF7F7F9),
+    onSurface = Color(0xFF14161B),
+    surfaceVariant = Color(0xFFE7E7EC),
+    onSurfaceVariant = if (highContrast) Color(0xFF2A2D34) else Color(0xFF4A4E57),
+    outline = if (highContrast) Color(0xFF3A3D44) else Color(0xFF8A8D95),
+    outlineVariant = Color(0xFFC5C7CE),
     error = Error,
-    onError = Color.White,
-    
-    outline = Color.Gray
+    onError = Color.White
 )
 
+/** Accent seed (`0xFFRRGGBB`) to a Compose colour. */
+fun AccentChoice.composeColor(): Color = Color(seed.toInt())
+
 /**
- * ArtFlow Theme composable
- * Provides Material 3 theming with custom colors and typography
+ * ArtFlow theme.
+ *
+ * Applies the user's theme mode, accent, contrast, motion and text-scale preferences. Passing
+ * [settings] keeps the theme reactive: changing a preference in Settings restyles the app instantly.
  */
 @Composable
 fun ArtFlowTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false, // Disable dynamic colors for consistent branding
+    settings: AppSettings = AppSettings(),
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when {
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+    val darkTheme = when (settings.themeMode) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+    }
+    val accent = settings.accent.composeColor()
+    val colorScheme = if (darkTheme) {
+        darkScheme(accent, settings.highContrast)
+    } else {
+        lightScheme(accent, settings.highContrast)
     }
 
     val view = LocalView.current
@@ -100,9 +112,23 @@ fun ArtFlowTheme(
         }
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
-    )
+    val baseDensity = LocalDensity.current
+    val uiScale = settings.uiScale.coerceIn(0.85f, 1.6f)
+    CompositionLocalProvider(
+        LocalArtFlowFlags provides ArtFlowThemeFlags(
+            highContrast = settings.highContrast,
+            reduceMotion = settings.reduceMotion,
+            largeTouchTargets = settings.largeTouchTargets
+        ),
+        LocalDensity provides Density(
+            density = baseDensity.density * uiScale,
+            fontScale = baseDensity.fontScale * uiScale
+        )
+    ) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            content = content
+        )
+    }
 }
