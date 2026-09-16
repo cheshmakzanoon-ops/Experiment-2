@@ -82,8 +82,6 @@
     <ID>UnusedParameter:StrokeRasterizer.kt$StrokeRasterizer$alphaScale: Float</ID>
     <ID>UnusedParameter:TextLayout.kt$TextLayout$style: TextStyle</ID>
     <ID>UnusedPrivateProperty:CanvasScreen.kt$val density = LocalDensity.current</ID>
-    <ID>UnusedPrivateProperty:StrokeRasterizer.kt$StrokeRasterizer$val directionX = dx / distance</ID>
-    <ID>UnusedPrivateProperty:StrokeRasterizer.kt$StrokeRasterizer$val directionY = dy / distance</ID>
     <ID>UseCheckOrError:ArtworkExporter.kt$ArtworkExporter$throw IllegalStateException("Canvas is too small for video export (minimum 16×16)")</ID>
     <ID>UseCheckOrError:OpenGLCanvasRenderer.kt$OpenGLCanvasRenderer$throw IllegalStateException("Shader compile failed: $log")</ID>
     <ID>UseCheckOrError:OpenGLCanvasRenderer.kt$OpenGLCanvasRenderer$throw IllegalStateException("Shader link failed: $log")</ID>

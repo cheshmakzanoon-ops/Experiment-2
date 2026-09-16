@@ -10,8 +10,13 @@
 -keep,allowobfuscation,allowshrinking class kotlin.coroutines.Continuation
 
 # Hilt
--keep class dagger.** { *; }
--keep class javax.inject.** { *; }
+# Broad `dagger.**`/`javax.inject.**` keeps previously forced R8 to retain the entire DI runtime,
+# preventing it from shrinking unused modules. Standard Hilt rules keep only what reflection and
+# generated components actually need; R8 can then remove the rest.
+-keepclasseswithmembernames class * {
+    @dagger.hilt.* <methods>;
+}
+-keep class dagger.hilt.** { *; }
 -keep class * extends java.lang.annotation.Annotation { *; }
 -keep class com.artflow.studio.di.** { *; }
 

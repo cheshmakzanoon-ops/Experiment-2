@@ -9,9 +9,11 @@ import com.artflow.studio.core.pixels.Stamping
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.model.brush.StrokePoint
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 /**
  * Rasterises the vector stroke model into pixels.
@@ -26,14 +28,27 @@ import kotlin.math.roundToInt
  * - A stroke's overall opacity is applied **once** through a scratch buffer, so a semi-transparent
  *   stroke does not darken itself where its own segments overlap.
  * - Colour jitter, spacing, scatter, count and velocity/tilt dynamics are honoured per dab.
+ * - Dab placement is O(N): the spacing grid carries across segment boundaries, taper depth is
+ *   accumulated along the path instead of rescanning the point list, and the path end receives at
+ *   most one closing dab.
  */
 class StrokeRasterizer {
-    /** Scratch buffer reused across strokes (transparent; allocated on demand). */
-    private var scratch: PixelBuffer? = null
+    /**
+     * Scratch buffer reused across strokes (transparent; allocated on demand).
+     *
+     * The rasteriser runs on the GL thread while the repository composites on worker dispatchers,
+     * so the scratch must be per-thread: a single shared field once handed one thread a buffer
+     * another thread had already cleared or sized for a different canvas.
+     */
+    private val scratch: ThreadLocal<PixelBuffer?> = ThreadLocal.withInitial { null }
 
     /** Statistics from the last rasterisation, for the performance panel. */
+    @Volatile
     var lastDabCount: Int = 0
         private set
+
+    /** Accumulator behind [lastDabCount]; incremented from the dab loops. */
+    private val dabCount = AtomicInteger(0)
 
     /**
      * Draws [stroke] into [target], honouring [BrushParams] dynamics.
@@ -54,6 +69,7 @@ class StrokeRasterizer {
         val strokeAlpha = strokeAlpha(stroke)
         if (strokeAlpha <= 0f) return
 
+        dabCount.set(0)
         lastDabCount = 0
 
         // Erasing is not painting: it removes coverage, so it always goes through the scratch
@@ -94,6 +110,7 @@ class StrokeRasterizer {
                 }
             }
         }
+        lastDabCount = dabCount.get()
     }
 
     /**
@@ -130,6 +147,7 @@ class StrokeRasterizer {
                     destination and 0xFF,
                 )
         }
+        lastDabCount = dabCount.get()
     }
 
     private fun drawStrokeInto(
@@ -146,39 +164,67 @@ class StrokeRasterizer {
             return
         }
 
+        // Total path length, needed by the taper maths; zero cost for untapered brushes.
+        val totalLength =
+            if (params.taperStart > 0f || params.taperEnd > 0f) stroke.calculateLength() else 0f
+
         // Spacing is expressed as a fraction of the brush size; a minimum of one dab per segment
         // keeps single-point taps visible.
         val spacingPx = max(1f, params.size * params.spacing.coerceIn(0.01f, 4f))
         var carry = 0f
+        var accumulatedDistance = 0f
+        // Travelled value of the most recently stamped dab, used to avoid stamping the path end
+        // twice when the spacing grid already lands exactly on it.
+        var lastDabTravelled = Float.NaN
 
         for (i in 1 until points.size) {
             val previous = points[i - 1]
             val current = points[i]
             val dx = current.x - previous.x
             val dy = current.y - previous.y
-            val distance = kotlin.math.sqrt(dx * dx + dy * dy)
+            val distance = sqrt(dx * dx + dy * dy)
 
             if (distance <= 0.0001f) {
                 // Duplicate sample: a single dab keeps a tap visible without double-darkening.
-                drawDabAt(target, stroke, params, previous, current, 0f, distance, alphaLock, mask)
+                drawDabAt(target, stroke, params, previous, current, 0f, distance, accumulatedDistance, totalLength, alphaLock, mask)
                 continue
             }
 
-            val directionX = dx / distance
-            val directionY = dy / distance
             var travelled = carry
             while (travelled <= distance) {
-                val t = travelled / distance
-                drawDabAt(target, stroke, params, previous, current, t, distance, alphaLock, mask)
+                drawDabAt(
+                    target,
+                    stroke,
+                    params,
+                    previous,
+                    current,
+                    travelled / distance,
+                    distance,
+                    accumulatedDistance + travelled,
+                    totalLength,
+                    alphaLock,
+                    mask,
+                )
+                lastDabTravelled = travelled
                 travelled += spacingPx
             }
             carry = travelled - distance
-            // Always finish the segment so the stroke reaches the pointer position exactly.
-            drawDabAt(target, stroke, params, previous, current, 1f, distance, alphaLock, mask)
+            accumulatedDistance += distance
         }
 
         if (points.size == 1) {
-            drawDabAt(target, stroke, params, points.first(), points.first(), 0f, 0f, alphaLock, mask)
+            drawDabAt(target, stroke, params, points.first(), points.first(), 0f, 0f, 0f, totalLength, alphaLock, mask)
+            return
+        }
+        // Finish exactly at the stroke end once, after the whole path — not once per segment, and
+        // not at all when the final segment's spacing grid already stamped t = 1.
+        val lastPrevious = points[points.size - 2]
+        val last = points.last()
+        val endDx = last.x - lastPrevious.x
+        val endDy = last.y - lastPrevious.y
+        val endDistance = sqrt(endDx * endDx + endDy * endDy)
+        if (endDistance > 0.0001f && lastDabTravelled != endDistance) {
+            drawDabAt(target, stroke, params, lastPrevious, last, 1f, endDistance, accumulatedDistance, totalLength, alphaLock, mask)
         }
     }
 
@@ -190,12 +236,21 @@ class StrokeRasterizer {
         current: StrokePoint,
         t: Float,
         distance: Float,
+        accumulatedDistance: Float,
+        totalLength: Float,
         alphaLock: Boolean,
         mask: SelectionMask?,
     ) {
         val x = previous.x + (current.x - previous.x) * t
         val y = previous.y + (current.y - previous.y) * t
         val pressure = previous.pressure + (current.pressure - previous.pressure) * t
+
+        // Selection bleed: skip the dab before any rasterisation work when its centre sits
+        // outside the selection, instead of relying on post-compositing alpha scaling.
+        if (mask != null) {
+            val coverage = mask.coverageAt(x.roundToInt(), y.roundToInt())
+            if (coverage <= 0f) return
+        }
 
         // Velocity is derived from the sample spacing and timestamps so the dynamics are stable
         // regardless of how fast the digitiser reports.
@@ -206,8 +261,8 @@ class StrokeRasterizer {
         val opacity = params.calculateEffectiveOpacity(pressure, velocity)
 
         // Tapering thins the stroke over the first and last portion of its length.
-        val taperFactor = taperFactor(params, stroke, current, t)
-        val radius = max(0.35f, size * taperFactor / 2f)
+        val taper = taperFactor(params, accumulatedDistance, totalLength)
+        val radius = max(0.35f, size * taper / 2f)
 
         val color = params.applyColorJitter(stroke.color, pressure, velocity)
 
@@ -234,7 +289,7 @@ class StrokeRasterizer {
                 alphaLock = alphaLock,
                 mask = mask,
             )
-            lastDabCount++
+            dabCount.incrementAndGet()
         }
     }
 
@@ -255,6 +310,11 @@ class StrokeRasterizer {
         val color = params.applyColorJitter(stroke.color, (start.pressure + end.pressure) / 2f)
 
         if (start.x == end.x && start.y == end.y) {
+            // Selection bleed: skip the dab before rasterising anything.
+            if (mask != null) {
+                val coverage = mask.coverageAt(start.x.roundToInt(), start.y.roundToInt())
+                if (coverage <= 0f) return
+            }
             Stamping.dab(
                 target = target,
                 x = start.x,
@@ -265,10 +325,17 @@ class StrokeRasterizer {
                 alphaLock = alphaLock,
                 mask = mask,
             )
-            lastDabCount++
+            dabCount.incrementAndGet()
             return
         }
 
+        // Selection bleed: skip the whole capsule when its midpoint is outside the selection, so
+        // masking is enforced at the primitive level rather than by post-compositing alpha scaling.
+        if (mask != null) {
+            val coverage =
+                mask.coverageAt(((start.x + end.x) / 2f).roundToInt(), ((start.y + end.y) / 2f).roundToInt())
+            if (coverage <= 0f) return
+        }
         Stamping.capsule(
             target = target,
             x0 = start.x,
@@ -282,7 +349,7 @@ class StrokeRasterizer {
             alphaLock = alphaLock,
             mask = mask,
         )
-        lastDabCount++
+        dabCount.incrementAndGet()
     }
 
     /** Low flow spreads the paint more softly, mirroring how an airbrush behaves. */
@@ -291,28 +358,23 @@ class StrokeRasterizer {
         return (0.45f + 0.55f * flow).coerceIn(0.1f, 1f)
     }
 
-    /** Multiplier applied to the brush size at position [current] to create start/end tapers. */
+    /**
+     * Multiplier applied to the brush size [accumulatedDistance] pixels into the stroke to create
+     * start/end tapers. The running distance is threaded through the dab loop, so the factor is
+     * O(1) per dab instead of rescanning the point list (which was O(N) per dab, O(N²) per stroke).
+     */
     private fun taperFactor(
         params: BrushParams,
-        stroke: Stroke,
-        current: StrokePoint,
-        segmentT: Float,
+        accumulatedDistance: Float,
+        totalLength: Float,
     ): Float {
         if (params.taperStart <= 0f && params.taperEnd <= 0f) return 1f
-        val totalLength = stroke.calculateLength()
         if (totalLength <= 1f) return 1f
-
-        // Distance travelled up to this sample (approximate but monotonic, which is what matters).
-        val index = stroke.points.indexOf(current)
-        var travelled = 0f
-        if (index > 0) {
-            for (i in 1..index) travelled += stroke.points[i].distanceTo(stroke.points[i - 1])
-        }
-        travelled += segmentT * 0f
 
         val startRamp = params.taperStart.coerceIn(0f, 1f) * totalLength
         val endRamp = params.taperEnd.coerceIn(0f, 1f) * totalLength
 
+        val travelled = accumulatedDistance.coerceIn(0f, totalLength)
         val startFactor = if (startRamp <= 0f) 1f else (travelled / startRamp).coerceIn(0.05f, 1f)
         val remaining = totalLength - travelled
         val endFactor = if (endRamp <= 0f) 1f else (remaining / endRamp).coerceIn(0.05f, 1f)
@@ -332,16 +394,16 @@ class StrokeRasterizer {
         width: Int,
         height: Int,
     ): PixelBuffer {
-        val existing = scratch
+        val existing = scratch.get()
         if (existing != null && existing.width == width && existing.height == height) return existing
         val created = PixelBuffer(width, height)
-        scratch = created
+        scratch.set(created)
         return created
     }
 
-    /** Releases the scratch buffer (called when the canvas is disposed). */
+    /** Releases this thread's scratch buffer (called when the canvas is disposed). */
     fun release() {
-        scratch = null
+        scratch.remove()
     }
 
     /**

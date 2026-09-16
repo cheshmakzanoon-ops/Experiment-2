@@ -1,5 +1,6 @@
 package com.artflow.studio.core.pixels
 
+import java.util.concurrent.ArrayBlockingQueue
 import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.max
@@ -413,6 +414,71 @@ data class IntBounds(
             kotlin.math.ceil(max(left, right)).toInt() + padding,
             kotlin.math.ceil(max(top, bottom)).toInt() + padding,
         )
+    }
+}
+
+/**
+ * A bounded, thread-safe pool of [PixelBuffer]s.
+ *
+ * Compositing allocates a canvas-sized buffer per layer and per result; on a large canvas that is
+ * tens of megabytes per buffer, and allocating them per composite pass produced the allocation
+ * churn (and GC pauses) behind out-of-memory crashes on big documents. Recycling buffers through
+ * this pool keeps those allocations off the render path without changing any pixel behaviour.
+ *
+ * Threadsafety comes from [ArrayBlockingQueue]: releases past capacity are discarded instead of
+ * blocking, and consumers drain under the queue's own lock, so no additional synchronisation is
+ * needed here.
+ */
+class PixelBufferPool(
+    /** Maximum number of idle buffers retained for reuse; releases past this are discarded. */
+    private val maxCapacity: Int = DEFAULT_CAPACITY,
+) {
+    init {
+        require(maxCapacity > 0) { "Pool capacity must be positive (got $maxCapacity)" }
+    }
+
+    private val pool = ArrayBlockingQueue<PixelBuffer>(maxCapacity)
+
+    /**
+     * Takes a buffer from the pool, or allocates a fresh one when the pool is empty.
+     *
+     * The returned buffer is **cleared to transparent black** whether it came from the pool or was
+     * newly allocated, so callers never see stale pixels from a previous owner. Pooled buffers with
+     * mismatched dimensions are discarded rather than resized, which keeps [obtain]
+     * allocation-free for the canvas size the pool is warmed with.
+     */
+    fun obtain(
+        width: Int,
+        height: Int,
+    ): PixelBuffer {
+        val safeWidth = max(1, width)
+        val safeHeight = max(1, height)
+        while (true) {
+            val recycled = pool.poll() ?: return PixelBuffer(safeWidth, safeHeight)
+            if (recycled.width == safeWidth && recycled.height == safeHeight) {
+                recycled.clear()
+                return recycled
+            }
+            // Wrong size for this canvas: drop it and try the next candidate.
+        }
+    }
+
+    /**
+     * Returns [buffer] to the pool for reuse, or discards it when the pool is full.
+     *
+     * Returns `true` when the buffer was pooled and `false` when it was discarded; either way the
+     * caller must stop using the buffer afterwards — a later [obtain] hands it to another owner.
+     */
+    fun release(buffer: PixelBuffer): Boolean = pool.offer(buffer)
+
+    /** Drops every pooled buffer immediately (called when the compositor is disposed). */
+    fun clear() {
+        pool.clear()
+    }
+
+    companion object {
+        /** Enough buffers for a typical multi-layer composite pass to stay allocation-free. */
+        const val DEFAULT_CAPACITY: Int = 8
     }
 }
 

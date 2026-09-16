@@ -262,10 +262,15 @@ class MainViewModel
 
         fun storageSummary(): String {
             val bytes = storage.totalStorageBytes()
+            // Double division: Float mantissa precision loses visible accuracy once the value
+            // exceeds 16 MB of bytes.
             return when {
                 bytes < 1024 * 1024 -> "%.0f KB on device".format(bytes / 1024f)
                 bytes < 1024L * 1024 * 1024 -> "%.1f MB on device".format(bytes / (1024f * 1024f))
-                else -> "%.2f GB on device".format(bytes / (1024f * 1024f * 1024f))
+                else ->
+                    "%.2f GB on device".format(
+                        bytes.toDouble() / (1024.0 * 1024.0 * 1024.0),
+                    )
             }
         }
     }
