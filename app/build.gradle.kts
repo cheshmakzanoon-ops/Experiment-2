@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -5,6 +7,34 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
     kotlin("kapt")
 }
+
+/**
+ * Release signing.
+ *
+ * Create a git-ignored `keystore.properties` at the repository root with:
+ * ```
+ * storeFile=/absolute/path/to/artflow-release.keystore
+ * storePassword=…
+ * keyAlias=artflow
+ * keyPassword=…
+ * ```
+ * Without it, `assembleRelease` still runs and produces an unsigned APK, so a fresh clone can
+ * always build; with it, the release output is signed and installable.
+ */
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.inputStream().use { load(it) }
+    }
+}
+val hasReleaseSigning = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+    .all { !keystoreProperties.getProperty(it).isNullOrBlank() }
+
+/**
+ * The native brush module needs the NDK. CI and JVM-only builds can skip it with
+ * `./gradlew assembleDebug -PnoNativeBuild`; local builds compile it by default.
+ */
+val nativeBuildEnabled = !project.hasProperty("noNativeBuild")
 
 android {
     namespace = "com.artflow.studio"
@@ -19,26 +49,36 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // External native build (NDK)
-        externalNativeBuild {
-            cmake {
-                cppFlags += ""
+        if (nativeBuildEnabled) {
+            // NDK configuration
+            ndk {
+                abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
             }
         }
-        
-        // NDK configuration
-        ndk {
-            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+    }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
         }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
         debug {
             isMinifyEnabled = false
@@ -72,9 +112,11 @@ android {
         kotlinCompilerExtensionVersion = "1.5.4"
     }
 
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/jni/CMakeLists.txt")
+    if (nativeBuildEnabled) {
+        externalNativeBuild {
+            cmake {
+                path = file("src/main/jni/CMakeLists.txt")
+            }
         }
     }
 
@@ -82,6 +124,10 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+    }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
     }
 }
 

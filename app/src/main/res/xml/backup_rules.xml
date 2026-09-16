@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 11 and below (`android:fullBackupContent`).
+
+  Listing includes restricts auto backup to these paths. Project pixels (`filesDir/projects`) must
+  be included alongside the Room database, otherwise a restored install has project rows but no
+  artwork. The previous excludes pointed at files this app never creates.
+-->
 <full-backup-content>
-    <!-- Exclude sensitive data from backup -->
-    <exclude domain="sharedpref" path="device_prefs.xml" />
-    <exclude domain="database" path="temp.db" />
+    <include domain="sharedpref" path="." />
+    <include domain="database" path="artflow_database" />
+    <include domain="file" path="projects" />
 </full-backup-content>

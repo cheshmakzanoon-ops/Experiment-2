@@ -5,11 +5,13 @@ It is a **working editor**: you can create a project, paint with a pressure-sens
 engine, build up layers with masks, groups and adjustments, fill and transform pixels, draw with
 symmetry and perspective guides, add text and frames, then save and export real files.
 
-> **Documentation accuracy note.** Earlier revisions of this README both over- and under-stated
-> the project: one described a finished product (cloud sync, collaboration, Vulkan rendering) that
-> does not exist, and a later one described a bare skeleton after the editor had been built. This
-> file describes what is actually in the repository now. See
-> [Project status](#-project-status) for the precise list of what works and what does not.
+> **Documentation accuracy note.** Earlier revisions of this README both over- and under-stated the
+> project: one described a finished product (cloud sync, collaboration, Vulkan rendering) that does
+> not exist, a later one described a bare skeleton after the editor had been built, and the phase
+> table in [`agent.md`](agent.md) claimed areas were missing that the app had already shipped. This
+> file describes what is actually in the repository: [Project status](#-project-status) for the
+> per-area breakdown, and [What is not wired](#-what-is-not-wired) for the code that exists but that
+> nothing calls.
 
 ---
 
@@ -26,14 +28,18 @@ symmetry and perspective guides, add text and frames, then save and export real 
 - A `BitmapPixelBridge` for reading the framebuffer back into `PixelBuffer`s
 
 ### Brush engine
-- `BrushEngine` + `StrokeBuilder` producing pressure-sensitive strokes
+- Strokes are rasterised by `StrokeRasterizer` + `Compositor` into per-layer buffers, driven by the
+  parameters in `BrushParams`; `ArtFlowCanvasView` captures stylus/finger input and calls the
+  repository, which keeps a copy-on-write buffer for the edit in progress
 - Stroke smoothing and start/end tapering
 - Advanced parameters: size / opacity / hue / saturation / brightness jitter, scatter, count,
   spacing, wet mix, flow, tilt influence, velocity dynamics
-- Pressure-curve types (linear, ease-in, ease-out, ease-in-out)
-- Brush preset factory (`CreateBrushPreset`) plus `applyPreset` on the advanced-parameter and
-  colour-dynamics use cases
-- Texture *models*, a `TextureMapper` and a texture library UI (no texture assets are bundled)
+- Pressure-curve types (linear, ease-in, ease-out, ease-in-out); `PressureCurve.CUSTOM` currently
+  falls back to a linear curve
+- Texture *models* only — no texture assets are bundled and nothing consumes `TextureMapper`, so
+  strokes cannot apply textures
+- ⛔ `core/brush/BrushEngine`, `core/brush/TextureMapper`, `CreateBrushPreset` and the brush use
+  cases are unreachable; the render path does not use them
 
 ### Pixel engine (`core/pixels`)
 - `PixelBuffer`: ARGB buffer with region maths, tiling and `IntBounds` clipping
@@ -53,18 +59,28 @@ symmetry and perspective guides, add text and frames, then save and export real 
 - **Fill**: Paint Bucket (flood fill with tolerance / contiguous / pattern / all-layers) and
   Gradient (linear, radial, angular, diamond, with a gradient editor and presets)
 - **Vector**: Text (font, size, style, alignment, kerning/leading, rasterize to layer) and Shapes
-  (rectangle, ellipse, polygon, line; fill/stroke, corner radius, boolean ops)
-- **Selection**: rectangle, ellipse, freehand, lasso and a magic wand
-- **Transform**: translate, rotate, scale, skew, perspective, distortion and snapping
+  (rectangle, ellipse, polygon, line; fill or stroke). Shapes are drawn in `ArtFlowCanvasView`;
+  corner radius and boolean ops only exist in the unreachable `ShapeManager`
+- **Selection**: rectangle, ellipse, freehand, lasso and a magic wand, combinable with
+  replace / add / subtract / intersect
+- **Transform**: 🟡 translate only — the `MOVE` and `TRANSFORM` tools shift pixels by the drag
+  delta. Rotate, scale, skew, perspective, distortion and snapping live in the unreachable
+  `core/transform/TransformManager`
 - Smudge, clone, heal and liquify run through `PixelBrushes` / `LiquifyTool` on `PixelBuffer`s
 
 ### Layers
-- `LayerManager`: add / remove / reorder / duplicate / merge, visibility, opacity, rename, lock,
-  alpha lock, clipping masks
-- `LayerMaskManager`: create, paint, fill, invert, feather and thumbnail grayscale masks
-- `LayerGroupManager`: nested groups, layer-to-group membership, expansion state
-- `AdjustmentLayerManager` + 9 adjustment types with validated parameter ranges
-- Filter layers (`addFilterLayer` / `rasterizeFilterLayer`)
+- The live layer stack is `CanvasRepositoryImpl`: add / remove / reorder / duplicate / merge (down,
+  visible, flatten), visibility, opacity, rename, lock, alpha lock, clipping masks, blend modes and
+  layer thumbnails
+- Layer masks: add (optionally from the current selection), paint, invert, enable/disable, density
+  and feather, with mask previews in the layer sheet
+- Adjustment layers: 9 adjustment types (`AdjustmentProcessor`) with validated parameter ranges,
+  applied non-destructively by the compositor
+- Filter layers (`addFilterLayer` / `rasterizeFilterLayer`) through `ImageFilters`
+- Reference layers: 🟡 a `reference` flag with a status label in the layer sheet — there is no
+  reference window and no copy-from-reference
+- ⛔ `LayerManager`, `LayerGroupManager`, `LayerMaskManager` and `AdjustmentLayerManager` are
+  unreachable, so **layer groups are not available in the app**
 
 ### Undo / redo
 - Snapshot-based history in `CanvasRepositoryImpl` — every destructive operation (pixel tools,
@@ -99,12 +115,14 @@ symmetry and perspective guides, add text and frames, then save and export real 
   first-run onboarding
 
 ### Data & architecture
-- Room persistence for projects, brushes and settings
-- Clean-ish layering: `domain` (models + repository interfaces + use cases),
-  `data` (Room, repositories, renderers, export), `presentation` (Compose UI + ViewModels)
-- Hilt dependency injection across all layers
-- Timber logging, Coil for image loading, Navigation Compose for routing
-- JVM unit tests for the pixel engine, layer groups and brush use cases
+- Room persistence for projects, brushes and settings; `.artflow` documents hold the canvas pixels
+- Layering: `domain` (models + repository interfaces), `data` (Room, repositories, renderers,
+  export), `presentation` (Compose screens + ViewModels + the GL canvas view)
+- 🟡 The `domain/usecase` layer exists but nothing calls it — both ViewModels go straight to the
+  repositories (see [What is not wired](#-what-is-not-wired))
+- Hilt dependency injection, Timber logging, Coil for image loading, Navigation Compose for routing
+- JVM unit tests for the pure-Kotlin engines (`core/pixels`, `core/render`, `core/tool`,
+  `core/canvas`, `core/symmetry`, `core/color`, `core/animation`, `core/export`)
 
 ---
 
@@ -116,12 +134,12 @@ The table below reflects the code that is currently in the repository.
 |------|--------|
 | Project gallery | Implemented — list, create, rename, delete, real thumbnails, search, sort, favourites |
 | Canvas screen + GL surface | Implemented |
-| Brush engine + parameters | Implemented, including advanced dynamics and presets |
-| Brush textures | Models, mapper and library UI implemented; **no texture assets shipped** |
+| Brush engine + parameters | Implemented via `StrokeRasterizer`/`Compositor` + `BrushParams`; the older `BrushEngine` module is ⛔ unreachable |
+| Brush textures | ⛔ **Unreachable** — models exist, but nothing calls `TextureMapper`, nothing composes the texture library and no assets are bundled |
 | Pixel engine (buffers, blend modes, adjustments, filters) | Implemented |
 | Tools (smudge, clone, heal, liquify, fill, gradient, text, shapes) | Implemented |
-| Selection / transform | Implemented, including magic wand and snapping |
-| Layers / masks / groups / adjustments / filter layers | Implemented |
+| Selection / transform | Selection implemented (magic wand + boolean combining); transform is **translate only** |
+| Layers / masks / adjustments / filter layers | Implemented; **layer groups are not reachable from the UI** |
 | Undo / redo | Implemented (snapshot history) |
 | Save / load projects | Implemented — `.artflow` documents with layer pixels, autosave and recovery |
 | Export (PNG/JPEG/WebP/PDF/PSD/GIF/MP4/frame sequence) | Implemented |
@@ -130,15 +148,49 @@ The table below reflects the code that is currently in the repository.
 | Colour picker, harmonies, palettes | Implemented |
 | Settings, help centre, onboarding | Implemented |
 | Cloud sync / collaboration | **Not implemented** |
-| Reference layers, layer linking, smart objects | **Not implemented** |
+| Reference layers, layer linking, smart objects | Reference flag only; layer linking exists in the repository with no UI; smart objects are just an unused id field |
 | Native C++ brush engine | Built via CMake, **not wired** into the Kotlin render path |
 | Instrumentation tests / benchmark module | **Not present** (a `benchmark` build *type* exists) |
+| CI | GitHub Actions workflow runs unit tests and a debug build |
 
-`TODO` markers in the source indicate the remaining follow-up work. Use:
+Only two `TODO` markers remain in the source:
 
 ```bash
 grep -rn "TODO" app/src/main
 ```
+
+Both are documented gaps rather than hidden work: `PressureCurve.CUSTOM` falls back to a linear
+curve, and `LayerMaskManager.removeLayerMask(discardChanges = false)` cannot apply a mask to layer
+alpha — that class is unreachable anyway.
+
+---
+
+## 🔌 What is not wired
+
+About 26% of the Kotlin lines — 75 of 155 files — are unreachable: nothing under `presentation`
+refers to them. They compile (and some are covered by unit tests), but they cannot change what a
+user sees. Treat them as design sketches, not features.
+
+- **`domain/usecase/**`** — all 54 files. `CanvasViewModel`/`MainViewModel` call the repositories
+  directly. The seven layer-group use cases are referenced only by `di/LayerGroupModule.kt`, and no
+  class injects them either.
+- **`core/layer/`** — `LayerManager`, `LayerGroupManager`, `LayerMaskManager`,
+  `AdjustmentLayerManager`.
+- **`core/selection/`** — `SelectionManager`, `ColorSelectionAlgorithm` (the live magic wand is
+  `SelectionMask.magicWand`, called from `ArtFlowCanvasView`).
+- **`core/transform/TransformManager`**, **`core/shape/ShapeManager`**, **`core/brush/BrushEngine`**,
+  **`core/brush/TextureMapper`**, **`domain/model/shape/VectorShape`**.
+- **`data/renderer/CanvasRasterizer`**, **`data/renderer/native/NativeBrushEngine`** (the C++ module
+  is built but never loaded).
+- **`data/repository/texture/TextureRepositoryImpl`** and its interface — injected only by the dead
+  `BrushEngine` and the dead texture use cases.
+- **`presentation/ui/components/texture/TextureLibrary.kt`** — a composable with no callers.
+- **Seven Hilt modules that provide only the above**: `LayerManagerModule`, `LayerGroupModule`,
+  `ShapeManagerModule`, `SelectionManagerModule`, `SelectionAlgorithmModule`, `BrushEngineModule`,
+  `TextureRepositoryModule`.
+
+Wiring this layer up (or deleting it) is the largest single improvement available — see
+[`agent.md`](agent.md#what-is-not-wired-into-the-app) for the per-phase view.
 
 ---
 
@@ -230,8 +282,11 @@ Configuration notes:
 - `minSdk = 26`, `targetSdk = 34`, `compileSdk = 34`
 - Build variants: `debug`, `release`, `benchmark`
 - Java/Kotlin target: 17
-- `app/src/main/jni/CMakeLists.txt` builds the shared library `libartflow-brush.so`
+- `app/src/main/jni/CMakeLists.txt` builds the shared library `libartflow-brush.so`; pass
+  `-PnoNativeBuild` to skip it, which is how CI builds without an NDK installed
 - `local.properties` with `sdk.dir=…` is required for a CLI build and is git-ignored
+- The release build enables R8 (`minifyEnabled`) and resource shrinking; see
+  [Building for release](#-building-for-release)
 
 ---
 
@@ -264,9 +319,18 @@ nothing to run yet.
 keytool -genkey -v -keystore artflow-release.keystore -alias artflow -keyalg RSA -keysize 2048 -validity 10000
 ```
 
-2. Provide signing credentials through `~/.gradle/gradle.properties` (the release build type
-   declares `minifyEnabled = true`; add a `signingConfig` block to `app/build.gradle.kts`
-   if you want signed output).
+2. Create a git-ignored `keystore.properties` at the repository root:
+
+```properties
+storeFile=/absolute/path/to/artflow-release.keystore
+storePassword=…
+keyAlias=artflow
+keyPassword=…
+```
+
+`app/build.gradle.kts` reads it automatically. Without the file the release build still runs and
+produces an **unsigned** APK, so a fresh clone never fails for want of a keystore. The release build
+type enables `minifyEnabled` and `isShrinkResources`, using the rules in `app/proguard-rules.pro`.
 
 3. Build:
 
@@ -308,20 +372,23 @@ This project is licensed under the **GNU General Public License v3.0** — see t
 
 ## 🗺️ Roadmap
 
-The detailed 50-phase plan lives in [`agent.md`](agent.md). Summarised:
+The detailed 50-phase plan lives in [`agent.md`](agent.md), which carries the per-phase status
+table and is kept in step with the code. Summarised:
 
-- **Foundation (1–8)**: project setup, DI, core architecture, design system, canvas, input,
-  brush engine, layers — *done*
-- **Core drawing (9–16)**: advanced brush params, textures, colour dynamics, blend modes,
-  selection, transform, alpha lock, masks — *done, except bundled texture assets*
-- **Professional tools (17–24)**: smudge, liquify, clone, heal, gradient, fill, text, shapes — *done*
-- **Advanced layers (25–30)**: adjustments, groups, filter layers — *done*; reference layers,
-  layer linking and smart objects — *not started*
+- **Foundation (1–8)**: project setup, DI, architecture, design system, canvas, input, stroke
+  engine, layers — ✅ *wired*; the standalone `BrushEngine`/`LayerManager` are ⛔ unreachable
+- **Core drawing (9–16)**: advanced brush params, colour dynamics, blend modes, selection,
+  alpha lock, masks — ✅ *wired*; texture brushes — ⛔ *unreachable*; transform — 🟡 *translate only*
+- **Professional tools (17–24)**: smudge, liquify, clone, heal, gradient, fill, text, shapes — ✅
+- **Advanced layers (25–30)**: adjustments and filter layers — ✅; layer groups, reference layers,
+  layer linking and smart objects — ⬜ *not started* (the manager classes are ⛔ unreachable)
 - **Colour & canvas (31–36)**: pickers, palettes, symmetry, perspective, canvas properties,
-  quick menu — *done*
-- **File operations (37–42)**: save, PNG/JPEG/WebP, PSD, PDF, gallery — *done*; cloud sync — *not started*
-- **Animation & advanced (43–50)**: timeline, animation export and settings/help — *done*;
-  timelapse recording, performance work, and full QA/release automation — *remaining*
+  quick menu — ✅; shortcut remapping — ⬜
+- **File operations (37–42)**: save, PNG/JPEG/WebP/PSD/PDF export, gallery — ✅; PSD import and
+  cloud sync — ⬜
+- **Animation & advanced (43–50)**: timeline, animation export, settings, help centre, onboarding,
+  CI — ✅; timelapse recording, analytics/crash reporting, instrumentation tests and a benchmark
+  module — ⬜
 
 ---
 

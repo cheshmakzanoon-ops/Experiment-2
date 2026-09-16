@@ -1,21 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ (cloud backup and device transfer).
+
+  Project pixels live in `filesDir/projects/<id>` and the project index lives in the Room database,
+  so both must be listed: backing up only the database would restore projects whose canvases are
+  missing. The former `./artwork` and `./cache` paths never existed in this layout.
+-->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- Include app-specific data -->
         <include domain="sharedpref" path="." />
-        <!-- Must match ArtFlowDatabase.DATABASE_NAME ("artflow_database"). -->
         <include domain="database" path="artflow_database" />
-        <include domain="file" path="./artwork" />
-
-        <!-- Exclude temporary and cache files -->
-        <exclude domain="file" path="./cache" />
-        <exclude domain="file" path="./temp" />
+        <include domain="file" path="projects" />
     </cloud-backup>
     <device-transfer>
         <include domain="sharedpref" path="." />
         <include domain="database" path="artflow_database" />
-        <include domain="file" path="./artwork" />
-        <exclude domain="file" path="./cache" />
-        <exclude domain="file" path="./temp" />
+        <include domain="file" path="projects" />
     </device-transfer>
 </data-extraction-rules>

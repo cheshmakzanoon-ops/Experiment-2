@@ -295,6 +295,7 @@ class CanvasRepositoryImpl @Inject constructor(
         }
         writeRasters(projectId, force = true)
         storage.saveDocument(projectId, snapshot)
+        pruneOrphanedRasters(projectId)
         val composite = compositeBuffer() ?: return null
 
         val pngBytes = withContext(Dispatchers.Default) { BitmapPixelBridge.toPngBytes(composite) }
@@ -314,6 +315,19 @@ class CanvasRepositoryImpl @Inject constructor(
         val snapshot = mutex.withLock { if (frameList.isEmpty()) null else canvasSnapshot() } ?: return
         writeRasters(projectId, force = false)
         storage.saveAutosave(projectId, snapshot)
+    }
+
+    /**
+     * Drops pixel files the saved document no longer references — the rasters of layers and masks
+     * that were deleted. Runs after the document itself is on disk, so an interrupted clean-up can
+     * never leave the document pointing at a file that has already been removed.
+     */
+    private suspend fun pruneOrphanedRasters(projectId: Long) {
+        val keep = mutex.withLock {
+            allLayers().flatMap { layer -> listOfNotNull(layer.rasterFile, layer.maskFile) }.toSet()
+        }
+        runCatching { storage.pruneRasters(projectId, keep) }
+            .onFailure { Timber.w(it, "Raster prune failed for project $projectId") }
     }
 
     /** Writes the pixel buffers that changed since the last write. */

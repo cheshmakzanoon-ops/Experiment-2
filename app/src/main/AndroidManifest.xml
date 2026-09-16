@@ -2,20 +2,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Storage permissions for saving/loading artwork -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
+    <!--
+      Storage permissions.
+
+      Export publishing goes through MediaStore, so API 29+ needs no storage permission at all and
+      API 26-28 needs WRITE_EXTERNAL_STORAGE. Media *read* permissions are not requested because the
+      app never queries the user's media library.
+    -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="29"
         tools:ignore="ScopedStorage" />
-    
-    <!-- For Android 13+ media access -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-
-    <!-- Network permissions for cloud sync (future feature) -->
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!-- Stylus and input features -->
     <uses-feature
@@ -37,12 +33,13 @@
         android:theme="@style/Theme.ArtFlow"
         android:hardwareAccelerated="true"
         android:largeHeap="true"
+        android:enableOnBackInvokedCallback="true"
         tools:targetApi="34">
 
         <activity
             android:name=".presentation.ui.MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.ArtFlow"
+            android:theme="@style/Theme.ArtFlow.Starting"
             android:windowSoftInputMode="adjustResize"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:launchMode="singleTop">

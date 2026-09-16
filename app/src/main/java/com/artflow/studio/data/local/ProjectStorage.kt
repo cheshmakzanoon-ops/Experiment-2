@@ -77,12 +77,14 @@ data class CanvasDocument(
  * filesDir/projects/<id>/canvas.png            flattened composite (fast preview / recovery)
  * filesDir/projects/<id>/thumbnail.png         gallery thumbnail
  * filesDir/projects/<id>/autosave.artflow      rolling autosave used for crash recovery
- * filesDir/projects/<id>/layers/<layer>/v<n>.png  pixel content, one file per undo version
+ * filesDir/projects/<id>/layers/<layer>/v<n>.png  latest saved pixel content
  * filesDir/projects/<id>/exports/<name>        exported PNG/JPEG/PDF/GIF/PSD
  * ```
  *
- * Raster versioning is what makes pixel-level undo cheap: a snapshot only has to remember a file
- * name, and the file itself is immutable once written.
+ * Pixel content on disk is a *cache of the last save*, not the undo history. Undo/redo keeps
+ * copy-on-write `PixelBuffer`s in memory (`CanvasRepositoryImpl`), so a save simply rewrites each
+ * layer's current raster. The version segment exists so a future format can keep several raster
+ * revisions side by side; today the repository always writes version 1.
  */
 @Singleton
 class ProjectStorage @Inject constructor(
@@ -207,9 +209,8 @@ class ProjectStorage @Inject constructor(
     /**
      * Writes a new immutable version of a layer's pixels and returns its project-relative path.
      *
-     * @param version monotonically increasing counter, supplied by the repository. Combined with
-     *   the layer id it gives each undo snapshot its own file, so snapshots never need to copy
-     *   pixel data in memory.
+     * @param version raster revision, supplied by the repository. Every call currently writes
+     *   revision 1, so a later save of the same layer replaces the previous file.
      */
     suspend fun writeRaster(
         projectId: Long,
@@ -252,8 +253,9 @@ class ProjectStorage @Inject constructor(
     /**
      * Deletes every pixel file that is not referenced by [keep].
      *
-     * Called after an undo/redo commit and on save. Without it, editing a 20 megapixel layer a few
-     * hundred times would leave gigabytes of stale PNGs behind.
+     * Called by `CanvasRepositoryImpl.saveCanvas`. Because a save rewrites rasters in place, the
+     * files this reclaims are the ones belonging to layers (and masks) that no longer exist in the
+     * document — without it they would stay on disk until the whole project is deleted.
      */
     suspend fun pruneRasters(projectId: Long, keep: Set<String>): Int = withContext(Dispatchers.IO) {
         val layersDir = File(projectDir(projectId), LAYERS_DIR)
