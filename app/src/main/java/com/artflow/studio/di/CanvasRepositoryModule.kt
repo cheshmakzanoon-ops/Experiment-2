@@ -14,10 +14,7 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class CanvasRepositoryModule {
-
     @Binds
     @Singleton
-    abstract fun bindCanvasRepository(
-        impl: CanvasRepositoryImpl
-    ): CanvasRepository
+    abstract fun bindCanvasRepository(impl: CanvasRepositoryImpl): CanvasRepository
 }

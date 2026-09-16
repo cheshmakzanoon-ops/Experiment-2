@@ -41,7 +41,7 @@ fun GalleryScreen(
     onNavigateToCanvas: (Long) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenHelp: () -> Unit,
-    viewModel: MainViewModel = hiltViewModel()
+    viewModel: MainViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val query by viewModel.query.collectAsState()
@@ -70,14 +70,14 @@ fun GalleryScreen(
                             onValueChange = viewModel::setQuery,
                             placeholder = { Text("Search artworks") },
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     } else {
                         Column {
                             Text("ArtFlow")
                             Text(
                                 text = viewModel.storageSummary(),
-                                style = MaterialTheme.typography.labelSmall
+                                style = MaterialTheme.typography.labelSmall,
                             )
                         }
                     }
@@ -86,7 +86,7 @@ fun GalleryScreen(
                     IconButton(onClick = { searchVisible = !searchVisible }) {
                         Icon(
                             imageVector = if (searchVisible) Icons.Default.Close else Icons.Default.Search,
-                            contentDescription = "Search"
+                            contentDescription = "Search",
                         )
                     }
                     Box {
@@ -97,12 +97,15 @@ fun GalleryScreen(
                             GallerySort.entries.forEach { sort ->
                                 DropdownMenuItem(
                                     text = { Text(sort.displayName) },
-                                    onClick = { viewModel.setSort(sort); sortMenu = false },
+                                    onClick = {
+                                        viewModel.setSort(sort)
+                                        sortMenu = false
+                                    },
                                     leadingIcon = {
                                         if (settings.gallerySort == sort) {
                                             Icon(Icons.Default.Check, contentDescription = null)
                                         }
-                                    }
+                                    },
                                 )
                             }
                         }
@@ -113,51 +116,54 @@ fun GalleryScreen(
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
-                }
+                },
             )
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { showNewProjectDialog = true },
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("New artwork") }
+                text = { Text("New artwork") },
             )
-        }
+        },
     ) { padding ->
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding),
         ) {
             when (val state = uiState) {
                 is MainUiState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-                is MainUiState.Error -> Column(
-                    modifier = Modifier.align(Alignment.Center),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(state.message, color = MaterialTheme.colorScheme.error)
-                }
-                is MainUiState.Success -> if (state.projects.isEmpty()) {
-                    EmptyGallery(query.isNotEmpty())
-                } else {
-                    LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = 168.dp),
-                        contentPadding = PaddingValues(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                is MainUiState.Error ->
+                    Column(
+                        modifier = Modifier.align(Alignment.Center),
+                        horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        items(state.projects, key = { it.id }) { project ->
-                            ProjectCard(
-                                project = project,
-                                onClick = { onNavigateToCanvas(project.id) },
-                                onFavorite = { viewModel.toggleFavorite(project) },
-                                onRename = { renameTarget = project },
-                                onDuplicate = { viewModel.duplicate(project) },
-                                onDelete = { deleteTarget = project }
-                            )
+                        Text(state.message, color = MaterialTheme.colorScheme.error)
+                    }
+                is MainUiState.Success ->
+                    if (state.projects.isEmpty()) {
+                        EmptyGallery(query.isNotEmpty())
+                    } else {
+                        LazyVerticalGrid(
+                            columns = GridCells.Adaptive(minSize = 168.dp),
+                            contentPadding = PaddingValues(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            items(state.projects, key = { it.id }) { project ->
+                                ProjectCard(
+                                    project = project,
+                                    onClick = { onNavigateToCanvas(project.id) },
+                                    onFavorite = { viewModel.toggleFavorite(project) },
+                                    onRename = { renameTarget = project },
+                                    onDuplicate = { viewModel.duplicate(project) },
+                                    onDelete = { deleteTarget = project },
+                                )
+                            }
                         }
                     }
-                }
             }
         }
     }
@@ -171,7 +177,7 @@ fun GalleryScreen(
                 viewModel.createProject(name, preset, width, height, dpi) { id ->
                     scope.launch { onNavigateToCanvas(id) }
                 }
-            }
+            },
         )
     }
 
@@ -189,7 +195,7 @@ fun GalleryScreen(
                     renameTarget = null
                 }) { Text("Rename") }
             },
-            dismissButton = { TextButton(onClick = { renameTarget = null }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { renameTarget = null }) { Text("Cancel") } },
         )
     }
 
@@ -204,7 +210,7 @@ fun GalleryScreen(
                     deleteTarget = null
                 }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("Cancel") } },
         )
     }
 }
@@ -212,32 +218,34 @@ fun GalleryScreen(
 @Composable
 private fun EmptyGallery(searching: Boolean) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.Center,
     ) {
         Icon(
             imageVector = if (searching) Icons.Default.SearchOff else Icons.Default.Palette,
             contentDescription = null,
             modifier = Modifier.size(56.dp),
-            tint = MaterialTheme.colorScheme.primary
+            tint = MaterialTheme.colorScheme.primary,
         )
         Spacer(Modifier.height(12.dp))
         Text(
             text = if (searching) "No artworks match that search" else "No artworks yet",
-            style = MaterialTheme.typography.headlineSmall
+            style = MaterialTheme.typography.headlineSmall,
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            text = if (searching) {
-                "Try a different name."
-            } else {
-                "Tap New artwork to start a canvas. Everything is stored on this device."
-            },
+            text =
+                if (searching) {
+                    "Try a different name."
+                } else {
+                    "Tap New artwork to start a canvas. Everything is stored on this device."
+                },
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -249,22 +257,24 @@ private fun ProjectCard(
     onFavorite: () -> Unit,
     onRename: () -> Unit,
     onDuplicate: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
 ) {
     var menuVisible by remember { mutableStateOf(false) }
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
     ) {
         Column {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1.35f)
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1.35f)
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center,
             ) {
                 val thumbnail = project.thumbnailPath
                 if (thumbnail != null && File(thumbnail).exists()) {
@@ -272,19 +282,19 @@ private fun ProjectCard(
                         model = File(thumbnail),
                         contentDescription = project.name,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
                     )
                 } else {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
                             Icons.Default.Image,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Text(
                             text = "${project.width}×${project.height}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
@@ -293,29 +303,30 @@ private fun ProjectCard(
                         Icons.Default.Star,
                         contentDescription = "Favourite",
                         tint = Color(0xFFF2C037),
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(6.dp)
+                        modifier =
+                            Modifier
+                                .align(Alignment.TopStart)
+                                .padding(6.dp),
                     )
                 }
             }
 
             Row(
                 modifier = Modifier.padding(start = 10.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = project.name,
                         style = MaterialTheme.typography.titleSmall,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         text = "${project.layerCount} layers · ${formatDate(project.modifiedAt)}",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1
+                        maxLines = 1,
                     )
                 }
                 Box {
@@ -325,20 +336,32 @@ private fun ProjectCard(
                     DropdownMenu(expanded = menuVisible, onDismissRequest = { menuVisible = false }) {
                         DropdownMenuItem(
                             text = { Text(if (project.isFavorite) "Remove favourite" else "Add favourite") },
-                            onClick = { onFavorite(); menuVisible = false }
+                            onClick = {
+                                onFavorite()
+                                menuVisible = false
+                            },
                         )
                         DropdownMenuItem(
                             text = { Text("Rename") },
-                            onClick = { onRename(); menuVisible = false }
+                            onClick = {
+                                onRename()
+                                menuVisible = false
+                            },
                         )
                         DropdownMenuItem(
                             text = { Text("Duplicate") },
-                            onClick = { onDuplicate(); menuVisible = false }
+                            onClick = {
+                                onDuplicate()
+                                menuVisible = false
+                            },
                         )
                         Divider()
                         DropdownMenuItem(
                             text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
-                            onClick = { onDelete(); menuVisible = false }
+                            onClick = {
+                                onDelete()
+                                menuVisible = false
+                            },
                         )
                     }
                 }
@@ -351,7 +374,7 @@ private fun ProjectCard(
 private fun NewProjectDialog(
     defaultPresetName: String,
     onDismiss: () -> Unit,
-    onCreate: (String, CanvasOperations.Preset?, Int, Int, Int) -> Unit
+    onCreate: (String, CanvasOperations.Preset?, Int, Int, Int) -> Unit,
 ) {
     var name by remember { mutableStateOf("") }
     var selectedPreset by remember {
@@ -372,19 +395,19 @@ private fun NewProjectDialog(
                     onValueChange = { name = it },
                     label = { Text("Name") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     FilterChip(
                         selected = !useCustom,
                         onClick = { useCustom = false },
-                        label = { Text("Preset") }
+                        label = { Text("Preset") },
                     )
                     Spacer(Modifier.width(8.dp))
                     FilterChip(
                         selected = useCustom,
                         onClick = { useCustom = true },
-                        label = { Text("Custom") }
+                        label = { Text("Custom") },
                     )
                 }
                 if (useCustom) {
@@ -394,14 +417,14 @@ private fun NewProjectDialog(
                             onValueChange = { customWidth = it.filter { c -> c.isDigit() }.take(5) },
                             label = { Text("Width") },
                             singleLine = true,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
                         )
                         OutlinedTextField(
                             value = customHeight,
                             onValueChange = { customHeight = it.filter { c -> c.isDigit() }.take(5) },
                             label = { Text("Height") },
                             singleLine = true,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
                         )
                     }
                     OutlinedTextField(
@@ -409,14 +432,14 @@ private fun NewProjectDialog(
                         onValueChange = { customDpi = it.filter { c -> c.isDigit() }.take(3) },
                         label = { Text("Dpi") },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 } else {
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(2),
                         modifier = Modifier.heightIn(max = 220.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         items(CanvasOperations.PRESETS) { preset ->
                             FilterChip(
@@ -426,16 +449,16 @@ private fun NewProjectDialog(
                                     Text(
                                         preset.name,
                                         style = MaterialTheme.typography.labelSmall,
-                                        maxLines = 1
+                                        maxLines = 1,
                                     )
-                                }
+                                },
                             )
                         }
                     }
                     Text(
                         "${selectedPreset.width}×${selectedPreset.height} px · ${selectedPreset.dpi} dpi",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 val width = if (useCustom) customWidth.toIntOrNull() ?: 2048 else selectedPreset.width
@@ -444,7 +467,7 @@ private fun NewProjectDialog(
                     Text(
                         text = CanvasOperations.sizeWarning(width, height) ?: "That canvas is too large",
                         color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
+                        style = MaterialTheme.typography.bodySmall,
                     )
                 }
             }
@@ -456,11 +479,11 @@ private fun NewProjectDialog(
                     if (useCustom) null else selectedPreset,
                     customWidth.toIntOrNull() ?: 2048,
                     customHeight.toIntOrNull() ?: 2048,
-                    customDpi.toIntOrNull() ?: 132
+                    customDpi.toIntOrNull() ?: 132,
                 )
             }) { Text("Create") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
 
@@ -473,8 +496,9 @@ private fun formatDate(timestamp: Long): String {
 @Composable
 internal fun ThumbnailPlaceholder(modifier: Modifier = Modifier) {
     Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
+        modifier =
+            modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
     )
 }

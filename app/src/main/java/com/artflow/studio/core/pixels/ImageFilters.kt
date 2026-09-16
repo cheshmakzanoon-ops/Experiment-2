@@ -19,27 +19,36 @@ import kotlin.math.sqrt
  * Pure Kotlin: no `android.graphics`, so every filter is unit-testable on the JVM.
  */
 object ImageFilters {
-
     /**
      * Separable Gaussian blur.
      *
      * @param radius standard deviation in pixels; `0` returns a copy unchanged.
      */
-    fun gaussianBlur(source: PixelBuffer, radius: Float): PixelBuffer {
+    fun gaussianBlur(
+        source: PixelBuffer,
+        radius: Float,
+    ): PixelBuffer {
         if (radius <= 0.01f) return source.copy()
         val kernel = gaussianKernel(radius)
         return separableConvolve(source, kernel)
     }
 
     /** Fast approximate blur with a repeated box filter (used for large radii and mask feathering). */
-    fun boxBlur(source: PixelBuffer, radius: Int): PixelBuffer {
+    fun boxBlur(
+        source: PixelBuffer,
+        radius: Int,
+    ): PixelBuffer {
         if (radius <= 0) return source.copy()
         val kernel = FloatArray(radius * 2 + 1) { 1f / (radius * 2 + 1) }
         return separableConvolve(source, kernel)
     }
 
     /** Directional motion blur. [angleDegrees] is measured clockwise from the +x axis. */
-    fun motionBlur(source: PixelBuffer, distance: Float, angleDegrees: Float): PixelBuffer {
+    fun motionBlur(
+        source: PixelBuffer,
+        distance: Float,
+        angleDegrees: Float,
+    ): PixelBuffer {
         if (distance <= 0.5f) return source.copy()
         val steps = max(2, distance.roundToInt())
         val radians = Math.toRadians(angleDegrees.toDouble())
@@ -75,7 +84,11 @@ object ImageFilters {
      * Unsharp-mask sharpening. Positive [amount] sharpens, negative blurs.
      * @param amount 0..5, where 1 is a subtle sharpen.
      */
-    fun sharpen(source: PixelBuffer, amount: Float, radius: Float = 1.2f): PixelBuffer {
+    fun sharpen(
+        source: PixelBuffer,
+        amount: Float,
+        radius: Float = 1.2f,
+    ): PixelBuffer {
         if (abs(amount) < 0.001f) return source.copy()
         val blurred = gaussianBlur(source, radius)
         val out = source.copy()
@@ -101,7 +114,7 @@ object ImageFilters {
         source: PixelBuffer,
         amount: Float,
         monochrome: Boolean = true,
-        seed: Long = 1234L
+        seed: Long = 1234L,
     ): PixelBuffer {
         if (amount <= 0f) return source.copy()
         val out = source.copy()
@@ -114,18 +127,24 @@ object ImageFilters {
             val nr = if (monochrome) noise else (random.nextFloat() - 0.5f) * scale
             val ng = if (monochrome) noise else (random.nextFloat() - 0.5f) * scale
             val nb = if (monochrome) noise else (random.nextFloat() - 0.5f) * scale
-            out.pixels[i] = Channels.argb(
-                Channels.alpha(pixel).toInt(),
-                clampByte(Channels.red(pixel) + nr),
-                clampByte(Channels.green(pixel) + ng),
-                clampByte(Channels.blue(pixel) + nb)
-            )
+            out.pixels[i] =
+                Channels.argb(
+                    Channels.alpha(pixel).toInt(),
+                    clampByte(Channels.red(pixel) + nr),
+                    clampByte(Channels.green(pixel) + ng),
+                    clampByte(Channels.blue(pixel) + nb),
+                )
         }
         return out
     }
 
     /** Lens-style chromatic aberration: the red and blue channels are scaled apart radially. */
-    fun chromaticAberration(source: PixelBuffer, amount: Float, centerX: Float, centerY: Float): PixelBuffer {
+    fun chromaticAberration(
+        source: PixelBuffer,
+        amount: Float,
+        centerX: Float,
+        centerY: Float,
+    ): PixelBuffer {
         if (abs(amount) < 0.001f) return source.copy()
         val out = PixelBuffer(source.width, source.height)
         val shift = amount.coerceIn(-0.05f, 0.05f)
@@ -133,22 +152,25 @@ object ImageFilters {
             for (x in 0 until source.width) {
                 val dx = x - centerX
                 val dy = y - centerY
-                val rSample = source.sampleBilinear(
-                    centerX + dx * (1f + shift) + 0.5f,
-                    centerY + dy * (1f + shift) + 0.5f
-                )
+                val rSample =
+                    source.sampleBilinear(
+                        centerX + dx * (1f + shift) + 0.5f,
+                        centerY + dy * (1f + shift) + 0.5f,
+                    )
                 val gSample = source.sampleBilinear(x + 0.5f, y + 0.5f)
-                val bSample = source.sampleBilinear(
-                    centerX + dx * (1f - shift) + 0.5f,
-                    centerY + dy * (1f - shift) + 0.5f
-                )
+                val bSample =
+                    source.sampleBilinear(
+                        centerX + dx * (1f - shift) + 0.5f,
+                        centerY + dy * (1f - shift) + 0.5f,
+                    )
                 val alpha = Channels.alpha(gSample).toInt()
-                out.pixels[y * source.width + x] = Channels.argb(
-                    alpha,
-                    Channels.red(rSample).toInt(),
-                    Channels.green(gSample).toInt(),
-                    Channels.blue(bSample).toInt()
-                )
+                out.pixels[y * source.width + x] =
+                    Channels.argb(
+                        alpha,
+                        Channels.red(rSample).toInt(),
+                        Channels.green(gSample).toInt(),
+                        Channels.blue(bSample).toInt(),
+                    )
             }
         }
         return out
@@ -158,7 +180,12 @@ object ImageFilters {
      * Darkens towards the edges. [amount] 0..1 controls strength, [radius] 0..1 how far from the
      * centre the falloff starts.
      */
-    fun vignette(source: PixelBuffer, amount: Float, radius: Float = 0.7f, feather: Float = 0.5f): PixelBuffer {
+    fun vignette(
+        source: PixelBuffer,
+        amount: Float,
+        radius: Float = 0.7f,
+        feather: Float = 0.5f,
+    ): PixelBuffer {
         if (amount <= 0f) return source.copy()
         val out = source.copy()
         val centerX = source.width / 2f
@@ -172,42 +199,52 @@ object ImageFilters {
                 val dx = x - centerX
                 val dy = y - centerY
                 val distance = sqrt(dx * dx + dy * dy)
-                val falloff = when {
-                    distance <= inner -> 0f
-                    distance >= outer -> 1f
-                    else -> (distance - inner) / (outer - inner)
-                }
+                val falloff =
+                    when {
+                        distance <= inner -> 0f
+                        distance >= outer -> 1f
+                        else -> (distance - inner) / (outer - inner)
+                    }
                 if (falloff <= 0f) continue
                 val factor = 1f - amount.coerceIn(0f, 1f) * falloff
                 val index = y * source.width + x
                 val pixel = source.pixels[index]
-                out.pixels[index] = Channels.argb(
-                    Channels.alpha(pixel).toInt(),
-                    (Channels.red(pixel) * factor).roundToInt(),
-                    (Channels.green(pixel) * factor).roundToInt(),
-                    (Channels.blue(pixel) * factor).roundToInt()
-                )
+                out.pixels[index] =
+                    Channels.argb(
+                        Channels.alpha(pixel).toInt(),
+                        (Channels.red(pixel) * factor).roundToInt(),
+                        (Channels.green(pixel) * factor).roundToInt(),
+                        (Channels.blue(pixel) * factor).roundToInt(),
+                    )
             }
         }
         return out
     }
 
     /** Gaussian blur whose strength varies linearly from top to bottom (fake depth of field). */
-    fun tiltShift(source: PixelBuffer, maxRadius: Float, focusCenter: Float, focusHeight: Float): PixelBuffer {
+    fun tiltShift(
+        source: PixelBuffer,
+        maxRadius: Float,
+        focusCenter: Float,
+        focusHeight: Float,
+    ): PixelBuffer {
         val fullyBlurred = gaussianBlur(source, maxRadius)
         val out = PixelBuffer(source.width, source.height)
         for (y in 0 until source.height) {
             val distance = abs(y - focusCenter)
-            val t = if (distance <= focusHeight / 2f) {
-                0f
-            } else {
-                ((distance - focusHeight / 2f) / (source.height / 2f)).coerceIn(0f, 1f)
-            }
+            val t =
+                if (distance <= focusHeight / 2f) {
+                    0f
+                } else {
+                    ((distance - focusHeight / 2f) / (source.height / 2f)).coerceIn(0f, 1f)
+                }
             if (t <= 0f) {
                 System.arraycopy(
-                    source.pixels, y * source.width,
-                    out.pixels, y * source.width,
-                    source.width
+                    source.pixels,
+                    y * source.width,
+                    out.pixels,
+                    y * source.width,
+                    source.width,
                 )
                 continue
             }
@@ -231,29 +268,43 @@ object ImageFilters {
                 val gy = Channels.luminance(center) - Channels.luminance(down)
                 val magnitude = (sqrt(gx * gx + gy * gy) * 255f).coerceIn(0f, 255f)
                 val alpha = Channels.alpha(center).toInt()
-                out.pixels[y * source.width + x] = Channels.argb(
-                    alpha,
-                    magnitude.roundToInt(),
-                    magnitude.roundToInt(),
-                    magnitude.roundToInt()
-                )
+                out.pixels[y * source.width + x] =
+                    Channels.argb(
+                        alpha,
+                        magnitude.roundToInt(),
+                        magnitude.roundToInt(),
+                        magnitude.roundToInt(),
+                    )
             }
         }
         return out
     }
 
     /** 3x3 emboss. */
-    fun emboss(source: PixelBuffer, strength: Float = 1f): PixelBuffer {
-        val kernel = floatArrayOf(
-            -2f, -1f, 0f,
-            -1f, 1f, 1f,
-            0f, 1f, 2f
-        ).map { it * strength }.toFloatArray()
+    fun emboss(
+        source: PixelBuffer,
+        strength: Float = 1f,
+    ): PixelBuffer {
+        val kernel =
+            floatArrayOf(
+                -2f,
+                -1f,
+                0f,
+                -1f,
+                1f,
+                1f,
+                0f,
+                1f,
+                2f,
+            ).map { it * strength }.toFloatArray()
         return convolve3x3(source, kernel)
     }
 
     /** General 3x3 convolution with a normalised bias of 128 (matches Photoshop's style filters). */
-    fun convolve3x3(source: PixelBuffer, kernel: FloatArray): PixelBuffer {
+    fun convolve3x3(
+        source: PixelBuffer,
+        kernel: FloatArray,
+    ): PixelBuffer {
         require(kernel.size == 9) { "3x3 convolution needs 9 weights" }
         val out = PixelBuffer(source.width, source.height)
         for (y in 0 until source.height) {
@@ -282,19 +333,25 @@ object ImageFilters {
                     continue
                 }
                 val sumA = (a / 255f).coerceAtLeast(0.0001f)
-                out.pixels[y * source.width + x] = Channels.argb(
-                    alpha,
-                    clampByte(r / sumA + 128f),
-                    clampByte(g / sumA + 128f),
-                    clampByte(b / sumA + 128f)
-                )
+                out.pixels[y * source.width + x] =
+                    Channels.argb(
+                        alpha,
+                        clampByte(r / sumA + 128f),
+                        clampByte(g / sumA + 128f),
+                        clampByte(b / sumA + 128f),
+                    )
             }
         }
         return out
     }
 
     /** Feather helper shared by mask feathering and soft brush edges. */
-    fun featherAlpha(alpha: FloatArray, width: Int, height: Int, radius: Int): FloatArray {
+    fun featherAlpha(
+        alpha: FloatArray,
+        width: Int,
+        height: Int,
+        radius: Int,
+    ): FloatArray {
         if (radius <= 0) return alpha.copyOf()
         val kernel = FloatArray(radius * 2 + 1) { 1f / (radius * 2 + 1) }
         val temp = FloatArray(alpha.size)
@@ -309,7 +366,10 @@ object ImageFilters {
     // -----------------------------------------------------------------------------------------
 
     /** Separable convolution on premultiplied channels. */
-    private fun separableConvolve(source: PixelBuffer, kernel: FloatArray): PixelBuffer {
+    private fun separableConvolve(
+        source: PixelBuffer,
+        kernel: FloatArray,
+    ): PixelBuffer {
         val width = source.width
         val height = source.height
         val count = width * height
@@ -355,14 +415,18 @@ object ImageFilters {
     }
 
     /** Linear interpolation between two ARGB pixels (used by depth-of-field style effects). */
-    fun lerpArgb(from: Int, to: Int, t: Float): Int {
+    fun lerpArgb(
+        from: Int,
+        to: Int,
+        t: Float,
+    ): Int {
         val clamped = t.coerceIn(0f, 1f)
         val inv = 1f - clamped
         return Channels.fromFloats(
             a = Channels.alpha(from) * inv + Channels.alpha(to) * clamped,
             r = Channels.red(from) * inv + Channels.red(to) * clamped,
             g = Channels.green(from) * inv + Channels.green(to) * clamped,
-            b = Channels.blue(from) * inv + Channels.blue(to) * clamped
+            b = Channels.blue(from) * inv + Channels.blue(to) * clamped,
         )
     }
 
@@ -371,7 +435,7 @@ object ImageFilters {
         dst: FloatArray,
         width: Int,
         height: Int,
-        kernel: FloatArray
+        kernel: FloatArray,
     ) {
         val radius = kernel.size / 2
         for (y in 0 until height) {
@@ -392,7 +456,7 @@ object ImageFilters {
         dst: FloatArray,
         width: Int,
         height: Int,
-        kernel: FloatArray
+        kernel: FloatArray,
     ) {
         val radius = kernel.size / 2
         for (y in 0 until height) {
@@ -423,7 +487,12 @@ object ImageFilters {
         return kernel
     }
 
-    private fun unpremultiply(a: Float, r: Float, g: Float, b: Float): Int {
+    private fun unpremultiply(
+        a: Float,
+        r: Float,
+        g: Float,
+        b: Float,
+    ): Int {
         val alpha = a.coerceIn(0f, 1f)
         if (alpha <= 0.0001f) return 0
         val invAlpha = 1f / alpha
@@ -431,7 +500,7 @@ object ImageFilters {
             a = alpha * 255f,
             r = (r * invAlpha * 255f).coerceIn(0f, 255f),
             g = (g * invAlpha * 255f).coerceIn(0f, 255f),
-            b = (b * invAlpha * 255f).coerceIn(0f, 255f)
+            b = (b * invAlpha * 255f).coerceIn(0f, 255f),
         )
     }
 

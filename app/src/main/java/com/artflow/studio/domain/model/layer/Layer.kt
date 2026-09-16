@@ -11,19 +11,17 @@ import kotlinx.serialization.Serializable
 data class Layer(
     val id: Long,
     val name: String,
-    val index: Int,                    // Position in layer stack (0 = bottom)
-    val isVisible: Boolean = true,     // Whether layer is visible
-    val opacity: Float = 1.0f,         // Layer opacity (0.0 - 1.0)
-    val isLocked: Boolean = false,     // Whether layer is locked from editing
+    val index: Int, // Position in layer stack (0 = bottom)
+    val isVisible: Boolean = true, // Whether layer is visible
+    val opacity: Float = 1.0f, // Layer opacity (0.0 - 1.0)
+    val isLocked: Boolean = false, // Whether layer is locked from editing
     val blendMode: BlendMode = BlendMode.NORMAL,
     val strokes: List<Stroke> = emptyList(),
-    val thumbnailPath: String? = null, // Path to layer thumbnail
-    val isAlphaLocked: Boolean = false, // Alpha lock (paint only on existing pixels)
-    val isClippingMask: Boolean = false, // Clip to layer below
-    val parentGroupId: Long? = null,   // Parent group ID if nested
-    val maskLayerId: Long? = null,     // Associated mask layer ID
-
-    // --- Phase 17-24: pixel-backed layer content -------------------------------------------
+    val thumbnailPath: String? = null,
+    val isAlphaLocked: Boolean = false,
+    val isClippingMask: Boolean = false,
+    val parentGroupId: Long? = null,
+    val maskLayerId: Long? = null,
     /**
      * Relative path (inside the project folder) of this layer's pixel data.
      *
@@ -33,31 +31,24 @@ data class Layer(
      * undo/redo can reference older versions without copying pixels around in memory.
      */
     val rasterFile: String? = null,
-
-    // --- Phase 16 / 25-30: masks, adjustments, filters, smart objects ----------------------
     /** Grayscale mask image (relative path). The mask multiplies this layer's alpha. */
     val maskFile: String? = null,
     val maskEnabled: Boolean = true,
     val maskInverted: Boolean = false,
     val maskDensity: Float = 1f,
     val maskFeather: Float = 0f,
-
     /** Phase 25: non-destructive colour correction applied to everything below this layer. */
     val adjustmentType: AdjustmentType? = null,
     val adjustmentParameters: Map<String, Float> = emptyMap(),
-
     /** Phase 29: non-destructive filter applied to the layer's own pixels. */
     val filterType: FilterType? = null,
     val filterAmount: Float = 0f,
-
     /** Phase 27: reference layer, shown on a side panel and never composited into the artwork. */
     val isReference: Boolean = false,
-
     /** Phase 28: layers sharing a non-null link move and transform together. */
     val linkGroupId: Long? = null,
-
     /** Hidden from the layer list but still composited (used by text layers before rasterising). */
-    val isInternal: Boolean = false
+    val isInternal: Boolean = false,
 ) {
     /**
      * Check if this layer can be edited
@@ -68,8 +59,7 @@ data class Layer(
     fun hasRaster(): Boolean = rasterFile != null
 
     /** True when painting on this layer is allowed (visible, unlocked, not a reference/adjustment). */
-    fun acceptsPaint(): Boolean =
-        isVisible && !isLocked && !isReference && adjustmentType == null
+    fun acceptsPaint(): Boolean = isVisible && !isLocked && !isReference && adjustmentType == null
 
     /** True when the layer has an active mask that must be applied during compositing. */
     fun hasActiveMask(): Boolean = maskFile != null && maskEnabled
@@ -103,35 +93,36 @@ data class Layer(
         filterAmount: Float = this.filterAmount,
         isReference: Boolean = this.isReference,
         linkGroupId: Long? = this.linkGroupId,
-        isInternal: Boolean = this.isInternal
-    ): Layer = Layer(
-        id = id,
-        name = name,
-        index = index,
-        isVisible = isVisible,
-        opacity = opacity,
-        isLocked = isLocked,
-        blendMode = blendMode,
-        strokes = strokes,
-        thumbnailPath = thumbnailPath,
-        isAlphaLocked = isAlphaLocked,
-        isClippingMask = isClippingMask,
-        parentGroupId = parentGroupId,
-        maskLayerId = maskLayerId,
-        rasterFile = rasterFile,
-        maskFile = maskFile,
-        maskEnabled = maskEnabled,
-        maskInverted = maskInverted,
-        maskDensity = maskDensity,
-        maskFeather = maskFeather,
-        adjustmentType = adjustmentType,
-        adjustmentParameters = adjustmentParameters,
-        filterType = filterType,
-        filterAmount = filterAmount,
-        isReference = isReference,
-        linkGroupId = linkGroupId,
-        isInternal = isInternal
-    )
+        isInternal: Boolean = this.isInternal,
+    ): Layer =
+        Layer(
+            id = id,
+            name = name,
+            index = index,
+            isVisible = isVisible,
+            opacity = opacity,
+            isLocked = isLocked,
+            blendMode = blendMode,
+            strokes = strokes,
+            thumbnailPath = thumbnailPath,
+            isAlphaLocked = isAlphaLocked,
+            isClippingMask = isClippingMask,
+            parentGroupId = parentGroupId,
+            maskLayerId = maskLayerId,
+            rasterFile = rasterFile,
+            maskFile = maskFile,
+            maskEnabled = maskEnabled,
+            maskInverted = maskInverted,
+            maskDensity = maskDensity,
+            maskFeather = maskFeather,
+            adjustmentType = adjustmentType,
+            adjustmentParameters = adjustmentParameters,
+            filterType = filterType,
+            filterAmount = filterAmount,
+            isReference = isReference,
+            linkGroupId = linkGroupId,
+            isInternal = isInternal,
+        )
 }
 
 /**
@@ -142,7 +133,7 @@ data class Layer(
 enum class FilterType(
     val displayName: String,
     /** Default strength (`0..1`) applied when the filter layer is created. */
-    val defaultAmount: Float
+    val defaultAmount: Float,
 ) {
     GAUSSIAN_BLUR("Gaussian Blur", 0.4f),
     MOTION_BLUR("Motion Blur", 0.4f),
@@ -152,7 +143,8 @@ enum class FilterType(
     VIGNETTE("Vignette", 0.5f),
     FIND_EDGES("Find Edges", 1f),
     EMBOSS("Emboss", 0.5f),
-    TILT_SHIFT("Tilt Shift", 0.5f);
+    TILT_SHIFT("Tilt Shift", 0.5f),
+    ;
 
     companion object {
         fun byName(name: String): FilterType? = entries.firstOrNull { it.name == name }
@@ -164,7 +156,9 @@ enum class FilterType(
  * Implements Phase 12: Blend Modes
  */
 @Serializable
-enum class BlendMode(val displayName: String) {
+enum class BlendMode(
+    val displayName: String,
+) {
     NORMAL("Normal"),
     MULTIPLY("Multiply"),
     SCREEN("Screen"),
@@ -181,8 +175,9 @@ enum class BlendMode(val displayName: String) {
     SATURATION("Saturation"),
     COLOR("Color"),
     LUMINOSITY("Luminosity"),
-    PASS_THROUGH("Pass Through");  // For layer groups
-    
+    PASS_THROUGH("Pass Through"), // For layer groups
+    ;
+
     companion object {
         /**
          * Get all blend modes available for regular layers (excludes PASS_THROUGH)
@@ -190,5 +185,3 @@ enum class BlendMode(val displayName: String) {
         fun getLayerBlendModes(): List<BlendMode> = entries.filter { it != PASS_THROUGH }
     }
 }
-
-

@@ -16,18 +16,21 @@ import org.junit.Test
  * pin down both the pixel result and the reported canvas properties.
  */
 class CanvasOperationsTest {
-
     private val red = 0xFFFF0000.toInt()
     private val blue = 0xFF0000FF.toInt()
 
-    private fun properties(width: Int = 8, height: Int = 8, dpi: Int = 72) =
-        CanvasOperations.CanvasProperties(width, height, dpi, 0)
+    private fun properties(
+        width: Int = 8,
+        height: Int = 8,
+        dpi: Int = 72,
+    ) = CanvasOperations.CanvasProperties(width, height, dpi, 0)
 
     /** 8x8 buffer with a red pixel at (2, 3) and (5, 6). */
-    private fun dotBuffer(): PixelBuffer = PixelBuffer(8, 8).apply {
-        setUnchecked(2, 3, red)
-        setUnchecked(5, 6, red)
-    }
+    private fun dotBuffer(): PixelBuffer =
+        PixelBuffer(8, 8).apply {
+            setUnchecked(2, 3, red)
+            setUnchecked(5, 6, red)
+        }
 
     // ---------------------------------------------------------------------------------------
     // Resize
@@ -56,13 +59,14 @@ class CanvasOperationsTest {
     fun `resizeCanvas centres existing artwork without rescaling it`() {
         val buffer = PixelBuffer(4, 4).apply { setUnchecked(0, 0, red) }
 
-        val result = CanvasOperations.resizeCanvas(
-            buffer = buffer,
-            width = 8,
-            height = 8,
-            anchor = CanvasOperations.Anchor.CENTER,
-            properties = properties(4, 4)
-        )
+        val result =
+            CanvasOperations.resizeCanvas(
+                buffer = buffer,
+                width = 8,
+                height = 8,
+                anchor = CanvasOperations.Anchor.CENTER,
+                properties = properties(4, 4),
+            )
 
         assertEquals(8, result.buffer.width)
         // (8 - 4) / 2 == 2, so the old origin lands at (2, 2) and the pixel keeps its size.
@@ -75,9 +79,14 @@ class CanvasOperationsTest {
         val buffer = PixelBuffer(4, 4).apply { setUnchecked(0, 0, red) }
 
         fun placedAt(anchor: CanvasOperations.Anchor): Pair<Int, Int> {
-            val result = CanvasOperations.resizeCanvas(
-                buffer = buffer, width = 10, height = 10, anchor = anchor, properties = properties(4, 4)
-            )
+            val result =
+                CanvasOperations.resizeCanvas(
+                    buffer = buffer,
+                    width = 10,
+                    height = 10,
+                    anchor = anchor,
+                    properties = properties(4, 4),
+                )
             val index = result.buffer.pixels.indexOfFirst { it == red }
             return index % result.buffer.width to index / result.buffer.width
         }
@@ -91,14 +100,15 @@ class CanvasOperationsTest {
 
     @Test
     fun `resizeCanvas fills the new area with the fill colour`() {
-        val result = CanvasOperations.resizeCanvas(
-            buffer = PixelBuffer(2, 2).apply { setUnchecked(0, 0, red) },
-            width = 4,
-            height = 4,
-            anchor = CanvasOperations.Anchor.TOP_LEFT,
-            properties = properties(2, 2),
-            fillColor = blue
-        )
+        val result =
+            CanvasOperations.resizeCanvas(
+                buffer = PixelBuffer(2, 2).apply { setUnchecked(0, 0, red) },
+                width = 4,
+                height = 4,
+                anchor = CanvasOperations.Anchor.TOP_LEFT,
+                properties = properties(2, 2),
+                fillColor = blue,
+            )
 
         assertEquals(red, result.buffer.getUnchecked(0, 0))
         assertEquals(blue, result.buffer.getUnchecked(3, 3))
@@ -258,7 +268,7 @@ class CanvasOperationsTest {
         CanvasOperations.PRESETS.forEach { preset ->
             assertTrue(
                 "${preset.name} is not a safe size",
-                CanvasOperations.isSizeSafe(preset.width, preset.height)
+                CanvasOperations.isSizeSafe(preset.width, preset.height),
             )
             assertTrue(preset.dpi in CanvasOperations.MIN_DPI..CanvasOperations.MAX_DPI)
         }

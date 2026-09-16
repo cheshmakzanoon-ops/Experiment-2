@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.Flow
  */
 @Dao
 interface SettingsDao {
-
     @Query("SELECT * FROM settings ORDER BY category, key")
     fun getAllSettings(): Flow<List<SettingsEntity>>
 
@@ -32,5 +31,9 @@ interface SettingsDao {
     suspend fun deleteSettingByKey(key: String)
 
     @Query("UPDATE settings SET value = :value, lastModified = :timestamp WHERE key = :key")
-    suspend fun updateSettingValue(key: String, value: String, timestamp: Long = System.currentTimeMillis())
+    suspend fun updateSettingValue(
+        key: String,
+        value: String,
+        timestamp: Long = System.currentTimeMillis(),
+    )
 }

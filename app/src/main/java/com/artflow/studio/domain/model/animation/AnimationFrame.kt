@@ -19,7 +19,7 @@ data class AnimationFrame(
     val durationMs: Int = DEFAULT_DURATION_MS,
     /** Marks a frame as a key pose in the timeline UI. */
     val isKeyframe: Boolean = false,
-    val createdAt: Long = 0L
+    val createdAt: Long = 0L,
 ) {
     val layerCount: Int get() = layers.size
 
@@ -52,7 +52,7 @@ data class AnimationSettings(
     val playbackRangeStart: Int = 0,
     val playbackRangeEnd: Int = -1,
     /** Ping-pong playback instead of looping from the start. */
-    val pingPong: Boolean = false
+    val pingPong: Boolean = false,
 ) {
     /** Milliseconds a single frame is displayed, derived from [fps]. */
     val frameDurationMs: Int get() = (1000f / fps.coerceIn(1, 60)).toInt().coerceAtLeast(16)
@@ -65,11 +65,14 @@ data class AnimationSettings(
 }
 
 /** Export formats for animation (Phase 44). */
-enum class AnimationExportFormat(val displayName: String, val extension: String) {
+enum class AnimationExportFormat(
+    val displayName: String,
+    val extension: String,
+) {
     GIF("Animated GIF", "gif"),
     MP4("MP4 video", "mp4"),
     FRAME_SEQUENCE("PNG frame sequence", "zip"),
-    APNG("Animated PNG (frame sequence)", "zip")
+    APNG("Animated PNG (frame sequence)", "zip"),
 }
 
 /** A timelapse recording entry: one committed action at a point in time (Phase 45). */
@@ -82,7 +85,7 @@ data class TimelapseEntry(
     /** Human-readable label ("Brush stroke", "Fill", "New layer"). */
     val label: String,
     /** Number of pixels the action touched, used to skip no-op entries. */
-    val affectedPixels: Int = 0
+    val affectedPixels: Int = 0,
 )
 
 /** Timelapse recording state (Phase 45). */
@@ -95,7 +98,7 @@ data class TimelapseRecording(
     val speedMultiplier: Float = 4f,
     val resolutionScale: Float = 0.5f,
     val includeWatermark: Boolean = false,
-    val watermarkText: String = "Made with ArtFlow"
+    val watermarkText: String = "Made with ArtFlow",
 ) {
     val durationMs: Long get() = entries.lastOrNull()?.timestampMs ?: 0L
 }

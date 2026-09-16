@@ -15,7 +15,7 @@ enum class ExportFormat(
     val extension: String,
     val mimeType: String,
     /** Formats that only make sense when the project has more than one frame. */
-    val requiresAnimation: Boolean = false
+    val requiresAnimation: Boolean = false,
 ) {
     PNG("PNG", "png", "image/png"),
     JPEG("JPEG", "jpg", "image/jpeg"),
@@ -24,7 +24,8 @@ enum class ExportFormat(
     PSD("Photoshop (PSD)", "psd", "image/vnd.adobe.photoshop"),
     GIF("Animated GIF", "gif", "image/gif", requiresAnimation = true),
     MP4("MP4 video", "mp4", "video/mp4", requiresAnimation = true),
-    FRAME_SEQUENCE("PNG frames (zip)", "zip", "application/zip", requiresAnimation = true);
+    FRAME_SEQUENCE("PNG frames (zip)", "zip", "application/zip", requiresAnimation = true),
+    ;
 
     companion object {
         /** Formats offered for a still image. */
@@ -38,12 +39,14 @@ enum class ExportFormat(
 }
 
 /** How much of the canvas an export covers. */
-enum class ExportArea(val displayName: String) {
+enum class ExportArea(
+    val displayName: String,
+) {
     FULL_CANVAS("Full canvas"),
     CURRENT_FRAME("Current frame"),
     ALL_FRAMES("All frames"),
     SELECTION("Selection"),
-    CONTENT_BOUNDS("Trim to content")
+    CONTENT_BOUNDS("Trim to content"),
 }
 
 /**
@@ -80,18 +83,24 @@ data class ExportOptions(
     val pdfOversample: Float = 1f,
     /** PSD options. */
     val psdUseRle: Boolean = true,
-    val psdGroupLayers: Boolean = true
+    val psdGroupLayers: Boolean = true,
 )
 
 /** How an export is fitted into the requested output size. */
-enum class FitMode(val displayName: String) {
+enum class FitMode(
+    val displayName: String,
+) {
     STRETCH("Stretch"),
     FIT("Fit (letterbox)"),
-    FILL("Fill (crop)")
+    FILL("Fill (crop)"),
 }
 
 /** Common PDF page sizes, in PostScript points (1/72 inch). */
-enum class PdfPageSize(val displayName: String, val widthPt: Float, val heightPt: Float) {
+enum class PdfPageSize(
+    val displayName: String,
+    val widthPt: Float,
+    val heightPt: Float,
+) {
     FIT_CANVAS("Fit to canvas", 0f, 0f),
     A4_PORTRAIT("A4 portrait", 595f, 842f),
     A4_LANDSCAPE("A4 landscape", 842f, 595f),
@@ -99,70 +108,70 @@ enum class PdfPageSize(val displayName: String, val widthPt: Float, val heightPt
     A3_LANDSCAPE("A3 landscape", 1191f, 842f),
     US_LETTER("US Letter", 612f, 792f),
     US_LEGAL("US Legal", 612f, 1008f),
-    SQUARE_2000("Square 2000pt", 2000f, 2000f)
+    SQUARE_2000("Square 2000pt", 2000f, 2000f),
 }
 
 /** Quick export presets shown in the export sheet. */
 data class ExportPreset(
     val name: String,
     val description: String,
-    val options: ExportOptions
+    val options: ExportOptions,
 )
 
 object ExportPresets {
-
-    val ALL: List<ExportPreset> = listOf(
-        ExportPreset(
-            "Share PNG",
-            "Full resolution, transparency preserved",
-            ExportOptions(format = ExportFormat.PNG, scale = 1f, flattenOntoBackground = false)
-        ),
-        ExportPreset(
-            "Web PNG",
-            "Half size for quick sharing",
-            ExportOptions(format = ExportFormat.PNG, scale = 0.5f)
-        ),
-        ExportPreset(
-            "Social JPEG",
-            "Half size, quality 90, white background",
-            ExportOptions(
-                format = ExportFormat.JPEG,
-                scale = 0.5f,
-                quality = 90,
-                flattenOntoBackground = true
-            )
-        ),
-        ExportPreset(
-            "Print PDF",
-            "A4 at 300 DPI with vector text",
-            ExportOptions(
-                format = ExportFormat.PDF,
-                pdfPageSize = PdfPageSize.A4_PORTRAIT,
-                dpi = 300,
-                pdfOversample = 2f
-            )
-        ),
-        ExportPreset(
-            "Photoshop PSD",
-            "Every layer as an editable PSD layer",
-            ExportOptions(format = ExportFormat.PSD, includeHiddenLayers = false, psdUseRle = true)
-        ),
-        ExportPreset(
-            "Animated GIF",
-            "Loop forever at the timeline FPS",
-            ExportOptions(format = ExportFormat.GIF, gifLoop = true, keepGifTransparency = true)
-        ),
-        ExportPreset(
-            "Video MP4",
-            "H.264 at 1080p, 8 Mbps",
-            ExportOptions(format = ExportFormat.MP4, videoBitrate = 8_000_000)
-        ),
-        ExportPreset(
-            "Thumbnail",
-            "512px preview image",
-            ExportOptions(format = ExportFormat.PNG, targetWidth = 512)
+    val ALL: List<ExportPreset> =
+        listOf(
+            ExportPreset(
+                "Share PNG",
+                "Full resolution, transparency preserved",
+                ExportOptions(format = ExportFormat.PNG, scale = 1f, flattenOntoBackground = false),
+            ),
+            ExportPreset(
+                "Web PNG",
+                "Half size for quick sharing",
+                ExportOptions(format = ExportFormat.PNG, scale = 0.5f),
+            ),
+            ExportPreset(
+                "Social JPEG",
+                "Half size, quality 90, white background",
+                ExportOptions(
+                    format = ExportFormat.JPEG,
+                    scale = 0.5f,
+                    quality = 90,
+                    flattenOntoBackground = true,
+                ),
+            ),
+            ExportPreset(
+                "Print PDF",
+                "A4 at 300 DPI with vector text",
+                ExportOptions(
+                    format = ExportFormat.PDF,
+                    pdfPageSize = PdfPageSize.A4_PORTRAIT,
+                    dpi = 300,
+                    pdfOversample = 2f,
+                ),
+            ),
+            ExportPreset(
+                "Photoshop PSD",
+                "Every layer as an editable PSD layer",
+                ExportOptions(format = ExportFormat.PSD, includeHiddenLayers = false, psdUseRle = true),
+            ),
+            ExportPreset(
+                "Animated GIF",
+                "Loop forever at the timeline FPS",
+                ExportOptions(format = ExportFormat.GIF, gifLoop = true, keepGifTransparency = true),
+            ),
+            ExportPreset(
+                "Video MP4",
+                "H.264 at 1080p, 8 Mbps",
+                ExportOptions(format = ExportFormat.MP4, videoBitrate = 8_000_000),
+            ),
+            ExportPreset(
+                "Thumbnail",
+                "512px preview image",
+                ExportOptions(format = ExportFormat.PNG, targetWidth = 512),
+            ),
         )
-    )
 }
 
 /** Result of an export, ready to be shown to the user or handed to a share intent. */
@@ -175,45 +184,65 @@ data class ExportResult(
     val height: Int,
     val frameCount: Int = 1,
     /** Set when the export was published to the device gallery. */
-    val mediaStoreUri: String? = null
+    val mediaStoreUri: String? = null,
 ) {
     val sizeLabel: String
-        get() = when {
-            byteCount < 1024 -> "$byteCount B"
-            byteCount < 1024 * 1024 -> "%.1f KB".format(byteCount / 1024f)
-            else -> "%.1f MB".format(byteCount / (1024f * 1024f))
-        }
+        get() =
+            when {
+                byteCount < 1024 -> "$byteCount B"
+                byteCount < 1024 * 1024 -> "%.1f KB".format(byteCount / 1024f)
+                else -> "%.1f MB".format(byteCount / (1024f * 1024f))
+            }
 }
 
 /** Failures the export pipeline can report; all user-readable. */
-sealed class ExportError(val message: String) {
-    class TooLarge(width: Int, height: Int) :
-        ExportError("Export would be ${width}×${height}px, which exceeds the safe canvas limit")
+sealed class ExportError(
+    val message: String,
+) {
+    class TooLarge(
+        width: Int,
+        height: Int,
+    ) : ExportError("Export would be $width×${height}px, which exceeds the safe canvas limit")
 
     object NoFrames : ExportError("This project has no frames to export")
+
     object NoContent : ExportError("Nothing to export: the canvas is empty")
 
-    class UnsupportedFormat(format: ExportFormat) :
-        ExportError("${format.displayName} export is not available on this device")
+    class UnsupportedFormat(
+        format: ExportFormat,
+    ) : ExportError("${format.displayName} export is not available on this device")
 
-    class EncodingFailed(cause: String) : ExportError("Encoding failed: $cause")
-    class StorageFailed(cause: String) : ExportError("Could not write the file: $cause")
+    class EncodingFailed(
+        cause: String,
+    ) : ExportError("Encoding failed: $cause")
+
+    class StorageFailed(
+        cause: String,
+    ) : ExportError("Could not write the file: $cause")
+
     object AnimationRequired : ExportError("This format needs an animation; add frames first")
 }
 
 /** Naming and sizing helpers shared by every exporter. */
 object ExportNaming {
-
     private val timestampFormat = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US)
 
     /** `ProjectName-20260916-101500.png`, sanitised for the file system. */
-    fun defaultFileName(projectName: String, format: ExportFormat, timestamp: Long = System.currentTimeMillis()): String {
+    fun defaultFileName(
+        projectName: String,
+        format: ExportFormat,
+        timestamp: Long = System.currentTimeMillis(),
+    ): String {
         val safe = sanitize(projectName).ifEmpty { "ArtFlow" }
         return "$safe-${timestampFormat.format(Date(timestamp))}.${format.extension}"
     }
 
     fun sanitize(name: String): String =
-        name.trim().replace(Regex("[^A-Za-z0-9-_ ]"), "").replace(' ', '-').take(48)
+        name
+            .trim()
+            .replace(Regex("[^A-Za-z0-9-_ ]"), "")
+            .replace(' ', '-')
+            .take(48)
 
     /**
      * Output size for the requested options. Never returns a zero or unsafe dimension; the caller
@@ -222,15 +251,16 @@ object ExportNaming {
     fun resolveSize(
         canvasWidth: Int,
         canvasHeight: Int,
-        options: ExportOptions
+        options: ExportOptions,
     ): Pair<Int, Int> {
         val targetWidth = options.targetWidth
-        val base = if (targetWidth != null) {
-            CanvasOperations.scaleToWidth(canvasWidth, canvasHeight, targetWidth)
-        } else {
-            val scale = options.scale.coerceIn(0.1f, 4f)
-            max(1, (canvasWidth * scale).roundToInt()) to max(1, (canvasHeight * scale).roundToInt())
-        }
+        val base =
+            if (targetWidth != null) {
+                CanvasOperations.scaleToWidth(canvasWidth, canvasHeight, targetWidth)
+            } else {
+                val scale = options.scale.coerceIn(0.1f, 4f)
+                max(1, (canvasWidth * scale).roundToInt()) to max(1, (canvasHeight * scale).roundToInt())
+            }
         return base
     }
 
@@ -240,7 +270,7 @@ object ExportNaming {
         sourceHeight: Int,
         targetWidth: Int,
         targetHeight: Int,
-        fitMode: FitMode
+        fitMode: FitMode,
     ): FitPlacement {
         if (fitMode == FitMode.STRETCH) {
             return FitPlacement(targetWidth, targetHeight, 0, 0, targetWidth, targetHeight)
@@ -262,6 +292,6 @@ object ExportNaming {
         val offsetX: Int,
         val offsetY: Int,
         val drawWidth: Int,
-        val drawHeight: Int
+        val drawHeight: Int,
     )
 }

@@ -8,7 +8,7 @@ data class Color(
     val alpha: Int = 255,
     val red: Int = 0,
     val green: Int = 0,
-    val blue: Int = 0
+    val blue: Int = 0,
 ) {
     /**
      * Create a color from ARGB values (0-255 each)
@@ -17,7 +17,7 @@ data class Color(
         alpha = (argb shr 24) and 0xFF,
         red = (argb shr 16) and 0xFF,
         green = (argb shr 8) and 0xFF,
-        blue = argb and 0xFF
+        blue = argb and 0xFF,
     )
 
     /**
@@ -25,7 +25,8 @@ data class Color(
      */
     fun toComposeColor(): androidx.compose.ui.graphics.Color {
         // androidx.compose.ui.graphics.Color's parameter order is (red, green, blue, alpha).
-        return androidx.compose.ui.graphics.Color(red, green, blue, alpha)
+        return androidx.compose.ui.graphics
+            .Color(red, green, blue, alpha)
     }
 
     /**
@@ -34,12 +35,11 @@ data class Color(
      * Implemented directly instead of delegating to `android.graphics.Color.argb` so the
      * domain layer stays free of Android framework calls and is unit-testable on the JVM.
      */
-    fun toAndroidColor(): Int {
-        return ((alpha and 0xFF) shl 24) or
+    fun toAndroidColor(): Int =
+        ((alpha and 0xFF) shl 24) or
             ((red and 0xFF) shl 16) or
             ((green and 0xFF) shl 8) or
             (blue and 0xFF)
-    }
 
     /**
      * Convert to HSV representation (hue 0-360, saturation 0-1, value 0-1)
@@ -49,45 +49,40 @@ data class Color(
     /**
      * Create a copy with modified alpha
      */
-    fun withAlpha(newAlpha: Int): Color {
-        return copy(alpha = newAlpha.coerceIn(0, 255))
-    }
+    fun withAlpha(newAlpha: Int): Color = copy(alpha = newAlpha.coerceIn(0, 255))
 
     /**
      * Create a copy with modified alpha (float 0.0 - 1.0)
      */
-    fun withAlpha(alphaFloat: Float): Color {
-        return withAlpha((alphaFloat * 255).toInt().coerceIn(0, 255))
-    }
+    fun withAlpha(alphaFloat: Float): Color = withAlpha((alphaFloat * 255).toInt().coerceIn(0, 255))
 
     /**
      * Blend this color with another using a factor (0.0 - 1.0)
      * @param other The color to blend with
      * @param factor Blend factor (0.0 = this color, 1.0 = other color)
      */
-    fun blendWith(other: Color, factor: Float): Color {
+    fun blendWith(
+        other: Color,
+        factor: Float,
+    ): Color {
         val clampedFactor = factor.coerceIn(0f, 1f)
         return Color(
             alpha = ((alpha * (1 - clampedFactor)) + (other.alpha * clampedFactor)).toInt(),
             red = ((red * (1 - clampedFactor)) + (other.red * clampedFactor)).toInt(),
             green = ((green * (1 - clampedFactor)) + (other.green * clampedFactor)).toInt(),
-            blue = ((blue * (1 - clampedFactor)) + (other.blue * clampedFactor)).toInt()
+            blue = ((blue * (1 - clampedFactor)) + (other.blue * clampedFactor)).toInt(),
         )
     }
 
     /**
      * Get the luminance of this color (0.0 - 1.0)
      */
-    fun getLuminance(): Float {
-        return (0.299f * red + 0.587f * green + 0.114f * blue) / 255f
-    }
+    fun getLuminance(): Float = (0.299f * red + 0.587f * green + 0.114f * blue) / 255f
 
     /**
      * Get a contrasting color (black or white) based on luminance
      */
-    fun getContrastingColor(): Color {
-        return if (getLuminance() > 0.5f) BLACK else WHITE
-    }
+    fun getContrastingColor(): Color = if (getLuminance() > 0.5f) BLACK else WHITE
 
     companion object {
         // Predefined colors
@@ -109,13 +104,18 @@ data class Color(
          * @param value Value/Brightness (0.0 - 1.0)
          * @param alpha Alpha (0-255)
          */
-        fun fromHSV(hue: Float, saturation: Float, value: Float, alpha: Int = 255): Color {
+        fun fromHSV(
+            hue: Float,
+            saturation: Float,
+            value: Float,
+            alpha: Int = 255,
+        ): Color {
             val rgb = hsvToRgb(hue, saturation, value)
             return Color(
                 alpha = alpha.coerceIn(0, 255),
                 red = (rgb shr 16) and 0xFF,
                 green = (rgb shr 8) and 0xFF,
-                blue = rgb and 0xFF
+                blue = rgb and 0xFF,
             )
         }
 
@@ -132,12 +132,13 @@ data class Color(
             val min = minOf(r, g, b)
             val delta = max - min
 
-            var hue = when {
-                delta == 0f -> 0f
-                max == r -> 60f * (((g - b) / delta) % 6f)
-                max == g -> 60f * (((b - r) / delta) + 2f)
-                else -> 60f * (((r - g) / delta) + 4f)
-            }
+            var hue =
+                when {
+                    delta == 0f -> 0f
+                    max == r -> 60f * (((g - b) / delta) % 6f)
+                    max == g -> 60f * (((b - r) / delta) + 2f)
+                    else -> 60f * (((r - g) / delta) + 4f)
+                }
             if (hue < 0f) hue += 360f
 
             val saturation = if (max == 0f) 0f else delta / max
@@ -147,7 +148,11 @@ data class Color(
         /**
          * Convert HSV to a packed, fully opaque ARGB int. Pure Kotlin so it works off-device.
          */
-        fun hsvToRgb(hue: Float, saturation: Float, value: Float): Int {
+        fun hsvToRgb(
+            hue: Float,
+            saturation: Float,
+            value: Float,
+        ): Int {
             val s = saturation.coerceIn(0f, 1f)
             val v = value.coerceIn(0f, 1f)
             val h = ((hue % 360f) + 360f) % 360f
@@ -156,14 +161,15 @@ data class Color(
             val hp = h / 60f
             val x = c * (1f - kotlin.math.abs((hp % 2f) - 1f))
 
-            val (r1, g1, b1) = when {
-                hp < 1f -> Triple(c, x, 0f)
-                hp < 2f -> Triple(x, c, 0f)
-                hp < 3f -> Triple(0f, c, x)
-                hp < 4f -> Triple(0f, x, c)
-                hp < 5f -> Triple(x, 0f, c)
-                else -> Triple(c, 0f, x)
-            }
+            val (r1, g1, b1) =
+                when {
+                    hp < 1f -> Triple(c, x, 0f)
+                    hp < 2f -> Triple(x, c, 0f)
+                    hp < 3f -> Triple(0f, c, x)
+                    hp < 4f -> Triple(0f, x, c)
+                    hp < 5f -> Triple(x, 0f, c)
+                    else -> Triple(c, 0f, x)
+                }
 
             val m = v - c
             val r = ((r1 + m) * 255f).toInt().coerceIn(0, 255)
@@ -176,14 +182,18 @@ data class Color(
         /**
          * Create a color from RGB values (0-255 each)
          */
-        fun fromRGB(red: Int, green: Int, blue: Int, alpha: Int = 255): Color {
-            return Color(
+        fun fromRGB(
+            red: Int,
+            green: Int,
+            blue: Int,
+            alpha: Int = 255,
+        ): Color =
+            Color(
                 alpha = alpha,
                 red = red.coerceIn(0, 255),
                 green = green.coerceIn(0, 255),
-                blue = blue.coerceIn(0, 255)
+                blue = blue.coerceIn(0, 255),
             )
-        }
 
         /**
          * Parse a hex color string (#RRGGBB or #AARRGGBB)

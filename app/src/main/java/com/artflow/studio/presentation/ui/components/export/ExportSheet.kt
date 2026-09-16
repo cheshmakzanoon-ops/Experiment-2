@@ -5,6 +5,7 @@ package com.artflow.studio.presentation.ui.components.export
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -17,7 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.export.ExportArea
@@ -52,7 +52,7 @@ fun ExportSheet(
     onSaveToGallery: (ExportResult) -> Unit,
     onView: (ExportResult) -> Unit,
     onDismissResult: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     var format by remember { mutableStateOf(availableFormats.firstOrNull() ?: ExportFormat.PNG) }
     var area by remember { mutableStateOf(ExportArea.FULL_CANVAS) }
@@ -73,11 +73,12 @@ fun ExportSheet(
     val safe = CanvasOperations.isSizeSafe(targetWidth, targetHeight)
 
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("Export", style = MaterialTheme.typography.titleMedium)
 
@@ -89,9 +90,10 @@ fun ExportSheet(
                     bitmap = image,
                     contentDescription = "Export preview",
                     contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 220.dp)
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 220.dp),
                 )
             }
         }
@@ -105,7 +107,7 @@ fun ExportSheet(
                         format = entry
                         if (entry == ExportFormat.JPEG) flatten = true
                     },
-                    label = { Text(entry.displayName, style = MaterialTheme.typography.labelSmall) }
+                    label = { Text(entry.displayName, style = MaterialTheme.typography.labelSmall) },
                 )
             }
         }
@@ -113,7 +115,7 @@ fun ExportSheet(
             Text(
                 "This format needs more than one frame. Add frames in the animation panel first.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error
+                color = MaterialTheme.colorScheme.error,
             )
         }
 
@@ -125,7 +127,7 @@ fun ExportSheet(
                     selected = area == entry,
                     enabled = enabled,
                     onClick = { area = entry },
-                    label = { Text(entry.displayName, style = MaterialTheme.typography.labelSmall) }
+                    label = { Text(entry.displayName, style = MaterialTheme.typography.labelSmall) },
                 )
             }
         }
@@ -135,7 +137,7 @@ fun ExportSheet(
             value = scale,
             range = 0.1f..4f,
             onChange = { scale = it },
-            valueLabel = "${(scale * 100).toInt()}%"
+            valueLabel = "${(scale * 100).toInt()}%",
         )
         Text(
             if (safe) {
@@ -144,7 +146,7 @@ fun ExportSheet(
                 CanvasOperations.sizeWarning(targetWidth, targetHeight) ?: "This size is too large"
             },
             style = MaterialTheme.typography.bodySmall,
-            color = if (safe) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error
+            color = if (safe) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
         )
 
         if (format == ExportFormat.JPEG || format == ExportFormat.WEBP) {
@@ -153,7 +155,7 @@ fun ExportSheet(
                 value = quality.toFloat(),
                 range = 1f..100f,
                 onChange = { quality = it.toInt() },
-                valueLabel = quality.toString()
+                valueLabel = quality.toString(),
             )
         }
 
@@ -164,7 +166,7 @@ fun ExportSheet(
                     FilterChip(
                         selected = pdfPage == page,
                         onClick = { pdfPage = page },
-                        label = { Text(page.displayName, style = MaterialTheme.typography.labelSmall) }
+                        label = { Text(page.displayName, style = MaterialTheme.typography.labelSmall) },
                     )
                 }
             }
@@ -173,7 +175,7 @@ fun ExportSheet(
                 value = dpi.toFloat(),
                 range = 36f..600f,
                 onChange = { dpi = it.toInt() },
-                valueLabel = dpi.toString()
+                valueLabel = dpi.toString(),
             )
         }
 
@@ -197,7 +199,7 @@ fun ExportSheet(
                     value = videoBitrate / 1_000_000f,
                     range = 1f..30f,
                     onChange = { videoBitrate = (it * 1_000_000).toInt() },
-                    valueLabel = "${(videoBitrate / 1_000_000f).toInt()}"
+                    valueLabel = "${(videoBitrate / 1_000_000f).toInt()}",
                 )
             }
         }
@@ -221,7 +223,7 @@ fun ExportSheet(
                 FilterChip(
                     selected = fitMode == mode,
                     onClick = { fitMode = mode },
-                    label = { Text(mode.displayName, style = MaterialTheme.typography.labelSmall) }
+                    label = { Text(mode.displayName, style = MaterialTheme.typography.labelSmall) },
                 )
             }
         }
@@ -232,7 +234,7 @@ fun ExportSheet(
             label = { Text("File name (optional)") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
         )
 
         Text("Presets", style = MaterialTheme.typography.labelMedium)
@@ -245,7 +247,7 @@ fun ExportSheet(
                         quality = preset.options.quality
                         flat(preset)?.let { flatten = it }
                     },
-                    label = { Text(preset.name, style = MaterialTheme.typography.labelSmall) }
+                    label = { Text(preset.name, style = MaterialTheme.typography.labelSmall) },
                 )
             }
         }
@@ -267,12 +269,12 @@ fun ExportSheet(
                         gifLoop = loopGif,
                         videoBitrate = videoBitrate,
                         pdfPageSize = pdfPage,
-                        psdUseRle = psdRle
-                    )
+                        psdUseRle = psdRle,
+                    ),
                 )
             },
             enabled = exportState !is ExportUiState.Running && safe && (!format.requiresAnimation || frameCount > 1),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
         ) {
             if (exportState is ExportUiState.Running) {
                 CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
@@ -296,7 +298,7 @@ fun ExportSheet(
                         Text(
                             "${result.width}×${result.height} · ${result.sizeLabel}" +
                                 if (result.frameCount > 1) " · ${result.frameCount} frames" else "",
-                            style = MaterialTheme.typography.bodySmall
+                            style = MaterialTheme.typography.bodySmall,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(onClick = { onShare(result) }) {
@@ -315,21 +317,23 @@ fun ExportSheet(
                     }
                 }
             }
-            is ExportUiState.Failed -> Text(
-                text = exportState.message,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall
-            )
+            is ExportUiState.Failed ->
+                Text(
+                    text = exportState.message,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                )
             else -> Unit
         }
     }
 }
 
 /** Presets only carry the fields they care about; returns null when the preset says nothing. */
-private fun flat(preset: ExportPreset): Boolean? = when (preset.options.format) {
-    ExportFormat.PNG, ExportFormat.PSD -> null
-    else -> preset.options.flattenOntoBackground
-}
+private fun flat(preset: ExportPreset): Boolean? =
+    when (preset.options.format) {
+        ExportFormat.PNG, ExportFormat.PSD -> null
+        else -> preset.options.flattenOntoBackground
+    }
 
 @Composable
 private fun LabeledSlider(
@@ -337,25 +341,25 @@ private fun LabeledSlider(
     value: Float,
     range: ClosedFloatingPointRange<Float>,
     onChange: (Float) -> Unit,
-    valueLabel: String = value.toInt().toString()
+    valueLabel: String = value.toInt().toString(),
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(label, style = MaterialTheme.typography.labelMedium)
             Text(
                 valueLabel,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Slider(
             value = value.coerceIn(range.start, range.endInclusive),
             onValueChange = onChange,
             valueRange = range,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 }

@@ -22,14 +22,15 @@ import kotlin.math.sqrt
  * A freeze mask protects areas from further distortion and can be thawed again.
  */
 object LiquifyTool {
-
-    enum class Mode(val displayName: String) {
+    enum class Mode(
+        val displayName: String,
+    ) {
         PUSH("Push"),
         TWIRL_CLOCKWISE("Twirl Right"),
         TWIRL_COUNTER_CLOCKWISE("Twirl Left"),
         PINCH("Pinch"),
         BLOAT("Bloat"),
-        RECONSTRUCT("Reconstruct")
+        RECONSTRUCT("Reconstruct"),
     }
 
     /**
@@ -37,7 +38,10 @@ object LiquifyTool {
      * allocation, and `touched` marks which pixels actually moved (the resample pass is skipped for
      * everything else).
      */
-    class DisplacementMap(val width: Int, val height: Int) {
+    class DisplacementMap(
+        val width: Int,
+        val height: Int,
+    ) {
         val offsetX = FloatArray(width * height)
         val offsetY = FloatArray(width * height)
         private val touched = BooleanArray(width * height)
@@ -46,7 +50,12 @@ object LiquifyTool {
         var dirtyBounds: IntBounds? = null
             private set
 
-        fun add(x: Int, y: Int, dx: Float, dy: Float) {
+        fun add(
+            x: Int,
+            y: Int,
+            dx: Float,
+            dy: Float,
+        ) {
             if (x < 0 || y < 0 || x >= width || y >= height) return
             val index = y * width + x
             offsetX[index] += dx
@@ -77,10 +86,11 @@ object LiquifyTool {
                         out.pixels[index] = source.pixels[index]
                         continue
                     }
-                    out.pixels[index] = source.sampleBilinear(
-                        x + 0.5f + offsetX[index],
-                        y + 0.5f + offsetY[index]
-                    )
+                    out.pixels[index] =
+                        source.sampleBilinear(
+                            x + 0.5f + offsetX[index],
+                            y + 0.5f + offsetY[index],
+                        )
                 }
             }
             return out
@@ -102,7 +112,7 @@ object LiquifyTool {
         /** Optional freeze mask: `true` entries are protected from distortion. */
         val freezeMask: BooleanArray? = null,
         /** Optional selection restricting the distortion. */
-        val mask: SelectionMask? = null
+        val mask: SelectionMask? = null,
     ) {
         val radius: Float get() = (size / 2f).coerceAtLeast(1f)
     }
@@ -115,7 +125,7 @@ object LiquifyTool {
         private val startX: Float,
         private val startY: Float,
         val settings: Settings,
-        val map: DisplacementMap
+        val map: DisplacementMap,
     ) {
         private var lastX = startX
         private var lastY = startY
@@ -126,7 +136,10 @@ object LiquifyTool {
          * Extends the gesture to ([x], [y]).
          * @return the canvas region affected by this sample, or null when the pointer did not move.
          */
-        fun dragTo(x: Float, y: Float): IntBounds? {
+        fun dragTo(
+            x: Float,
+            y: Float,
+        ): IntBounds? {
             val dx = x - lastX
             val dy = y - lastY
             val distance = sqrt(dx * dx + dy * dy)
@@ -148,7 +161,11 @@ object LiquifyTool {
             return affectedBounds(lastX, lastY, settings.radius, map.width, map.height)
         }
 
-        private fun applyPush(dxTotal: Float, dyTotal: Float, distance: Float) {
+        private fun applyPush(
+            dxTotal: Float,
+            dyTotal: Float,
+            distance: Float,
+        ) {
             val radius = settings.radius
             // Spacing between samples in pixels; smaller spacing = denser, stronger distortion.
             val spacing = max(1f, radius * (0.5f - settings.density.coerceIn(0f, 1f) * 0.4f))
@@ -166,7 +183,10 @@ object LiquifyTool {
             }
         }
 
-        private fun applyTwirl(distance: Float, clockwise: Boolean) {
+        private fun applyTwirl(
+            distance: Float,
+            clockwise: Boolean,
+        ) {
             val radius = settings.radius
             val anglePerSample = (distance / radius).coerceAtMost(0.5f) * 45f
             val direction = if (clockwise) 1f else -1f
@@ -177,9 +197,10 @@ object LiquifyTool {
                 if (pixelDistance < 0.5f) {
                     map.add(pixelX, pixelY, 0f, 0f)
                 } else {
-                    val angle = Math.toRadians(
-                        (anglePerSample * direction * smoothstep(falloff) * effectiveStrength()).toDouble()
-                    )
+                    val angle =
+                        Math.toRadians(
+                            (anglePerSample * direction * smoothstep(falloff) * effectiveStrength()).toDouble(),
+                        )
                     val cosA = kotlin.math.cos(angle).toFloat()
                     val sinA = kotlin.math.sin(angle).toFloat()
                     val rotatedX = offsetX * cosA - offsetY * sinA
@@ -189,7 +210,10 @@ object LiquifyTool {
             }
         }
 
-        private fun applyRadialScale(distance: Float, pinch: Boolean) {
+        private fun applyRadialScale(
+            distance: Float,
+            pinch: Boolean,
+        ) {
             val radius = settings.radius
             val base = (distance / radius).coerceAtMost(1f) * if (pinch) -0.5f else 0.5f
             forEachPixelInBrush(lastX, lastY, radius) { pixelX, pixelY, falloff ->
@@ -205,7 +229,7 @@ object LiquifyTool {
             centerX: Float,
             centerY: Float,
             radius: Float,
-            action: (pixelX: Int, pixelY: Int, falloff: Float) -> Unit
+            action: (pixelX: Int, pixelY: Int, falloff: Float) -> Unit,
         ) {
             val x0 = max(0, floor(centerX - radius).toInt())
             val x1 = min(map.width - 1, ceil(centerX + radius).toInt())
@@ -227,8 +251,7 @@ object LiquifyTool {
             }
         }
 
-        private fun effectiveStrength(): Float =
-            settings.strength.coerceIn(0f, 1f) * settings.pressure.coerceIn(0f, 1f)
+        private fun effectiveStrength(): Float = settings.strength.coerceIn(0f, 1f) * settings.pressure.coerceIn(0f, 1f)
 
         private fun smoothstep(falloff: Float): Float {
             val t = falloff.coerceIn(0f, 1f)
@@ -241,11 +264,14 @@ object LiquifyTool {
         y: Float,
         settings: Settings,
         width: Int,
-        height: Int
+        height: Int,
     ): Session = Session(x, y, settings, DisplacementMap(width, height))
 
     /** Applies the accumulated displacement to the layer in place. */
-    fun commit(target: PixelBuffer, session: Session): IntBounds? {
+    fun commit(
+        target: PixelBuffer,
+        session: Session,
+    ): IntBounds? {
         if (session.map.isEmpty()) return null
         val warped = session.map.apply(target)
         System.arraycopy(warped.pixels, 0, target.pixels, 0, target.pixels.size)
@@ -263,7 +289,7 @@ object LiquifyTool {
         radius: Float,
         centerX: Float,
         centerY: Float,
-        mask: SelectionMask? = null
+        mask: SelectionMask? = null,
     ) {
         val strength = amount.coerceIn(0f, 1f)
         if (strength <= 0f) return
@@ -284,11 +310,12 @@ object LiquifyTool {
                 val coverage = mask?.alphaAt(index) ?: 1f
                 val effective = falloff * falloff * strength * coverage
                 if (effective <= 0f) continue
-                target.pixels[index] = ImageFilters.lerpArgb(
-                    target.pixels[index],
-                    original.pixels[index],
-                    effective
-                )
+                target.pixels[index] =
+                    ImageFilters.lerpArgb(
+                        target.pixels[index],
+                        original.pixels[index],
+                        effective,
+                    )
             }
         }
     }
@@ -301,7 +328,7 @@ object LiquifyTool {
         centerX: Float,
         centerY: Float,
         radius: Float,
-        frozen: Boolean
+        frozen: Boolean,
     ) {
         require(freezeMask.size == width * height) { "Freeze mask size must match the canvas" }
         val x0 = max(0, floor(centerX - radius).toInt())
@@ -340,7 +367,7 @@ object LiquifyTool {
         deltaX: Float,
         deltaY: Float,
         size: Float,
-        strength: Float
+        strength: Float,
     ): IntBounds? {
         Stamping.displace(
             target = target,
@@ -349,7 +376,7 @@ object LiquifyTool {
             radius = (size / 2f).coerceAtLeast(1f),
             deltaX = deltaX,
             deltaY = deltaY,
-            strength = strength.coerceIn(0f, 1f)
+            strength = strength.coerceIn(0f, 1f),
         )
         return affectedBounds(x, y, size / 2f, target.width, target.height)
     }
@@ -360,11 +387,17 @@ object LiquifyTool {
         centerY: Float,
         radius: Float,
         width: Int,
-        height: Int
+        height: Int,
     ): IntBounds? {
-        val bounds = IntBounds.aroundRectangle(
-            centerX - radius, centerY - radius, centerX + radius, centerY + radius, padding = 2
-        ).clamped(width, height)
+        val bounds =
+            IntBounds
+                .aroundRectangle(
+                    centerX - radius,
+                    centerY - radius,
+                    centerX + radius,
+                    centerY + radius,
+                    padding = 2,
+                ).clamped(width, height)
         return if (bounds.isEmpty) null else bounds
     }
 }

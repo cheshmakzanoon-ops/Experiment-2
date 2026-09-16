@@ -9,15 +9,14 @@ import timber.log.Timber
  */
 @HiltAndroidApp
 class ArtFlowApplication : Application() {
-
     override fun onCreate() {
         super.onCreate()
-        
+
         // Initialize Timber logging
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
         }
-        
+
         Timber.d("ArtFlow Application initialized")
     }
 }

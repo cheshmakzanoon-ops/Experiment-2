@@ -1,3 +1,6 @@
+rootProject.name = "ArtFlow"
+
+// Static-analysis plugin markers are resolved from the Gradle Plugin Portal.
 pluginManagement {
     repositories {
         google()
@@ -14,5 +17,4 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "ArtFlow"
 include(":app")

@@ -21,7 +21,7 @@ data class Palette(
     val isFavorite: Boolean = false,
     val createdAt: Long = 0L,
     /** Where the palette came from, so the UI can label imported ones. */
-    val source: String = "ArtFlow"
+    val source: String = "ArtFlow",
 ) {
     val size: Int get() = colors.size
 
@@ -29,7 +29,10 @@ data class Palette(
     fun colorAt(index: Int): Int = if (colors.isEmpty()) 0 else colors[index.mod(colors.size)]
 
     /** A palette with a colour appended, ignoring colours that are already present. */
-    fun withColor(color: Int, threshold: Float = 6f): Palette {
+    fun withColor(
+        color: Int,
+        threshold: Float = 6f,
+    ): Palette {
         if (colors.any { ColorHarmony.distance(it, color) < threshold }) return this
         return copy(colors = colors + color)
     }
@@ -46,90 +49,138 @@ data class Palette(
 
 /** Bundled starter palettes so the app is useful before the artist saves anything. */
 object PaletteLibrary {
-
-    val BUILT_IN: List<Palette> = listOf(
-        Palette(
-            name = "Grayscale 9",
-            colors = listOf(
-                0xFF000000.toInt(), 0xFF333333.toInt(), 0xFF555555.toInt(),
-                0xFF777777.toInt(), 0xFF999999.toInt(), 0xFFBBBBBB.toInt(),
-                0xFFDDDDDD.toInt(), 0xFFEEEEEE.toInt(), 0xFFFFFFFF.toInt()
+    val BUILT_IN: List<Palette> =
+        listOf(
+            Palette(
+                name = "Grayscale 9",
+                colors =
+                    listOf(
+                        0xFF000000.toInt(),
+                        0xFF333333.toInt(),
+                        0xFF555555.toInt(),
+                        0xFF777777.toInt(),
+                        0xFF999999.toInt(),
+                        0xFFBBBBBB.toInt(),
+                        0xFFDDDDDD.toInt(),
+                        0xFFEEEEEE.toInt(),
+                        0xFFFFFFFF.toInt(),
+                    ),
+                category = "Essentials",
+                source = "ArtFlow",
             ),
-            category = "Essentials",
-            source = "ArtFlow"
-        ),
-        Palette(
-            name = "Skin Tones",
-            colors = listOf(
-                0xFFFFE0BD.toInt(), 0xFFF1C27D.toInt(), 0xFFE0AC69.toInt(),
-                0xFFC68642.toInt(), 0xFF8D5524.toInt(), 0xFF5C3317.toInt(),
-                0xFFFFDBAC.toInt(), 0xFFD9A066.toInt(), 0xFFA9714B.toInt(),
-                0xFF7B4B2A.toInt()
+            Palette(
+                name = "Skin Tones",
+                colors =
+                    listOf(
+                        0xFFFFE0BD.toInt(),
+                        0xFFF1C27D.toInt(),
+                        0xFFE0AC69.toInt(),
+                        0xFFC68642.toInt(),
+                        0xFF8D5524.toInt(),
+                        0xFF5C3317.toInt(),
+                        0xFFFFDBAC.toInt(),
+                        0xFFD9A066.toInt(),
+                        0xFFA9714B.toInt(),
+                        0xFF7B4B2A.toInt(),
+                    ),
+                category = "Portrait",
+                source = "ArtFlow",
             ),
-            category = "Portrait",
-            source = "ArtFlow"
-        ),
-        Palette(
-            name = "Landscape Greens",
-            colors = listOf(
-                0xFF0B3D0B.toInt(), 0xFF1E5631.toInt(), 0xFF4C9A2A.toInt(),
-                0xFF77B255.toInt(), 0xFFA8C97F.toInt(), 0xFF8B6F47.toInt(),
-                0xFF5C4033.toInt(), 0xFF2E8B57.toInt()
+            Palette(
+                name = "Landscape Greens",
+                colors =
+                    listOf(
+                        0xFF0B3D0B.toInt(),
+                        0xFF1E5631.toInt(),
+                        0xFF4C9A2A.toInt(),
+                        0xFF77B255.toInt(),
+                        0xFFA8C97F.toInt(),
+                        0xFF8B6F47.toInt(),
+                        0xFF5C4033.toInt(),
+                        0xFF2E8B57.toInt(),
+                    ),
+                category = "Landscape",
+                source = "ArtFlow",
             ),
-            category = "Landscape",
-            source = "ArtFlow"
-        ),
-        Palette(
-            name = "Sunset Sky",
-            colors = listOf(
-                0xFF2B1B4B.toInt(), 0xFF5C3A6E.toInt(), 0xFFB23A48.toInt(),
-                0xFFE06C55.toInt(), 0xFFF79D65.toInt(), 0xFFFFD6A5.toInt(),
-                0xFFFFF3C4.toInt()
+            Palette(
+                name = "Sunset Sky",
+                colors =
+                    listOf(
+                        0xFF2B1B4B.toInt(),
+                        0xFF5C3A6E.toInt(),
+                        0xFFB23A48.toInt(),
+                        0xFFE06C55.toInt(),
+                        0xFFF79D65.toInt(),
+                        0xFFFFD6A5.toInt(),
+                        0xFFFFF3C4.toInt(),
+                    ),
+                category = "Landscape",
+                source = "ArtFlow",
             ),
-            category = "Landscape",
-            source = "ArtFlow"
-        ),
-        Palette(
-            name = "Ocean Deep",
-            colors = listOf(
-                0xFF001219.toInt(), 0xFF005F73.toInt(), 0xFF0A9396.toInt(),
-                0xFF94D2BD.toInt(), 0xFFE9D8A6.toInt(), 0xFFEE9B00.toInt(),
-                0xFFCA6702.toInt(), 0xFF9B2226.toInt()
+            Palette(
+                name = "Ocean Deep",
+                colors =
+                    listOf(
+                        0xFF001219.toInt(),
+                        0xFF005F73.toInt(),
+                        0xFF0A9396.toInt(),
+                        0xFF94D2BD.toInt(),
+                        0xFFE9D8A6.toInt(),
+                        0xFFEE9B00.toInt(),
+                        0xFFCA6702.toInt(),
+                        0xFF9B2226.toInt(),
+                    ),
+                category = "Landscape",
+                source = "ArtFlow",
             ),
-            category = "Landscape",
-            source = "ArtFlow"
-        ),
-        Palette(
-            name = "Ink & Marker",
-            colors = listOf(
-                0xFF1A1A1A.toInt(), 0xFFEF476F.toInt(), 0xFFFFD166.toInt(),
-                0xFF06D6A0.toInt(), 0xFF118AB2.toInt(), 0xFF073B4C.toInt(),
-                0xFF8338EC.toInt()
+            Palette(
+                name = "Ink & Marker",
+                colors =
+                    listOf(
+                        0xFF1A1A1A.toInt(),
+                        0xFFEF476F.toInt(),
+                        0xFFFFD166.toInt(),
+                        0xFF06D6A0.toInt(),
+                        0xFF118AB2.toInt(),
+                        0xFF073B4C.toInt(),
+                        0xFF8338EC.toInt(),
+                    ),
+                category = "Illustration",
+                source = "ArtFlow",
             ),
-            category = "Illustration",
-            source = "ArtFlow"
-        ),
-        Palette(
-            name = "Pastel Set",
-            colors = listOf(
-                0xFFFFADAD.toInt(), 0xFFFFD6A5.toInt(), 0xFFFDFFB6.toInt(),
-                0xFFCAFFBF.toInt(), 0xFF9BF6FF.toInt(), 0xFFA0C4FF.toInt(),
-                0xFFBDB2FF.toInt(), 0xFFFFC6FF.toInt()
+            Palette(
+                name = "Pastel Set",
+                colors =
+                    listOf(
+                        0xFFFFADAD.toInt(),
+                        0xFFFFD6A5.toInt(),
+                        0xFFFDFFB6.toInt(),
+                        0xFFCAFFBF.toInt(),
+                        0xFF9BF6FF.toInt(),
+                        0xFFA0C4FF.toInt(),
+                        0xFFBDB2FF.toInt(),
+                        0xFFFFC6FF.toInt(),
+                    ),
+                category = "Illustration",
+                source = "ArtFlow",
             ),
-            category = "Illustration",
-            source = "ArtFlow"
-        ),
-        Palette(
-            name = "Comic Palette",
-            colors = listOf(
-                0xFF000000.toInt(), 0xFFFFFFFF.toInt(), 0xFFFF0000.toInt(),
-                0xFF00AAFF.toInt(), 0xFFFFD800.toInt(), 0xFF00C853.toInt(),
-                0xFFFF6D00.toInt(), 0xFF8E24AA.toInt()
+            Palette(
+                name = "Comic Palette",
+                colors =
+                    listOf(
+                        0xFF000000.toInt(),
+                        0xFFFFFFFF.toInt(),
+                        0xFFFF0000.toInt(),
+                        0xFF00AAFF.toInt(),
+                        0xFFFFD800.toInt(),
+                        0xFF00C853.toInt(),
+                        0xFFFF6D00.toInt(),
+                        0xFF8E24AA.toInt(),
+                    ),
+                category = "Illustration",
+                source = "ArtFlow",
             ),
-            category = "Illustration",
-            source = "ArtFlow"
         )
-    )
 
     fun byCategory(): Map<String, List<Palette>> = BUILT_IN.groupBy { it.category }
 
@@ -146,30 +197,34 @@ object PaletteLibrary {
  * - **JSON** (ArtFlow's own format, for backup and sharing between devices)
  */
 object PaletteCodec {
-
-    private val json = Json {
-        prettyPrint = true
-        ignoreUnknownKeys = true
-    }
+    private val json =
+        Json {
+            prettyPrint = true
+            ignoreUnknownKeys = true
+        }
 
     // ---------------------------------------------------------------------------------------
     // GPL
     // ---------------------------------------------------------------------------------------
 
-    fun exportGpl(palette: Palette): String = buildString {
-        appendLine("GIMP Palette")
-        appendLine("Name: ${palette.name}")
-        appendLine("Columns: ${palette.colors.size.coerceAtMost(16)}")
-        appendLine("# Exported by ArtFlow")
-        palette.colors.forEach { color ->
-            val r = (color shr 16) and 0xFF
-            val g = (color shr 8) and 0xFF
-            val b = color and 0xFF
-            appendLine("%3d %3d %3d\t${ColorHarmony.nameOf(color)}".format(r, g, b))
+    fun exportGpl(palette: Palette): String =
+        buildString {
+            appendLine("GIMP Palette")
+            appendLine("Name: ${palette.name}")
+            appendLine("Columns: ${palette.colors.size.coerceAtMost(16)}")
+            appendLine("# Exported by ArtFlow")
+            palette.colors.forEach { color ->
+                val r = (color shr 16) and 0xFF
+                val g = (color shr 8) and 0xFF
+                val b = color and 0xFF
+                appendLine("%3d %3d %3d\t${ColorHarmony.nameOf(color)}".format(r, g, b))
+            }
         }
-    }
 
-    fun importGpl(text: String, fallbackName: String = "Imported Palette"): Palette? {
+    fun importGpl(
+        text: String,
+        fallbackName: String = "Imported Palette",
+    ): Palette? {
         val lines = text.split('\n')
         if (lines.isEmpty()) return null
         var name = fallbackName
@@ -205,18 +260,25 @@ object PaletteCodec {
     // HEX / text
     // ---------------------------------------------------------------------------------------
 
-    fun exportHex(palette: Palette): String =
-        palette.colors.joinToString("\n") { ColorHarmony.toHex(it) }
+    fun exportHex(palette: Palette): String = palette.colors.joinToString("\n") { ColorHarmony.toHex(it) }
 
-    fun importHex(text: String, name: String = "Imported Palette"): Palette? {
-        val colors = text.split(Regex("[,\\s]+"))
-            .mapNotNull { ColorHarmony.parseHex(it) }
+    fun importHex(
+        text: String,
+        name: String = "Imported Palette",
+    ): Palette? {
+        val colors =
+            text
+                .split(Regex("[,\\s]+"))
+                .mapNotNull { ColorHarmony.parseHex(it) }
         if (colors.isEmpty()) return null
         return Palette(name = name, colors = colors, source = "Hex import")
     }
 
     /** Accepts anything the user might paste: CSS, GPL, hex lists or a JSON palette. */
-    fun importAuto(text: String, name: String = "Imported Palette"): Palette? {
+    fun importAuto(
+        text: String,
+        name: String = "Imported Palette",
+    ): Palette? {
         val trimmed = text.trim()
         if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
             importJson(trimmed)?.let { return it.renamed(name) }
@@ -237,32 +299,35 @@ object PaletteCodec {
     fun exportJson(palettes: List<Palette>): String =
         json.encodeToString(kotlinx.serialization.builtins.ListSerializer(Palette.serializer()), palettes)
 
-    fun importJson(text: String): Palette? = try {
-        if (text.trim().startsWith("[")) {
-            val list = json.decodeFromString(
-                kotlinx.serialization.builtins.ListSerializer(Palette.serializer()),
-                text
-            )
-            list.firstOrNull()
-        } else {
-            json.decodeFromString(Palette.serializer(), text)
+    fun importJson(text: String): Palette? =
+        try {
+            if (text.trim().startsWith("[")) {
+                val list =
+                    json.decodeFromString(
+                        kotlinx.serialization.builtins.ListSerializer(Palette.serializer()),
+                        text,
+                    )
+                list.firstOrNull()
+            } else {
+                json.decodeFromString(Palette.serializer(), text)
+            }
+        } catch (e: Exception) {
+            null
         }
-    } catch (e: Exception) {
-        null
-    }
 
-    fun importJsonAll(text: String): List<Palette> = try {
-        if (text.trim().startsWith("[")) {
-            json.decodeFromString(
-                kotlinx.serialization.builtins.ListSerializer(Palette.serializer()),
-                text
-            )
-        } else {
-            listOf(json.decodeFromString(Palette.serializer(), text))
+    fun importJsonAll(text: String): List<Palette> =
+        try {
+            if (text.trim().startsWith("[")) {
+                json.decodeFromString(
+                    kotlinx.serialization.builtins.ListSerializer(Palette.serializer()),
+                    text,
+                )
+            } else {
+                listOf(json.decodeFromString(Palette.serializer(), text))
+            }
+        } catch (e: Exception) {
+            emptyList()
         }
-    } catch (e: Exception) {
-        emptyList()
-    }
 
     // ---------------------------------------------------------------------------------------
     // ASE (Adobe Swatch Exchange)
@@ -309,7 +374,10 @@ object PaletteCodec {
         return final
     }
 
-    fun importAse(bytes: ByteArray, fallbackName: String = "Imported Swatch"): Palette? {
+    fun importAse(
+        bytes: ByteArray,
+        fallbackName: String = "Imported Swatch",
+    ): Palette? {
         if (bytes.size < 12) return null
         val header = String(bytes, 0, 4, Charsets.US_ASCII)
         if (header != ASE_HEADER) return null
@@ -339,7 +407,7 @@ object PaletteCodec {
         return Palette(
             name = groupName?.trim()?.ifEmpty { fallbackName } ?: fallbackName,
             colors = colors,
-            source = "ASE import"
+            source = "ASE import",
         )
     }
 
@@ -380,13 +448,16 @@ object PaletteCodec {
     }
 
     /** CIE L*a*b* (D65) to sRGB, used so LAB swatches survive an ASE import. */
-    fun labToArgb(l: Float, a: Float, b: Float): Int {
+    fun labToArgb(
+        l: Float,
+        a: Float,
+        b: Float,
+    ): Int {
         val fy = (l + 16f) / 116f
         val fx = fy + a / 500f
         val fz = fy - b / 200f
 
-        fun pivot(t: Float): Float =
-            if (t > 0.206897f) t * t * t else (t - 16f / 116f) / 7.787f
+        fun pivot(t: Float): Float = if (t > 0.206897f) t * t * t else (t - 16f / 116f) / 7.787f
 
         val x = 0.95047f * pivot(fx)
         val y = 1.00000f * pivot(fy)
@@ -398,8 +469,11 @@ object PaletteCodec {
         var bl = 0.0556434f * x - 0.2040259f * y + 1.0572252f * z
 
         fun gamma(channel: Float): Float =
-            if (channel <= 0.0031308f) 12.92f * channel
-            else 1.055f * Math.pow(channel.toDouble(), 1.0 / 2.4).toFloat() - 0.055f
+            if (channel <= 0.0031308f) {
+                12.92f * channel
+            } else {
+                1.055f * Math.pow(channel.toDouble(), 1.0 / 2.4).toFloat() - 0.055f
+            }
 
         r = gamma(r).coerceIn(0f, 1f)
         g = gamma(g).coerceIn(0f, 1f)
@@ -408,7 +482,11 @@ object PaletteCodec {
     }
 
     /** Builds a palette from an image by picking its most representative colours. */
-    fun paletteFromImage(pixels: IntArray, maxColors: Int = 16, name: String = "From Image"): Palette {
+    fun paletteFromImage(
+        pixels: IntArray,
+        maxColors: Int = 16,
+        name: String = "From Image",
+    ): Palette {
         // Uniform histogram over a 4-bit-per-channel quantised colour cube, then pick the most
         // frequent buckets. Simple, fast and good enough for a palette picker.
         val buckets = HashMap<Int, Int>()
@@ -421,36 +499,47 @@ object PaletteCodec {
             buckets[key] = (buckets[key] ?: 0) + 1
         }
 
-        val colors = buckets.entries
-            .sortedByDescending { it.value }
-            .take(maxColors)
-            .map { entry ->
-                val r = ((entry.key shr 8) and 0xF) * 17
-                val g = ((entry.key shr 4) and 0xF) * 17
-                val b = (entry.key and 0xF) * 17
-                ColorHarmony.fromRgb(r, g, b)
-            }
+        val colors =
+            buckets.entries
+                .sortedByDescending { it.value }
+                .take(maxColors)
+                .map { entry ->
+                    val r = ((entry.key shr 8) and 0xF) * 17
+                    val g = ((entry.key shr 4) and 0xF) * 17
+                    val b = (entry.key and 0xF) * 17
+                    ColorHarmony.fromRgb(r, g, b)
+                }
         return Palette(name = name, colors = colors, source = "Image extract")
     }
 
     /** Suggests a file extension for a given format. */
-    enum class Format(val extension: String, val displayName: String) {
+    enum class Format(
+        val extension: String,
+        val displayName: String,
+    ) {
         GPL("gpl", "GIMP palette"),
         ASE("ase", "Adobe swatch"),
         HEX("txt", "Hex list"),
-        JSON("json", "ArtFlow palette")
+        JSON("json", "ArtFlow palette"),
     }
 
     /** Encodes a palette in the requested format. */
-    fun encode(palette: Palette, format: Format): ByteArray = when (format) {
-        Format.GPL -> exportGpl(palette).toByteArray()
-        Format.ASE -> exportAse(palette)
-        Format.HEX -> exportHex(palette).toByteArray()
-        Format.JSON -> exportJson(palette).toByteArray()
-    }
+    fun encode(
+        palette: Palette,
+        format: Format,
+    ): ByteArray =
+        when (format) {
+            Format.GPL -> exportGpl(palette).toByteArray()
+            Format.ASE -> exportAse(palette)
+            Format.HEX -> exportHex(palette).toByteArray()
+            Format.JSON -> exportJson(palette).toByteArray()
+        }
 
     /** Decodes a palette from raw bytes, sniffing the format. */
-    fun decode(bytes: ByteArray, fallbackName: String = "Imported Palette"): Palette? {
+    fun decode(
+        bytes: ByteArray,
+        fallbackName: String = "Imported Palette",
+    ): Palette? {
         if (bytes.size >= 4 && String(bytes, 0, 4, Charsets.US_ASCII) == ASE_HEADER) {
             return importAse(bytes, fallbackName)
         }
@@ -471,7 +560,10 @@ object PaletteCodec {
      * Writes one ASE block: a 16-bit type, a 32-bit big-endian payload length, then the payload.
      * The staging buffer is large enough for the longest palette name we allow plus an RGB entry.
      */
-    private fun ByteArrayOutputStream.writeBlock(type: Int, fill: (ByteBuffer) -> Unit) {
+    private fun ByteArrayOutputStream.writeBlock(
+        type: Int,
+        fill: (ByteBuffer) -> Unit,
+    ) {
         val body = ByteArrayOutputStream()
         val buffer = ByteBuffer.allocate(MAX_BLOCK_BYTES).order(ByteOrder.BIG_ENDIAN)
         fill(buffer)

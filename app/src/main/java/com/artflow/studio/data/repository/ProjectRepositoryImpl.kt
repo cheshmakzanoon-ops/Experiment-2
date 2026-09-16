@@ -14,53 +14,48 @@ import javax.inject.Singleton
  * Implementation of ProjectRepository using local database
  */
 @Singleton
-class ProjectRepositoryImpl @Inject constructor(
-    private val projectDao: ProjectDao
-) : ProjectRepository {
+class ProjectRepositoryImpl
+    @Inject
+    constructor(
+        private val projectDao: ProjectDao,
+    ) : ProjectRepository {
+        override fun getAllProjects(): Flow<List<Project>> =
+            projectDao.getAllProjects().map { entities ->
+                entities.map { it.toDomain() }
+            }
 
-    override fun getAllProjects(): Flow<List<Project>> {
-        return projectDao.getAllProjects().map { entities ->
-            entities.map { it.toDomain() }
+        override suspend fun getProjectById(projectId: Long): Project? = projectDao.getProjectById(projectId)?.toDomain()
+
+        override fun getFavoriteProjects(): Flow<List<Project>> =
+            projectDao.getFavoriteProjects().map { entities ->
+                entities.map { it.toDomain() }
+            }
+
+        override fun searchProjects(query: String): Flow<List<Project>> =
+            projectDao.searchProjects(query).map { entities ->
+                entities.map { it.toDomain() }
+            }
+
+        override suspend fun saveProject(project: Project): Long = projectDao.insertProject(project.toEntity())
+
+        override suspend fun updateProject(project: Project) {
+            projectDao.updateProject(project.toEntity())
         }
-    }
 
-    override suspend fun getProjectById(projectId: Long): Project? {
-        return projectDao.getProjectById(projectId)?.toDomain()
-    }
-
-    override fun getFavoriteProjects(): Flow<List<Project>> {
-        return projectDao.getFavoriteProjects().map { entities ->
-            entities.map { it.toDomain() }
+        override suspend fun deleteProject(project: Project) {
+            projectDao.deleteProject(project.toEntity())
         }
-    }
 
-    override fun searchProjects(query: String): Flow<List<Project>> {
-        return projectDao.searchProjects(query).map { entities ->
-            entities.map { it.toDomain() }
+        override suspend fun deleteProjectById(projectId: Long) {
+            projectDao.deleteProjectById(projectId)
         }
-    }
 
-    override suspend fun saveProject(project: Project): Long {
-        return projectDao.insertProject(project.toEntity())
-    }
+        override suspend fun toggleFavorite(
+            projectId: Long,
+            isFavorite: Boolean,
+        ) {
+            projectDao.toggleFavorite(projectId, isFavorite)
+        }
 
-    override suspend fun updateProject(project: Project) {
-        projectDao.updateProject(project.toEntity())
+        override fun getProjectCount(): Flow<Int> = projectDao.getProjectCount()
     }
-
-    override suspend fun deleteProject(project: Project) {
-        projectDao.deleteProject(project.toEntity())
-    }
-
-    override suspend fun deleteProjectById(projectId: Long) {
-        projectDao.deleteProjectById(projectId)
-    }
-
-    override suspend fun toggleFavorite(projectId: Long, isFavorite: Boolean) {
-        projectDao.toggleFavorite(projectId, isFavorite)
-    }
-
-    override fun getProjectCount(): Flow<Int> {
-        return projectDao.getProjectCount()
-    }
-}

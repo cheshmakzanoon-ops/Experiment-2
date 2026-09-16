@@ -10,10 +10,7 @@ import androidx.room.PrimaryKey
 data class SettingsEntity(
     @PrimaryKey
     val key: String,
-    
     val value: String,
-    
     val category: String = "general",
-    
-    val lastModified: Long = System.currentTimeMillis()
+    val lastModified: Long = System.currentTimeMillis(),
 )

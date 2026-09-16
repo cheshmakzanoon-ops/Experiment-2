@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.Flow
  */
 @Dao
 interface BrushDao {
-
     @Query("SELECT * FROM brushes ORDER BY category, name")
     fun getAllBrushes(): Flow<List<BrushEntity>>
 

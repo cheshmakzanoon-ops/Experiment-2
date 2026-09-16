@@ -23,7 +23,7 @@ import com.artflow.studio.domain.model.settings.ThemeMode
 data class ArtFlowThemeFlags(
     val highContrast: Boolean = false,
     val reduceMotion: Boolean = false,
-    val largeTouchTargets: Boolean = false
+    val largeTouchTargets: Boolean = false,
 )
 
 val LocalArtFlowFlags = staticCompositionLocalOf { ArtFlowThemeFlags() }
@@ -31,7 +31,10 @@ val LocalArtFlowFlags = staticCompositionLocalOf { ArtFlowThemeFlags() }
 /**
  * Dark scheme. The studio is a dark room: chrome recedes, artwork stays bright.
  */
-private fun darkScheme(accent: Color, highContrast: Boolean) = darkColorScheme(
+private fun darkScheme(
+    accent: Color,
+    highContrast: Boolean,
+) = darkColorScheme(
     primary = accent,
     onPrimary = Color.White,
     primaryContainer = accent.copy(alpha = if (highContrast) 0.42f else 0.28f),
@@ -51,10 +54,13 @@ private fun darkScheme(accent: Color, highContrast: Boolean) = darkColorScheme(
     outline = if (highContrast) Color(0xFFBFBFBF) else Color(0xFF6E6E76),
     outlineVariant = if (highContrast) Color(0xFF8A8A92) else Color(0xFF4A4A52),
     error = Error,
-    onError = Color.White
+    onError = Color.White,
 )
 
-private fun lightScheme(accent: Color, highContrast: Boolean) = lightColorScheme(
+private fun lightScheme(
+    accent: Color,
+    highContrast: Boolean,
+) = lightColorScheme(
     primary = accent,
     onPrimary = Color.White,
     primaryContainer = accent.copy(alpha = if (highContrast) 0.30f else 0.18f),
@@ -74,7 +80,7 @@ private fun lightScheme(accent: Color, highContrast: Boolean) = lightColorScheme
     outline = if (highContrast) Color(0xFF3A3D44) else Color(0xFF8A8D95),
     outlineVariant = Color(0xFFC5C7CE),
     error = Error,
-    onError = Color.White
+    onError = Color.White,
 )
 
 /** Accent seed (`0xFFRRGGBB`) to a Compose colour. */
@@ -89,19 +95,21 @@ fun AccentChoice.composeColor(): Color = Color(seed.toInt())
 @Composable
 fun ArtFlowTheme(
     settings: AppSettings = AppSettings(),
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
-    val darkTheme = when (settings.themeMode) {
-        ThemeMode.SYSTEM -> isSystemInDarkTheme()
-        ThemeMode.LIGHT -> false
-        ThemeMode.DARK -> true
-    }
+    val darkTheme =
+        when (settings.themeMode) {
+            ThemeMode.SYSTEM -> isSystemInDarkTheme()
+            ThemeMode.LIGHT -> false
+            ThemeMode.DARK -> true
+        }
     val accent = settings.accent.composeColor()
-    val colorScheme = if (darkTheme) {
-        darkScheme(accent, settings.highContrast)
-    } else {
-        lightScheme(accent, settings.highContrast)
-    }
+    val colorScheme =
+        if (darkTheme) {
+            darkScheme(accent, settings.highContrast)
+        } else {
+            lightScheme(accent, settings.highContrast)
+        }
 
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -115,20 +123,22 @@ fun ArtFlowTheme(
     val baseDensity = LocalDensity.current
     val uiScale = settings.uiScale.coerceIn(0.85f, 1.6f)
     CompositionLocalProvider(
-        LocalArtFlowFlags provides ArtFlowThemeFlags(
-            highContrast = settings.highContrast,
-            reduceMotion = settings.reduceMotion,
-            largeTouchTargets = settings.largeTouchTargets
-        ),
-        LocalDensity provides Density(
-            density = baseDensity.density * uiScale,
-            fontScale = baseDensity.fontScale * uiScale
-        )
+        LocalArtFlowFlags provides
+            ArtFlowThemeFlags(
+                highContrast = settings.highContrast,
+                reduceMotion = settings.reduceMotion,
+                largeTouchTargets = settings.largeTouchTargets,
+            ),
+        LocalDensity provides
+            Density(
+                density = baseDensity.density * uiScale,
+                fontScale = baseDensity.fontScale * uiScale,
+            ),
     ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = Typography,
-            content = content
+            content = content,
         )
     }
 }

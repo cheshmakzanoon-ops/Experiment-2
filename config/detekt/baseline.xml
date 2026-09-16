@@ -1,0 +1,91 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues></ManuallySuppressedIssues>
+  <CurrentIssues>
+    <ID>ComplexCondition:BrushParams.kt$BrushParams$hueJitter &lt;= 0f &amp;&amp; saturationJitter &lt;= 0f &amp;&amp; brightnessJitter &lt;= 0f &amp;&amp; !colorPressure &amp;&amp; velocityToHue &lt;= 0f</ID>
+    <ID>ComplexCondition:LiquifyTool.kt$LiquifyTool.DisplacementMap$x &lt; 0 || y &lt; 0 || x &gt;= width || y &gt;= height</ID>
+    <ID>ComplexCondition:PixelBrushes.kt$PixelBrushes$candidateX &lt; 0 || candidateY &lt; 0 || candidateX &gt;= target.width || candidateY &gt;= target.height</ID>
+    <ID>ComplexCondition:PixelBuffer.kt$PixelBuffer$sx &lt; -1f || sy &lt; -1f || sx &gt; width + 1f || sy &gt; height + 1f</ID>
+    <ID>ComplexCondition:PsdCodec.kt$PsdCodec$width &lt;= 0 || height &lt;= 0 || width &gt; 30_000 || height &gt; 30_000</ID>
+    <ID>ComplexCondition:SelectionMask.kt$SelectionMask.Companion$(y1p &lt;= scanY &amp;&amp; y2p &gt; scanY) || (y2p &lt;= scanY &amp;&amp; y1p &gt; scanY)</ID>
+    <ID>CyclomaticComplexMethod:ArtFlowCanvasView.kt$ArtFlowCanvasView$private fun endGesture( event: MotionEvent, x: Float, y: Float, cancelled: Boolean, )</ID>
+    <ID>CyclomaticComplexMethod:CanvasScreen.kt$@Composable fun CanvasScreen( projectId: Long, onNavigateBack: () -&gt; Unit, onOpenSettings: () -&gt; Unit = {}, viewModel: CanvasViewModel = hiltViewModel(), )</ID>
+    <ID>CyclomaticComplexMethod:ExportSheet.kt$@Composable fun ExportSheet( availableFormats: List&lt;ExportFormat&gt;, frameCount: Int, canvasWidth: Int, canvasHeight: Int, canvasDpi: Int, previewBytes: ByteArray?, exportState: ExportUiState, onExport: (ExportOptions) -&gt; Unit, onShare: (ExportResult) -&gt; Unit, onSaveToGallery: (ExportResult) -&gt; Unit, onView: (ExportResult) -&gt; Unit, onDismissResult: () -&gt; Unit, modifier: Modifier = Modifier, )</ID>
+    <ID>CyclomaticComplexMethod:PsdCodec.kt$PsdCodec$private fun readLayerRecords( reader: PsdReader, canvasWidth: Int, canvasHeight: Int, channelCount: Int, depth: Int, colorMode: Int, ): List&lt;PsdLayer&gt;</ID>
+    <ID>ForbiddenComment:BrushParams.kt$BrushParams$// TODO: Implement custom curve</ID>
+    <ID>ImplicitDefaultLocale:EditorSheets.kt$String.format("#%08X", backgroundColor)</ID>
+    <ID>LargeClass:ArtFlowCanvasView.kt$ArtFlowCanvasView : GLSurfaceView</ID>
+    <ID>LargeClass:CanvasRepositoryImpl.kt$CanvasRepositoryImpl : CanvasRepository</ID>
+    <ID>LongMethod:CanvasScreen.kt$@Composable fun CanvasScreen( projectId: Long, onNavigateBack: () -&gt; Unit, onOpenSettings: () -&gt; Unit = {}, viewModel: CanvasViewModel = hiltViewModel(), )</ID>
+    <ID>LongMethod:ExportSheet.kt$@Composable fun ExportSheet( availableFormats: List&lt;ExportFormat&gt;, frameCount: Int, canvasWidth: Int, canvasHeight: Int, canvasDpi: Int, previewBytes: ByteArray?, exportState: ExportUiState, onExport: (ExportOptions) -&gt; Unit, onShare: (ExportResult) -&gt; Unit, onSaveToGallery: (ExportResult) -&gt; Unit, onView: (ExportResult) -&gt; Unit, onDismissResult: () -&gt; Unit, modifier: Modifier = Modifier, )</ID>
+    <ID>LongParameterList:CanvasRepositoryImpl.kt$CanvasRepositoryImpl.LayerData$( val id: Long, var name: String, var isVisible: Boolean = true, var opacity: Float = 1.0f, var isLocked: Boolean = false, var blendMode: BlendMode = BlendMode.NORMAL, val strokes: MutableList&lt;Stroke&gt; = mutableListOf(), var isAlphaLocked: Boolean = false, var isClippingMask: Boolean = false, var isReference: Boolean = false, var linkGroupId: Long? = null, var maskEnabled: Boolean = true, var maskInverted: Boolean = false, var maskDensity: Float = 1.0f, var maskFeather: Float = 0f, var adjustmentType: AdjustmentType? = null, var adjustmentParams: MutableMap&lt;String, Float&gt; = mutableMapOf(), var filterType: FilterType? = null, var filterAmount: Float = 0f, var isInternal: Boolean = false, )</ID>
+    <ID>LongParameterList:EditorChrome.kt$( canvasWidth: Int, canvasHeight: Int, scale: Float, offsetX: Float, offsetY: Float, rotationDegrees: Float, symmetry: SymmetryEngine.Settings, showSymmetry: Boolean, perspective: PerspectiveGuide.Settings, showPerspective: Boolean, selection: SelectionMask?, preview: DragPreview?, modifier: Modifier = Modifier, )</ID>
+    <ID>LongParameterList:EditorChrome.kt$( scalePercent: Int, rotation: Int, onZoomIn: () -&gt; Unit, onZoomOut: () -&gt; Unit, onFit: () -&gt; Unit, onResetView: () -&gt; Unit, onRotate: (Float) -&gt; Unit, onFlipCanvas: (Boolean) -&gt; Unit, onRotateCanvas: (Int) -&gt; Unit, onSelectAll: () -&gt; Unit, onClearSelection: () -&gt; Unit, onInvertSelection: () -&gt; Unit, onUndo: () -&gt; Unit, onRedo: () -&gt; Unit, canUndo: Boolean, canRedo: Boolean, modifier: Modifier = Modifier, )</ID>
+    <ID>LongParameterList:EditorSheets.kt$( layer: Layer, isActive: Boolean, onSelect: () -&gt; Unit, onVisibility: () -&gt; Unit, onOpacity: (Float) -&gt; Unit, onBlendMode: () -&gt; Unit, onLock: () -&gt; Unit, onAlphaLock: () -&gt; Unit, onClipping: () -&gt; Unit, onDuplicate: () -&gt; Unit, onDelete: () -&gt; Unit, onMergeDown: () -&gt; Unit, onRename: () -&gt; Unit, )</ID>
+    <ID>LongParameterList:EditorSheets.kt$( layers: List&lt;Layer&gt;, activeLayerId: Long, onSelect: (Long) -&gt; Unit, onVisibility: (Long, Boolean) -&gt; Unit, onOpacity: (Long, Float) -&gt; Unit, onName: (Long, String) -&gt; Unit, onLock: (Long, Boolean) -&gt; Unit, onAlphaLock: (Long, Boolean) -&gt; Unit, onClipping: (Long, Boolean) -&gt; Unit, onBlendMode: (Long, BlendMode) -&gt; Unit, onDuplicate: (Long) -&gt; Unit, onDelete: (Long) -&gt; Unit, onMergeDown: (Long) -&gt; Unit, onAddLayer: () -&gt; Unit, onFlatten: () -&gt; Unit, onMergeVisible: () -&gt; Unit, onAddMask: () -&gt; Unit, onRemoveMask: () -&gt; Unit, onInvertMask: () -&gt; Unit, onMaskEnabled: (Boolean) -&gt; Unit, onMaskDensity: (Float) -&gt; Unit, onMaskFeather: (Float) -&gt; Unit, onAddAdjustment: (AdjustmentType) -&gt; Unit, onAddFilter: (FilterType) -&gt; Unit, onAdjustmentParameter: (Long, String, Float) -&gt; Unit, onFilterAmount: (Long, Float) -&gt; Unit, modifier: Modifier = Modifier, )</ID>
+    <ID>LongParameterList:EditorSheets.kt$( mode: SelectionCombineMode, selectionCount: Int, tolerance: Int, featherRadius: Int, hasSelection: Boolean, onModeChange: (SelectionCombineMode) -&gt; Unit, onToleranceChange: (Int) -&gt; Unit, onFeatherChange: (Int) -&gt; Unit, onSelectAll: () -&gt; Unit, onClearSelection: () -&gt; Unit, onInvertSelection: () -&gt; Unit, onApplyFeather: () -&gt; Unit, onSelectionFromLayer: () -&gt; Unit, onTrimToSelection: () -&gt; Unit, onColorRange: (Int) -&gt; Unit, modifier: Modifier = Modifier, )</ID>
+    <ID>LongParameterList:EditorSheets.kt$( width: Int, height: Int, dpi: Int, backgroundColor: Int, onResize: (Int, Int, Boolean, CanvasOperations.Anchor) -&gt; Unit, onRotate: (Int) -&gt; Unit, onFlip: (Boolean) -&gt; Unit, onTrim: () -&gt; Unit, onDpi: (Int) -&gt; Unit, onBackgroundColor: (Int) -&gt; Unit, onClear: (Int) -&gt; Unit, modifier: Modifier = Modifier, )</ID>
+    <ID>LongParameterList:ExportSheet.kt$( availableFormats: List&lt;ExportFormat&gt;, frameCount: Int, canvasWidth: Int, canvasHeight: Int, canvasDpi: Int, previewBytes: ByteArray?, exportState: ExportUiState, onExport: (ExportOptions) -&gt; Unit, onShare: (ExportResult) -&gt; Unit, onSaveToGallery: (ExportResult) -&gt; Unit, onView: (ExportResult) -&gt; Unit, onDismissResult: () -&gt; Unit, modifier: Modifier = Modifier, )</ID>
+    <ID>LongParameterList:Layer.kt$Layer$( id: Long = this.id, name: String = this.name, index: Int = this.index, isVisible: Boolean = this.isVisible, opacity: Float = this.opacity, isLocked: Boolean = this.isLocked, blendMode: BlendMode = this.blendMode, strokes: List&lt;Stroke&gt; = this.strokes, thumbnailPath: String? = this.thumbnailPath, isAlphaLocked: Boolean = this.isAlphaLocked, isClippingMask: Boolean = this.isClippingMask, parentGroupId: Long? = this.parentGroupId, maskLayerId: Long? = this.maskLayerId, rasterFile: String? = this.rasterFile, maskFile: String? = this.maskFile, maskEnabled: Boolean = this.maskEnabled, maskInverted: Boolean = this.maskInverted, maskDensity: Float = this.maskDensity, maskFeather: Float = this.maskFeather, adjustmentType: AdjustmentType? = this.adjustmentType, adjustmentParameters: Map&lt;String, Float&gt; = this.adjustmentParameters, filterType: FilterType? = this.filterType, filterAmount: Float = this.filterAmount, isReference: Boolean = this.isReference, linkGroupId: Long? = this.linkGroupId, isInternal: Boolean = this.isInternal, )</ID>
+    <ID>LongParameterList:OpenGLCanvasRenderer.kt$OpenGLCanvasRenderer.StrokeVertexBuilder$( x: Float, y: Float, segAX: Float, segAY: Float, segBX: Float, segBY: Float, radiusA: Float, radiusB: Float, r: Float, g: Float, b: Float, alpha: Float, )</ID>
+    <ID>LongParameterList:Stamping.kt$Stamping$( target: PixelBuffer, x0: Float, y0: Float, x1: Float, y1: Float, radiusStart: Float, radiusEnd: Float, color: Int, strength: Float = 1f, hardness: Float = 0.8f, mode: Mode = Mode.SOURCE_OVER, alphaLock: Boolean = false, mask: SelectionMask? = null, )</ID>
+    <ID>LoopWithTooManyJumpStatements:ArtFlowCanvasView.kt$ArtFlowCanvasView$for</ID>
+    <ID>LoopWithTooManyJumpStatements:ArtworkExporter.kt$ArtworkExporter.Mp4Writer$while</ID>
+    <ID>LoopWithTooManyJumpStatements:CanvasViewModel.kt$CanvasViewModel$while</ID>
+    <ID>LoopWithTooManyJumpStatements:Compositor.kt$Compositor$for</ID>
+    <ID>LoopWithTooManyJumpStatements:FillTool.kt$FillTool$for</ID>
+    <ID>LoopWithTooManyJumpStatements:GifEncoder.kt$GifEncoder.Quantizer$for</ID>
+    <ID>LoopWithTooManyJumpStatements:GradientTool.kt$GradientTool$for</ID>
+    <ID>LoopWithTooManyJumpStatements:LiquifyTool.kt$LiquifyTool$for</ID>
+    <ID>LoopWithTooManyJumpStatements:LiquifyTool.kt$LiquifyTool.Session$for</ID>
+    <ID>LoopWithTooManyJumpStatements:PixelBrushes.kt$PixelBrushes$for</ID>
+    <ID>LoopWithTooManyJumpStatements:PsdCodec.kt$PsdCodec$while</ID>
+    <ID>LoopWithTooManyJumpStatements:SelectionMask.kt$SelectionMask.Companion$for</ID>
+    <ID>LoopWithTooManyJumpStatements:SelectionMask.kt$SelectionMask.Companion$while</ID>
+    <ID>LoopWithTooManyJumpStatements:Stamping.kt$Stamping$for</ID>
+    <ID>LoopWithTooManyJumpStatements:StrokeRasterizer.kt$StrokeRasterizer$for</ID>
+    <ID>MatchingDeclarationName:ArtFlowApp.kt$Routes</ID>
+    <ID>MatchingDeclarationName:Theme.kt$ArtFlowThemeFlags</ID>
+    <ID>NestedBlockDepth:ArtworkExporter.kt$ArtworkExporter.Mp4Writer.Companion$fun argbToNv12( pixels: IntArray, width: Int, height: Int, ): ByteArray</ID>
+    <ID>NestedBlockDepth:CanvasRepositoryImpl.kt$CanvasRepositoryImpl$private fun rasterBytes(stack: ArrayDeque&lt;Snapshot&gt;): Long</ID>
+    <ID>NestedBlockDepth:FillTool.kt$FillTool$private fun applyFill( target: PixelBuffer, coverage: SelectionMask, color: Int, settings: Settings, ): Result</ID>
+    <ID>NestedBlockDepth:FillTool.kt$FillTool$private fun scanlineFill( mask: SelectionMask, source: PixelBuffer, startX: Int, startY: Int, settings: Settings, )</ID>
+    <ID>NestedBlockDepth:GifEncoder.kt$GifEncoder.LzwCompressor$fun compress( indices: ByteArray, minCodeSize: Int, ): ByteArray</ID>
+    <ID>NestedBlockDepth:GradientTool.kt$GradientTool$fun draw( target: PixelBuffer, startX: Float, startY: Float, endX: Float, endY: Float, settings: Settings = Settings(), ): Result</ID>
+    <ID>NestedBlockDepth:ImageFilters.kt$ImageFilters$fun convolve3x3( source: PixelBuffer, kernel: FloatArray, ): PixelBuffer</ID>
+    <ID>NestedBlockDepth:PixelBuffer.kt$PixelBuffer$fun contentBounds(): IntBounds?</ID>
+    <ID>NestedBlockDepth:PsdCodec.kt$PsdCodec$fun packBits( source: ByteArray, offset: Int, length: Int, ): ByteArray</ID>
+    <ID>NestedBlockDepth:PsdCodec.kt$PsdCodec$fun unpackBits( reader: PsdReader, width: Int, ): ByteArray</ID>
+    <ID>NestedBlockDepth:PsdCodec.kt$PsdCodec$private fun readLayerRecords( reader: PsdReader, canvasWidth: Int, canvasHeight: Int, channelCount: Int, depth: Int, colorMode: Int, ): List&lt;PsdLayer&gt;</ID>
+    <ID>NestedBlockDepth:SelectionMask.kt$SelectionMask$fun bounds(): IntBounds?</ID>
+    <ID>NestedBlockDepth:StrokeRasterizer.kt$StrokeRasterizer$fun draw( target: PixelBuffer, stroke: Stroke, alphaLock: Boolean = false, mask: SelectionMask? = null, )</ID>
+    <ID>TooGenericExceptionCaught:ArtFlowCanvasView.kt$ArtFlowCanvasView$error: Throwable</ID>
+    <ID>TooGenericExceptionCaught:ArtworkExporter.kt$ArtworkExporter$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ArtworkExporter.kt$ArtworkExporter.Mp4Writer$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:CanvasViewModel.kt$CanvasViewModel$error: Exception</ID>
+    <ID>TooGenericExceptionCaught:CanvasViewModel.kt$CanvasViewModel$error: Throwable</ID>
+    <ID>TooGenericExceptionCaught:MainViewModel.kt$MainViewModel$error: Exception</ID>
+    <ID>TooGenericExceptionCaught:Palette.kt$PaletteCodec$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ProjectStorage.kt$ProjectStorage$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:SettingsRepositoryImpl.kt$SettingsRepositoryImpl$error: Throwable</ID>
+    <ID>UnusedParameter:AdvancedBrushSettingsPanel.kt$isInteger: Boolean = false</ID>
+    <ID>UnusedParameter:ArtFlowCanvasView.kt$ArtFlowCanvasView$event: MotionEvent</ID>
+    <ID>UnusedParameter:ArtFlowCanvasView.kt$ArtFlowCanvasView$index: Int</ID>
+    <ID>UnusedParameter:ArtFlowCanvasView.kt$ArtFlowCanvasView$pressure: Float</ID>
+    <ID>UnusedParameter:ArtworkExporter.kt$ArtworkExporter$projectName: String</ID>
+    <ID>UnusedParameter:OpenGLCanvasRenderer.kt$OpenGLCanvasRenderer$dpi: Int</ID>
+    <ID>UnusedParameter:PerspectiveGuide.kt$PerspectiveGuide$height: Int</ID>
+    <ID>UnusedParameter:PerspectiveGuide.kt$PerspectiveGuide$width: Int</ID>
+    <ID>UnusedParameter:PsdCodec.kt$PsdCodec$canvasHeight: Int</ID>
+    <ID>UnusedParameter:PsdCodec.kt$PsdCodec$canvasWidth: Int</ID>
+    <ID>UnusedParameter:PsdCodec.kt$PsdCodec$channelCount: Int</ID>
+    <ID>UnusedParameter:StrokeRasterizer.kt$StrokeRasterizer$alphaScale: Float</ID>
+    <ID>UnusedParameter:TextLayout.kt$TextLayout$style: TextStyle</ID>
+    <ID>UnusedPrivateProperty:CanvasScreen.kt$val density = LocalDensity.current</ID>
+    <ID>UnusedPrivateProperty:StrokeRasterizer.kt$StrokeRasterizer$val directionX = dx / distance</ID>
+    <ID>UnusedPrivateProperty:StrokeRasterizer.kt$StrokeRasterizer$val directionY = dy / distance</ID>
+    <ID>UseCheckOrError:ArtworkExporter.kt$ArtworkExporter$throw IllegalStateException("Canvas is too small for video export (minimum 16×16)")</ID>
+    <ID>UseCheckOrError:OpenGLCanvasRenderer.kt$OpenGLCanvasRenderer$throw IllegalStateException("Shader compile failed: $log")</ID>
+    <ID>UseCheckOrError:OpenGLCanvasRenderer.kt$OpenGLCanvasRenderer$throw IllegalStateException("Shader link failed: $log")</ID>
+  </CurrentIssues>
+</SmellBaseline>

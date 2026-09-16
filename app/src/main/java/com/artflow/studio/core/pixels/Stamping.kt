@@ -13,7 +13,6 @@ import kotlin.math.sqrt
  * Everything here is deterministic and pure Kotlin so the tools can be verified off-device.
  */
 object Stamping {
-
     /** How a stamped pixel is merged into the destination. */
     enum class Mode { SOURCE_OVER, REPLACE, ADD, SUBTRACT }
 
@@ -35,7 +34,7 @@ object Stamping {
         hardness: Float = 0.8f,
         mode: Mode = Mode.SOURCE_OVER,
         alphaLock: Boolean = false,
-        mask: SelectionMask? = null
+        mask: SelectionMask? = null,
     ) {
         if (radius <= 0f || strength <= 0f) return
         val x0 = max(0, floor(x - radius).toInt())
@@ -78,7 +77,7 @@ object Stamping {
         hardness: Float = 0.8f,
         mode: Mode = Mode.SOURCE_OVER,
         alphaLock: Boolean = false,
-        mask: SelectionMask? = null
+        mask: SelectionMask? = null,
     ) {
         val maxRadius = max(radiusStart, radiusEnd)
         if (maxRadius <= 0f || strength <= 0f) return
@@ -99,12 +98,13 @@ object Stamping {
                 val pointY = py + 0.5f
 
                 // Projection of the point onto the segment, clamped to [0, 1].
-                val t = if (segmentLengthSquared <= 1e-6f) {
-                    0f
-                } else {
-                    (((pointX - x0) * segmentX + (pointY - y0) * segmentY) / segmentLengthSquared)
-                        .coerceIn(0f, 1f)
-                }
+                val t =
+                    if (segmentLengthSquared <= 1e-6f) {
+                        0f
+                    } else {
+                        (((pointX - x0) * segmentX + (pointY - y0) * segmentY) / segmentLengthSquared)
+                            .coerceIn(0f, 1f)
+                    }
 
                 val closestX = x0 + segmentX * t
                 val closestY = y0 + segmentY * t
@@ -134,7 +134,7 @@ object Stamping {
         y: Float,
         radius: Int,
         jitterX: Float = 0f,
-        jitterY: Float = 0f
+        jitterY: Float = 0f,
     ): Int {
         var a = 0f
         var r = 0f
@@ -168,7 +168,7 @@ object Stamping {
         radius: Float,
         strength: Float,
         hardness: Float,
-        mask: SelectionMask? = null
+        mask: SelectionMask? = null,
     ) {
         if (radius <= 0f || strength <= 0f) return
         // Read the source patch first: dragging while reading would smear the write back in.
@@ -178,16 +178,22 @@ object Stamping {
     }
 
     /** Reads a circular patch into a (2r+1)^2 buffer so it can be written back displaced. */
-    fun readPatch(source: PixelBuffer, centerX: Float, centerY: Float, radius: Float): IntArray {
+    fun readPatch(
+        source: PixelBuffer,
+        centerX: Float,
+        centerY: Float,
+        radius: Float,
+    ): IntArray {
         val r = ceil(radius).toInt()
         val size = r * 2 + 1
         val patch = IntArray(size * size)
         for (dy in -r..r) {
             for (dx in -r..r) {
-                patch[(dy + r) * size + (dx + r)] = source.sampleBilinear(
-                    centerX + dx + 0.5f,
-                    centerY + dy + 0.5f
-                )
+                patch[(dy + r) * size + (dx + r)] =
+                    source.sampleBilinear(
+                        centerX + dx + 0.5f,
+                        centerY + dy + 0.5f,
+                    )
             }
         }
         return patch
@@ -202,7 +208,7 @@ object Stamping {
         radius: Float,
         strength: Float,
         hardness: Float,
-        mask: SelectionMask? = null
+        mask: SelectionMask? = null,
     ) {
         val r = (sqrt(patch.size.toFloat()).toInt() - 1) / 2
         if (r <= 0) return
@@ -235,7 +241,7 @@ object Stamping {
         deltaX: Float,
         deltaY: Float,
         strength: Float,
-        freeze: BooleanArray? = null
+        freeze: BooleanArray? = null,
     ) {
         if (radius <= 0f) return
         val snapshot = target.copy()
@@ -270,7 +276,7 @@ object Stamping {
         radius: Float,
         angleDegrees: Float,
         strength: Float,
-        freeze: BooleanArray? = null
+        freeze: BooleanArray? = null,
     ) {
         if (radius <= 0f) return
         val snapshot = target.copy()
@@ -305,7 +311,7 @@ object Stamping {
         strength: Float,
         mode: Mode,
         alphaLock: Boolean,
-        mask: SelectionMask?
+        mask: SelectionMask?,
     ) {
         val coverage = if (mask != null) mask.alphaAt(index) else 1f
         var effective = (strength * coverage).coerceIn(0f, 1f)
@@ -319,26 +325,32 @@ object Stamping {
             if (effective <= 0f) return
         }
 
-        target.pixels[index] = when (mode) {
-            Mode.SOURCE_OVER -> BlendModes.sourceOver(existing, Channels.scaleAlpha(color, effective))
-            Mode.REPLACE -> ImageFilters.lerpArgb(existing, color, effective)
-            Mode.ADD -> Channels.fromFloats(
-                a = min(255f, Channels.alpha(existing) + 255f * effective * (Channels.alpha(color) / 255f)),
-                r = Channels.red(existing) + Channels.red(color) * effective,
-                g = Channels.green(existing) + Channels.green(color) * effective,
-                b = Channels.blue(existing) + Channels.blue(color) * effective
-            )
-            Mode.SUBTRACT -> Channels.fromFloats(
-                a = Channels.alpha(existing) + (255f - Channels.alpha(existing)) * effective,
-                r = Channels.red(existing) - Channels.red(color) * effective,
-                g = Channels.green(existing) - Channels.green(color) * effective,
-                b = Channels.blue(existing) - Channels.blue(color) * effective
-            )
-        }
+        target.pixels[index] =
+            when (mode) {
+                Mode.SOURCE_OVER -> BlendModes.sourceOver(existing, Channels.scaleAlpha(color, effective))
+                Mode.REPLACE -> ImageFilters.lerpArgb(existing, color, effective)
+                Mode.ADD ->
+                    Channels.fromFloats(
+                        a = min(255f, Channels.alpha(existing) + 255f * effective * (Channels.alpha(color) / 255f)),
+                        r = Channels.red(existing) + Channels.red(color) * effective,
+                        g = Channels.green(existing) + Channels.green(color) * effective,
+                        b = Channels.blue(existing) + Channels.blue(color) * effective,
+                    )
+                Mode.SUBTRACT ->
+                    Channels.fromFloats(
+                        a = Channels.alpha(existing) + (255f - Channels.alpha(existing)) * effective,
+                        r = Channels.red(existing) - Channels.red(color) * effective,
+                        g = Channels.green(existing) - Channels.green(color) * effective,
+                        b = Channels.blue(existing) - Channels.blue(color) * effective,
+                    )
+            }
     }
 
     /** Signed distance helper used by the healing brush to weight its edge blend. */
-    fun edgeWeight(distanceFromEdge: Float, feather: Float): Float {
+    fun edgeWeight(
+        distanceFromEdge: Float,
+        feather: Float,
+    ): Float {
         if (feather <= 0f) return 1f
         return ((distanceFromEdge / feather).coerceIn(0f, 1f)).let { it * it * (3f - 2f * it) }
     }

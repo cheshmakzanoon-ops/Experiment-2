@@ -18,7 +18,6 @@ import kotlin.math.sqrt
  * [PixelBuffer] so it is fully unit-testable.
  */
 object FillTool {
-
     data class Settings(
         /** 0..255 colour distance tolerance. */
         val tolerance: Int = 32,
@@ -37,7 +36,7 @@ object FillTool {
         /** Pattern tiling; when present the fill uses the pattern instead of a solid colour. */
         val pattern: PixelBuffer? = null,
         /** Sample the fill colour from the composite rather than the target layer. */
-        val sampleAllLayers: Boolean = false
+        val sampleAllLayers: Boolean = false,
     )
 
     /** How a bucket fill blends into the existing pixels. */
@@ -47,7 +46,7 @@ object FillTool {
     data class Result(
         val filledPixels: Int,
         val bounds: IntBounds?,
-        val changed: Boolean
+        val changed: Boolean,
     )
 
     /**
@@ -63,7 +62,7 @@ object FillTool {
         startY: Int,
         color: Int,
         settings: Settings = Settings(),
-        source: PixelBuffer = target
+        source: PixelBuffer = target,
     ): Result {
         if (!target.contains(startX, startY)) return Result(0, null, changed = false)
         if (source.width != target.width || source.height != target.height) {
@@ -97,7 +96,7 @@ object FillTool {
     fun fillAll(
         target: PixelBuffer,
         color: Int,
-        settings: Settings = Settings()
+        settings: Settings = Settings(),
     ): Result {
         val coverage = settings.mask?.copy() ?: SelectionMask(target.width, target.height).apply { selectAll() }
         if (!coverage.isActive()) return Result(0, null, changed = false)
@@ -109,7 +108,7 @@ object FillTool {
         target: PixelBuffer,
         color: Int,
         width: Int,
-        settings: Settings = Settings()
+        settings: Settings = Settings(),
     ): Result {
         val mask = settings.mask ?: return Result(0, null, changed = false)
         val inner = mask.expanded(-max(1, width / 2))
@@ -128,14 +127,14 @@ object FillTool {
     fun patternFill(
         target: PixelBuffer,
         pattern: PixelBuffer,
-        settings: Settings = Settings()
+        settings: Settings = Settings(),
     ): Result = fillAll(target, color = 0, settings = settings.copy(pattern = pattern))
 
     private fun applyFill(
         target: PixelBuffer,
         coverage: SelectionMask,
         color: Int,
-        settings: Settings
+        settings: Settings,
     ): Result {
         var count = 0
         var minX = target.width
@@ -161,38 +160,45 @@ object FillTool {
                     if (alpha <= 0f) continue
                 }
 
-                val sourceColor = if (pattern != null) {
-                    pattern.getUnchecked(x % pattern.width, y % pattern.height)
-                } else {
-                    color
-                }
+                val sourceColor =
+                    if (pattern != null) {
+                        pattern.getUnchecked(x % pattern.width, y % pattern.height)
+                    } else {
+                        color
+                    }
                 val existing = target.pixels[index]
-                val blended = when (settings.mode) {
-                    BlendModeChoice.NORMAL -> BlendModes.sourceOver(
-                        existing,
-                        Channels.scaleAlpha(sourceColor, alpha)
-                    )
-                    BlendModeChoice.MULTIPLY -> ImageFilters.lerpArgb(
-                        existing,
-                        BlendModes.blend(existing, sourceColor, com.artflow.studio.domain.model.layer.BlendMode.MULTIPLY),
-                        alpha
-                    )
-                    BlendModeChoice.SCREEN -> ImageFilters.lerpArgb(
-                        existing,
-                        BlendModes.blend(existing, sourceColor, com.artflow.studio.domain.model.layer.BlendMode.SCREEN),
-                        alpha
-                    )
-                    BlendModeChoice.DARKEN -> ImageFilters.lerpArgb(
-                        existing,
-                        BlendModes.blend(existing, sourceColor, com.artflow.studio.domain.model.layer.BlendMode.DARKEN),
-                        alpha
-                    )
-                    BlendModeChoice.LIGHTEN -> ImageFilters.lerpArgb(
-                        existing,
-                        BlendModes.blend(existing, sourceColor, com.artflow.studio.domain.model.layer.BlendMode.LIGHTEN),
-                        alpha
-                    )
-                }
+                val blended =
+                    when (settings.mode) {
+                        BlendModeChoice.NORMAL ->
+                            BlendModes.sourceOver(
+                                existing,
+                                Channels.scaleAlpha(sourceColor, alpha),
+                            )
+                        BlendModeChoice.MULTIPLY ->
+                            ImageFilters.lerpArgb(
+                                existing,
+                                BlendModes.blend(existing, sourceColor, com.artflow.studio.domain.model.layer.BlendMode.MULTIPLY),
+                                alpha,
+                            )
+                        BlendModeChoice.SCREEN ->
+                            ImageFilters.lerpArgb(
+                                existing,
+                                BlendModes.blend(existing, sourceColor, com.artflow.studio.domain.model.layer.BlendMode.SCREEN),
+                                alpha,
+                            )
+                        BlendModeChoice.DARKEN ->
+                            ImageFilters.lerpArgb(
+                                existing,
+                                BlendModes.blend(existing, sourceColor, com.artflow.studio.domain.model.layer.BlendMode.DARKEN),
+                                alpha,
+                            )
+                        BlendModeChoice.LIGHTEN ->
+                            ImageFilters.lerpArgb(
+                                existing,
+                                BlendModes.blend(existing, sourceColor, com.artflow.studio.domain.model.layer.BlendMode.LIGHTEN),
+                                alpha,
+                            )
+                    }
 
                 if (blended != existing) {
                     target.pixels[index] = blended
@@ -241,7 +247,7 @@ object FillTool {
         source: PixelBuffer,
         startX: Int,
         startY: Int,
-        settings: Settings
+        settings: Settings,
     ) {
         val width = source.width
         val height = source.height
@@ -253,7 +259,10 @@ object FillTool {
          * Connectivity test. With gap closing enabled, a pixel counts as "connected" when any
          * pixel inside the gap window matches, which lets the fill jump hairline gaps in line art.
          */
-        fun matches(x: Int, y: Int): Boolean {
+        fun matches(
+            x: Int,
+            y: Int,
+        ): Boolean {
             if (gapClose == 0) {
                 return colorDistanceSquared(source.getUnchecked(x, y), startColor) <= toleranceSquared
             }
@@ -316,7 +325,10 @@ object FillTool {
     }
 
     /** Squared RGBA distance so we can compare without a square root on every pixel. */
-    fun colorDistanceSquared(a: Int, b: Int): Float {
+    fun colorDistanceSquared(
+        a: Int,
+        b: Int,
+    ): Float {
         val da = Channels.alpha(a) - Channels.alpha(b)
         val dr = Channels.red(a) - Channels.red(b)
         val dg = Channels.green(a) - Channels.green(b)
@@ -331,13 +343,19 @@ object FillTool {
     }
 
     /** Colour similarity in `0..1`, used by the fill preview and the magic-wand slider label. */
-    fun similarity(a: Int, b: Int): Float {
+    fun similarity(
+        a: Int,
+        b: Int,
+    ): Float {
         val distance = sqrt(colorDistanceSquared(a, b))
         return (1f - distance / (255f * 2f)).coerceIn(0f, 1f)
     }
 
     /** Convenience: fill the whole canvas with a background colour (used by "Clear canvas"). */
-    fun clearToColor(target: PixelBuffer, color: Int): Result {
+    fun clearToColor(
+        target: PixelBuffer,
+        color: Int,
+    ): Result {
         val before = target.copy()
         target.fill(color)
         val bounds = IntBounds(0, 0, target.width - 1, target.height - 1)

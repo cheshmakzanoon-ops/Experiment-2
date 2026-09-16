@@ -16,20 +16,18 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
-
     @Provides
     @Singleton
     fun provideArtFlowDatabase(
-        @ApplicationContext context: Context
-    ): ArtFlowDatabase {
-        return Room.databaseBuilder(
-            context,
-            ArtFlowDatabase::class.java,
-            "artflow_database"
-        )
-            .fallbackToDestructiveMigration()
+        @ApplicationContext context: Context,
+    ): ArtFlowDatabase =
+        Room
+            .databaseBuilder(
+                context,
+                ArtFlowDatabase::class.java,
+                "artflow_database",
+            ).fallbackToDestructiveMigration()
             .build()
-    }
 
     @Provides
     @Singleton

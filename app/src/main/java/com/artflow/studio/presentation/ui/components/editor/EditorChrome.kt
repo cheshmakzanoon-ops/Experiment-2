@@ -11,7 +11,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -38,42 +37,53 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /** Icon for each tool, kept in the UI layer so `core` stays free of Android types. */
-fun ToolType.icon(): androidx.compose.ui.graphics.vector.ImageVector = when (this) {
-    ToolType.BRUSH -> Icons.Default.Brush
-    ToolType.ERASER -> Icons.Default.AutoFixOff
-    ToolType.SMUDGE -> Icons.Default.BlurOn
-    ToolType.CLONE_STAMP -> Icons.Default.ContentCopy
-    ToolType.HEALING -> Icons.Default.Healing
-    ToolType.LIQUIFY -> Icons.Default.Waves
-    ToolType.PAINT_BUCKET -> Icons.Default.FormatColorFill
-    ToolType.GRADIENT -> Icons.Default.Gradient
-    ToolType.TEXT -> Icons.Default.TextFields
-    ToolType.SHAPE -> Icons.Default.Category
-    ToolType.SELECT_RECTANGLE -> Icons.Default.CropSquare
-    ToolType.SELECT_ELLIPSE -> Icons.Default.Circle
-    ToolType.SELECT_FREEHAND -> Icons.Default.Gesture
-    ToolType.SELECT_LASSO -> Icons.Default.Polyline
-    ToolType.SELECT_MAGIC_WAND -> Icons.Default.AutoFixHigh
-    ToolType.TRANSFORM -> Icons.Default.OpenWith
-    ToolType.EYEDROPPER -> Icons.Default.Colorize
-    ToolType.MOVE -> Icons.Default.PanTool
-    ToolType.ZOOM -> Icons.Default.ZoomIn
-}
+fun ToolType.icon(): androidx.compose.ui.graphics.vector.ImageVector =
+    when (this) {
+        ToolType.BRUSH -> Icons.Default.Brush
+        ToolType.ERASER -> Icons.Default.AutoFixOff
+        ToolType.SMUDGE -> Icons.Default.BlurOn
+        ToolType.CLONE_STAMP -> Icons.Default.ContentCopy
+        ToolType.HEALING -> Icons.Default.Healing
+        ToolType.LIQUIFY -> Icons.Default.Waves
+        ToolType.PAINT_BUCKET -> Icons.Default.FormatColorFill
+        ToolType.GRADIENT -> Icons.Default.Gradient
+        ToolType.TEXT -> Icons.Default.TextFields
+        ToolType.SHAPE -> Icons.Default.Category
+        ToolType.SELECT_RECTANGLE -> Icons.Default.CropSquare
+        ToolType.SELECT_ELLIPSE -> Icons.Default.Circle
+        ToolType.SELECT_FREEHAND -> Icons.Default.Gesture
+        ToolType.SELECT_LASSO -> Icons.Default.Polyline
+        ToolType.SELECT_MAGIC_WAND -> Icons.Default.AutoFixHigh
+        ToolType.TRANSFORM -> Icons.Default.OpenWith
+        ToolType.EYEDROPPER -> Icons.Default.Colorize
+        ToolType.MOVE -> Icons.Default.PanTool
+        ToolType.ZOOM -> Icons.Default.ZoomIn
+    }
 
 /** Tool groups used to split the strip into labelled clusters. */
-private val TOOL_GROUPS: List<Pair<String, List<ToolType>>> = listOf(
-    "Paint" to listOf(
-        ToolType.BRUSH, ToolType.ERASER, ToolType.SMUDGE,
-        ToolType.CLONE_STAMP, ToolType.HEALING, ToolType.LIQUIFY
-    ),
-    "Fill" to listOf(ToolType.PAINT_BUCKET, ToolType.GRADIENT),
-    "Vector" to listOf(ToolType.TEXT, ToolType.SHAPE),
-    "Select" to listOf(
-        ToolType.SELECT_RECTANGLE, ToolType.SELECT_ELLIPSE,
-        ToolType.SELECT_FREEHAND, ToolType.SELECT_LASSO, ToolType.SELECT_MAGIC_WAND
-    ),
-    "Edit" to listOf(ToolType.TRANSFORM, ToolType.MOVE, ToolType.EYEDROPPER)
-)
+private val TOOL_GROUPS: List<Pair<String, List<ToolType>>> =
+    listOf(
+        "Paint" to
+            listOf(
+                ToolType.BRUSH,
+                ToolType.ERASER,
+                ToolType.SMUDGE,
+                ToolType.CLONE_STAMP,
+                ToolType.HEALING,
+                ToolType.LIQUIFY,
+            ),
+        "Fill" to listOf(ToolType.PAINT_BUCKET, ToolType.GRADIENT),
+        "Vector" to listOf(ToolType.TEXT, ToolType.SHAPE),
+        "Select" to
+            listOf(
+                ToolType.SELECT_RECTANGLE,
+                ToolType.SELECT_ELLIPSE,
+                ToolType.SELECT_FREEHAND,
+                ToolType.SELECT_LASSO,
+                ToolType.SELECT_MAGIC_WAND,
+            ),
+        "Edit" to listOf(ToolType.TRANSFORM, ToolType.MOVE, ToolType.EYEDROPPER),
+    )
 
 /**
  * Bottom tool strip.
@@ -85,53 +95,58 @@ private val TOOL_GROUPS: List<Pair<String, List<ToolType>>> = listOf(
 fun ToolStrip(
     activeTool: ToolType,
     onToolSelected: (ToolType) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             TOOL_GROUPS.forEachIndexed { index, (label, tools) ->
                 if (index > 0) {
                     Box(
-                        modifier = Modifier
-                            .padding(horizontal = 6.dp)
-                            .width(1.dp)
-                            .height(40.dp)
-                            .background(MaterialTheme.colorScheme.outlineVariant)
+                        modifier =
+                            Modifier
+                                .padding(horizontal = 6.dp)
+                                .width(1.dp)
+                                .height(40.dp)
+                                .background(MaterialTheme.colorScheme.outlineVariant),
                     )
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         label.uppercase(),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                         tools.forEach { tool ->
                             val selected = tool == activeTool
                             IconButton(
                                 onClick = { onToolSelected(tool) },
-                                colors = IconButtonDefaults.iconButtonColors(
-                                    containerColor = if (selected) {
-                                        MaterialTheme.colorScheme.primaryContainer
-                                    } else {
-                                        Color.Transparent
-                                    }
-                                )
+                                colors =
+                                    IconButtonDefaults.iconButtonColors(
+                                        containerColor =
+                                            if (selected) {
+                                                MaterialTheme.colorScheme.primaryContainer
+                                            } else {
+                                                Color.Transparent
+                                            },
+                                    ),
                             ) {
                                 Icon(
                                     imageVector = tool.icon(),
                                     contentDescription = tool.displayName,
-                                    tint = if (selected) {
-                                        MaterialTheme.colorScheme.onPrimaryContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurface
-                                    }
+                                    tint =
+                                        if (selected) {
+                                            MaterialTheme.colorScheme.onPrimaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        },
                                 )
                             }
                         }
@@ -154,29 +169,31 @@ fun BrushOptionsRow(
     onOpacityChanged: (Float) -> Unit,
     onEraserSizeChanged: (Float) -> Unit,
     onToleranceChanged: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         when {
-            tool == ToolType.ERASER -> LabeledSlider(
-                label = "Size",
-                value = eraserSize,
-                range = 1f..400f,
-                onChange = onEraserSizeChanged,
-                modifier = Modifier.weight(1f)
-            )
+            tool == ToolType.ERASER ->
+                LabeledSlider(
+                    label = "Size",
+                    value = eraserSize,
+                    range = 1f..400f,
+                    onChange = onEraserSizeChanged,
+                    modifier = Modifier.weight(1f),
+                )
             tool.usesBrushSize() -> {
                 LabeledSlider(
                     label = "Size",
                     value = size,
                     range = 1f..400f,
                     onChange = onSizeChanged,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.width(12.dp))
                 LabeledSlider(
@@ -184,21 +201,23 @@ fun BrushOptionsRow(
                     value = opacity,
                     range = 0.01f..1f,
                     onChange = onOpacityChanged,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
                 )
             }
-            tool == ToolType.PAINT_BUCKET || tool == ToolType.SELECT_MAGIC_WAND -> LabeledSlider(
-                label = "Tolerance",
-                value = tolerance.toFloat(),
-                range = 0f..255f,
-                onChange = { onToleranceChanged(it.toInt()) },
-                modifier = Modifier.weight(1f)
-            )
-            else -> Text(
-                text = "Adjust ${tool.displayName.lowercase()} in the tool panel",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            tool == ToolType.PAINT_BUCKET || tool == ToolType.SELECT_MAGIC_WAND ->
+                LabeledSlider(
+                    label = "Tolerance",
+                    value = tolerance.toFloat(),
+                    range = 0f..255f,
+                    onChange = { onToleranceChanged(it.toInt()) },
+                    modifier = Modifier.weight(1f),
+                )
+            else ->
+                Text(
+                    text = "Adjust ${tool.displayName.lowercase()} in the tool panel",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
         }
     }
 }
@@ -209,29 +228,30 @@ private fun LabeledSlider(
     value: Float,
     range: ClosedFloatingPointRange<Float>,
     onChange: (Float) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(label, style = MaterialTheme.typography.labelSmall)
             Text(
-                text = if (range.endInclusive <= 1.01f) {
-                    "${(value * 100).toInt()}%"
-                } else {
-                    value.toInt().toString()
-                },
+                text =
+                    if (range.endInclusive <= 1.01f) {
+                        "${(value * 100).toInt()}%"
+                    } else {
+                        value.toInt().toString()
+                    },
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Slider(
             value = value.coerceIn(range.start, range.endInclusive),
             onValueChange = onChange,
             valueRange = range,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 }
@@ -257,21 +277,22 @@ fun GuidesOverlay(
     showPerspective: Boolean,
     selection: SelectionMask?,
     preview: DragPreview?,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val dashPhase by rememberInfiniteTransition(label = "ants").animateFloat(
         initialValue = 0f,
         targetValue = 24f,
         animationSpec = infiniteRepeatable(tween(durationMillis = 900)),
-        label = "dash"
+        label = "dash",
     )
 
     var maskBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(selection) {
-        maskBitmap = selection?.let { mask ->
-            val buffer: PixelBuffer = mask.toMaskBitmap(0xFFFF3B30.toInt())
-            BitmapPixelBridge.toBitmap(buffer).asImageBitmap()
-        }
+        maskBitmap =
+            selection?.let { mask ->
+                val buffer: PixelBuffer = mask.toMaskBitmap(0xFFFF3B30.toInt())
+                BitmapPixelBridge.toBitmap(buffer).asImageBitmap()
+            }
     }
 
     Canvas(modifier = modifier) {
@@ -292,7 +313,7 @@ fun GuidesOverlay(
                         color = Color(0xCC2D9CDB),
                         start = Offset(line.startX, line.startY),
                         end = Offset(line.endX, line.endY),
-                        strokeWidth = if (line.isPrimary) hairline * 1.4f else hairline
+                        strokeWidth = if (line.isPrimary) hairline * 1.4f else hairline,
                     )
                 }
             }
@@ -304,7 +325,7 @@ fun GuidesOverlay(
                         color = Color(0x9988CC66),
                         start = Offset(clipped.startX, clipped.startY),
                         end = Offset(clipped.endX, clipped.endY),
-                        strokeWidth = hairline
+                        strokeWidth = hairline,
                     )
                 }
             }
@@ -312,84 +333,93 @@ fun GuidesOverlay(
             maskBitmap?.let { bitmap ->
                 drawImage(
                     image = bitmap,
-                    dstOffset = androidx.compose.ui.unit.IntOffset(0, 0),
-                    dstSize = androidx.compose.ui.unit.IntSize(canvasWidth, canvasHeight),
-                    alpha = 0.28f
+                    dstOffset =
+                        androidx.compose.ui.unit
+                            .IntOffset(0, 0),
+                    dstSize =
+                        androidx.compose.ui.unit
+                            .IntSize(canvasWidth, canvasHeight),
+                    alpha = 0.28f,
                 )
             }
 
             preview?.let { band ->
                 val points = band.points.map { Offset(it.first, it.second) }
                 when (band.tool) {
-                    ToolType.SELECT_RECTANGLE, ToolType.SELECT_ELLIPSE -> if (points.size >= 2) {
-                        val topLeft = Offset(
-                            minOf(points.first().x, points.last().x),
-                            minOf(points.first().y, points.last().y)
-                        )
-                        val size = androidx.compose.ui.geometry.Size(
-                            kotlin.math.abs(points.last().x - points.first().x),
-                            kotlin.math.abs(points.last().y - points.first().y)
-                        )
-                        if (band.tool == ToolType.SELECT_RECTANGLE) {
-                            drawRect(
-                                color = Color(0x66FFFFFF),
-                                topLeft = topLeft,
-                                size = size
-                            )
-                            drawRect(
-                                color = Color.White,
-                                topLeft = topLeft,
-                                size = size,
-                                style = Stroke(width = hairline * 1.2f)
-                            )
-                        } else {
-                            drawOval(
-                                color = Color(0x66FFFFFF),
-                                topLeft = topLeft,
-                                size = size
-                            )
-                            drawOval(
-                                color = Color.White,
-                                topLeft = topLeft,
-                                size = size,
-                                style = Stroke(width = hairline * 1.2f)
-                            )
+                    ToolType.SELECT_RECTANGLE, ToolType.SELECT_ELLIPSE ->
+                        if (points.size >= 2) {
+                            val topLeft =
+                                Offset(
+                                    minOf(points.first().x, points.last().x),
+                                    minOf(points.first().y, points.last().y),
+                                )
+                            val size =
+                                androidx.compose.ui.geometry.Size(
+                                    kotlin.math.abs(points.last().x - points.first().x),
+                                    kotlin.math.abs(points.last().y - points.first().y),
+                                )
+                            if (band.tool == ToolType.SELECT_RECTANGLE) {
+                                drawRect(
+                                    color = Color(0x66FFFFFF),
+                                    topLeft = topLeft,
+                                    size = size,
+                                )
+                                drawRect(
+                                    color = Color.White,
+                                    topLeft = topLeft,
+                                    size = size,
+                                    style = Stroke(width = hairline * 1.2f),
+                                )
+                            } else {
+                                drawOval(
+                                    color = Color(0x66FFFFFF),
+                                    topLeft = topLeft,
+                                    size = size,
+                                )
+                                drawOval(
+                                    color = Color.White,
+                                    topLeft = topLeft,
+                                    size = size,
+                                    style = Stroke(width = hairline * 1.2f),
+                                )
+                            }
                         }
-                    }
                     ToolType.SELECT_FREEHAND, ToolType.SELECT_LASSO -> {
                         for (i in 1 until points.size) {
                             drawLine(
                                 color = Color.White,
                                 start = points[i - 1],
                                 end = points[i],
-                                strokeWidth = hairline * 2f
+                                strokeWidth = hairline * 2f,
                             )
                         }
                     }
-                    ToolType.SHAPE -> if (points.size >= 2) {
-                        drawLine(
-                            color = Color(0xCCFFFFFF),
-                            start = points.first(),
-                            end = points.last(),
-                            strokeWidth = hairline * 2f,
-                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(18f, 12f), dashPhase)
-                        )
-                    }
-                    ToolType.GRADIENT -> if (points.size >= 2) {
-                        drawLine(
-                            color = Color.White,
-                            start = points.first(),
-                            end = points.last(),
-                            strokeWidth = hairline * 2f
-                        )
-                        drawCircle(Color.White, radius = hairline * 6f, center = points.first())
-                        drawCircle(
-                            Color.White,
-                            radius = hairline * 6f,
-                            center = points.last(),
-                            style = Stroke(width = hairline * 2f)
-                        )
-                    }
+                    ToolType.SHAPE ->
+                        if (points.size >= 2) {
+                            drawLine(
+                                color = Color(0xCCFFFFFF),
+                                start = points.first(),
+                                end = points.last(),
+                                strokeWidth = hairline * 2f,
+                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(18f, 12f), dashPhase),
+                            )
+                        }
+                    ToolType.GRADIENT ->
+                        if (points.size >= 2) {
+                            drawLine(
+                                color = Color.White,
+                                start = points.first(),
+                                end = points.last(),
+                                strokeWidth = hairline * 2f,
+                            )
+                            drawCircle(Color.White, radius = hairline * 6f, center = points.first())
+                            drawCircle(
+                                Color.White,
+                                radius = hairline * 6f,
+                                center = points.last(),
+                                style = Stroke(width = hairline * 2f),
+                            )
+                        }
                     else -> Unit
                 }
             }
@@ -399,14 +429,16 @@ fun GuidesOverlay(
                     drawRect(
                         color = Color.White,
                         topLeft = Offset(bounds.left.toFloat(), bounds.top.toFloat()),
-                        size = androidx.compose.ui.geometry.Size(
-                            bounds.width.toFloat(),
-                            bounds.height.toFloat()
-                        ),
-                        style = Stroke(
-                            width = (2f / scale).coerceAtLeast(0.3f),
-                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(16f, 12f), dashPhase)
-                        )
+                        size =
+                            androidx.compose.ui.geometry.Size(
+                                bounds.width.toFloat(),
+                                bounds.height.toFloat(),
+                            ),
+                        style =
+                            Stroke(
+                                width = (2f / scale).coerceAtLeast(0.3f),
+                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(16f, 12f), dashPhase),
+                            ),
                     )
                 }
             }
@@ -415,8 +447,10 @@ fun GuidesOverlay(
             drawRect(
                 color = Color(0x55FFFFFF),
                 topLeft = Offset.Zero,
-                size = androidx.compose.ui.geometry.Size(canvasWidth.toFloat(), canvasHeight.toFloat()),
-                style = Stroke(width = hairline)
+                size =
+                    androidx.compose.ui.geometry
+                        .Size(canvasWidth.toFloat(), canvasHeight.toFloat()),
+                style = Stroke(width = hairline),
             )
         }
     }
@@ -444,13 +478,14 @@ fun QuickMenuSheet(
     onRedo: () -> Unit,
     canUndo: Boolean,
     canRedo: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("View", style = MaterialTheme.typography.titleSmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -460,9 +495,9 @@ fun QuickMenuSheet(
             AssistChip(onClick = onResetView, label = { Text("100%") })
         }
         Text(
-            "Zoom $scalePercent% · Rotation ${rotation}°",
+            "Zoom $scalePercent% · Rotation $rotation°",
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AssistChip(onClick = { onRotate(15f) }, label = { Text("View +15°") })
@@ -494,18 +529,27 @@ fun QuickMenuSheet(
 
 /** Small round colour button used by the toolbar. */
 @Composable
-fun ColorChip(color: Int, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun ColorChip(
+    color: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Box(
-        modifier = modifier
-            .size(34.dp)
-            .clip(CircleShape)
-            .background(Color(color))
-            .clickable(onClick = onClick)
+        modifier =
+            modifier
+                .size(34.dp)
+                .clip(CircleShape)
+                .background(Color(color))
+                .clickable(onClick = onClick),
     )
 }
 
 /** Kept for callers that want a polar helper when drawing radial guides. */
-internal fun polarOffset(centre: Offset, radius: Float, degrees: Float): Offset {
+internal fun polarOffset(
+    centre: Offset,
+    radius: Float,
+    degrees: Float,
+): Offset {
     val radians = Math.toRadians(degrees.toDouble())
     return Offset(centre.x + cos(radians).toFloat() * radius, centre.y + sin(radians).toFloat() * radius)
 }

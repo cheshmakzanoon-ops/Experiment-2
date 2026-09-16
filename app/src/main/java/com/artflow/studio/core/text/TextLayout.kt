@@ -15,12 +15,13 @@ import kotlin.math.sqrt
  * rasterisation happens in `data/renderer/TextLayerRenderer` on the device.
  */
 object TextLayout {
-
-    enum class Alignment(val displayName: String) {
+    enum class Alignment(
+        val displayName: String,
+    ) {
         LEFT("Left"),
         CENTER("Center"),
         RIGHT("Right"),
-        JUSTIFY("Justify")
+        JUSTIFY("Justify"),
     }
 
     /**
@@ -44,7 +45,7 @@ object TextLayout {
         /** Maximum line width; `null` means "never wrap". */
         val maxWidth: Float? = null,
         /** Distance from one line's baseline to the next, in pixels. */
-        val curveRadius: Float? = null
+        val curveRadius: Float? = null,
     ) {
         val lineHeightPx: Float get() = fontSize * lineHeight.coerceIn(0.5f, 4f)
     }
@@ -54,7 +55,7 @@ object TextLayout {
         val text: String,
         val x: Float,
         val y: Float,
-        val width: Float
+        val width: Float,
     )
 
     /** A single glyph placed on a curve, with the tangent rotation the renderer must apply. */
@@ -64,7 +65,7 @@ object TextLayout {
         val y: Float,
         val width: Float,
         /** Rotation in degrees around ([x], [y]) so the glyph follows the arc. */
-        val rotationDegrees: Float
+        val rotationDegrees: Float,
     )
 
     /** One laid-out line. */
@@ -73,7 +74,7 @@ object TextLayout {
         val x: Float,
         val baselineY: Float,
         val width: Float,
-        val runs: List<PositionedText>
+        val runs: List<PositionedText>,
     )
 
     /** The complete result of laying out a string. */
@@ -81,7 +82,7 @@ object TextLayout {
         val lines: List<LaidOutLine>,
         val width: Float,
         val height: Float,
-        val lineCount: Int
+        val lineCount: Int,
     ) {
         val isEmpty: Boolean get() = lines.isEmpty() || lines.all { it.text.isEmpty() }
     }
@@ -100,7 +101,7 @@ object TextLayout {
         style: TextStyle,
         measureWidth: (String) -> Float,
         measureAscent: () -> Float,
-        measureDescent: () -> Float
+        measureDescent: () -> Float,
     ): LayoutResult {
         if (text.isEmpty()) return LayoutResult(emptyList(), 0f, 0f, 0)
 
@@ -120,27 +121,30 @@ object TextLayout {
         val lineHeight = style.lineHeightPx
         val widest = wrapped.maxOfOrNull { measureWidth(it) } ?: 0f
 
-        val lines = wrapped.mapIndexed { index, lineText ->
-            val lineWidth = measureWidth(lineText)
-            val baselineY = originY + ascent + index * lineHeight
-            val startX = when (style.alignment) {
-                Alignment.LEFT, Alignment.JUSTIFY -> originX
-                Alignment.CENTER -> originX + ((maxWidth ?: widest) - lineWidth) / 2f
-                Alignment.RIGHT -> originX + (maxWidth ?: widest) - lineWidth
+        val lines =
+            wrapped.mapIndexed { index, lineText ->
+                val lineWidth = measureWidth(lineText)
+                val baselineY = originY + ascent + index * lineHeight
+                val startX =
+                    when (style.alignment) {
+                        Alignment.LEFT, Alignment.JUSTIFY -> originX
+                        Alignment.CENTER -> originX + ((maxWidth ?: widest) - lineWidth) / 2f
+                        Alignment.RIGHT -> originX + (maxWidth ?: widest) - lineWidth
+                    }
+                val runs =
+                    if (style.alignment == Alignment.JUSTIFY && index < wrapped.size - 1) {
+                        justify(lineText, measureWidth, maxWidth ?: lineWidth, startX)
+                    } else {
+                        listOf(PositionedText(lineText, startX, baselineY, lineWidth))
+                    }
+                LaidOutLine(
+                    text = lineText,
+                    x = startX,
+                    baselineY = baselineY,
+                    width = lineWidth,
+                    runs = runs,
+                )
             }
-            val runs = if (style.alignment == Alignment.JUSTIFY && index < wrapped.size - 1) {
-                justify(lineText, measureWidth, maxWidth ?: lineWidth, startX)
-            } else {
-                listOf(PositionedText(lineText, startX, baselineY, lineWidth))
-            }
-            LaidOutLine(
-                text = lineText,
-                x = startX,
-                baselineY = baselineY,
-                width = lineWidth,
-                runs = runs
-            )
-        }
 
         val height = ascent + descent + (lines.size - 1).coerceAtLeast(0) * lineHeight
         return LayoutResult(lines, widest, height, lines.size)
@@ -154,7 +158,7 @@ object TextLayout {
         paragraph: String,
         maxWidth: Float,
         style: TextStyle,
-        measureWidth: (String) -> Float
+        measureWidth: (String) -> Float,
     ): List<String> {
         if (paragraph.isEmpty()) return listOf("")
         if (maxWidth <= 0f) return listOf(paragraph)
@@ -173,7 +177,7 @@ object TextLayout {
         }
 
         words.forEach { word ->
-            val candidate = if (current.isEmpty()) word else "${current} $word"
+            val candidate = if (current.isEmpty()) word else "$current $word"
             if (measureWidth(candidate) <= maxWidth) {
                 current = StringBuilder(candidate)
                 return@forEach
@@ -207,7 +211,7 @@ object TextLayout {
         lineText: String,
         measureWidth: (String) -> Float,
         targetWidth: Float,
-        startX: Float
+        startX: Float,
     ): List<PositionedText> {
         val words = lineText.split(' ').filter { it.isNotEmpty() }
         if (words.size < 2) return listOf(PositionedText(lineText, startX, 0f, measureWidth(lineText)))
@@ -237,7 +241,7 @@ object TextLayout {
         centerY: Float,
         radius: Float,
         style: TextStyle,
-        measureWidth: (String) -> Float
+        measureWidth: (String) -> Float,
     ): List<CurvedGlyph> {
         if (text.isEmpty() || radius == 0f) return emptyList()
         val arcRadius = abs(radius)
@@ -285,7 +289,10 @@ object TextLayout {
     }
 
     /** Angle of the path at [index], in degrees, for glyph rotation on an arbitrary path. */
-    fun pathAngleAt(points: List<Pair<Float, Float>>, index: Int): Float {
+    fun pathAngleAt(
+        points: List<Pair<Float, Float>>,
+        index: Int,
+    ): Float {
         if (points.size < 2) return 0f
         val clamped = index.coerceIn(0, points.size - 2)
         val dx = points[clamped + 1].first - points[clamped].first
@@ -294,17 +301,18 @@ object TextLayout {
     }
 
     /** Font families offered by the picker (Android's built-in families, so no assets are needed). */
-    val FONT_FAMILIES: List<String> = listOf(
-        "sans-serif",
-        "sans-serif-condensed",
-        "sans-serif-medium",
-        "serif",
-        "serif-monospace",
-        "monospace",
-        "casual",
-        "cursive",
-        "sans-serif-smallcaps"
-    )
+    val FONT_FAMILIES: List<String> =
+        listOf(
+            "sans-serif",
+            "sans-serif-condensed",
+            "sans-serif-medium",
+            "serif",
+            "serif-monospace",
+            "monospace",
+            "casual",
+            "cursive",
+            "sans-serif-smallcaps",
+        )
 
     /** Sizes offered by the quick text size stepper. */
     val FONT_SIZE_STEPS: List<Float> = listOf(12f, 18f, 24f, 32f, 48f, 64f, 96f, 128f, 192f, 256f)
@@ -313,8 +321,11 @@ object TextLayout {
     fun naturalWidth(result: LayoutResult): Float = max(result.width, 1f)
 
     /** True when the text needs at least one line break. */
-    fun needsWrap(text: String, style: TextStyle, measureWidth: (String) -> Float): Boolean =
-        style.maxWidth?.let { measureWidth(text) > it } ?: false
+    fun needsWrap(
+        text: String,
+        style: TextStyle,
+        measureWidth: (String) -> Float,
+    ): Boolean = style.maxWidth?.let { measureWidth(text) > it } ?: false
 
     /** Word count, shown in the text panel. */
     fun wordCount(text: String): Int = text.trim().split(Regex("\\s+")).count { it.isNotEmpty() }
@@ -323,12 +334,14 @@ object TextLayout {
     fun characterCount(text: String): Int = text.replace("\n", "").length
 
     /** Resolves a font family name to a safe fallback if the platform does not know it. */
-    fun fallbackFamily(fontFamily: String): String =
-        if (fontFamily in FONT_FAMILIES) fontFamily else "sans-serif"
+    fun fallbackFamily(fontFamily: String): String = if (fontFamily in FONT_FAMILIES) fontFamily else "sans-serif"
 
     /** Letter-spacing helper applied by the renderer: returns the per-glyph advance. */
-    fun advanceFor(glyphWidth: Float, style: TextStyle, isSpace: Boolean): Float =
-        glyphWidth + style.letterSpacing + if (isSpace) style.wordSpacing else 0f
+    fun advanceFor(
+        glyphWidth: Float,
+        style: TextStyle,
+        isSpace: Boolean,
+    ): Float = glyphWidth + style.letterSpacing + if (isSpace) style.wordSpacing else 0f
 
     /** Compute the ascent used by the layout when the platform font has not been loaded yet. */
     fun estimatedAscent(style: TextStyle): Float = style.fontSize * 0.78f

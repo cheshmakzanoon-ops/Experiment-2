@@ -17,17 +17,16 @@ import com.artflow.studio.data.local.entity.SettingsEntity
     entities = [
         ProjectEntity::class,
         BrushEntity::class,
-        SettingsEntity::class
+        SettingsEntity::class,
     ],
     version = 1,
-    exportSchema = true
+    exportSchema = true,
 )
 abstract class ArtFlowDatabase : RoomDatabase() {
-
     abstract fun projectDao(): ProjectDao
-    
+
     abstract fun brushDao(): BrushDao
-    
+
     abstract fun settingsDao(): SettingsDao
 
     companion object {

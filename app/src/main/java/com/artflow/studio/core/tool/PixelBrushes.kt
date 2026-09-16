@@ -21,7 +21,6 @@ import kotlin.math.sqrt
  * but differ in where the patch comes from and how it is corrected before it lands.
  */
 object PixelBrushes {
-
     /** Shared brush geometry used by all three tools. */
     data class BrushShape(
         val size: Float = 60f,
@@ -31,7 +30,7 @@ object PixelBrushes {
         val strength: Float = 0.6f,
         val opacity: Float = 1f,
         val mask: SelectionMask? = null,
-        val alphaLock: Boolean = false
+        val alphaLock: Boolean = false,
     ) {
         val radius: Float get() = (size / 2f).coerceAtLeast(0.5f)
     }
@@ -48,7 +47,7 @@ object PixelBrushes {
     class SmudgeSession(
         private val startX: Float,
         private val startY: Float,
-        var settings: SmudgeSettings = SmudgeSettings()
+        var settings: SmudgeSettings = SmudgeSettings(),
     ) {
         var lastX: Float = startX
             private set
@@ -59,7 +58,11 @@ object PixelBrushes {
         /** Total distance travelled, exposed for the timelapse and for the "rate" readout. */
         val distance: Float get() = accumulatedDistance
 
-        fun dragTo(x: Float, y: Float, target: PixelBuffer): IntBounds? {
+        fun dragTo(
+            x: Float,
+            y: Float,
+            target: PixelBuffer,
+        ): IntBounds? {
             val dx = x - lastX
             val dy = y - lastY
             val distance = sqrt(dx * dx + dy * dy)
@@ -81,15 +84,18 @@ object PixelBrushes {
                 radius = settings.radius,
                 strength = strength,
                 hardness = settings.hardness,
-                mask = settings.mask
+                mask = settings.mask,
             )
 
             accumulatedDistance += distance
-            val bounds = IntBounds.aroundRectangle(
-                min(lastX, x), min(lastY, y),
-                max(lastX, x), max(lastY, y),
-                padding = ceil(settings.radius).toInt() + 1
-            )
+            val bounds =
+                IntBounds.aroundRectangle(
+                    min(lastX, x),
+                    min(lastY, y),
+                    max(lastX, x),
+                    max(lastY, y),
+                    padding = ceil(settings.radius).toInt() + 1,
+                )
 
             lastX = x
             lastY = y
@@ -110,20 +116,28 @@ object PixelBrushes {
         /** Finger smudge mode pulls less colour per stamp for a gentler blend. */
         val fingerMode: Boolean = false,
         val mask: SelectionMask? = null,
-        val alphaLock: Boolean = false
+        val alphaLock: Boolean = false,
     ) {
         val radius: Float get() = (size / 2f).coerceAtLeast(0.5f)
     }
 
-    fun beginSmudge(x: Float, y: Float, settings: SmudgeSettings): SmudgeSession =
-        SmudgeSession(x, y, settings)
+    fun beginSmudge(
+        x: Float,
+        y: Float,
+        settings: SmudgeSettings,
+    ): SmudgeSession = SmudgeSession(x, y, settings)
 
     // ---------------------------------------------------------------------------------------
     // Clone stamp (Phase 19)
     // ---------------------------------------------------------------------------------------
 
     /** A named clone origin, so the artist can keep several reference points around. */
-    data class CloneSource(val id: Long, val x: Float, val y: Float, val label: String)
+    data class CloneSource(
+        val id: Long,
+        val x: Float,
+        val y: Float,
+        val label: String,
+    )
 
     data class CloneSettings(
         val size: Float = 60f,
@@ -141,7 +155,7 @@ object PixelBrushes {
         /** Scale the sampled patch around the source point. */
         val sourceScale: Float = 1f,
         val mask: SelectionMask? = null,
-        val alphaLock: Boolean = false
+        val alphaLock: Boolean = false,
     ) {
         val radius: Float get() = (size / 2f).coerceAtLeast(0.5f)
     }
@@ -155,7 +169,7 @@ object PixelBrushes {
         private val targetStartY: Float,
         private val sourceStartX: Float,
         private val sourceStartY: Float,
-        var settings: CloneSettings
+        var settings: CloneSettings,
     ) {
         private var lastX = targetStartX
         private var lastY = targetStartY
@@ -167,7 +181,12 @@ object PixelBrushes {
         var offsetY: Float = targetStartY - sourceStartY
             private set
 
-        fun dragTo(x: Float, y: Float, target: PixelBuffer, source: PixelBuffer): IntBounds? {
+        fun dragTo(
+            x: Float,
+            y: Float,
+            target: PixelBuffer,
+            source: PixelBuffer,
+        ): IntBounds? {
             val dx = x - lastX
             val dy = y - lastY
             val distance = sqrt(dx * dx + dy * dy)
@@ -188,13 +207,20 @@ object PixelBrushes {
             stamped = true
 
             return IntBounds.aroundRectangle(
-                min(targetStartX, x), min(targetStartY, y),
-                max(targetStartX, x), max(targetStartY, y),
-                padding = ceil(settings.radius).toInt() + 1
+                min(targetStartX, x),
+                min(targetStartY, y),
+                max(targetStartX, x),
+                max(targetStartY, y),
+                padding = ceil(settings.radius).toInt() + 1,
             )
         }
 
-        private fun stamp(px: Float, py: Float, target: PixelBuffer, source: PixelBuffer) {
+        private fun stamp(
+            px: Float,
+            py: Float,
+            target: PixelBuffer,
+            source: PixelBuffer,
+        ) {
             // Aligned mode keeps one fixed offset for the whole session; unaligned mode restarts
             // from the origin on every new stroke, which is why the offset is captured up front.
             val sourceX = px - offsetX
@@ -213,7 +239,7 @@ object PixelBrushes {
                 radius = settings.radius,
                 strength = settings.opacity,
                 hardness = settings.hardness,
-                mask = settings.mask
+                mask = settings.mask,
             )
             previewSourceX = sourceX
             previewSourceY = sourceY
@@ -226,7 +252,10 @@ object PixelBrushes {
             private set
 
         /** Resets the offset, used when the user alt-taps a new source mid-session. */
-        fun resetAlignment(newSourceX: Float, newSourceY: Float) {
+        fun resetAlignment(
+            newSourceX: Float,
+            newSourceY: Float,
+        ) {
             offsetX = lastX - newSourceX
             offsetY = lastY - newSourceY
             stamped = false
@@ -238,7 +267,7 @@ object PixelBrushes {
         targetY: Float,
         sourceX: Float,
         sourceY: Float,
-        settings: CloneSettings
+        settings: CloneSettings,
     ): CloneSession = CloneSession(targetX, targetY, sourceX, sourceY, settings)
 
     /** Reads the clone patch, applying the configured rotation and scale. */
@@ -246,7 +275,7 @@ object PixelBrushes {
         source: PixelBuffer,
         centerX: Float,
         centerY: Float,
-        settings: CloneSettings
+        settings: CloneSettings,
     ): PixelBuffer {
         val radius = ceil(settings.radius).toInt().coerceAtLeast(1)
         val size = radius * 2 + 1
@@ -268,7 +297,7 @@ object PixelBrushes {
             scaleY = settings.sourceScale.coerceAtLeast(0.05f),
             rotationDegrees = settings.sourceRotation,
             pivotX = size / 2f,
-            pivotY = size / 2f
+            pivotY = size / 2f,
         )
     }
 
@@ -290,7 +319,7 @@ object PixelBrushes {
         /** How far outside the brush the automatic source ring is sampled from (spot mode). */
         val sampleDistance: Float = 2.5f,
         val mask: SelectionMask? = null,
-        val alphaLock: Boolean = false
+        val alphaLock: Boolean = false,
     ) {
         val radius: Float get() = (size / 2f).coerceAtLeast(0.5f)
     }
@@ -301,7 +330,7 @@ object PixelBrushes {
         private val startY: Float,
         private val sourceStartX: Float,
         private val sourceStartY: Float,
-        var settings: HealingSettings
+        var settings: HealingSettings,
     ) {
         private var lastX = startX
         private var lastY = startY
@@ -310,7 +339,12 @@ object PixelBrushes {
         var offsetY: Float = startY - sourceStartY
             private set
 
-        fun dragTo(x: Float, y: Float, target: PixelBuffer, source: PixelBuffer): IntBounds? {
+        fun dragTo(
+            x: Float,
+            y: Float,
+            target: PixelBuffer,
+            source: PixelBuffer,
+        ): IntBounds? {
             val dx = x - lastX
             val dy = y - lastY
             val distance = sqrt(dx * dx + dy * dy)
@@ -326,19 +360,28 @@ object PixelBrushes {
             lastX = x
             lastY = y
             return IntBounds.aroundRectangle(
-                min(startX, x), min(startY, y), max(startX, x), max(startY, y),
-                padding = ceil(settings.radius).toInt() + 1
+                min(startX, x),
+                min(startY, y),
+                max(startX, x),
+                max(startY, y),
+                padding = ceil(settings.radius).toInt() + 1,
             )
         }
 
         /** Applies a single healing dab at ([px], [py]). */
-        fun heal(px: Float, py: Float, target: PixelBuffer, source: PixelBuffer) {
+        fun heal(
+            px: Float,
+            py: Float,
+            target: PixelBuffer,
+            source: PixelBuffer,
+        ) {
             val radius = settings.radius
-            val (sampleX, sampleY) = if (settings.spotMode) {
-                findSpotSource(target, px, py, settings)
-            } else {
-                (px - offsetX) to (py - offsetY)
-            }
+            val (sampleX, sampleY) =
+                if (settings.spotMode) {
+                    findSpotSource(target, px, py, settings)
+                } else {
+                    (px - offsetX) to (py - offsetY)
+                }
 
             val patch = Stamping.readPatch(source, sampleX, sampleY, radius)
             val patchSize = sqrt(patch.size.toFloat()).toInt()
@@ -351,20 +394,21 @@ object PixelBrushes {
             val shiftG = Channels.green(destinationMean) - Channels.green(patchMean)
             val shiftB = Channels.blue(destinationMean) - Channels.blue(patchMean)
 
-            val corrected = IntArray(patch.size) { index ->
-                val pixel = patch[index]
-                val alpha = Channels.alpha(pixel).toInt()
-                if (alpha == 0) {
-                    pixel
-                } else {
-                    Channels.argb(
-                        alpha,
-                        (Channels.red(pixel) + shiftR).roundToInt().coerceIn(0, 255),
-                        (Channels.green(pixel) + shiftG).roundToInt().coerceIn(0, 255),
-                        (Channels.blue(pixel) + shiftB).roundToInt().coerceIn(0, 255)
-                    )
+            val corrected =
+                IntArray(patch.size) { index ->
+                    val pixel = patch[index]
+                    val alpha = Channels.alpha(pixel).toInt()
+                    if (alpha == 0) {
+                        pixel
+                    } else {
+                        Channels.argb(
+                            alpha,
+                            (Channels.red(pixel) + shiftR).roundToInt().coerceIn(0, 255),
+                            (Channels.green(pixel) + shiftG).roundToInt().coerceIn(0, 255),
+                            (Channels.blue(pixel) + shiftB).roundToInt().coerceIn(0, 255),
+                        )
+                    }
                 }
-            }
 
             Stamping.stampPatch(
                 target = target,
@@ -374,7 +418,7 @@ object PixelBrushes {
                 radius = radius,
                 strength = settings.strength,
                 hardness = settings.hardness,
-                mask = settings.mask
+                mask = settings.mask,
             )
         }
     }
@@ -384,7 +428,7 @@ object PixelBrushes {
         y: Float,
         sourceX: Float,
         sourceY: Float,
-        settings: HealingSettings
+        settings: HealingSettings,
     ): HealingSession = HealingSession(x, y, sourceX, sourceY, settings)
 
     /**
@@ -396,7 +440,7 @@ object PixelBrushes {
         target: PixelBuffer,
         x: Float,
         y: Float,
-        settings: HealingSettings
+        settings: HealingSettings,
     ): Pair<Float, Float> {
         val radius = settings.radius
         val distance = radius * settings.sampleDistance.coerceAtLeast(1.2f)
@@ -426,7 +470,12 @@ object PixelBrushes {
     }
 
     /** Mean ARGB over a circular region. Transparent pixels are excluded from the average. */
-    fun meanRegion(buffer: PixelBuffer, centerX: Float, centerY: Float, radius: Float): Int {
+    fun meanRegion(
+        buffer: PixelBuffer,
+        centerX: Float,
+        centerY: Float,
+        radius: Float,
+    ): Int {
         var a = 0f
         var r = 0f
         var g = 0f
@@ -473,7 +522,10 @@ object PixelBrushes {
         return Channels.fromFloats(a / count, r / count, g / count, b / count)
     }
 
-    fun colorDistance(a: Int, b: Int): Float {
+    fun colorDistance(
+        a: Int,
+        b: Int,
+    ): Float {
         val da = Channels.alpha(a) - Channels.alpha(b)
         val dr = Channels.red(a) - Channels.red(b)
         val dg = Channels.green(a) - Channels.green(b)
@@ -488,7 +540,7 @@ object PixelBrushes {
         centerX: Float,
         centerY: Float,
         radius: Float,
-        feather: Float
+        feather: Float,
     ) {
         val blurred = ImageFilters.gaussianBlur(original, feather.coerceAtLeast(0.5f))
         for (y in 0 until target.height) {

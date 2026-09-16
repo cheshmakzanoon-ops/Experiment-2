@@ -16,13 +16,12 @@ import kotlin.math.roundToInt
  * rather than by hand on a device.
  */
 object AnimationTimeline {
-
     /** A timeline plus the settings that describe how it plays. */
     data class State(
         val frames: List<AnimationFrame> = emptyList(),
         val activeIndex: Int = 0,
         val settings: AnimationSettings = AnimationSettings(),
-        val isPlaying: Boolean = false
+        val isPlaying: Boolean = false,
     ) {
         val activeFrame: AnimationFrame? get() = frames.getOrNull(activeIndex)
         val frameCount: Int get() = frames.size
@@ -34,33 +33,42 @@ object AnimationTimeline {
     }
 
     /** Creates the first frame from a starting layer stack. */
-    fun initialState(layers: List<Layer>, settings: AnimationSettings = AnimationSettings()): State {
-        val frame = AnimationFrame(
-            id = 1L,
-            name = "Frame 1",
-            layers = layers,
-            durationMs = settings.frameDurationMs,
-            createdAt = System.currentTimeMillis()
-        )
+    fun initialState(
+        layers: List<Layer>,
+        settings: AnimationSettings = AnimationSettings(),
+    ): State {
+        val frame =
+            AnimationFrame(
+                id = 1L,
+                name = "Frame 1",
+                layers = layers,
+                durationMs = settings.frameDurationMs,
+                createdAt = System.currentTimeMillis(),
+            )
         return State(frames = listOf(frame), activeIndex = 0, settings = settings)
     }
 
     /** Appends a blank frame after the active one, copying nothing. */
-    fun addBlankFrame(state: State, backgroundLayerName: String = "Background"): State {
+    fun addBlankFrame(
+        state: State,
+        backgroundLayerName: String = "Background",
+    ): State {
         val nextId = (state.frames.maxOfOrNull { it.id } ?: 0L) + 1
-        val blank = AnimationFrame(
-            id = nextId,
-            name = "Frame ${state.frames.size + 1}",
-            layers = listOf(
-                Layer(
-                    id = 1L,
-                    name = backgroundLayerName,
-                    index = 0
-                )
-            ),
-            durationMs = state.settings.frameDurationMs,
-            createdAt = System.currentTimeMillis()
-        )
+        val blank =
+            AnimationFrame(
+                id = nextId,
+                name = "Frame ${state.frames.size + 1}",
+                layers =
+                    listOf(
+                        Layer(
+                            id = 1L,
+                            name = backgroundLayerName,
+                            index = 0,
+                        ),
+                    ),
+                durationMs = state.settings.frameDurationMs,
+                createdAt = System.currentTimeMillis(),
+            )
         return insert(state, blank, state.activeIndex + 1)
     }
 
@@ -72,31 +80,42 @@ object AnimationTimeline {
         val source = state.activeFrame ?: return state
         val nextFrameId = (state.frames.maxOfOrNull { it.id } ?: 0L) + 1
         val nextLayerId = (source.layers.maxOfOrNull { it.id } ?: 0L) + 1
-        val nextStrokeId = source.layers.flatMap { it.strokes }.maxOfOrNull { it.id }?.plus(1) ?: 1L
+        val nextStrokeId =
+            source.layers
+                .flatMap { it.strokes }
+                .maxOfOrNull { it.id }
+                ?.plus(1) ?: 1L
 
         var layerIdCursor = nextLayerId
         var strokeIdCursor = nextStrokeId
-        val remapped = source.layers.map { layer ->
-            val newLayerId = layerIdCursor++
-            layer.copy(
-                id = newLayerId,
-                strokes = layer.strokes.map { stroke ->
-                    stroke.copy(id = strokeIdCursor++, layerId = newLayerId)
-                }
-            )
-        }
+        val remapped =
+            source.layers.map { layer ->
+                val newLayerId = layerIdCursor++
+                layer.copy(
+                    id = newLayerId,
+                    strokes =
+                        layer.strokes.map { stroke ->
+                            stroke.copy(id = strokeIdCursor++, layerId = newLayerId)
+                        },
+                )
+            }
 
-        val duplicate = source.copy(
-            id = nextFrameId,
-            name = "${source.name} copy",
-            layers = remapped,
-            createdAt = System.currentTimeMillis()
-        )
+        val duplicate =
+            source.copy(
+                id = nextFrameId,
+                name = "${source.name} copy",
+                layers = remapped,
+                createdAt = System.currentTimeMillis(),
+            )
         return insert(state, duplicate, state.activeIndex + 1)
     }
 
     /** Inserts [frame] at [index], keeping the active index on the newly inserted frame. */
-    fun insert(state: State, frame: AnimationFrame, index: Int): State {
+    fun insert(
+        state: State,
+        frame: AnimationFrame,
+        index: Int,
+    ): State {
         val frames = state.frames.toMutableList()
         val target = index.coerceIn(0, frames.size)
         frames.add(target, frame)
@@ -104,20 +123,28 @@ object AnimationTimeline {
     }
 
     /** Deletes the frame at [index]. The last remaining frame can never be deleted. */
-    fun deleteFrame(state: State, index: Int): State {
+    fun deleteFrame(
+        state: State,
+        index: Int,
+    ): State {
         if (state.frames.size <= 1) return state
         if (index !in state.frames.indices) return state
         val frames = state.frames.toMutableList().apply { removeAt(index) }
-        val active = when {
-            index < state.activeIndex -> state.activeIndex - 1
-            index == state.activeIndex -> index.coerceAtMost(frames.lastIndex)
-            else -> state.activeIndex
-        }
+        val active =
+            when {
+                index < state.activeIndex -> state.activeIndex - 1
+                index == state.activeIndex -> index.coerceAtMost(frames.lastIndex)
+                else -> state.activeIndex
+            }
         return state.copy(frames = frames, activeIndex = active)
     }
 
     /** Moves a frame from [from] to [to] and keeps the moved frame active. */
-    fun moveFrame(state: State, from: Int, to: Int): State {
+    fun moveFrame(
+        state: State,
+        from: Int,
+        to: Int,
+    ): State {
         if (from !in state.frames.indices) return state
         val target = to.coerceIn(0, state.frames.lastIndex)
         if (from == target) return state
@@ -128,15 +155,22 @@ object AnimationTimeline {
     }
 
     /** Adds a layer to every frame (used by "add a persistent background"). */
-    fun addLayerToAllFrames(state: State, layerFactory: (frameIndex: Int) -> Layer): State {
-        val frames = state.frames.mapIndexed { index, frame ->
-            frame.copy(layers = frame.layers + layerFactory(index))
-        }
+    fun addLayerToAllFrames(
+        state: State,
+        layerFactory: (frameIndex: Int) -> Layer,
+    ): State {
+        val frames =
+            state.frames.mapIndexed { index, frame ->
+                frame.copy(layers = frame.layers + layerFactory(index))
+            }
         return state.copy(frames = frames)
     }
 
     /** Replaces the layer stack of the active frame. */
-    fun updateActiveFrameLayers(state: State, layers: List<Layer>): State {
+    fun updateActiveFrameLayers(
+        state: State,
+        layers: List<Layer>,
+    ): State {
         val frame = state.activeFrame ?: return state
         val frames = state.frames.toMutableList()
         frames[state.activeIndex] = frame.copy(layers = layers)
@@ -144,32 +178,47 @@ object AnimationTimeline {
     }
 
     /** Sets the hold duration of a frame. */
-    fun setFrameDuration(state: State, index: Int, durationMs: Int): State {
+    fun setFrameDuration(
+        state: State,
+        index: Int,
+        durationMs: Int,
+    ): State {
         if (index !in state.frames.indices) return state
         val frames = state.frames.toMutableList()
-        frames[index] = frames[index].copy(
-            durationMs = durationMs.coerceIn(AnimationFrame.MIN_DURATION_MS, AnimationFrame.MAX_DURATION_MS)
-        )
+        frames[index] =
+            frames[index].copy(
+                durationMs = durationMs.coerceIn(AnimationFrame.MIN_DURATION_MS, AnimationFrame.MAX_DURATION_MS),
+            )
         return state.copy(frames = frames)
     }
 
     /** Applies the FPS to every frame that still uses the default duration. */
-    fun applyFps(state: State, fps: Int): State {
+    fun applyFps(
+        state: State,
+        fps: Int,
+    ): State {
         val clamped = fps.coerceIn(AnimationSettings.MIN_FPS, AnimationSettings.MAX_FPS)
         val settings = state.settings.copy(fps = clamped)
         val duration = settings.frameDurationMs
-        val frames = state.frames.map { frame ->
-            if (frame.durationMs == AnimationFrame.DEFAULT_DURATION_MS) frame.copy(durationMs = duration) else frame
-        }
+        val frames =
+            state.frames.map { frame ->
+                if (frame.durationMs == AnimationFrame.DEFAULT_DURATION_MS) frame.copy(durationMs = duration) else frame
+            }
         return state.copy(frames = frames, settings = settings)
     }
 
     /** Selects a frame by index (clamped). */
-    fun select(state: State, index: Int): State =
-        state.copy(activeIndex = index.coerceIn(0, max(0, state.frames.lastIndex)))
+    fun select(
+        state: State,
+        index: Int,
+    ): State = state.copy(activeIndex = index.coerceIn(0, max(0, state.frames.lastIndex)))
 
     /** Moves the selection by [delta] frames, wrapping when the animation loops. */
-    fun step(state: State, delta: Int, wrap: Boolean = true): State {
+    fun step(
+        state: State,
+        delta: Int,
+        wrap: Boolean = true,
+    ): State {
         if (state.frames.isEmpty()) return state
         var index = state.activeIndex + delta
         if (wrap) {
@@ -186,7 +235,10 @@ object AnimationTimeline {
      *
      * @param direction +1 for forward, -1 for backwards during a ping-pong return leg.
      */
-    fun nextPlaybackIndex(state: State, direction: Int): Pair<Int, Int> {
+    fun nextPlaybackIndex(
+        state: State,
+        direction: Int,
+    ): Pair<Int, Int> {
         val range = playbackRange(state)
         if (range.isEmpty()) return state.activeIndex to direction
         var index = state.activeIndex
@@ -222,16 +274,20 @@ object AnimationTimeline {
     fun playbackRange(state: State): IntRange {
         if (state.frames.isEmpty()) return IntRange.EMPTY
         val start = state.settings.playbackRangeStart.coerceIn(0, state.frames.lastIndex)
-        val end = if (state.settings.playbackRangeEnd < 0) {
-            state.frames.lastIndex
-        } else {
-            state.settings.playbackRangeEnd.coerceIn(start, state.frames.lastIndex)
-        }
+        val end =
+            if (state.settings.playbackRangeEnd < 0) {
+                state.frames.lastIndex
+            } else {
+                state.settings.playbackRangeEnd.coerceIn(start, state.frames.lastIndex)
+            }
         return start..end
     }
 
     /** Frame index displayed at [elapsedMs] of playback, respecting per-frame durations. */
-    fun frameIndexAtElapsed(state: State, elapsedMs: Long): Int {
+    fun frameIndexAtElapsed(
+        state: State,
+        elapsedMs: Long,
+    ): Int {
         val range = playbackRange(state)
         if (range.isEmpty()) return 0
         val total = (range.first..range.last).sumOf { state.frames[it].durationMs.toLong() }
@@ -251,7 +307,7 @@ object AnimationTimeline {
      */
     data class OnionSkin(
         val previous: List<Pair<Int, Float>>,
-        val next: List<Pair<Int, Float>>
+        val next: List<Pair<Int, Float>>,
     )
 
     fun onionSkin(state: State): OnionSkin {
@@ -279,15 +335,16 @@ object AnimationTimeline {
 
     /** Frame names for the timeline strip; ensures they stay unique after edits. */
     fun normalizeNames(state: State): State {
-        val frames = state.frames.mapIndexed { index, frame ->
-            val expected = "Frame ${index + 1}"
-            // Only rename untouched default names so user names survive.
-            if (frame.name.startsWith("Frame ") && frame.name != expected) {
-                frame.copy(name = expected)
-            } else {
-                frame
+        val frames =
+            state.frames.mapIndexed { index, frame ->
+                val expected = "Frame ${index + 1}"
+                // Only rename untouched default names so user names survive.
+                if (frame.name.startsWith("Frame ") && frame.name != expected) {
+                    frame.copy(name = expected)
+                } else {
+                    frame
+                }
             }
-        }
         return state.copy(frames = frames)
     }
 
@@ -295,11 +352,14 @@ object AnimationTimeline {
     fun totalStrokeCount(state: State): Int = state.frames.sumOf { frame -> frame.layers.sumOf { it.strokes.size } }
 
     /** Number of frames that still have no content. */
-    fun emptyFrameIndices(state: State): List<Int> =
-        state.frames.mapIndexedNotNull { index, frame -> index.takeIf { frame.isEmpty() } }
+    fun emptyFrameIndices(state: State): List<Int> = state.frames.mapIndexedNotNull { index, frame -> index.takeIf { frame.isEmpty() } }
 
     /** Estimated memory for all frames, in megabytes. */
-    fun estimatedMemoryMb(state: State, width: Int, height: Int): Float {
+    fun estimatedMemoryMb(
+        state: State,
+        width: Int,
+        height: Int,
+    ): Float {
         val bytesPerLayer = width.toLong() * height * 4
         val layerCount = state.frames.sumOf { it.layerCount }
         return (bytesPerLayer * layerCount) / (1024f * 1024f)
@@ -312,14 +372,20 @@ object AnimationTimeline {
     }
 
     /** Playback position in `0..1` for a scrubber. */
-    fun progress(state: State, elapsedMs: Long): Float {
+    fun progress(
+        state: State,
+        elapsedMs: Long,
+    ): Float {
         val total = state.durationMs
         if (total <= 0) return 0f
         return (elapsedMs.toFloat() / total).coerceIn(0f, 1f)
     }
 
     /** Frame index closest to a scrubber position in `0..1`. */
-    fun frameIndexAtProgress(state: State, progress: Float): Int {
+    fun frameIndexAtProgress(
+        state: State,
+        progress: Float,
+    ): Int {
         if (state.frames.isEmpty()) return 0
         val clamped = progress.coerceIn(0f, 1f)
         val targetMs = (state.durationMs * clamped)
@@ -332,7 +398,10 @@ object AnimationTimeline {
     }
 
     /** Exports the durations of every frame, for the GIF encoder. */
-    fun frameDurations(state: State, overrideFps: Int? = null): List<Int> {
+    fun frameDurations(
+        state: State,
+        overrideFps: Int? = null,
+    ): List<Int> {
         val fallback = overrideFps?.let { (1000f / it.coerceIn(1, 60)).roundToInt().coerceAtLeast(16) }
         return state.frames.map { fallback ?: it.durationMs }
     }
@@ -360,7 +429,10 @@ object AnimationTimeline {
     }
 
     /** Clamps a scrub position to the nearest frame boundary. */
-    fun snapToFrameBoundary(state: State, progress: Float): Float {
+    fun snapToFrameBoundary(
+        state: State,
+        progress: Float,
+    ): Float {
         val index = frameIndexAtProgress(state, progress)
         val before = state.frames.take(index).sumOf { it.durationMs.toLong() }
         val total = state.durationMs
@@ -372,13 +444,22 @@ object AnimationTimeline {
     val FRAME_LIMITS = 1..600
 
     /** Difference between two frame durations, for the "hold" readout. */
-    fun durationDelta(a: AnimationFrame, b: AnimationFrame): Int = abs(a.durationMs - b.durationMs)
+    fun durationDelta(
+        a: AnimationFrame,
+        b: AnimationFrame,
+    ): Int = abs(a.durationMs - b.durationMs)
 
     /** Ensures a frame index is valid for [state] (used when the frame count shrinks). */
-    fun clampIndex(state: State, index: Int): Int = index.coerceIn(0, max(0, state.frames.lastIndex))
+    fun clampIndex(
+        state: State,
+        index: Int,
+    ): Int = index.coerceIn(0, max(0, state.frames.lastIndex))
 
     /** Smallest sensible duration for a frame given the loop time budget. */
-    fun minDurationForLoop(totalMs: Long, frames: Int): Int {
+    fun minDurationForLoop(
+        totalMs: Long,
+        frames: Int,
+    ): Int {
         if (frames <= 0) return AnimationFrame.MIN_DURATION_MS
         return max(AnimationFrame.MIN_DURATION_MS, min(AnimationFrame.MAX_DURATION_MS, (totalMs / frames).toInt()))
     }

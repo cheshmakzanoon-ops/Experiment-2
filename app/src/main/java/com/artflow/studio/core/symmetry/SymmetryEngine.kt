@@ -1,7 +1,6 @@
 package com.artflow.studio.core.symmetry
 
 import com.artflow.studio.domain.model.brush.Stroke
-import com.artflow.studio.domain.model.brush.StrokePoint
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
@@ -19,17 +18,22 @@ import kotlin.math.sqrt
  * The maths is pure geometry, so it is fully unit-testable.
  */
 object SymmetryEngine {
-
-    enum class SymmetryType(val displayName: String) {
+    enum class SymmetryType(
+        val displayName: String,
+    ) {
         NONE("None"),
+
         /** Mirror across the vertical axis (left <-> right). */
         VERTICAL("Vertical"),
+
         /** Mirror across the horizontal axis (top <-> bottom). */
         HORIZONTAL("Horizontal"),
+
         /** Both axes, producing four copies. */
         QUADRANT("Quadrant"),
+
         /** Rotational symmetry around the canvas centre. */
-        RADIAL("Radial")
+        RADIAL("Radial"),
     }
 
     /**
@@ -52,21 +56,26 @@ object SymmetryEngine {
         val radialAngleDegrees: Float = 0f,
         val secondaryAxis: Boolean = false,
         /** When true the mirrored copies use their own independent colour jitter. */
-        val independentColour: Boolean = false
+        val independentColour: Boolean = false,
     ) {
         fun isActive(): Boolean = type != SymmetryType.NONE
 
         /** How many brush stamps each pointer sample produces. */
-        fun instanceCount(): Int = when (type) {
-            SymmetryType.NONE -> 1
-            SymmetryType.VERTICAL, SymmetryType.HORIZONTAL -> if (secondaryAxis) 4 else 2
-            SymmetryType.QUADRANT -> 4
-            SymmetryType.RADIAL -> radialCount.coerceIn(2, 32)
-        }
+        fun instanceCount(): Int =
+            when (type) {
+                SymmetryType.NONE -> 1
+                SymmetryType.VERTICAL, SymmetryType.HORIZONTAL -> if (secondaryAxis) 4 else 2
+                SymmetryType.QUADRANT -> 4
+                SymmetryType.RADIAL -> radialCount.coerceIn(2, 32)
+            }
     }
 
     /** A mirrored pointer sample. */
-    data class Instance(val x: Float, val y: Float, val rotationDegrees: Float)
+    data class Instance(
+        val x: Float,
+        val y: Float,
+        val rotationDegrees: Float,
+    )
 
     /**
      * Transforms ([x], [y]) into every symmetric instance, including the original.
@@ -80,7 +89,7 @@ object SymmetryEngine {
         width: Int,
         height: Int,
         settings: Settings,
-        brushRotation: Float = 0f
+        brushRotation: Float = 0f,
     ): List<Instance> {
         if (!settings.isActive()) return listOf(Instance(x, y, brushRotation))
 
@@ -91,11 +100,17 @@ object SymmetryEngine {
 
         val results = mutableListOf<Instance>()
 
-        fun mirrorVertical(px: Float, py: Float, rotation: Float): Instance =
-            Instance(2f * axisX - px, py, -rotation)
+        fun mirrorVertical(
+            px: Float,
+            py: Float,
+            rotation: Float,
+        ): Instance = Instance(2f * axisX - px, py, -rotation)
 
-        fun mirrorHorizontal(px: Float, py: Float, rotation: Float): Instance =
-            Instance(px, 2f * axisY - py, -rotation)
+        fun mirrorHorizontal(
+            px: Float,
+            py: Float,
+            rotation: Float,
+        ): Instance = Instance(px, 2f * axisY - py, -rotation)
 
         when (settings.type) {
             SymmetryType.NONE -> results += Instance(x, y, brushRotation)
@@ -130,11 +145,12 @@ object SymmetryEngine {
                     val sinA = sin(angle).toFloat()
                     val dx = x - centreX
                     val dy = y - centreY
-                    results += Instance(
-                        x = centreX + dx * cosA - dy * sinA,
-                        y = centreY + dx * sinA + dy * cosA,
-                        rotationDegrees = brushRotation + Math.toDegrees(angle).toFloat()
-                    )
+                    results +=
+                        Instance(
+                            x = centreX + dx * cosA - dy * sinA,
+                            y = centreY + dx * sinA + dy * cosA,
+                            rotationDegrees = brushRotation + Math.toDegrees(angle).toFloat(),
+                        )
                 }
             }
         }
@@ -145,19 +161,25 @@ object SymmetryEngine {
      * Mirrors a whole stroke. Used when symmetry is switched on after a stroke was drawn, and by
      * the tests that assert the replication matches stamp-for-stamp.
      */
-    fun mirrorStroke(stroke: Stroke, width: Int, height: Int, settings: Settings): List<Stroke> {
+    fun mirrorStroke(
+        stroke: Stroke,
+        width: Int,
+        height: Int,
+        settings: Settings,
+    ): List<Stroke> {
         if (!settings.isActive()) return listOf(stroke)
-        val mirrored = instances(
-            x = stroke.points.firstOrNull()?.x ?: 0f,
-            y = stroke.points.firstOrNull()?.y ?: 0f,
-            width = width,
-            height = height,
-            settings = settings
-        )
+        val mirrored =
+            instances(
+                x = stroke.points.firstOrNull()?.x ?: 0f,
+                y = stroke.points.firstOrNull()?.y ?: 0f,
+                width = width,
+                height = height,
+                settings = settings,
+            )
         if (mirrored.size <= 1) return listOf(stroke)
 
         // Apply the same transform to every point so pressure/texture data is preserved.
-        return mirrored.mapIndexed { index, instance -> 
+        return mirrored.mapIndexed { index, instance ->
             if (index == 0) {
                 stroke
             } else {
@@ -168,14 +190,15 @@ object SymmetryEngine {
                 val sinR = sin(rotation).toFloat()
                 val originX = stroke.points.firstOrNull()?.x ?: 0f
                 val originY = stroke.points.firstOrNull()?.y ?: 0f
-                val transformed = stroke.points.map { point ->
-                    val localX = point.x - originX
-                    val localY = point.y - originY
-                    point.copy(
-                        x = originX + dx + (localX * cosR - localY * sinR),
-                        y = originY + dy + (localX * sinR + localY * cosR)
-                    )
-                }
+                val transformed =
+                    stroke.points.map { point ->
+                        val localX = point.x - originX
+                        val localY = point.y - originY
+                        point.copy(
+                            x = originX + dx + (localX * cosR - localY * sinR),
+                            y = originY + dy + (localX * sinR + localY * cosR),
+                        )
+                    }
                 stroke.copy(id = stroke.id + index, points = transformed)
             }
         }
@@ -187,11 +210,15 @@ object SymmetryEngine {
         val startY: Float,
         val endX: Float,
         val endY: Float,
-        val isPrimary: Boolean = true
+        val isPrimary: Boolean = true,
     )
 
     /** Guide lines for the current symmetry, ready for the overlay to draw. */
-    fun guideLines(width: Int, height: Int, settings: Settings): List<GuideLine> {
+    fun guideLines(
+        width: Int,
+        height: Int,
+        settings: Settings,
+    ): List<GuideLine> {
         if (!settings.isActive()) return emptyList()
         val axisX = (settings.centreX + settings.offsetX) * width
         val axisY = (settings.centreY + settings.offsetY) * height
@@ -217,15 +244,17 @@ object SymmetryEngine {
                 val count = settings.radialCount.coerceIn(2, 32)
                 val radius = sqrt(centreX * centreX + centreY * centreY)
                 for (i in 0 until count) {
-                    val angle = Math.toRadians(settings.radialAngleDegrees.toDouble()) +
-                        (2.0 * Math.PI * i) / count
-                    lines += GuideLine(
-                        startX = centreX,
-                        startY = centreY,
-                        endX = centreX + radius * cos(angle).toFloat(),
-                        endY = centreY + radius * sin(angle).toFloat(),
-                        isPrimary = i % 2 == 0
-                    )
+                    val angle =
+                        Math.toRadians(settings.radialAngleDegrees.toDouble()) +
+                            (2.0 * Math.PI * i) / count
+                    lines +=
+                        GuideLine(
+                            startX = centreX,
+                            startY = centreY,
+                            endX = centreX + radius * cos(angle).toFloat(),
+                            endY = centreY + radius * sin(angle).toFloat(),
+                            isPrimary = i % 2 == 0,
+                        )
                 }
             }
         }
@@ -233,7 +262,14 @@ object SymmetryEngine {
     }
 
     /** Snaps a point onto the nearest symmetry axis, used by the "snap to guide" option. */
-    fun snapToAxis(x: Float, y: Float, width: Int, height: Int, settings: Settings, tolerance: Float): Pair<Float, Float> {
+    fun snapToAxis(
+        x: Float,
+        y: Float,
+        width: Int,
+        height: Int,
+        settings: Settings,
+        tolerance: Float,
+    ): Pair<Float, Float> {
         if (!settings.isActive()) return x to y
         val axisX = (settings.centreX + settings.offsetX) * width
         val axisY = (settings.centreY + settings.offsetY) * height
@@ -249,36 +285,48 @@ object SymmetryEngine {
     }
 
     /** Presets shown in the symmetry panel. */
-    data class Preset(val name: String, val settings: Settings)
-
-    val PRESETS: List<Preset> = listOf(
-        Preset("Vertical", Settings(type = SymmetryType.VERTICAL)),
-        Preset("Horizontal", Settings(type = SymmetryType.HORIZONTAL)),
-        Preset("Quadrant", Settings(type = SymmetryType.QUADRANT)),
-        Preset("Mandala 6", Settings(type = SymmetryType.RADIAL, radialCount = 6)),
-        Preset("Mandala 8", Settings(type = SymmetryType.RADIAL, radialCount = 8)),
-        Preset("Mandala 12", Settings(type = SymmetryType.RADIAL, radialCount = 12)),
-        Preset("Kaleidoscope 5", Settings(type = SymmetryType.RADIAL, radialCount = 5, radialAngleDegrees = 15f)),
-        Preset("Double Axis", Settings(type = SymmetryType.VERTICAL, secondaryAxis = true))
+    data class Preset(
+        val name: String,
+        val settings: Settings,
     )
+
+    val PRESETS: List<Preset> =
+        listOf(
+            Preset("Vertical", Settings(type = SymmetryType.VERTICAL)),
+            Preset("Horizontal", Settings(type = SymmetryType.HORIZONTAL)),
+            Preset("Quadrant", Settings(type = SymmetryType.QUADRANT)),
+            Preset("Mandala 6", Settings(type = SymmetryType.RADIAL, radialCount = 6)),
+            Preset("Mandala 8", Settings(type = SymmetryType.RADIAL, radialCount = 8)),
+            Preset("Mandala 12", Settings(type = SymmetryType.RADIAL, radialCount = 12)),
+            Preset("Kaleidoscope 5", Settings(type = SymmetryType.RADIAL, radialCount = 5, radialAngleDegrees = 15f)),
+            Preset("Double Axis", Settings(type = SymmetryType.VERTICAL, secondaryAxis = true)),
+        )
 
     /** Radial symmetry count range exposed to the UI slider. */
     val RADIAL_RANGE = 2..32
 
     /** Clamps settings into their valid ranges (called by every setter in the ViewModel). */
-    fun sanitize(settings: Settings): Settings = settings.copy(
-        centreX = settings.centreX.coerceIn(-1f, 2f),
-        centreY = settings.centreY.coerceIn(-1f, 2f),
-        offsetX = settings.offsetX.coerceIn(-1f, 1f),
-        offsetY = settings.offsetY.coerceIn(-1f, 1f),
-        radialCount = settings.radialCount.coerceIn(RADIAL_RANGE.first, RADIAL_RANGE.last),
-        radialAngleDegrees = ((settings.radialAngleDegrees % 360f) + 360f) % 360f
-    )
+    fun sanitize(settings: Settings): Settings =
+        settings.copy(
+            centreX = settings.centreX.coerceIn(-1f, 2f),
+            centreY = settings.centreY.coerceIn(-1f, 2f),
+            offsetX = settings.offsetX.coerceIn(-1f, 1f),
+            offsetY = settings.offsetY.coerceIn(-1f, 1f),
+            radialCount = settings.radialCount.coerceIn(RADIAL_RANGE.first, RADIAL_RANGE.last),
+            radialAngleDegrees = ((settings.radialAngleDegrees % 360f) + 360f) % 360f,
+        )
 
     /** True when mirrored strokes would fall outside the canvas and are worth skipping. */
-    fun isOutsideCanvas(instance: Instance, width: Int, height: Int, margin: Float = 64f): Boolean =
-        instance.x < -margin || instance.y < -margin ||
-            instance.x > width + margin || instance.y > height + margin
+    fun isOutsideCanvas(
+        instance: Instance,
+        width: Int,
+        height: Int,
+        margin: Float = 64f,
+    ): Boolean =
+        instance.x < -margin ||
+            instance.y < -margin ||
+            instance.x > width + margin ||
+            instance.y > height + margin
 
     /** Number of stamps per sample, for the performance readout. */
     fun stampsPerSample(settings: Settings): Int = max(1, min(settings.instanceCount(), 32))

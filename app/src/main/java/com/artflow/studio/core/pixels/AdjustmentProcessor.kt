@@ -15,7 +15,6 @@ import kotlin.math.roundToInt
  * `android.graphics` makes the whole adjustment pipeline unit-testable.
  */
 object AdjustmentProcessor {
-
     /**
      * Apply an adjustment to [source] and return a new buffer.
      *
@@ -30,7 +29,7 @@ object AdjustmentProcessor {
         type: AdjustmentType,
         parameters: Map<String, Float>,
         intensity: Float = 1f,
-        mask: ByteArray? = null
+        mask: ByteArray? = null,
     ): PixelBuffer {
         val mixed = intensity.coerceIn(0f, 1f)
         if (mixed <= 0f) return source.copy()
@@ -39,14 +38,15 @@ object AdjustmentProcessor {
         val out = source.copy()
 
         when (type) {
-            AdjustmentType.INVERT -> perPixel(source, out, mixed, mask) { _, p ->
-                Channels.argb(
-                    Channels.alpha(p).toInt(),
-                    255 - Channels.red(p).toInt(),
-                    255 - Channels.green(p).toInt(),
-                    255 - Channels.blue(p).toInt()
-                )
-            }
+            AdjustmentType.INVERT ->
+                perPixel(source, out, mixed, mask) { _, p ->
+                    Channels.argb(
+                        Channels.alpha(p).toInt(),
+                        255 - Channels.red(p).toInt(),
+                        255 - Channels.green(p).toInt(),
+                        255 - Channels.blue(p).toInt(),
+                    )
+                }
             AdjustmentType.BRIGHTNESS_CONTRAST -> {
                 val brightness = merged.float("brightness", 0f) * 2.55f
                 val contrast = contrastFactor(merged.float("contrast", 0f))
@@ -55,7 +55,7 @@ object AdjustmentProcessor {
                         Channels.alpha(p).toInt(),
                         applyContrast(Channels.red(p) + brightness, contrast),
                         applyContrast(Channels.green(p) + brightness, contrast),
-                        applyContrast(Channels.blue(p) + brightness, contrast)
+                        applyContrast(Channels.blue(p) + brightness, contrast),
                     )
                 }
             }
@@ -64,13 +64,17 @@ object AdjustmentProcessor {
                 val saturation = 1f + merged.float("saturation", 0f) / 100f
                 val lightness = merged.float("lightness", 0f) / 100f
                 perPixel(source, out, mixed, mask) { _, p ->
-                    val hsv = com.artflow.studio.domain.model.Color.rgbToHsv(p)
+                    val hsv =
+                        com.artflow.studio.domain.model.Color
+                            .rgbToHsv(p)
                     var h = (hsv[0] + hueShift) % 360f
                     if (h < 0f) h += 360f
                     val s = (hsv[1] * saturation).coerceIn(0f, 1f)
                     var v = hsv[2]
                     v = if (lightness >= 0f) v + (1f - v) * lightness else v * (1f + lightness)
-                    val rgb = com.artflow.studio.domain.model.Color.hsvToRgb(h, s, v.coerceIn(0f, 1f))
+                    val rgb =
+                        com.artflow.studio.domain.model.Color
+                            .hsvToRgb(h, s, v.coerceIn(0f, 1f))
                     Channels.withAlpha(rgb, Channels.alpha(p).toInt())
                 }
             }
@@ -83,7 +87,7 @@ object AdjustmentProcessor {
                         Channels.alpha(p).toInt(),
                         clamp(Channels.red(p) + cyanRed),
                         clamp(Channels.green(p) + magentaGreen),
-                        clamp(Channels.blue(p) + yellowBlue)
+                        clamp(Channels.blue(p) + yellowBlue),
                     )
                 }
             }
@@ -94,7 +98,7 @@ object AdjustmentProcessor {
                         Channels.alpha(p).toInt(),
                         lut[Channels.red(p).toInt().coerceIn(0, 255)],
                         lut[Channels.green(p).toInt().coerceIn(0, 255)],
-                        lut[Channels.blue(p).toInt().coerceIn(0, 255)]
+                        lut[Channels.blue(p).toInt().coerceIn(0, 255)],
                     )
                 }
             }
@@ -110,7 +114,7 @@ object AdjustmentProcessor {
                         Channels.alpha(p).toInt(),
                         lut[Channels.red(p).toInt().coerceIn(0, 255)],
                         lut[Channels.green(p).toInt().coerceIn(0, 255)],
-                        lut[Channels.blue(p).toInt().coerceIn(0, 255)]
+                        lut[Channels.blue(p).toInt().coerceIn(0, 255)],
                     )
                 }
             }
@@ -122,7 +126,7 @@ object AdjustmentProcessor {
                         Channels.alpha(p).toInt(),
                         posterizeChannel(Channels.red(p), step),
                         posterizeChannel(Channels.green(p), step),
-                        posterizeChannel(Channels.blue(p), step)
+                        posterizeChannel(Channels.blue(p), step),
                     )
                 }
             }
@@ -137,11 +141,12 @@ object AdjustmentProcessor {
                 perPixel(source, out, mixed, mask) { _, p ->
                     val luminance = Channels.luminance(p)
                     val hue = startHue + (endHue - startHue) * luminance
-                    val mapped = com.artflow.studio.domain.model.Color.hsvToRgb(
-                        hue,
-                        if (luminance > 0.5f) 1f - (luminance - 0.5f) * 2f * 0.2f else 1f,
-                        1f
-                    )
+                    val mapped =
+                        com.artflow.studio.domain.model.Color.hsvToRgb(
+                            hue,
+                            if (luminance > 0.5f) 1f - (luminance - 0.5f) * 2f * 0.2f else 1f,
+                            1f,
+                        )
                     Channels.withAlpha(mapped, Channels.alpha(p).toInt())
                 }
             }
@@ -156,7 +161,7 @@ object AdjustmentProcessor {
         type: AdjustmentType,
         parameters: Map<String, Float>,
         intensity: Float,
-        mask: SelectionMask?
+        mask: SelectionMask?,
     ): PixelBuffer = apply(source, type, parameters, intensity, mask?.coverage)
 
     /**
@@ -168,7 +173,7 @@ object AdjustmentProcessor {
         original: PixelBuffer,
         type: AdjustmentType,
         parameters: Map<String, Float>,
-        intensity: Float
+        intensity: Float,
     ) {
         val adjusted = apply(original, type, parameters, 1f, null)
         for (i in target.pixels.indices) {
@@ -182,11 +187,13 @@ object AdjustmentProcessor {
      * cannot overshoot into artifacts.
      */
     fun buildCurveLut(parameters: Map<String, Float>): IntArray {
-        val points = (0..4).mapNotNull { index ->
-            val x = parameters["point_${index}_x"] ?: return@mapNotNull null
-            val y = parameters["point_${index}_y"] ?: return@mapNotNull null
-            (x.coerceIn(0f, 255f) to y.coerceIn(0f, 255f))
-        }.sortedBy { it.first }
+        val points =
+            (0..4)
+                .mapNotNull { index ->
+                    val x = parameters["point_${index}_x"] ?: return@mapNotNull null
+                    val y = parameters["point_${index}_y"] ?: return@mapNotNull null
+                    (x.coerceIn(0f, 255f) to y.coerceIn(0f, 255f))
+                }.sortedBy { it.first }
 
         val lut = IntArray(256)
         if (points.size < 2) {
@@ -198,10 +205,11 @@ object AdjustmentProcessor {
         val xs = FloatArray(points.size) { points[it].first }
         val ys = FloatArray(points.size) { points[it].second }
         val n = points.size
-        val slopes = FloatArray(n - 1) { i ->
-            val dx = xs[i + 1] - xs[i]
-            if (abs(dx) < 1e-4f) 0f else (ys[i + 1] - ys[i]) / dx
-        }
+        val slopes =
+            FloatArray(n - 1) { i ->
+                val dx = xs[i + 1] - xs[i]
+                if (abs(dx) < 1e-4f) 0f else (ys[i + 1] - ys[i]) / dx
+            }
         val tangents = FloatArray(n)
         tangents[0] = slopes[0]
         tangents[n - 1] = slopes[n - 2]
@@ -236,8 +244,9 @@ object AdjustmentProcessor {
             val h10 = t3 - 2f * t2 + t
             val h01 = -2f * t3 + 3f * t2
             val h11 = t3 - t2
-            val value = h00 * ys[segment] + h10 * h * tangents[segment] +
-                h01 * ys[segment + 1] + h11 * h * tangents[segment + 1]
+            val value =
+                h00 * ys[segment] + h10 * h * tangents[segment] +
+                    h01 * ys[segment + 1] + h11 * h * tangents[segment + 1]
             lut[x] = value.roundToInt().coerceIn(0, 255)
         }
         return lut
@@ -249,7 +258,7 @@ object AdjustmentProcessor {
         inputWhite: Float,
         gamma: Float,
         outputBlack: Float,
-        outputWhite: Float
+        outputWhite: Float,
     ): IntArray {
         val inBlack = inputBlack.coerceIn(0f, 255f)
         val inWhite = inputWhite.coerceIn(inBlack + 1f, 255f)
@@ -266,8 +275,13 @@ object AdjustmentProcessor {
         return lut
     }
 
-    private fun applySelectiveColor(pixel: Int, parameters: Map<String, Float>): Int {
-        val hsv = com.artflow.studio.domain.model.Color.rgbToHsv(pixel)
+    private fun applySelectiveColor(
+        pixel: Int,
+        parameters: Map<String, Float>,
+    ): Int {
+        val hsv =
+            com.artflow.studio.domain.model.Color
+                .rgbToHsv(pixel)
         val hue = hsv[0]
         val saturation = hsv[1]
         val value = hsv[2]
@@ -308,7 +322,7 @@ object AdjustmentProcessor {
             Channels.alpha(pixel).toInt(),
             (r * 255f).roundToInt(),
             (g * 255f).roundToInt(),
-            (b * 255f).roundToInt()
+            (b * 255f).roundToInt(),
         )
     }
 
@@ -317,7 +331,7 @@ object AdjustmentProcessor {
         target: PixelBuffer,
         intensity: Float,
         mask: ByteArray?,
-        transform: (Int, Int) -> Int
+        transform: (Int, Int) -> Int,
     ) {
         for (i in source.pixels.indices) {
             val original = source.pixels[i]
@@ -325,33 +339,48 @@ object AdjustmentProcessor {
             val adjusted = transform(i, original)
             val coverage = if (mask != null) (mask[i].toInt() and 0xFF) / 255f else 1f
             val effective = intensity * coverage
-            target.pixels[i] = if (effective >= 1f) {
-                adjusted
-            } else if (effective <= 0f) {
-                original
-            } else {
-                ImageFilters.lerpArgb(original, adjusted, effective)
-            }
+            target.pixels[i] =
+                if (effective >= 1f) {
+                    adjusted
+                } else if (effective <= 0f) {
+                    original
+                } else {
+                    ImageFilters.lerpArgb(original, adjusted, effective)
+                }
         }
     }
 
     /** Quantises one channel into [step]-sized bands (Posterize). */
-    private fun posterizeChannel(value: Float, step: Float): Int =
-        ((value / step).roundToInt() * step).roundToInt().coerceIn(0, 255)
+    private fun posterizeChannel(
+        value: Float,
+        step: Float,
+    ): Int = ((value / step).roundToInt() * step).roundToInt().coerceIn(0, 255)
 
-    private fun contrastFactor(contrast: Float): Float =
-        ((100f + contrast.coerceIn(-100f, 100f)) / 100f).let { it * it }
+    private fun contrastFactor(contrast: Float): Float = ((100f + contrast.coerceIn(-100f, 100f)) / 100f).let { it * it }
 
-    private fun applyContrast(value: Float, factor: Float): Int =
-        ((value / 255f - 0.5f) * factor + 0.5f).let { (it * 255f) }.roundToInt().coerceIn(0, 255)
+    private fun applyContrast(
+        value: Float,
+        factor: Float,
+    ): Int = ((value / 255f - 0.5f) * factor + 0.5f).let { (it * 255f) }.roundToInt().coerceIn(0, 255)
 
     private fun clamp(value: Float): Int = value.roundToInt().coerceIn(0, 255)
 
-    private fun Map<String, Float>.float(key: String, default: Float): Float = this[key] ?: default
+    private fun Map<String, Float>.float(
+        key: String,
+        default: Float,
+    ): Float = this[key] ?: default
 
     /** Hue windows used by Selective Color. */
-    private data class SelectiveRange(val key: String, val center: Float, val width: Float) {
-        fun weight(hue: Float, saturation: Float, value: Float): Float {
+    private data class SelectiveRange(
+        val key: String,
+        val center: Float,
+        val width: Float,
+    ) {
+        fun weight(
+            hue: Float,
+            saturation: Float,
+            value: Float,
+        ): Float {
             if (key == "neutrals") {
                 val lowSat = (1f - saturation * 4f).coerceIn(0f, 1f)
                 val midValue = (1f - abs(value - 0.5f) * 2f).coerceIn(0f, 1f)
@@ -368,36 +397,47 @@ object AdjustmentProcessor {
             return falloff * (0.35f + 0.65f * saturation)
         }
 
-        private fun angularDistance(a: Float, b: Float): Float {
+        private fun angularDistance(
+            a: Float,
+            b: Float,
+        ): Float {
             val diff = abs(a - b) % 360f
             return min(diff, 360f - diff)
         }
     }
 
-    private val SELECTIVE_RANGES = listOf(
-        SelectiveRange("reds", 0f, 30f),
-        SelectiveRange("yellows", 60f, 30f),
-        SelectiveRange("greens", 120f, 45f),
-        SelectiveRange("cyans", 180f, 45f),
-        SelectiveRange("blues", 240f, 45f),
-        SelectiveRange("magentas", 300f, 30f),
-        SelectiveRange("whites", 0f, 0f),
-        SelectiveRange("neutrals", 0f, 0f),
-        SelectiveRange("blacks", 0f, 0f)
-    )
+    private val SELECTIVE_RANGES =
+        listOf(
+            SelectiveRange("reds", 0f, 30f),
+            SelectiveRange("yellows", 60f, 30f),
+            SelectiveRange("greens", 120f, 45f),
+            SelectiveRange("cyans", 180f, 45f),
+            SelectiveRange("blues", 240f, 45f),
+            SelectiveRange("magentas", 300f, 30f),
+            SelectiveRange("whites", 0f, 0f),
+            SelectiveRange("neutrals", 0f, 0f),
+            SelectiveRange("blacks", 0f, 0f),
+        )
 
     /** Adjustment types that only make sense on the whole composite (histogram-based). */
     fun types(): List<AdjustmentType> = AdjustmentType.entries
 
     /** Sensible default preview value for a single-parameter slider. */
-    fun defaultValue(type: AdjustmentType, key: String): Float =
-        type.defaultParameters[key] ?: 0f
+    fun defaultValue(
+        type: AdjustmentType,
+        key: String,
+    ): Float = type.defaultParameters[key] ?: 0f
 
     /** Largest change a parameter is allowed to make, used by the slider ranges in the UI. */
-    fun rangeFor(type: AdjustmentType, key: String): ClosedFloatingPointRange<Float> =
-        type.parameterRanges[key] ?: -100f..100f
+    fun rangeFor(
+        type: AdjustmentType,
+        key: String,
+    ): ClosedFloatingPointRange<Float> = type.parameterRanges[key] ?: -100f..100f
 
     /** Clamp so the UI can never send an out-of-range value. */
-    fun clampParameter(type: AdjustmentType, key: String, value: Float): Float =
-        type.validateParameter(key, max(min(value, 1e6f), -1e6f))
+    fun clampParameter(
+        type: AdjustmentType,
+        key: String,
+        value: Float,
+    ): Float = type.validateParameter(key, max(min(value, 1e6f), -1e6f))
 }

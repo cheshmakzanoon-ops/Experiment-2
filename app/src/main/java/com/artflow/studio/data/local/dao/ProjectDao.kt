@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.Flow
  */
 @Dao
 interface ProjectDao {
-
     @Query("SELECT * FROM projects ORDER BY modifiedAt DESC")
     fun getAllProjects(): Flow<List<ProjectEntity>>
 
@@ -35,7 +34,10 @@ interface ProjectDao {
     suspend fun deleteProjectById(projectId: Long)
 
     @Query("UPDATE projects SET isFavorite = :isFavorite WHERE id = :projectId")
-    suspend fun toggleFavorite(projectId: Long, isFavorite: Boolean)
+    suspend fun toggleFavorite(
+        projectId: Long,
+        isFavorite: Boolean,
+    )
 
     @Query("SELECT COUNT(*) FROM projects")
     fun getProjectCount(): Flow<Int>

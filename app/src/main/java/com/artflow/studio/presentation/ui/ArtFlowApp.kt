@@ -35,9 +35,7 @@ object Routes {
  * whole display while painting.
  */
 @Composable
-fun ArtFlowApp(
-    viewModel: MainViewModel = hiltViewModel()
-) {
+fun ArtFlowApp(viewModel: MainViewModel = hiltViewModel()) {
     val navController = rememberNavController()
     val settings by viewModel.settings.collectAsState()
     var showOnboarding by remember { mutableStateOf(false) }
@@ -48,13 +46,13 @@ fun ArtFlowApp(
 
     NavHost(
         navController = navController,
-        startDestination = Routes.GALLERY
+        startDestination = Routes.GALLERY,
     ) {
         composable(Routes.GALLERY) {
             GalleryScreen(
                 onNavigateToCanvas = { projectId -> navController.navigate(Routes.canvas(projectId)) },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
-                onOpenHelp = { navController.navigate(Routes.HELP) }
+                onOpenHelp = { navController.navigate(Routes.HELP) },
             )
         }
         composable(Routes.CANVAS) { backStackEntry ->
@@ -62,7 +60,7 @@ fun ArtFlowApp(
             CanvasScreen(
                 projectId = projectId,
                 onNavigateBack = { navController.popBackStack() },
-                onOpenSettings = { navController.navigate(Routes.SETTINGS) }
+                onOpenSettings = { navController.navigate(Routes.SETTINGS) },
             )
         }
         composable(Routes.SETTINGS) {
@@ -73,7 +71,7 @@ fun ArtFlowApp(
                 onNavigateBack = { navController.popBackStack() },
                 dismissedTips = settings.dismissedTips,
                 onDismissTip = { viewModel.dismissTip(it) },
-                onResetTips = { viewModel.restoreTips() }
+                onResetTips = { viewModel.restoreTips() },
             )
         }
     }

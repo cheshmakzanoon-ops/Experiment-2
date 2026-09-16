@@ -21,7 +21,6 @@ import kotlin.math.min
  * and the composite image data when layers are missing.
  */
 object PsdCodec {
-
     const val SIGNATURE = "8BPS"
     private const val VERSION = 1
     private const val COLOR_MODE_RGB = 3
@@ -49,7 +48,7 @@ object PsdCodec {
         val blendMode: BlendMode = BlendMode.NORMAL,
         /** Position of the layer inside the document canvas. */
         val left: Int = 0,
-        val top: Int = 0
+        val top: Int = 0,
     )
 
     /** A parsed PSD document. */
@@ -59,7 +58,7 @@ object PsdCodec {
         val layers: List<PsdLayer>,
         /** Flattened image as stored in the file's image data section. */
         val composite: PixelBuffer?,
-        val dpi: Int = 72
+        val dpi: Int = 72,
     )
 
     // -----------------------------------------------------------------------------------------
@@ -78,7 +77,7 @@ object PsdCodec {
         layers: List<PsdLayer>,
         composite: PixelBuffer,
         dpi: Int = 72,
-        useRle: Boolean = true
+        useRle: Boolean = true,
     ): ByteArray {
         require(width > 0 && height > 0) { "PSD dimensions must be positive" }
         require(composite.width == width && composite.height == height) {
@@ -148,7 +147,11 @@ object PsdCodec {
         return out.toByteArray()
     }
 
-    private fun writeLayerRecord(out: ByteArrayOutputStream, layer: PsdLayer, useRle: Boolean) {
+    private fun writeLayerRecord(
+        out: ByteArrayOutputStream,
+        layer: PsdLayer,
+        useRle: Boolean,
+    ) {
         val pixels = layer.pixels
         val top = layer.top
         val left = layer.left
@@ -164,10 +167,11 @@ object PsdCodec {
         out.writeShort(channelIds.size)
 
         // Channel data lengths are needed before the data itself, so compute them first.
-        val channelPayloads = channelIds.map { channelId ->
-            val plane = extractChannel(pixels, channelId)
-            if (useRle) encodeRle(plane, pixels.width, pixels.height) else rawBytes(plane)
-        }
+        val channelPayloads =
+            channelIds.map { channelId ->
+                val plane = extractChannel(pixels, channelId)
+                if (useRle) encodeRle(plane, pixels.width, pixels.height) else rawBytes(plane)
+            }
         channelIds.forEachIndexed { index, channelId ->
             out.writeShort(channelId)
             out.writeInt(channelPayloads[index].size + 2) // + compression flag
@@ -196,7 +200,10 @@ object PsdCodec {
         out.write(extraBytes)
     }
 
-    private fun layerChannelData(layer: PsdLayer, useRle: Boolean): ByteArray {
+    private fun layerChannelData(
+        layer: PsdLayer,
+        useRle: Boolean,
+    ): ByteArray {
         val pixels = layer.pixels
         val out = ByteArrayOutputStream()
         intArrayOf(CHANNEL_RED, CHANNEL_GREEN, CHANNEL_BLUE, CHANNEL_ALPHA).forEach { channelId ->
@@ -212,14 +219,19 @@ object PsdCodec {
         return out.toByteArray()
     }
 
-    private fun writeImageData(out: ByteArrayOutputStream, image: PixelBuffer, useRle: Boolean) {
+    private fun writeImageData(
+        out: ByteArrayOutputStream,
+        image: PixelBuffer,
+        useRle: Boolean,
+    ) {
         if (useRle) {
             out.writeShort(COMPRESSION_RLE)
-            val planes = listOf(
-                extractChannel(image, CHANNEL_RED),
-                extractChannel(image, CHANNEL_GREEN),
-                extractChannel(image, CHANNEL_BLUE)
-            )
+            val planes =
+                listOf(
+                    extractChannel(image, CHANNEL_RED),
+                    extractChannel(image, CHANNEL_GREEN),
+                    extractChannel(image, CHANNEL_BLUE),
+                )
             // The RLE byte-count table lists every row of every channel up front.
             val encoded = planes.map { encodeRlePayload(it, image.width, image.height) }
             encoded.forEach { payload -> payload.counts.forEach { out.writeShort(it) } }
@@ -282,18 +294,19 @@ object PsdCodec {
         }
 
         // Image data (composite).
-        val composite = if (reader.remaining() >= 2) {
-            readImageData(reader, width, height, channelCount, depth, colorMode)
-        } else {
-            null
-        }
+        val composite =
+            if (reader.remaining() >= 2) {
+                readImageData(reader, width, height, channelCount, depth, colorMode)
+            } else {
+                null
+            }
 
         return PsdDocument(
             width = width,
             height = height,
             layers = layers,
             composite = composite,
-            dpi = dpi
+            dpi = dpi,
         )
     }
 
@@ -327,7 +340,7 @@ object PsdCodec {
         canvasHeight: Int,
         channelCount: Int,
         depth: Int,
-        colorMode: Int
+        colorMode: Int,
     ): List<PsdLayer> {
         val layerCount = reader.readShort()
         if (layerCount <= 0) return emptyList()
@@ -341,7 +354,7 @@ object PsdCodec {
             val opacity: Int,
             val isVisible: Boolean,
             val blendMode: BlendMode,
-            val channels: List<Pair<Int, Int>>
+            val channels: List<Pair<Int, Int>>,
         )
 
         val pending = mutableListOf<Pending>()
@@ -352,11 +365,12 @@ object PsdCodec {
             val bottom = reader.readInt()
             val right = reader.readInt()
             val layerChannelCount = reader.readShort()
-            val channels = (0 until layerChannelCount).map {
-                val id = reader.readShort().toShort().toInt()
-                val length = reader.readInt()
-                id to length
-            }
+            val channels =
+                (0 until layerChannelCount).map {
+                    val id = reader.readShort().toShort().toInt()
+                    val length = reader.readInt()
+                    id to length
+                }
             val blendSignature = reader.readAscii(4)
             val blendKey = reader.readAscii(4)
             val opacity = reader.readByte()
@@ -395,17 +409,18 @@ object PsdCodec {
             }
             reader.position = extraEnd
 
-            pending += Pending(
-                name = name,
-                top = top,
-                left = left,
-                bottom = bottom,
-                right = right,
-                opacity = opacity,
-                isVisible = (flags and 0x02) == 0,
-                blendMode = blendModeFromKey(if (blendSignature == "8BIM") blendKey else "norm"),
-                channels = channels
-            )
+            pending +=
+                Pending(
+                    name = name,
+                    top = top,
+                    left = left,
+                    bottom = bottom,
+                    right = right,
+                    opacity = opacity,
+                    isVisible = (flags and 0x02) == 0,
+                    blendMode = blendModeFromKey(if (blendSignature == "8BIM") blendKey else "norm"),
+                    channels = channels,
+                )
         }
 
         // Channel image data follows the records, in the same order.
@@ -432,12 +447,13 @@ object PsdCodec {
                 for (index in buffer.pixels.indices) {
                     val black = planes[3]?.getOrNull(index)?.toInt()?.and(0xFF) ?: 0
                     val a = alpha?.getOrNull(index)?.toInt()?.and(0xFF) ?: 255
-                    buffer.pixels[index] = Channels.argb(
-                        a,
-                        cmykToRgb(planes[0], index, black),
-                        cmykToRgb(planes[1], index, black),
-                        cmykToRgb(planes[2], index, black)
-                    )
+                    buffer.pixels[index] =
+                        Channels.argb(
+                            a,
+                            cmykToRgb(planes[0], index, black),
+                            cmykToRgb(planes[1], index, black),
+                            cmykToRgb(planes[2], index, black),
+                        )
                 }
             } else {
                 val red = planes[CHANNEL_RED]
@@ -452,15 +468,16 @@ object PsdCodec {
                 }
             }
 
-            layers += PsdLayer(
-                name = record.name,
-                pixels = buffer,
-                opacity = record.opacity,
-                isVisible = record.isVisible,
-                blendMode = record.blendMode,
-                left = record.left,
-                top = record.top
-            )
+            layers +=
+                PsdLayer(
+                    name = record.name,
+                    pixels = buffer,
+                    opacity = record.opacity,
+                    isVisible = record.isVisible,
+                    blendMode = record.blendMode,
+                    left = record.left,
+                    top = record.top,
+                )
         }
         return layers
     }
@@ -471,22 +488,24 @@ object PsdCodec {
         height: Int,
         channelCount: Int,
         depth: Int,
-        colorMode: Int
+        colorMode: Int,
     ): PixelBuffer? {
         val compression = reader.readShort()
         val planes = HashMap<Int, ByteArray>()
-        val channelIds = (0 until channelCount).map { index ->
-            when (colorMode) {
-                COLOR_MODE_GRAYSCALE -> if (index == 0) CHANNEL_RED else CHANNEL_ALPHA
-                COLOR_MODE_CMYK -> index
-                else -> when (index) {
-                    0 -> CHANNEL_RED
-                    1 -> CHANNEL_GREEN
-                    2 -> CHANNEL_BLUE
-                    else -> CHANNEL_ALPHA
+        val channelIds =
+            (0 until channelCount).map { index ->
+                when (colorMode) {
+                    COLOR_MODE_GRAYSCALE -> if (index == 0) CHANNEL_RED else CHANNEL_ALPHA
+                    COLOR_MODE_CMYK -> index
+                    else ->
+                        when (index) {
+                            0 -> CHANNEL_RED
+                            1 -> CHANNEL_GREEN
+                            2 -> CHANNEL_BLUE
+                            else -> CHANNEL_ALPHA
+                        }
                 }
             }
-        }
 
         when (compression) {
             COMPRESSION_RAW -> {
@@ -531,12 +550,13 @@ object PsdCodec {
             val k = planes[3]
             for (index in buffer.pixels.indices) {
                 val kk = k?.getOrNull(index)?.toInt()?.and(0xFF) ?: 0
-                buffer.pixels[index] = Channels.argb(
-                    255,
-                    cmykToRgb(c, index, kk),
-                    cmykToRgb(m, index, kk),
-                    cmykToRgb(y, index, kk)
-                )
+                buffer.pixels[index] =
+                    Channels.argb(
+                        255,
+                        cmykToRgb(c, index, kk),
+                        cmykToRgb(m, index, kk),
+                        cmykToRgb(y, index, kk),
+                    )
             }
             return buffer
         }
@@ -551,7 +571,11 @@ object PsdCodec {
     }
 
     /** One CMYK component (0..255 inverted) to an 8-bit RGB channel. */
-    private fun cmykToRgb(plane: ByteArray?, index: Int, black: Int): Int {
+    private fun cmykToRgb(
+        plane: ByteArray?,
+        index: Int,
+        black: Int,
+    ): Int {
         val component = plane?.getOrNull(index)?.toInt()?.and(0xFF) ?: 0
         return (255 - min(255, component + black)).coerceIn(0, 255)
     }
@@ -565,7 +589,7 @@ object PsdCodec {
         width: Int,
         height: Int,
         depth: Int,
-        declaredLength: Int
+        declaredLength: Int,
     ): ByteArray {
         if (declaredLength <= 0 || reader.remaining() < 2) return ByteArray(width * height)
         val compression = reader.readShort()
@@ -595,7 +619,12 @@ object PsdCodec {
         }
     }
 
-    private fun downsample(raw: ByteArray, width: Int, height: Int, depth: Int): ByteArray {
+    private fun downsample(
+        raw: ByteArray,
+        width: Int,
+        height: Int,
+        depth: Int,
+    ): ByteArray {
         if (depth != DEPTH_16) return raw
         val out = ByteArray(width * height)
         for (i in out.indices) {
@@ -606,7 +635,11 @@ object PsdCodec {
     }
 
     /** Reads one 8-bit channel value; grayscale planes feed all three RGB channels. */
-    private fun channelValue(plane: ByteArray?, index: Int, colorMode: Int): Int {
+    private fun channelValue(
+        plane: ByteArray?,
+        index: Int,
+        colorMode: Int,
+    ): Int {
         if (colorMode == COLOR_MODE_GRAYSCALE) return plane?.getOrNull(index)?.toInt()?.and(0xFF) ?: 0
         return plane?.getOrNull(index)?.toInt()?.and(0xFF) ?: 0
     }
@@ -615,27 +648,38 @@ object PsdCodec {
     // Channel / RLE helpers
     // -----------------------------------------------------------------------------------------
 
-    private fun extractChannel(pixels: PixelBuffer, channelId: Int): ByteArray {
+    private fun extractChannel(
+        pixels: PixelBuffer,
+        channelId: Int,
+    ): ByteArray {
         val out = ByteArray(pixels.pixels.size)
         for (i in pixels.pixels.indices) {
             val pixel = pixels.pixels[i]
-            out[i] = when (channelId) {
-                CHANNEL_RED -> ((pixel shr 16) and 0xFF).toByte()
-                CHANNEL_GREEN -> ((pixel shr 8) and 0xFF).toByte()
-                CHANNEL_BLUE -> (pixel and 0xFF).toByte()
-                CHANNEL_ALPHA -> ((pixel ushr 24) and 0xFF).toByte()
-                else -> 0
-            }
+            out[i] =
+                when (channelId) {
+                    CHANNEL_RED -> ((pixel shr 16) and 0xFF).toByte()
+                    CHANNEL_GREEN -> ((pixel shr 8) and 0xFF).toByte()
+                    CHANNEL_BLUE -> (pixel and 0xFF).toByte()
+                    CHANNEL_ALPHA -> ((pixel ushr 24) and 0xFF).toByte()
+                    else -> 0
+                }
         }
         return out
     }
 
     private fun rawBytes(plane: ByteArray): ByteArray = plane
 
-    private data class RlePayload(val counts: List<Int>, val data: ByteArray)
+    private data class RlePayload(
+        val counts: List<Int>,
+        val data: ByteArray,
+    )
 
     /** PackBits-encodes each scanline separately; the counts table is written by the caller. */
-    private fun encodeRlePayload(plane: ByteArray, width: Int, height: Int): RlePayload {
+    private fun encodeRlePayload(
+        plane: ByteArray,
+        width: Int,
+        height: Int,
+    ): RlePayload {
         val data = ByteArrayOutputStream(plane.size)
         val counts = ArrayList<Int>(height)
         for (row in 0 until height) {
@@ -647,7 +691,11 @@ object PsdCodec {
     }
 
     /** Full channel payload: row counts followed by the PackBits data. */
-    private fun encodeRle(plane: ByteArray, width: Int, height: Int): ByteArray {
+    private fun encodeRle(
+        plane: ByteArray,
+        width: Int,
+        height: Int,
+    ): ByteArray {
         val payload = encodeRlePayload(plane, width, height)
         val out = ByteArrayOutputStream(payload.data.size + height * 2)
         payload.counts.forEach { out.writeShort(it) }
@@ -660,7 +708,11 @@ object PsdCodec {
      * `0..127` -> copy the next `n+1` bytes literally, `129..255` -> repeat the next byte `257-n`
      * times, and `128` is a no-op. Runs are capped at 128 bytes.
      */
-    fun packBits(source: ByteArray, offset: Int, length: Int): ByteArray {
+    fun packBits(
+        source: ByteArray,
+        offset: Int,
+        length: Int,
+    ): ByteArray {
         val out = ByteArrayOutputStream(length + length / 64 + 8)
         var position = 0
         while (position < length) {
@@ -701,7 +753,10 @@ object PsdCodec {
     }
 
     /** Decodes one PackBits scanline into a row of [width] bytes. */
-    fun unpackBits(reader: PsdReader, width: Int): ByteArray {
+    fun unpackBits(
+        reader: PsdReader,
+        width: Int,
+    ): ByteArray {
         val out = ByteArray(width)
         var written = 0
         while (written < width) {
@@ -732,74 +787,83 @@ object PsdCodec {
         return out
     }
 
-    private fun decodeRleRow(reader: PsdReader, width: Int): ByteArray = unpackBits(reader, width)
+    private fun decodeRleRow(
+        reader: PsdReader,
+        width: Int,
+    ): ByteArray = unpackBits(reader, width)
 
-    private fun inflate(bytes: ByteArray): ByteArray = try {
-        val inflater = java.util.zip.Inflater()
-        inflater.setInput(bytes)
-        val out = ByteArrayOutputStream(bytes.size * 4)
-        val buffer = ByteArray(8192)
-        while (!inflater.finished()) {
-            val read = inflater.inflate(buffer)
-            if (read == 0) break
-            out.write(buffer, 0, read)
+    private fun inflate(bytes: ByteArray): ByteArray =
+        try {
+            val inflater = java.util.zip.Inflater()
+            inflater.setInput(bytes)
+            val out = ByteArrayOutputStream(bytes.size * 4)
+            val buffer = ByteArray(8192)
+            while (!inflater.finished()) {
+                val read = inflater.inflate(buffer)
+                if (read == 0) break
+                out.write(buffer, 0, read)
+            }
+            inflater.end()
+            out.toByteArray()
+        } catch (_: java.util.zip.DataFormatException) {
+            // Malformed PSD channel data: report as an empty stream and let the caller fall back.
+            ByteArray(0)
         }
-        inflater.end()
-        out.toByteArray()
-    } catch (e: Exception) {
-        ByteArray(0)
-    }
 
     // -----------------------------------------------------------------------------------------
     // Blend mode mapping
     // -----------------------------------------------------------------------------------------
 
     /** Maps a domain [BlendMode] onto the four-character PSD key. */
-    fun blendModeKey(mode: BlendMode): String = when (mode) {
-        BlendMode.NORMAL, BlendMode.PASS_THROUGH -> "norm"
-        BlendMode.MULTIPLY -> "mul "
-        BlendMode.SCREEN -> "scrn"
-        BlendMode.OVERLAY -> "over"
-        BlendMode.DARKEN -> "dark"
-        BlendMode.LIGHTEN -> "lite"
-        BlendMode.COLOR_DODGE -> "div "
-        BlendMode.COLOR_BURN -> "idiv"
-        BlendMode.HARD_LIGHT -> "hLit"
-        BlendMode.SOFT_LIGHT -> "sLit"
-        BlendMode.DIFFERENCE -> "diff"
-        BlendMode.EXCLUSION -> "smud"
-        BlendMode.HUE -> "hue "
-        BlendMode.SATURATION -> "sat "
-        BlendMode.COLOR -> "colr"
-        BlendMode.LUMINOSITY -> "lum "
-    }
+    fun blendModeKey(mode: BlendMode): String =
+        when (mode) {
+            BlendMode.NORMAL, BlendMode.PASS_THROUGH -> "norm"
+            BlendMode.MULTIPLY -> "mul "
+            BlendMode.SCREEN -> "scrn"
+            BlendMode.OVERLAY -> "over"
+            BlendMode.DARKEN -> "dark"
+            BlendMode.LIGHTEN -> "lite"
+            BlendMode.COLOR_DODGE -> "div "
+            BlendMode.COLOR_BURN -> "idiv"
+            BlendMode.HARD_LIGHT -> "hLit"
+            BlendMode.SOFT_LIGHT -> "sLit"
+            BlendMode.DIFFERENCE -> "diff"
+            BlendMode.EXCLUSION -> "smud"
+            BlendMode.HUE -> "hue "
+            BlendMode.SATURATION -> "sat "
+            BlendMode.COLOR -> "colr"
+            BlendMode.LUMINOSITY -> "lum "
+        }
 
     /** Inverse of [blendModeKey]; unknown keys fall back to normal. */
-    fun blendModeFromKey(key: String): BlendMode = when (key) {
-        "mul " -> BlendMode.MULTIPLY
-        "scrn" -> BlendMode.SCREEN
-        "over" -> BlendMode.OVERLAY
-        "dark" -> BlendMode.DARKEN
-        "lite" -> BlendMode.LIGHTEN
-        "div " -> BlendMode.COLOR_DODGE
-        "idiv" -> BlendMode.COLOR_BURN
-        "hLit" -> BlendMode.HARD_LIGHT
-        "sLit" -> BlendMode.SOFT_LIGHT
-        "diff" -> BlendMode.DIFFERENCE
-        "smud" -> BlendMode.EXCLUSION
-        "hue " -> BlendMode.HUE
-        "sat " -> BlendMode.SATURATION
-        "colr" -> BlendMode.COLOR
-        "lum " -> BlendMode.LUMINOSITY
-        else -> BlendMode.NORMAL
-    }
+    fun blendModeFromKey(key: String): BlendMode =
+        when (key) {
+            "mul " -> BlendMode.MULTIPLY
+            "scrn" -> BlendMode.SCREEN
+            "over" -> BlendMode.OVERLAY
+            "dark" -> BlendMode.DARKEN
+            "lite" -> BlendMode.LIGHTEN
+            "div " -> BlendMode.COLOR_DODGE
+            "idiv" -> BlendMode.COLOR_BURN
+            "hLit" -> BlendMode.HARD_LIGHT
+            "sLit" -> BlendMode.SOFT_LIGHT
+            "diff" -> BlendMode.DIFFERENCE
+            "smud" -> BlendMode.EXCLUSION
+            "hue " -> BlendMode.HUE
+            "sat " -> BlendMode.SATURATION
+            "colr" -> BlendMode.COLOR
+            "lum " -> BlendMode.LUMINOSITY
+            else -> BlendMode.NORMAL
+        }
 
     // -----------------------------------------------------------------------------------------
     // Small binary reader/writer helpers
     // -----------------------------------------------------------------------------------------
 
     /** Bounds-checked big-endian reader; every accessor returns 0 past the end of the data. */
-    class PsdReader(private val bytes: ByteArray) {
+    class PsdReader(
+        private val bytes: ByteArray,
+    ) {
         var position: Int = 0
 
         fun remaining(): Int = bytes.size - position
@@ -844,10 +908,11 @@ object PsdCodec {
         fun readUnicodeString(length: Int): String {
             val raw = readBytes(length)
             if (raw.size < 4) return ""
-            val charCount = ((raw[0].toInt() and 0xFF) shl 24) or
-                ((raw[1].toInt() and 0xFF) shl 16) or
-                ((raw[2].toInt() and 0xFF) shl 8) or
-                (raw[3].toInt() and 0xFF)
+            val charCount =
+                ((raw[0].toInt() and 0xFF) shl 24) or
+                    ((raw[1].toInt() and 0xFF) shl 16) or
+                    ((raw[2].toInt() and 0xFF) shl 8) or
+                    (raw[3].toInt() and 0xFF)
             val chars = CharArray(max(0, charCount - 1).coerceAtMost((raw.size - 4) / 2))
             for (i in chars.indices) {
                 val high = raw[4 + i * 2].toInt() and 0xFF

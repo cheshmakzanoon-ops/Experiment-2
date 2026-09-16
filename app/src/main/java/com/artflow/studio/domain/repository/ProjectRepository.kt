@@ -8,7 +8,6 @@ import kotlinx.coroutines.flow.Flow
  * Defines the contract for project data access
  */
 interface ProjectRepository {
-
     /**
      * Get all projects ordered by modification date
      */
@@ -53,7 +52,10 @@ interface ProjectRepository {
     /**
      * Toggle favorite status for a project
      */
-    suspend fun toggleFavorite(projectId: Long, isFavorite: Boolean)
+    suspend fun toggleFavorite(
+        projectId: Long,
+        isFavorite: Boolean,
+    )
 
     /**
      * Get total count of projects

@@ -20,9 +20,7 @@ import java.io.ByteArrayOutputStream
  * Bitmaps returned by [toBitmap] are always owned by the caller and must be recycled.
  */
 object BitmapPixelBridge {
-
-    fun toBitmap(buffer: PixelBuffer): Bitmap =
-        Bitmap.createBitmap(buffer.pixels, buffer.width, buffer.height, Bitmap.Config.ARGB_8888)
+    fun toBitmap(buffer: PixelBuffer): Bitmap = Bitmap.createBitmap(buffer.pixels, buffer.width, buffer.height, Bitmap.Config.ARGB_8888)
 
     /** Copies a bitmap into a buffer. The bitmap is not recycled. */
     fun fromBitmap(bitmap: Bitmap): PixelBuffer {
@@ -50,13 +48,18 @@ object BitmapPixelBridge {
      * Encodes to JPEG. JPEG has no alpha channel, so transparent pixels are composited over
      * [matteColor] first (white by default) — otherwise they would come out black.
      */
-    fun toJpegBytes(buffer: PixelBuffer, quality: Int = 92, matteColor: Int = 0xFFFFFFFF.toInt()): ByteArray {
+    fun toJpegBytes(
+        buffer: PixelBuffer,
+        quality: Int = 92,
+        matteColor: Int = 0xFFFFFFFF.toInt(),
+    ): ByteArray {
         val flattened = PixelBuffer(buffer.width, buffer.height)
         for (i in flattened.pixels.indices) {
-            flattened.pixels[i] = com.artflow.studio.core.pixels.BlendModes.sourceOver(
-                matteColor,
-                buffer.pixels[i]
-            )
+            flattened.pixels[i] =
+                com.artflow.studio.core.pixels.BlendModes.sourceOver(
+                    matteColor,
+                    buffer.pixels[i],
+                )
         }
         val bitmap = toBitmap(flattened)
         return try {
@@ -70,7 +73,11 @@ object BitmapPixelBridge {
     }
 
     /** Encodes to lossless WebP (smaller than PNG for photographic layers on API 30+). */
-    fun toWebpBytes(buffer: PixelBuffer, lossless: Boolean = true, quality: Int = 90): ByteArray {
+    fun toWebpBytes(
+        buffer: PixelBuffer,
+        lossless: Boolean = true,
+        quality: Int = 90,
+    ): ByteArray {
         val bitmap = toBitmap(buffer)
         return try {
             ByteArrayOutputStream().use { out ->
@@ -100,15 +107,19 @@ object BitmapPixelBridge {
      * Decodes an image file, downsampling so a 50 megapixel import cannot exhaust memory.
      * The returned buffer keeps the image's aspect ratio.
      */
-    fun decodeFile(path: String, maxDimension: Int = 4096): PixelBuffer? {
+    fun decodeFile(
+        path: String,
+        maxDimension: Int = 4096,
+    ): PixelBuffer? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(path, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
 
-        val options = BitmapFactory.Options().apply {
-            inSampleSize = calculateSampleSize(bounds.outWidth, bounds.outHeight, maxDimension)
-            inPreferredConfig = Bitmap.Config.ARGB_8888
-        }
+        val options =
+            BitmapFactory.Options().apply {
+                inSampleSize = calculateSampleSize(bounds.outWidth, bounds.outHeight, maxDimension)
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            }
         val bitmap = BitmapFactory.decodeFile(path, options) ?: return null
         val decoded = fromBitmap(bitmap)
         bitmap.recycle()
@@ -116,7 +127,7 @@ object BitmapPixelBridge {
             val scale = maxDimension.toFloat() / maxOf(decoded.width, decoded.height)
             decoded.scaled(
                 (decoded.width * scale).toInt().coerceAtLeast(1),
-                (decoded.height * scale).toInt().coerceAtLeast(1)
+                (decoded.height * scale).toInt().coerceAtLeast(1),
             )
         } else {
             decoded
@@ -124,7 +135,11 @@ object BitmapPixelBridge {
     }
 
     /** Power-of-two downsampling factor that keeps the longest side within [maxDimension]. */
-    fun calculateSampleSize(width: Int, height: Int, maxDimension: Int): Int {
+    fun calculateSampleSize(
+        width: Int,
+        height: Int,
+        maxDimension: Int,
+    ): Int {
         var sampleSize = 1
         var longest = maxOf(width, height)
         while (longest / 2 >= maxDimension) {
@@ -138,8 +153,10 @@ object BitmapPixelBridge {
      * Rasterises a selection mask's outline into pixels, used for the marching-ants band when a
      * GL overlay is not available (exports) and for baking a mask into a layer mask image.
      */
-    fun maskToBuffer(mask: SelectionMask, color: Int = 0xFFFFFFFF.toInt()): PixelBuffer =
-        mask.toMaskBitmap(color)
+    fun maskToBuffer(
+        mask: SelectionMask,
+        color: Int = 0xFFFFFFFF.toInt(),
+    ): PixelBuffer = mask.toMaskBitmap(color)
 
     /**
      * Builds a [PixelBuffer] from a path-based shape (rectangle/ellipse/polygon) by rasterising it
@@ -151,7 +168,7 @@ object BitmapPixelBridge {
         build: (Path) -> Unit,
         fillColor: Int,
         strokeColor: Int = 0,
-        strokeWidth: Float = 0f
+        strokeWidth: Float = 0f,
     ): PixelBuffer {
         val buffer = PixelBuffer(width, height)
         val bitmap = toBitmap(buffer)
@@ -163,7 +180,7 @@ object BitmapPixelBridge {
                 android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
                     style = android.graphics.Paint.Style.FILL
                     this.color = fillColor
-                }
+                },
             )
         }
         if ((strokeColor ushr 24) != 0 && strokeWidth > 0f) {
@@ -175,7 +192,7 @@ object BitmapPixelBridge {
                     this.strokeWidth = strokeWidth
                     strokeCap = android.graphics.Paint.Cap.ROUND
                     strokeJoin = android.graphics.Paint.Join.ROUND
-                }
+                },
             )
         }
         val result = fromBitmap(bitmap)
@@ -184,10 +201,19 @@ object BitmapPixelBridge {
     }
 
     /** Converts a rectangle in buffer space into a platform [RectF] (shape/text placement). */
-    fun toRectF(left: Float, top: Float, right: Float, bottom: Float): RectF = RectF(left, top, right, bottom)
+    fun toRectF(
+        left: Float,
+        top: Float,
+        right: Float,
+        bottom: Float,
+    ): RectF = RectF(left, top, right, bottom)
 
     /** Creates a [Region] for hit-testing a path against the canvas bounds. */
-    fun regionFor(path: Path, width: Int, height: Int): Region {
+    fun regionFor(
+        path: Path,
+        width: Int,
+        height: Int,
+    ): Region {
         val region = Region(0, 0, width, height)
         region.setPath(path, Region(0, 0, width, height))
         return region

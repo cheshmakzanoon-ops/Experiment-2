@@ -8,7 +8,6 @@ import org.junit.Test
 
 /** Buffer geometry, sampling and the operations the canvas tools rely on. */
 class PixelBufferTest {
-
     private val red = 0xFFFF0000.toInt()
     private val blue = 0xFF0000FF.toInt()
 

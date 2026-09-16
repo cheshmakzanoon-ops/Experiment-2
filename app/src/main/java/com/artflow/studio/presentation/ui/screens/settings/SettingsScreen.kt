@@ -28,7 +28,7 @@ import com.artflow.studio.presentation.ui.viewmodel.MainViewModel
 @Composable
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
-    viewModel: MainViewModel = hiltViewModel()
+    viewModel: MainViewModel = hiltViewModel(),
 ) {
     val settings by viewModel.settings.collectAsState()
 
@@ -40,17 +40,18 @@ fun SettingsScreen(
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
-                }
+                },
             )
-        }
+        },
     ) { padding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             SettingsSection("Appearance")
             Text("Theme", style = MaterialTheme.typography.labelMedium)
@@ -59,7 +60,7 @@ fun SettingsScreen(
                     FilterChip(
                         selected = settings.themeMode == mode,
                         onClick = { viewModel.setThemeMode(mode) },
-                        label = { Text(mode.displayName, style = MaterialTheme.typography.labelSmall) }
+                        label = { Text(mode.displayName, style = MaterialTheme.typography.labelSmall) },
                     )
                 }
             }
@@ -69,7 +70,7 @@ fun SettingsScreen(
                     FilterChip(
                         selected = settings.accent == accent,
                         onClick = { viewModel.setAccent(accent) },
-                        label = { Text(accent.displayName, style = MaterialTheme.typography.labelSmall) }
+                        label = { Text(accent.displayName, style = MaterialTheme.typography.labelSmall) },
                     )
                 }
             }
@@ -79,29 +80,29 @@ fun SettingsScreen(
                 title = "High contrast",
                 subtitle = "Stronger outlines and clearer text contrast",
                 checked = settings.highContrast,
-                onChange = viewModel::setHighContrast
+                onChange = viewModel::setHighContrast,
             )
             SwitchRow(
                 title = "Reduce motion",
                 subtitle = "Shortens panel and canvas animations",
                 checked = settings.reduceMotion,
-                onChange = viewModel::setReduceMotion
+                onChange = viewModel::setReduceMotion,
             )
             SwitchRow(
                 title = "Larger touch targets",
                 subtitle = "Bigger toolbar buttons for easier tapping",
                 checked = settings.largeTouchTargets,
-                onChange = viewModel::setLargeTouchTargets
+                onChange = viewModel::setLargeTouchTargets,
             )
             Column {
                 Text(
                     "Interface scale: ${(settings.uiScale * 100).toInt()}%",
-                    style = MaterialTheme.typography.labelMedium
+                    style = MaterialTheme.typography.labelMedium,
                 )
                 Slider(
                     value = settings.uiScale,
                     onValueChange = viewModel::setUiScale,
-                    valueRange = 0.85f..1.6f
+                    valueRange = 0.85f..1.6f,
                 )
             }
 
@@ -110,31 +111,31 @@ fun SettingsScreen(
                 title = "Transparency checkerboard",
                 subtitle = "Show the checker pattern behind transparent pixels",
                 checked = settings.checkerboard,
-                onChange = viewModel::setCheckerboard
+                onChange = viewModel::setCheckerboard,
             )
             SwitchRow(
                 title = "Onion skin",
                 subtitle = "Show previous and next animation frames as ghosts",
                 checked = settings.onionSkin,
-                onChange = viewModel::setOnionSkin
+                onChange = viewModel::setOnionSkin,
             )
             SwitchRow(
                 title = "Symmetry guides",
                 subtitle = "Draw the active symmetry axis on the canvas",
                 checked = settings.showSymmetryGuides,
-                onChange = viewModel::setSymmetryGuides
+                onChange = viewModel::setSymmetryGuides,
             )
             SwitchRow(
                 title = "Perspective guides",
                 subtitle = "Draw vanishing-point rays on the canvas",
                 checked = settings.showPerspectiveGuides,
-                onChange = viewModel::setPerspectiveGuides
+                onChange = viewModel::setPerspectiveGuides,
             )
             SwitchRow(
                 title = "Snap strokes to guides",
                 subtitle = "Strokes stick to the nearest guide line",
                 checked = settings.snapToGuides,
-                onChange = viewModel::setSnapToGuides
+                onChange = viewModel::setSnapToGuides,
             )
 
             SettingsSection("Input")
@@ -142,13 +143,13 @@ fun SettingsScreen(
                 title = "Stylus only",
                 subtitle = "Fingers pan and zoom; only a stylus paints (recommended for palm rejection)",
                 checked = settings.stylusOnly,
-                onChange = viewModel::setStylusOnly
+                onChange = viewModel::setStylusOnly,
             )
             SwitchRow(
                 title = "Haptics",
                 subtitle = "Short vibration when a tool commits",
                 checked = settings.haptics,
-                onChange = viewModel::setHaptics
+                onChange = viewModel::setHaptics,
             )
 
             SettingsSection("Saving")
@@ -156,17 +157,17 @@ fun SettingsScreen(
                 title = "Autosave",
                 subtitle = "Keeps a recovery copy while you paint",
                 checked = settings.autosaveEnabled,
-                onChange = { viewModel.setAutosave(it, settings.autosaveIntervalMs) }
+                onChange = { viewModel.setAutosave(it, settings.autosaveIntervalMs) },
             )
             Column {
                 Text(
                     "Autosave every ${settings.autosaveIntervalMs / 1000}s",
-                    style = MaterialTheme.typography.labelMedium
+                    style = MaterialTheme.typography.labelMedium,
                 )
                 Slider(
                     value = settings.autosaveIntervalMs.toFloat(),
                     onValueChange = { viewModel.setAutosave(settings.autosaveEnabled, it.toLong()) },
-                    valueRange = 5_000f..300_000f
+                    valueRange = 5_000f..300_000f,
                 )
             }
 
@@ -179,7 +180,10 @@ fun SettingsScreen(
                     CanvasOperations.PRESETS.forEach { preset ->
                         DropdownMenuItem(
                             text = { Text(preset.label) },
-                            onClick = { viewModel.setDefaultPreset(preset.name); presetMenu = false }
+                            onClick = {
+                                viewModel.setDefaultPreset(preset.name)
+                                presetMenu = false
+                            },
                         )
                     }
                 }
@@ -192,7 +196,7 @@ fun SettingsScreen(
                     FilterChip(
                         selected = settings.gallerySort == sort,
                         onClick = { viewModel.setSort(sort) },
-                        label = { Text(sort.displayName, style = MaterialTheme.typography.labelSmall) }
+                        label = { Text(sort.displayName, style = MaterialTheme.typography.labelSmall) },
                     )
                 }
             }
@@ -201,14 +205,14 @@ fun SettingsScreen(
             Text(
                 "${settings.recentColors.size} recent colours stored",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             OutlinedButton(onClick = viewModel::clearRecentColors) { Text("Clear recent colours") }
 
             Text(
                 "ArtFlow stores everything on this device. There is no account and nothing is uploaded.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -219,7 +223,7 @@ private fun SettingsSection(title: String) {
     Text(
         text = title.uppercase(),
         style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.primary
+        color = MaterialTheme.colorScheme.primary,
     )
 }
 
@@ -228,18 +232,18 @@ private fun SwitchRow(
     title: String,
     subtitle: String,
     checked: Boolean,
-    onChange: (Boolean) -> Unit
+    onChange: (Boolean) -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
             Text(
                 subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Switch(checked = checked, onCheckedChange = onChange)

@@ -24,19 +24,27 @@ import kotlinx.coroutines.flow.StateFlow
  * stay testable and lets the compositor be shared by the live canvas, the saved file and exports.
  */
 interface CanvasRepository {
-
     // -----------------------------------------------------------------------------------------
     // Canvas lifecycle
     // -----------------------------------------------------------------------------------------
 
     /** Creates a blank canvas of [width] x [height]. Returns the canvas id. */
-    suspend fun createCanvas(width: Int, height: Int, dpi: Int): Long
+    suspend fun createCanvas(
+        width: Int,
+        height: Int,
+        dpi: Int,
+    ): Long
 
     /**
      * Loads the saved project, or creates a blank canvas when there is nothing saved yet.
      * This is the entry point used when the editor screen opens.
      */
-    suspend fun loadOrCreate(projectId: Long, width: Int, height: Int, dpi: Int): CanvasState?
+    suspend fun loadOrCreate(
+        projectId: Long,
+        width: Int,
+        height: Int,
+        dpi: Int,
+    ): CanvasState?
 
     /** Loads a saved project. Returns null when no document exists. */
     suspend fun loadCanvas(projectId: Long): CanvasState?
@@ -78,7 +86,7 @@ interface CanvasRepository {
         pressure: Float,
         brushParams: BrushParams,
         layerId: Long,
-        isEraser: Boolean = false
+        isEraser: Boolean = false,
     ): Long
 
     fun continueStroke(
@@ -87,7 +95,7 @@ interface CanvasRepository {
         y: Float,
         pressure: Float,
         tiltX: Float = 0f,
-        tiltY: Float = 0f
+        tiltY: Float = 0f,
     )
 
     fun endStroke(strokeId: Long)
@@ -113,7 +121,10 @@ interface CanvasRepository {
     fun requestPreviewRefresh()
 
     /** Replaces the stroke list of a layer (transform commits, symmetry replay). */
-    suspend fun replaceLayerStrokes(layerId: Long, strokes: List<Stroke>): Boolean
+    suspend fun replaceLayerStrokes(
+        layerId: Long,
+        strokes: List<Stroke>,
+    ): Boolean
 
     // -----------------------------------------------------------------------------------------
     // Pixel editing
@@ -129,7 +140,7 @@ interface CanvasRepository {
     class RasterEditSession internal constructor(
         val layerId: Long,
         val buffer: PixelBuffer,
-        internal val snapshotToken: Long
+        internal val snapshotToken: Long,
     )
 
     /** The layer's pixel buffer, loading it from disk on first access. */
@@ -139,7 +150,10 @@ interface CanvasRepository {
     suspend fun beginRasterEdit(layerId: Long): RasterEditSession?
 
     /** Writes a fresh version file for the session's layer and invalidates the canvas. */
-    suspend fun commitRasterEdit(session: RasterEditSession, description: String): Boolean
+    suspend fun commitRasterEdit(
+        session: RasterEditSession,
+        description: String,
+    ): Boolean
 
     /** Throws the session's changes away and restores the pre-gesture pixels. */
     suspend fun cancelRasterEdit(session: RasterEditSession)
@@ -148,11 +162,15 @@ interface CanvasRepository {
     suspend fun applyRasterEdit(
         layerId: Long,
         description: String,
-        edit: (PixelBuffer) -> Unit
+        edit: (PixelBuffer) -> Unit,
     ): Boolean
 
     /** Replaces a layer's pixels wholesale (image import, text rasterisation, paste). */
-    suspend fun setLayerPixels(layerId: Long, buffer: PixelBuffer, description: String): Boolean
+    suspend fun setLayerPixels(
+        layerId: Long,
+        buffer: PixelBuffer,
+        description: String,
+    ): Boolean
 
     /** Sets the ink colour used by subsequent strokes. */
     fun setStrokeColor(color: Int)
@@ -176,15 +194,25 @@ interface CanvasRepository {
     // Layers
     // -----------------------------------------------------------------------------------------
 
-    suspend fun addLayer(name: String? = null, index: Int? = null, opacity: Float = 1.0f): Layer
+    suspend fun addLayer(
+        name: String? = null,
+        index: Int? = null,
+        opacity: Float = 1.0f,
+    ): Layer
 
     suspend fun removeLayer(layerId: Long): Boolean
 
-    suspend fun reorderLayer(layerId: Long, newIndex: Int): Boolean
+    suspend fun reorderLayer(
+        layerId: Long,
+        newIndex: Int,
+    ): Boolean
 
     suspend fun duplicateLayer(layerId: Long): Long?
 
-    suspend fun mergeLayers(sourceLayerId: Long, targetLayerId: Long): Boolean
+    suspend fun mergeLayers(
+        sourceLayerId: Long,
+        targetLayerId: Long,
+    ): Boolean
 
     suspend fun mergeVisibleLayers(keepOriginals: Boolean = false): Long?
 
@@ -193,22 +221,46 @@ interface CanvasRepository {
     /** Flattens the layer stack into a single layer (destructive, undoable). */
     suspend fun flattenAllLayers(): Long?
 
-    suspend fun setLayerVisibility(layerId: Long, isVisible: Boolean? = null): Boolean
+    suspend fun setLayerVisibility(
+        layerId: Long,
+        isVisible: Boolean? = null,
+    ): Boolean
 
-    suspend fun setLayerOpacity(layerId: Long, opacity: Float): Boolean
+    suspend fun setLayerOpacity(
+        layerId: Long,
+        opacity: Float,
+    ): Boolean
 
-    suspend fun setLayerName(layerId: Long, newName: String): Boolean
+    suspend fun setLayerName(
+        layerId: Long,
+        newName: String,
+    ): Boolean
 
-    suspend fun setLayerLock(layerId: Long, isLocked: Boolean): Boolean
+    suspend fun setLayerLock(
+        layerId: Long,
+        isLocked: Boolean,
+    ): Boolean
 
-    suspend fun setLayerBlendMode(layerId: Long, blendMode: BlendMode): Boolean
+    suspend fun setLayerBlendMode(
+        layerId: Long,
+        blendMode: BlendMode,
+    ): Boolean
 
-    suspend fun setLayerAlphaLock(layerId: Long, isLocked: Boolean? = null): Boolean
+    suspend fun setLayerAlphaLock(
+        layerId: Long,
+        isLocked: Boolean? = null,
+    ): Boolean
 
-    suspend fun setLayerClippingMask(layerId: Long, isClipping: Boolean? = null): Boolean
+    suspend fun setLayerClippingMask(
+        layerId: Long,
+        isClipping: Boolean? = null,
+    ): Boolean
 
     /** Marks a layer as a reference image (visible on the reference panel, never composited). */
-    suspend fun setLayerReference(layerId: Long, isReference: Boolean): Boolean
+    suspend fun setLayerReference(
+        layerId: Long,
+        isReference: Boolean,
+    ): Boolean
 
     /** Links several layers so they move and transform together (Phase 28). */
     suspend fun linkLayers(layerIds: List<Long>): Boolean
@@ -228,34 +280,68 @@ interface CanvasRepository {
     // -----------------------------------------------------------------------------------------
 
     /** Adds a layer mask, optionally initialised from a selection. */
-    suspend fun addLayerMask(layerId: Long, fromSelection: SelectionMask? = null): Boolean
+    suspend fun addLayerMask(
+        layerId: Long,
+        fromSelection: SelectionMask? = null,
+    ): Boolean
 
     suspend fun removeLayerMask(layerId: Long): Boolean
 
     suspend fun invertLayerMask(layerId: Long): Boolean
 
-    suspend fun setLayerMaskEnabled(layerId: Long, enabled: Boolean): Boolean
+    suspend fun setLayerMaskEnabled(
+        layerId: Long,
+        enabled: Boolean,
+    ): Boolean
 
-    suspend fun setLayerMaskDensity(layerId: Long, density: Float): Boolean
+    suspend fun setLayerMaskDensity(
+        layerId: Long,
+        density: Float,
+    ): Boolean
 
-    suspend fun setLayerMaskFeather(layerId: Long, radius: Float): Boolean
+    suspend fun setLayerMaskFeather(
+        layerId: Long,
+        radius: Float,
+    ): Boolean
 
     /** Paints on a layer mask (white reveals, black hides). */
-    suspend fun paintLayerMask(layerId: Long, x: Float, y: Float, radius: Float, reveal: Boolean): Boolean
+    suspend fun paintLayerMask(
+        layerId: Long,
+        x: Float,
+        y: Float,
+        radius: Float,
+        reveal: Boolean,
+    ): Boolean
 
     /** Adds an adjustment layer at [index] (top when null). */
-    suspend fun addAdjustmentLayer(type: AdjustmentType, index: Int? = null): Layer?
+    suspend fun addAdjustmentLayer(
+        type: AdjustmentType,
+        index: Int? = null,
+    ): Layer?
 
-    suspend fun setAdjustmentParameter(layerId: Long, key: String, value: Float): Boolean
+    suspend fun setAdjustmentParameter(
+        layerId: Long,
+        key: String,
+        value: Float,
+    ): Boolean
 
-    suspend fun setAdjustmentParameters(layerId: Long, values: Map<String, Float>): Boolean
+    suspend fun setAdjustmentParameters(
+        layerId: Long,
+        values: Map<String, Float>,
+    ): Boolean
 
     suspend fun resetAdjustment(layerId: Long): Boolean
 
     /** Adds a filter layer above the active layer. */
-    suspend fun addFilterLayer(type: FilterType, index: Int? = null): Layer?
+    suspend fun addFilterLayer(
+        type: FilterType,
+        index: Int? = null,
+    ): Layer?
 
-    suspend fun setFilterAmount(layerId: Long, amount: Float): Boolean
+    suspend fun setFilterAmount(
+        layerId: Long,
+        amount: Float,
+    ): Boolean
 
     /** Bakes a filter layer's effect into the layer below it. */
     suspend fun rasterizeFilterLayer(layerId: Long): Boolean
@@ -268,7 +354,7 @@ interface CanvasRepository {
         width: Int,
         height: Int,
         resample: Boolean,
-        anchor: com.artflow.studio.core.canvas.CanvasOperations.Anchor = com.artflow.studio.core.canvas.CanvasOperations.Anchor.CENTER
+        anchor: com.artflow.studio.core.canvas.CanvasOperations.Anchor = com.artflow.studio.core.canvas.CanvasOperations.Anchor.CENTER,
     ): Boolean
 
     suspend fun cropCanvas(bounds: IntBounds): Boolean
@@ -289,7 +375,7 @@ interface CanvasRepository {
     suspend fun applyAdjustmentToCanvas(
         type: AdjustmentType,
         parameters: Map<String, Float>,
-        toAllLayers: Boolean
+        toAllLayers: Boolean,
     ): Boolean
 
     // -----------------------------------------------------------------------------------------
@@ -308,11 +394,17 @@ interface CanvasRepository {
     /** @return true when a frame was actually removed (never removes the last frame). */
     suspend fun deleteFrame(index: Int): Boolean
 
-    suspend fun moveFrame(from: Int, to: Int): Boolean
+    suspend fun moveFrame(
+        from: Int,
+        to: Int,
+    ): Boolean
 
     suspend fun selectFrame(index: Int)
 
-    suspend fun setFrameDuration(index: Int, durationMs: Int): Boolean
+    suspend fun setFrameDuration(
+        index: Int,
+        durationMs: Int,
+    ): Boolean
 
     suspend fun updateAnimationSettings(settings: AnimationSettings)
 
@@ -326,7 +418,7 @@ interface CanvasRepository {
     /** Flattens the document. Callers own the returned buffer. */
     suspend fun compositeBuffer(
         includeHidden: Boolean = false,
-        applyAdjustments: Boolean = true
+        applyAdjustments: Boolean = true,
     ): PixelBuffer?
 
     /** Layer rasters alongside their properties, for PSD export. */
@@ -369,14 +461,14 @@ data class CanvasState(
     val rotation: Float,
     val frameCount: Int = 1,
     val activeFrameIndex: Int = 0,
-    val hasUnsavedChanges: Boolean = false
+    val hasUnsavedChanges: Boolean = false,
 )
 
 /** Canvas dimensions. */
 data class CanvasSize(
     val width: Int,
     val height: Int,
-    val dpi: Int
+    val dpi: Int,
 )
 
 /** What part of the canvas needs redrawing. */
@@ -389,15 +481,19 @@ sealed class CanvasInvalidationEvent {
         val left: Float,
         val top: Float,
         val right: Float,
-        val bottom: Float
+        val bottom: Float,
     ) : CanvasInvalidationEvent()
 
     /** A stroke was completed. */
-    data class StrokeCompleted(val strokeId: Long) : CanvasInvalidationEvent()
+    data class StrokeCompleted(
+        val strokeId: Long,
+    ) : CanvasInvalidationEvent()
 
     /** The layer stack changed (add/remove/reorder/visibility). */
     object LayersChanged : CanvasInvalidationEvent()
 
     /** The active frame changed. */
-    data class FrameChanged(val index: Int) : CanvasInvalidationEvent()
+    data class FrameChanged(
+        val index: Int,
+    ) : CanvasInvalidationEvent()
 }

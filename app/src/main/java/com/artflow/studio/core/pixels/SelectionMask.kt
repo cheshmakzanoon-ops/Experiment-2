@@ -22,9 +22,8 @@ import kotlin.math.sqrt
 class SelectionMask(
     val width: Int,
     val height: Int,
-    val coverage: ByteArray = ByteArray(width * height)
+    val coverage: ByteArray = ByteArray(width * height),
 ) {
-
     init {
         require(coverage.size == width * height) {
             "Coverage size ${coverage.size} does not match ${width}x$height"
@@ -36,8 +35,10 @@ class SelectionMask(
     /** True when the mask is a fully-opaque select-all (avoids unnecessary per-pixel work). */
     fun isFull(): Boolean = coverage.all { (it.toInt() and 0xFF) == 255 }
 
-    fun coverageAt(x: Int, y: Int): Int =
-        if (x in 0 until width && y in 0 until height) coverage[y * width + x].toInt() and 0xFF else 0
+    fun coverageAt(
+        x: Int,
+        y: Int,
+    ): Int = if (x in 0 until width && y in 0 until height) coverage[y * width + x].toInt() and 0xFF else 0
 
     fun alphaAt(index: Int): Float = (coverage[index].toInt() and 0xFF) / 255f
 
@@ -104,7 +105,10 @@ class SelectionMask(
         return out
     }
 
-    private fun dilate(source: BooleanArray, radius: Int): BooleanArray {
+    private fun dilate(
+        source: BooleanArray,
+        radius: Int,
+    ): BooleanArray {
         // Cheap and predictable: repeat a 3x3 max filter; fine for the radii the UI allows.
         var current = source
         repeat(radius) {
@@ -131,7 +135,10 @@ class SelectionMask(
         return current
     }
 
-    private fun erode(source: BooleanArray, radius: Int): BooleanArray {
+    private fun erode(
+        source: BooleanArray,
+        radius: Int,
+    ): BooleanArray {
         var current = source
         repeat(radius) {
             val next = BooleanArray(source.size)
@@ -172,14 +179,16 @@ class SelectionMask(
     }
 
     companion object {
-
         /**
          * Selection from the alpha channel of a buffer ("select layer opacity").
          *
          * Static because it derives everything from the buffer it is given, which is what callers
          * want from the layer panel's "load selection" action.
          */
-        fun fromAlphaOf(buffer: PixelBuffer, threshold: Int = 1): SelectionMask {
+        fun fromAlphaOf(
+            buffer: PixelBuffer,
+            threshold: Int = 1,
+        ): SelectionMask {
             val out = SelectionMask(buffer.width, buffer.height)
             for (i in out.coverage.indices) {
                 val a = (buffer.pixels[i] ushr 24) and 0xFF
@@ -195,7 +204,7 @@ class SelectionMask(
             left: Float,
             top: Float,
             right: Float,
-            bottom: Float
+            bottom: Float,
         ): SelectionMask {
             val mask = SelectionMask(width, height)
             val x0 = max(0, floor(min(left, right)).toInt())
@@ -216,7 +225,7 @@ class SelectionMask(
             left: Float,
             top: Float,
             right: Float,
-            bottom: Float
+            bottom: Float,
         ): SelectionMask {
             val mask = SelectionMask(width, height)
             val centerX = (left + right) / 2f
@@ -237,11 +246,12 @@ class SelectionMask(
                     val distance = sqrt(nx * nx + ny * ny)
                     // 1px wide soft edge in normalised space, scaled by the smaller radius.
                     val edge = 1f / min(radiusX, radiusY)
-                    val coverage = when {
-                        distance <= 1f - edge -> 1f
-                        distance >= 1f + edge -> 0f
-                        else -> 1f - (distance - (1f - edge)) / (2f * edge)
-                    }
+                    val coverage =
+                        when {
+                            distance <= 1f - edge -> 1f
+                            distance >= 1f + edge -> 0f
+                            else -> 1f - (distance - (1f - edge)) / (2f * edge)
+                        }
                     if (coverage > 0f) {
                         mask.coverage[y * width + x] = (coverage * 255f).toInt().toByte()
                     }
@@ -251,7 +261,11 @@ class SelectionMask(
         }
 
         /** Freehand lasso: even-odd fill of a closed polygon with anti-aliased edges. */
-        fun polygon(width: Int, height: Int, points: List<Pair<Float, Float>>): SelectionMask {
+        fun polygon(
+            width: Int,
+            height: Int,
+            points: List<Pair<Float, Float>>,
+        ): SelectionMask {
             val mask = SelectionMask(width, height)
             if (points.size < 3) return mask
 
@@ -287,7 +301,7 @@ class SelectionMask(
                             mask.coverage,
                             y * width + spanStart,
                             y * width + spanEnd + 1,
-                            255.toByte()
+                            255.toByte(),
                         )
                     }
                     i += 2
@@ -297,7 +311,12 @@ class SelectionMask(
         }
 
         /** Freehand selection following a painted path with a brush [radius]. */
-        fun fromStroke(width: Int, height: Int, points: List<Pair<Float, Float>>, radius: Float): SelectionMask {
+        fun fromStroke(
+            width: Int,
+            height: Int,
+            points: List<Pair<Float, Float>>,
+            radius: Float,
+        ): SelectionMask {
             val mask = SelectionMask(width, height)
             if (points.isEmpty()) return mask
             if (points.size == 1) {
@@ -327,7 +346,7 @@ class SelectionMask(
             tolerance: Int = 32,
             contiguous: Boolean = true,
             antiAlias: Boolean = true,
-            respectExistingSelection: SelectionMask? = null
+            respectExistingSelection: SelectionMask? = null,
         ): SelectionMask {
             val mask = SelectionMask(buffer.width, buffer.height)
             if (!buffer.contains(startX, startY)) return mask
@@ -396,7 +415,7 @@ class SelectionMask(
             buffer: PixelBuffer,
             color: Int,
             tolerance: Int,
-            antiAlias: Boolean = true
+            antiAlias: Boolean = true,
         ): SelectionMask {
             val mask = SelectionMask(buffer.width, buffer.height)
             val hard = (tolerance.coerceIn(0, 255) * 3).toFloat()
@@ -408,17 +427,21 @@ class SelectionMask(
                 val dg = Channels.green(pixel) - Channels.green(color)
                 val db = Channels.blue(pixel) - Channels.blue(color)
                 val distance = sqrt(da * da + dr * dr + dg * dg + db * db)
-                mask.coverage[i] = when {
-                    distance <= hard -> 255.toByte()
-                    !antiAlias || distance >= soft -> 0
-                    else -> (((soft - distance) / (soft - hard)) * 255f).toInt().toByte()
-                }
+                mask.coverage[i] =
+                    when {
+                        distance <= hard -> 255.toByte()
+                        !antiAlias || distance >= soft -> 0
+                        else -> (((soft - distance) / (soft - hard)) * 255f).toInt().toByte()
+                    }
             }
             return mask
         }
 
         /** Intersection of two masks (used when "add to selection" is off). */
-        fun intersect(a: SelectionMask, b: SelectionMask): SelectionMask {
+        fun intersect(
+            a: SelectionMask,
+            b: SelectionMask,
+        ): SelectionMask {
             val out = SelectionMask(min(a.width, b.width), min(a.height, b.height))
             for (y in 0 until out.height) {
                 for (x in 0 until out.width) {
@@ -434,7 +457,7 @@ class SelectionMask(
             mask: SelectionMask,
             buffer: PixelBuffer,
             target: Int,
-            tolerance: Int
+            tolerance: Int,
         ): SelectionMask {
             val out = mask.copy()
             val hard = (tolerance.coerceIn(0, 255) * 3).toFloat()
@@ -444,11 +467,15 @@ class SelectionMask(
                     val index = y * mask.width + x
                     if ((out.coverage[index].toInt() and 0xFF) == 0) continue
                     // Only pixels on the boundary need a softer value.
-                    val nearEdge = x == 0 || y == 0 || x == mask.width - 1 || y == mask.height - 1 ||
-                        (mask.coverage[index - 1].toInt() and 0xFF) == 0 ||
-                        (mask.coverage[index + 1].toInt() and 0xFF) == 0 ||
-                        (mask.coverage[index - mask.width].toInt() and 0xFF) == 0 ||
-                        (mask.coverage[index + mask.width].toInt() and 0xFF) == 0
+                    val nearEdge =
+                        x == 0 ||
+                            y == 0 ||
+                            x == mask.width - 1 ||
+                            y == mask.height - 1 ||
+                            (mask.coverage[index - 1].toInt() and 0xFF) == 0 ||
+                            (mask.coverage[index + 1].toInt() and 0xFF) == 0 ||
+                            (mask.coverage[index - mask.width].toInt() and 0xFF) == 0 ||
+                            (mask.coverage[index + mask.width].toInt() and 0xFF) == 0
                     if (!nearEdge) continue
                     val pixel = buffer.pixels[index]
                     val da = Channels.alpha(pixel) - Channels.alpha(target)
@@ -463,7 +490,12 @@ class SelectionMask(
             return out
         }
 
-        private fun stamp(mask: SelectionMask, centerX: Float, centerY: Float, radius: Float) {
+        private fun stamp(
+            mask: SelectionMask,
+            centerX: Float,
+            centerY: Float,
+            radius: Float,
+        ) {
             val x0 = max(0, floor(centerX - radius).toInt())
             val x1 = min(mask.width - 1, ceil(centerX + radius).toInt())
             val y0 = max(0, floor(centerY - radius).toInt())
@@ -485,12 +517,19 @@ class SelectionMask(
         }
 
         /** Converts a smooth polygon through [points] into a mask (used by "select shape"). */
-        fun fromCircle(width: Int, height: Int, centerX: Float, centerY: Float, radius: Float): SelectionMask {
+        fun fromCircle(
+            width: Int,
+            height: Int,
+            centerX: Float,
+            centerY: Float,
+            radius: Float,
+        ): SelectionMask {
             val mask = SelectionMask(width, height)
-            val points = (0 until 64).map { i ->
-                val angle = (i / 64f) * 2f * Math.PI.toFloat()
-                (centerX + cos(angle) * radius) to (centerY + sin(angle) * radius)
-            }
+            val points =
+                (0 until 64).map { i ->
+                    val angle = (i / 64f) * 2f * Math.PI.toFloat()
+                    (centerX + cos(angle) * radius) to (centerY + sin(angle) * radius)
+                }
             return polygon(width, height, points)
         }
     }

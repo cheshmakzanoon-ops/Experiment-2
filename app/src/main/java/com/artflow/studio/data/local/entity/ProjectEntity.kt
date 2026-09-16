@@ -11,33 +11,23 @@ import com.artflow.studio.domain.model.Project
 data class ProjectEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    
     val name: String,
-    
     val filePath: String,
-    
     val thumbnailPath: String?,
-    
     val width: Int,
-    
     val height: Int,
-    
     val dpi: Int,
-    
     val createdAt: Long,
-    
     val modifiedAt: Long,
-    
     val layerCount: Int = 1,
-    
-    val isFavorite: Boolean = false
+    val isFavorite: Boolean = false,
 )
 
 /**
  * Extension function to convert ProjectEntity to domain Project model
  */
-fun ProjectEntity.toDomain(): Project {
-    return Project(
+fun ProjectEntity.toDomain(): Project =
+    Project(
         id = this.id,
         name = this.name,
         filePath = this.filePath,
@@ -48,15 +38,14 @@ fun ProjectEntity.toDomain(): Project {
         createdAt = this.createdAt,
         modifiedAt = this.modifiedAt,
         layerCount = this.layerCount,
-        isFavorite = this.isFavorite
+        isFavorite = this.isFavorite,
     )
-}
 
 /**
  * Extension function to convert domain Project model to ProjectEntity
  */
-fun Project.toEntity(): ProjectEntity {
-    return ProjectEntity(
+fun Project.toEntity(): ProjectEntity =
+    ProjectEntity(
         id = this.id,
         name = this.name,
         filePath = this.filePath,
@@ -67,6 +56,5 @@ fun Project.toEntity(): ProjectEntity {
         createdAt = this.createdAt,
         modifiedAt = this.modifiedAt,
         layerCount = this.layerCount,
-        isFavorite = this.isFavorite
+        isFavorite = this.isFavorite,
     )
-}

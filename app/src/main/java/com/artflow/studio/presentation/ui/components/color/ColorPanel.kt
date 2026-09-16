@@ -16,7 +16,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -60,33 +59,35 @@ fun ColorPanel(
     onClearRecents: () -> Unit,
     onSavePalette: (String, List<Int>) -> Unit,
     onRemovePalette: (Long) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     var mode by remember { mutableStateOf(ColorHarmony.ColorMode.HSV) }
     var harmony by remember { mutableStateOf(ColorHarmony.Harmony.COMPLEMENTARY) }
     var palettePickerVisible by remember { mutableStateOf(false) }
 
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(
-                modifier = Modifier
-                    .size(52.dp)
-                    .clip(CircleShape)
-                    .background(Color(color))
-                    .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                modifier =
+                    Modifier
+                        .size(52.dp)
+                        .clip(CircleShape)
+                        .background(Color(color))
+                        .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text("Colour", style = MaterialTheme.typography.titleMedium)
                 Text(
                     text = "${ColorHarmony.nameOf(color)} · ${ColorHarmony.toHex(color)}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             TextButton(onClick = { palettePickerVisible = true }) { Text("Palettes") }
@@ -99,7 +100,7 @@ fun ColorPanel(
                 FilterChip(
                     selected = mode == entry,
                     onClick = { mode = entry },
-                    label = { Text(entry.displayName, style = MaterialTheme.typography.labelSmall) }
+                    label = { Text(entry.displayName, style = MaterialTheme.typography.labelSmall) },
                 )
             }
         }
@@ -113,7 +114,7 @@ fun ColorPanel(
                 range = range,
                 onChange = { newValue ->
                     onColorSelected(ColorHarmony.withChannel(color, mode, index, newValue))
-                }
+                },
             )
         }
 
@@ -125,7 +126,7 @@ fun ColorPanel(
                 FilterChip(
                     selected = harmony == entry,
                     onClick = { harmony = entry },
-                    label = { Text(entry.displayName, style = MaterialTheme.typography.labelSmall) }
+                    label = { Text(entry.displayName, style = MaterialTheme.typography.labelSmall) },
                 )
             }
         }
@@ -143,7 +144,7 @@ fun ColorPanel(
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             SectionLabel("Recent")
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -160,7 +161,7 @@ fun ColorPanel(
             Text(
                 "Colours you use will show up here.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -189,7 +190,7 @@ fun ColorPanel(
                     onColorSelected(it)
                     palettePickerVisible = false
                 },
-                onRemovePalette = onRemovePalette
+                onRemovePalette = onRemovePalette,
             )
         }
     }
@@ -200,7 +201,7 @@ private fun SectionLabel(text: String) {
     Text(
         text = text.uppercase(),
         style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
 
@@ -209,7 +210,7 @@ private fun ChannelSlider(
     label: String,
     value: Float,
     range: ClosedFloatingPointRange<Float>,
-    onChange: (Float) -> Unit
+    onChange: (Float) -> Unit,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(label, modifier = Modifier.width(34.dp), style = MaterialTheme.typography.labelMedium)
@@ -217,18 +218,21 @@ private fun ChannelSlider(
             value = value.coerceIn(range.start, range.endInclusive),
             onValueChange = onChange,
             valueRange = range,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
         )
         Text(
             text = value.roundToInt().toString(),
             modifier = Modifier.width(40.dp),
-            style = MaterialTheme.typography.labelSmall
+            style = MaterialTheme.typography.labelSmall,
         )
     }
 }
 
 @Composable
-private fun HexField(color: Int, onColorSelected: (Int) -> Unit) {
+private fun HexField(
+    color: Int,
+    onColorSelected: (Int) -> Unit,
+) {
     var text by remember(color) { mutableStateOf(ColorHarmony.toHex(color).removePrefix("#")) }
     OutlinedTextField(
         value = text,
@@ -236,53 +240,61 @@ private fun HexField(color: Int, onColorSelected: (Int) -> Unit) {
         label = { Text("Hex") },
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(onDone = {
-            ColorHarmony.parseHex(text)?.let(onColorSelected)
-        }),
+        keyboardActions =
+            KeyboardActions(onDone = {
+                ColorHarmony.parseHex(text)?.let(onColorSelected)
+            }),
         trailingIcon = {
             TextButton(onClick = { ColorHarmony.parseHex(text)?.let(onColorSelected) }) { Text("Apply") }
         },
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
     )
 }
 
 @Composable
-private fun Swatch(color: Int, onClick: () -> Unit) {
+private fun Swatch(
+    color: Int,
+    onClick: () -> Unit,
+) {
     Box(
-        modifier = Modifier
-            .size(34.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color(color))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
+        modifier =
+            Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(color))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                .clickable(onClick = onClick),
     )
 }
 
 /** Hue ring with a saturation/brightness square; dragging anywhere picks a colour. */
 @Composable
-private fun ColorWheel(color: Int, onColorSelected: (Int) -> Unit) {
+private fun ColorWheel(
+    color: Int,
+    onColorSelected: (Int) -> Unit,
+) {
     val hsv = remember(color) { argbToHsv(color) }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Canvas(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(240.dp)
-                .pointerInput(hsv[0], hsv[1], hsv[2]) {
-                    val center = Offset(size.width / 2f, size.height / 2f)
-                    val radius = minOf(size.width, size.height) / 2f - 12f
-                    if (radius <= 0f) return@pointerInput
-                    detectDragGestures(
-                        onDragStart = { offset -> onColorSelected(pickPoint(offset, center, radius, hsv)) },
-                        onDrag = { change, _ -> onColorSelected(pickPoint(change.position, center, radius, hsv)) }
-                    )
-                }
-                .pointerInput(hsv[0], hsv[1], hsv[2]) {
-                    val center = Offset(size.width / 2f, size.height / 2f)
-                    val radius = minOf(size.width, size.height) / 2f - 12f
-                    if (radius <= 0f) return@pointerInput
-                    detectTapGestures { offset -> onColorSelected(pickPoint(offset, center, radius, hsv)) }
-                }
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(240.dp)
+                    .pointerInput(hsv[0], hsv[1], hsv[2]) {
+                        val center = Offset(size.width / 2f, size.height / 2f)
+                        val radius = minOf(size.width, size.height) / 2f - 12f
+                        if (radius <= 0f) return@pointerInput
+                        detectDragGestures(
+                            onDragStart = { offset -> onColorSelected(pickPoint(offset, center, radius, hsv)) },
+                            onDrag = { change, _ -> onColorSelected(pickPoint(change.position, center, radius, hsv)) },
+                        )
+                    }.pointerInput(hsv[0], hsv[1], hsv[2]) {
+                        val center = Offset(size.width / 2f, size.height / 2f)
+                        val radius = minOf(size.width, size.height) / 2f - 12f
+                        if (radius <= 0f) return@pointerInput
+                        detectTapGestures { offset -> onColorSelected(pickPoint(offset, center, radius, hsv)) }
+                    },
         ) {
             val center = Offset(size.width / 2f, size.height / 2f)
             val radius = minOf(size.width, size.height) / 2f - 12f
@@ -299,7 +311,7 @@ private fun ColorWheel(color: Int, onColorSelected: (Int) -> Unit) {
                     useCenter = false,
                     topLeft = Offset(center.x - radius, center.y - radius),
                     size = Size(radius * 2, radius * 2),
-                    style = Stroke(width = radius * 0.22f)
+                    style = Stroke(width = radius * 0.22f),
                 )
             }
 
@@ -308,53 +320,61 @@ private fun ColorWheel(color: Int, onColorSelected: (Int) -> Unit) {
             val topLeft = Offset(center.x - inner, center.y - inner)
             val squareSize = Size(inner * 2, inner * 2)
             drawRect(
-                brush = Brush.horizontalGradient(
-                    listOf(Color.White, Color(ColorHarmony.fromHsv(hsv[0], 1f, 1f)))
-                ),
+                brush =
+                    Brush.horizontalGradient(
+                        listOf(Color.White, Color(ColorHarmony.fromHsv(hsv[0], 1f, 1f))),
+                    ),
                 topLeft = topLeft,
-                size = squareSize
+                size = squareSize,
             )
             drawRect(
                 brush = Brush.verticalGradient(listOf(Color.Transparent, Color.Black)),
                 topLeft = topLeft,
-                size = squareSize
+                size = squareSize,
             )
 
             // Hue marker on the ring.
             val angle = Math.toRadians(hsv[0].toDouble())
-            val marker = Offset(
-                center.x + cos(angle).toFloat() * radius,
-                center.y + sin(angle).toFloat() * radius
-            )
+            val marker =
+                Offset(
+                    center.x + cos(angle).toFloat() * radius,
+                    center.y + sin(angle).toFloat() * radius,
+                )
             drawCircle(Color.White, radius = 9f, center = marker)
             drawCircle(Color.Black, radius = 9f, center = marker, style = Stroke(2f))
 
             // Saturation / brightness marker in the square.
-            val saturationPoint = Offset(
-                topLeft.x + hsv[1] * squareSize.width,
-                topLeft.y + (1f - hsv[2]) * squareSize.height
-            )
+            val saturationPoint =
+                Offset(
+                    topLeft.x + hsv[1] * squareSize.width,
+                    topLeft.y + (1f - hsv[2]) * squareSize.height,
+                )
             drawCircle(Color.White, radius = 7f, center = saturationPoint)
             drawCircle(Color.Black, radius = 7f, center = saturationPoint, style = Stroke(2f))
         }
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("Brightness", style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(72.dp))
             Slider(
                 value = hsv[2],
                 onValueChange = { onColorSelected(ColorHarmony.fromHsv(hsv[0], hsv[1], it)) },
                 valueRange = 0f..1f,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
             )
         }
     }
 }
 
 /** Maps a wheel touch to a hue (ring) or a saturation/brightness pair (square). */
-private fun pickPoint(offset: Offset, center: Offset, radius: Float, current: FloatArray): Int {
+private fun pickPoint(
+    offset: Offset,
+    center: Offset,
+    radius: Float,
+    current: FloatArray,
+): Int {
     val inner = radius * SQUARE_FRACTION
     val dx = offset.x - center.x
     val dy = offset.y - center.y
@@ -383,7 +403,7 @@ private fun PalettePickerDialog(
     currentColor: Int,
     onDismiss: () -> Unit,
     onColorSelected: (Int) -> Unit,
-    onRemovePalette: (Long) -> Unit
+    onRemovePalette: (Long) -> Unit,
 ) {
     val grouped = remember(palettes) { palettes.groupBy { it.category } }
     AlertDialog(
@@ -391,31 +411,32 @@ private fun PalettePickerDialog(
         title = { Text("Palettes") },
         text = {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 420.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 grouped.forEach { (category, entries) ->
                     Text(
                         category.uppercase(),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     entries.forEach { palette ->
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(palette.name, style = MaterialTheme.typography.bodyMedium)
                                 if (palette.category == "Custom") {
                                     IconButton(onClick = { onRemovePalette(palette.id) }) {
                                         Icon(
                                             Icons.Default.Delete,
-                                            contentDescription = "Remove ${palette.name}"
+                                            contentDescription = "Remove ${palette.name}",
                                         )
                                     }
                                 }
@@ -424,11 +445,12 @@ private fun PalettePickerDialog(
                                 items(palette.colors) { entry ->
                                     val closest = ColorHarmony.distance(entry, currentColor) < 24f
                                     Box(
-                                        modifier = Modifier
-                                            .size(if (closest) 40.dp else 32.dp)
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(Color(entry))
-                                            .clickable { onColorSelected(entry) }
+                                        modifier =
+                                            Modifier
+                                                .size(if (closest) 40.dp else 32.dp)
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(Color(entry))
+                                                .clickable { onColorSelected(entry) },
                                     )
                                 }
                             }
@@ -437,22 +459,26 @@ private fun PalettePickerDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } }
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
     )
 }
 
 /** Small helper used by the brush sheet: a row of the built-in palettes. */
 @Composable
-fun BuiltInPaletteRow(onColorSelected: (Int) -> Unit, modifier: Modifier = Modifier) {
+fun BuiltInPaletteRow(
+    onColorSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val palette = PaletteLibrary.BUILT_IN.firstOrNull()
     LazyRow(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         items(palette?.colors ?: emptyList()) { entry ->
             Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Color(entry))
-                    .clickable { onColorSelected(entry) }
+                modifier =
+                    Modifier
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(entry))
+                        .clickable { onColorSelected(entry) },
             )
         }
     }

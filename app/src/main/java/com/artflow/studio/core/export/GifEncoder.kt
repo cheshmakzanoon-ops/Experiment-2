@@ -16,7 +16,6 @@ import kotlin.math.min
  * expose, and it makes the encoder fully unit-testable on the JVM.
  */
 object GifEncoder {
-
     /**
      * Encodes [frames] into an animated GIF.
      *
@@ -34,7 +33,7 @@ object GifEncoder {
         loop: Boolean = true,
         matteColor: Int = 0xFFFFFFFF.toInt(),
         keepTransparency: Boolean = false,
-        maxColors: Int = 256
+        maxColors: Int = 256,
     ): ByteArray {
         require(frames.isNotEmpty()) { "A GIF needs at least one frame" }
         require(width > 0 && height > 0) { "GIF dimensions must be positive" }
@@ -50,14 +49,13 @@ object GifEncoder {
         val transparentIndex = if (keepTransparency) 0 else -1
         frames.forEachIndexed { index, frame ->
             val delay = (delaysMs.getOrNull(index) ?: 100).coerceIn(20, 100_000)
-            val quantized = Quantizer.quantize(
-                frame = frame,
-                width = width,
-                height = height,
-                maxColors = if (keepTransparency) maxColors - 1 else maxColors,
-                matteColor = matteColor,
-                reserveTransparent = keepTransparency
-            )
+            val quantized =
+                Quantizer.quantize(
+                    frame = frame,
+                    maxColors = if (keepTransparency) maxColors - 1 else maxColors,
+                    matteColor = matteColor,
+                    reserveTransparent = keepTransparency,
+                )
             writeFrame(
                 out = out,
                 width = width,
@@ -65,7 +63,7 @@ object GifEncoder {
                 indexed = quantized.indices,
                 palette = quantized.palette,
                 delayMs = delay,
-                transparentIndex = transparentIndex
+                transparentIndex = transparentIndex,
             )
         }
 
@@ -73,7 +71,12 @@ object GifEncoder {
         return out.toByteArray()
     }
 
-    private fun writeHeader(out: ByteArrayOutputStream, width: Int, height: Int, loop: Boolean) {
+    private fun writeHeader(
+        out: ByteArrayOutputStream,
+        width: Int,
+        height: Int,
+        loop: Boolean,
+    ) {
         out.write("GIF89a".toByteArray(Charsets.US_ASCII))
         writeShort(out, width)
         writeShort(out, height)
@@ -102,7 +105,7 @@ object GifEncoder {
         indexed: ByteArray,
         palette: IntArray,
         delayMs: Int,
-        transparentIndex: Int
+        transparentIndex: Int,
     ) {
         // Graphics control extension: delay + transparency.
         out.write(0x21)
@@ -147,7 +150,10 @@ object GifEncoder {
         out.write(0x00) // block terminator
     }
 
-    private fun writeShort(out: ByteArrayOutputStream, value: Int) {
+    private fun writeShort(
+        out: ByteArrayOutputStream,
+        value: Int,
+    ) {
         out.write(value and 0xFF)
         out.write((value shr 8) and 0xFF)
     }
@@ -160,20 +166,23 @@ object GifEncoder {
      * footprint while still producing good-looking ramps.
      */
     object Quantizer {
-
         /** Named `Quantized` rather than `Result` so it cannot shadow `kotlin.Result`. */
-        data class Quantized(val indices: ByteArray, val palette: IntArray)
+        data class Quantized(
+            val indices: ByteArray,
+            val palette: IntArray,
+        )
 
         /** A colour with its pixel count inside the current box. */
-        private class Bucket(val color: Int, val count: Int)
+        private class Bucket(
+            val color: Int,
+            val count: Int,
+        )
 
         fun quantize(
             frame: IntArray,
-            width: Int,
-            height: Int,
             maxColors: Int,
             matteColor: Int,
-            reserveTransparent: Boolean
+            reserveTransparent: Boolean,
         ): Quantized {
             val targetColors = maxColors.coerceIn(2, 256)
 
@@ -200,19 +209,22 @@ object GifEncoder {
                 histogram[key] = (histogram[key] ?: 0) + 1
             }
 
-            val buckets = histogram.map { (key, count) ->
-                val r = ((key shr 10) and 0x1F) shl 3
-                val g = ((key shr 5) and 0x1F) shl 3
-                val b = (key and 0x1F) shl 3
-                Bucket((0xFF shl 24) or (r shl 16) or (g shl 8) or b, count)
-            }
+            val buckets =
+                histogram.map { (key, count) ->
+                    val r = ((key shr 10) and 0x1F) shl 3
+                    val g = ((key shr 5) and 0x1F) shl 3
+                    val b = (key and 0x1F) shl 3
+                    Bucket((0xFF shl 24) or (r shl 16) or (g shl 8) or b, count)
+                }
 
             val boxes = mutableListOf(buckets)
             while (boxes.size < targetColors) {
-                val splittable = boxes.withIndex()
-                    .filter { it.value.size > 1 }
-                    .maxByOrNull { (_, box) -> channelRange(box) * box.size }
-                    ?: break
+                val splittable =
+                    boxes
+                        .withIndex()
+                        .filter { it.value.size > 1 }
+                        .maxByOrNull { (_, box) -> channelRange(box) * box.size }
+                        ?: break
                 val (index, box) = splittable
                 val (first, second) = split(box)
                 boxes[index] = first
@@ -246,7 +258,11 @@ object GifEncoder {
             return Quantized(indices, paletteArray)
         }
 
-        private fun blend(backdrop: Int, source: Int, alpha: Float): Int {
+        private fun blend(
+            backdrop: Int,
+            source: Int,
+            alpha: Float,
+        ): Int {
             val inv = 1f - alpha
             val r = (((source shr 16) and 0xFF) * alpha + ((backdrop shr 16) and 0xFF) * inv).toInt()
             val g = (((source shr 8) and 0xFF) * alpha + ((backdrop shr 8) and 0xFF) * inv).toInt()
@@ -257,40 +273,53 @@ object GifEncoder {
 
         /** Largest single-channel spread in a box; the axis median cut should split on. */
         private fun channelRange(box: List<Bucket>): Int {
-            var minR = 255; var maxR = 0
-            var minG = 255; var maxG = 0
-            var minB = 255; var maxB = 0
+            var minR = 255
+            var maxR = 0
+            var minG = 255
+            var maxG = 0
+            var minB = 255
+            var maxB = 0
             box.forEach { bucket ->
                 val r = (bucket.color shr 16) and 0xFF
                 val g = (bucket.color shr 8) and 0xFF
                 val b = bucket.color and 0xFF
-                minR = min(minR, r); maxR = max(maxR, r)
-                minG = min(minG, g); maxG = max(maxG, g)
-                minB = min(minB, b); maxB = max(maxB, b)
+                minR = min(minR, r)
+                maxR = max(maxR, r)
+                minG = min(minG, g)
+                maxG = max(maxG, g)
+                minB = min(minB, b)
+                maxB = max(maxB, b)
             }
             return max(maxR - minR, max(maxG - minG, maxB - minB))
         }
 
         private fun split(box: List<Bucket>): Pair<List<Bucket>, List<Bucket>> {
-            var minR = 255; var maxR = 0
-            var minG = 255; var maxG = 0
-            var minB = 255; var maxB = 0
+            var minR = 255
+            var maxR = 0
+            var minG = 255
+            var maxG = 0
+            var minB = 255
+            var maxB = 0
             box.forEach { bucket ->
                 val r = (bucket.color shr 16) and 0xFF
                 val g = (bucket.color shr 8) and 0xFF
                 val b = bucket.color and 0xFF
-                minR = min(minR, r); maxR = max(maxR, r)
-                minG = min(minG, g); maxG = max(maxG, g)
-                minB = min(minB, b); maxB = max(maxB, b)
+                minR = min(minR, r)
+                maxR = max(maxR, r)
+                minG = min(minG, g)
+                maxG = max(maxG, g)
+                minB = min(minB, b)
+                maxB = max(maxB, b)
             }
             val rRange = maxR - minR
             val gRange = maxG - minG
             val bRange = maxB - minB
-            val comparator = when {
-                rRange >= gRange && rRange >= bRange -> compareBy<Bucket> { (it.color shr 16) and 0xFF }
-                gRange >= bRange -> compareBy { (it.color shr 8) and 0xFF }
-                else -> compareBy { it.color and 0xFF }
-            }
+            val comparator =
+                when {
+                    rRange >= gRange && rRange >= bRange -> compareBy<Bucket> { (it.color shr 16) and 0xFF }
+                    gRange >= bRange -> compareBy { (it.color shr 8) and 0xFF }
+                    else -> compareBy { it.color and 0xFF }
+                }
             val sorted = box.sortedWith(comparator)
             // Split at the weighted median so both halves carry roughly equal pixel counts.
             val total = sorted.sumOf { it.count }
@@ -307,7 +336,10 @@ object GifEncoder {
         }
 
         private fun averageColor(box: List<Bucket>): Int {
-            var r = 0L; var g = 0L; var b = 0L; var count = 0L
+            var r = 0L
+            var g = 0L
+            var b = 0L
+            var count = 0L
             box.forEach { bucket ->
                 r += ((bucket.color shr 16) and 0xFF) * bucket.count
                 g += ((bucket.color shr 8) and 0xFF) * bucket.count
@@ -321,7 +353,11 @@ object GifEncoder {
                 (b / count).toInt().coerceIn(0, 255)
         }
 
-        private fun nearestIndex(palette: IntArray, color: Int, from: Int): Int {
+        private fun nearestIndex(
+            palette: IntArray,
+            color: Int,
+            from: Int,
+        ): Int {
             val r = (color shr 16) and 0xFF
             val g = (color shr 8) and 0xFF
             val b = color and 0xFF
@@ -351,12 +387,14 @@ object GifEncoder {
      * dictionary fills, and the standard 255-byte sub-block packing handled by the caller.
      */
     object LzwCompressor {
-
         /** Codes are 12 bits wide at most, so the dictionary cannot exceed 4096 entries. */
         private const val MAX_CODE_SIZE = 12
         private const val MAX_CODE = 1 shl MAX_CODE_SIZE
 
-        fun compress(indices: ByteArray, minCodeSize: Int): ByteArray {
+        fun compress(
+            indices: ByteArray,
+            minCodeSize: Int,
+        ): ByteArray {
             val clearCode = 1 shl minCodeSize
             val endCode = clearCode + 1
             var codeSize = minCodeSize + 1
@@ -378,6 +416,7 @@ object GifEncoder {
 
             // Dictionary keyed by (prefix << 8) | nextByte.
             var dictionary = HashMap<Int, Int>(1 shl 13)
+
             fun resetDictionary() {
                 dictionary = HashMap(1 shl 13)
                 nextCode = endCode + 1

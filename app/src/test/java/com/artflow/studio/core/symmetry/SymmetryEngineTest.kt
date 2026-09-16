@@ -12,14 +12,14 @@ import org.junit.Test
  * instance is the exact reflection of the sample" — which is what these tests pin down.
  */
 class SymmetryEngineTest {
-
     private val width = 200
     private val height = 100
 
-    private fun vertical(secondary: Boolean = false) = SymmetryEngine.Settings(
-        type = SymmetryEngine.SymmetryType.VERTICAL,
-        secondaryAxis = secondary
-    )
+    private fun vertical(secondary: Boolean = false) =
+        SymmetryEngine.Settings(
+            type = SymmetryEngine.SymmetryType.VERTICAL,
+            secondaryAxis = secondary,
+        )
 
     @Test
     fun `no symmetry produces a single unchanged instance`() {
@@ -49,10 +49,14 @@ class SymmetryEngineTest {
 
     @Test
     fun `horizontal symmetry mirrors across the centre axis`() {
-        val instances = SymmetryEngine.instances(
-            40f, 20f, width, height,
-            SymmetryEngine.Settings(type = SymmetryEngine.SymmetryType.HORIZONTAL)
-        )
+        val instances =
+            SymmetryEngine.instances(
+                40f,
+                20f,
+                width,
+                height,
+                SymmetryEngine.Settings(type = SymmetryEngine.SymmetryType.HORIZONTAL),
+            )
 
         assertEquals(2, instances.size)
         assertEquals(40f, instances[1].x, 0.001f)
@@ -70,10 +74,14 @@ class SymmetryEngineTest {
 
     @Test
     fun `quadrant symmetry produces all four reflections`() {
-        val instances = SymmetryEngine.instances(
-            40f, 20f, width, height,
-            SymmetryEngine.Settings(type = SymmetryEngine.SymmetryType.QUADRANT)
-        )
+        val instances =
+            SymmetryEngine.instances(
+                40f,
+                20f,
+                width,
+                height,
+                SymmetryEngine.Settings(type = SymmetryEngine.SymmetryType.QUADRANT),
+            )
 
         assertEquals(4, instances.size)
         val points = instances.map { it.x to it.y }
@@ -92,10 +100,11 @@ class SymmetryEngineTest {
 
     @Test
     fun `radial symmetry rotates around the canvas centre without changing the radius`() {
-        val settings = SymmetryEngine.Settings(
-            type = SymmetryEngine.SymmetryType.RADIAL,
-            radialCount = 8
-        )
+        val settings =
+            SymmetryEngine.Settings(
+                type = SymmetryEngine.SymmetryType.RADIAL,
+                radialCount = 8,
+            )
 
         val instances = SymmetryEngine.instances(120f, 50f, width, height, settings)
         assertEquals(8, instances.size)
@@ -111,12 +120,22 @@ class SymmetryEngineTest {
 
     @Test
     fun `radial count is clamped to the supported range`() {
-        assertEquals(2, SymmetryEngine.Settings(
-            type = SymmetryEngine.SymmetryType.RADIAL, radialCount = 1
-        ).instanceCount())
-        assertEquals(32, SymmetryEngine.Settings(
-            type = SymmetryEngine.SymmetryType.RADIAL, radialCount = 500
-        ).instanceCount())
+        assertEquals(
+            2,
+            SymmetryEngine
+                .Settings(
+                    type = SymmetryEngine.SymmetryType.RADIAL,
+                    radialCount = 1,
+                ).instanceCount(),
+        )
+        assertEquals(
+            32,
+            SymmetryEngine
+                .Settings(
+                    type = SymmetryEngine.SymmetryType.RADIAL,
+                    radialCount = 500,
+                ).instanceCount(),
+        )
         assertEquals(2..32, SymmetryEngine.RADIAL_RANGE)
     }
 
@@ -126,16 +145,21 @@ class SymmetryEngineTest {
         assertEquals(2, SymmetryEngine.guideLines(width, height, vertical(secondary = true)).size)
         assertEquals(
             2,
-            SymmetryEngine.guideLines(
-                width, height, SymmetryEngine.Settings(type = SymmetryEngine.SymmetryType.QUADRANT)
-            ).size
+            SymmetryEngine
+                .guideLines(
+                    width,
+                    height,
+                    SymmetryEngine.Settings(type = SymmetryEngine.SymmetryType.QUADRANT),
+                ).size,
         )
         assertEquals(
             6,
-            SymmetryEngine.guideLines(
-                width, height,
-                SymmetryEngine.Settings(type = SymmetryEngine.SymmetryType.RADIAL, radialCount = 6)
-            ).size
+            SymmetryEngine
+                .guideLines(
+                    width,
+                    height,
+                    SymmetryEngine.Settings(type = SymmetryEngine.SymmetryType.RADIAL, radialCount = 6),
+                ).size,
         )
     }
 
@@ -151,10 +175,11 @@ class SymmetryEngineTest {
 
     @Test
     fun `offsets move the guide axis`() {
-        val settings = SymmetryEngine.Settings(
-            type = SymmetryEngine.SymmetryType.VERTICAL,
-            offsetX = 0.1f
-        )
+        val settings =
+            SymmetryEngine.Settings(
+                type = SymmetryEngine.SymmetryType.VERTICAL,
+                offsetX = 0.1f,
+            )
 
         assertEquals(120f, SymmetryEngine.guideLines(width, height, settings).first().startX, 0.001f)
         // The reflection follows the shifted axis: 2 * 120 - 40 = 200.
@@ -179,17 +204,18 @@ class SymmetryEngineTest {
 
     @Test
     fun `sanitize clamps every setting into range`() {
-        val sanitized = SymmetryEngine.sanitize(
-            SymmetryEngine.Settings(
-                type = SymmetryEngine.SymmetryType.RADIAL,
-                centreX = 5f,
-                centreY = -5f,
-                offsetX = -9f,
-                offsetY = 9f,
-                radialCount = 900,
-                radialAngleDegrees = 400f
+        val sanitized =
+            SymmetryEngine.sanitize(
+                SymmetryEngine.Settings(
+                    type = SymmetryEngine.SymmetryType.RADIAL,
+                    centreX = 5f,
+                    centreY = -5f,
+                    offsetX = -9f,
+                    offsetY = 9f,
+                    radialCount = 900,
+                    radialAngleDegrees = 400f,
+                ),
             )
-        )
 
         assertEquals(2f, sanitized.centreX, 0.001f)
         assertEquals(-1f, sanitized.centreY, 0.001f)
@@ -207,7 +233,9 @@ class SymmetryEngineTest {
         }
         assertEquals(
             6,
-            SymmetryEngine.PRESETS.first { it.name == "Mandala 6" }.settings.radialCount
+            SymmetryEngine.PRESETS
+                .first { it.name == "Mandala 6" }
+                .settings.radialCount,
         )
     }
 
@@ -224,8 +252,8 @@ class SymmetryEngineTest {
         assertEquals(
             32,
             SymmetryEngine.stampsPerSample(
-                SymmetryEngine.Settings(type = SymmetryEngine.SymmetryType.RADIAL, radialCount = 32)
-            )
+                SymmetryEngine.Settings(type = SymmetryEngine.SymmetryType.RADIAL, radialCount = 32),
+            ),
         )
     }
 }

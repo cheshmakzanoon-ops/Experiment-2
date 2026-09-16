@@ -1,0 +1,26 @@
+# EditorConfig — consumed by ktlint (https://ktlint.github.io).
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{kt,kts}]
+indent_style = space
+indent_size = 4
+max_line_length = 140
+
+# The Compose UI files rely on wildcard imports (androidx.compose.material3.*,
+# androidx.compose.runtime.*) for readability; everything else keeps explicit imports.
+ktlint_standard_no-wildcard-imports = disabled
+
+# Composable functions are PascalCase by convention
+# (https://developer.android.com/jetpack/compose/kotlin-style-guide#naming-composables).
+ktlint_function_naming_ignore_when_annotated_with = Composable
+
+# Compose Kotlin code style (https://developer.android.com/jetpack/compose/kotlin-style-guide):
+# allow trailing commas in parameter lists — they produce cleaner diffs in composable signatures.
+ij_kotlin_allow_trailing_comma = true
+ij_kotlin_allow_trailing_comma_on_call_site = true

@@ -14,7 +14,6 @@ import kotlinx.coroutines.flow.Flow
  * exposed as a [Flow]; `update` writes through to storage and never blocks the UI.
  */
 interface SettingsRepository {
-
     val settings: Flow<AppSettings>
 
     /** The current snapshot without subscribing. */
@@ -51,7 +50,10 @@ interface SettingsRepository {
 
     suspend fun setHaptics(enabled: Boolean)
 
-    suspend fun setAutosave(enabled: Boolean, intervalMs: Long = current().autosaveIntervalMs)
+    suspend fun setAutosave(
+        enabled: Boolean,
+        intervalMs: Long = current().autosaveIntervalMs,
+    )
 
     suspend fun setDefaultPreset(name: String)
 
@@ -70,5 +72,8 @@ interface SettingsRepository {
 
     suspend fun removePalette(paletteId: Long)
 
-    suspend fun renamePalette(paletteId: Long, name: String)
+    suspend fun renamePalette(
+        paletteId: Long,
+        name: String,
+    )
 }

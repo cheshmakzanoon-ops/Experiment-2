@@ -14,5 +14,5 @@ data class Project(
     val createdAt: Long,
     val modifiedAt: Long,
     val layerCount: Int = 1,
-    val isFavorite: Boolean = false
+    val isFavorite: Boolean = false,
 )

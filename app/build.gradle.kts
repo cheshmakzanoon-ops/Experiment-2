@@ -5,6 +5,8 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("com.google.dagger.hilt.android")
     id("org.jetbrains.kotlin.plugin.serialization")
+    id("org.jlleitschuh.gradle.ktlint")
+    id("io.gitlab.arturbosch.detekt")
     kotlin("kapt")
 }
 
@@ -22,13 +24,19 @@ plugins {
  * always build; with it, the release output is signed and installable.
  */
 val keystorePropertiesFile = rootProject.file("keystore.properties")
-val keystoreProperties = Properties().apply {
-    if (keystorePropertiesFile.exists()) {
-        keystorePropertiesFile.inputStream().use { load(it) }
+val keystoreProperties =
+    Properties().apply {
+        if (keystorePropertiesFile.exists()) {
+            keystorePropertiesFile.inputStream().use { load(it) }
+        }
     }
-}
-val hasReleaseSigning = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
-    .all { !keystoreProperties.getProperty(it).isNullOrBlank() }
+val hasReleaseSigning =
+    listOf(
+        "storeFile",
+        "storePassword",
+        "keyAlias",
+        "keyPassword",
+    ).all { !keystoreProperties.getProperty(it).isNullOrBlank() }
 
 android {
     namespace = "com.artflow.studio"
@@ -61,7 +69,7 @@ android {
             isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
+                "proguard-rules.pro",
             )
             if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")
@@ -149,7 +157,6 @@ dependencies {
     // Project file serialization (.artflow documents)
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
 
-
     // Testing
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.mockito:mockito-core:5.7.0")
@@ -164,4 +171,37 @@ dependencies {
 
 kapt {
     correctErrorTypes = true
+}
+
+// ---------------------------------------------------------------------------------------------
+// Static analysis
+// ---------------------------------------------------------------------------------------------
+
+ktlint {
+    // Rules are configured through the root .editorconfig (Kotlin official style, Android
+    // conventions, 140-column lines and the Compose wildcard-import exception).
+    version.set("1.3.1")
+    android.set(true)
+    outputToConsole.set(true)
+    ignoreFailures.set(false)
+    filter {
+        exclude { element -> element.file.path.contains("generated/") }
+    }
+}
+
+detekt {
+    config.setFrom(files("$rootDir/config/detekt/detekt.yml"))
+    buildUponDefaultConfig = true
+    parallel = true
+    // Pre-existing findings (codec complexity, broad catches in IO boundaries, etc.) are
+    // recorded in the baseline so `detekt` fails only on NEW violations.
+    baseline = file("$rootDir/config/detekt/baseline.xml")
+}
+
+// `./gradlew check` runs ktlint and detekt on the app module. The Kotlin/Android lint
+// tasks (`lintDebug`, `lintRelease`) are appended when they exist because `check` already
+// depends on them in plain Gradle; registering explicitly keeps the alias single-sourced.
+tasks.named("check") {
+    dependsOn(tasks.matching { it.name in setOf("ktlintKotlinScriptCheck", "ktlintMainSourceSetCheck", "ktlintTestSourceSetCheck") })
+    dependsOn("detekt")
 }

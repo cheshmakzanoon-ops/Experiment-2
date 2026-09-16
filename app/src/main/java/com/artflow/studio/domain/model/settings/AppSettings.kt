@@ -3,23 +3,29 @@ package com.artflow.studio.domain.model.settings
 import com.artflow.studio.core.color.Palette
 
 /** Which theme the app follows. */
-enum class ThemeMode(val displayName: String) {
+enum class ThemeMode(
+    val displayName: String,
+) {
     SYSTEM("Match system"),
     LIGHT("Light"),
-    DARK("Dark")
+    DARK("Dark"),
 }
 
 /**
  * Accent palettes offered by the theme picker. The names are deliberately concrete (ink, indigo,
  * terracotta...) so the app does not look like every other Material default.
  */
-enum class AccentChoice(val displayName: String, val seed: Long) {
+enum class AccentChoice(
+    val displayName: String,
+    val seed: Long,
+) {
     INK("Ink", 0xFF2B3A55),
     INDIGO("Indigo", 0xFF4C5FD5),
     TERRACOTTA("Terracotta", 0xFFB4553D),
     FOREST("Forest", 0xFF2F6F4E),
     PLUM("Plum", 0xFF7A3E68),
-    OCHRE("Ochre", 0xFFB07D2B);
+    OCHRE("Ochre", 0xFFB07D2B),
+    ;
 
     companion object {
         fun byName(name: String?): AccentChoice = entries.firstOrNull { it.name == name } ?: INK
@@ -27,11 +33,13 @@ enum class AccentChoice(val displayName: String, val seed: Long) {
 }
 
 /** How the gallery orders projects. */
-enum class GallerySort(val displayName: String) {
+enum class GallerySort(
+    val displayName: String,
+) {
     RECENT("Recently edited"),
     CREATED("Recently created"),
     NAME("Name"),
-    SIZE("Canvas size")
+    SIZE("Canvas size"),
 }
 
 /**
@@ -56,7 +64,6 @@ data class AppSettings(
     val showPerspectiveGuides: Boolean = true,
     val snapToGuides: Boolean = true,
     val brushCursor: Boolean = true,
-    // Input
     /** When true only a stylus paints; fingers are reserved for navigation (palm rejection). */
     val stylusOnly: Boolean = false,
     val haptics: Boolean = true,
@@ -72,7 +79,7 @@ data class AppSettings(
     val dismissedTips: Set<String> = emptySet(),
     // Colour state that has to survive a restart
     val recentColors: List<Int> = emptyList(),
-    val customPalettes: List<Palette> = emptyList()
+    val customPalettes: List<Palette> = emptyList(),
 ) {
     /** True when a finger may paint. */
     val fingerPainting: Boolean get() = !stylusOnly

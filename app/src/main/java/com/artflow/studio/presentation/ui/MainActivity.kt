@@ -23,7 +23,6 @@ import dagger.hilt.android.AndroidEntryPoint
  */
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-
     override fun onCreate(savedInstanceState: Bundle?) {
         // The manifest starts the cold-start window on Theme.ArtFlow.Starting; swap to the real
         // window theme before the first frame so insets, system bars and dialogs are correct.
@@ -35,7 +34,7 @@ class MainActivity : ComponentActivity() {
             ArtFlowTheme(settings = settings) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
+                    color = MaterialTheme.colorScheme.background,
                 ) {
                     ArtFlowApp(viewModel = viewModel)
                 }

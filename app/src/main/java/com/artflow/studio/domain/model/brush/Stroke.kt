@@ -16,7 +16,7 @@ data class StrokePoint(
     val tiltY: Float = 0f,
     val azimuth: Float = 0f,
     val timestamp: Long = System.currentTimeMillis(),
-    val color: Int = Color.BLACK
+    val color: Int = Color.BLACK,
 ) {
     /**
      * Calculate distance to another point
@@ -55,40 +55,40 @@ data class Stroke(
      * Keeping the flag on the stroke (rather than pre-processing it away) means the compositor
      * replays it exactly like it was drawn, so a saved document reopens identical to the screen.
      */
-    val isEraser: Boolean = false
+    val isEraser: Boolean = false,
 ) {
     /**
      * Get the bounding box of the stroke
      */
     fun getBounds(): RectF {
         if (points.isEmpty()) return RectF(0f, 0f, 0f, 0f)
-        
+
         var minX = Float.MAX_VALUE
         var minY = Float.MAX_VALUE
         var maxX = -Float.MAX_VALUE
         var maxY = -Float.MAX_VALUE
-        
+
         points.forEach { point ->
             minX = kotlin.math.min(minX, point.x)
             minY = kotlin.math.min(minY, point.y)
             maxX = kotlin.math.max(maxX, point.x)
             maxY = kotlin.math.max(maxY, point.y)
         }
-        
+
         return RectF(minX, minY, maxX, maxY)
     }
-    
+
     /**
      * Calculate total length of the stroke path
      */
     fun calculateLength(): Float {
         if (points.size < 2) return 0f
-        
+
         var totalLength = 0f
         for (i in 1 until points.size) {
             totalLength += points[i].distanceTo(points[i - 1])
         }
-        
+
         return totalLength
     }
 }
@@ -100,17 +100,21 @@ data class RectF(
     val left: Float,
     val top: Float,
     val right: Float,
-    val bottom: Float
+    val bottom: Float,
 ) {
     val width: Float get() = right - left
     val height: Float get() = bottom - top
-    
-    fun contains(x: Float, y: Float): Boolean {
-        return x >= left && x <= right && y >= top && y <= bottom
-    }
-    
-    fun intersects(other: RectF): Boolean {
-        return !(other.left > right || other.right < left || 
-                 other.top > bottom || other.bottom < top)
-    }
+
+    fun contains(
+        x: Float,
+        y: Float,
+    ): Boolean = x >= left && x <= right && y >= top && y <= bottom
+
+    fun intersects(other: RectF): Boolean =
+        !(
+            other.left > right ||
+                other.right < left ||
+                other.top > bottom ||
+                other.bottom < top
+        )
 }

@@ -28,7 +28,6 @@ import kotlin.math.roundToInt
  * - Colour jitter, spacing, scatter, count and velocity/tilt dynamics are honoured per dab.
  */
 class StrokeRasterizer {
-
     /** Scratch buffer reused across strokes (transparent; allocated on demand). */
     private var scratch: PixelBuffer? = null
 
@@ -46,7 +45,7 @@ class StrokeRasterizer {
         target: PixelBuffer,
         stroke: Stroke,
         alphaLock: Boolean = false,
-        mask: SelectionMask? = null
+        mask: SelectionMask? = null,
     ) {
         val points = stroke.points
         if (points.isEmpty()) return
@@ -81,15 +80,17 @@ class StrokeRasterizer {
                 if (alphaLock) {
                     val destinationAlpha = (target.pixels[i] ushr 24) and 0xFF
                     if (destinationAlpha == 0) continue
-                    target.pixels[i] = BlendModes.sourceOver(
-                        target.pixels[i],
-                        Channels.scaleAlpha(source, effective * destinationAlpha / 255f)
-                    )
+                    target.pixels[i] =
+                        BlendModes.sourceOver(
+                            target.pixels[i],
+                            Channels.scaleAlpha(source, effective * destinationAlpha / 255f),
+                        )
                 } else {
-                    target.pixels[i] = BlendModes.sourceOver(
-                        target.pixels[i],
-                        Channels.scaleAlpha(source, effective)
-                    )
+                    target.pixels[i] =
+                        BlendModes.sourceOver(
+                            target.pixels[i],
+                            Channels.scaleAlpha(source, effective),
+                        )
                 }
             }
         }
@@ -105,7 +106,7 @@ class StrokeRasterizer {
         params: BrushParams,
         points: List<StrokePoint>,
         strokeAlpha: Float,
-        mask: SelectionMask?
+        mask: SelectionMask?,
     ) {
         val buffer = scratchFor(target.width, target.height)
         buffer.clear()
@@ -121,12 +122,13 @@ class StrokeRasterizer {
             val destinationAlpha = (destination ushr 24) and 0xFF
             if (destinationAlpha == 0) continue
             val outAlpha = (destinationAlpha * (1f - erase)).roundToInt().coerceIn(0, 255)
-            target.pixels[i] = Channels.argb(
-                outAlpha,
-                (destination shr 16) and 0xFF,
-                (destination shr 8) and 0xFF,
-                destination and 0xFF
-            )
+            target.pixels[i] =
+                Channels.argb(
+                    outAlpha,
+                    (destination shr 16) and 0xFF,
+                    (destination shr 8) and 0xFF,
+                    destination and 0xFF,
+                )
         }
     }
 
@@ -137,7 +139,7 @@ class StrokeRasterizer {
         points: List<StrokePoint>,
         alphaScale: Float,
         alphaLock: Boolean,
-        mask: SelectionMask?
+        mask: SelectionMask?,
     ) {
         if (params.spacing <= 0f && points.size <= 2) {
             drawSegment(target, stroke, params, points.first(), points.last(), alphaLock, mask)
@@ -189,7 +191,7 @@ class StrokeRasterizer {
         t: Float,
         distance: Float,
         alphaLock: Boolean,
-        mask: SelectionMask?
+        mask: SelectionMask?,
     ) {
         val x = previous.x + (current.x - previous.x) * t
         val y = previous.y + (current.y - previous.y) * t
@@ -230,7 +232,7 @@ class StrokeRasterizer {
                 hardness = hardnessForFlow(params),
                 mode = Stamping.Mode.SOURCE_OVER,
                 alphaLock = alphaLock,
-                mask = mask
+                mask = mask,
             )
             lastDabCount++
         }
@@ -243,7 +245,7 @@ class StrokeRasterizer {
         start: StrokePoint,
         end: StrokePoint,
         alphaLock: Boolean,
-        mask: SelectionMask?
+        mask: SelectionMask?,
     ) {
         val startSize = params.calculateEffectiveSize(start.pressure)
         val endSize = params.calculateEffectiveSize(end.pressure)
@@ -261,7 +263,7 @@ class StrokeRasterizer {
                 color = Channels.withAlpha(color, (Channels.alpha(color) * startAlpha).roundToInt().coerceIn(0, 255)),
                 hardness = hardnessForFlow(params),
                 alphaLock = alphaLock,
-                mask = mask
+                mask = mask,
             )
             lastDabCount++
             return
@@ -278,7 +280,7 @@ class StrokeRasterizer {
             color = Channels.withAlpha(color, (Channels.alpha(color) * averageAlpha).roundToInt().coerceIn(0, 255)),
             hardness = hardnessForFlow(params),
             alphaLock = alphaLock,
-            mask = mask
+            mask = mask,
         )
         lastDabCount++
     }
@@ -294,7 +296,7 @@ class StrokeRasterizer {
         params: BrushParams,
         stroke: Stroke,
         current: StrokePoint,
-        segmentT: Float
+        segmentT: Float,
     ): Float {
         if (params.taperStart <= 0f && params.taperEnd <= 0f) return 1f
         val totalLength = stroke.calculateLength()
@@ -326,7 +328,10 @@ class StrokeRasterizer {
         return (average * params.opacity.coerceIn(0f, 1f).toDouble()).toFloat().coerceIn(0f, 1f)
     }
 
-    private fun scratchFor(width: Int, height: Int): PixelBuffer {
+    private fun scratchFor(
+        width: Int,
+        height: Int,
+    ): PixelBuffer {
         val existing = scratch
         if (existing != null && existing.width == width && existing.height == height) return existing
         val created = PixelBuffer(width, height)
@@ -347,7 +352,7 @@ class StrokeRasterizer {
         width: Int,
         height: Int,
         alphaLock: Boolean = false,
-        mask: SelectionMask? = null
+        mask: SelectionMask? = null,
     ): PixelBuffer {
         val buffer = PixelBuffer(max(1, width), max(1, height))
         strokes.forEach { draw(buffer, it, alphaLock, mask) }
@@ -355,7 +360,11 @@ class StrokeRasterizer {
     }
 
     /** Blends [source] into [target] using the given opacity (kept for mask/overlay helpers). */
-    fun blendWithOpacity(target: PixelBuffer, source: PixelBuffer, opacity: Float) {
+    fun blendWithOpacity(
+        target: PixelBuffer,
+        source: PixelBuffer,
+        opacity: Float,
+    ) {
         val clamped = opacity.coerceIn(0f, 1f)
         if (clamped <= 0f) return
         for (i in target.pixels.indices) {

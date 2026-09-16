@@ -1,0 +1,69 @@
+# Detekt configuration for ArtFlow.
+#
+# Philosophy: catch real defects and hygiene issues; do not re-litigate style that
+# ktlint already owns. Most rules stay at detekt's defaults.
+
+build:
+  maxIssues: 0
+
+processors:
+  active: true
+
+console-reports:
+  active: true
+  exclude:
+    - 'ProjectStatisticsReport'
+    - 'ComplexityReport'
+    - 'NotificationReport'
+
+output-reports:
+  active: true
+  exclude:
+    - 'TxtOutputReport'
+
+complexity:
+  LongMethod:
+    active: true
+    threshold: 220
+  LongParameterList:
+    active: true
+    functionThreshold: 12
+    constructorThreshold: 14
+  LargeClass:
+    active: true
+    threshold: 1200
+  CyclomaticComplexMethod:
+    active: true
+    threshold: 30
+  TooManyFunctions:
+    active: false
+
+exceptions:
+  TooGenericExceptionCaught:
+    active: true
+  SwallowedException:
+    active: false
+
+naming:
+  FunctionNaming:
+    # Composable functions are PascalCase by convention.
+    ignoreAnnotated: ['Composable']
+
+style:
+  MaxLineLength:
+    active: true
+    maxLineLength: 140
+  MagicNumber:
+    # Graphics and layout code is full of meaningful pixel/colour constants; this
+    # rule would generate hundreds of findings without improving the code.
+    active: false
+  ReturnCount:
+    active: false
+  UnusedPrivateMember:
+    active: true
+    ignoreAnnotated: ['Preview']
+  WildcardImport:
+    active: false # owned by ktlint (.editorconfig) so the Compose exception lives in one place
+
+coroutines:
+  active: true

@@ -19,9 +19,8 @@ import kotlin.math.roundToInt
 class PixelBuffer(
     val width: Int,
     val height: Int,
-    val pixels: IntArray = IntArray(width * height)
+    val pixels: IntArray = IntArray(width * height),
 ) {
-
     init {
         require(width > 0 && height > 0) { "PixelBuffer must be at least 1x1 (got ${width}x$height)" }
         require(pixels.size == width * height) {
@@ -31,21 +30,41 @@ class PixelBuffer(
 
     val size: Int get() = pixels.size
 
-    fun index(x: Int, y: Int): Int = y * width + x
+    fun index(
+        x: Int,
+        y: Int,
+    ): Int = y * width + x
 
-    fun contains(x: Int, y: Int): Boolean = x in 0 until width && y in 0 until height
+    fun contains(
+        x: Int,
+        y: Int,
+    ): Boolean = x in 0 until width && y in 0 until height
 
     /** Raw pixel access without bounds checking (hot paths). */
-    fun getUnchecked(x: Int, y: Int): Int = pixels[y * width + x]
+    fun getUnchecked(
+        x: Int,
+        y: Int,
+    ): Int = pixels[y * width + x]
 
     /** Returns 0 (transparent) outside the buffer so sampling never throws. */
-    fun getSafe(x: Int, y: Int): Int = if (contains(x, y)) pixels[y * width + x] else 0
+    fun getSafe(
+        x: Int,
+        y: Int,
+    ): Int = if (contains(x, y)) pixels[y * width + x] else 0
 
-    fun setUnchecked(x: Int, y: Int, argb: Int) {
+    fun setUnchecked(
+        x: Int,
+        y: Int,
+        argb: Int,
+    ) {
         pixels[y * width + x] = argb
     }
 
-    fun setSafe(x: Int, y: Int, argb: Int) {
+    fun setSafe(
+        x: Int,
+        y: Int,
+        argb: Int,
+    ) {
         if (contains(x, y)) pixels[y * width + x] = argb
     }
 
@@ -70,14 +89,19 @@ class PixelBuffer(
      * Nearest-neighbour sample. Used by tools that need the pre-edit state of a pixel while the
      * buffer is being modified in place.
      */
-    fun sampleNearest(xf: Float, yf: Float): Int =
-        getSafe(floor(xf).toInt(), floor(yf).toInt())
+    fun sampleNearest(
+        xf: Float,
+        yf: Float,
+    ): Int = getSafe(floor(xf).toInt(), floor(yf).toInt())
 
     /**
      * Bilinear sample in buffer space. Out-of-bounds taps read as transparent.
      * Used for scaling, liquify and transform resampling.
      */
-    fun sampleBilinear(xf: Float, yf: Float): Int {
+    fun sampleBilinear(
+        xf: Float,
+        yf: Float,
+    ): Int {
         val x = xf - 0.5f
         val y = yf - 0.5f
         val x0 = floor(x).toInt()
@@ -94,7 +118,12 @@ class PixelBuffer(
     }
 
     /** Draw [src] into this buffer at ([dx], [dy]) with source-over compositing. */
-    fun drawInto(src: PixelBuffer, dx: Int, dy: Int, opacity: Float = 1f) {
+    fun drawInto(
+        src: PixelBuffer,
+        dx: Int,
+        dy: Int,
+        opacity: Float = 1f,
+    ) {
         val alpha = opacity.coerceIn(0f, 1f)
         for (y in 0 until src.height) {
             val ty = y + dy
@@ -154,7 +183,10 @@ class PixelBuffer(
     }
 
     /** Resize using bilinear sampling. */
-    fun scaled(newWidth: Int, newHeight: Int): PixelBuffer {
+    fun scaled(
+        newWidth: Int,
+        newHeight: Int,
+    ): PixelBuffer {
         require(newWidth > 0 && newHeight > 0) { "Scale target must be positive" }
         if (newWidth == width && newHeight == height) return copy()
 
@@ -199,9 +231,10 @@ class PixelBuffer(
         return when (normalized) {
             0 -> copy()
             90 -> transpose(clockwise = true)
-            180 -> PixelBuffer(width, height).also { out ->
-                for (i in pixels.indices) out.pixels[i] = pixels[pixels.size - 1 - i]
-            }
+            180 ->
+                PixelBuffer(width, height).also { out ->
+                    for (i in pixels.indices) out.pixels[i] = pixels[pixels.size - 1 - i]
+                }
             270 -> transpose(clockwise = false)
             else -> throw IllegalArgumentException("Only 90-degree steps are supported, got $degrees")
         }
@@ -220,7 +253,10 @@ class PixelBuffer(
     }
 
     /** Pads or crops to exactly [targetWidth] x [targetHeight], anchoring content at the top-left. */
-    fun resizedCanvas(targetWidth: Int, targetHeight: Int): PixelBuffer {
+    fun resizedCanvas(
+        targetWidth: Int,
+        targetHeight: Int,
+    ): PixelBuffer {
         val out = PixelBuffer(targetWidth, targetHeight)
         val copyWidth = min(width, targetWidth)
         val copyHeight = min(height, targetHeight)
@@ -243,7 +279,7 @@ class PixelBuffer(
         scaleY: Float,
         rotationDegrees: Float,
         pivotX: Float,
-        pivotY: Float
+        pivotY: Float,
     ): PixelBuffer {
         val out = PixelBuffer(targetWidth, targetHeight)
         val radians = Math.toRadians(rotationDegrees.toDouble())
@@ -270,32 +306,49 @@ class PixelBuffer(
     }
 
     /** Bounds of this buffer shifted by an offset (helper for transform commits). */
-    fun translatedBounds(dx: Float, dy: Float): IntBounds =
+    fun translatedBounds(
+        dx: Float,
+        dy: Float,
+    ): IntBounds =
         IntBounds(
             floor(dx).toInt(),
             floor(dy).toInt(),
             floor(dx).toInt() + width - 1,
-            floor(dy).toInt() + height - 1
+            floor(dy).toInt() + height - 1,
         )
 
     companion object {
-        fun filled(width: Int, height: Int, argb: Int): PixelBuffer =
-            PixelBuffer(width, height).also { it.fill(argb) }
+        fun filled(
+            width: Int,
+            height: Int,
+            argb: Int,
+        ): PixelBuffer = PixelBuffer(width, height).also { it.fill(argb) }
 
-        fun mix4(p00: Int, p10: Int, p01: Int, p11: Int, fx: Float, fy: Float): Int {
+        fun mix4(
+            p00: Int,
+            p10: Int,
+            p01: Int,
+            p11: Int,
+            fx: Float,
+            fy: Float,
+        ): Int {
             val w00 = (1 - fx) * (1 - fy)
             val w10 = fx * (1 - fy)
             val w01 = (1 - fx) * fy
             val w11 = fx * fy
             return Channels.fromFloats(
-                a = Channels.alpha(p00) * w00 + Channels.alpha(p10) * w10 +
-                    Channels.alpha(p01) * w01 + Channels.alpha(p11) * w11,
-                r = Channels.red(p00) * w00 + Channels.red(p10) * w10 +
-                    Channels.red(p01) * w01 + Channels.red(p11) * w11,
-                g = Channels.green(p00) * w00 + Channels.green(p10) * w10 +
-                    Channels.green(p01) * w01 + Channels.green(p11) * w11,
-                b = Channels.blue(p00) * w00 + Channels.blue(p10) * w10 +
-                    Channels.blue(p01) * w01 + Channels.blue(p11) * w11
+                a =
+                    Channels.alpha(p00) * w00 + Channels.alpha(p10) * w10 +
+                        Channels.alpha(p01) * w01 + Channels.alpha(p11) * w11,
+                r =
+                    Channels.red(p00) * w00 + Channels.red(p10) * w10 +
+                        Channels.red(p01) * w01 + Channels.red(p11) * w11,
+                g =
+                    Channels.green(p00) * w00 + Channels.green(p10) * w10 +
+                        Channels.green(p01) * w01 + Channels.green(p11) * w11,
+                b =
+                    Channels.blue(p00) * w00 + Channels.blue(p10) * w10 +
+                        Channels.blue(p01) * w01 + Channels.blue(p11) * w11,
             )
         }
     }
@@ -306,47 +359,60 @@ data class IntBounds(
     val left: Int,
     val top: Int,
     val right: Int,
-    val bottom: Int
+    val bottom: Int,
 ) {
     val width: Int get() = right - left + 1
     val height: Int get() = bottom - top + 1
     val isEmpty: Boolean get() = right < left || bottom < top
 
-    fun contains(x: Int, y: Int): Boolean = x in left..right && y in top..bottom
+    fun contains(
+        x: Int,
+        y: Int,
+    ): Boolean = x in left..right && y in top..bottom
 
-    fun inflated(amount: Int): IntBounds =
-        IntBounds(left - amount, top - amount, right + amount, bottom + amount)
+    fun inflated(amount: Int): IntBounds = IntBounds(left - amount, top - amount, right + amount, bottom + amount)
 
-    fun intersect(other: IntBounds): IntBounds = IntBounds(
-        max(left, other.left),
-        max(top, other.top),
-        min(right, other.right),
-        min(bottom, other.bottom)
-    )
+    fun intersect(other: IntBounds): IntBounds =
+        IntBounds(
+            max(left, other.left),
+            max(top, other.top),
+            min(right, other.right),
+            min(bottom, other.bottom),
+        )
 
-    fun clamped(maxWidth: Int, maxHeight: Int): IntBounds = IntBounds(
-        left.coerceIn(0, maxWidth - 1),
-        top.coerceIn(0, maxHeight - 1),
-        right.coerceIn(0, maxWidth - 1),
-        bottom.coerceIn(0, maxHeight - 1)
-    )
+    fun clamped(
+        maxWidth: Int,
+        maxHeight: Int,
+    ): IntBounds =
+        IntBounds(
+            left.coerceIn(0, maxWidth - 1),
+            top.coerceIn(0, maxHeight - 1),
+            right.coerceIn(0, maxWidth - 1),
+            bottom.coerceIn(0, maxHeight - 1),
+        )
 
     /** Grow to cover a point, so a caller can accumulate a dirty rectangle. */
-    fun union(other: IntBounds): IntBounds = IntBounds(
-        min(left, other.left),
-        min(top, other.top),
-        max(right, other.right),
-        max(bottom, other.bottom)
-    )
+    fun union(other: IntBounds): IntBounds =
+        IntBounds(
+            min(left, other.left),
+            min(top, other.top),
+            max(right, other.right),
+            max(bottom, other.bottom),
+        )
 
     companion object {
-        fun aroundRectangle(left: Float, top: Float, right: Float, bottom: Float, padding: Int = 0) =
-            IntBounds(
-                floor(min(left, right)).toInt() - padding,
-                floor(min(top, bottom)).toInt() - padding,
-                kotlin.math.ceil(max(left, right)).toInt() + padding,
-                kotlin.math.ceil(max(top, bottom)).toInt() + padding
-            )
+        fun aroundRectangle(
+            left: Float,
+            top: Float,
+            right: Float,
+            bottom: Float,
+            padding: Int = 0,
+        ) = IntBounds(
+            floor(min(left, right)).toInt() - padding,
+            floor(min(top, bottom)).toInt() - padding,
+            kotlin.math.ceil(max(left, right)).toInt() + padding,
+            kotlin.math.ceil(max(top, bottom)).toInt() + padding,
+        )
     }
 }
 
@@ -356,11 +422,19 @@ data class IntBounds(
  */
 object Channels {
     fun alpha(argb: Int): Float = ((argb ushr 24) and 0xFF).toFloat()
+
     fun red(argb: Int): Float = ((argb ushr 16) and 0xFF).toFloat()
+
     fun green(argb: Int): Float = ((argb ushr 8) and 0xFF).toFloat()
+
     fun blue(argb: Int): Float = (argb and 0xFF).toFloat()
 
-    fun fromFloats(a: Float, r: Float, g: Float, b: Float): Int {
+    fun fromFloats(
+        a: Float,
+        r: Float,
+        g: Float,
+        b: Float,
+    ): Int {
         val ai = a.roundToInt().coerceIn(0, 255)
         val ri = r.roundToInt().coerceIn(0, 255)
         val gi = g.roundToInt().coerceIn(0, 255)
@@ -368,17 +442,25 @@ object Channels {
         return (ai shl 24) or (ri shl 16) or (gi shl 8) or bi
     }
 
-    fun argb(a: Int, r: Int, g: Int, b: Int): Int =
-        ((a and 0xFF) shl 24) or ((r and 0xFF) shl 16) or ((g and 0xFF) shl 8) or (b and 0xFF)
+    fun argb(
+        a: Int,
+        r: Int,
+        g: Int,
+        b: Int,
+    ): Int = ((a and 0xFF) shl 24) or ((r and 0xFF) shl 16) or ((g and 0xFF) shl 8) or (b and 0xFF)
 
-    fun scaleAlpha(argb: Int, factor: Float): Int {
+    fun scaleAlpha(
+        argb: Int,
+        factor: Float,
+    ): Int {
         val a = (alpha(argb) * factor).roundToInt().coerceIn(0, 255)
         return (argb and 0x00FFFFFF) or (a shl 24)
     }
 
-    fun withAlpha(argb: Int, alpha: Int): Int =
-        (argb and 0x00FFFFFF) or ((alpha.coerceIn(0, 255)) shl 24)
+    fun withAlpha(
+        argb: Int,
+        alpha: Int,
+    ): Int = (argb and 0x00FFFFFF) or ((alpha.coerceIn(0, 255)) shl 24)
 
-    fun luminance(argb: Int): Float =
-        (0.2126f * red(argb) + 0.7152f * green(argb) + 0.0722f * blue(argb)) / 255f
+    fun luminance(argb: Int): Float = (0.2126f * red(argb) + 0.7152f * green(argb) + 0.0722f * blue(argb)) / 255f
 }

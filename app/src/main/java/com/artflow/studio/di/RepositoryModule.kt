@@ -15,12 +15,7 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object RepositoryModule {
-
     @Provides
     @Singleton
-    fun provideProjectRepository(
-        projectDao: ProjectDao
-    ): ProjectRepository {
-        return ProjectRepositoryImpl(projectDao)
-    }
+    fun provideProjectRepository(projectDao: ProjectDao): ProjectRepository = ProjectRepositoryImpl(projectDao)
 }
