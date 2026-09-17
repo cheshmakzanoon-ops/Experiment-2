@@ -38,7 +38,7 @@ jobs:
           import hashlib, json, lzma, pathlib
           root = pathlib.Path.cwd().resolve()
           packed = b''.join((root / f'.github/hardening-parts/{i}.xzpart').read_bytes() for i in range(4))
-          assert hashlib.sha256(packed).hexdigest() == 'd2d4141a5e6ed671b6d05e7523b8a2ff7f838312db2d797e123480d7bf80f895'
+          assert hashlib.sha256(packed).hexdigest() == '16a77dff9520e157eb3e229333307f3dc265e471c80c7cdef26771d9a5d513fa'
           entries = json.loads(lzma.decompress(packed))
           assert len({e['path'] for e in entries}) == len(entries)
           for entry in entries:
@@ -57,12 +57,6 @@ jobs:
               path.parent.mkdir(parents=True, exist_ok=True)
               path.write_bytes(new)
           print(f'Applied {len(entries)} source files; all before/after hashes verified.')
-          path = root / 'app/src/main/java/com/artflow/studio/presentation/ui/components/canvas/ArtFlowCanvasView.kt'
-          text = path.read_text()
-          old = '                    if (!canvasRepository.commitRasterEdit(session, description)) onStatusMessage?.invoke("The layer changed; this gesture was discarded")'
-          new = '                    if (!canvasRepository.commitRasterEdit(session, description)) {\n                        onStatusMessage?.invoke("The layer changed; this gesture was discarded")\n                    }'
-          assert text.count(old) == 1, 'Expected the exact overlong statement'
-          path.write_text(text.replace(old, new))
       - name: Format candidate with existing repository rules
         run: |
           ./gradlew ktlintFormat --stacktrace
@@ -227,5 +221,5 @@ jobs:
           git add app
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'fix: preserve artwork across saves, cancelled edits and GL lifecycle changes' -m "Verified by workflow run $GITHUB_RUN_ID: JVM tests, ktlint, detekt, Android lint, debug APK, release AAB, and API 26/36 instrumentation."
+          git commit -m 'fix: preserve artwork and correct deterministic painting, fills and layer compositing' -m "Verified by workflow run $GITHUB_RUN_ID: JVM tests, ktlint, detekt, Android lint, debug APK, release AAB, and API 26/36 instrumentation."
           git push origin HEAD:main
