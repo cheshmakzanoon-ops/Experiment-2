@@ -4,14 +4,13 @@ on:
   push:
     branches: [main]
     paths:
-      - .github/hardening-parts/**
-      - .github/hardening-followup.patch.xz
+      - .github/finish-repairs.py
       - .github/workflows/hardening-verify.yml
-      - gradle.properties
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: editor-repair-verification
@@ -25,6 +24,20 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: editor-repair-candidate
+          run-id: 35202962410
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/recovered
+      - name: Restore exact reviewed source
+        env:
+          PATCH: ${{ runner.temp }}/recovered/candidate.patch
+        run: |
+          echo "2272b39120265b363b75a8e9f4b8bf218373f8bf978f684573b79e7ff3325a86  $PATCH" | sha256sum -c -
+          git apply --check "$PATCH"
+          git apply "$PATCH"
+          python .github/finish-repairs.py
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -34,46 +47,10 @@ jobs:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@v4
-      - name: Apply hash-verified source edits
-        shell: python
-        run: |
-          import hashlib, json, lzma, pathlib
-          root = pathlib.Path.cwd().resolve()
-          packed = b''.join((root / f'.github/hardening-parts/{i}.xzpart').read_bytes() for i in range(4))
-          assert hashlib.sha256(packed).hexdigest() == '16a77dff9520e157eb3e229333307f3dc265e471c80c7cdef26771d9a5d513fa'
-          entries = json.loads(lzma.decompress(packed))
-          assert len({e['path'] for e in entries}) == len(entries)
-          for entry in entries:
-              path = root / entry['path']
-              assert entry['path'].startswith('app/') and path.resolve().is_relative_to(root / 'app')
-              old = path.read_bytes() if path.exists() else b''
-              assert hashlib.sha256(old).hexdigest() == entry['old'], f"Source changed: {path}"
-              lines = old.decode('utf-8').splitlines(keepends=True)
-              limit = len(lines)
-              for start, end, replacement in reversed(entry['edits']):
-                  assert 0 <= start <= end <= limit
-                  lines[start:end] = replacement.splitlines(keepends=True)
-                  limit = start
-              new = ''.join(lines).encode('utf-8')
-              assert hashlib.sha256(new).hexdigest() == entry['new'], f"Edit mismatch: {path}"
-              path.parent.mkdir(parents=True, exist_ok=True)
-              path.write_bytes(new)
-          print(f'Applied {len(entries)} source files; all before/after hashes verified.')
-      - name: Establish previously verified formatting
-        run: ./gradlew ktlintFormat --stacktrace
-      - name: Apply checked analysis fixes
-        shell: python
-        run: |
-          import hashlib, lzma, pathlib, subprocess
-          packed = pathlib.Path('.github/hardening-followup.patch.xz').read_bytes()
-          assert hashlib.sha256(packed).hexdigest() == '470639e5194187bf394fbb70f424132d11918fff0c70d5bed1232d62c93daffb'
-          patch = lzma.decompress(packed)
-          subprocess.run(['git', 'apply', '--check', '-'], input=patch, check=True)
-          subprocess.run(['git', 'apply', '-'], input=patch, check=True)
-      - name: Format and check complete candidate
+      - name: Format then verify
         run: |
           ./gradlew ktlintFormat --stacktrace
-          ./gradlew ktlintCheck --stacktrace
+          ./gradlew ktlintCheck detekt --stacktrace
       - name: Archive exact candidate
         if: always()
         run: |
@@ -90,6 +67,7 @@ jobs:
             ${{ runner.temp }}/candidate.patch
             ${{ runner.temp }}/candidate-source.tar.gz
             ${{ runner.temp }}/SHA256SUMS
+            app/build/reports/
           if-no-files-found: error
           retention-days: 14
 
@@ -105,11 +83,13 @@ jobs:
         with:
           name: editor-repair-candidate
           path: ${{ runner.temp }}/candidate
-      - name: Apply exact formatted candidate
+      - name: Apply exact candidate
         run: |
-          (cd "${RUNNER_TEMP}/candidate" && sha256sum -c SHA256SUMS)
-          git apply --check "${RUNNER_TEMP}/candidate/candidate.patch"
-          git apply "${RUNNER_TEMP}/candidate/candidate.patch"
+          cd "${RUNNER_TEMP}/candidate/_temp"
+          sha256sum -c SHA256SUMS
+          cd "$GITHUB_WORKSPACE"
+          git apply --check "${RUNNER_TEMP}/candidate/_temp/candidate.patch"
+          git apply "${RUNNER_TEMP}/candidate/_temp/candidate.patch"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -119,23 +99,20 @@ jobs:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@v4
-      - name: Unit tests, analysis, APK and minified bundle
+      - name: Unit tests, analysis, APK and release bundle
         run: |
           set -o pipefail
           ./gradlew testDebugUnitTest ktlintCheck detekt lintDebug lintRelease assembleDebug bundleRelease --continue --stacktrace 2>&1 | tee "${RUNNER_TEMP}/build.log"
-      - name: Upload reports
+      - uses: actions/upload-artifact@v4
         if: always()
-        uses: actions/upload-artifact@v4
         with:
           name: editor-repair-build-results
           path: |
             app/build/reports/
             ${{ runner.temp }}/build.log
-          if-no-files-found: ignore
           retention-days: 14
-      - name: Upload candidate builds
+      - uses: actions/upload-artifact@v4
         if: success()
-        uses: actions/upload-artifact@v4
         with:
           name: editor-repair-builds
           path: |
@@ -161,11 +138,11 @@ jobs:
         with:
           name: editor-repair-candidate
           path: ${{ runner.temp }}/candidate
-      - name: Apply exact formatted candidate
+      - name: Apply exact candidate
         run: |
-          (cd "${RUNNER_TEMP}/candidate" && sha256sum -c SHA256SUMS)
-          git apply --check "${RUNNER_TEMP}/candidate/candidate.patch"
-          git apply "${RUNNER_TEMP}/candidate/candidate.patch"
+          (cd "${RUNNER_TEMP}/candidate/_temp" && sha256sum -c SHA256SUMS)
+          git apply --check "${RUNNER_TEMP}/candidate/_temp/candidate.patch"
+          git apply "${RUNNER_TEMP}/candidate/_temp/candidate.patch"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -180,7 +157,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Exercise editor and storage on device
+      - name: Run device regression tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api }}
@@ -189,11 +166,6 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: ./gradlew connectedDebugAndroidTest --stacktrace
-      - name: Capture device diagnostics
-        if: always()
-        run: |
-          timeout 15 adb logcat -d > "${RUNNER_TEMP}/device-logcat.txt" || true
-          timeout 15 adb pull /sdcard/Android/data/com.artflow.studio/files/test-evidence "${RUNNER_TEMP}/test-evidence" || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -201,9 +173,6 @@ jobs:
           path: |
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
-            ${{ runner.temp }}/device-logcat.txt
-            ${{ runner.temp }}/test-evidence/
-          if-no-files-found: ignore
           retention-days: 14
 
   publish-verified-repairs:
@@ -212,6 +181,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -220,19 +190,19 @@ jobs:
         with:
           name: editor-repair-candidate
           path: ${{ runner.temp }}/candidate
-      - name: Commit only the candidate that passed every gate
+      - name: Publish verified app sources and remove temporary repair payloads
         env:
           EXPECTED_HEAD: ${{ github.sha }}
         run: |
           set -euo pipefail
           test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$EXPECTED_HEAD"
-          (cd "${RUNNER_TEMP}/candidate" && sha256sum -c SHA256SUMS)
-          git apply --check "${RUNNER_TEMP}/candidate/candidate.patch"
-          git apply "${RUNNER_TEMP}/candidate/candidate.patch"
+          (cd "${RUNNER_TEMP}/candidate/_temp" && sha256sum -c SHA256SUMS)
+          git apply --check "${RUNNER_TEMP}/candidate/_temp/candidate.patch"
+          git apply "${RUNNER_TEMP}/candidate/_temp/candidate.patch"
           git rm -r .github/hardening-parts
-          git rm .github/hardening-followup.patch.xz .github/workflows/hardening-verify.yml .github/workflows/source-review.yml
+          git rm .github/hardening-followup.patch.xz .github/finish-repairs.py .github/workflows/hardening-verify.yml .github/workflows/source-review.yml
           git add app
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'fix: preserve artwork and correct deterministic painting, fills and layer compositing' -m "Verified by workflow run $GITHUB_RUN_ID: JVM tests, ktlint, detekt, Android lint, debug APK, release AAB, and API 26/36 instrumentation."
+          git commit -m 'fix: preserve artwork and repair painting, fills, layer compositing and renderer lifecycle' -m "Verified in run $GITHUB_RUN_ID: JVM tests, ktlint, detekt, debug/release lint, debug APK, release AAB and API 26/36 instrumentation."
           git push origin HEAD:main
