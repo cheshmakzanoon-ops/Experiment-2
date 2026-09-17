@@ -25,14 +25,14 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: editor-repair-candidate
-          run-id: 35202962410
+          run-id: 35211551616
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/recovered
       - name: Restore exact reviewed source
         env:
           PATCH: ${{ runner.temp }}/recovered/candidate.patch
         run: |
-          echo "2272b39120265b363b75a8e9f4b8bf218373f8bf978f684573b79e7ff3325a86  $PATCH" | sha256sum -c -
+          echo "fb6a40cd8efa0acef7521822342221edb3c61cf1eefd2f104e65c39667194b45  $PATCH" | sha256sum -c -
           git apply --check "$PATCH"
           git apply "$PATCH"
           python .github/finish-repairs.py
@@ -47,8 +47,6 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Format then verify
         run: |
-          # Some ktlint rules report a violation fixed by a later rule in the same pass.
-          # A second formatting pass may converge; read-only checks must still pass.
           ./gradlew ktlintFormat --continue --stacktrace || ./gradlew ktlintFormat --continue --stacktrace
           ./gradlew ktlintCheck detekt --continue --stacktrace
       - name: Archive exact candidate
