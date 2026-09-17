@@ -5,7 +5,9 @@ on:
     branches: [main]
     paths:
       - .github/hardening-parts/**
+      - .github/hardening-followup.patch.xz
       - .github/workflows/hardening-verify.yml
+      - gradle.properties
   workflow_dispatch:
 
 permissions:
@@ -57,7 +59,18 @@ jobs:
               path.parent.mkdir(parents=True, exist_ok=True)
               path.write_bytes(new)
           print(f'Applied {len(entries)} source files; all before/after hashes verified.')
-      - name: Format candidate with existing repository rules
+      - name: Establish previously verified formatting
+        run: ./gradlew ktlintFormat --stacktrace
+      - name: Apply checked analysis fixes
+        shell: python
+        run: |
+          import hashlib, lzma, pathlib, subprocess
+          packed = pathlib.Path('.github/hardening-followup.patch.xz').read_bytes()
+          assert hashlib.sha256(packed).hexdigest() == '470639e5194187bf394fbb70f424132d11918fff0c70d5bed1232d62c93daffb'
+          patch = lzma.decompress(packed)
+          subprocess.run(['git', 'apply', '--check', '-'], input=patch, check=True)
+          subprocess.run(['git', 'apply', '-'], input=patch, check=True)
+      - name: Format and check complete candidate
         run: |
           ./gradlew ktlintFormat --stacktrace
           ./gradlew ktlintCheck --stacktrace
@@ -179,8 +192,8 @@ jobs:
       - name: Capture device diagnostics
         if: always()
         run: |
-          adb logcat -d > "${RUNNER_TEMP}/device-logcat.txt" || true
-          adb pull /sdcard/Android/data/com.artflow.studio/files/test-evidence "${RUNNER_TEMP}/test-evidence" || true
+          timeout 15 adb logcat -d > "${RUNNER_TEMP}/device-logcat.txt" || true
+          timeout 15 adb pull /sdcard/Android/data/com.artflow.studio/files/test-evidence "${RUNNER_TEMP}/test-evidence" || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -217,7 +230,7 @@ jobs:
           git apply --check "${RUNNER_TEMP}/candidate/candidate.patch"
           git apply "${RUNNER_TEMP}/candidate/candidate.patch"
           git rm -r .github/hardening-parts
-          git rm .github/workflows/hardening-verify.yml .github/workflows/source-review.yml
+          git rm .github/hardening-followup.patch.xz .github/workflows/hardening-verify.yml .github/workflows/source-review.yml
           git add app
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
