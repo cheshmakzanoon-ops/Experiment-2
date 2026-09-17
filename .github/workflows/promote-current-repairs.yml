@@ -25,16 +25,16 @@ jobs:
           run-id: 35216159218
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/candidate
-      - name: Apply and publish the exact latest completed source candidate
+      - name: Apply and publish all non-workflow repair changes
         run: |
           set -euo pipefail
           (cd "${RUNNER_TEMP}/candidate" && sha256sum -c SHA256SUMS)
           git apply --check "${RUNNER_TEMP}/candidate/candidate.patch"
           git apply "${RUNNER_TEMP}/candidate/candidate.patch"
-          git rm .github/workflows/promote-current-repairs.yml
-          git add app README.md agent.md CONTRIBUTING.md docs .github/scripts .github/workflows/android-ci.yml
+          git checkout -- .github/workflows/android-ci.yml .github/workflows/promote-current-repairs.yml
+          git add app README.md agent.md CONTRIBUTING.md docs .github/scripts
           test -n "$(git status --porcelain)"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'fix: commit all completed ArtFlow repair source changes' -m 'Promotes the exact latest repair candidate from verification run 35216159218 so all source, tests, documentation and release-hardening changes completed so far are present directly on main.'
+          git commit -m 'fix: commit all completed ArtFlow repair source changes' -m 'Promotes the exact latest repair candidate from verification run 35216159218 so all application source, tests, documentation and release-hardening support code completed so far are present directly on main.'
           git push origin HEAD:main
