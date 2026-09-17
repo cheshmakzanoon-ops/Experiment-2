@@ -4,8 +4,7 @@ on:
     branches: [main]
     paths:
       - .github/finish-repairs.py
-      - .github/export-repair-parts/**
-      - .github/run-device-tests.sh
+      - .github/release-doc-parts/**
       - .github/workflows/hardening-verify.yml
   workflow_dispatch:
 permissions:
@@ -25,14 +24,14 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: editor-repair-candidate
-          run-id: 35211551616
+          run-id: 35214429192
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/recovered
       - name: Restore exact reviewed source
         env:
           PATCH: ${{ runner.temp }}/recovered/candidate.patch
         run: |
-          echo "fb6a40cd8efa0acef7521822342221edb3c61cf1eefd2f104e65c39667194b45  $PATCH" | sha256sum -c -
+          echo "dfbb341c3625205bdca225805daf173e4ebbee43999f4f1476b9952c5ba72ceb  $PATCH" | sha256sum -c -
           git apply --check "$PATCH"
           git apply "$PATCH"
           python .github/finish-repairs.py
@@ -49,14 +48,16 @@ jobs:
         run: |
           ./gradlew ktlintFormat --continue --stacktrace || ./gradlew ktlintFormat --continue --stacktrace
           ./gradlew ktlintCheck detekt --continue --stacktrace
+          python -m unittest discover -s .github/scripts -p 'test_*.py'
+          bash -n .github/scripts/run-device-tests.sh
       - name: Archive exact candidate
         if: always()
         run: |
-          git add app
+          git add app README.md agent.md CONTRIBUTING.md docs .github/scripts .github/workflows/android-ci.yml
           git archive --format=tar.gz "$(git write-tree)" > "${RUNNER_TEMP}/candidate-source.tar.gz"
-          git diff --cached --binary HEAD -- app > "${RUNNER_TEMP}/candidate.patch"
+          git diff --cached --binary HEAD -- app README.md agent.md CONTRIBUTING.md docs .github/scripts .github/workflows/android-ci.yml > "${RUNNER_TEMP}/candidate.patch"
           cd "${RUNNER_TEMP}"
-          sha256sum candidate.patch > SHA256SUMS
+          sha256sum candidate.patch candidate-source.tar.gz > SHA256SUMS
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -100,10 +101,35 @@ jobs:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@v4
+      - name: Verify production builds reject missing signing inputs
+        run: |
+          if ./gradlew help -PrequireReleaseSigning=true > "${RUNNER_TEMP}/signing-negative.log" 2>&1; then
+            echo 'Production signing guard unexpectedly accepted unsigned input'
+            exit 1
+          fi
+          grep -F 'Production signing is required' "${RUNNER_TEMP}/signing-negative.log"
       - name: Unit tests, analysis, APK and release bundle
         run: |
           set -o pipefail
           ./gradlew testDebugUnitTest ktlintCheck detekt lintDebug lintRelease assembleDebug bundleRelease --continue --stacktrace 2>&1 | tee "${RUNNER_TEMP}/build.log"
+      - name: Verify artifact integrity and native alignment
+        run: |
+          set -o pipefail
+          python .github/scripts/verify_android_artifacts.py app/build/outputs/apk/debug/*.apk app/build/outputs/bundle/release/*.aab | tee "${RUNNER_TEMP}/artifact-preflight.txt"
+      - name: Capture generated schemas with hashes
+        run: |
+          find app/schemas -name '*.json' -print -quit | grep .
+          mkdir -p "${RUNNER_TEMP}/schema"
+          cp -a app/schemas "${RUNNER_TEMP}/schema/schemas"
+          cd "${RUNNER_TEMP}/schema"
+          find schemas -type f -name '*.json' -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: editor-repair-schemas
+          path: ${{ runner.temp }}/schema/
+          if-no-files-found: error
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -112,6 +138,8 @@ jobs:
             app/build/reports/
             app/build/test-results/
             ${{ runner.temp }}/build.log
+            ${{ runner.temp }}/signing-negative.log
+            ${{ runner.temp }}/artifact-preflight.txt
           retention-days: 14
       - uses: actions/upload-artifact@v4
         if: success()
@@ -130,7 +158,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api: [26, 36]
+        include:
+          - api: 26
+            target: google_apis
+            page_size: 4096
+          - api: 35
+            target: google_apis_ps16k
+            page_size: 16384
+          - api: 36
+            target: google_apis
+            page_size: 4096
     steps:
       - uses: actions/checkout@v4
         with:
@@ -158,15 +195,17 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Run device regression tests
+      - name: Test editor, exports, page size and minified launch
+        env:
+          EXPECTED_PAGE_SIZE: ${{ matrix.page_size }}
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api }}
           arch: x86_64
-          target: google_apis
+          target: ${{ matrix.target }}
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: bash .github/run-device-tests.sh
+          script: bash .github/scripts/run-device-tests.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -174,8 +213,7 @@ jobs:
           path: |
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
-            ${{ runner.temp }}/device-logcat.txt
-            ${{ runner.temp }}/test-evidence/
+            ${{ runner.temp }}/artflow-device/
           retention-days: 14
   publish-verified-repairs:
     needs: [build, device-tests]
@@ -192,19 +230,26 @@ jobs:
         with:
           name: editor-repair-candidate
           path: ${{ runner.temp }}/candidate
-      - name: Publish verified app sources and remove temporary repair payloads
+      - uses: actions/download-artifact@v4
+        with:
+          name: editor-repair-schemas
+          path: ${{ runner.temp }}/schema
+      - name: Publish exact verified sources and remove temporary repair payloads
         env:
           EXPECTED_HEAD: ${{ github.sha }}
         run: |
           set -euo pipefail
           test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$EXPECTED_HEAD"
           (cd "${RUNNER_TEMP}/candidate" && sha256sum -c SHA256SUMS)
+          (cd "${RUNNER_TEMP}/schema" && sha256sum -c SHA256SUMS)
           git apply --check "${RUNNER_TEMP}/candidate/candidate.patch"
           git apply "${RUNNER_TEMP}/candidate/candidate.patch"
-          git rm -r .github/hardening-parts .github/export-repair-parts
+          mkdir -p app/schemas
+          cp -a "${RUNNER_TEMP}/schema/schemas/." app/schemas/
+          git rm -r .github/hardening-parts .github/export-repair-parts .github/release-doc-parts
           git rm .github/hardening-followup.patch.xz .github/finish-repairs.py .github/run-device-tests.sh .github/workflows/hardening-verify.yml .github/workflows/source-review.yml
-          git add app
+          git add app README.md agent.md CONTRIBUTING.md docs .github/scripts .github/workflows/android-ci.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'fix: preserve artwork, duplicate projects safely and repair rendering and exports' -m "Verified in run $GITHUB_RUN_ID: JVM tests, ktlint, detekt, debug/release lint, debug APK, release AAB and API 26/36 instrumentation."
+          git commit -m 'fix: preserve artwork, repair exports and enforce release verification' -m "Verified in run $GITHUB_RUN_ID: JVM tests, ktlint, detekt, debug/release lint, debug APK, release AAB, signing rejection, native preflight and API 26/35-16KB/36 instrumentation with minified launch."
           git push origin HEAD:main
