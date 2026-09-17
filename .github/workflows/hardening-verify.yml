@@ -1,5 +1,4 @@
 name: Verify editor reliability repairs
-
 on:
   push:
     branches: [main]
@@ -9,19 +8,16 @@ on:
       - .github/run-device-tests.sh
       - .github/workflows/hardening-verify.yml
   workflow_dispatch:
-
 permissions:
   contents: read
   actions: read
-
 concurrency:
   group: editor-repair-verification
   cancel-in-progress: true
-
 jobs:
   prepare:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
@@ -51,8 +47,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Format then verify
         run: |
-          ./gradlew ktlintFormat --stacktrace
-          ./gradlew ktlintCheck detekt --stacktrace
+          # Some ktlint rules report a violation fixed by a later rule in the same pass.
+          # A second formatting pass may converge; read-only checks must still pass.
+          ./gradlew ktlintFormat --continue --stacktrace || ./gradlew ktlintFormat --continue --stacktrace
+          ./gradlew ktlintCheck detekt --continue --stacktrace
       - name: Archive exact candidate
         if: always()
         run: |
@@ -78,7 +76,6 @@ jobs:
           path: app/build/reports/
           if-no-files-found: ignore
           retention-days: 14
-
   build:
     needs: prepare
     runs-on: ubuntu-latest
@@ -128,7 +125,6 @@ jobs:
             app/build/outputs/mapping/release/mapping.txt
           if-no-files-found: error
           retention-days: 14
-
   device-tests:
     needs: prepare
     runs-on: ubuntu-latest
@@ -183,7 +179,6 @@ jobs:
             ${{ runner.temp }}/device-logcat.txt
             ${{ runner.temp }}/test-evidence/
           retention-days: 14
-
   publish-verified-repairs:
     needs: [build, device-tests]
     runs-on: ubuntu-latest
