@@ -31,5 +31,5 @@ replace(BASE + 'core/render/StrokeRasterizer.kt',
         val mask = context.mask
         val random = context.random''')
 replace(BASE + 'data/local/ProjectStorage.kt',
-'OsConstants.O_RDONLY or OsConstants.O_DIRECTORY', 'OsConstants.O_RDONLY')
+' or android.system.OsConstants.O_DIRECTORY', '')
 print('Applied compiler and analysis repairs; no quality checks disabled.')
