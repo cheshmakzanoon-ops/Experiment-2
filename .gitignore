@@ -72,3 +72,7 @@ htmlcov/
 *.arj
 *.rpm
 *.deb
+
+# Python interpreter caches (not source)
+__pycache__/
+*.py[cod]

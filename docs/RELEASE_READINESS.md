@@ -30,10 +30,10 @@ can require real signing inputs with `-PrequireReleaseSigning=true`.
 ## Evidence discipline
 
 A passing workflow must build the exact source revision under review. A successful build of the
-old source does not validate a reconstructed repair candidate. Candidate patches are checksum
-verified, formatted, checked and run on both API 26 and API 36 before their app sources are
-published. Temporary patch payloads are removed after publication. Permanent CI tests the source
-directly without relying on expiring repair artifacts.
+old source does not validate a reconstructed repair candidate. The saved candidate patch was checksum verified and exercised in CI before being committed
+as ordinary source at the repository owner's explicit request. Committing that work does not
+mean that every release check passed. Temporary patch-transport files have been removed; permanent
+CI tests the source directly without relying on expiring repair artifacts.
 
 The workflow reports and artifacts are the authoritative execution evidence. A benchmark-variant
 launch uses release minification with a disposable debug key; it does not certify publisher signing.
@@ -41,6 +41,32 @@ Record the final run, commit, test counts, artifacts and SHA-256 values here whe
 substitute a scheduled job, a job that was cancelled, a skipped job, or a source-code assertion for
 executed evidence. `detekt` passes against the existing baseline; that is not zero historical
 findings. API-specific assumptions must remain visible in the test reports.
+
+## Source publication checkpoint — September 17, 2026
+
+All saved application, test, release-check and documentation changes from candidate run
+[35216159218](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/35216159218)
+are committed as ordinary repository files, rather than only as compressed patch payloads.
+Generated Python bytecode is excluded; it is not application source. The original candidate
+patch SHA-256 is `b6269fd00f8cb911ec3a7db748e944c22e0ec045bbd31fd69938f3749c32f299`.
+
+Observed results of that candidate's full verification run:
+
+| Check | Result |
+| --- | --- |
+| Candidate formatting and static analysis | Passed |
+| Missing-production-signing rejection | Passed |
+| JVM tests, debug/release lint, debug APK and release AAB build step | Passed |
+| Packaged artifact integrity/native alignment check | Failed |
+| API 26 device test job | Failed |
+| API 36 device tests and minified launch job | Passed |
+| API 35, 16 KB device tests and minified launch job | Passed |
+| Automatic verified-source promotion | Skipped because not all gates passed |
+
+The repository owner subsequently requested that all work be committed and pushed despite the
+incomplete release verification. Source publication is not a Google Play release or a production
+sign-off. Keep the failing checks enabled and resolve their reports before release. Subsequent CI
+runs on the committed source supersede this checkpoint only where they actually complete.
 
 ## Required publisher and device gates
 
