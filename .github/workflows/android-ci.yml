@@ -18,10 +18,24 @@ jobs:
     name: Unit tests, static analysis and builds
     runs-on: ubuntu-latest
     timeout-minutes: 45
-
     steps:
       - name: Check out
         uses: actions/checkout@v4
+
+      - name: Archive exact source revision
+        run: |
+          git archive --format=tar.gz HEAD > "${RUNNER_TEMP}/artflow-source.tar.gz"
+          git rev-parse HEAD > "${RUNNER_TEMP}/REVISION.txt"
+
+      - name: Upload source provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: artflow-source
+          path: |
+            ${{ runner.temp }}/artflow-source.tar.gz
+            ${{ runner.temp }}/REVISION.txt
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -32,39 +46,31 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          # The action's default package list includes `tools`, which no longer
-          # exists in the SDK repository (sdkmanager: "Failed to find package
-          # 'tools'"); platform-tools is all the Gradle build needs.
           packages: platform-tools
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # The JVM unit tests cover the pure-Kotlin engines, so no NDK is involved.
       - name: Run JVM unit tests
         run: ./gradlew testDebugUnitTest --stacktrace
 
-      # Enforced here as well as locally, so style/analysis drift cannot land on main.
-      - name: Static analysis (ktlint + detekt)
-        run: ./gradlew ktlintCheck detekt --stacktrace
+      - name: Static analysis
+        run: ./gradlew ktlintCheck detekt lintDebug --stacktrace
 
-      # -PnoNativeBuild skips the CMake module (libartflow-brush), which would need the NDK.
       - name: Assemble debug APK
-        run: ./gradlew assembleDebug -PnoNativeBuild --stacktrace
+        run: ./gradlew assembleDebug --stacktrace
 
-      # R8 minification, resource shrinking and lintVital only run in the release variant, so this is
-      # where release-only breakage surfaces. Signing is skipped when keystore.properties is absent
-      # (it is git-ignored), which still exercises the full shrink/package path.
       - name: Assemble release bundle
-        run: ./gradlew bundleRelease -PnoNativeBuild --stacktrace
+        run: ./gradlew bundleRelease --stacktrace
 
-      - name: Upload test report
+      - name: Upload test and analysis reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: unit-test-report
-          path: app/build/reports/tests/testDebugUnitTest
+          name: verification-reports
+          path: app/build/reports/
           if-no-files-found: ignore
+          retention-days: 14
 
       - name: Upload APK and bundle
         if: success()
@@ -74,4 +80,49 @@ jobs:
           path: |
             app/build/outputs/apk/debug/*.apk
             app/build/outputs/bundle/release/*.aab
+            app/build/outputs/mapping/release/mapping.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  device-tests:
+    name: Device tests (API ${{ matrix.api }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [26, 36]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run instrumentation tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: ./gradlew connectedDebugAndroidTest --stacktrace
+      - name: Upload device test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: device-test-results-api-${{ matrix.api }}
+          path: |
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
           if-no-files-found: ignore
+          retention-days: 14
