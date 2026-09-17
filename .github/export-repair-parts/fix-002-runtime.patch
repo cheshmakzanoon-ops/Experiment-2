@@ -1,0 +1,77 @@
+--- a/app/src/main/java/com/artflow/studio/core/canvas/CanvasOperations.kt
++++ b/app/src/main/java/com/artflow/studio/core/canvas/CanvasOperations.kt
+@@ -74,6 +74,7 @@
+     ): Result {
+         val targetWidth = width.coerceIn(1, MAX_DIMENSION)
+         val targetHeight = height.coerceIn(1, MAX_DIMENSION)
++        require(isSizeSafe(targetWidth, targetHeight)) { "Resized canvas exceeds the supported pixel budget" }
+         return Result(
+             buffer = buffer.scaled(targetWidth, targetHeight),
+             properties = properties.copy(width = targetWidth, height = targetHeight),
+--- a/app/src/test/java/com/artflow/studio/core/canvas/CanvasOperationsTest.kt
++++ b/app/src/test/java/com/artflow/studio/core/canvas/CanvasOperationsTest.kt
+@@ -48,11 +48,22 @@
+     }
+ 
+     @Test
+-    fun `resample clamps absurd sizes instead of allocating them`() {
+-        val result = CanvasOperations.resample(PixelBuffer.filled(2, 2, red), 100_000, 100_000, properties(2, 2))
+-
++    fun `resample rejects a clamped size above the pixel budget without changing its source`() {
++        val source = PixelBuffer.filled(2, 2, red)
++        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
++            CanvasOperations.resample(source, 100_000, 100_000, properties(2, 2))
++        }
++        assertEquals(2, source.width)
++        assertEquals(2, source.height)
++        assertTrue(source.pixels.all { it == red })
++    }
++
++    @Test
++    fun `resample clamps a long thin canvas within the supported budget`() {
++        val result = CanvasOperations.resample(PixelBuffer.filled(2, 2, red), 100_000, 1, properties(2, 2))
+         assertEquals(CanvasOperations.MAX_DIMENSION, result.buffer.width)
+-        assertEquals(CanvasOperations.MAX_DIMENSION, result.buffer.height)
++        assertEquals(1, result.buffer.height)
++        assertTrue(result.buffer.pixels.all { it == red })
+     }
+ 
+     @Test
+--- a/app/src/main/java/com/artflow/studio/data/export/Mp4Encoder.kt
++++ b/app/src/main/java/com/artflow/studio/data/export/Mp4Encoder.kt
+@@ -45,6 +45,15 @@
+             requireNotNull(MediaCodecList(MediaCodecList.REGULAR_CODECS).findEncoderForFormat(format)) {
+                 "This device has no H.264 encoder for $width by $height pixels; try a smaller export"
+             }
++        // OMX encoders on older Android require an explicit level whenever profile is set.
++        // Use an advertised Baseline level rather than an arbitrary constant for every device.
++        val capabilities = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
++            .first { it.name == name }.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC)
++        val level = capabilities.profileLevels
++            .filter { it.profile == MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline }
++            .maxOfOrNull { it.level }
++            ?: throw UnsupportedOperationException("This device does not advertise an H.264 Baseline level")
++        format.setInteger(MediaFormat.KEY_LEVEL, level)
+         val codec = MediaCodec.createByCodecName(name)
+         try {
+             val muxer = MediaMuxer(output.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+--- a/app/src/main/java/com/artflow/studio/presentation/ui/components/export/ExportSheet.kt
++++ b/app/src/main/java/com/artflow/studio/presentation/ui/components/export/ExportSheet.kt
+@@ -1,4 +1,7 @@
+-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
++@file:OptIn(
++    androidx.compose.material3.ExperimentalMaterial3Api::class,
++    androidx.compose.foundation.layout.ExperimentalLayoutApi::class,
++)
+ 
+ package com.artflow.studio.presentation.ui.components.export
+ 
+@@ -114,7 +117,7 @@
+             modifier = Modifier.fillMaxWidth(),
+         )
+         Text("Presets", style = MaterialTheme.typography.labelMedium)
+-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
++        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+             ExportPresets.ALL.filter { it.options.format in availableFormats }.forEach { preset ->
+                 AssistChip(
+                     onClick = { options = preset.options.copy(fileName = options.fileName) },
