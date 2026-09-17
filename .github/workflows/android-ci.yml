@@ -15,9 +15,9 @@ permissions:
 
 jobs:
   build:
-    name: Unit tests and debug build
+    name: Unit tests, static analysis and builds
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Check out
@@ -44,9 +44,19 @@ jobs:
       - name: Run JVM unit tests
         run: ./gradlew testDebugUnitTest --stacktrace
 
+      # Enforced here as well as locally, so style/analysis drift cannot land on main.
+      - name: Static analysis (ktlint + detekt)
+        run: ./gradlew ktlintCheck detekt --stacktrace
+
       # -PnoNativeBuild skips the CMake module (libartflow-brush), which would need the NDK.
       - name: Assemble debug APK
         run: ./gradlew assembleDebug -PnoNativeBuild --stacktrace
+
+      # R8 minification, resource shrinking and lintVital only run in the release variant, so this is
+      # where release-only breakage surfaces. Signing is skipped when keystore.properties is absent
+      # (it is git-ignored), which still exercises the full shrink/package path.
+      - name: Assemble release bundle
+        run: ./gradlew bundleRelease -PnoNativeBuild --stacktrace
 
       - name: Upload test report
         if: always()
@@ -54,4 +64,14 @@ jobs:
         with:
           name: unit-test-report
           path: app/build/reports/tests/testDebugUnitTest
+          if-no-files-found: ignore
+
+      - name: Upload APK and bundle
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: artflow-builds
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/bundle/release/*.aab
           if-no-files-found: ignore

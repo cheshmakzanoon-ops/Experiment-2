@@ -1,8 +1,9 @@
 # Google Play store listing — ArtFlow
 
-Copy and assets for the Play Console listing. Everything below describes only features that are
-wired into the app (see the README's project-status table); do not market the unreachable modules
-(layer groups, rotate/scale transform, texture brushes, native engine) until they ship.
+Copy and assets for the Play Console listing. Everything below describes only features the app
+actually ships (see the README's project-status table); do not advertise anything from the README's
+"Known gaps" — layer groups, rotate/scale transform, texture brushes or the native engine — until
+it lands.
 
 ## App details
 

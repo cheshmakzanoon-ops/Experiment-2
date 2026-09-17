@@ -176,7 +176,16 @@ fun CanvasScreen(
             )
         },
         bottomBar = {
-            Surface(tonalElevation = 4.dp) {
+            // The app is edge-to-edge from API 35, and the opt-out attribute is ignored from API 36,
+            // so the tool strip has to inset itself: without this the navigation bar covers the
+            // tool row. Scaffold only insets *content* when a bottomBar is present, not the bar.
+            Surface(
+                tonalElevation = 4.dp,
+                modifier =
+                    Modifier.windowInsetsPadding(
+                        WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
+                    ),
+            ) {
                 Column {
                     BrushOptionsRow(
                         tool = input.tool,

@@ -5,11 +5,12 @@
       dark palette. `postSplashScreenTheme` is intentionally absent: the theme swap happens in
       MainActivity.onCreate so the app does not depend on the AndroidX splash screen library.
 
-      The base `values` theme covers API 26-30; this file only carries the API 31+ additions.
+      Both styles must re-declare their parent explicitly: a style resource in a qualified folder
+      replaces the one in `values/`, it does not merge with it, so inheriting from
+      `Theme.ArtFlow.Base` (defined in `values/themes.xml`) is what keeps colorPrimary,
+      windowBackground and the display-cutout mode from being dropped on Android 12+.
     -->
-    <style name="Theme.ArtFlow" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowLightStatusBar">false</item>
-    </style>
+    <style name="Theme.ArtFlow" parent="Theme.ArtFlow.Base" />
 
     <style name="Theme.ArtFlow.Starting" parent="Theme.ArtFlow">
         <item name="android:windowBackground">@drawable/splash_background</item>

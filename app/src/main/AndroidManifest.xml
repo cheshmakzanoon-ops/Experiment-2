@@ -33,10 +33,12 @@
         android:required="true" />
 
     <!--
-      Apps targeting API 35+ are forced edge-to-edge: the window draws under the status and
-      navigation bars regardless of the theme's statusBarColor/navigationBarColor. The Compose
-      chrome (Scaffold) already insets itself, but the platform window theme still paints opaque
-      bars and the GL canvas view is not inset-aware, so opt out for now.
+      Edge-to-edge. Apps targeting API 35+ draw under the system bars, and from API 36
+      `android:windowOptOutEdgeToEdgeEnforcement` is deprecated and ignored, so the UI handles the
+      insets instead: the Material3 top app bars consume the top/horizontal insets themselves,
+      `Scaffold` content is padded by its slots, and the editor's bottom bar pads itself with the
+      safe-drawing insets. The near-black window background (`@color/artflow_background`, or the
+      Compose theme in light mode) therefore reads correctly behind the bars.
     -->
     <application
         android:name=".ArtFlowApplication"
@@ -51,7 +53,6 @@
         android:hardwareAccelerated="true"
         android:largeHeap="true"
         android:enableOnBackInvokedCallback="true"
-        android:windowOptOutEdgeToEdgeEnforcement="true"
         tools:targetApi="36">
 
         <activity

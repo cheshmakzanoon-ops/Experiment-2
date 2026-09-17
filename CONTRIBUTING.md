@@ -6,17 +6,18 @@ inventory in [`README.md`](README.md).
 
 ## Before you start
 
-- Read the ["Project status"](README.md#-project-status) table. It lists what is wired into the app
-  and what is not, so you do not spend time on a module that is already known to be unused.
-- Anything described as *not implemented* in that table is a welcome target.
+- Read the ["Project status"](README.md#-project-status) and ["Known gaps"](README.md#-known-gaps)
+  sections first. They list exactly which features exist and which do not, so you do not spend time
+  rebuilding something that is already shipped.
+- Anything listed as *not implemented* there is a welcome target.
 
 ## Requirements
 
 | Tool | Version |
 |------|---------|
 | JDK | 17 |
-| Android SDK | API 34 (`compileSdk`/`targetSdk`) |
-| NDK | 25.1.8937393 — only for the native `libartflow-brush` module |
+| Android SDK | API 36 (`compileSdk`/`targetSdk`) |
+| NDK | Any current NDK — only for the native `libartflow-brush` module; no `ndkVersion` is pinned |
 | Gradle | via the committed wrapper (`./gradlew`) |
 
 `local.properties` needs `sdk.dir=…` and is git-ignored.
@@ -25,6 +26,7 @@ inventory in [`README.md`](README.md).
 
 ```bash
 ./gradlew testDebugUnitTest     # JVM unit tests (no device, no NDK needed)
+./gradlew ktlintCheck detekt    # static analysis
 ./gradlew assembleDebug         # debug APK, builds the native module too
 ./gradlew assembleDebug -PnoNativeBuild   # same, without the NDK/CMake step
 ./gradlew lintDebug             # Android lint
@@ -37,8 +39,9 @@ root; without it `./gradlew assembleRelease` produces an unsigned APK. See
 ## Code style
 
 - Kotlin official coding conventions, 4-space indents, no wildcard imports.
-- `ktlint` and `detekt` are **not** configured, so there is no `./gradlew ktlintCheck`. Run
-  `./gradlew lintDebug` for platform lint and keep your editor set to the Kotlin style.
+- `ktlint` and `detekt` **are** configured. Run `./gradlew ktlintCheck detekt` — or the combined
+  `./gradlew check` — before opening a pull request; CI runs both. `detekt` reads
+  `config/detekt/detekt.yml` with a baseline, so it fails only on new findings.
 - Prefer editing existing files over adding new ones, and keep new abstractions proportional to the
   duplication they remove.
 
@@ -52,9 +55,9 @@ Two things to know about unit tests here:
 
 - The pixel engines are deliberately free of `android.*` imports, which is what keeps them testable
   on the JVM. Do not introduce an Android dependency into `core/pixels` or `core/render`.
-- Types that need `android.graphics` (canvas view, OpenGL renderer, `VectorShape`, `Selection`) are
-  covered by instrumentation tests instead, which do not exist yet — see the status table. Adding
-  `app/src/androidTest` is an open task.
+- Types that need `android.graphics` (the canvas view, the OpenGL renderer) belong in
+  instrumentation tests under `app/src/androidTest`, which currently holds one Hilt-backed launch
+  smoke test (`AppLaunchTest`). Screen-level coverage is an open task.
 
 ```bash
 ./gradlew testDebugUnitTest --tests 'com.artflow.studio.core.pixels.*'

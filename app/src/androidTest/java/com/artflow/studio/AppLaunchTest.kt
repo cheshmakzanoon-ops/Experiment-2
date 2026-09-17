@@ -19,7 +19,6 @@ import org.junit.runner.RunWith
 @HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
 class AppLaunchTest {
-
     @get:Rule
     val hiltRule = HiltAndroidRule(this)
 

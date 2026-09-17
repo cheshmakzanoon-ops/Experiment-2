@@ -1,17 +1,23 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!--
-      Base application theme (API 26-30 devices).
+      Base window theme (API 26-30 devices).
 
       The app is dark-first: Compose draws the real UI from `ArtFlowTheme`, but the window itself
-      (behind the first frame, in system dialogs and in the status/navigation bars) uses these
-      platform attributes. Keep this in step with `domain/model/settings/AppSettings` so the window
-      never flashes a light surface before Compose composes.
+      (behind the first frame, in system dialogs and in the system bars) uses these platform
+      attributes. Keep this in step with `domain/model/settings/AppSettings` so the window never
+      flashes a light surface before Compose composes.
+
+      The items live in `Theme.ArtFlow.Base` rather than in `Theme.ArtFlow` itself because
+      `values-v31/themes.xml` re-declares `Theme.ArtFlow` for the splash screen attributes. Style
+      resources are *replaced*, not merged, across configuration qualifiers: if both files defined
+      `Theme.ArtFlow` with the platform parent, every item below would silently disappear on
+      Android 12+. Both variants inherit from this base instead.
 
       `statusBarColor`/`navigationBarColor` are deprecated from API 35 and ignored when a window is
       edge-to-edge, so they are intentionally not set here: the near-black window background reads
       correctly behind the system bars.
     -->
-    <style name="Theme.ArtFlow" parent="android:Theme.Material.NoActionBar">
+    <style name="Theme.ArtFlow.Base" parent="android:Theme.Material.NoActionBar">
         <!-- Primary brand color -->
         <item name="android:colorPrimary">@color/artflow_primary</item>
         <item name="android:colorAccent">@color/artflow_primary</item>
@@ -29,6 +35,8 @@
 
         <item name="android:hardwareAccelerated">true</item>
     </style>
+
+    <style name="Theme.ArtFlow" parent="Theme.ArtFlow.Base" />
 
     <!--
       Cold-start window: a dark background with the mark centred on it. The activity starts on this

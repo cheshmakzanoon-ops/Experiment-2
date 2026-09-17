@@ -32,49 +32,44 @@ phase describes · **⛔ unreachable** — the code exists but nothing calls it 
 
 | Phases | Scope | Status in this repository |
 |--------|-------|---------------------------|
-| 1–8 | Setup, DI, architecture, design system, canvas, input, brush, layers | 🟡 The Gradle wrapper, build config, dark-first design system, GL canvas, stylus/gesture input, stroke engine and layer stack all work. `BrushEngine`/`TextureMapper` are ⛔ unreachable: strokes are rasterised by `Compositor` + `StrokeRasterizer`. `LayerManager` is ⛔ unreachable — the live layer state is `CanvasRepositoryImpl`. No ktlint/detekt (see *Tooling gaps*). |
-| 9–16 | Advanced brush params, textures, colour dynamics, blend modes, selection, transform, alpha lock, masks | 🟡 Blend modes, jitter/scatter/taper dynamics, the selection engine and layer masks run in the app. Brush **textures** are ⛔ unreachable end to end (`TextureMapper` is never called and the texture library UI is never composed), so no texture-driven strokes and no bundled assets. Transform is 🟡 translate only (see phase 14). Creating a mask from a selection/alpha/gradient is a stub that fills white. |
-| 17–24 | Smudge, liquify, clone stamp, healing, gradient, paint bucket, text, shapes | ✅ Wired: `PixelBrushes` (smudge/clone/heal) and `LiquifyTool` are driven from `ArtFlowCanvasView`, alongside paint bucket, gradient, text and shapes. `ShapeManager`/`VectorShape` are ⛔ unreachable duplicates of the shape drawing in `ArtFlowCanvasView`; the live path has no corner radius or boolean ops. |
-| 25–30 | Adjustment layers, layer groups, reference layers, layer linking, filter layers, smart objects | 🟡 Adjustments (`AdjustmentProcessor`) and filter layers (`ImageFilters` via `Compositor.applyFilter`) are wired. ⬜ Reference layers, layer linking, smart objects. `AdjustmentLayerManager` and `LayerGroupManager` are ⛔ unreachable. |
-| 31–36 | Colour picker, palettes, symmetry, perspective guides, canvas properties, quick menu | ✅ Wired: `ColorPanel`, `Palette`/`PaletteCodec`, `SymmetryEngine`, `PerspectiveGuide`, `CanvasOperations` and the quick menu. 🟡 Shortcut remapping and stylus-button mapping are not implemented. |
+| 1–8 | Setup, DI, architecture, design system, canvas, input, brush, layers | ✅ The Gradle wrapper, build config, dark-first design system, GL canvas, stylus/gesture input, stroke engine and layer stack all work. Strokes are rasterised by `Compositor` + `StrokeRasterizer`; the live layer state is `CanvasRepositoryImpl`. ktlint and detekt are configured (see *Tooling gaps*). |
+| 9–16 | Advanced brush params, textures, colour dynamics, blend modes, selection, transform, alpha lock, masks | 🟡 Blend modes, jitter/scatter/taper dynamics, the selection engine and layer masks run in the app. Brush **textures** are ⬜ not implemented: `BrushParams` carries the fields, but no assets are bundled and no render path consumes them. Transform is 🟡 translate only (see phase 14). A layer mask can be created empty (white) or from the current selection; alpha and gradient sources are ⬜. |
+| 17–24 | Smudge, liquify, clone stamp, healing, gradient, paint bucket, text, shapes | ✅ `PixelBrushes` (smudge/clone/heal) and `LiquifyTool` are driven from `ArtFlowCanvasView`, alongside paint bucket, gradient, text and shapes. Shape drawing lives in `ArtFlowCanvasView`; corner radius and boolean ops are ⬜. |
+| 25–30 | Adjustment layers, layer groups, reference layers, layer linking, filter layers, smart objects | 🟡 Adjustments (`AdjustmentProcessor`) and filter layers (`ImageFilters`, via `addFilterLayer` / `rasterizeFilterLayer`) are wired, and reference layers exist as a flag plus a label in the layer sheet — though no UI sets the flag. ⬜ Layer groups, layer-linking UI, smart objects. |
+| 31–36 | Colour picker, palettes, symmetry, perspective guides, canvas properties, quick menu | ✅ `ColorPanel`, `Palette` with `PaletteCodec` for persistence, `ColorHarmony`, `SymmetryEngine`, `PerspectiveGuide`, `CanvasOperations` and the quick menu. ⬜ Shortcut remapping and stylus-button mapping. |
 | 37–42 | Save system, PNG/JPEG export, PSD, PDF, gallery, cloud sync | ✅ Wired: `.artflow` documents (v2: per-layer rasters, frames, timelapse metadata), autosave with crash recovery, PNG/JPEG/WebP/PDF/PSD export and gallery publishing. ⬜ PSD **import**, ⬜ cloud sync. |
-| 43–50 | Animation timeline, animation export, timelapse, performance, tutorials, settings, QA, release | 🟡 Timeline, onion skinning and GIF/MP4/frame-sequence export work; settings, help centre and onboarding exist. ⬜ Timelapse recording, ⬜ analytics/crash reporting, ⬜ instrumentation tests, ⬜ benchmark module (the `benchmark` build type has nothing to run). 🟡 Release builds are signed when `keystore.properties` is present, but no release build has been produced. |
+| 43–50 | Animation timeline, animation export, timelapse, performance, tutorials, settings, QA, release | 🟡 Timeline, onion skinning and GIF/MP4/frame-sequence export work; settings, help centre and onboarding exist, and a Hilt instrumentation smoke test launches the app. ⬜ Timelapse recording, ⬜ analytics/crash reporting, ⬜ benchmark module (the `benchmark` build type has nothing to run), 🟡 coverage beyond the three JVM test classes. ✅ Release builds are signed when `keystore.properties` is present; CI builds the release bundle on every push. |
 
-### What is not wired into the app
+### Known gaps
 
-About 26% of the Kotlin lines (75 of 155 files) are unreachable: nothing under `presentation` calls
-them. They compile and some are covered by tests, but they cannot affect what a user sees. Treat
-them as design sketches rather than features:
+Nothing in `app/src/main` is known to be unreachable. The prototype layer an earlier revision of
+this document listed as dead code — `core/layer`, `core/selection`, `core/transform`,
+`core/shape`, `core/brush`, `domain/usecase`, `data/repository/texture`, `data/renderer/native`,
+`presentation/ui/components/texture`, the seven Hilt modules that only provided them, and the unused
+`domain/model/layer/LayerMask.kt` model — has been deleted. What remains missing is missing
+**functionality**, not orphaned code:
 
-- **`domain/usecase/**` — all 54 files.** `CanvasViewModel` and `MainViewModel` talk to the
-  repositories directly. The seven layer-group use cases are referenced only by
-  `di/LayerGroupModule.kt`, and no class injects them either.
-- **`core/layer/`** — `LayerManager`, `LayerGroupManager`, `LayerMaskManager`, `AdjustmentLayerManager`.
-- **`core/selection/`** — `SelectionManager`, `ColorSelectionAlgorithm` (the live magic wand is
-  `SelectionMask.magicWand`, called from `ArtFlowCanvasView`).
-- **`core/transform/TransformManager`**, **`core/shape/ShapeManager`**, **`core/brush/BrushEngine`**,
-  **`core/brush/TextureMapper`**, **`domain/model/shape/VectorShape`**.
-- **`data/renderer/CanvasRasterizer`**, **`data/renderer/native/NativeBrushEngine`**.
-- **`data/repository/texture/TextureRepositoryImpl`** and its interface — injected only by the dead
-  `BrushEngine` and the dead texture use cases.
-- **`presentation/ui/components/texture/TextureLibrary.kt`** — a composable with no callers.
-- **Seven Hilt modules that provide only the above**: `LayerManagerModule`, `LayerGroupModule`,
-  `ShapeManagerModule`, `SelectionManagerModule`, `SelectionAlgorithmModule`, `BrushEngineModule`,
-  `TextureRepositoryModule`.
-
-Either deleting this layer or wiring it into `CanvasRepositoryImpl` is the largest single cleanup
-available; the tests in `app/src/test` cover the engines that are live.
+- **Layer groups** — `Layer.parentGroupId` exists, but no repository operation or screen sets it.
+- **Layer-linking UI** — `CanvasRepositoryImpl` can set and clear `linkGroupId`; nothing calls it.
+- **Transform beyond translation** — no rotate, scale, skew, perspective, distortion or snapping.
+- **Texture brushes** — the texture fields in `BrushParams` are never consumed and no assets ship.
+- **Mask sources** — a mask can be created empty or from the current selection, not from layer
+  alpha or a gradient.
+- **Native engine** — `libartflow-brush.so` is built by CMake but never loaded; `System.loadLibrary`
+  does not appear anywhere in the Kotlin sources.
+- **PSD import, cloud sync, smart objects, timelapse recording, analytics/crash reporting.**
+- **Benchmark module**, and test coverage beyond `core/canvas`, `core/pixels` and `core/symmetry`.
 
 ### Tooling gaps
 
 | Item | State |
 |------|-------|
-| CI | ✅ `.github/workflows/android-ci.yml` — unit tests + `assembleDebug -PnoNativeBuild` |
-| JVM unit tests | 🟡 Cover the pure-Kotlin engines in `core/`; the presentation layer, repositories and native bridge are untested |
-| Instrumentation tests | ⬜ No `app/src/androidTest` source set |
+| CI | ✅ `.github/workflows/android-ci.yml` — unit tests, `ktlintCheck` + `detekt`, `assembleDebug -PnoNativeBuild` and a release bundle |
+| JVM unit tests | 🟡 Cover the pure-Kotlin engines in `core/pixels`, `core/canvas` and `core/symmetry`; the presentation layer, repositories and native bridge are untested |
+| Instrumentation tests | 🟡 A Hilt-backed launch smoke test (`AppLaunchTest`); no screen-level coverage |
 | Benchmark module | ⬜ None, although a `benchmark` build type exists |
-| Static analysis | ⬜ No ktlint or detekt configuration; only Android `lint` is available |
-| Release signing | 🟡 Wired through a git-ignored `keystore.properties`; no keystore is committed |
+| Static analysis | ✅ ktlint 1.3.1 (root `.editorconfig`) and detekt 1.23.6 (`config/detekt/`, with a baseline) run in `./gradlew check` and in CI |
+| Release signing | ✅ Wired through a git-ignored `keystore.properties`; no keystore is committed, so a fresh clone still builds (unsigned) |
 | Analytics / crash reporting | ⬜ None (deliberate so far: the app has no network permission) |
 | Native module | ⛔ Built by CMake, never called by Kotlin |
 
@@ -85,14 +80,18 @@ from the command line:
 
 ```bash
 ./gradlew testDebugUnitTest               # JVM unit tests for the pure-Kotlin engines
+./gradlew ktlintCheck detekt              # static analysis (also part of `./gradlew check`)
 ./gradlew assembleDebug                   # debug APK; compiles the CMake module (needs the NDK)
 ./gradlew assembleDebug -PnoNativeBuild   # same, without the NDK/CMake step
 ./gradlew lintDebug                       # Android lint
+./gradlew bundleRelease -PnoNativeBuild   # release AAB through R8 (signed only with keystore.properties)
 ```
 
-`.github/workflows/android-ci.yml` runs the unit tests and `assembleDebug -PnoNativeBuild` on every
-push and pull request. There is no instrumentation test source set and no benchmark module, so
-`connectedAndroidTest` and the `benchmark` variant still have nothing to run.
+`.github/workflows/android-ci.yml` runs the unit tests, ktlint + detekt, `assembleDebug
+-PnoNativeBuild` and a release bundle on every push and pull request, so the minified variant is
+covered continuously rather than only at release time. There is still no benchmark module, so the
+`benchmark` variant has nothing to run. `gradle.properties` caps the daemon heap and the worker
+count so those builds fit a 4 GB container.
 
 See the [README](README.md#-getting-started).
 
@@ -108,7 +107,7 @@ See the [README](README.md#-getting-started).
 
 **Tasks**:
 - [ ] Create new Android project with Kotlin
-- [ ] Configure minimum SDK (API 26) and target SDK (API 34)
+- [ ] Configure minimum SDK (API 26) and target SDK (API 36)
 - [ ] Set up Gradle build configuration (build.gradle.kts)
 - [ ] Configure build variants (debug, release, benchmark)
 - [ ] Initialize Git repository with proper .gitignore
@@ -1365,7 +1364,7 @@ See the [README](README.md#-getting-started).
 - Optimized: Samsung Galaxy Tab S series, Lenovo Tab P series
 
 ### Key Technologies
-- **Language**: Kotlin 1.9+
+- **Language**: Kotlin 2.0.21
 - **UI**: Jetpack Compose
 - **Graphics**: OpenGL ES 2.0 through `GLSurfaceView` / `GLES20` (ES 3.x and Vulkan are aspirational)
 - **Native**: C++ via JNI/NDK — built, not called
