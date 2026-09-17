@@ -1,0 +1,115 @@
+name: Verified source maintenance
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_head:
+        description: Exact main commit to patch; concurrent changes abort publication
+        required: true
+        type: string
+      patch_sha256:
+        description: SHA-256 of the uncompressed git patch
+        required: true
+        type: string
+      patch_gzip_base64:
+        description: Gzip/base64 encoded git patch, decoded as data only
+        required: true
+        type: string
+      commit_message:
+        description: Description of the source repair
+        required: true
+        type: string
+
+concurrency:
+  group: verified-source-maintenance
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      EXPECTED_HEAD: ${{ inputs.expected_head }}
+      PATCH_SHA256: ${{ inputs.patch_sha256 }}
+      PATCH_DATA: ${{ inputs.patch_gzip_base64 }}
+      COMMIT_MESSAGE: ${{ inputs.commit_message }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply checksum-verified patch to its exact base
+        run: |
+          python - <<'PY'
+          import base64, hashlib, os, pathlib, re, subprocess, zlib
+          head = os.environ['EXPECTED_HEAD']
+          if not re.fullmatch('[0-9a-f]{40}', head):
+              raise SystemExit('Invalid expected commit')
+          actual = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          if actual != head:
+              raise SystemExit('Main has changed; rebase the repair rather than overwriting it')
+          decoder = zlib.decompressobj(31)
+          patch = decoder.decompress(base64.b64decode(os.environ['PATCH_DATA'], validate=True), 2_000_001)
+          if len(patch) > 2_000_000 or not decoder.eof or decoder.unconsumed_tail or decoder.unused_data:
+              raise SystemExit('Invalid or oversized patch')
+          if hashlib.sha256(patch).hexdigest() != os.environ['PATCH_SHA256']:
+              raise SystemExit('Patch checksum mismatch')
+          path = pathlib.Path(os.environ['RUNNER_TEMP']) / 'source-repair.patch'
+          path.write_bytes(patch)
+          subprocess.run(['git', 'apply', '--check', '--index', str(path)], check=True)
+          subprocess.run(['git', 'apply', '--index', str(path)], check=True)
+          PY
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Format touched source using the project formatter
+        run: |
+          ./gradlew ktlintFormat --stacktrace
+          git add -u
+      - name: Verify host tests and Android builds
+        run: |
+          python -m unittest discover -s .github/scripts -p 'test_*.py'
+          ./gradlew testDebugUnitTest ktlintCheck detekt lintDebug lintRelease assembleDebug bundleRelease --stacktrace
+      - name: Require binary preflight
+        run: |
+          set -o pipefail
+          python .github/scripts/verify_android_artifacts.py app/build/outputs/apk/debug/*.apk app/build/outputs/bundle/release/*.aab | tee "${RUNNER_TEMP}/artifact-preflight.txt"
+      - name: Publish ordinary source files without rewriting history
+        run: |
+          git fetch origin main --depth=1
+          test "$(git rev-parse origin/main)" = "$EXPECTED_HEAD"
+          git diff --cached --quiet && { echo 'No source changes'; exit 1; }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m "$COMMIT_MESSAGE"
+          git push origin HEAD:main
+          git rev-parse HEAD | tee "${RUNNER_TEMP}/PUBLISHED_REVISION.txt"
+      - name: Preserve candidate source and diagnostics even on failure
+        if: always()
+        run: |
+          git write-tree > "${RUNNER_TEMP}/CANDIDATE_TREE.txt"
+          git archive --format=tar.gz "$(git write-tree)" > "${RUNNER_TEMP}/candidate-source.tar.gz"
+          git diff HEAD --binary > "${RUNNER_TEMP}/remaining.patch"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: source-maintenance-diagnostics
+          path: |
+            ${{ runner.temp }}/CANDIDATE_TREE.txt
+            ${{ runner.temp }}/candidate-source.tar.gz
+            ${{ runner.temp }}/remaining.patch
+            ${{ runner.temp }}/PUBLISHED_REVISION.txt
+            ${{ runner.temp }}/artifact-preflight.txt
+            app/build/reports/
+            app/build/test-results/
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
+          retention-days: 7
