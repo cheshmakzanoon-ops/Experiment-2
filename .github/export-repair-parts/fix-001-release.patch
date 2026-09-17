@@ -1,0 +1,47 @@
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -39,6 +39,24 @@
+         "keyPassword",
+     ).all { !keystoreProperties.getProperty(it).isNullOrBlank() }
+ 
++// CI may build unsigned candidates, but a production request must never succeed unsigned.
++val requireReleaseSigning = providers.gradleProperty("requireReleaseSigning").orNull == "true"
++check(!keystorePropertiesFile.exists() || hasReleaseSigning) {
++    "keystore.properties is incomplete: storeFile, storePassword, keyAlias and keyPassword are required"
++}
++check(!requireReleaseSigning || hasReleaseSigning) {
++    "Production signing is required. Configure the private keystore.properties file before release."
++}
++if (hasReleaseSigning) {
++    check(rootProject.file(keystoreProperties.getProperty("storeFile")).isFile) {
++        "The configured release keystore does not exist"
++    }
++}
++
++ksp {
++    arg("room.schemaLocation", "$projectDir/schemas")
++}
++
+ android {
+     namespace = "com.artflow.studio"
+     compileSdk = 36
+@@ -57,7 +75,7 @@
+     signingConfigs {
+         if (hasReleaseSigning) {
+             create("release") {
+-                storeFile = file(keystoreProperties.getProperty("storeFile"))
++                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+                 storePassword = keystoreProperties.getProperty("storePassword")
+                 keyAlias = keystoreProperties.getProperty("keyAlias")
+                 keyPassword = keystoreProperties.getProperty("keyPassword")
+--- a/app/src/androidTest/java/com/artflow/studio/data/ExportDeviceTest.kt
++++ b/app/src/androidTest/java/com/artflow/studio/data/ExportDeviceTest.kt
+@@ -110,7 +110,7 @@
+                         "Pages",
+                         frames,
+                         listOf(100, 100),
+-                        ExportOptions(format = ExportFormat.PDF, pdfPageSize = PdfPageSize.A4),
++                        ExportOptions(format = ExportFormat.PDF, pdfPageSize = PdfPageSize.A4_PORTRAIT),
+                     ).getOrThrow()
+             PdfRenderer(ParcelFileDescriptor.open(File(result.filePath), ParcelFileDescriptor.MODE_READ_ONLY)).use { pdf ->
+                 assertEquals(2, pdf.pageCount)
