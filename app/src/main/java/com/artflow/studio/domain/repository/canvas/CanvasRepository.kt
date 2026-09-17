@@ -2,12 +2,14 @@ package com.artflow.studio.domain.repository.canvas
 
 import com.artflow.studio.core.animation.AnimationTimeline
 import com.artflow.studio.core.pixels.IntBounds
+import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.domain.model.animation.AnimationFrame
 import com.artflow.studio.domain.model.animation.AnimationSettings
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.Stroke
+import com.artflow.studio.domain.model.brush.StrokeDestination
 import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.FilterType
@@ -90,6 +92,7 @@ interface CanvasRepository {
         brushParams: BrushParams,
         layerId: Long,
         isEraser: Boolean = false,
+        destination: StrokeDestination = StrokeDestination.LAYER,
     ): Long
 
     fun continueStroke(
@@ -287,6 +290,12 @@ interface CanvasRepository {
     suspend fun addLayerMask(
         layerId: Long,
         fromSelection: SelectionMask? = null,
+    ): Boolean
+
+    /** Creates a mask from a named source without changing original layer pixels. */
+    suspend fun createLayerMask(
+        layerId: Long,
+        source: LayerMaskSource,
     ): Boolean
 
     suspend fun removeLayerMask(layerId: Long): Boolean

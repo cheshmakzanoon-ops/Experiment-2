@@ -4,9 +4,10 @@ import com.artflow.studio.core.animation.AnimationTimeline
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.pixels.AdjustmentProcessor
 import com.artflow.studio.core.pixels.IntBounds
+import com.artflow.studio.core.pixels.LayerMaskFactory
+import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
-import com.artflow.studio.core.pixels.Stamping
 import com.artflow.studio.core.render.Compositor
 import com.artflow.studio.core.render.LayerStrokeRenderer
 import com.artflow.studio.core.render.StrokeRasterizer
@@ -18,6 +19,7 @@ import com.artflow.studio.domain.model.animation.AnimationFrame
 import com.artflow.studio.domain.model.animation.AnimationSettings
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.Stroke
+import com.artflow.studio.domain.model.brush.StrokeDestination
 import com.artflow.studio.domain.model.brush.StrokePoint
 import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.layer.BlendMode
@@ -101,6 +103,7 @@ class CanvasRepositoryImpl
         private val strokeBrushParams = mutableMapOf<Long, BrushParams>()
         private val strokeLayerIds = mutableMapOf<Long, Long>()
         private val strokeErasers = mutableMapOf<Long, Boolean>()
+        private val strokeDestinations = mutableMapOf<Long, StrokeDestination>()
 
         private var strokeColor: Int = 0xFF000000.toInt()
         private var symmetrySettings = SymmetryEngine.Settings()
@@ -195,6 +198,7 @@ class CanvasRepositoryImpl
             strokeBrushParams.clear()
             strokeLayerIds.clear()
             strokeErasers.clear()
+            strokeDestinations.clear()
             undoStack.clear()
             redoStack.clear()
             dirtyRasters.clear()
@@ -314,6 +318,7 @@ class CanvasRepositoryImpl
             strokeBrushParams.clear()
             strokeLayerIds.clear()
             strokeErasers.clear()
+            strokeDestinations.clear()
             undoStack.clear()
             redoStack.clear()
             dirtyRasters.clear()
@@ -485,19 +490,34 @@ class CanvasRepositoryImpl
             brushParams: BrushParams,
             layerId: Long,
             isEraser: Boolean,
+            destination: StrokeDestination,
         ): Long {
             val strokeId = nextStrokeId++
             val layer = layerById(layerId)
-            if (layer != null && !layer.canPaint()) {
-                Timber.w("Stroke started on non-paintable layer ${layer.name}")
+            if (layer == null || !canReceiveStroke(layer, destination) || !validSample(x, y, pressure)) {
+                Timber.w("Stroke rejected on unavailable or non-editable layer $layerId")
+                return 0L
             }
             activeStrokes[strokeId] =
                 mutableListOf(
-                    StrokePoint(x = x, y = y, pressure = pressure, color = strokeColor),
+                    StrokePoint(x = x, y = y, pressure = pressure, color = destination.color(strokeColor, layer.maskInverted)),
                 )
-            strokeBrushParams[strokeId] = brushParams
+            strokeBrushParams[strokeId] =
+                if (destination.isMask) {
+                    brushParams.copy(
+                        hueJitter = 0f,
+                        saturationJitter = 0f,
+                        brightnessJitter = 0f,
+                        colorPressure = false,
+                        velocityToHue = 0f,
+                        wetMix = 0f,
+                    )
+                } else {
+                    brushParams
+                }
             strokeLayerIds[strokeId] = layerId
-            strokeErasers[strokeId] = isEraser
+            strokeErasers[strokeId] = isEraser && !destination.isMask
+            strokeDestinations[strokeId] = destination
             return strokeId
         }
 
@@ -509,14 +529,16 @@ class CanvasRepositoryImpl
             tiltX: Float,
             tiltY: Float,
         ) {
-            activeStrokes[strokeId]?.add(
+            if (!validSample(x, y, pressure) || !tiltX.isFinite() || !tiltY.isFinite()) return
+            val points = activeStrokes[strokeId] ?: return
+            points.add(
                 StrokePoint(
                     x = x,
                     y = y,
                     pressure = pressure,
                     tiltX = tiltX,
                     tiltY = tiltY,
-                    color = strokeColor,
+                    color = points.first().color,
                 ),
             )
         }
@@ -526,13 +548,14 @@ class CanvasRepositoryImpl
             val brushParams = strokeBrushParams.remove(strokeId) ?: return
             val layerId = strokeLayerIds.remove(strokeId) ?: return
             val isEraser = strokeErasers.remove(strokeId) ?: false
+            val destination = strokeDestinations.remove(strokeId) ?: StrokeDestination.LAYER
 
             val layer =
                 layerById(layerId) ?: run {
                     Timber.w("Dropping stroke for unknown layer $layerId")
                     return
                 }
-            if (!layer.canPaint()) {
+            if (!canReceiveStroke(layer, destination)) {
                 Timber.w("Dropping stroke on non-paintable layer ${layer.name}")
                 return
             }
@@ -551,28 +574,51 @@ class CanvasRepositoryImpl
             val incoming = SymmetryEngine.mirrorStroke(stroke, canvasWidth, canvasHeight, symmetrySettings)
             val base =
                 LayerStrokeRenderer.render(
-                    layer.raster,
-                    layer.strokes.toList(),
+                    if (destination.isMask) layer.mask else layer.raster,
+                    if (destination.isMask) emptyList() else layer.strokes.toList(),
                     incoming,
                     canvasWidth,
                     canvasHeight,
-                    layer.isAlphaLocked,
+                    !destination.isMask && layer.isAlphaLocked,
                     activeSelection,
                 )
             pushUndo()
-            layer.raster = base
-            layer.strokes.clear()
-            layer.rasterFile = null
+            if (destination.isMask) {
+                layer.mask = base
+                layer.maskFile = null
+                layer.maskOwned = true
+            } else {
+                layer.raster = base
+                layer.strokes.clear()
+                layer.rasterFile = null
+            }
             dirtyRasters += layer.id
             dirty = true
             emitAsync(CanvasInvalidationEvent.Full)
         }
+
+        private fun validSample(
+            x: Float,
+            y: Float,
+            pressure: Float,
+        ): Boolean = x.isFinite() && y.isFinite() && pressure.isFinite()
+
+        private fun canReceiveStroke(
+            layer: LayerData,
+            destination: StrokeDestination,
+        ): Boolean =
+            if (destination.isMask) {
+                layer.isVisible && !layer.isLocked && !layer.isReference && layer.mask != null && layer.maskEnabled
+            } else {
+                layer.canPaint()
+            }
 
         override fun cancelStroke(strokeId: Long) {
             activeStrokes.remove(strokeId)
             strokeBrushParams.remove(strokeId)
             strokeLayerIds.remove(strokeId)
             strokeErasers.remove(strokeId)
+            strokeDestinations.remove(strokeId)
             emitAsync(CanvasInvalidationEvent.Full)
         }
 
@@ -1031,11 +1077,66 @@ class CanvasRepositoryImpl
         ): Boolean =
             withState {
                 val layer = layerById(layerId) ?: return@withState false
+                if (layer.isLocked || layer.isReference || layer.mask != null) return@withState false
+                if (fromSelection != null &&
+                    (fromSelection.width != canvasWidth || fromSelection.height != canvasHeight)
+                ) {
+                    return@withState false
+                }
+                val mask = fromSelection?.toMaskBitmap() ?: PixelBuffer.filled(canvasWidth, canvasHeight, 0xFFFFFFFF.toInt())
                 pushUndo()
-                layer.mask = fromSelection?.toMaskBitmap() ?: PixelBuffer.filled(canvasWidth, canvasHeight, 0xFFFFFFFF.toInt())
+                layer.mask = mask
                 layer.maskEnabled = true
                 layer.maskInverted = false
                 layer.maskFile = null
+                dirtyRasters += layer.id
+                dirty = true
+                emit(CanvasInvalidationEvent.Full)
+                true
+            }
+
+        override suspend fun createLayerMask(
+            layerId: Long,
+            source: LayerMaskSource,
+        ): Boolean =
+            withState {
+                val layer = layerById(layerId) ?: return@withState false
+                if (layer.isLocked || layer.isReference || layer.mask != null) return@withState false
+                val selection = activeSelection?.copy()
+                if (source == LayerMaskSource.SELECTION && selection == null) return@withState false
+                val revision = editRevision
+                val width = canvasWidth
+                val height = canvasHeight
+                val project = currentProjectId
+                markRastersShared()
+                val frozen = layer.snapshotCopy()
+                val mask =
+                    withContext(Dispatchers.Default) {
+                        val pixels =
+                            if (source == LayerMaskSource.LAYER_ALPHA) {
+                                LayerStrokeRenderer.render(
+                                    frozen.raster,
+                                    frozen.strokes.toList(),
+                                    emptyList(),
+                                    width,
+                                    height,
+                                    frozen.isAlphaLocked,
+                                    null,
+                                )
+                            } else {
+                                null
+                            }
+                        LayerMaskFactory.create(source, width, height, pixels, selection)
+                    }
+                if (project != currentProjectId || revision != editRevision || layerById(layerId) !== layer) return@withState false
+                pushUndo()
+                layer.mask = mask
+                layer.maskEnabled = true
+                layer.maskInverted = false
+                layer.maskDensity = 1f
+                layer.maskFeather = 0f
+                layer.maskFile = null
+                layer.maskOwned = true
                 dirtyRasters += layer.id
                 dirty = true
                 emit(CanvasInvalidationEvent.Full)
@@ -1111,31 +1212,12 @@ class CanvasRepositoryImpl
             reveal: Boolean,
         ): Boolean =
             withState {
-                val layer = layerById(layerId) ?: return@withState false
-                // Copy-on-write: the mask is cloned once per gesture, not once per pointer sample.
-                if (!layer.maskOwned) {
-                    pushUndo()
-                    layer.mask = layer.mask?.copy()
-                        ?: PixelBuffer.filled(canvasWidth, canvasHeight, 0xFFFFFFFF.toInt())
-                    layer.maskOwned = true
-                    layer.maskFile = null
-                }
-                val mask = layer.mask ?: return@withState false
-                // White reveals the layer, black hides it.
-                val value = if (reveal) 0xFFFFFFFF.toInt() else 0xFF000000.toInt()
-                Stamping.dab(
-                    target = mask,
-                    x = x,
-                    y = y,
-                    radius = radius,
-                    color = value,
-                    strength = 1f,
-                    hardness = 0.8f,
-                    mode = Stamping.Mode.REPLACE,
-                )
-                dirtyRasters += layer.id
-                dirty = true
-                emit(CanvasInvalidationEvent.Full)
+                if (!radius.isFinite() || radius <= 0f) return@withState false
+                val destination = if (reveal) StrokeDestination.MASK_REVEAL else StrokeDestination.MASK_HIDE
+                val params = BrushParams(size = (radius * 2f).coerceAtMost(512f), pressureToSize = 0f, pressureToOpacity = 0f)
+                val id = beginStroke(x, y, 1f, params, layerId, false, destination)
+                if (id == 0L) return@withState false
+                endStroke(id)
                 true
             }
 
@@ -1648,6 +1730,7 @@ class CanvasRepositoryImpl
             val layers: List<LayerData>,
             val document: CanvasDocument,
             val strokes: List<Stroke>,
+            val destinations: Map<Long, StrokeDestination>,
             val selection: SelectionMask?,
             val symmetry: SymmetryEngine.Settings,
         )
@@ -1668,6 +1751,7 @@ class CanvasRepositoryImpl
                         layers,
                         canvasSnapshot(),
                         activeStrokes.keys.mapNotNull { activeStroke(it) },
+                        strokeDestinations.toMap(),
                         activeSelection?.copy(),
                         symmetrySettings,
                     )
@@ -1676,25 +1760,38 @@ class CanvasRepositoryImpl
                 val strokesByLayer = snapshot.strokes.groupBy { it.layerId }
                 for (layer in snapshot.layers) {
                     coroutineContext.ensureActive()
-                    val active = strokesByLayer[layer.id]
-                    if (active == null || !layer.canPaint()) continue
-                    val incoming =
-                        active.flatMap {
-                            SymmetryEngine.mirrorStroke(it, snapshot.document.width, snapshot.document.height, snapshot.symmetry)
-                        }
-                    layer.raster =
-                        LayerStrokeRenderer.render(
-                            layer.raster,
-                            layer.strokes.toList(),
-                            incoming,
-                            snapshot.document.width,
-                            snapshot.document.height,
-                            layer.isAlphaLocked,
-                            snapshot.selection,
-                        )
-                    layer.strokes.clear()
+                    val active = strokesByLayer[layer.id] ?: continue
+                    paintPreviewStrokes(layer, active, snapshot)
                 }
                 renderFrozen(snapshot.layers, snapshot.document, transparentBackground = true)
+            }
+        }
+
+        private fun paintPreviewStrokes(
+            layer: LayerData,
+            active: List<Stroke>,
+            snapshot: PreviewSnapshot,
+        ) {
+            for (stroke in active) {
+                val destination = snapshot.destinations[stroke.id] ?: StrokeDestination.LAYER
+                if (!canReceiveStroke(layer, destination)) continue
+                val incoming = SymmetryEngine.mirrorStroke(stroke, snapshot.document.width, snapshot.document.height, snapshot.symmetry)
+                val pixels =
+                    LayerStrokeRenderer.render(
+                        if (destination.isMask) layer.mask else layer.raster,
+                        if (destination.isMask) emptyList() else layer.strokes.toList(),
+                        incoming,
+                        snapshot.document.width,
+                        snapshot.document.height,
+                        !destination.isMask && layer.isAlphaLocked,
+                        snapshot.selection,
+                    )
+                if (destination.isMask) {
+                    layer.mask = pixels
+                } else {
+                    layer.raster = pixels
+                    layer.strokes.clear()
+                }
             }
         }
 
@@ -1929,6 +2026,7 @@ class CanvasRepositoryImpl
             strokeBrushParams.clear()
             strokeLayerIds.clear()
             strokeErasers.clear()
+            strokeDestinations.clear()
             dirtyRasters.addAll(allLayers().map { it.id })
             syncTimeline()
         }
@@ -2073,6 +2171,7 @@ class CanvasRepositoryImpl
             strokeBrushParams.clear()
             strokeLayerIds.clear()
             strokeErasers.clear()
+            strokeDestinations.clear()
             undoStack.clear()
             redoStack.clear()
         }

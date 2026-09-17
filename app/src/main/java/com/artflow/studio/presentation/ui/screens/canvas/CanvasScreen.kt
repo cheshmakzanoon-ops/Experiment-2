@@ -22,6 +22,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.artflow.studio.core.tool.ToolType
+import com.artflow.studio.domain.model.brush.StrokeDestination
 import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.FilterType
@@ -36,6 +37,9 @@ import com.artflow.studio.presentation.ui.components.editor.CanvasOpsSheet
 import com.artflow.studio.presentation.ui.components.editor.ColorChip
 import com.artflow.studio.presentation.ui.components.editor.GuidesOverlay
 import com.artflow.studio.presentation.ui.components.editor.GuidesSheet
+import com.artflow.studio.presentation.ui.components.editor.LayerMaskActions
+import com.artflow.studio.presentation.ui.components.editor.LayerRowActions
+import com.artflow.studio.presentation.ui.components.editor.LayerStackActions
 import com.artflow.studio.presentation.ui.components.editor.LayersSheet
 import com.artflow.studio.presentation.ui.components.editor.QuickMenuSheet
 import com.artflow.studio.presentation.ui.components.editor.SelectionSheet
@@ -233,6 +237,19 @@ fun CanvasScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         ColorChip(color = input.brushColor, onClick = { panel = EditorPanel.COLOUR })
+                        if (input.strokeDestination.isMask) {
+                            TextButton(onClick = { viewModel.setTool(ToolType.BRUSH) }) {
+                                Text(
+                                    if (input.strokeDestination ==
+                                        StrokeDestination.MASK_REVEAL
+                                    ) {
+                                        "Mask: reveal • Done"
+                                    } else {
+                                        "Mask: hide • Done"
+                                    },
+                                )
+                            }
+                        }
                         TextButton(onClick = { showBrushEditor = true }) { Text("Brush") }
                         TextButton(onClick = { panel = EditorPanel.LAYERS }) {
                             Text("Layers (${layers.size})")
@@ -357,30 +374,44 @@ fun CanvasScreen(
                         LayersSheet(
                             layers = layers,
                             activeLayerId = activeLayerId,
-                            onSelect = { viewModel.setActiveLayer(it) },
-                            onVisibility = { id, visible -> viewModel.setLayerVisibility(id, visible) },
-                            onOpacity = { id, opacity -> viewModel.setLayerOpacity(id, opacity) },
-                            onName = { id, name -> viewModel.setLayerName(id, name) },
-                            onLock = { id, locked -> viewModel.setLayerLock(id, locked) },
-                            onAlphaLock = { id, locked -> viewModel.setLayerAlphaLock(id, locked) },
-                            onClipping = { id, clipping -> viewModel.setLayerClippingMask(id, clipping) },
-                            onBlendMode = { id, mode: BlendMode -> viewModel.setLayerBlendMode(id, mode) },
-                            onDuplicate = { viewModel.duplicateLayer(it) },
-                            onDelete = { viewModel.removeLayer(it) },
-                            onMergeDown = { viewModel.mergeLayerDown(it) },
-                            onAddLayer = { viewModel.addLayer() },
-                            onFlatten = { viewModel.flattenAllLayers() },
-                            onMergeVisible = { viewModel.mergeVisibleLayers() },
-                            onAddMask = { viewModel.addLayerMask(fromSelection = selection != null) },
-                            onRemoveMask = { viewModel.removeLayerMask() },
-                            onInvertMask = { viewModel.invertLayerMask() },
-                            onMaskEnabled = { viewModel.setLayerMaskEnabled(it) },
-                            onMaskDensity = { viewModel.setLayerMaskDensity(it) },
-                            onMaskFeather = { viewModel.setLayerMaskFeather(it) },
-                            onAddAdjustment = { type: AdjustmentType -> viewModel.addAdjustmentLayer(type) },
-                            onAddFilter = { type: FilterType -> viewModel.addFilterLayer(type) },
-                            onAdjustmentParameter = { id, key, value -> viewModel.setAdjustmentParameter(id, key, value) },
-                            onFilterAmount = { id, amount -> viewModel.setFilterAmount(id, amount) },
+                            hasSelection = selection != null,
+                            rowActions =
+                                LayerRowActions(
+                                    onSelect = { viewModel.setActiveLayer(it) },
+                                    onVisibility = { id, visible -> viewModel.setLayerVisibility(id, visible) },
+                                    onOpacity = { id, opacity -> viewModel.setLayerOpacity(id, opacity) },
+                                    onName = { id, name -> viewModel.setLayerName(id, name) },
+                                    onLock = { id, locked -> viewModel.setLayerLock(id, locked) },
+                                    onAlphaLock = { id, locked -> viewModel.setLayerAlphaLock(id, locked) },
+                                    onClipping = { id, clipping -> viewModel.setLayerClippingMask(id, clipping) },
+                                    onBlendMode = { id, mode: BlendMode -> viewModel.setLayerBlendMode(id, mode) },
+                                    onDuplicate = { viewModel.duplicateLayer(it) },
+                                    onDelete = { viewModel.removeLayer(it) },
+                                    onMergeDown = { viewModel.mergeLayerDown(it) },
+                                ),
+                            stackActions =
+                                LayerStackActions(
+                                    onAddLayer = { viewModel.addLayer() },
+                                    onFlatten = { viewModel.flattenAllLayers() },
+                                    onMergeVisible = { viewModel.mergeVisibleLayers() },
+                                    onAddAdjustment = { type: AdjustmentType -> viewModel.addAdjustmentLayer(type) },
+                                    onAddFilter = { type: FilterType -> viewModel.addFilterLayer(type) },
+                                    onAdjustmentParameter = { id, key, value -> viewModel.setAdjustmentParameter(id, key, value) },
+                                    onFilterAmount = { id, amount -> viewModel.setFilterAmount(id, amount) },
+                                ),
+                            maskActions =
+                                LayerMaskActions(
+                                    onAddMask = { viewModel.createLayerMask(it) },
+                                    onPaintMask = { reveal ->
+                                        viewModel.paintMask(reveal)
+                                        panel = EditorPanel.NONE
+                                    },
+                                    onRemoveMask = { viewModel.removeLayerMask() },
+                                    onInvertMask = { viewModel.invertLayerMask() },
+                                    onMaskEnabled = { viewModel.setLayerMaskEnabled(it) },
+                                    onMaskDensity = { viewModel.setLayerMaskDensity(it) },
+                                    onMaskFeather = { viewModel.setLayerMaskFeather(it) },
+                                ),
                         )
                     EditorPanel.SELECTION ->
                         SelectionSheet(

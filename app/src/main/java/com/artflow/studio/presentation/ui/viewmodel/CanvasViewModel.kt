@@ -28,6 +28,7 @@ import com.artflow.studio.data.export.ArtworkExporter
 import com.artflow.studio.data.export.LayerRaster
 import com.artflow.studio.domain.model.Project
 import com.artflow.studio.domain.model.animation.AnimationSettings
+import com.artflow.studio.domain.model.brush.StrokeDestination
 import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.FilterType
@@ -340,8 +341,15 @@ class CanvasViewModel
         }
 
         private fun refreshLayers() {
+            val previous = _activeLayerId.value
             _layers.value = canvasRepository.getAllLayers()
             _activeLayerId.value = canvasRepository.getActiveLayerId()
+            val layer = canvasRepository.getActiveLayer()
+            val hasUsableMask = layer?.let { it.hasMask() && it.maskEnabled } == true
+            val destinationChanged = previous != _activeLayerId.value || !hasUsableMask
+            if (_input.value.strokeDestination.isMask && destinationChanged) {
+                updateInput { it.copy(strokeDestination = StrokeDestination.LAYER) }
+            }
         }
 
         private fun refreshHistory() {
@@ -366,7 +374,30 @@ class CanvasViewModel
         // Tool state
         // -----------------------------------------------------------------------------------------
 
-        fun setTool(tool: ToolType) = updateInput { it.copy(tool = tool) }
+        fun setTool(tool: ToolType) = updateInput { it.copy(tool = tool, strokeDestination = StrokeDestination.LAYER) }
+
+        fun paintMask(reveal: Boolean) {
+            val layer = canvasRepository.getActiveLayer()
+            val hasUsableMask = layer?.let { it.hasMask() && it.maskEnabled } == true
+            val canEdit = layer?.let { it.canEdit() && !it.isReference } == true
+            if (!hasUsableMask || !canEdit) {
+                notify("Select an unlocked, visible layer with an enabled mask")
+                return
+            }
+            updateInput {
+                it.copy(
+                    tool = ToolType.BRUSH,
+                    strokeDestination = if (reveal) StrokeDestination.MASK_REVEAL else StrokeDestination.MASK_HIDE,
+                )
+            }
+        }
+
+        fun createLayerMask(source: com.artflow.studio.core.pixels.LayerMaskSource) =
+            layerOp {
+                check(canvasRepository.createLayerMask(canvasRepository.getActiveLayerId(), source)) {
+                    "The mask could not be created. Check the layer lock, selection, or concurrent edits."
+                }
+            }
 
         fun setBrushSize(size: Float) = updateInput { it.copy(brushParams = it.brushParams.copy(size = size.coerceIn(1f, 512f))) }
 
@@ -652,6 +683,7 @@ class CanvasViewModel
         }
 
         fun setActiveLayer(layerId: Long) {
+            updateInput { it.copy(strokeDestination = StrokeDestination.LAYER) }
             canvasRepository.setActiveLayer(layerId)
             refreshLayers()
         }

@@ -23,6 +23,7 @@ import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.data.renderer.opengl.OpenGLCanvasRenderer
 import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.StrokeDestination
 import com.artflow.studio.domain.repository.canvas.CanvasInvalidationEvent
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import dagger.hilt.android.AndroidEntryPoint
@@ -35,7 +36,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -78,6 +80,7 @@ enum class SelectionCombineMode(
 data class EditorInput(
     val tool: ToolType = ToolType.BRUSH,
     val brushParams: BrushParams = BrushParams(),
+    val strokeDestination: StrokeDestination = StrokeDestination.LAYER,
     val brushColor: Int = 0xFF1F2933.toInt(),
     val eraserSize: Float = 48f,
     val symmetry: SymmetryEngine.Settings = SymmetryEngine.Settings(),
@@ -306,13 +309,15 @@ class ArtFlowCanvasView
 
         /** Pushes the whole editor state; cheap enough to call on every recomposition. */
         fun setEditorInput(newInput: EditorInput) {
-            if (newInput.tool != input.tool && (drawing || pixelTool != null)) cancelActiveGesture()
+            val destinationChanged = newInput.tool != input.tool || newInput.strokeDestination != input.strokeDestination
+            if (destinationChanged && (drawing || pixelTool != null)) cancelActiveGesture()
             input = newInput
             canvasRepository.setStrokeColor(newInput.brushColor)
             canvasRepository.setSymmetry(newInput.symmetry)
         }
 
         fun setActiveLayerId(layerId: Long) {
+            if (layerId != activeLayerId && (drawing || pixelTool != null)) cancelActiveGesture()
             activeLayerId = layerId
         }
 
@@ -579,19 +584,17 @@ class ArtFlowCanvasView
             observingInvalidations = true
             invalidateJob =
                 coroutineScope.launch {
-                    canvasRepository.observeCanvasInvalidation().collectLatest { event ->
-                        when (event) {
-                            is CanvasInvalidationEvent.StrokeCompleted -> {
-                                refreshComposite()
-                            }
-                            is CanvasInvalidationEvent.FrameChanged -> {
-                                onionDirty = true
-                                refreshComposite()
-                                refreshOnionSkins()
-                            }
-                            else -> refreshComposite()
+                    canvasRepository
+                        .observeCanvasInvalidation()
+                        .onEach { event ->
+                            if (event is CanvasInvalidationEvent.FrameChanged) onionDirty = true
+                        }.conflate()
+                        .collect {
+                            // A busy renderer must complete frames instead of cancelling each one
+                            // when another pointer sample arrives. Only the latest queued request is kept.
+                            refreshComposite()
+                            if (onionDirty) refreshOnionSkins()
                         }
-                    }
                 }
         }
 
@@ -622,13 +625,14 @@ class ArtFlowCanvasView
         private var onionJob: Job? = null
 
         private fun refreshOnionSkins() {
+            if (onionEnabled && !onionDirty) return
             onionJob?.cancel()
             if (!onionEnabled) {
+                onionDirty = false
                 renderer.clearOnionSkins()
                 requestRender()
                 return
             }
-            if (!onionDirty) return
             onionDirty = false
             onionJob =
                 coroutineScope.launch {
@@ -1031,8 +1035,10 @@ class ArtFlowCanvasView
                     brushParams = params,
                     layerId = activeLayerId,
                     isEraser = tool == ToolType.ERASER,
+                    destination = input.strokeDestination,
                 )
-            drawing = true
+            drawing = currentStrokeId != 0L
+            if (!drawing) onStatusMessage?.invoke("Choose an unlocked, visible layer with an editable destination")
             updateLiveStroke()
         }
 

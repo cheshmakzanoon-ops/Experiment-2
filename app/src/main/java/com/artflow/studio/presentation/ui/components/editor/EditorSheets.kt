@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import com.artflow.studio.core.animation.AnimationTimeline
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.perspective.PerspectiveGuide
+import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.symmetry.SymmetryEngine
 import com.artflow.studio.core.text.TextLayout
 import com.artflow.studio.domain.model.animation.AnimationSettings
@@ -41,36 +42,68 @@ import com.artflow.studio.presentation.ui.components.canvas.SelectionCombineMode
  * Every action goes through `CanvasViewModel` into `CanvasRepository`, which is the document: undo,
  * save, export and the canvas all read the same stack, so the panel can never drift out of sync.
  */
+data class LayerRowActions(
+    val onSelect: (Long) -> Unit,
+    val onVisibility: (Long, Boolean) -> Unit,
+    val onOpacity: (Long, Float) -> Unit,
+    val onName: (Long, String) -> Unit,
+    val onLock: (Long, Boolean) -> Unit,
+    val onAlphaLock: (Long, Boolean) -> Unit,
+    val onClipping: (Long, Boolean) -> Unit,
+    val onBlendMode: (Long, BlendMode) -> Unit,
+    val onDuplicate: (Long) -> Unit,
+    val onDelete: (Long) -> Unit,
+    val onMergeDown: (Long) -> Unit,
+)
+
+data class LayerStackActions(
+    val onAddLayer: () -> Unit,
+    val onFlatten: () -> Unit,
+    val onMergeVisible: () -> Unit,
+    val onAddAdjustment: (AdjustmentType) -> Unit,
+    val onAddFilter: (FilterType) -> Unit,
+    val onAdjustmentParameter: (Long, String, Float) -> Unit,
+    val onFilterAmount: (Long, Float) -> Unit,
+)
+
+data class LayerMaskActions(
+    val onAddMask: (LayerMaskSource) -> Unit,
+    val onRemoveMask: () -> Unit,
+    val onInvertMask: () -> Unit,
+    val onMaskEnabled: (Boolean) -> Unit,
+    val onMaskDensity: (Float) -> Unit,
+    val onMaskFeather: (Float) -> Unit,
+    val onPaintMask: (Boolean) -> Unit,
+)
+
 @Composable
 fun LayersSheet(
     layers: List<Layer>,
     activeLayerId: Long,
-    onSelect: (Long) -> Unit,
-    onVisibility: (Long, Boolean) -> Unit,
-    onOpacity: (Long, Float) -> Unit,
-    onName: (Long, String) -> Unit,
-    onLock: (Long, Boolean) -> Unit,
-    onAlphaLock: (Long, Boolean) -> Unit,
-    onClipping: (Long, Boolean) -> Unit,
-    onBlendMode: (Long, BlendMode) -> Unit,
-    onDuplicate: (Long) -> Unit,
-    onDelete: (Long) -> Unit,
-    onMergeDown: (Long) -> Unit,
-    onAddLayer: () -> Unit,
-    onFlatten: () -> Unit,
-    onMergeVisible: () -> Unit,
-    onAddMask: () -> Unit,
-    onRemoveMask: () -> Unit,
-    onInvertMask: () -> Unit,
-    onMaskEnabled: (Boolean) -> Unit,
-    onMaskDensity: (Float) -> Unit,
-    onMaskFeather: (Float) -> Unit,
-    onAddAdjustment: (AdjustmentType) -> Unit,
-    onAddFilter: (FilterType) -> Unit,
-    onAdjustmentParameter: (Long, String, Float) -> Unit,
-    onFilterAmount: (Long, Float) -> Unit,
+    rowActions: LayerRowActions,
+    stackActions: LayerStackActions,
+    maskActions: LayerMaskActions,
+    hasSelection: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val onSelect = rowActions.onSelect
+    val onVisibility = rowActions.onVisibility
+    val onOpacity = rowActions.onOpacity
+    val onName = rowActions.onName
+    val onLock = rowActions.onLock
+    val onAlphaLock = rowActions.onAlphaLock
+    val onClipping = rowActions.onClipping
+    val onBlendMode = rowActions.onBlendMode
+    val onDuplicate = rowActions.onDuplicate
+    val onDelete = rowActions.onDelete
+    val onMergeDown = rowActions.onMergeDown
+    val onAddLayer = stackActions.onAddLayer
+    val onFlatten = stackActions.onFlatten
+    val onMergeVisible = stackActions.onMergeVisible
+    val onAddAdjustment = stackActions.onAddAdjustment
+    val onAddFilter = stackActions.onAddFilter
+    val onAdjustmentParameter = stackActions.onAdjustmentParameter
+    val onFilterAmount = stackActions.onFilterAmount
     var blendTarget by remember { mutableStateOf<Layer?>(null) }
     var renameTarget by remember { mutableStateOf<Layer?>(null) }
     var addMenuVisible by remember { mutableStateOf(false) }
@@ -176,38 +209,7 @@ fun LayersSheet(
                 modifier = Modifier.padding(horizontal = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Text("Mask", style = MaterialTheme.typography.titleSmall)
-                if (!layer.hasMask()) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = onAddMask) { Text("Add mask") }
-                        Text(
-                            "A mask hides parts of this layer without erasing them.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                } else {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        AssistChip(
-                            onClick = { onMaskEnabled(!layer.maskEnabled) },
-                            label = { Text(if (layer.maskEnabled) "Enabled" else "Disabled") },
-                        )
-                        AssistChip(onClick = onInvertMask, label = { Text("Invert") })
-                        AssistChip(onClick = onRemoveMask, label = { Text("Remove") })
-                    }
-                    LabeledSlider(
-                        label = "Density",
-                        value = layer.maskDensity,
-                        range = 0f..1f,
-                        onChange = onMaskDensity,
-                    )
-                    LabeledSlider(
-                        label = "Feather",
-                        value = layer.maskFeather,
-                        range = 0f..64f,
-                        onChange = onMaskFeather,
-                    )
-                }
+                LayerMaskControls(layer, hasSelection, maskActions)
 
                 layer.adjustmentType?.let { type ->
                     Text(type.displayName, style = MaterialTheme.typography.titleSmall)
@@ -265,6 +267,69 @@ fun LayersSheet(
                 }) { Text("Rename") }
             },
             dismissButton = { TextButton(onClick = { renameTarget = null }) { Text("Cancel") } },
+        )
+    }
+}
+
+@Composable
+private fun LayerMaskControls(
+    layer: Layer,
+    hasSelection: Boolean,
+    actions: LayerMaskActions,
+) {
+    var maskMenuVisible by remember(layer.id) { mutableStateOf(false) }
+    Text("Mask", style = MaterialTheme.typography.titleSmall)
+    if (!layer.hasMask()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box {
+                Button(
+                    onClick = { maskMenuVisible = true },
+                    enabled = !layer.isLocked && !layer.isReference,
+                ) { Text("Add mask") }
+                DropdownMenu(expanded = maskMenuVisible, onDismissRequest = { maskMenuVisible = false }) {
+                    LayerMaskSource.entries.forEach { source ->
+                        DropdownMenuItem(
+                            text = { Text(source.label) },
+                            enabled = source != LayerMaskSource.SELECTION || hasSelection,
+                            onClick = {
+                                actions.onAddMask(source)
+                                maskMenuVisible = false
+                            },
+                        )
+                    }
+                }
+            }
+            Text(
+                "A mask hides parts of this layer without erasing them.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    } else {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val canPaint = layer.canEdit() && layer.maskEnabled && !layer.isReference
+            OutlinedButton(onClick = { actions.onPaintMask(true) }, enabled = canPaint) { Text("Paint reveal") }
+            OutlinedButton(onClick = { actions.onPaintMask(false) }, enabled = canPaint) { Text("Paint hide") }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            AssistChip(
+                onClick = { actions.onMaskEnabled(!layer.maskEnabled) },
+                label = { Text(if (layer.maskEnabled) "Enabled" else "Disabled") },
+            )
+            AssistChip(onClick = actions.onInvertMask, label = { Text("Invert") })
+            AssistChip(onClick = actions.onRemoveMask, label = { Text("Remove") })
+        }
+        LabeledSlider(
+            label = "Density",
+            value = layer.maskDensity,
+            range = 0f..1f,
+            onChange = actions.onMaskDensity,
+        )
+        LabeledSlider(
+            label = "Feather",
+            value = layer.maskFeather,
+            range = 0f..64f,
+            onChange = actions.onMaskFeather,
         )
     }
 }

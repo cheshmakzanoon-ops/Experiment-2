@@ -320,7 +320,9 @@ class Compositor(
         val density = layer.maskDensity.coerceIn(0f, 1f)
         if (density <= 0f) return 1f
         val pixel = if (mask.contains(x, y)) mask.getSafe(x, y) else 0xFFFFFFFF.toInt()
-        val raw = Channels.luminance(pixel)
+        // Selection-derived masks store coverage in alpha; opaque grayscale masks
+        // store it in luminance. Both encodings must produce the same coverage.
+        val raw = Channels.luminance(pixel) * (Channels.alpha(pixel) / 255f)
         val value = if (layer.maskInverted) 1f - raw else raw
         return 1f - density + density * value
     }

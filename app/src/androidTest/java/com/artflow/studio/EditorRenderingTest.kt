@@ -5,20 +5,30 @@ import android.graphics.Color
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.view.MotionEvent
 import android.view.PixelCopy
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.data.local.ProjectStorage
+import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.StrokeDestination
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import com.artflow.studio.presentation.ui.MainActivity
 import com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView
 import com.artflow.studio.presentation.ui.components.canvas.EditorInput
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -99,6 +109,131 @@ class EditorRenderingTest {
             scenario.close()
             runBlocking(Dispatchers.Main) { repository.dispose() }
             storage.deleteProjectFiles(projectId)
+        }
+    }
+
+    @Test
+    fun realPointerMaskStrokePreviewsAndUndoesOnTheGlSurface() {
+        val projectId = 9_000_002L
+        storage.deleteProjectFiles(projectId)
+        val scenario = ActivityScenario.launch(MainActivity::class.java)
+        try {
+            val layer =
+                runBlocking(Dispatchers.Main) {
+                    repository.loadOrCreate(projectId, 32, 32, 72)
+                    repository.setLayerPixels(repository.getActiveLayerId(), PixelBuffer.filled(32, 32, Color.BLUE), "Background fixture")
+                    val ink = repository.addLayer("Ink").id
+                    repository.setLayerPixels(ink, PixelBuffer.filled(32, 32, Color.RED), "Ink fixture")
+                    assertTrue(repository.createLayerMask(ink, LayerMaskSource.HIDE_ALL))
+                    ink
+                }
+            val canvas =
+                installCanvas(
+                    scenario,
+                    layer,
+                    32,
+                    EditorInput(
+                        brushParams = BrushParams(size = 24f, pressureToSize = 0f, pressureToOpacity = 0f),
+                        strokeDestination = StrokeDestination.MASK_REVEAL,
+                    ),
+                )
+            awaitColor(canvas, Color.BLUE)
+            val down = SystemClock.uptimeMillis()
+            scenario.onActivity { pointer(canvas, down, MotionEvent.ACTION_DOWN) }
+            // Require the real GL surface to show the provisional mask BEFORE pointer-up.
+            awaitColor(canvas, Color.RED)
+            runBlocking(Dispatchers.Main) {
+                assertTrue(
+                    repository
+                        .exportSnapshot(false, false, false)
+                        .frames
+                        .single()
+                        .pixels
+                        .all { it == Color.BLUE },
+                )
+            }
+            scenario.onActivity { pointer(canvas, down, MotionEvent.ACTION_UP) }
+            awaitColor(canvas, Color.RED)
+            runBlocking(Dispatchers.Main) { assertTrue(repository.undo()) }
+            awaitColor(canvas, Color.BLUE)
+        } finally {
+            scenario.close()
+            runBlocking(Dispatchers.Main) { repository.dispose() }
+            storage.deleteProjectFiles(projectId)
+        }
+    }
+
+    @Test
+    fun redrawsCompleteWhileNewInvalidationsKeepArriving() {
+        val projectId = 9_000_003L
+        storage.deleteProjectFiles(projectId)
+        val scenario = ActivityScenario.launch(MainActivity::class.java)
+        var producer: Job? = null
+        try {
+            val layer =
+                runBlocking(Dispatchers.Main) {
+                    repository.loadOrCreate(projectId, 1024, 1024, 72)
+                    val id = repository.getActiveLayerId()
+                    repository.setLayerPixels(id, PixelBuffer.filled(1024, 1024, Color.BLUE), "Background fixture")
+                    id
+                }
+            val canvas = installCanvas(scenario, layer, 1024, EditorInput())
+            awaitColor(canvas, Color.BLUE)
+            producer =
+                CoroutineScope(Dispatchers.Main).launch {
+                    while (isActive) {
+                        repository.requestPreviewRefresh()
+                        delay(2)
+                    }
+                }
+            runBlocking(Dispatchers.Main) {
+                repository.setLayerPixels(layer, PixelBuffer.filled(1024, 1024, Color.RED), "Redraw fixture")
+            }
+            // The producer is deliberately still running. Cancellation of every in-flight frame
+            // used to starve this update until input stopped. This is not a frame-rate benchmark.
+            awaitColor(canvas, Color.RED)
+        } finally {
+            runBlocking { producer?.cancelAndJoin() }
+            scenario.close()
+            runBlocking(Dispatchers.Main) { repository.dispose() }
+            storage.deleteProjectFiles(projectId)
+        }
+    }
+
+    private fun installCanvas(
+        scenario: ActivityScenario<MainActivity>,
+        layer: Long,
+        size: Int,
+        input: EditorInput,
+    ): ArtFlowCanvasView {
+        var view: ArtFlowCanvasView? = null
+        scenario.onActivity { activity ->
+            val container = activity.findViewById<FrameLayout>(android.R.id.content)
+            container.removeAllViews()
+            val canvas =
+                ArtFlowCanvasView(activity).apply {
+                    layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                    attachToCanvas(size, size, 72, Color.WHITE)
+                    setActiveLayerId(layer)
+                    setEditorInput(input)
+                    setOnionSkinEnabled(false)
+                }
+            view = canvas
+            container.addView(canvas)
+        }
+        return requireNotNull(view)
+    }
+
+    private fun pointer(
+        view: ArtFlowCanvasView,
+        down: Long,
+        action: Int,
+    ) {
+        val event = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, view.width / 2f, view.height / 2f, 0)
+        try {
+            assertTrue(view.onTouchEvent(event))
+        } finally {
+            event.recycle()
         }
     }
 
