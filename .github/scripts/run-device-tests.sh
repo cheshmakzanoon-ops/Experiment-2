@@ -8,10 +8,15 @@ collect() {
   timeout 15 adb pull /sdcard/Android/data/com.artflow.studio/files/test-evidence "$root/test-evidence" || true
 }
 trap collect EXIT
-page_size=$(adb shell getconf PAGE_SIZE | tr -d "\r")
-echo "Runtime page size: $page_size" > "$root/page-size.txt"
-test "$page_size" = "${EXPECTED_PAGE_SIZE:-$page_size}" || exit 1
-./gradlew connectedDebugAndroidTest --stacktrace || exit $?
+# Older Android images have no getconf executable. Measure via Os.sysconf inside
+# the instrumentation process instead; RuntimeEnvironmentTest asserts this value.
+case "${EXPECTED_PAGE_SIZE:-}" in
+  4096|16384) ;;
+  *) echo 'EXPECTED_PAGE_SIZE must explicitly be 4096 or 16384' >&2; exit 2 ;;
+esac
+./gradlew connectedDebugAndroidTest \
+  "-Pandroid.testInstrumentationRunnerArguments.expectedPageSize=${EXPECTED_PAGE_SIZE}" \
+  --stacktrace || exit $?
 
 # Benchmark inherits release R8/resource shrinking but uses the disposable debug key.
 # This is a release-equivalent launch smoke test, NOT a publisher-signed release.

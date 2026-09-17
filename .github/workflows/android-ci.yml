@@ -103,16 +103,18 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      - name: Upload APK and bundle
-        if: success()
+      # A failed preflight must not destroy the binary needed to diagnose that failure.
+      # These are explicitly unverified outputs, never a signed production release.
+      - name: Preserve diagnostic APK and bundle
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: artflow-builds
+          name: artflow-builds-unverified
           path: |
             app/build/outputs/apk/debug/*.apk
             app/build/outputs/bundle/release/*.aab
             app/build/outputs/mapping/release/mapping.txt
-          if-no-files-found: error
+          if-no-files-found: ignore
           retention-days: 14
 
   device-tests:
