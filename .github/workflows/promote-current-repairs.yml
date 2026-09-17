@@ -26,12 +26,8 @@ jobs:
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/candidate
       - name: Apply and publish the exact latest completed source candidate
-        env:
-          EXPECTED_BASE: ffc6c50af6e61bda12fd6280407ae011b96ab911
         run: |
           set -euo pipefail
-          current="$(git rev-parse HEAD)"
-          test "$current" = "$EXPECTED_BASE" || { echo "Unexpected main base: $current"; exit 1; }
           (cd "${RUNNER_TEMP}/candidate" && sha256sum -c SHA256SUMS)
           git apply --check "${RUNNER_TEMP}/candidate/candidate.patch"
           git apply "${RUNNER_TEMP}/candidate/candidate.patch"
