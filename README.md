@@ -2,7 +2,7 @@
 
 ArtFlow is an Android digital-painting application built with Kotlin and Jetpack Compose.
 It is a **working editor**: you can create a project, paint with a pressure-sensitive brush
-engine, build up layers with masks, groups and adjustments, fill and transform pixels, draw with
+engine, build up layers with masks and adjustments, fill and transform pixels, draw with
 symmetry and perspective guides, add text and frames, then save and export real files.
 
 > **Documentation accuracy note.** Earlier revisions of this README both over- and under-stated the
@@ -24,7 +24,7 @@ symmetry and perspective guides, add text and frames, then save and export real 
   `StrokeRasterizer` that turns stroke samples into dabs
 - Zoom / pan / pinch / rotation handled in `ArtFlowCanvasView.onTouchEvent`
 - **Two-finger tap = undo, three-finger tap = redo**, also handled inline in `onTouchEvent`
-- A `BitmapPixelBridge` for reading the framebuffer back into `PixelBuffer`s
+- A `BitmapPixelBridge` for lossless project rasters and platform image encoding
 - Edge-to-edge layout from API 35: the Material 3 top bars and `Scaffold` slots consume the system
   insets, and the editor's tool strip pads itself with the safe-drawing insets, so the chrome is
   not covered by the status or navigation bars
@@ -105,7 +105,7 @@ symmetry and perspective guides, add text and frames, then save and export real 
 - Export via `ArtworkExporter`: **PNG, JPEG, WebP, PDF, PSD, animated GIF, MP4 and a PNG
   frame-sequence zip**, with scale, quality, area (full canvas / frame / all frames / selection /
   trim to content) and transparency handling
-- Export publishing to the gallery plus share and view intents
+- Export publishing to the correct image/video gallery collection, Android document-picker save, and read-granted share/view intents. Editable project files are excluded from FileProvider access
 
 ### App shell
 - Project gallery: list, create, rename, delete, thumbnails, search, sort and favourites
@@ -130,7 +130,7 @@ The table below reflects the code that is currently in the repository.
 
 | Area | Status |
 |------|--------|
-| Project gallery | Implemented — list, create, rename, delete, real thumbnails, search, sort, favourites |
+| Project gallery | Implemented — list, create, rename, delete, independent artwork duplication, real thumbnails, search, sort, favourites |
 | Canvas screen + GL surface | Implemented |
 | Brush engine + parameters | Implemented via `StrokeRasterizer`/`Compositor` + `BrushParams` |
 | Brush textures | **Not implemented** — `BrushParams` carries texture fields, but no assets are bundled and nothing applies them |
@@ -149,10 +149,10 @@ The table below reflects the code that is currently in the repository.
 | Cloud sync / collaboration | **Not implemented** |
 | Reference layers | 🟡 Model + compositor support and a `· reference` label, but no control sets the flag; no reference window, no copy-from-reference |
 | Layer linking, smart objects | **Not implemented** (no UI; no smart-object concept in the model) |
-| Native C++ brush engine | Built via CMake, **never loaded** — no `System.loadLibrary` call in the Kotlin sources |
+| Native C++ brush engine | Unintegrated source prototype; not built or packaged by the application Gradle configuration |
 | Timelapse recording | **Not implemented** (the `.artflow` format reserves timelapse metadata) |
-| Instrumentation tests | A Hilt-backed launch smoke test (`AppLaunchTest`); no benchmark module (a `benchmark` build *type* exists) |
-| CI | GitHub Actions: unit tests, ktlint + detekt, debug APK and a release bundle |
+| Instrumentation tests | Launch, GL rendering, storage/recovery, independent duplication, export formats/provider access and export/privacy UI regression tests |
+| CI | GitHub Actions: JVM tests, ktlint, detekt, Android lint, APK/AAB builds and API 26/36 instrumentation; see the workflow and release evidence |
 
 One `TODO` marker remains in the source:
 
@@ -178,18 +178,19 @@ only provided them) has been deleted.
   not implemented; `MOVE`/`TRANSFORM` translate pixels only.
 - **Texture brushes.** No texture assets ship and no render path consumes the texture fields in
   `BrushParams`.
-- **The native module.** `app/src/main/jni` builds `libartflow-brush.so` through CMake, but no
-  Kotlin code loads it, so it cannot affect rendering. Building it also requires an NDK; CI and the
-  default local workflow pass `-PnoNativeBuild` to skip it.
+- **The native module.** `app/src/main/jni` remains an unintegrated C++ prototype. The application
+  no longer builds or packages that unused module. The active engine is Kotlin; no NDK or
+  `-PnoNativeBuild` switch is needed for the normal application build.
 - **Reference layers.** The flag is honoured when compositing, but no screen sets it, so the
   feature cannot actually be used.
 - **PSD import.** PSD *export* works; importing a Photoshop document does not.
 - **Cloud sync, collaboration, smart objects, layer linking UI, timelapse recording.**
 - **Analytics and crash reporting.** Deliberately absent: the app declares no `INTERNET`
   permission, which is what the privacy policy and the Play data-safety answers rely on.
-- **Benchmark module and broader test coverage.** The presentation layer, the repositories and the
-  native bridge have no automated coverage; the JVM tests cover `core/canvas`, `core/pixels` and
-  `core/symmetry`.
+- **Benchmarks and broader device coverage.** Repository, rendering, export and selected Compose
+  UI regressions now have automated tests. This is not exhaustive UI coverage or measured
+  performance on low-memory phones, physical styluses and every GPU/codec. No benchmark module
+  is present. See [release readiness](docs/RELEASE_READINESS.md) before distribution.
 
 ---
 
@@ -210,7 +211,7 @@ only provided them) has been deleted.
 - **Language**: Kotlin (there are **no Java sources**)
 - **UI**: Jetpack Compose with Material 3 (dark-first theme)
 - **Graphics**: OpenGL ES 2.0 through `GLSurfaceView` / `GLES20`, CPU-side pixel pipeline
-- **Native**: C++ via CMake + NDK — `libartflow-brush` is built but no Kotlin code loads it
+- **Native**: unintegrated C++ prototype retained as source; not part of the application build
 - **Architecture**: MVVM with a layered `domain` / `data` / `presentation` split
 - **DI**: Hilt (Dagger)
 - **Async**: Kotlin Coroutines + Flow / StateFlow
@@ -249,9 +250,9 @@ app/src/main/java/com/artflow/studio/
                                 # color,editor,export,layer}, screens/{canvas,gallery,help,settings},
                                 # theme, viewmodel
 
-app/src/main/jni/               # C++ sources built by CMakeLists.txt (never loaded from Kotlin)
+app/src/main/jni/               # Unintegrated C++ prototype, excluded from the app build
 app/src/test/                   # JVM unit tests (JUnit)
-app/src/androidTest/            # Instrumentation smoke test + Hilt test runner
+app/src/androidTest/            # Device regressions, Compose tests and Hilt test runner
 ```
 
 ---
@@ -259,99 +260,86 @@ app/src/androidTest/            # Instrumentation smoke test + Hilt test runner
 ## 🚀 Getting started
 
 ### Prerequisites
-- Android Studio Hedgehog (2023.1.1) or later, **or** a local Gradle install
-- JDK 17
-- Android SDK with API 36
-- NDK (only required to build the native `libartflow-brush` module)
+- JDK 17 and the committed Gradle 8.14.3 wrapper; no global Gradle install is needed.
+- Android SDK platform 36 and platform-tools. Set `ANDROID_HOME` or a git-ignored
+  `local.properties` containing `sdk.dir=...`.
+- An Android Studio release compatible with Android Gradle Plugin 8.10.1 when using the IDE.
+- At least 6 GB of available build memory, plus emulator memory for device tests. The daemon
+  budgets 2.5 GB heap and 1 GB metaspace, uses the in-process Kotlin compiler and two workers.
+  These are build settings, not a claim about the app's minimum device RAM.
 
-### Build
-
-The Gradle wrapper **is** committed, so a fresh clone builds with:
-
-```bash
-./gradlew assembleDebug
-```
-
-Configuration notes:
-- `minSdk = 26`, `targetSdk = 36`, `compileSdk = 36`
-- Build variants: `debug`, `release`, `benchmark`
-- Java/Kotlin target: 17
-- `app/src/main/jni/CMakeLists.txt` builds the shared library `libartflow-brush.so`; pass
-  `-PnoNativeBuild` to skip it, which is how CI builds without an NDK installed
-- `local.properties` with `sdk.dir=…` is required for a CLI build and is git-ignored
-- The release build enables R8 (`minifyEnabled`) and resource shrinking; see
-  [Building for release](#-building-for-release)
-- `gradle.properties` bounds the daemon heap (3 GB), runs the Kotlin compiler in-process and caps
-  the worker pool at 4. Those numbers are sized so that a full `assembleRelease` — R8 is the peak —
-  fits a 4 GB / 2 vCPU container instead of being OOM-killed. Raise them on a larger machine if you
-  want faster builds.
-
----
-
-## 🧪 Testing and static analysis
-
-JVM unit tests live in `app/src/test`:
+### Build and verify
 
 ```bash
-./gradlew testDebugUnitTest
+./gradlew testDebugUnitTest ktlintCheck detekt lintDebug lintRelease
+./gradlew assembleDebug bundleRelease
+./gradlew connectedDebugAndroidTest  # requires a running device/emulator, API 26 or newer
+python -m unittest discover -s .github/scripts -p 'test_*.py'
+python .github/scripts/verify_android_artifacts.py app/build/outputs/apk/debug/app-debug.apk app/build/outputs/bundle/release/app-release.aab
 ```
 
-Coverage today — three classes, all against the pure-Kotlin engines:
+On Windows use `gradlew.bat` and your Python command. Build variants are `debug`, `release` and
+`benchmark`; the last is a release-like build type, not a benchmark suite. Minimum SDK is 26,
+compile/target SDK is 36, and the Java/Kotlin bytecode target is 17. The unused C++ prototype does
+not require the NDK for these builds.
 
-- `core/pixels/PixelBufferTest` — buffer maths, blending and region operations
-- `core/canvas/CanvasOperationsTest` — resize, crop, rotate and trim maths
-- `core/symmetry/SymmetryEngineTest` — symmetry-axis generation
+### What the tests cover
 
-Instrumentation tests live in `app/src/androidTest`, currently a single Hilt-backed smoke test
-(`AppLaunchTest`) that launches `MainActivity`:
+JVM suites exercise canvas operations, pixel buffers, selections, symmetry, flood filling,
+deterministic brush/compositor behavior and image codecs. PNG tests use an independent JDK decoder;
+PSD tests cover raw/RLE output, alpha, Unicode layer names, clipping and resolution metadata.
 
-```bash
-./gradlew connectedDebugAndroidTest    # needs a device or emulator
-```
+Device suites exercise project round trips, incomplete saves, recovery, stale edit rejection,
+independent duplication and rollback, actual GL output, file-provider isolation, image/document/
+video exports, video frame timing, and selected export/privacy UI interactions. Source tests are
+not proof of passing execution: consult [release evidence](docs/RELEASE_READINESS.md) and the
+Actions reports for the exact commit and device. Legacy and modern Android storage paths differ;
+a conditional API-specific test is not evidence for the untested path.
 
-Static analysis is configured and enforced:
+`detekt` uses the existing `config/detekt/baseline.xml`; a successful run means no findings beyond
+that baseline, not that every historical finding has been eliminated. `ktlint` follows
+`.editorconfig`. No benchmark module or exhaustive physical-device test campaign is claimed.
 
-```bash
-./gradlew ktlintCheck    # Kotlin style; rules come from .editorconfig
-./gradlew detekt         # bug-prone patterns; pre-existing findings are baselined
-./gradlew lintDebug      # Android platform lint
-./gradlew check          # ktlint + detekt + platform lint
-```
-
-`detekt` reads `config/detekt/detekt.yml` and `config/detekt/baseline.xml`, so it fails only on new
-findings. There is no benchmark module, so the `benchmark` build variant has nothing to run.
+The APK/AAB preflight checks archive integrity, packaged native-library inventory and 16 KB binary
+alignment. It does not replace a 16 KB runtime test, Play's generated-split checks, signing
+verification or Play Console review.
 
 ---
 
 ## 📦 Building for release
 
-1. Generate a keystore:
-
-```bash
-keytool -genkey -v -keystore artflow-release.keystore -alias artflow -keyalg RSA -keysize 2048 -validity 10000
-```
-
-2. Create a git-ignored `keystore.properties` at the repository root:
+Keep the upload keystore outside source control. Create a git-ignored `keystore.properties` at the
+repository root:
 
 ```properties
-storeFile=/absolute/path/to/artflow-release.keystore
-storePassword=…
-keyAlias=artflow
-keyPassword=…
+storeFile=/absolute/path/to/private-upload-key.jks
+storePassword=YOUR_PRIVATE_STORE_PASSWORD
+keyAlias=YOUR_UPLOAD_ALIAS
+keyPassword=YOUR_PRIVATE_KEY_PASSWORD
 ```
 
-`app/build.gradle.kts` reads it automatically. Without the file the release build still runs and
-produces an **unsigned** APK, so a fresh clone never fails for want of a keystore. The release build
-type enables `minifyEnabled` and `isShrinkResources`, using the rules in `app/proguard-rules.pro`.
-
-3. Build:
+A relative `storeFile` is resolved from the repository root. Preserve the same upload-key identity
+for existing Play applications; do not generate a replacement casually. Never paste signing
+passwords or keys into issues, source files, build artifacts or public logs.
 
 ```bash
-./gradlew assembleRelease     # signed APK (v2 signature scheme)
-./gradlew bundleRelease       # AAB for Google Play
+./gradlew bundleRelease -PrequireReleaseSigning=true
 ```
 
-`local.properties` (SDK/NDK paths) and keystores are git-ignored — never commit them.
+The production command fails when signing inputs are missing. An incomplete properties file or a
+missing keystore also fails configuration. Without the opt-in flag and without a properties file,
+CI may deliberately build an **unsigned candidate**, which is not a Play-upload-ready artifact.
+Release builds run R8 and resource shrinking. Confirm the final bundle's signature, application ID,
+version code and packaged SDK behavior before uploading to an internal test track.
+
+The app includes an offline privacy policy in Settings; the matching public-policy source is
+[docs/privacy-policy.md](docs/privacy-policy.md). Android backup/device transfer follows device
+settings and may use the device owner's cloud account. Exported copies can be handled by external
+apps/providers. A missing network permission does not exempt an app from Play's Data safety form.
+
+See [release readiness](docs/RELEASE_READINESS.md), [store listing](docs/play-listing.md) and the
+unchanged future-feature goals in [agent.md](agent.md). Build success alone does not certify
+production readiness or completion of all 50 phases.
 
 ---
 

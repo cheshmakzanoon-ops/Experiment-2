@@ -12,6 +12,9 @@ import com.artflow.studio.domain.model.settings.ThemeMode
 import com.artflow.studio.domain.repository.ProjectRepository
 import com.artflow.studio.domain.repository.settings.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,6 +22,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -63,17 +67,25 @@ class MainViewModel
         val messageFlow: Flow<String> = messages.receiveAsFlow()
 
         private var allProjects: List<Project> = emptyList()
+        private var storageBytes = 0L
+        private val galleryErrors =
+            CoroutineExceptionHandler { _, error ->
+                Timber.e(error, "Gallery operation failed")
+                messages.trySend(error.message ?: "The operation could not be completed")
+                if (_uiState.value is MainUiState.Loading) _uiState.value = MainUiState.Error("Could not load the gallery")
+            }
 
         init {
-            viewModelScope.launch {
+            viewModelScope.launch(galleryErrors) {
                 settingsRepository.settings.collect { stored ->
                     _settings.value = stored
                     publish()
                 }
             }
-            viewModelScope.launch {
+            viewModelScope.launch(galleryErrors) {
                 projectRepository.getAllProjects().collect { projects ->
                     allProjects = projects
+                    storageBytes = withContext(Dispatchers.IO) { storage.totalStorageBytes() }
                     publish()
                 }
             }
@@ -95,7 +107,7 @@ class MainViewModel
                     GallerySort.NAME -> filtered.sortedBy { it.name.lowercase() }
                     GallerySort.SIZE -> filtered.sortedByDescending { it.width.toLong() * it.height }
                 }
-            _uiState.value = MainUiState.Success(sorted, storage.totalStorageBytes())
+            _uiState.value = MainUiState.Success(sorted, storageBytes)
         }
 
         fun setQuery(query: String) {
@@ -111,7 +123,7 @@ class MainViewModel
             dpi: Int,
             onCreated: (Long) -> Unit,
         ) {
-            viewModelScope.launch {
+            viewModelScope.launch(galleryErrors) {
                 try {
                     val now = System.currentTimeMillis()
                     val project =
@@ -125,9 +137,13 @@ class MainViewModel
                             createdAt = now,
                             modifiedAt = now,
                         )
+                    require(CanvasOperations.isSizeSafe(project.width, project.height)) { "This canvas is too large" }
+                    require(project.dpi in CanvasOperations.MIN_DPI..CanvasOperations.MAX_DPI) { "Invalid canvas DPI" }
                     val id = projectRepository.saveProject(project)
                     preset?.let { settingsRepository.setDefaultPreset(it.name) }
                     onCreated(id)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
                 } catch (error: Exception) {
                     // Saving touches Room, file storage and serialization; let programming errors
                     // (Error subclasses) crash loudly instead of being swallowed into a snackbar.
@@ -141,127 +157,120 @@ class MainViewModel
             project: Project,
             name: String,
         ) {
-            viewModelScope.launch {
+            viewModelScope.launch(galleryErrors) {
                 projectRepository.updateProject(project.copy(name = name, modifiedAt = System.currentTimeMillis()))
             }
         }
 
         fun toggleFavorite(project: Project) {
-            viewModelScope.launch { projectRepository.toggleFavorite(project.id, !project.isFavorite) }
+            viewModelScope.launch(galleryErrors) { projectRepository.toggleFavorite(project.id, !project.isFavorite) }
         }
 
         fun duplicate(project: Project) {
-            viewModelScope.launch {
-                val now = System.currentTimeMillis()
-                projectRepository.saveProject(
-                    project.copy(
-                        id = 0,
-                        name = "${project.name} copy",
-                        createdAt = now,
-                        modifiedAt = now,
-                        thumbnailPath = project.thumbnailPath,
-                    ),
-                )
+            viewModelScope.launch(galleryErrors) {
+                projectRepository.duplicateProject(project.id)
                 messages.send("Duplicated ${project.name}")
             }
         }
 
         fun delete(project: Project) {
-            viewModelScope.launch {
+            viewModelScope.launch(galleryErrors) {
                 projectRepository.deleteProjectById(project.id)
-                storage.deleteProjectFiles(project.id)
+                withContext(Dispatchers.IO) { storage.deleteProjectFiles(project.id) }
+                storageBytes = withContext(Dispatchers.IO) { storage.totalStorageBytes() }
+                publish()
                 messages.send("Deleted ${project.name}")
             }
         }
 
         fun setSort(sort: GallerySort) {
-            viewModelScope.launch { settingsRepository.setGallerySort(sort) }
+            viewModelScope.launch(galleryErrors) { settingsRepository.setGallerySort(sort) }
         }
 
         fun setThemeMode(mode: ThemeMode) {
-            viewModelScope.launch { settingsRepository.setThemeMode(mode) }
+            viewModelScope.launch(galleryErrors) { settingsRepository.setThemeMode(mode) }
         }
 
         fun setAccent(accent: AccentChoice) {
-            viewModelScope.launch { settingsRepository.setAccent(accent) }
+            viewModelScope.launch(galleryErrors) { settingsRepository.setAccent(accent) }
         }
 
         fun setHighContrast(enabled: Boolean) {
-            viewModelScope.launch { settingsRepository.setHighContrast(enabled) }
+            viewModelScope.launch(galleryErrors) { settingsRepository.setHighContrast(enabled) }
         }
 
         fun setReduceMotion(enabled: Boolean) {
-            viewModelScope.launch { settingsRepository.setReduceMotion(enabled) }
+            viewModelScope.launch(galleryErrors) { settingsRepository.setReduceMotion(enabled) }
         }
 
         fun setUiScale(scale: Float) {
-            viewModelScope.launch { settingsRepository.setUiScale(scale) }
+            viewModelScope.launch(galleryErrors) { settingsRepository.setUiScale(scale) }
         }
 
         fun setLargeTouchTargets(enabled: Boolean) {
-            viewModelScope.launch { settingsRepository.setLargeTouchTargets(enabled) }
+            viewModelScope.launch(galleryErrors) { settingsRepository.setLargeTouchTargets(enabled) }
         }
 
         fun setCheckerboard(enabled: Boolean) {
-            viewModelScope.launch { settingsRepository.setCheckerboard(enabled) }
+            viewModelScope.launch(galleryErrors) { settingsRepository.setCheckerboard(enabled) }
         }
 
         fun setOnionSkin(enabled: Boolean) {
-            viewModelScope.launch { settingsRepository.setOnionSkin(enabled) }
+            viewModelScope.launch(galleryErrors) { settingsRepository.setOnionSkin(enabled) }
         }
 
         fun setSymmetryGuides(enabled: Boolean) {
-            viewModelScope.launch { settingsRepository.setSymmetryGuides(enabled) }
+            viewModelScope.launch(galleryErrors) { settingsRepository.setSymmetryGuides(enabled) }
         }
 
         fun setPerspectiveGuides(enabled: Boolean) {
-            viewModelScope.launch { settingsRepository.setPerspectiveGuides(enabled) }
+            viewModelScope.launch(galleryErrors) { settingsRepository.setPerspectiveGuides(enabled) }
         }
 
         fun setSnapToGuides(enabled: Boolean) {
-            viewModelScope.launch { settingsRepository.setSnapToGuides(enabled) }
+            viewModelScope.launch(galleryErrors) { settingsRepository.setSnapToGuides(enabled) }
         }
 
         fun setStylusOnly(enabled: Boolean) {
-            viewModelScope.launch { settingsRepository.setStylusOnly(enabled) }
+            viewModelScope.launch(galleryErrors) { settingsRepository.setStylusOnly(enabled) }
         }
 
         fun setHaptics(enabled: Boolean) {
-            viewModelScope.launch { settingsRepository.setHaptics(enabled) }
+            viewModelScope.launch(galleryErrors) { settingsRepository.setHaptics(enabled) }
         }
 
         fun setAutosave(
             enabled: Boolean,
             intervalMs: Long,
         ) {
-            viewModelScope.launch { settingsRepository.setAutosave(enabled, intervalMs) }
+            viewModelScope.launch(galleryErrors) { settingsRepository.setAutosave(enabled, intervalMs) }
         }
 
         fun setDefaultPreset(name: String) {
-            viewModelScope.launch { settingsRepository.setDefaultPreset(name) }
+            viewModelScope.launch(galleryErrors) { settingsRepository.setDefaultPreset(name) }
         }
 
         fun setOnboardingSeen(seen: Boolean) {
-            viewModelScope.launch { settingsRepository.setOnboardingSeen(seen) }
+            viewModelScope.launch(galleryErrors) { settingsRepository.setOnboardingSeen(seen) }
         }
 
         fun dismissTip(id: String) {
-            viewModelScope.launch { settingsRepository.dismissTip(id) }
+            viewModelScope.launch(galleryErrors) { settingsRepository.dismissTip(id) }
         }
 
         /** Brings back every tip the user has hidden, so Help can always be re-read. */
         fun restoreTips() {
-            viewModelScope.launch {
+            viewModelScope.launch(galleryErrors) {
                 settingsRepository.update { it.copy(dismissedTips = emptySet()) }
             }
         }
 
         fun clearRecentColors() {
-            viewModelScope.launch { settingsRepository.clearRecentColors() }
+            viewModelScope.launch(galleryErrors) { settingsRepository.clearRecentColors() }
         }
 
         fun storageSummary(): String {
-            val bytes = storage.totalStorageBytes()
+            val bytes = storageBytes
             // Double division: Float mantissa precision loses visible accuracy once the value
             // exceeds 16 MB of bytes.
             return when {

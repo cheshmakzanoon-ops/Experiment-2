@@ -1,6 +1,8 @@
 package com.artflow.studio.di
 
+import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.local.dao.ProjectDao
+import com.artflow.studio.data.local.database.ArtFlowDatabase
 import com.artflow.studio.data.repository.ProjectRepositoryImpl
 import com.artflow.studio.domain.repository.ProjectRepository
 import dagger.Module
@@ -17,5 +19,9 @@ import javax.inject.Singleton
 object RepositoryModule {
     @Provides
     @Singleton
-    fun provideProjectRepository(projectDao: ProjectDao): ProjectRepository = ProjectRepositoryImpl(projectDao)
+    fun provideProjectRepository(
+        projectDao: ProjectDao,
+        storage: ProjectStorage,
+        database: ArtFlowDatabase,
+    ): ProjectRepository = ProjectRepositoryImpl(projectDao, storage, database)
 }

@@ -1,6 +1,7 @@
 package com.artflow.studio.domain.model.brush
 
 import kotlinx.serialization.Serializable
+import java.util.Random
 
 /**
  * Domain model representing brush parameters
@@ -58,19 +59,21 @@ data class BrushParams(
     }
 
     /**
-     * Calculate effective size based on pressure and velocity
+     * Calculate effective size; velocity is pixels per millisecond.
+     * A caller-supplied stroke seed makes jitter reproducible. Without a generator, jitter is neutral.
      */
     fun calculateEffectiveSize(
         pressure: Float,
         velocity: Float = 0f,
+        random: Random? = null,
     ): Float {
-        var effectiveSize = size
+        var effectiveSize = size.coerceAtLeast(1f)
 
         // Apply pressure dynamics
         if (pressureToSize > 0f) {
-            val pressureFactor = applyPressureCurve(pressure, pressureCurve)
-            val sizeVariation = pressureFactor * pressureToSize
-            effectiveSize = size * (0.5f + sizeVariation)
+            val pressureFactor = applyPressureCurve(pressure.coerceIn(0f, 1f), pressureCurve)
+            val influence = pressureToSize.coerceIn(0f, 1f)
+            effectiveSize *= 1f - influence + pressureFactor * influence
         }
 
         // Apply velocity dynamics
@@ -81,7 +84,7 @@ data class BrushParams(
 
         // Apply size jitter
         if (sizeJitter > 0f) {
-            val jitterFactor = 1f + (Math.random().toFloat() * 2f - 1f) * sizeJitter
+            val jitterFactor = 1f + ((random?.nextFloat() ?: 0.5f) * 2f - 1f) * sizeJitter
             effectiveSize *= jitterFactor
         }
 
@@ -89,19 +92,21 @@ data class BrushParams(
     }
 
     /**
-     * Calculate effective opacity based on pressure and velocity
+     * Calculate effective opacity without losing the artist's base opacity.
+     * Zero is genuinely transparent, including when pressure dynamics or jitter are enabled.
      */
     fun calculateEffectiveOpacity(
         pressure: Float,
         velocity: Float = 0f,
+        random: Random? = null,
     ): Float {
-        var effectiveOpacity = opacity
+        var effectiveOpacity = opacity.coerceIn(0f, 1f)
 
         // Apply pressure dynamics
         if (pressureToOpacity > 0f) {
-            val pressureFactor = applyPressureCurve(pressure, pressureCurve)
-            val opacityVariation = pressureFactor * pressureToOpacity
-            effectiveOpacity = 0.3f + opacityVariation * 0.7f
+            val pressureFactor = applyPressureCurve(pressure.coerceIn(0f, 1f), pressureCurve)
+            val influence = pressureToOpacity.coerceIn(0f, 1f)
+            effectiveOpacity *= 1f - influence + pressureFactor * influence
         }
 
         // Apply velocity dynamics
@@ -112,11 +117,11 @@ data class BrushParams(
 
         // Apply opacity jitter
         if (opacityJitter > 0f) {
-            val jitterFactor = (Math.random().toFloat() * 2f - 1f) * opacityJitter
-            effectiveOpacity = (effectiveOpacity + jitterFactor).coerceIn(0.1f, 1f)
+            val jitterFactor = ((random?.nextFloat() ?: 0.5f) * 2f - 1f) * opacityJitter
+            effectiveOpacity *= 1f + jitterFactor
         }
 
-        return effectiveOpacity.coerceIn(0.01f, 1f)
+        return effectiveOpacity.coerceIn(0f, 1f)
     }
 
     /**
@@ -147,6 +152,7 @@ data class BrushParams(
         baseColor: Int,
         pressure: Float = 1f,
         velocity: Float = 0f,
+        random: Random? = null,
     ): Int {
         if (hueJitter <= 0f &&
             saturationJitter <= 0f &&
@@ -163,7 +169,7 @@ data class BrushParams(
 
         // Apply hue jitter
         if (hueJitter > 0f) {
-            val hueShift = (Math.random().toFloat() * 2f - 1f) * hueJitter * 360f
+            val hueShift = ((random?.nextFloat() ?: 0.5f) * 2f - 1f) * hueJitter * 360f
             hsv[0] = (hsv[0] + hueShift) % 360f
             if (hsv[0] < 0f) hsv[0] += 360f
         }
@@ -177,19 +183,19 @@ data class BrushParams(
 
         // Apply saturation jitter
         if (saturationJitter > 0f) {
-            val satShift = (Math.random().toFloat() * 2f - 1f) * saturationJitter
+            val satShift = ((random?.nextFloat() ?: 0.5f) * 2f - 1f) * saturationJitter
             hsv[1] = (hsv[1] + satShift).coerceIn(0f, 1f)
         }
 
         // Apply brightness jitter
         if (brightnessJitter > 0f) {
-            val brightShift = (Math.random().toFloat() * 2f - 1f) * brightnessJitter
+            val brightShift = ((random?.nextFloat() ?: 0.5f) * 2f - 1f) * brightnessJitter
             hsv[2] = (hsv[2] + brightShift).coerceIn(0f, 1f)
         }
 
         // Apply pressure-based color dynamics
         if (colorPressure) {
-            val pressureFactor = applyPressureCurve(pressure, pressureCurve)
+            val pressureFactor = applyPressureCurve(pressure.coerceIn(0f, 1f), pressureCurve)
             hsv[2] *= (0.5f + pressureFactor * 0.5f) // Darker at low pressure
         }
 

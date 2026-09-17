@@ -6,6 +6,8 @@ import android.graphics.Canvas
 import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Region
+import com.artflow.studio.core.canvas.CanvasOperations
+import com.artflow.studio.core.export.PngCodec
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
 import java.io.ByteArrayOutputStream
@@ -20,7 +22,14 @@ import java.io.ByteArrayOutputStream
  * Bitmaps returned by [toBitmap] are always owned by the caller and must be recycled.
  */
 object BitmapPixelBridge {
-    fun toBitmap(buffer: PixelBuffer): Bitmap = Bitmap.createBitmap(buffer.pixels, buffer.width, buffer.height, Bitmap.Config.ARGB_8888)
+    fun toBitmap(
+        buffer: PixelBuffer,
+        premultiplied: Boolean = true,
+    ): Bitmap =
+        Bitmap.createBitmap(buffer.width, buffer.height, Bitmap.Config.ARGB_8888).apply {
+            setPremultiplied(premultiplied)
+            setPixels(buffer.pixels, 0, buffer.width, 0, 0, buffer.width, buffer.height)
+        }
 
     /** Copies a bitmap into a buffer. The bitmap is not recycled. */
     fun fromBitmap(bitmap: Bitmap): PixelBuffer {
@@ -32,17 +41,10 @@ object BitmapPixelBridge {
     }
 
     /** Encodes to PNG (lossless, keeps alpha). */
-    fun toPngBytes(buffer: PixelBuffer): ByteArray {
-        val bitmap = toBitmap(buffer)
-        return try {
-            ByteArrayOutputStream().use { out ->
-                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
-                out.toByteArray()
-            }
-        } finally {
-            bitmap.recycle()
-        }
-    }
+    fun toPngBytes(
+        buffer: PixelBuffer,
+        dpi: Int? = null,
+    ): ByteArray = PngCodec.encode(buffer, dpi)
 
     /**
      * Encodes to JPEG. JPEG has no alpha channel, so transparent pixels are composited over
@@ -52,20 +54,22 @@ object BitmapPixelBridge {
         buffer: PixelBuffer,
         quality: Int = 92,
         matteColor: Int = 0xFFFFFFFF.toInt(),
+        dpi: Int = 72,
     ): ByteArray {
         val flattened = PixelBuffer(buffer.width, buffer.height)
         for (i in flattened.pixels.indices) {
             flattened.pixels[i] =
                 com.artflow.studio.core.pixels.BlendModes.sourceOver(
-                    matteColor,
+                    matteColor or 0xFF000000.toInt(),
                     buffer.pixels[i],
                 )
         }
         val bitmap = toBitmap(flattened)
         return try {
             ByteArrayOutputStream().use { out ->
-                bitmap.compress(Bitmap.CompressFormat.JPEG, quality.coerceIn(1, 100), out)
-                out.toByteArray()
+                check(bitmap.compress(Bitmap.CompressFormat.JPEG, quality.coerceIn(1, 100), out)) { "JPEG encoding failed" }
+                com.artflow.studio.core.export.JpegDensity
+                    .withDpi(out.toByteArray(), dpi)
             }
         } finally {
             bitmap.recycle()
@@ -78,13 +82,13 @@ object BitmapPixelBridge {
         lossless: Boolean = true,
         quality: Int = 90,
     ): ByteArray {
-        val bitmap = toBitmap(buffer)
+        val bitmap = toBitmap(buffer, premultiplied = false)
         return try {
             ByteArrayOutputStream().use { out ->
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R && lossless) {
-                    bitmap.compress(Bitmap.CompressFormat.WEBP_LOSSLESS, 100, out)
+                    check(bitmap.compress(Bitmap.CompressFormat.WEBP_LOSSLESS, 100, out)) { "WebP encoding failed" }
                 } else {
-                    bitmap.compress(Bitmap.CompressFormat.WEBP, quality.coerceIn(1, 100), out)
+                    check(bitmap.compress(Bitmap.CompressFormat.WEBP, quality.coerceIn(1, 100), out)) { "WebP encoding failed" }
                 }
                 out.toByteArray()
             }
@@ -95,7 +99,16 @@ object BitmapPixelBridge {
 
     /** Decodes PNG/JPEG/WebP bytes into a buffer, or null when the data is not an image. */
     fun fromEncodedBytes(bytes: ByteArray): PixelBuffer? {
-        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return null
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        require(CanvasOperations.isSizeSafe(bounds.outWidth, bounds.outHeight)) { "Decoded image exceeds the canvas limits" }
+        val options =
+            BitmapFactory.Options().apply {
+                inPremultiplied = false
+                inScaled = false
+            }
+        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) ?: return null
         return try {
             fromBitmap(bitmap)
         } finally {
@@ -140,6 +153,7 @@ object BitmapPixelBridge {
         height: Int,
         maxDimension: Int,
     ): Int {
+        require(width > 0 && height > 0 && maxDimension > 0) { "Image dimensions must be positive" }
         var sampleSize = 1
         var longest = maxOf(width, height)
         while (longest / 2 >= maxDimension) {

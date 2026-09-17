@@ -5,18 +5,22 @@ package com.artflow.studio.presentation.ui.screens.canvas
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.layer.BlendMode
@@ -38,6 +42,7 @@ import com.artflow.studio.presentation.ui.components.editor.SelectionSheet
 import com.artflow.studio.presentation.ui.components.editor.TextSheet
 import com.artflow.studio.presentation.ui.components.editor.ToolStrip
 import com.artflow.studio.presentation.ui.components.export.ExportSheet
+import com.artflow.studio.presentation.ui.components.export.rememberExportActions
 import com.artflow.studio.presentation.ui.viewmodel.CanvasUiState
 import com.artflow.studio.presentation.ui.viewmodel.CanvasViewModel
 import kotlinx.coroutines.launch
@@ -84,6 +89,7 @@ fun CanvasScreen(
     val selection by viewModel.selection.collectAsState()
     val selectionCount by viewModel.selectionCount.collectAsState()
     val dirty by viewModel.dirty.collectAsState()
+    val saving by viewModel.saving.collectAsState()
     val viewScale by viewModel.viewScale.collectAsState()
     val viewRotation by viewModel.viewRotation.collectAsState()
     val viewOffsetX by viewModel.viewOffsetX.collectAsState()
@@ -93,9 +99,9 @@ fun CanvasScreen(
     val palettes by viewModel.palettes.collectAsState()
 
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
     val density = LocalDensity.current
     val snackbarHostState = remember { SnackbarHostState() }
+    val exportActions = rememberExportActions(viewModel)
 
     var panel by remember { mutableStateOf(EditorPanel.NONE) }
     var canvasView by remember { mutableStateOf<ArtFlowCanvasView?>(null) }
@@ -105,6 +111,25 @@ fun CanvasScreen(
     var showRecoveryDialog by remember { mutableStateOf(false) }
     var showBrushEditor by remember { mutableStateOf(false) }
     var showExitConfirm by remember { mutableStateOf(false) }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, canvasView) {
+        val view = canvasView
+        val observer =
+            LifecycleEventObserver { _, event ->
+                when (event) {
+                    Lifecycle.Event.ON_START -> view?.resumeRendering()
+                    Lifecycle.Event.ON_STOP -> {
+                        view?.cancelActiveGesture()
+                        view?.pauseRendering()
+                        viewModel.saveRecoveryOnBackground()
+                    }
+                    else -> Unit
+                }
+            }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     LaunchedEffect(projectId) { viewModel.open(projectId) }
 
@@ -160,7 +185,7 @@ fun CanvasScreen(
                     IconButton(onClick = viewModel::redo, enabled = history.canRedo) {
                         Icon(Icons.Default.Redo, contentDescription = "Redo")
                     }
-                    IconButton(onClick = { viewModel.save() }) {
+                    IconButton(onClick = { viewModel.save() }, enabled = !saving && ready != null) {
                         Icon(
                             imageVector = if (dirty) Icons.Default.Save else Icons.Default.CloudDone,
                             contentDescription = "Save",
@@ -202,6 +227,7 @@ fun CanvasScreen(
                         modifier =
                             Modifier
                                 .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
                                 .padding(horizontal = 12.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -449,9 +475,7 @@ fun CanvasScreen(
                             previewBytes = previewBytes,
                             exportState = exportState,
                             onExport = { viewModel.export(it) },
-                            onShare = { result -> context.startActivity(viewModel.shareIntent(result)) },
-                            onSaveToGallery = { viewModel.exportToGallery(it) },
-                            onView = { result -> context.startActivity(viewModel.viewIntent(result)) },
+                            actions = exportActions,
                             onDismissResult = { viewModel.resetExportState() },
                         )
                     EditorPanel.QUICK ->
@@ -507,10 +531,8 @@ fun CanvasScreen(
 
     if (showRecoveryDialog) {
         AlertDialog(
-            onDismissRequest = {
-                showRecoveryDialog = false
-                viewModel.dismissRecovery()
-            },
+            // A tap outside the dialog or system Back must never delete recoverable artwork.
+            onDismissRequest = {},
             title = { Text("Autosave found") },
             text = {
                 Text("ArtFlow closed unexpectedly the last time this project was open. Recover the autosaved version?")
@@ -532,23 +554,26 @@ fun CanvasScreen(
 
     if (showExitConfirm) {
         AlertDialog(
-            onDismissRequest = { showExitConfirm = false },
+            onDismissRequest = { if (!saving) showExitConfirm = false },
             title = { Text("Save changes?") },
             text = { Text("This project has unsaved changes.") },
             confirmButton = {
-                TextButton(onClick = {
-                    viewModel.save()
-                    showExitConfirm = false
-                    onNavigateBack()
-                }) { Text("Save and leave") }
+                TextButton(enabled = !saving, onClick = {
+                    viewModel.save {
+                        showExitConfirm = false
+                        onNavigateBack()
+                    }
+                }) { Text(if (saving) "Saving…" else "Save and leave") }
             },
             dismissButton = {
                 Row {
-                    TextButton(onClick = { showExitConfirm = false }) { Text("Stay") }
-                    TextButton(onClick = {
-                        showExitConfirm = false
-                        onNavigateBack()
-                    }) { Text("Leave") }
+                    TextButton(enabled = !saving, onClick = { showExitConfirm = false }) { Text("Stay") }
+                    TextButton(enabled = !saving, onClick = {
+                        viewModel.discardChanges {
+                            showExitConfirm = false
+                            onNavigateBack()
+                        }
+                    }) { Text("Discard and leave") }
                 }
             },
         )

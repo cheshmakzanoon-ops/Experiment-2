@@ -1,91 +1,103 @@
 # Google Play store listing — ArtFlow
 
-Copy and assets for the Play Console listing. Everything below describes only features the app
-actually ships (see the README's project-status table); do not advertise anything from the README's
-"Known gaps" — layer groups, rotate/scale transform, texture brushes or the native engine — until
-it lands.
+Draft listing for the implemented offline editor. Publish only after the release gates in
+[RELEASE_READINESS.md](RELEASE_READINESS.md) are satisfied. The development goals in `agent.md`
+remain goals, not a claim that every phase has been delivered.
 
 ## App details
 
-| Field | Value |
+| Field | Draft value |
 |---|---|
 | App name | ArtFlow: Digital Art Studio |
-| Category | `ART_AND_DESIGN` |
-| Tags | Drawing, Painting, Illustration, Animation |
-| Application ID | `com.artflow.studio` |
+| Category | ART_AND_DESIGN |
+| Suggested tags | Drawing, Painting, Illustration, Animation |
+| Application ID | com.artflow.studio |
 
-## Short description (80 chars max)
+Before creating the Play application, confirm ownership and availability of the application ID,
+app name, icon and store artwork. This repository cannot establish those account-level facts.
 
-> A pressure-sensitive digital art studio: layers, masks, brushes, animation and export.
+## Short description
+
+Paint, layer, mask and animate offline. Export images, documents and video.
 
 ## Full description
 
-ArtFlow is a digital painting studio built for tablets and stylus-first devices. It starts with a
-blank canvas and gives you real tools: a pressure-sensitive brush engine, a full layer stack with
-masks and adjustment layers, flood fills, gradients, symmetry and perspective guides — and it saves
-everything as an open document you can export in the format you need.
+ArtFlow is an offline digital painting studio for Android. Create a canvas, paint with a stylus
+or your finger, build up layers, and export a separate copy to share or keep.
 
-**Paint**
-- Pressure-sensitive brushes with size, opacity and colour dynamics; works with a stylus and falls
-  back to finger pressure
-- Smudge, clone stamp, healing and liquify tools
-- Paint bucket with tolerance and gap closing; linear, radial, angular and diamond gradients
-- Text and shapes rasterised onto their own layers
+PAINT AND EDIT
+Use brushes with pressure-sensitive size and opacity on supported styluses, plus smoothing,
+colour dynamics, smudge, clone, healing and liquify tools. Fill areas, add gradients, draw shapes
+and rasterise text. Choose colours with the picker, harmonies and saved palettes.
 
-**Layers that behave like layers**
-- Unlimited layer stack with blend modes, opacity, lock and alpha lock
-- Layer masks, clipping masks and non-destructive adjustment layers (curves, levels, hue, colour
-  balance and more)
-- Reorder, duplicate, merge, flatten — with thumbnails
+WORK WITH LAYERS
+Reorder, duplicate and merge layers. Adjust opacity and blend modes, protect alpha, and use
+clipping masks, layer masks, adjustments and filters. The layer count and undo history depend on
+canvas size and available memory; they are not unlimited.
 
-**Draw with structure**
-- Vertical, horizontal, quadrant and radial symmetry
-- One-, two- and three-point perspective plus isometric guides with draggable vanishing points
-- Magic-wand and lasso selections that combine with add, subtract and intersect
+DRAW WITH GUIDES
+Use symmetry and perspective guides. Select areas with geometric, lasso and magic-wand tools,
+and combine or feather selections. Move selected pixels. General scale, perspective and skew
+transforms are not included in this release.
 
-**Animate**
-- Frame-by-frame timeline with onion skinning and adjustable FPS
-- Export animations as GIF, MP4 or PNG frame sequences
+ANIMATE
+Arrange frames in a timeline, use onion skinning and preview playback. Export GIF animation,
+MP4 video or a ZIP of PNG frames. MP4 needs a compatible device encoder and uses an opaque
+background; unsupported dimensions or encoder failures are reported rather than silently saved.
 
-**Your files, your way**
-- Autosave with crash recovery; documents are open `.artflow` files (JSON + per-layer rasters)
-- Export PNG, JPEG, WebP, PDF, PSD, GIF, MP4 or a PNG frame-sequence zip — at scale, with
-  transparency, trimmed to content if you want
-- Publish straight to your device gallery or share anywhere
+SAVE AND EXPORT
+Projects are stored privately with autosave and recovery. Duplicate creates independent project
+files. Export PNG, JPEG, WebP, PDF, PSD, GIF, MP4 or PNG sequences. Save an export using the Android
+file picker, share it with another app, or publish an image or video to the gallery.
 
-**Made for the studio**
-- Full undo/redo history, two-finger tap to undo, three-finger tap to redo
-- Dark studio chrome that stays out of your artwork's way; light mode and high-contrast themes
-- Colour picker with harmonies and saved palettes
+PNG and PSD support transparency; JPEG and MP4 use an opaque background. PDF keeps the artwork's
+aspect ratio on the chosen page. PSD preserves raster layers where possible, with masks and
+filters baked into pixels. Unsupported adjustment stacks use a visible composite plus hidden
+source layers and show a warning; Photoshop adjustment-layer editing and PSD import are not
+included.
 
-ArtFlow runs entirely on your device: no account, no network access, no data collection.
+Undo and redo are available through buttons and two- and three-finger taps. Settings include
+themes, brush preferences and an offline privacy policy.
 
-## Content rating questionnaire summary
+No account, advertising, analytics or developer network connection is required. Android backup
+and device transfer follow your device settings and may use your cloud account. Exported or
+shared copies are handled by the app or document provider you choose. Keep separate copies of
+important artwork; Android backup is not guaranteed for large projects.
 
-- No violence, sex, language, gambling or user-generated sharing — a single-user offline creative
-  tool. Rating comes out `EVERYONE` / `3+`.
-- "Does this app collect or share user data?" → **No** (see `docs/privacy-policy.md`; the app has
-  no network permission, so there is nothing to declare in the Data safety form either).
+## Console declarations — publisher review required
 
-## Screenshot checklist (device, 16:9 or 9:16)
+Complete the Data safety form even when the app reports no developer collection. Review the
+final merged manifest, packaged SDKs, backup behaviour and user-initiated exports before answering.
+An absent INTERNET permission is evidence about this app's networking, not an exemption from the
+form. Internal-test-only apps have different form requirements from closed/open/production tracks.
 
-| # | Screen | Show |
-|---|---|---|
-| 1 | Editor, blank canvas | Tool strip + brush options panel open, a fresh stroke visible |
-| 2 | Layer sheet | ≥3 layers with a mask and an adjustment layer, thumbnails rendered |
-| 3 | Colour picker | Colour wheel + harmonies visible |
-| 4 | Symmetry/perspective | A radial-symmetry or 2-point-perspective guide overlay |
-| 5 | Animation timeline | Onion-skin ghosts enabled, ≥4 frames |
-| 6 | Export sheet | Format list (PNG/PSD/GIF/MP4…) with preview rendered |
-| 7 | Gallery | Grid of project thumbnails |
+Provide an accessible public privacy-policy URL in Play Console and verify its text matches
+[privacy-policy.md](privacy-policy.md) and the in-app Settings policy. A repository file is not
+proof that a Play Console field has been completed. Supply the publisher's actual contact and
+identity information; do not invent it from a GitHub account name.
 
-Feature graphic (1024×500): dark `#1A1A1A` background, the brush-and-dab launcher mark, app name,
-tagline "A digital art studio for tablets".
+Complete the content-rating and target-audience questionnaires accurately. The repository does
+not assign an IARC rating, establish eligibility for child-directed distribution, or guarantee
+approval. There is no in-app social feed; exports can be shared to other installed apps.
 
-Phone screenshots: minimum 2, max 8. 7-inch and 10-inch tablet sets are strongly recommended — this
-app's target hardware is tablets.
+## Store assets
 
-## Release notes (first release)
+Capture screenshots from the release candidate on actual supported devices: gallery, painting,
+layers and masks, colours, guides, animation and export. Do not use invented screenshots or show
+unimplemented features. Prepare the store icon, feature graphic and device-specific screenshot
+sets against the current Console asset rules. Include accessible text and show real artwork that
+you own or have permission to distribute.
 
-> First public release: painting, layers with masks and adjustments, selections, symmetry and
-> perspective guides, animation timeline, and export to PNG/JPEG/WebP/PDF/PSD/GIF/MP4.
+## Release notes draft
+
+Offline painting with layers, masks, guides and frame animation. Independent project duplication,
+autosave recovery, and image, document and video exports with Android save/share controls.
+
+## Publisher references (checked September 17, 2026)
+
+- Target API: https://support.google.com/googleplay/android-developer/answer/11926878
+- Data safety: https://support.google.com/googleplay/android-developer/answer/10787469
+- Privacy policy: https://support.google.com/googleplay/android-developer/answer/10144311
+- Android backup: https://developer.android.com/identity/data/autobackup
+
+Recheck these policies at submission; this document does not guarantee Play approval.

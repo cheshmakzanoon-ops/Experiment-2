@@ -1,6 +1,7 @@
 package com.artflow.studio.presentation.ui.viewmodel
 
 import android.content.Intent
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.artflow.studio.core.animation.AnimationTimeline
@@ -8,8 +9,10 @@ import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.color.ColorHarmony
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.color.PaletteLibrary
+import com.artflow.studio.core.export.ExportArea
 import com.artflow.studio.core.export.ExportFormat
 import com.artflow.studio.core.export.ExportOptions
+import com.artflow.studio.core.export.ExportRegion
 import com.artflow.studio.core.export.ExportResult
 import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.IntBounds
@@ -38,6 +41,8 @@ import com.artflow.studio.presentation.ui.components.canvas.EditorInput
 import com.artflow.studio.presentation.ui.components.canvas.SelectionCombineMode
 import com.artflow.studio.presentation.ui.components.canvas.ShapeKind
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -172,6 +177,8 @@ class CanvasViewModel
 
         private val _dirty = MutableStateFlow(false)
         val dirty: StateFlow<Boolean> = _dirty.asStateFlow()
+        private val _saving = MutableStateFlow(false)
+        val saving: StateFlow<Boolean> = _saving.asStateFlow()
 
         private val messages = Channel<String>(Channel.BUFFERED)
         val messageFlow: Flow<String> = messages.receiveAsFlow()
@@ -181,9 +188,17 @@ class CanvasViewModel
         private var autosaveJob: Job? = null
         private var observationJob: Job? = null
         private var currentProjectId: Long = 0L
+        private var loadJob: Job? = null
+        private var allowAutosave = true
+        private val editorErrors =
+            CoroutineExceptionHandler { _, error ->
+                Timber.e(error, "Editor operation failed")
+                _dirty.value = canvasRepository.hasUnsavedChanges()
+                notify(error.message ?: "The operation could not be completed")
+            }
 
         init {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 settingsRepository.settings.collect { stored ->
                     _settings.value = stored
                     _recentColors.value = stored.recentColors
@@ -196,7 +211,7 @@ class CanvasViewModel
                         )
                 }
             }
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 canvasRepository.timeline.collect { _timeline.value = it }
             }
         }
@@ -207,50 +222,47 @@ class CanvasViewModel
 
         fun open(projectId: Long) {
             if (currentProjectId == projectId && _uiState.value is CanvasUiState.Ready) return
+            loadJob?.cancel()
+            autosaveJob?.cancel()
+            observationJob?.cancel()
+            playbackJob?.cancel()
+            allowAutosave = true
             currentProjectId = projectId
-            viewModelScope.launch {
-                _uiState.value = CanvasUiState.Loading
-                try {
-                    val existing = projectRepository.getProjectById(projectId)
-                    project = existing
-                    val state =
-                        if (existing != null) {
-                            canvasRepository.loadOrCreate(projectId, existing.width, existing.height, existing.dpi)
-                        } else {
-                            val summary = CanvasOperations.presetByName(_settings.value.defaultPresetName)
-                            canvasRepository.loadOrCreate(
-                                projectId,
-                                summary?.width ?: DEFAULT_WIDTH,
-                                summary?.height ?: DEFAULT_HEIGHT,
-                                summary?.dpi ?: DEFAULT_DPI,
-                            )
+            loadJob =
+                viewModelScope.launch(editorErrors) {
+                    _uiState.value = CanvasUiState.Loading
+                    try {
+                        val existing = requireNotNull(projectRepository.getProjectById(projectId)) { "This artwork no longer exists" }
+                        project = existing
+                        val state = canvasRepository.loadOrCreate(projectId, existing.width, existing.height, existing.dpi)
+                        if (state == null) {
+                            _uiState.value = CanvasUiState.Error("This project could not be opened")
+                            return@launch
                         }
-                    if (state == null) {
-                        _uiState.value = CanvasUiState.Error("This project could not be opened")
-                        return@launch
+                        val recoveryAvailable = canvasRepository.hasRecovery(projectId)
+                        _uiState.value =
+                            CanvasUiState.Ready(
+                                projectId = projectId,
+                                projectName = existing?.name ?: "Untitled artwork",
+                                width = state.width,
+                                height = state.height,
+                                dpi = state.dpi,
+                                frameCount = state.frameCount,
+                                recoveryAvailable = recoveryAvailable,
+                            )
+                        refreshLayers()
+                        refreshHistory()
+                        refreshSelection()
+                        startObserving()
+                        startAutosave()
+                        Timber.d("Opened project $projectId (${state.width}x${state.height})")
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        Timber.e(error, "Failed to open project $projectId")
+                        _uiState.value = CanvasUiState.Error(error.message ?: "Failed to open the project")
                     }
-                    val recoveryAvailable = canvasRepository.hasRecovery(projectId)
-                    _uiState.value =
-                        CanvasUiState.Ready(
-                            projectId = projectId,
-                            projectName = existing?.name ?: "Untitled artwork",
-                            width = state.width,
-                            height = state.height,
-                            dpi = state.dpi,
-                            frameCount = state.frameCount,
-                            recoveryAvailable = recoveryAvailable,
-                        )
-                    refreshLayers()
-                    refreshHistory()
-                    refreshSelection()
-                    startObserving()
-                    startAutosave()
-                    Timber.d("Opened project $projectId (${state.width}x${state.height})")
-                } catch (error: Throwable) {
-                    Timber.e(error, "Failed to open project $projectId")
-                    _uiState.value = CanvasUiState.Error(error.message ?: "Failed to open the project")
                 }
-            }
         }
 
         /** Creates a project record and opens it; the gallery calls this for "New artwork". */
@@ -260,7 +272,7 @@ class CanvasViewModel
             height: Int,
             dpi: Int,
         ) {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 val now = System.currentTimeMillis()
                 val project =
                     Project(
@@ -281,7 +293,7 @@ class CanvasViewModel
         private fun startObserving() {
             observationJob?.cancel()
             observationJob =
-                viewModelScope.launch {
+                viewModelScope.launch(editorErrors) {
                     canvasRepository.observeCanvasInvalidation().collect { event ->
                         when (event) {
                             is CanvasInvalidationEvent.LayersChanged -> refreshLayers()
@@ -303,17 +315,25 @@ class CanvasViewModel
         private fun startAutosave() {
             autosaveJob?.cancel()
             autosaveJob =
-                viewModelScope.launch {
+                viewModelScope.launch(editorErrors) {
                     while (true) {
                         val settings = _settings.value
                         delay(settings.autosaveIntervalMs.coerceAtLeast(5_000L))
-                        if (!settings.autosaveEnabled) continue
+                        if (!settings.autosaveEnabled ||
+                            !allowAutosave ||
+                            (_uiState.value as? CanvasUiState.Ready)?.recoveryAvailable == true
+                        ) {
+                            continue
+                        }
                         if (currentProjectId == 0L) continue
                         if (!canvasRepository.hasUnsavedChanges()) continue
                         try {
                             canvasRepository.autosave(currentProjectId)
-                        } catch (error: Throwable) {
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
                             Timber.e(error, "Autosave failed")
+                            notify("Autosave failed; save your artwork manually: ${error.message}")
                         }
                     }
                 }
@@ -337,7 +357,8 @@ class CanvasViewModel
             val state = _uiState.value
             if (state is CanvasUiState.Ready) {
                 val frames = canvasRepository.frames().size
-                if (frames != state.frameCount) _uiState.value = state.copy(frameCount = frames)
+                val size = canvasRepository.getCanvasSize()
+                _uiState.value = state.copy(frameCount = frames, width = size.width, height = size.height, dpi = size.dpi)
             }
         }
 
@@ -358,7 +379,7 @@ class CanvasViewModel
 
         fun setColor(color: Int) {
             updateInput { it.copy(brushColor = color) }
-            viewModelScope.launch { settingsRepository.pushRecentColor(color) }
+            viewModelScope.launch(editorErrors) { settingsRepository.pushRecentColor(color) }
         }
 
         fun onColorPicked(color: Int) = setColor(color)
@@ -377,7 +398,7 @@ class CanvasViewModel
 
         fun setSnapToGuides(enabled: Boolean) {
             updateInput { it.copy(snapToGuides = enabled) }
-            viewModelScope.launch { settingsRepository.setSnapToGuides(enabled) }
+            viewModelScope.launch(editorErrors) { settingsRepository.setSnapToGuides(enabled) }
         }
 
         fun setFingerPainting(enabled: Boolean) = updateInput { it.copy(fingerPainting = enabled) }
@@ -433,7 +454,7 @@ class CanvasViewModel
         }
 
         fun notify(message: String) {
-            viewModelScope.launch { messages.send(message) }
+            viewModelScope.launch(editorErrors) { messages.send(message) }
         }
 
         // -----------------------------------------------------------------------------------------
@@ -499,7 +520,7 @@ class CanvasViewModel
         }
 
         fun selectionFromAlphaOfActiveLayer() {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 val layerId = canvasRepository.getActiveLayerId()
                 val buffer = canvasRepository.layerPixels(layerId)
                 if (buffer == null) {
@@ -515,7 +536,7 @@ class CanvasViewModel
             color: Int,
             tolerance: Int,
         ) {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 val buffer = canvasRepository.compositeBuffer()
                 if (buffer == null) {
                     notify("Nothing to sample")
@@ -531,35 +552,35 @@ class CanvasViewModel
         // -----------------------------------------------------------------------------------------
 
         fun addLayer() {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 canvasRepository.addLayer()
                 refreshLayers()
             }
         }
 
         fun removeLayer(layerId: Long) {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 if (!canvasRepository.removeLayer(layerId)) notify("The last layer cannot be deleted")
                 refreshLayers()
             }
         }
 
         fun duplicateLayer(layerId: Long) {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 canvasRepository.duplicateLayer(layerId)
                 refreshLayers()
             }
         }
 
         fun mergeLayerDown(layerId: Long) {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 if (!canvasRepository.mergeLayerDown(layerId)) notify("Nothing to merge into")
                 refreshLayers()
             }
         }
 
         fun flattenAllLayers() {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 canvasRepository.flattenAllLayers()
                 refreshLayers()
                 notify("Layers flattened")
@@ -567,7 +588,7 @@ class CanvasViewModel
         }
 
         fun mergeVisibleLayers() {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 canvasRepository.mergeVisibleLayers()
                 refreshLayers()
                 notify("Visible layers merged")
@@ -678,11 +699,13 @@ class CanvasViewModel
             }
 
         private fun layerOp(block: suspend () -> Unit) {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 try {
                     block()
                     refreshLayers()
-                } catch (error: Throwable) {
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
                     Timber.e(error, "Layer operation failed")
                     notify(error.message ?: "The layer operation failed")
                 }
@@ -694,7 +717,7 @@ class CanvasViewModel
         // -----------------------------------------------------------------------------------------
 
         fun addAdjustmentLayer(type: AdjustmentType) {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 canvasRepository.addAdjustmentLayer(type)
                 refreshLayers()
             }
@@ -705,21 +728,21 @@ class CanvasViewModel
             key: String,
             value: Float,
         ) {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 canvasRepository.setAdjustmentParameter(layerId, key, value)
                 refreshLayers()
             }
         }
 
         fun resetAdjustment(layerId: Long) {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 canvasRepository.resetAdjustment(layerId)
                 refreshLayers()
             }
         }
 
         fun addFilterLayer(type: FilterType) {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 canvasRepository.addFilterLayer(type)
                 refreshLayers()
             }
@@ -729,14 +752,14 @@ class CanvasViewModel
             layerId: Long,
             amount: Float,
         ) {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 canvasRepository.setFilterAmount(layerId, amount)
                 refreshLayers()
             }
         }
 
         fun rasterizeFilterLayer(layerId: Long) {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 canvasRepository.rasterizeFilterLayer(layerId)
                 refreshLayers()
                 notify("Filter baked into the layer below")
@@ -748,7 +771,7 @@ class CanvasViewModel
             parameters: Map<String, Float>,
             toAllLayers: Boolean,
         ) {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 canvasRepository.applyAdjustmentToCanvas(type, parameters, toAllLayers)
                 refreshLayers()
                 notify("Adjustment applied")
@@ -765,7 +788,7 @@ class CanvasViewModel
             resample: Boolean,
             anchor: CanvasOperations.Anchor,
         ) {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 if (canvasRepository.resizeCanvas(width, height, resample, anchor)) {
                     refreshUiStateSize(width, height, canvasSize().third)
                     notify("Canvas resized to ${width}x$height")
@@ -776,14 +799,14 @@ class CanvasViewModel
         }
 
         fun cropCanvas(bounds: IntBounds) {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 canvasRepository.cropCanvas(bounds)
                 refreshUiStateSize(bounds.width, bounds.height, canvasSize().third)
             }
         }
 
         fun rotateCanvas(degrees: Int) {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 canvasRepository.rotateCanvas(degrees)
                 if (degrees % 180 != 0) {
                     val (width, height, dpi) = canvasSize()
@@ -794,14 +817,14 @@ class CanvasViewModel
         }
 
         fun flipCanvas(vertical: Boolean) {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 canvasRepository.flipCanvas(vertical)
                 notify(if (vertical) "Canvas flipped vertically" else "Canvas flipped horizontally")
             }
         }
 
         fun trimTransparent() {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 if (canvasRepository.trimTransparent()) {
                     val (width, height, dpi) = canvasSize()
                     refreshUiStateSize(width, height, dpi)
@@ -827,18 +850,18 @@ class CanvasViewModel
         }
 
         fun setCanvasDpi(dpi: Int) {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 canvasRepository.setCanvasDpi(dpi)
                 refreshUiStateSize(canvasSize().first, canvasSize().second, dpi)
             }
         }
 
         fun setCanvasBackgroundColor(color: Int) {
-            viewModelScope.launch { canvasRepository.setCanvasBackgroundColor(color) }
+            viewModelScope.launch(editorErrors) { canvasRepository.setCanvasBackgroundColor(color) }
         }
 
         fun clearCanvas(color: Int = 0) {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 canvasRepository.clearCanvas(color)
                 notify("Canvas cleared")
             }
@@ -866,7 +889,7 @@ class CanvasViewModel
         // -----------------------------------------------------------------------------------------
 
         fun addFrame(duplicateCurrent: Boolean) {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 canvasRepository.addFrame(duplicateCurrent)
                 refreshLayers()
                 refreshUiStateFrames()
@@ -874,7 +897,7 @@ class CanvasViewModel
         }
 
         fun deleteFrame(index: Int) {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 if (!canvasRepository.deleteFrame(index)) notify("The last frame cannot be deleted")
                 refreshLayers()
                 refreshUiStateFrames()
@@ -885,32 +908,32 @@ class CanvasViewModel
             from: Int,
             to: Int,
         ) {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 canvasRepository.moveFrame(from, to)
                 refreshUiStateFrames()
             }
         }
 
         fun selectFrame(index: Int) {
-            viewModelScope.launch { canvasRepository.selectFrame(index) }
+            viewModelScope.launch(editorErrors) { canvasRepository.selectFrame(index) }
         }
 
         fun setFrameDuration(
             index: Int,
             durationMs: Int,
         ) {
-            viewModelScope.launch { canvasRepository.setFrameDuration(index, durationMs) }
+            viewModelScope.launch(editorErrors) { canvasRepository.setFrameDuration(index, durationMs) }
         }
 
         fun updateAnimationSettings(settings: AnimationSettings) {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 canvasRepository.updateAnimationSettings(settings)
                 settingsRepository.setOnionSkin(settings.onionSkinFrames > 0)
             }
         }
 
         fun toggleOnionSkin(enabled: Boolean) {
-            viewModelScope.launch { settingsRepository.setOnionSkin(enabled) }
+            viewModelScope.launch(editorErrors) { settingsRepository.setOnionSkin(enabled) }
         }
 
         // -----------------------------------------------------------------------------------------
@@ -932,18 +955,19 @@ class CanvasViewModel
         // Saving and exporting
         // -----------------------------------------------------------------------------------------
 
-        fun save() {
+        fun save(onSaved: (() -> Unit)? = null) {
             val projectId = currentProjectId
-            if (projectId == 0L) return
-            viewModelScope.launch {
+            if (projectId == 0L || _saving.value) return
+            _saving.value = true
+            viewModelScope.launch(editorErrors) {
                 try {
-                    val thumbnail = canvasRepository.saveCanvas(projectId)
+                    val thumbnail = requireNotNull(canvasRepository.saveCanvas(projectId)) { "No artwork was saved" }
                     val existing = project ?: projectRepository.getProjectById(projectId)
                     if (existing != null) {
                         val size = canvasRepository.getCanvasSize()
                         val updated =
                             existing.copy(
-                                thumbnailPath = thumbnail ?: existing.thumbnailPath,
+                                thumbnailPath = thumbnail,
                                 width = size.width,
                                 height = size.height,
                                 dpi = size.dpi,
@@ -953,25 +977,54 @@ class CanvasViewModel
                         projectRepository.updateProject(updated)
                         project = updated
                     }
-                    _dirty.value = false
-                    notify("Saved")
-                } catch (error: Throwable) {
+                    _dirty.value = canvasRepository.hasUnsavedChanges()
+                    notify(if (_dirty.value) "Saved snapshot; newer edits are still unsaved" else "Saved")
+                    // Navigation is a post-commit action. Leaving immediately would cancel this
+                    // ViewModel's coroutine, interrupting the document write or gallery update.
+                    if (!_dirty.value && currentProjectId == projectId) onSaved?.invoke()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
                     Timber.e(error, "Save failed")
                     notify("Save failed: ${error.message ?: "unknown error"}")
+                } finally {
+                    _saving.value = false
                 }
             }
         }
 
-        /** Restores the autosave copy after a crash. */
+        fun saveRecoveryOnBackground() {
+            if (!allowAutosave || !_settings.value.autosaveEnabled || _saving.value) return
+            val state = _uiState.value as? CanvasUiState.Ready ?: return
+            if (state.recoveryAvailable || !canvasRepository.hasUnsavedChanges()) return
+            viewModelScope.launch(editorErrors) { canvasRepository.autosave(state.projectId) }
+        }
+
+        fun discardChanges(onDiscarded: () -> Unit) {
+            if (_saving.value) return
+            allowAutosave = false
+            viewModelScope.launch(editorErrors) {
+                try {
+                    canvasRepository.discardRecovery(currentProjectId)
+                    _dirty.value = false
+                    onDiscarded()
+                } catch (error: Exception) {
+                    allowAutosave = true
+                    throw error
+                }
+            }
+        }
+
+        /** Restores the autosave without clearing it until an explicit save succeeds. */
         fun recoverAutosave() {
             val projectId = currentProjectId
             if (projectId == 0L) return
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 val state = canvasRepository.recoverAutosave(projectId)
                 if (state == null) {
                     notify("There was nothing to recover")
                 } else {
-                    _uiState.value = (
+                    _uiState.value =
                         CanvasUiState.Ready(
                             projectId = projectId,
                             projectName = project?.name ?: "Untitled artwork",
@@ -980,53 +1033,76 @@ class CanvasViewModel
                             dpi = state.dpi,
                             frameCount = state.frameCount,
                         )
-                    )
+                    _dirty.value = true
                     refreshLayers()
                     refreshHistory()
+                    refreshSelection()
+                    startObserving()
+                    startAutosave()
                     notify("Recovered the autosaved version")
                 }
             }
         }
 
         fun dismissRecovery() {
-            val state = _uiState.value
-            if (state is CanvasUiState.Ready) _uiState.value = state.copy(recoveryAvailable = false)
+            viewModelScope.launch(editorErrors) {
+                canvasRepository.discardRecovery(currentProjectId)
+                val state = _uiState.value
+                if (state is CanvasUiState.Ready) _uiState.value = state.copy(recoveryAvailable = false)
+            }
         }
 
         /** Runs an export through the shared pipeline and keeps the result for the dialog. */
         fun export(options: ExportOptions) {
             val projectId = currentProjectId
-            if (projectId == 0L) return
-            viewModelScope.launch {
-                _exportState.value = ExportUiState.Running
+            if (projectId == 0L || _exportState.value is ExportUiState.Running) return
+            _exportState.value = ExportUiState.Running
+            viewModelScope.launch(editorErrors) {
                 try {
                     val name = project?.name ?: "Artwork"
-                    val result =
-                        if (options.format.requiresAnimation) {
-                            val frames = canvasRepository.compositeAllFrames(maxFrames = MAX_EXPORT_FRAMES)
-                            val delays = canvasRepository.frames().map { it.durationMs }
-                            exporter.exportAnimation(projectId, name, frames, delays, options)
+                    val resolved =
+                        if (options.area == ExportArea.ALL_FRAMES && options.format == ExportFormat.PNG) {
+                            options.copy(format = ExportFormat.FRAME_SEQUENCE)
                         } else {
-                            val composite =
-                                canvasRepository.compositeBuffer(
-                                    includeHidden = options.includeHiddenLayers,
-                                ) ?: run {
-                                    _exportState.value = ExportUiState.Failed("There is nothing to export")
-                                    return@launch
-                                }
+                            options
+                        }
+                    val allFrames =
+                        resolved.area == ExportArea.ALL_FRAMES ||
+                            (resolved.format.requiresAnimation && resolved.area != ExportArea.CURRENT_FRAME)
+                    require(!allFrames || resolved.format.requiresAnimation || resolved.format == ExportFormat.PDF) {
+                        "For all frames, choose PNG frames, PDF, GIF or MP4"
+                    }
+                    val snapshot =
+                        canvasRepository.exportSnapshot(
+                            allFrames,
+                            resolved.includeHiddenLayers,
+                            resolved.format == ExportFormat.PSD,
+                        )
+                    val region = ExportRegion.resolve(snapshot.frames, snapshot.selection, resolved.area)
+                    val frames = snapshot.frames.map { ExportRegion.apply(it, snapshot.selection, resolved.area, region) }
+                    val delays =
+                        resolved.animationFpsOverride?.let { fps -> List(frames.size) { 1000 / fps.coerceIn(1, 60) } }
+                            ?: snapshot.delaysMs
+                    val result =
+                        if (allFrames || resolved.format.requiresAnimation) {
+                            exporter.exportAnimation(projectId, name, frames, delays, resolved)
+                        } else {
                             val layers =
-                                canvasRepository.layerBuffers().map { (layer, buffer) ->
-                                    LayerRaster(name = layer.name, buffer = buffer, layer = layer)
+                                snapshot.layers.map { (layer, buffer) ->
+                                    LayerRaster(layer.name, ExportRegion.apply(buffer, snapshot.selection, resolved.area, region), layer)
                                 }
-                            exporter.exportStill(projectId, name, composite, layers, options)
+                            exporter.exportStill(projectId, name, frames.first(), layers, resolved, snapshot.hasAdjustmentLayers)
                         }
                     _exportState.value =
                         result.fold(
                             onSuccess = { ExportUiState.Done(it) },
                             onFailure = { ExportUiState.Failed(it.message ?: "Export failed") },
                         )
+                } catch (cancelled: CancellationException) {
+                    _exportState.value = ExportUiState.Idle
+                    throw cancelled
                 } catch (error: Exception) {
-                    // Export runs over file/codec/IO code; anything else is a programming error.
+                    // Codec/storage errors remain visible; cancellation is never reported as success.
                     Timber.e(error, "Export failed")
                     _exportState.value = ExportUiState.Failed(error.message ?: "Export failed")
                 }
@@ -1034,9 +1110,19 @@ class CanvasViewModel
         }
 
         fun exportToGallery(result: ExportResult) {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 val path = exporter.publishToGallery(result, project?.name ?: "Artwork")
                 notify(if (path != null) "Saved to the device gallery" else "Could not write to the gallery")
+            }
+        }
+
+        fun saveExportToDocument(
+            filePath: String,
+            destination: Uri,
+        ) {
+            viewModelScope.launch(editorErrors) {
+                exporter.writeToDocument(filePath, destination)
+                notify("Saved the exported file to the chosen location")
             }
         }
 
@@ -1062,7 +1148,7 @@ class CanvasViewModel
         fun previewComposite() {
             // Compositing happens in the canvas view; this exists so the export dialog can force a
             // fresh composite before it opens with a thumbnail.
-            viewModelScope.launch { canvasRepository.compositeBuffer() }
+            viewModelScope.launch(editorErrors) { canvasRepository.compositeBuffer() }
         }
 
         fun palettesFor(category: String? = null): List<Palette> =
@@ -1072,7 +1158,7 @@ class CanvasViewModel
             name: String,
             colors: List<Int>,
         ) {
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 val palette =
                     Palette(
                         id = System.currentTimeMillis(),
@@ -1086,7 +1172,7 @@ class CanvasViewModel
         }
 
         fun removePalette(paletteId: Long) {
-            viewModelScope.launch { settingsRepository.removePalette(paletteId) }
+            viewModelScope.launch(editorErrors) { settingsRepository.removePalette(paletteId) }
         }
 
         fun harmonyFor(
@@ -1095,15 +1181,15 @@ class CanvasViewModel
         ): List<Int> = ColorHarmony.harmony(baseColor, harmony)
 
         fun clearRecentColors() {
-            viewModelScope.launch { settingsRepository.clearRecentColors() }
+            viewModelScope.launch(editorErrors) { settingsRepository.clearRecentColors() }
         }
 
         fun setSymmetryGuidesVisible(visible: Boolean) {
-            viewModelScope.launch { settingsRepository.setSymmetryGuides(visible) }
+            viewModelScope.launch(editorErrors) { settingsRepository.setSymmetryGuides(visible) }
         }
 
         fun setPerspectiveGuidesVisible(visible: Boolean) {
-            viewModelScope.launch { settingsRepository.setPerspectiveGuides(visible) }
+            viewModelScope.launch(editorErrors) { settingsRepository.setPerspectiveGuides(visible) }
         }
 
         /**
@@ -1119,7 +1205,7 @@ class CanvasViewModel
                 return
             }
             playbackJob =
-                viewModelScope.launch {
+                viewModelScope.launch(editorErrors) {
                     var index = canvasRepository.activeFrameIndex()
                     var direction = 1
                     while (true) {
@@ -1149,7 +1235,7 @@ class CanvasViewModel
         fun quickFill(color: Int) {
             val projectId = currentProjectId
             if (projectId == 0L) return
-            viewModelScope.launch {
+            viewModelScope.launch(editorErrors) {
                 canvasRepository.applyRasterEdit(
                     canvasRepository.getActiveLayerId(),
                     "Fill layer",
@@ -1162,6 +1248,7 @@ class CanvasViewModel
 
         override fun onCleared() {
             super.onCleared()
+            loadJob?.cancel()
             observationJob?.cancel()
             autosaveJob?.cancel()
             playbackJob?.cancel()
@@ -1172,6 +1259,5 @@ class CanvasViewModel
             const val DEFAULT_WIDTH = 1920
             const val DEFAULT_HEIGHT = 1080
             const val DEFAULT_DPI = 72
-            private const val MAX_EXPORT_FRAMES = 240
         }
     }

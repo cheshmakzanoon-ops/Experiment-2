@@ -49,6 +49,8 @@ data class Layer(
     val linkGroupId: Long? = null,
     /** Hidden from the layer list but still composited (used by text layers before rasterising). */
     val isInternal: Boolean = false,
+    /** Runtime mask presence is independent of whether its immutable PNG has been saved yet. */
+    @kotlinx.serialization.Transient val hasInMemoryMask: Boolean = false,
 ) {
     /**
      * Check if this layer can be edited
@@ -62,7 +64,9 @@ data class Layer(
     fun acceptsPaint(): Boolean = isVisible && !isLocked && !isReference && adjustmentType == null
 
     /** True when the layer has an active mask that must be applied during compositing. */
-    fun hasActiveMask(): Boolean = maskFile != null && maskEnabled
+    fun hasMask(): Boolean = hasInMemoryMask || maskFile != null
+
+    fun hasActiveMask(): Boolean = hasMask() && maskEnabled
 
     /**
      * Create a copy of this layer with modified properties
@@ -122,6 +126,7 @@ data class Layer(
             isReference = isReference,
             linkGroupId = linkGroupId,
             isInternal = isInternal,
+            hasInMemoryMask = hasInMemoryMask,
         )
 }
 

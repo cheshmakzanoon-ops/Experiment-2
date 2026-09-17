@@ -1,43 +1,43 @@
 # ArtFlow Privacy Policy
+Last updated: September 17, 2026
+Developer/project: cheshmakzanoon-ops / Experiment-2
 
-**Last updated: 2026-09-16**
+## Developer collection
+The app does not send your artwork or personal information to the developer. It has no Internet
+permission, account system, advertising, analytics or remote crash-reporting SDK. It does not
+request access to contacts, location, microphone or camera and does not scan the media library.
 
-ArtFlow ("the app") is developed to run entirely on your device.
+## Local storage
+Artwork, brushes, palettes and preferences are stored in the private app storage. Export creates a
+separate copy. Sharing, saving to a chosen document location or publishing to the gallery transfers
+only the export you selected. A receiving app or a cloud document provider may upload that copy
+under its own privacy policy.
 
-## Data we collect
+## Android backup and device transfer
+The app allows Android to back up its project files and database and transfer them to another
+device, according to your Android backup settings and provider. That service may store the data in
+your cloud account. The developer does not receive or control these backups. Platform quotas and
+device conditions can prevent backup; do not rely on it as the only copy of important artwork.
 
-**None.** The app:
-
-- has no network permission and makes no network connections;
-- contains no analytics, advertising or crash-reporting SDKs;
-- does not read your contacts, media library, location or any other personal data;
-- does not require an account.
-
-## Data stored on your device
-
-ArtFlow stores your projects, brushes, palettes and preferences in the app's private storage on
-your device. This data never leaves your device except when you explicitly export or share a file
-through Android's system share sheet or save it to your gallery.
-
-Uninstalling the app deletes all of this data.
+## Retention and deletion
+Deleting a project removes its private project files and private export copies. Uninstalling or
+clearing app storage removes private app data. Copies already saved to the gallery, another app or a
+document provider remain there until you delete them. Android may retain a backup and restore it on
+reinstall; manage those copies in your device or backup-provider settings.
 
 ## Permissions
-
-| Permission | Why |
-|---|---|
-| `WRITE_EXTERNAL_STORAGE` (Android 8–9 only) | Saving exported images and publishing to your gallery on older Android versions. Not requested on Android 10+. |
+On Android 8 and 9, WRITE_EXTERNAL_STORAGE is requested only when you choose to publish an image or
+video to the gallery. Android 10 and newer use MediaStore without that permission. Saving to a
+chosen file location uses the access grant from the Android document picker.
 
 ## Children
-
-The app does not collect any data from any user, including children under 13. It contains no ads
-and no links to social networks.
+The app has no ads or developer data collection, including for children. This notice does not assign
+a store age rating or target audience.
 
 ## Contact
-
-Questions about this policy can be opened as an issue on the project's repository.
+For privacy questions, contact the project maintainer using:
+https://github.com/cheshmakzanoon-ops/Experiment-2/issues
+Do not include private artwork or personal information in a public issue.
 
 ## Changes
-
-If a future version ever adds a feature that touches this policy (for example optional cloud
-backup), this document will be updated and the change will be called out in the release notes
-before the update ships.
+A future release that changes these practices must update this policy before distribution.

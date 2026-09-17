@@ -15,7 +15,7 @@ Before beginning Phase 1, understand these core principles:
 - **Dependency Injection**: Hilt for all dependency management
 - **Reactive Programming**: Kotlin Flow and StateFlow for reactive data streams
 - **GPU Acceleration**: OpenGL ES for rendering. The current renderer uses OpenGL ES 2.0 (`GLSurfaceView` + `GLES20`); ES 3.x and Vulkan are aspirational targets, not implemented.
-- **Native Performance**: C++ via JNI for performance-critical operations. The CMake module builds `libartflow-brush.so`, but nothing in the Kotlin render path calls it yet.
+- **Native Performance**: C++ via JNI for performance-critical operations. The C++ prototype is retained as source but excluded from the application build; the active render path is Kotlin.
 - **Test-Driven Development**: Write tests before or alongside implementation
 - **Progressive Enhancement**: Build MVP first, then add advanced features
 
@@ -38,7 +38,7 @@ phase describes · **⛔ unreachable** — the code exists but nothing calls it 
 | 25–30 | Adjustment layers, layer groups, reference layers, layer linking, filter layers, smart objects | 🟡 Adjustments (`AdjustmentProcessor`) and filter layers (`ImageFilters`, via `addFilterLayer` / `rasterizeFilterLayer`) are wired, and reference layers exist as a flag plus a label in the layer sheet — though no UI sets the flag. ⬜ Layer groups, layer-linking UI, smart objects. |
 | 31–36 | Colour picker, palettes, symmetry, perspective guides, canvas properties, quick menu | ✅ `ColorPanel`, `Palette` with `PaletteCodec` for persistence, `ColorHarmony`, `SymmetryEngine`, `PerspectiveGuide`, `CanvasOperations` and the quick menu. ⬜ Shortcut remapping and stylus-button mapping. |
 | 37–42 | Save system, PNG/JPEG export, PSD, PDF, gallery, cloud sync | ✅ Wired: `.artflow` documents (v2: per-layer rasters, frames, timelapse metadata), autosave with crash recovery, PNG/JPEG/WebP/PDF/PSD export and gallery publishing. ⬜ PSD **import**, ⬜ cloud sync. |
-| 43–50 | Animation timeline, animation export, timelapse, performance, tutorials, settings, QA, release | 🟡 Timeline, onion skinning and GIF/MP4/frame-sequence export work; settings, help centre and onboarding exist, and a Hilt instrumentation smoke test launches the app. ⬜ Timelapse recording, ⬜ analytics/crash reporting, ⬜ benchmark module (the `benchmark` build type has nothing to run), 🟡 coverage beyond the three JVM test classes. ✅ Release builds are signed when `keystore.properties` is present; CI builds the release bundle on every push. |
+| 43–50 | Animation timeline, animation export, timelapse, performance, tutorials, settings, QA, release | 🟡 Timeline, onion skinning and GIF/MP4/frame-sequence export work; settings, help centre and onboarding exist, and device regressions cover storage, rendering, duplication, exports and selected UI flows. ⬜ Timelapse recording, ⬜ analytics/crash reporting, ⬜ benchmark module (the `benchmark` build type has nothing to run), 🟡 broader physical-device and end-to-end coverage. ✅ Signing configuration is validated; production builds can require it with `-PrequireReleaseSigning=true`. CI can build unsigned candidates, which are not approved releases. |
 
 ### Known gaps
 
@@ -55,45 +55,37 @@ this document listed as dead code — `core/layer`, `core/selection`, `core/tran
 - **Texture brushes** — the texture fields in `BrushParams` are never consumed and no assets ship.
 - **Mask sources** — a mask can be created empty or from the current selection, not from layer
   alpha or a gradient.
-- **Native engine** — `libartflow-brush.so` is built by CMake but never loaded; `System.loadLibrary`
-  does not appear anywhere in the Kotlin sources.
+- **Native engine** — the C++ prototype remains unintegrated and is excluded from the app build.
 - **PSD import, cloud sync, smart objects, timelapse recording, analytics/crash reporting.**
-- **Benchmark module**, and test coverage beyond `core/canvas`, `core/pixels` and `core/symmetry`.
+- **Benchmark module** and a comprehensive physical-device, stylus, GPU and low-memory test campaign.
+  Automated coverage now also includes rendering, filling, selections, storage, recovery,
+  duplication, exports and selected Compose UI flows.
 
-### Tooling gaps
+### Verification and release evidence
 
-| Item | State |
-|------|-------|
-| CI | ✅ `.github/workflows/android-ci.yml` — unit tests, `ktlintCheck` + `detekt`, `assembleDebug -PnoNativeBuild` and a release bundle |
-| JVM unit tests | 🟡 Cover the pure-Kotlin engines in `core/pixels`, `core/canvas` and `core/symmetry`; the presentation layer, repositories and native bridge are untested |
-| Instrumentation tests | 🟡 A Hilt-backed launch smoke test (`AppLaunchTest`); no screen-level coverage |
-| Benchmark module | ⬜ None, although a `benchmark` build type exists |
-| Static analysis | ✅ ktlint 1.3.1 (root `.editorconfig`) and detekt 1.23.6 (`config/detekt/`, with a baseline) run in `./gradlew check` and in CI |
-| Release signing | ✅ Wired through a git-ignored `keystore.properties`; no keystore is committed, so a fresh clone still builds (unsigned) |
-| Analytics / crash reporting | ⬜ None (deliberate so far: the app has no network permission) |
-| Native module | ⛔ Built by CMake, never called by Kotlin |
+The phase tasks below are preserved as the original development goals. Repairs do not turn an
+unimplemented phase into a completed one. Check [README.md](README.md) for the active build and
+feature set and [docs/RELEASE_READINESS.md](docs/RELEASE_READINESS.md) for actual validation results
+and outstanding release work.
 
-### Verification
-
-The Gradle wrapper and `local.properties`-free build config are committed, so a fresh clone builds
-from the command line:
+The September 2026 reliability work adds JVM rendering/fill/selection/codec regressions and device
+coverage for persistence, recovery, GL output, independent project duplication, exports and selected
+Compose controls. The old description of only three JVM classes and one launch test is obsolete.
+Existing detekt baseline findings remain visible; checks are not disabled to pass new code.
 
 ```bash
-./gradlew testDebugUnitTest               # JVM unit tests for the pure-Kotlin engines
-./gradlew ktlintCheck detekt              # static analysis (also part of `./gradlew check`)
-./gradlew assembleDebug                   # debug APK; compiles the CMake module (needs the NDK)
-./gradlew assembleDebug -PnoNativeBuild   # same, without the NDK/CMake step
-./gradlew lintDebug                       # Android lint
-./gradlew bundleRelease -PnoNativeBuild   # release AAB through R8 (signed only with keystore.properties)
+./gradlew testDebugUnitTest ktlintCheck detekt lintDebug lintRelease
+./gradlew assembleDebug bundleRelease
+./gradlew connectedDebugAndroidTest
+./gradlew bundleRelease -PrequireReleaseSigning=true
 ```
 
-`.github/workflows/android-ci.yml` runs the unit tests, ktlint + detekt, `assembleDebug
--PnoNativeBuild` and a release bundle on every push and pull request, so the minified variant is
-covered continuously rather than only at release time. There is still no benchmark module, so the
-`benchmark` variant has nothing to run. `gradle.properties` caps the daemon heap and the worker
-count so those builds fit a 4 GB container.
-
-See the [README](README.md#-getting-started).
+The last command is for a publisher with a private upload keystore; it must fail without signing
+inputs. The first bundle command deliberately permits an unsigned CI candidate. The unused C++
+prototype is excluded from the application build, so `-PnoNativeBuild` and an NDK are no longer
+needed for the normal application. The daemon budgets 2.5 GB heap, 1 GB metaspace and two workers;
+allow at least 6 GB build memory plus emulator memory. CI builds and device tests operate on the
+exact revision identified in their reports. The `benchmark` build type is not a benchmark suite.
 
 ---
 

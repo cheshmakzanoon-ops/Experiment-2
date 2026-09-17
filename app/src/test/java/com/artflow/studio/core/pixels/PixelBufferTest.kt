@@ -12,6 +12,26 @@ class PixelBufferTest {
     private val blue = 0xFF0000FF.toInt()
 
     @Test
+    fun scalingExtendsOpaqueEdgesWithoutIntroducingTransparency() {
+        val source = PixelBuffer.filled(2, 2, red)
+        val enlarged = source.scaled(17, 19)
+        assertTrue(enlarged.pixels.all { it == red })
+        assertTrue(source.pixels.all { it == red })
+    }
+
+    @Test
+    fun scalingOnePixelPreservesItsPartialAlphaAtEveryEdge() {
+        val colour = 0x80123456.toInt()
+        assertTrue(
+            PixelBuffer
+                .filled(1, 1, colour)
+                .scaled(13, 15)
+                .pixels
+                .all { it == colour },
+        )
+    }
+
+    @Test
     fun `fill and read back every pixel`() {
         val buffer = PixelBuffer(4, 3)
         buffer.fill(red)

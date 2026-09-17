@@ -48,11 +48,22 @@ class CanvasOperationsTest {
     }
 
     @Test
-    fun `resample clamps absurd sizes instead of allocating them`() {
-        val result = CanvasOperations.resample(PixelBuffer.filled(2, 2, red), 100_000, 100_000, properties(2, 2))
+    fun `resample rejects a clamped size above the pixel budget without changing its source`() {
+        val source = PixelBuffer.filled(2, 2, red)
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            CanvasOperations.resample(source, 100_000, 100_000, properties(2, 2))
+        }
+        assertEquals(2, source.width)
+        assertEquals(2, source.height)
+        assertTrue(source.pixels.all { it == red })
+    }
 
+    @Test
+    fun `resample clamps a long thin canvas within the supported budget`() {
+        val result = CanvasOperations.resample(PixelBuffer.filled(2, 2, red), 100_000, 1, properties(2, 2))
         assertEquals(CanvasOperations.MAX_DIMENSION, result.buffer.width)
-        assertEquals(CanvasOperations.MAX_DIMENSION, result.buffer.height)
+        assertEquals(1, result.buffer.height)
+        assertTrue(result.buffer.pixels.all { it == red })
     }
 
     @Test

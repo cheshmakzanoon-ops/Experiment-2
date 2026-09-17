@@ -11,8 +11,8 @@ import com.artflow.studio.domain.model.brush.StrokePoint
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
+import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
-import javax.inject.Singleton
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.abs
@@ -35,7 +35,6 @@ import kotlin.math.sqrt
  *
  * Onion-skin frames are drawn with the same textured-quad program in a tinted, alpha-blended pass.
  */
-@Singleton
 class OpenGLCanvasRenderer
     @Inject
     constructor() : GLSurfaceView.Renderer {
@@ -51,7 +50,10 @@ class OpenGLCanvasRenderer
         private var offsetY = 0f
         private var rotationDegrees = 0f
 
+        @Volatile
         private var backgroundColor = floatArrayOf(1f, 1f, 1f, 1f)
+
+        @Volatile
         private var showCheckerboard = true
 
         // --- Programs ------------------------------------------------------------------------------
@@ -86,20 +88,22 @@ class OpenGLCanvasRenderer
 
         // --- Data staged from other threads ---------------------------------------------------------
 
-        @Volatile
-        private var pendingComposite: Bitmap? = null
+        // Ownership is transferred atomically. A producer may recycle only a superseded, unclaimed
+        // bitmap; it must never recycle one that the GL thread is uploading.
+        private val pendingComposite = AtomicReference<Bitmap?>(null)
+        private val pendingOnionSkins = AtomicReference<List<Pair<Bitmap, Float>>?>(null)
 
-        @Volatile
-        private var pendingOnionSkins: List<Pair<Bitmap, Float>> = emptyList()
+        private data class StrokeMesh(
+            val vertices: FloatArray,
+            val count: Int,
+        )
 
-        @Volatile
-        private var pendingStrokeVertices: FloatArray? = null
+        private val pendingStroke = AtomicReference<StrokeMesh?>(null)
 
-        @Volatile
-        private var pendingStrokeVertexCount = 0
-
-        private var onionDirty = true
-        private var needsRedraw = true
+        // GL-thread-owned images survive EGL context loss and can be reuploaded into the new context.
+        private var retainedComposite: Bitmap? = null
+        private var retainedOnions: List<Pair<Bitmap, Float>> = emptyList()
+        private var maxTextureSize = 2048
         private var isInitialized = false
 
         private val quadVertexBuffer: FloatBuffer =
@@ -120,6 +124,15 @@ class OpenGLCanvasRenderer
             unused: GL10?,
             config: EGLConfig?,
         ) {
+            // Texture/program names from a previous EGL context are invalid, even if their numeric
+            // values happen to be reused. Keep CPU images, but allocate all GL objects anew.
+            compositeTexture = 0
+            checkerTexture = 0
+            onionTextures.clear()
+            onionAlphas.clear()
+            val textureLimit = IntArray(1)
+            GLES20.glGetIntegerv(GLES20.GL_MAX_TEXTURE_SIZE, textureLimit, 0)
+            maxTextureSize = textureLimit[0].coerceAtLeast(2048)
             GLES20.glDisable(GLES20.GL_DEPTH_TEST)
             GLES20.glEnable(GLES20.GL_BLEND)
             GLES20.glBlendFunc(GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_ALPHA) // premultiplied
@@ -144,9 +157,7 @@ class OpenGLCanvasRenderer
             strokeViewportScaleHandle = GLES20.glGetUniformLocation(strokeProgram, "uViewportScale")
 
             checkerTexture = createCheckerboardTexture()
-            onionDirty = true
             isInitialized = true
-            needsRedraw = true
         }
 
         override fun onSurfaceChanged(
@@ -157,7 +168,6 @@ class OpenGLCanvasRenderer
             viewWidth = width
             viewHeight = height
             GLES20.glViewport(0, 0, width, height)
-            needsRedraw = true
         }
 
         override fun onDrawFrame(unused: GL10?) {
@@ -166,8 +176,8 @@ class OpenGLCanvasRenderer
             GLES20.glClearColor(0.08f, 0.08f, 0.09f, 1f)
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
 
-            if (!needsRedraw) return
-            needsRedraw = false
+            // GLSurfaceView has already scheduled this frame. A cleared framebuffer must always be
+            // repainted, including pan/zoom, expose and redundant requestRender calls.
 
             val matrix = projectionMatrix()
 
@@ -181,15 +191,11 @@ class OpenGLCanvasRenderer
             if (showCheckerboard) {
                 GLES20.glUniform1f(quadUseTextureHandle, 1f)
                 drawQuad(checkerTexture, textureRepeat = true)
-            } else {
+            }
+            val paper = backgroundColor
+            if (paper[3] > 0f) {
                 GLES20.glUniform1f(quadUseTextureHandle, 0f)
-                GLES20.glUniform4f(
-                    quadTintHandle,
-                    backgroundColor[0],
-                    backgroundColor[1],
-                    backgroundColor[2],
-                    backgroundColor[3],
-                )
+                GLES20.glUniform4f(quadTintHandle, paper[0] * paper[3], paper[1] * paper[3], paper[2] * paper[3], paper[3])
                 drawQuad(checkerTexture, textureRepeat = false)
             }
 
@@ -203,42 +209,42 @@ class OpenGLCanvasRenderer
             }
             GLES20.glUniform1f(quadAlphaHandle, 1f)
 
-            // 3. The composited artwork.
-            pendingComposite?.let { bitmap ->
-                val texture =
-                    if (compositeTexture == 0) {
-                        uploadBitmap(bitmap).also { compositeTexture = it }
-                    } else {
-                        updateBitmap(compositeTexture, bitmap)
-                        compositeTexture
-                    }
+            // 3. Upload changed artwork, but draw the retained texture on EVERY frame.
+            val incoming = pendingComposite.getAndSet(null)
+            if (incoming != null) {
+                retainedComposite?.recycle()
+                retainedComposite = incoming
+            }
+            retainedComposite?.let { bitmap ->
+                if (compositeTexture == 0) {
+                    compositeTexture = uploadBitmap(bitmap)
+                } else if (incoming != null) {
+                    updateBitmap(compositeTexture, bitmap)
+                }
                 GLES20.glUniform4f(quadTintHandle, 1f, 1f, 1f, 1f)
-                drawQuad(texture, textureRepeat = false)
-                // The upload is done; free the staging bitmap straight away.
-                bitmap.recycle()
-                pendingComposite = null
+                drawQuad(compositeTexture, textureRepeat = false)
             }
 
-            // 4. The in-progress stroke, on top of the committed artwork.
-            val vertices = pendingStrokeVertices
-            if (vertices != null && pendingStrokeVertexCount > 0) {
-                drawStrokeSegments(vertices, pendingStrokeVertexCount, matrix)
+            // 4. Vertices and count travel together, so a frame cannot read half a stroke update.
+            pendingStroke.get()?.let { mesh ->
+                if (mesh.count > 0) drawStrokeSegments(mesh.vertices, mesh.count, matrix)
             }
         }
 
-        /** Rebuilds the onion-skin textures when the ghost frames change. */
         private fun refreshOnionTextures() {
-            if (!onionDirty) return
-            onionDirty = false
+            val incoming = pendingOnionSkins.getAndSet(null)
+            if (incoming != null) {
+                retainedOnions.forEach { it.first.recycle() }
+                retainedOnions = incoming
+            }
+            if (incoming == null && onionTextures.size == retainedOnions.size) return
             onionTextures.forEach { GLES20.glDeleteTextures(1, intArrayOf(it), 0) }
             onionTextures.clear()
             onionAlphas.clear()
-            pendingOnionSkins.forEach { (bitmap, alpha) ->
+            retainedOnions.forEach { (bitmap, alpha) ->
                 onionTextures += uploadBitmap(bitmap)
                 onionAlphas += alpha
-                bitmap.recycle()
             }
-            pendingOnionSkins = emptyList()
         }
 
         // -----------------------------------------------------------------------------------------
@@ -253,25 +259,24 @@ class OpenGLCanvasRenderer
          * immediately so a fast-painting session cannot leak.
          */
         fun setComposite(buffer: PixelBuffer) {
-            pendingComposite?.recycle()
-            pendingComposite = BitmapPixelBridge.toBitmap(buffer)
-            needsRedraw = true
+            pendingComposite.getAndSet(BitmapPixelBridge.toBitmap(buffer))?.recycle()
         }
 
-        /** Draws onion-skin ghosts behind the artwork, each with its own opacity. */
         fun setOnionSkins(frames: List<Pair<PixelBuffer, Float>>) {
-            pendingOnionSkins.forEach { it.first.recycle() }
-            pendingOnionSkins = frames.map { (buffer, alpha) -> BitmapPixelBridge.toBitmap(buffer) to alpha }
-            onionDirty = true
-            needsRedraw = true
+            val bitmaps = mutableListOf<Pair<Bitmap, Float>>()
+            var published = false
+            try {
+                frames.forEach { (buffer, alpha) -> bitmaps += BitmapPixelBridge.toBitmap(buffer) to alpha.coerceIn(0f, 1f) }
+                val obsolete = pendingOnionSkins.getAndSet(bitmaps)
+                published = true // The GL thread owns these bitmaps from this point.
+                obsolete?.forEach { it.first.recycle() }
+            } finally {
+                if (!published) bitmaps.forEach { it.first.recycle() }
+            }
         }
 
         fun clearOnionSkins() {
-            if (pendingOnionSkins.isEmpty() && onionTextures.isEmpty()) return
-            pendingOnionSkins.forEach { it.first.recycle() }
-            pendingOnionSkins = emptyList()
-            onionDirty = true
-            needsRedraw = true
+            pendingOnionSkins.getAndSet(emptyList())?.forEach { it.first.recycle() }
         }
 
         /**
@@ -287,16 +292,12 @@ class OpenGLCanvasRenderer
         ) {
             val all = listOfNotNull(stroke) + symmetryCopies
             if (all.isEmpty()) {
-                pendingStrokeVertices = null
-                pendingStrokeVertexCount = 0
-                needsRedraw = true
+                pendingStroke.set(null)
                 return
             }
             val builder = StrokeVertexBuilder()
             all.forEach { builder.addStroke(it) }
-            pendingStrokeVertices = builder.toFloatArray()
-            pendingStrokeVertexCount = builder.vertexCount
-            needsRedraw = true
+            pendingStroke.set(StrokeMesh(builder.toFloatArray(), builder.vertexCount))
         }
 
         fun setCanvasSize(
@@ -306,7 +307,6 @@ class OpenGLCanvasRenderer
         ) {
             canvasWidth = max(1, width)
             canvasHeight = max(1, height)
-            needsRedraw = true
         }
 
         fun setTransformation(
@@ -319,7 +319,6 @@ class OpenGLCanvasRenderer
             this.offsetX = offsetX
             this.offsetY = offsetY
             this.rotationDegrees = rotation
-            needsRedraw = true
         }
 
         fun setBackgroundArgb(argb: Int) {
@@ -330,32 +329,29 @@ class OpenGLCanvasRenderer
                     android.graphics.Color.blue(argb) / 255f,
                     android.graphics.Color.alpha(argb) / 255f,
                 )
-            needsRedraw = true
         }
 
         fun setCheckerboardVisible(visible: Boolean) {
             showCheckerboard = visible
-            needsRedraw = true
         }
 
-        fun requestRedraw() {
-            needsRedraw = true
-        }
-
+        /** Called only AFTER GLSurfaceView has stopped its GL thread and destroyed the surface. */
         fun dispose() {
-            if (quadProgram != 0) GLES20.glDeleteProgram(quadProgram)
-            if (strokeProgram != 0) GLES20.glDeleteProgram(strokeProgram)
-            val textures = mutableListOf(compositeTexture, checkerTexture)
-            textures += onionTextures
-            textures.filter { it != 0 }.forEach { GLES20.glDeleteTextures(1, intArrayOf(it), 0) }
+            // EGL already owns destruction of context objects. Calling glDelete* here on the main
+            // thread would act on no context (or the wrong context).
             compositeTexture = 0
+            checkerTexture = 0
+            quadProgram = 0
+            strokeProgram = 0
             onionTextures.clear()
             onionAlphas.clear()
-            pendingComposite?.recycle()
-            pendingComposite = null
-            pendingOnionSkins.forEach { it.first.recycle() }
-            pendingOnionSkins = emptyList()
-            pendingStrokeVertices = null
+            pendingComposite.getAndSet(null)?.recycle()
+            pendingOnionSkins.getAndSet(null)?.forEach { it.first.recycle() }
+            retainedComposite?.recycle()
+            retainedComposite = null
+            retainedOnions.forEach { it.first.recycle() }
+            retainedOnions = emptyList()
+            pendingStroke.set(null)
             isInitialized = false
         }
 
@@ -488,7 +484,7 @@ class OpenGLCanvasRenderer
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
-            GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
+            uploadPixels(bitmap)
             return texture
         }
 
@@ -500,7 +496,28 @@ class OpenGLCanvasRenderer
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureId)
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
-            GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
+            uploadPixels(bitmap)
+        }
+
+        private fun uploadPixels(bitmap: Bitmap) {
+            val longest = maxOf(bitmap.width, bitmap.height)
+            val upload =
+                if (longest <= maxTextureSize) {
+                    bitmap
+                } else {
+                    val ratio = maxTextureSize.toFloat() / longest
+                    Bitmap.createScaledBitmap(
+                        bitmap,
+                        (bitmap.width * ratio).toInt().coerceAtLeast(1),
+                        (bitmap.height * ratio).toInt().coerceAtLeast(1),
+                        true,
+                    )
+                }
+            try {
+                GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, upload, 0)
+            } finally {
+                if (upload !== bitmap) upload.recycle()
+            }
         }
 
         /** 2x2 checkerboard for transparency, tiled across the canvas quad. */

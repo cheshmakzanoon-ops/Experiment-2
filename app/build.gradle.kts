@@ -39,6 +39,24 @@ val hasReleaseSigning =
         "keyPassword",
     ).all { !keystoreProperties.getProperty(it).isNullOrBlank() }
 
+// CI may build unsigned candidates, but a production request must never succeed unsigned.
+val requireReleaseSigning = providers.gradleProperty("requireReleaseSigning").orNull == "true"
+check(!keystorePropertiesFile.exists() || hasReleaseSigning) {
+    "keystore.properties is incomplete: storeFile, storePassword, keyAlias and keyPassword are required"
+}
+check(!requireReleaseSigning || hasReleaseSigning) {
+    "Production signing is required. Configure the private keystore.properties file before release."
+}
+if (hasReleaseSigning) {
+    check(rootProject.file(keystoreProperties.getProperty("storeFile")).isFile) {
+        "The configured release keystore does not exist"
+    }
+}
+
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 android {
     namespace = "com.artflow.studio"
     compileSdk = 36
@@ -57,7 +75,7 @@ android {
     signingConfigs {
         if (hasReleaseSigning) {
             create("release") {
-                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
                 storePassword = keystoreProperties.getProperty("storePassword")
                 keyAlias = keystoreProperties.getProperty("keyAlias")
                 keyPassword = keystoreProperties.getProperty("keyPassword")
@@ -122,6 +140,7 @@ dependencies {
     // Core Android
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.4")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
     implementation("androidx.activity:activity-compose:1.11.0")
 
     // Jetpack Compose
@@ -135,9 +154,14 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.8.5")
 
     // Hilt Dependency Injection
-    implementation("com.google.dagger:hilt-android:2.52")
-    ksp("com.google.dagger:hilt-android-compiler:2.52")
+    implementation("com.google.dagger:hilt-android:2.54")
+    ksp("com.google.dagger:hilt-android-compiler:2.54")
     implementation("androidx.hilt:hilt-navigation-compose:1.3.0")
+
+    // Portable MP4 container writing; no player, networking, or native codec dependency.
+    implementation("androidx.media3:media3-muxer:1.10.1")
+    // Update the transitive path library for current 16 KB native alignment.
+    implementation("androidx.graphics:graphics-path:1.1.0")
 
     // Room Database
     implementation("androidx.room:room-runtime:2.8.4")
@@ -164,8 +188,8 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
     androidTestImplementation("androidx.test:core:1.7.0")
-    androidTestImplementation("com.google.dagger:hilt-android-testing:2.52")
-    kspAndroidTest("com.google.dagger:hilt-android-compiler:2.52")
+    androidTestImplementation("com.google.dagger:hilt-android-testing:2.54")
+    kspAndroidTest("com.google.dagger:hilt-android-compiler:2.54")
     androidTestImplementation(composeBom)
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")

@@ -101,6 +101,40 @@ object BlendModes {
         }
     }
 
+    /** Source-atop painting: change colour without increasing or decreasing existing coverage. */
+    fun sourceAtop(
+        backdrop: Int,
+        source: Int,
+    ): Int {
+        val alpha = (backdrop ushr 24) and 0xFF
+        if (alpha == 0) return backdrop
+        return Channels.withAlpha(sourceOver(Channels.withAlpha(backdrop, 255), source), alpha)
+    }
+
+    /** Blend a clipping layer into its isolated base, preserving that base's exact alpha. */
+    fun compositeClipped(
+        dst: PixelBuffer,
+        src: PixelBuffer,
+        mode: BlendMode,
+        opacity: Float,
+    ) {
+        require(dst.width == src.width && dst.height == src.height) { "Clipping requires matching buffer sizes" }
+        val amount = opacity.coerceIn(0f, 1f)
+        if (amount <= 0f) return
+        for (i in dst.pixels.indices) {
+            val alpha = (dst.pixels[i] ushr 24) and 0xFF
+            if (alpha == 0) continue
+            val opaque = Channels.withAlpha(dst.pixels[i], 255)
+            val mixed =
+                if (mode == BlendMode.NORMAL || mode == BlendMode.PASS_THROUGH) {
+                    sourceOver(opaque, Channels.scaleAlpha(src.pixels[i], amount))
+                } else {
+                    blend(opaque, src.pixels[i], mode, amount)
+                }
+            dst.pixels[i] = Channels.withAlpha(mixed, alpha)
+        }
+    }
+
     /** Plain source-over (a.k.a. normal) compositing of unpremultiplied ARGB pixels. */
     fun sourceOver(
         backdrop: Int,

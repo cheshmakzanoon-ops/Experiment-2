@@ -22,10 +22,10 @@ import kotlin.math.sqrt
 class SelectionMask(
     val width: Int,
     val height: Int,
-    val coverage: ByteArray = ByteArray(width * height),
+    val coverage: ByteArray = ByteArray(checkedPixelCount(width, height)),
 ) {
     init {
-        require(coverage.size == width * height) {
+        require(coverage.size == checkedPixelCount(width, height)) {
             "Coverage size ${coverage.size} does not match ${width}x$height"
         }
     }
@@ -96,7 +96,7 @@ class SelectionMask(
      */
     fun expanded(amount: Int): SelectionMask {
         if (amount == 0) return copy()
-        val binary = BooleanArray(coverage.size) { coverage[it].toInt() >= 128 }
+        val binary = BooleanArray(coverage.size) { (coverage[it].toInt() and 0xFF) >= 128 }
         val result = if (amount > 0) dilate(binary, amount) else erode(binary, -amount)
         val out = SelectionMask(width, height)
         for (i in out.coverage.indices) {

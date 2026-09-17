@@ -14,7 +14,7 @@ import kotlin.math.sqrt
  */
 object Stamping {
     /** How a stamped pixel is merged into the destination. */
-    enum class Mode { SOURCE_OVER, REPLACE, ADD, SUBTRACT }
+    enum class Mode { SOURCE_OVER, REPLACE, ADD, SUBTRACT, MAX_COVERAGE }
 
     /**
      * Stamp a single soft round dab.
@@ -223,7 +223,14 @@ object Stamping {
                 if (distance > radius) continue
                 val falloff = if (distance <= inner) 1f else ((radius - distance) / edge).coerceIn(0f, 1f)
                 val index = py * target.width + px
-                val coverage = if (mask != null) mask.alphaAt(index) else 1f
+                val coverage =
+                    if (mask == null) {
+                        1f
+                    } else if (mask.width == target.width && mask.height == target.height) {
+                        mask.alphaAt(index)
+                    } else {
+                        mask.coverageAt(index % target.width, index / target.width) / 255f
+                    }
                 val effective = falloff * strength * coverage
                 if (effective <= 0f) continue
                 val sample = patch[(dy + r) * (r * 2 + 1) + (dx + r)]
@@ -313,21 +320,37 @@ object Stamping {
         alphaLock: Boolean,
         mask: SelectionMask?,
     ) {
-        val coverage = if (mask != null) mask.alphaAt(index) else 1f
-        var effective = (strength * coverage).coerceIn(0f, 1f)
+        val coverage =
+            if (mask == null) {
+                1f
+            } else if (mask.width == target.width && mask.height == target.height) {
+                mask.alphaAt(index)
+            } else {
+                mask.coverageAt(index % target.width, index / target.width) / 255f
+            }
+        val effective = (strength * coverage).coerceIn(0f, 1f)
         if (effective <= 0f) return
 
         val existing = target.pixels[index]
         if (alphaLock) {
             val dstAlpha = (existing ushr 24) and 0xFF
             if (dstAlpha == 0) return
-            effective *= dstAlpha / 255f
-            if (effective <= 0f) return
         }
 
-        target.pixels[index] =
+        val mixed =
             when (mode) {
-                Mode.SOURCE_OVER -> BlendModes.sourceOver(existing, Channels.scaleAlpha(color, effective))
+                Mode.SOURCE_OVER ->
+                    if (alphaLock) {
+                        BlendModes.sourceAtop(existing, Channels.scaleAlpha(color, effective))
+                    } else {
+                        BlendModes.sourceOver(existing, Channels.scaleAlpha(color, effective))
+                    }
+                Mode.MAX_COVERAGE -> {
+                    // A single stroke covers a pixel once. Overlapping samples must not make
+                    // pressure, opacity or feathered edges stronger merely due to sample count.
+                    val candidate = Channels.scaleAlpha(color, effective)
+                    if (Channels.alpha(candidate) >= Channels.alpha(existing)) candidate else existing
+                }
                 Mode.REPLACE -> ImageFilters.lerpArgb(existing, color, effective)
                 Mode.ADD ->
                     Channels.fromFloats(
@@ -344,6 +367,7 @@ object Stamping {
                         b = Channels.blue(existing) - Channels.blue(color) * effective,
                     )
             }
+        target.pixels[index] = if (alphaLock) Channels.withAlpha(mixed, (existing ushr 24) and 0xFF) else mixed
     }
 
     /** Signed distance helper used by the healing brush to weight its edge blend. */

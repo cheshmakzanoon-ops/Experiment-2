@@ -64,6 +64,9 @@ interface CanvasRepository {
     /** Writes the rolling autosave without touching the saved document. */
     suspend fun autosave(projectId: Long)
 
+    /** Explicitly discards only the recovery snapshot, never the saved artwork. */
+    suspend fun discardRecovery(projectId: Long)
+
     /** True when there are unsaved changes. */
     fun hasUnsavedChanges(): Boolean
 
@@ -100,6 +103,8 @@ interface CanvasRepository {
 
     fun endStroke(strokeId: Long)
 
+    fun cancelStroke(strokeId: Long)
+
     /** Strokes currently in flight, so the canvas view can render the live stroke. */
     fun activeStroke(strokeId: Long): Stroke?
 
@@ -114,9 +119,8 @@ interface CanvasRepository {
     /**
      * Asks listeners to re-composite without changing the document.
      *
-     * Interactive pixel tools (smudge, clone, heal, liquify) mutate the layer buffer directly
-     * during a gesture and call this to update the on-screen preview; nothing is written to disk
-     * until the gesture commits.
+     * Interactive pixel tools mutate a provisional session buffer. The display uses
+     * compositePreview; saving and exporting use only committed layer content.
      */
     fun requestPreviewRefresh()
 
@@ -143,19 +147,19 @@ interface CanvasRepository {
         internal val snapshotToken: Long,
     )
 
-    /** The layer's pixel buffer, loading it from disk on first access. */
+    /** A caller-owned copy of the layer's committed pixels. */
     suspend fun layerPixels(layerId: Long): PixelBuffer?
 
-    /** Starts an editing session, pushing a single undo entry for the whole gesture. */
+    /** Starts a provisional edit. Exactly one undo entry is created only on a successful commit. */
     suspend fun beginRasterEdit(layerId: Long): RasterEditSession?
 
-    /** Writes a fresh version file for the session's layer and invalidates the canvas. */
+    /** Commits a still-valid session into memory; save/autosave handle durable storage. */
     suspend fun commitRasterEdit(
         session: RasterEditSession,
         description: String,
     ): Boolean
 
-    /** Throws the session's changes away and restores the pre-gesture pixels. */
+    /** Discards only this provisional session without altering committed pixels or history. */
     suspend fun cancelRasterEdit(session: RasterEditSession)
 
     /** One-shot pixel edit: snapshots, applies [edit], persists and invalidates. */
@@ -411,6 +415,15 @@ interface CanvasRepository {
     /** Composites every frame; used by animation export and playback preview. */
     suspend fun compositeAllFrames(maxFrames: Int = 240): List<PixelBuffer>
 
+    /** Renders one frame without allocating the entire animation. */
+    suspend fun compositeFrame(
+        index: Int,
+        transparentBackground: Boolean = false,
+    ): PixelBuffer?
+
+    /** Provisional pixel-tool preview; never used by persistence or exports. */
+    suspend fun compositePreview(): PixelBuffer?
+
     // -----------------------------------------------------------------------------------------
     // Compositing and invalidation
     // -----------------------------------------------------------------------------------------
@@ -420,6 +433,13 @@ interface CanvasRepository {
         includeHidden: Boolean = false,
         applyAdjustments: Boolean = true,
     ): PixelBuffer?
+
+    /** Captures pixels, layer properties, selection and frame timing from one document revision. */
+    suspend fun exportSnapshot(
+        allFrames: Boolean,
+        includeHidden: Boolean,
+        includeLayers: Boolean,
+    ): CanvasExportSnapshot
 
     /** Layer rasters alongside their properties, for PSD export. */
     suspend fun layerBuffers(): List<Pair<Layer, PixelBuffer>>
@@ -497,3 +517,12 @@ sealed class CanvasInvalidationEvent {
         val index: Int,
     ) : CanvasInvalidationEvent()
 }
+
+/** Immutable caller-owned export data; later editor changes cannot alter this snapshot. */
+data class CanvasExportSnapshot(
+    val frames: List<PixelBuffer>,
+    val delaysMs: List<Int>,
+    val layers: List<Pair<Layer, PixelBuffer>>,
+    val selection: SelectionMask?,
+    val hasAdjustmentLayers: Boolean,
+)

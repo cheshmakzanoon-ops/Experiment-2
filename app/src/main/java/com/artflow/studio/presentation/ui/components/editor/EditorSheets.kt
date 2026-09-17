@@ -177,7 +177,7 @@ fun LayersSheet(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text("Mask", style = MaterialTheme.typography.titleSmall)
-                if (layer.maskFile == null) {
+                if (!layer.hasMask()) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = onAddMask) { Text("Add mask") }
                         Text(

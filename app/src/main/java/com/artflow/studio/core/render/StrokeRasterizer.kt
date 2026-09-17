@@ -9,6 +9,7 @@ import com.artflow.studio.core.pixels.Stamping
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.model.brush.StrokePoint
+import java.util.Random
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.max
 import kotlin.math.min
@@ -27,7 +28,7 @@ import kotlin.math.sqrt
  *   look continuous rather than scalloped.
  * - A stroke's overall opacity is applied **once** through a scratch buffer, so a semi-transparent
  *   stroke does not darken itself where its own segments overlap.
- * - Colour jitter, spacing, scatter, count and velocity/tilt dynamics are honoured per dab.
+ * - Colour jitter, spacing, scatter, count and velocity dynamics are honoured per dab.
  * - Dab placement is O(N): the spacing grid carries across segment boundaries, taper depth is
  *   accumulated along the path instead of rescanning the point list, and the path end receives at
  *   most one closing dab.
@@ -65,50 +66,38 @@ class StrokeRasterizer {
         val points = stroke.points
         if (points.isEmpty()) return
 
-        val params = stroke.brushParams
+        require(points.all { it.x.isFinite() && it.y.isFinite() && it.pressure.isFinite() }) {
+            "Stroke coordinates and pressure must be finite"
+        }
         val strokeAlpha = strokeAlpha(stroke)
         if (strokeAlpha <= 0f) return
-
+        // Global opacity is applied below exactly once. Per-sample pressure and flow stay local.
+        val params = stroke.brushParams.copy(opacity = 1f)
+        val random = Random(stroke.id)
         dabCount.set(0)
         lastDabCount = 0
 
-        // Erasing is not painting: it removes coverage, so it always goes through the scratch
-        // buffer to measure how much each pixel is covered by this one stroke.
         if (stroke.isEraser) {
-            eraseStroke(target, stroke, params, points, strokeAlpha, mask)
+            eraseStroke(target, stroke, params, points, strokeAlpha, mask, random)
             return
         }
 
-        // Fully opaque strokes can draw straight into the target; anything else needs the scratch
-        // pass so overlapping dabs do not compound the alpha.
-        if (strokeAlpha >= 0.999f) {
-            drawStrokeInto(target, stroke, params, points, 1f, alphaLock, mask)
-        } else {
-            val buffer = scratchFor(target.width, target.height)
-            buffer.clear()
-            drawStrokeInto(buffer, stroke, params, points, 1f, alphaLock = false, mask = null)
-            for (i in target.pixels.indices) {
-                val source = buffer.pixels[i]
-                if ((source ushr 24) == 0) continue
-                val coverage = mask?.alphaAt(i) ?: 1f
-                val effective = strokeAlpha * coverage
-                if (effective <= 0f) continue
+        val buffer = scratchFor(target.width, target.height)
+        buffer.clear()
+        drawStrokeInto(buffer, stroke, params, points, alphaLock = false, mask = null, random = random)
+        for (i in target.pixels.indices) {
+            val source = buffer.pixels[i]
+            if ((source ushr 24) == 0) continue
+            val coverage = selectionCoverage(mask, target, i)
+            val effective = strokeAlpha * coverage
+            if (effective <= 0f) continue
+            val paint = Channels.scaleAlpha(source, effective)
+            target.pixels[i] =
                 if (alphaLock) {
-                    val destinationAlpha = (target.pixels[i] ushr 24) and 0xFF
-                    if (destinationAlpha == 0) continue
-                    target.pixels[i] =
-                        BlendModes.sourceOver(
-                            target.pixels[i],
-                            Channels.scaleAlpha(source, effective * destinationAlpha / 255f),
-                        )
+                    BlendModes.sourceAtop(target.pixels[i], paint)
                 } else {
-                    target.pixels[i] =
-                        BlendModes.sourceOver(
-                            target.pixels[i],
-                            Channels.scaleAlpha(source, effective),
-                        )
+                    BlendModes.sourceOver(target.pixels[i], paint)
                 }
-            }
         }
         lastDabCount = dabCount.get()
     }
@@ -124,15 +113,16 @@ class StrokeRasterizer {
         points: List<StrokePoint>,
         strokeAlpha: Float,
         mask: SelectionMask?,
+        random: Random,
     ) {
         val buffer = scratchFor(target.width, target.height)
         buffer.clear()
-        drawStrokeInto(buffer, stroke, params, points, 1f, alphaLock = false, mask = null)
+        drawStrokeInto(buffer, stroke, params, points, alphaLock = false, mask = null, random = random)
         for (i in target.pixels.indices) {
             val source = buffer.pixels[i]
             val sourceCoverage = ((source ushr 24) and 0xFF) / 255f
             if (sourceCoverage <= 0f) continue
-            val selectionCoverage = mask?.alphaAt(i) ?: 1f
+            val selectionCoverage = selectionCoverage(mask, target, i)
             if (selectionCoverage <= 0f) continue
             val erase = (strokeAlpha * sourceCoverage * selectionCoverage).coerceIn(0f, 1f)
             val destination = target.pixels[i]
@@ -155,12 +145,12 @@ class StrokeRasterizer {
         stroke: Stroke,
         params: BrushParams,
         points: List<StrokePoint>,
-        alphaScale: Float,
         alphaLock: Boolean,
         mask: SelectionMask?,
+        random: Random,
     ) {
-        if (params.spacing <= 0f && points.size <= 2) {
-            drawSegment(target, stroke, params, points.first(), points.last(), alphaLock, mask)
+        if (canUseCapsule(params, points)) {
+            drawSegment(target, stroke, params, points.first(), points.last(), alphaLock, mask, random)
             return
         }
 
@@ -170,6 +160,7 @@ class StrokeRasterizer {
 
         // Spacing is expressed as a fraction of the brush size; a minimum of one dab per segment
         // keeps single-point taps visible.
+        val context = DabContext(target, stroke, params, totalLength, alphaLock, mask, random)
         val spacingPx = max(1f, params.size * params.spacing.coerceIn(0.01f, 4f))
         var carry = 0f
         var accumulatedDistance = 0f
@@ -186,24 +177,26 @@ class StrokeRasterizer {
 
             if (distance <= 0.0001f) {
                 // Duplicate sample: a single dab keeps a tap visible without double-darkening.
-                drawDabAt(target, stroke, params, previous, current, 0f, distance, accumulatedDistance, totalLength, alphaLock, mask)
+                drawDabAt(
+                    context,
+                    previous,
+                    current,
+                    0f,
+                    distance,
+                    accumulatedDistance,
+                )
                 continue
             }
 
             var travelled = carry
             while (travelled <= distance) {
                 drawDabAt(
-                    target,
-                    stroke,
-                    params,
+                    context,
                     previous,
                     current,
                     travelled / distance,
                     distance,
                     accumulatedDistance + travelled,
-                    totalLength,
-                    alphaLock,
-                    mask,
                 )
                 lastDabTravelled = travelled
                 travelled += spacingPx
@@ -213,7 +206,7 @@ class StrokeRasterizer {
         }
 
         if (points.size == 1) {
-            drawDabAt(target, stroke, params, points.first(), points.first(), 0f, 0f, 0f, totalLength, alphaLock, mask)
+            drawDabAt(context, points.first(), points.first(), 0f, 0f, 0f)
             return
         }
         // Finish exactly at the stroke end once, after the whole path — not once per segment, and
@@ -224,54 +217,66 @@ class StrokeRasterizer {
         val endDy = last.y - lastPrevious.y
         val endDistance = sqrt(endDx * endDx + endDy * endDy)
         if (endDistance > 0.0001f && lastDabTravelled != endDistance) {
-            drawDabAt(target, stroke, params, lastPrevious, last, 1f, endDistance, accumulatedDistance, totalLength, alphaLock, mask)
+            drawDabAt(
+                context,
+                lastPrevious,
+                last,
+                1f,
+                endDistance,
+                accumulatedDistance,
+            )
         }
     }
 
+    private data class DabContext(
+        val target: PixelBuffer,
+        val stroke: Stroke,
+        val params: BrushParams,
+        val totalLength: Float,
+        val alphaLock: Boolean,
+        val mask: SelectionMask?,
+        val random: Random,
+    )
+
     private fun drawDabAt(
-        target: PixelBuffer,
-        stroke: Stroke,
-        params: BrushParams,
+        context: DabContext,
         previous: StrokePoint,
         current: StrokePoint,
         t: Float,
         distance: Float,
         accumulatedDistance: Float,
-        totalLength: Float,
-        alphaLock: Boolean,
-        mask: SelectionMask?,
     ) {
+        val target = context.target
+        val stroke = context.stroke
+        val params = context.params
+        val totalLength = context.totalLength
+        val alphaLock = context.alphaLock
+        val mask = context.mask
+        val random = context.random
         val x = previous.x + (current.x - previous.x) * t
         val y = previous.y + (current.y - previous.y) * t
         val pressure = previous.pressure + (current.pressure - previous.pressure) * t
 
-        // Selection bleed: skip the dab before any rasterisation work when its centre sits
-        // outside the selection, instead of relying on post-compositing alpha scaling.
-        if (mask != null) {
-            val coverage = mask.coverageAt(x.roundToInt(), y.roundToInt())
-            if (coverage <= 0f) return
-        }
-
         // Velocity is derived from the sample spacing and timestamps so the dynamics are stable
         // regardless of how fast the digitiser reports.
         val elapsedMs = (current.timestamp - previous.timestamp).coerceAtLeast(1L).toFloat()
-        val velocity = if (distance <= 0f) 0f else distance / elapsedMs * 1000f
+        val velocity = if (distance <= 0f) 0f else distance / elapsedMs
 
-        val size = params.calculateEffectiveSize(pressure, velocity)
-        val opacity = params.calculateEffectiveOpacity(pressure, velocity)
+        val size = params.calculateEffectiveSize(pressure, velocity, random)
+        val opacity = params.calculateEffectiveOpacity(pressure, velocity, random) * params.flow.coerceIn(0f, 1f)
 
         // Tapering thins the stroke over the first and last portion of its length.
         val taper = taperFactor(params, accumulatedDistance, totalLength)
         val radius = max(0.35f, size * taper / 2f)
 
-        val color = params.applyColorJitter(stroke.color, pressure, velocity)
+        val color = params.applyColorJitter(stroke.color, pressure, velocity, random)
 
         // Scatter offsets each dab; count repeats it along a random perpendicular offset.
         val dabs = params.count.coerceIn(1, 32)
         repeat(dabs) { index ->
             val scatter = params.scatter.coerceIn(0f, 4f) * params.size
-            val jitterX = if (scatter > 0f) ((Math.random().toFloat() * 2f - 1f) * scatter / 2f) else 0f
-            val jitterY = if (scatter > 0f) ((Math.random().toFloat() * 2f - 1f) * scatter / 2f) else 0f
+            val jitterX = if (scatter > 0f) ((random.nextFloat() * 2f - 1f) * scatter / 2f) else 0f
+            val jitterY = if (scatter > 0f) ((random.nextFloat() * 2f - 1f) * scatter / 2f) else 0f
             val offsetScale = if (dabs == 1) 0f else (index / (dabs - 1f) - 0.5f) * params.size * 0.5f
             val offsetX = jitterX + offsetScale * (if (distance > 0f) -(current.y - previous.y) / distance else 0f)
             val offsetY = jitterY + offsetScale * (if (distance > 0f) (current.x - previous.x) / distance else 0f)
@@ -283,15 +288,37 @@ class StrokeRasterizer {
                 radius = radius,
                 color = Channels.withAlpha(color, (Channels.alpha(color) * opacity).roundToInt().coerceIn(0, 255)),
                 strength = 1f,
-                // Flow controls how hard each dab presses; low flow builds up gradually.
+                // Flow controls deposited coverage; repeated strokes can build it up.
                 hardness = hardnessForFlow(params),
-                mode = Stamping.Mode.SOURCE_OVER,
+                mode = Stamping.Mode.MAX_COVERAGE,
                 alphaLock = alphaLock,
                 mask = mask,
             )
             dabCount.incrementAndGet()
         }
     }
+
+    private fun canUseCapsule(
+        params: BrushParams,
+        points: List<StrokePoint>,
+    ): Boolean =
+        params.spacing <= 0f &&
+            points.size <= 2 &&
+            params.count == 1 &&
+            points.first().pressure == points.last().pressure &&
+            listOf(
+                params.scatter,
+                params.taperStart,
+                params.taperEnd,
+                params.sizeJitter,
+                params.opacityJitter,
+                params.hueJitter,
+                params.saturationJitter,
+                params.brightnessJitter,
+                params.velocityToSize,
+                params.velocityToOpacity,
+                params.velocityToHue,
+            ).all { it == 0f }
 
     private fun drawSegment(
         target: PixelBuffer,
@@ -301,20 +328,16 @@ class StrokeRasterizer {
         end: StrokePoint,
         alphaLock: Boolean,
         mask: SelectionMask?,
+        random: Random,
     ) {
-        val startSize = params.calculateEffectiveSize(start.pressure)
-        val endSize = params.calculateEffectiveSize(end.pressure)
-        val startAlpha = params.calculateEffectiveOpacity(start.pressure)
-        val endAlpha = params.calculateEffectiveOpacity(end.pressure)
+        val startSize = params.calculateEffectiveSize(start.pressure, random = random)
+        val endSize = params.calculateEffectiveSize(end.pressure, random = random)
+        val startAlpha = params.calculateEffectiveOpacity(start.pressure, random = random) * params.flow.coerceIn(0f, 1f)
+        val endAlpha = params.calculateEffectiveOpacity(end.pressure, random = random) * params.flow.coerceIn(0f, 1f)
         val averageAlpha = (startAlpha + endAlpha) / 2f
-        val color = params.applyColorJitter(stroke.color, (start.pressure + end.pressure) / 2f)
+        val color = params.applyColorJitter(stroke.color, (start.pressure + end.pressure) / 2f, random = random)
 
         if (start.x == end.x && start.y == end.y) {
-            // Selection bleed: skip the dab before rasterising anything.
-            if (mask != null) {
-                val coverage = mask.coverageAt(start.x.roundToInt(), start.y.roundToInt())
-                if (coverage <= 0f) return
-            }
             Stamping.dab(
                 target = target,
                 x = start.x,
@@ -322,6 +345,7 @@ class StrokeRasterizer {
                 radius = max(0.35f, startSize / 2f),
                 color = Channels.withAlpha(color, (Channels.alpha(color) * startAlpha).roundToInt().coerceIn(0, 255)),
                 hardness = hardnessForFlow(params),
+                mode = Stamping.Mode.MAX_COVERAGE,
                 alphaLock = alphaLock,
                 mask = mask,
             )
@@ -329,13 +353,6 @@ class StrokeRasterizer {
             return
         }
 
-        // Selection bleed: skip the whole capsule when its midpoint is outside the selection, so
-        // masking is enforced at the primitive level rather than by post-compositing alpha scaling.
-        if (mask != null) {
-            val coverage =
-                mask.coverageAt(((start.x + end.x) / 2f).roundToInt(), ((start.y + end.y) / 2f).roundToInt())
-            if (coverage <= 0f) return
-        }
         Stamping.capsule(
             target = target,
             x0 = start.x,
@@ -346,6 +363,7 @@ class StrokeRasterizer {
             radiusEnd = max(0.35f, endSize / 2f),
             color = Channels.withAlpha(color, (Channels.alpha(color) * averageAlpha).roundToInt().coerceIn(0, 255)),
             hardness = hardnessForFlow(params),
+            mode = Stamping.Mode.MAX_COVERAGE,
             alphaLock = alphaLock,
             mask = mask,
         )
@@ -381,14 +399,21 @@ class StrokeRasterizer {
         return min(startFactor, endFactor)
     }
 
-    /** Overall opacity of a stroke, derived from the dynamics applied to its points. */
-    fun strokeAlpha(stroke: Stroke): Float {
-        val params = stroke.brushParams
-        val points = stroke.points
-        if (points.isEmpty()) return params.opacity.coerceIn(0f, 1f)
-        val average = points.sumOf { params.calculateEffectiveOpacity(it.pressure).toDouble() } / points.size
-        return (average * params.opacity.coerceIn(0f, 1f).toDouble()).toFloat().coerceIn(0f, 1f)
-    }
+    /** The user-selected stroke opacity; pressure is evaluated per dab, never averaged. */
+    fun strokeAlpha(stroke: Stroke): Float = stroke.brushParams.opacity.coerceIn(0f, 1f)
+
+    private fun selectionCoverage(
+        mask: SelectionMask?,
+        target: PixelBuffer,
+        index: Int,
+    ): Float =
+        if (mask == null) {
+            1f
+        } else if (mask.width == target.width && mask.height == target.height) {
+            mask.alphaAt(index)
+        } else {
+            mask.coverageAt(index % target.width, index / target.width) / 255f
+        }
 
     private fun scratchFor(
         width: Int,

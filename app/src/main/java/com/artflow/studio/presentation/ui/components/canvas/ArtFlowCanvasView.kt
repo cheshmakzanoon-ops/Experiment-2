@@ -26,9 +26,13 @@ import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.repository.canvas.CanvasInvalidationEvent
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
@@ -128,7 +132,12 @@ class ArtFlowCanvasView
         @Inject
         lateinit var canvasRepository: CanvasRepository
 
-        private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        private val toolErrors =
+            CoroutineExceptionHandler { _, error ->
+                Timber.e(error, "Canvas operation failed")
+                onStatusMessage?.invoke(error.message ?: "The operation could not be completed")
+            }
+        private var coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate + toolErrors)
 
         // --- Editor state -------------------------------------------------------------------------
 
@@ -179,6 +188,8 @@ class ArtFlowCanvasView
         private var rasterBase: PixelBuffer? = null
         private val pendingSamples = mutableListOf<FloatArray>()
         private var pendingPixelCommit = false
+        private var pendingPixelCancel = false
+        private var pixelOpenJob: Job? = null
         private var pixelCommitDescription = ""
 
         private var smudgeSession: PixelBrushes.SmudgeSession? = null
@@ -216,26 +227,77 @@ class ArtFlowCanvasView
 
         init {
             setEGLContextClientVersion(2)
-            renderMode = RENDERMODE_WHEN_DIRTY
             isFocusableInTouchMode = true
             preserveEGLContextOnPause = true
         }
 
         override fun onAttachedToWindow() {
             super.onAttachedToWindow()
-            // Hilt injects @Inject fields after the constructor has run.
             if (!rendererAttached) {
-                rendererAttached = true
                 setRenderer(renderer)
+                renderMode = RENDERMODE_WHEN_DIRTY
+                rendererAttached = true
                 renderer.setCanvasSize(canvasWidth, canvasHeight, canvasDpi)
                 renderer.setBackgroundArgb(canvasRepository.getBackgroundColor())
             }
+            coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate + toolErrors)
+            observingInvalidations = false
             startObservingInvalidations()
+            requestRender()
+        }
+
+        fun pauseRendering() {
+            if (rendererAttached) onPause()
+        }
+
+        fun resumeRendering() {
+            if (rendererAttached) {
+                onResume()
+                requestRender()
+            }
+        }
+
+        override fun requestRender() {
+            // Compose configures the AndroidView before attachment. GLSurfaceView creates its GL
+            // thread only in setRenderer; requestRender/setRenderMode before that would throw.
+            if (rendererAttached) super.requestRender()
+        }
+
+        override fun onSizeChanged(
+            width: Int,
+            height: Int,
+            oldWidth: Int,
+            oldHeight: Int,
+        ) {
+            super.onSizeChanged(width, height, oldWidth, oldHeight)
+            val isFirstSize = oldWidth == 0 || oldHeight == 0
+            if (width > 0 && height > 0 && isFirstSize) post { fitToView() }
+        }
+
+        fun cancelActiveGesture() {
+            if (drawing) canvasRepository.cancelStroke(currentStrokeId)
+            drawing = false
+            renderer.setInProgressStroke(null)
+            pixelOpenJob?.cancel()
+            rasterSession?.let { session ->
+                coroutineScope.launch(NonCancellable, start = CoroutineStart.UNDISPATCHED) { canvasRepository.cancelRasterEdit(session) }
+            }
+            rasterSession = null
+            rasterBuffer = null
+            rasterSource = null
+            rasterBase = null
+            pixelTool = null
+            pendingSamples.clear()
+            pendingPixelCommit = false
+            pendingPixelCancel = false
+            onDragPreview?.invoke(null)
         }
 
         override fun onDetachedFromWindow() {
-            super.onDetachedFromWindow()
+            cancelActiveGesture()
             coroutineScope.cancel()
+            observingInvalidations = false
+            super.onDetachedFromWindow() // waits for the GL thread to stop
             renderer.dispose()
         }
 
@@ -245,13 +307,10 @@ class ArtFlowCanvasView
 
         /** Pushes the whole editor state; cheap enough to call on every recomposition. */
         fun setEditorInput(newInput: EditorInput) {
-            val needsRepositorySync = newInput.symmetry != input.symmetry || newInput.brushColor != input.brushColor
+            if (newInput.tool != input.tool && (drawing || pixelTool != null)) cancelActiveGesture()
             input = newInput
-            if (needsRepositorySync) {
-                canvasRepository.setStrokeColor(newInput.brushColor)
-                canvasRepository.setSymmetry(newInput.symmetry)
-            }
-            renderer.requestRedraw()
+            canvasRepository.setStrokeColor(newInput.brushColor)
+            canvasRepository.setSymmetry(newInput.symmetry)
         }
 
         fun setActiveLayerId(layerId: Long) {
@@ -265,11 +324,13 @@ class ArtFlowCanvasView
             dpi: Int,
             backgroundColor: Int,
         ) {
+            val dimensionsChanged = width != canvasWidth || height != canvasHeight
             canvasWidth = max(1, width)
             canvasHeight = max(1, height)
             canvasDpi = dpi
             renderer.setCanvasSize(canvasWidth, canvasHeight, canvasDpi)
             renderer.setBackgroundArgb(backgroundColor)
+            if (dimensionsChanged) fitToView()
             requestRender()
         }
 
@@ -284,8 +345,10 @@ class ArtFlowCanvasView
         }
 
         fun setOnionSkinEnabled(enabled: Boolean) {
+            if (enabled == onionEnabled) return
             onionEnabled = enabled
             onionDirty = true
+            if (rendererAttached) refreshOnionSkins()
             requestRender()
         }
 
@@ -538,20 +601,33 @@ class ArtFlowCanvasView
         }
 
         private suspend fun refreshComposite() {
-            val buffer =
-                withContext(Dispatchers.Default) {
-                    try {
-                        canvasRepository.compositeBuffer()
-                    } catch (error: Throwable) {
-                        Timber.e(error, "Composite failed")
-                        null
-                    }
-                }
-            if (buffer != null) renderer.setComposite(buffer)
-            requestRender()
+            val size = canvasRepository.getCanvasSize()
+            attachToCanvas(size.width, size.height, size.dpi, canvasRepository.getBackgroundColor())
+            try {
+                val buffer = canvasRepository.compositePreview()
+                if (buffer != null) renderer.setComposite(buffer)
+                requestRender()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: IllegalArgumentException) {
+                reportCompositeFailure(error)
+            } catch (error: IllegalStateException) {
+                reportCompositeFailure(error)
+            } catch (error: OutOfMemoryError) {
+                Timber.e(error, "Insufficient memory for canvas preview")
+                onStatusMessage?.invoke("Not enough memory to render this canvas. Save your artwork and reduce its size.")
+            }
         }
 
+        private fun reportCompositeFailure(error: Exception) {
+            Timber.e(error, "Composite failed")
+            onStatusMessage?.invoke("Could not update the canvas: ${error.message}")
+        }
+
+        private var onionJob: Job? = null
+
         private fun refreshOnionSkins() {
+            onionJob?.cancel()
             if (!onionEnabled) {
                 renderer.clearOnionSkins()
                 requestRender()
@@ -559,27 +635,35 @@ class ArtFlowCanvasView
             }
             if (!onionDirty) return
             onionDirty = false
-            coroutineScope.launch {
-                val frames =
-                    withContext(Dispatchers.Default) {
-                        try {
-                            canvasRepository.compositeAllFrames(maxFrames = ONION_SKIN_MAX_FRAMES)
-                        } catch (error: Throwable) {
-                            Timber.e(error, "Onion skin composite failed")
-                            emptyList()
-                        }
+            onionJob =
+                coroutineScope.launch {
+                    val state = canvasRepository.timeline.value
+                    val active = state.activeIndex
+                    val range = state.settings.onionSkinFrames.coerceIn(0, 5)
+                    val opacity = state.settings.onionSkinOpacity
+                    val ghosts = mutableListOf<Pair<PixelBuffer, Float>>()
+                    for (offset in -range..range) {
+                        if (offset == 0) continue
+                        val index = active + offset
+                        if (index !in state.frames.indices) continue
+                        val frame = canvasRepository.compositeFrame(index, transparentBackground = true) ?: continue
+                        val ratio = (1024f / maxOf(frame.width, frame.height)).coerceAtMost(1f)
+                        val preview =
+                            if (ratio < 1f) {
+                                withContext(Dispatchers.Default) {
+                                    frame.scaled(
+                                        (frame.width * ratio).toInt().coerceAtLeast(1),
+                                        (frame.height * ratio).toInt().coerceAtLeast(1),
+                                    )
+                                }
+                            } else {
+                                frame
+                            }
+                        ghosts += preview to opacity / abs(offset).toFloat()
                     }
-                val active = canvasRepository.activeFrameIndex()
-                val ghosts = mutableListOf<Pair<PixelBuffer, Float>>()
-                for (offset in -ONION_SKIN_RANGE..ONION_SKIN_RANGE) {
-                    if (offset == 0) continue
-                    val index = active + offset
-                    if (index < 0 || index >= frames.size) continue
-                    ghosts += frames[index] to ONION_SKIN_OPACITY / abs(offset).toFloat()
+                    renderer.setOnionSkins(ghosts)
+                    requestRender()
                 }
-                renderer.setOnionSkins(ghosts)
-                requestRender()
-            }
         }
 
         private fun reportHistory() {
@@ -798,7 +882,9 @@ class ArtFlowCanvasView
 
             when (tool) {
                 ToolType.BRUSH, ToolType.ERASER -> {
-                    if (drawing) canvasRepository.endStroke(currentStrokeId)
+                    if (drawing) {
+                        if (cancelled) canvasRepository.cancelStroke(currentStrokeId) else canvasRepository.endStroke(currentStrokeId)
+                    }
                     drawing = false
                     renderer.setInProgressStroke(null)
                     reportHistory()
@@ -986,7 +1072,11 @@ class ArtFlowCanvasView
         ) {
             pixelTool = tool
             pixelCommitDescription = description
+            cancelActiveGesture()
+            pixelTool = tool
+            pixelCommitDescription = description
             pendingPixelCommit = false
+            pendingPixelCancel = false
             pendingSamples.clear()
             rasterSession = null
             rasterBuffer = null
@@ -999,23 +1089,24 @@ class ArtFlowCanvasView
             moveStart = x to y
 
             val layerId = activeLayerId
-            coroutineScope.launch {
-                val session = canvasRepository.beginRasterEdit(layerId)
-                if (session == null) {
-                    pixelTool = null
-                    onStatusMessage?.invoke("This layer cannot be edited")
-                    return@launch
+            pixelOpenJob =
+                coroutineScope.launch {
+                    val session = canvasRepository.beginRasterEdit(layerId)
+                    if (session == null) {
+                        pixelTool = null
+                        onStatusMessage?.invoke("This layer cannot be edited")
+                        return@launch
+                    }
+                    rasterSession = session
+                    rasterBuffer = session.buffer
+                    rasterBase = session.buffer.copy()
+                    if (tool == ToolType.CLONE_STAMP || tool == ToolType.HEALING) {
+                        rasterSource = withContext(Dispatchers.Default) { canvasRepository.compositeBuffer() }
+                    }
+                    initToolSession(tool, session.buffer, x, y)
+                    drainPendingSamples()
+                    if (pendingPixelCommit) commitPixelGesture(cancelled = pendingPixelCancel)
                 }
-                rasterSession = session
-                rasterBuffer = session.buffer
-                rasterBase = session.buffer.copy()
-                if (tool == ToolType.CLONE_STAMP || tool == ToolType.HEALING) {
-                    rasterSource = withContext(Dispatchers.Default) { canvasRepository.compositeBuffer() }
-                }
-                initToolSession(tool, session.buffer, x, y)
-                drainPendingSamples()
-                if (pendingPixelCommit) commitPixelGesture(cancelled = false)
-            }
         }
 
         private fun initToolSession(
@@ -1134,6 +1225,7 @@ class ArtFlowCanvasView
             if (rasterSession == null) {
                 // The session is still opening; it commits itself once it is ready.
                 pendingPixelCommit = true
+                pendingPixelCancel = cancelled
                 return
             }
             commitPixelGesture(cancelled)
@@ -1157,7 +1249,13 @@ class ArtFlowCanvasView
                 if (cancelled) {
                     canvasRepository.cancelRasterEdit(session)
                 } else {
-                    canvasRepository.commitRasterEdit(session, description)
+                    if (!canvasRepository.commitRasterEdit(
+                            session,
+                            description,
+                        )
+                    ) {
+                        onStatusMessage?.invoke("The layer changed; this gesture was discarded")
+                    }
                     reportHistory()
                 }
             }
@@ -1632,9 +1730,6 @@ class ArtFlowCanvasView
             private const val TAP_TIMEOUT_MS = 320L
             private const val MIN_PRESSURE = 0.05f
             private const val SNAP_TOLERANCE = 12f
-            private const val ONION_SKIN_RANGE = 2
-            private const val ONION_SKIN_MAX_FRAMES = 8
-            private const val ONION_SKIN_OPACITY = 0.35f
             private const val PREVIEW_INTERVAL_MS = 66L
             private const val LIQUIFY_PREVIEW_INTERVAL_MS = 140L
             private const val LIQUIFY_PREVIEW_MAX_PIXELS = 4_000_000

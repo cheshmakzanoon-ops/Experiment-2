@@ -26,8 +26,7 @@ object DatabaseModule {
                 context,
                 ArtFlowDatabase::class.java,
                 "artflow_database",
-            ).fallbackToDestructiveMigration()
-            .build()
+            ).build()
 
     @Provides
     @Singleton

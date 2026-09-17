@@ -39,6 +39,9 @@ interface ProjectDao {
         isFavorite: Boolean,
     )
 
+    @Query("SELECT COALESCE(MAX(id), 0) FROM projects")
+    suspend fun maximumProjectId(): Long
+
     @Query("SELECT COUNT(*) FROM projects")
     fun getProjectCount(): Flow<Int>
 }

@@ -49,6 +49,7 @@ object PsdCodec {
         /** Position of the layer inside the document canvas. */
         val left: Int = 0,
         val top: Int = 0,
+        val isClippingMask: Boolean = false,
     )
 
     /** A parsed PSD document. */
@@ -79,7 +80,16 @@ object PsdCodec {
         dpi: Int = 72,
         useRle: Boolean = true,
     ): ByteArray {
-        require(width > 0 && height > 0) { "PSD dimensions must be positive" }
+        require(width in 1..30_000 && height in 1..30_000) { "Invalid PSD dimensions" }
+        require(layers.size <= 1024) { "Too many PSD layers" }
+        require(dpi in 1..32_767) { "Invalid PSD resolution" }
+        val storedLayers = layers.ifEmpty { listOf(PsdLayer("Artwork", composite)) }
+        val pixels =
+            storedLayers.sumOf {
+                it.pixels.pixels.size
+                    .toLong()
+            } + width.toLong() * height
+        require(pixels * 16L <= Runtime.getRuntime().maxMemory() / 2) { "PSD exceeds the export memory budget" }
         require(composite.width == width && composite.height == height) {
             "Composite must match the document size"
         }
@@ -90,9 +100,8 @@ object PsdCodec {
         out.writeAscii(SIGNATURE)
         out.writeShort(VERSION)
         out.writeZeros(6)
-        // The flattened image data section stores three RGB channels, so the header must agree;
-        // per-layer alpha lives in the layer channel data.
-        out.writeShort(3)
+        // The fourth merged channel is transparency, identified by a negative layer count.
+        out.writeShort(4)
         out.writeInt(height)
         out.writeInt(width)
         out.writeShort(DEPTH_8)
@@ -121,20 +130,22 @@ object PsdCodec {
         val layerSection = ByteArrayOutputStream()
         val layerInfo = ByteArrayOutputStream()
 
-        layerInfo.writeShort(layers.size)
-        layers.forEach { layer ->
+        layerInfo.writeShort(-storedLayers.size)
+        storedLayers.forEach { layer ->
             writeLayerRecord(layerInfo, layer, useRle)
         }
         val channelData = ByteArrayOutputStream()
-        layers.forEach { layer ->
+        storedLayers.forEach { layer ->
             channelData.write(layerChannelData(layer, useRle))
         }
 
         val layerInfoBytes = layerInfo.toByteArray()
         val channelDataBytes = channelData.toByteArray()
-        layerSection.writeInt(layerInfoBytes.size + channelDataBytes.size)
+        val infoLength = layerInfoBytes.size + channelDataBytes.size
+        layerSection.writeInt(infoLength + infoLength % 2)
         layerSection.write(layerInfoBytes)
         layerSection.write(channelDataBytes)
+        if (infoLength % 2 != 0) layerSection.write(0)
         layerSection.writeInt(0) // global layer mask info length
 
         val layerSectionBytes = layerSection.toByteArray()
@@ -180,7 +191,7 @@ object PsdCodec {
         out.writeAscii("8BIM")
         out.writeAscii(blendModeKey(layer.blendMode))
         out.write(layer.opacity.coerceIn(0, 255))
-        out.write(0) // clipping
+        out.write(if (layer.isClippingMask) 1 else 0) // clipping
         out.write(if (layer.isVisible) 0 else 2) // flags: bit 1 = hidden
         out.write(0) // filler
 
@@ -195,6 +206,12 @@ object PsdCodec {
         extra.write(truncatedName.size)
         extra.write(truncatedName)
         repeat(paddedNameLength - nameLength) { extra.write(0) }
+        val unicode = layer.name.take(4096).toByteArray(Charsets.UTF_16BE)
+        extra.writeAscii("8BIM")
+        extra.writeAscii("luni")
+        extra.writeInt(4 + unicode.size)
+        extra.writeInt(unicode.size / 2)
+        extra.write(unicode)
         val extraBytes = extra.toByteArray()
         out.writeInt(extraBytes.size)
         out.write(extraBytes)
@@ -231,6 +248,7 @@ object PsdCodec {
                     extractChannel(image, CHANNEL_RED),
                     extractChannel(image, CHANNEL_GREEN),
                     extractChannel(image, CHANNEL_BLUE),
+                    extractChannel(image, CHANNEL_ALPHA),
                 )
             // The RLE byte-count table lists every row of every channel up front.
             val encoded = planes.map { encodeRlePayload(it, image.width, image.height) }
@@ -238,7 +256,7 @@ object PsdCodec {
             encoded.forEach { payload -> out.write(payload.data) }
         } else {
             out.writeShort(COMPRESSION_RAW)
-            listOf(CHANNEL_RED, CHANNEL_GREEN, CHANNEL_BLUE).forEach { channelId ->
+            listOf(CHANNEL_RED, CHANNEL_GREEN, CHANNEL_BLUE, CHANNEL_ALPHA).forEach { channelId ->
                 out.write(rawBytes(extractChannel(image, channelId)))
             }
         }
@@ -342,8 +360,9 @@ object PsdCodec {
         depth: Int,
         colorMode: Int,
     ): List<PsdLayer> {
-        val layerCount = reader.readShort()
-        if (layerCount <= 0) return emptyList()
+        val layerCount = kotlin.math.abs(reader.readShort().toShort().toInt())
+        require(layerCount <= 1024) { "Too many PSD layers" }
+        if (layerCount == 0) return emptyList()
 
         data class Pending(
             val name: String,
@@ -355,6 +374,7 @@ object PsdCodec {
             val isVisible: Boolean,
             val blendMode: BlendMode,
             val channels: List<Pair<Int, Int>>,
+            val isClippingMask: Boolean,
         )
 
         val pending = mutableListOf<Pending>()
@@ -374,7 +394,7 @@ object PsdCodec {
             val blendSignature = reader.readAscii(4)
             val blendKey = reader.readAscii(4)
             val opacity = reader.readByte()
-            reader.skip(1) // clipping
+            val isClippingMask = reader.readByte() == 1
             val flags = reader.readByte()
             reader.skip(1) // filler
             val extraLength = reader.readInt()
@@ -389,6 +409,7 @@ object PsdCodec {
                 if (reader.position < extraEnd) {
                     val nameLength = reader.readByte()
                     if (nameLength > 0) name = reader.readAscii(nameLength)
+                    reader.skip((4 - (nameLength + 1) % 4) % 4)
                 }
                 // A "luni" block carries the UTF-16 name and is preferred when present.
                 var scanPosition = reader.position
@@ -420,6 +441,7 @@ object PsdCodec {
                     isVisible = (flags and 0x02) == 0,
                     blendMode = blendModeFromKey(if (blendSignature == "8BIM") blendKey else "norm"),
                     channels = channels,
+                    isClippingMask = isClippingMask,
                 )
         }
 
@@ -477,6 +499,7 @@ object PsdCodec {
                     blendMode = record.blendMode,
                     left = record.left,
                     top = record.top,
+                    isClippingMask = record.isClippingMask,
                 )
         }
         return layers
@@ -913,13 +936,13 @@ object PsdCodec {
                     ((raw[1].toInt() and 0xFF) shl 16) or
                     ((raw[2].toInt() and 0xFF) shl 8) or
                     (raw[3].toInt() and 0xFF)
-            val chars = CharArray(max(0, charCount - 1).coerceAtMost((raw.size - 4) / 2))
+            val chars = CharArray(charCount.coerceIn(0, (raw.size - 4) / 2))
             for (i in chars.indices) {
                 val high = raw[4 + i * 2].toInt() and 0xFF
                 val low = raw[5 + i * 2].toInt() and 0xFF
                 chars[i] = ((high shl 8) or low).toChar()
             }
-            return String(chars)
+            return String(chars).trimEnd('\u0000')
         }
     }
 

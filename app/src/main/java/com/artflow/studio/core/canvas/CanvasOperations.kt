@@ -74,6 +74,7 @@ object CanvasOperations {
     ): Result {
         val targetWidth = width.coerceIn(1, MAX_DIMENSION)
         val targetHeight = height.coerceIn(1, MAX_DIMENSION)
+        require(isSizeSafe(targetWidth, targetHeight)) { "Resized canvas exceeds the supported pixel budget" }
         return Result(
             buffer = buffer.scaled(targetWidth, targetHeight),
             properties = properties.copy(width = targetWidth, height = targetHeight),

@@ -100,64 +100,75 @@ class Compositor(
     ) {
         if ((backgroundColor ushr 24) != 0) result.fill(backgroundColor)
 
-        // Tracks the layer a clipping mask clips to (the nearest non-clipping layer below).
+        // Isolate each clipping group, then composite it once. Applying clipped layers directly
+        // to the full stack would increase base alpha and expose children of a hidden base.
         var clipBase: PixelBuffer? = null
+        var baseLayer: Layer? = null
 
-        inputs.sortedBy { it.layer.index }.forEach { input ->
-            val layer = input.layer
-            if (layer.isReference && !options.includeReferenceLayers) return@forEach
-            if (!layer.isVisible && !options.includeHiddenLayers) return@forEach
-            if (layer.opacity <= 0.001f && !options.includeHiddenLayers) return@forEach
+        fun flushGroup() {
+            val content = clipBase ?: return
+            val layer = checkNotNull(baseLayer)
+            clipBase = null
+            baseLayer = null
+            blendAndRelease(result, content, layer, clipped = false)
+        }
 
-            if (layer.adjustmentType != null) {
-                if (!options.applyAdjustments) return@forEach
-                applyAdjustment(result, input, options)
-                return@forEach
+        try {
+            for (input in inputs.sortedBy { it.layer.index }) {
+                val layer = input.layer
+                // Even a hidden/empty base starts a new group: it cannot inherit an older base.
+                if (!layer.isClippingMask) flushGroup()
+                if (layer.isReference && !options.includeReferenceLayers) continue
+                if (!layer.isVisible && !options.includeHiddenLayers) continue
+                if (layer.opacity <= 0f) continue
+                if (layer.isClippingMask && clipBase == null) continue
+
+                if (layer.adjustmentType != null && options.applyAdjustments) {
+                    applyAdjustment(clipBase ?: result, input)
+                }
+                if (layer.adjustmentType != null) continue
+                val content = renderLayerContent(input, result.width, result.height, bufferPool) ?: continue
+                if (layer.isClippingMask) {
+                    blendAndRelease(checkNotNull(clipBase), content, layer, clipped = true)
+                } else {
+                    clipBase = content
+                    baseLayer = layer
+                }
             }
-
-            val content = renderLayerContent(input, result.width, result.height, bufferPool)
-            if (content == null) return@forEach
-
-            if (layer.isClippingMask && clipBase != null) {
-                applyClipping(content, clipBase!!)
-            }
-
-            BlendModes.composite(result, content, layer.blendMode, layer.opacity)
-            if (!layer.isClippingMask) {
-                clipBase = content
-            } else {
-                // Clipping content is blended into the result and nothing references it
-                // afterwards, so it goes straight back to the pool (discarded when full).
-                bufferPool.release(content)
-            }
+            flushGroup()
+        } finally {
+            clipBase?.let { bufferPool.release(it) }
         }
 
         options.selection?.let { selection -> applySelection(result, selection) }
     }
 
+    private fun blendAndRelease(
+        destination: PixelBuffer,
+        content: PixelBuffer,
+        layer: Layer,
+        clipped: Boolean,
+    ) {
+        try {
+            if (clipped) {
+                BlendModes.compositeClipped(destination, content, layer.blendMode, layer.opacity)
+            } else {
+                BlendModes.composite(destination, content, layer.blendMode, layer.opacity)
+            }
+        } finally {
+            bufferPool.release(content)
+        }
+    }
+
     /**
      * Restricts [result] to the selection: alpha is zeroed where nothing is selected and scaled
      * on feathered edges. Row-major when the mask matches the buffer (the normal case); falls
-     * back to masked indexing for a smaller mask.
+     * back to coordinate-based coverage for a smaller mask.
      */
     private fun applySelection(
         result: PixelBuffer,
         selection: SelectionMask,
     ) {
-        if (selection.width != result.width || selection.height != result.height) {
-            for (i in result.pixels.indices) {
-                val coverage = selection.alphaAt(i)
-                if (coverage >= 1f) continue
-                val pixel = result.pixels[i]
-                result.pixels[i] =
-                    if (coverage <= 0f) {
-                        Channels.withAlpha(pixel, 0)
-                    } else {
-                        Channels.scaleAlpha(pixel, coverage)
-                    }
-            }
-            return
-        }
         for (y in 0 until result.height) {
             val row = y * result.width
             for (x in 0 until result.width) {
@@ -228,7 +239,7 @@ class Compositor(
             applyFilter(content, filter, layer.filterAmount)
         }
 
-        if (layer.hasActiveMask()) {
+        if (layer.maskEnabled && input.mask != null) {
             applyMask(content, input.mask, layer)
         }
         return content
@@ -280,34 +291,38 @@ class Compositor(
         layer: Layer,
     ) {
         if (mask == null) return
-        val density = layer.maskDensity.coerceIn(0f, 1f)
-        if (density <= 0f) return
-
-        val source =
-            if (layer.maskFeather > 0f) {
-                ImageFilters.gaussianBlur(mask, layer.maskFeather)
-            } else {
-                mask
-            }
-
+        val source = preparedMask(mask, layer)
         for (y in 0 until content.height) {
             for (x in 0 until content.width) {
                 val index = y * content.width + x
-                val maskPixel =
-                    if (x < source.width && y < source.height) {
-                        source.pixels[y * source.width + x]
-                    } else {
-                        // Outside the mask image the mask is treated as opaque white.
-                        0xFFFFFFFF.toInt()
-                    }
-                val raw = Channels.luminance(maskPixel)
-                val value = if (layer.maskInverted) 1f - raw else raw
-                val factor = (1f - density) + density * value
-                val pixel = content.pixels[index]
-                val alpha = Channels.alpha(pixel) * factor
-                content.pixels[index] = Channels.withAlpha(pixel, alpha.roundToInt().coerceIn(0, 255))
+                content.pixels[index] = Channels.scaleAlpha(content.pixels[index], maskFactor(source, layer, x, y))
             }
         }
+    }
+
+    private fun preparedMask(
+        mask: PixelBuffer?,
+        layer: Layer,
+    ): PixelBuffer? =
+        if (mask != null && layer.maskFeather > 0f && layer.maskDensity > 0f) {
+            ImageFilters.gaussianBlur(mask, layer.maskFeather)
+        } else {
+            mask
+        }
+
+    private fun maskFactor(
+        mask: PixelBuffer?,
+        layer: Layer,
+        x: Int,
+        y: Int,
+    ): Float {
+        if (mask == null) return 1f
+        val density = layer.maskDensity.coerceIn(0f, 1f)
+        if (density <= 0f) return 1f
+        val pixel = if (mask.contains(x, y)) mask.getSafe(x, y) else 0xFFFFFFFF.toInt()
+        val raw = Channels.luminance(pixel)
+        val value = if (layer.maskInverted) 1f - raw else raw
+        return 1f - density + density * value
     }
 
     /** Clips [content] to the alpha of the layer below (clipping mask, Phase 15). */
@@ -333,7 +348,6 @@ class Compositor(
     private fun applyAdjustment(
         result: PixelBuffer,
         input: LayerInput,
-        options: Options,
     ) {
         val layer = input.layer
         val type = layer.adjustmentType ?: return
@@ -343,11 +357,15 @@ class Compositor(
                 type = type,
                 parameters = layer.adjustmentParameters,
                 intensity = 1f,
-                mask = options.selection?.coverage,
             )
         val intensity = layer.opacity.coerceIn(0f, 1f)
-        for (i in result.pixels.indices) {
-            result.pixels[i] = ImageFilters.lerpArgb(result.pixels[i], adjusted.pixels[i], intensity)
+        val mask = if (layer.maskEnabled) preparedMask(input.mask, layer) else null
+        for (y in 0 until result.height) {
+            for (x in 0 until result.width) {
+                val i = y * result.width + x
+                val amount = intensity * maskFactor(mask, layer, x, y)
+                result.pixels[i] = ImageFilters.lerpArgb(result.pixels[i], adjusted.pixels[i], amount)
+            }
         }
     }
 

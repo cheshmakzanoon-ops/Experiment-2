@@ -17,24 +17,28 @@ inventory in [`README.md`](README.md).
 |------|---------|
 | JDK | 17 |
 | Android SDK | API 36 (`compileSdk`/`targetSdk`) |
-| NDK | Any current NDK — only for the native `libartflow-brush` module; no `ndkVersion` is pinned |
+| NDK | Not used by the application build; the unintegrated native prototype is retained as source only |
 | Gradle | via the committed wrapper (`./gradlew`) |
 
-`local.properties` needs `sdk.dir=…` and is git-ignored.
+Set `ANDROID_HOME` or a git-ignored `local.properties` with `sdk.dir=…`.
+Allow at least 6 GB RAM for builds and additional memory for an emulator.
 
 ## Build and test
 
 ```bash
 ./gradlew testDebugUnitTest     # JVM unit tests (no device, no NDK needed)
 ./gradlew ktlintCheck detekt    # static analysis
-./gradlew assembleDebug         # debug APK, builds the native module too
-./gradlew assembleDebug -PnoNativeBuild   # same, without the NDK/CMake step
-./gradlew lintDebug             # Android lint
+./gradlew assembleDebug        # debug APK
+./gradlew lintDebug lintRelease # Android lint for both variants
+./gradlew bundleRelease        # minified AAB; unsigned without private signing inputs
+./gradlew connectedDebugAndroidTest # real device/emulator regression suite
 ```
 
 Release builds need signing credentials in a git-ignored `keystore.properties` at the repository
 root; without it `./gradlew assembleRelease` produces an unsigned APK. See
-["Building for release"](README.md#-building-for-release).
+["Building for release"](README.md#-building-for-release). Use
+`./gradlew bundleRelease -PrequireReleaseSigning=true` for a production signing request; it must
+fail when credentials are missing. Never commit or upload private signing keys.
 
 ## Code style
 
@@ -56,8 +60,9 @@ Two things to know about unit tests here:
 - The pixel engines are deliberately free of `android.*` imports, which is what keeps them testable
   on the JVM. Do not introduce an Android dependency into `core/pixels` or `core/render`.
 - Types that need `android.graphics` (the canvas view, the OpenGL renderer) belong in
-  instrumentation tests under `app/src/androidTest`, which currently holds one Hilt-backed launch
-  smoke test (`AppLaunchTest`). Screen-level coverage is an open task.
+  instrumentation tests under `app/src/androidTest`. These exercise persistence/recovery, project
+  duplication, mask/export snapshots, platform export codecs, FileProvider, GL lifecycle, and
+  selected Compose settings/export controls. Broader screen/device coverage remains necessary.
 
 ```bash
 ./gradlew testDebugUnitTest --tests 'com.artflow.studio.core.pixels.*'

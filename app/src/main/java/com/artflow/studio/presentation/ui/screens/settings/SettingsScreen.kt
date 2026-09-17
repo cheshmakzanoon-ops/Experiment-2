@@ -2,8 +2,10 @@
 
 package com.artflow.studio.presentation.ui.screens.settings
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -11,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.artflow.studio.core.canvas.CanvasOperations
@@ -31,8 +34,13 @@ fun SettingsScreen(
     viewModel: MainViewModel = hiltViewModel(),
 ) {
     val settings by viewModel.settings.collectAsState()
+    val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(viewModel) {
+        viewModel.messageFlow.collect { snackbar.showSnackbar(it) }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 title = { Text("Settings") },
@@ -55,7 +63,7 @@ fun SettingsScreen(
         ) {
             SettingsSection("Appearance")
             Text("Theme", style = MaterialTheme.typography.labelMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ThemeMode.entries.forEach { mode ->
                     FilterChip(
                         selected = settings.themeMode == mode,
@@ -65,7 +73,7 @@ fun SettingsScreen(
                 }
             }
             Text("Accent", style = MaterialTheme.typography.labelMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AccentChoice.entries.forEach { accent ->
                     FilterChip(
                         selected = settings.accent == accent,
@@ -191,7 +199,7 @@ fun SettingsScreen(
 
             SettingsSection("Gallery")
             Text("Sort by", style = MaterialTheme.typography.labelMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 GallerySort.entries.forEach { sort ->
                     FilterChip(
                         selected = settings.gallerySort == sort,
@@ -200,6 +208,9 @@ fun SettingsScreen(
                     )
                 }
             }
+
+            SettingsSection("Privacy")
+            PrivacyPolicyEntry()
 
             SettingsSection("Colour history")
             Text(
@@ -210,7 +221,7 @@ fun SettingsScreen(
             OutlinedButton(onClick = viewModel::clearRecentColors) { Text("Clear recent colours") }
 
             Text(
-                "ArtFlow stores everything on this device. There is no account and nothing is uploaded.",
+                "ArtFlow has no account or developer uploads. Android backup and exports follow your choices and device settings.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -235,7 +246,7 @@ private fun SwitchRow(
     onChange: (Boolean) -> Unit,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().toggleable(value = checked, role = Role.Switch, onValueChange = onChange),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -246,6 +257,6 @@ private fun SwitchRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Switch(checked = checked, onCheckedChange = onChange)
+        Switch(checked = checked, onCheckedChange = null)
     }
 }

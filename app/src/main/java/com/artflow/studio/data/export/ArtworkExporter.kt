@@ -1,17 +1,14 @@
 package com.artflow.studio.data.export
 
+import android.content.ClipData
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Paint
-import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.pdf.PdfDocument
-import android.media.MediaCodec
-import android.media.MediaCodecInfo
-import android.media.MediaFormat
-import android.media.MediaMuxer
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
@@ -32,7 +29,10 @@ import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.layer.Layer
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.ByteArrayOutputStream
@@ -79,6 +79,7 @@ class ArtworkExporter
             composite: PixelBuffer,
             layers: List<LayerRaster>,
             options: ExportOptions,
+            hasAdjustmentLayers: Boolean = false,
         ): Result<ExportResult> =
             withContext(Dispatchers.Default) {
                 try {
@@ -97,18 +98,17 @@ class ArtworkExporter
                     }
 
                     val prepared = prepare(composite, targetWidth, targetHeight, options)
-                    val fileName =
-                        options.fileName
-                            ?: ExportNaming.defaultFileName(projectName, options.format)
+                    val fileName = ExportNaming.fileName(projectName, options)
 
                     val bytes: ByteArray =
                         when (options.format) {
-                            ExportFormat.PNG -> BitmapPixelBridge.toPngBytes(prepared)
+                            ExportFormat.PNG -> BitmapPixelBridge.toPngBytes(flatten(prepared, options), options.dpi)
                             ExportFormat.JPEG ->
                                 BitmapPixelBridge.toJpegBytes(
                                     flatten(prepared, options),
                                     options.quality,
                                     options.backgroundColor,
+                                    options.dpi,
                                 )
                             ExportFormat.WEBP ->
                                 BitmapPixelBridge.toWebpBytes(
@@ -116,8 +116,8 @@ class ArtworkExporter
                                     lossless = options.quality >= 100,
                                     quality = options.quality,
                                 )
-                            ExportFormat.PDF -> buildPdf(listOf(prepared), options, projectName)
-                            ExportFormat.PSD -> buildPsd(prepared, layers, options, targetWidth, targetHeight)
+                            ExportFormat.PDF -> buildPdf(listOf(prepared), options)
+                            ExportFormat.PSD -> buildPsd(prepared, layers, options, hasAdjustmentLayers)
                             else -> return@withContext Result.failure(
                                 ExportFailure(ExportError.UnsupportedFormat(options.format).message),
                             )
@@ -132,9 +132,17 @@ class ArtworkExporter
                             byteCount = bytes.size.toLong(),
                             width = prepared.width,
                             height = prepared.height,
+                            warning =
+                                if (options.format == ExportFormat.PSD && hasAdjustmentLayers) {
+                                    "Adjustment effects are baked into a visible Artwork layer; original pixel layers are included hidden."
+                                } else {
+                                    null
+                                },
                         )
                     Timber.d("Exported ${options.format} (${result.sizeLabel}) to ${file.name}")
                     Result.success(result)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
                 } catch (e: Exception) {
                     Timber.e(e, "Still export failed")
                     Result.failure(ExportFailure(ExportError.EncodingFailed(e.message ?: "unknown").message))
@@ -168,24 +176,31 @@ class ArtworkExporter
                         )
                     }
 
-                    val prepared = frames.map { prepare(it, targetWidth, targetHeight, options) }
-                    val fileName =
-                        options.fileName
-                            ?: ExportNaming.defaultFileName(projectName, options.format)
+                    require(frames.size <= ProjectStorage.MAX_FRAMES) { "Too many frames to export" }
+                    require(targetWidth.toLong() * targetHeight * 4L * frames.size <= Runtime.getRuntime().maxMemory() / 4) {
+                        "The animation is too large for this device; reduce the output scale"
+                    }
+                    val prepared =
+                        frames.map {
+                            currentCoroutineContext().ensureActive()
+                            prepare(it, targetWidth, targetHeight, options)
+                        }
+                    val fileName = ExportNaming.fileName(projectName, options)
 
                     val bytes =
                         when (options.format) {
                             ExportFormat.GIF -> buildGif(prepared, delaysMs, options)
                             ExportFormat.MP4 -> buildMp4(prepared, delaysMs, options)
                             ExportFormat.FRAME_SEQUENCE -> buildFrameSequenceZip(prepared, projectName, options)
-                            ExportFormat.PNG -> BitmapPixelBridge.toPngBytes(prepared.first())
+                            ExportFormat.PNG -> BitmapPixelBridge.toPngBytes(flatten(prepared.first(), options), options.dpi)
                             ExportFormat.JPEG ->
                                 BitmapPixelBridge.toJpegBytes(
                                     flatten(prepared.first(), options),
                                     options.quality,
                                     options.backgroundColor,
+                                    options.dpi,
                                 )
-                            ExportFormat.PDF -> buildPdf(prepared, options, projectName)
+                            ExportFormat.PDF -> buildPdf(prepared, options)
                             else -> return@withContext Result.failure(
                                 ExportFailure(ExportError.UnsupportedFormat(options.format).message),
                             )
@@ -198,23 +213,24 @@ class ArtworkExporter
                             filePath = file.absolutePath,
                             fileName = fileName,
                             byteCount = bytes.size.toLong(),
-                            width = targetWidth,
-                            height = targetHeight,
+                            width = if (options.format == ExportFormat.MP4) (targetWidth + 1) and -2 else targetWidth,
+                            height = if (options.format == ExportFormat.MP4) (targetHeight + 1) and -2 else targetHeight,
                             frameCount = prepared.size,
                         )
                     Timber.d("Exported ${options.format} (${result.sizeLabel}, ${prepared.size} frames)")
                     Result.success(result)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
                 } catch (e: Exception) {
                     Timber.e(e, "Animation export failed")
                     Result.failure(ExportFailure(ExportError.EncodingFailed(e.message ?: "unknown").message))
                 }
             }
 
-        /** Multi-page PDF: one page per frame, with the chosen page size and DPI. */
+        /** Every page and bitmap is released even when rendering or writing fails. */
         private fun buildPdf(
             frames: List<PixelBuffer>,
             options: ExportOptions,
-            projectName: String,
         ): ByteArray {
             val document = PdfDocument()
             try {
@@ -222,6 +238,12 @@ class ArtworkExporter
                     val oversample = options.pdfOversample.coerceIn(0.25f, 3f)
                     val imageWidth = max(1, (frame.width * oversample).roundToInt())
                     val imageHeight = max(1, (frame.height * oversample).roundToInt())
+                    check(
+                        com.artflow.studio.core.canvas.CanvasOperations
+                            .isSizeSafe(imageWidth, imageHeight),
+                    ) {
+                        "The PDF image is too large; reduce its scale"
+                    }
                     val rendered =
                         if (imageWidth == frame.width && imageHeight == frame.height) {
                             frame
@@ -229,83 +251,83 @@ class ArtworkExporter
                             frame.scaled(imageWidth, imageHeight)
                         }
                     val bitmap = BitmapPixelBridge.toBitmap(flatten(rendered, options))
-
-                    val (pageWidth, pageHeight) =
-                        if (options.pdfPageSize == PdfPageSize.FIT_CANVAS) {
-                            // Points at the requested DPI so the PDF prints at the artist's intended size.
-                            val dpi = options.dpi.coerceAtLeast(36).toFloat()
-                            (frame.width * 72f / dpi) to (frame.height * 72f / dpi)
-                        } else {
-                            options.pdfPageSize.widthPt to options.pdfPageSize.heightPt
-                        }
-
-                    val pageInfo =
-                        PdfDocument.PageInfo
-                            .Builder(
-                                pageWidth.roundToInt().coerceAtLeast(1),
-                                pageHeight.roundToInt().coerceAtLeast(1),
-                                index + 1,
-                            ).apply {
-                                setContentRect(
-                                    Rect(
-                                        0,
-                                        0,
-                                        pageWidth.roundToInt().coerceAtLeast(1),
-                                        pageHeight.roundToInt().coerceAtLeast(1),
-                                    ),
+                    try {
+                        val dpi = options.dpi.coerceAtLeast(36).toFloat()
+                        val pageWidth =
+                            if (options.pdfPageSize == PdfPageSize.FIT_CANVAS) {
+                                frame.width * 72f / dpi
+                            } else {
+                                options.pdfPageSize.widthPt
+                            }
+                        val pageHeight =
+                            if (options.pdfPageSize == PdfPageSize.FIT_CANVAS) {
+                                frame.height * 72f / dpi
+                            } else {
+                                options.pdfPageSize.heightPt
+                            }
+                        val width = pageWidth.roundToInt().coerceAtLeast(1)
+                        val height = pageHeight.roundToInt().coerceAtLeast(1)
+                        val page = document.startPage(PdfDocument.PageInfo.Builder(width, height, index + 1).create())
+                        try {
+                            val placement = ExportNaming.applyFit(bitmap.width, bitmap.height, width, height, FitMode.FIT)
+                            val target =
+                                RectF(
+                                    placement.offsetX.toFloat(),
+                                    placement.offsetY.toFloat(),
+                                    (placement.offsetX + placement.drawWidth).toFloat(),
+                                    (placement.offsetY + placement.drawHeight).toFloat(),
                                 )
-                            }.create()
-
-                    val page = document.startPage(pageInfo)
-                    val target = RectF(0f, 0f, pageWidth, pageHeight)
-                    val source = Rect(0, 0, bitmap.width, bitmap.height)
-                    page.canvas.drawBitmap(bitmap, source, target, Paint(Paint.FILTER_BITMAP_FLAG))
-                    document.finishPage(page)
-                    bitmap.recycle()
+                            page.canvas.drawBitmap(bitmap, null, target, Paint(Paint.FILTER_BITMAP_FLAG))
+                        } finally {
+                            document.finishPage(page)
+                        }
+                    } finally {
+                        bitmap.recycle()
+                    }
+                }
+                return ByteArrayOutputStream().use { out ->
+                    document.writeTo(out)
+                    out.toByteArray()
                 }
             } finally {
-                // No-op guard so a failure mid-loop still releases the document.
+                document.close()
             }
-            val out = ByteArrayOutputStream()
-            document.writeTo(out)
-            document.close()
-            return out.toByteArray()
         }
 
         private fun buildPsd(
             composite: PixelBuffer,
             layers: List<LayerRaster>,
             options: ExportOptions,
-            targetWidth: Int,
-            targetHeight: Int,
+            hasAdjustmentLayers: Boolean,
         ): ByteArray {
-            val scaled =
-                if (targetWidth == composite.width && targetHeight == composite.height) {
-                    composite
-                } else {
-                    composite.scaled(targetWidth, targetHeight)
-                }
             val psdLayers =
-                layers.map { entry ->
-                    val buffer =
-                        if (entry.buffer.width == targetWidth && entry.buffer.height == targetHeight) {
-                            entry.buffer
-                        } else {
-                            entry.buffer.scaled(targetWidth, targetHeight)
-                        }
+                layers
+                    .map { entry ->
+                        PsdCodec.PsdLayer(
+                            name = entry.name,
+                            pixels = prepare(entry.buffer, composite.width, composite.height, options),
+                            opacity = (entry.layer.opacity * 255f).roundToInt().coerceIn(0, 255),
+                            isVisible = !hasAdjustmentLayers && (options.includeHiddenLayers || entry.layer.isVisible),
+                            blendMode = entry.layer.blendMode,
+                            isClippingMask = entry.layer.isClippingMask,
+                        )
+                    }.toMutableList()
+            if (hasAdjustmentLayers) {
+                psdLayers += PsdCodec.PsdLayer("Artwork (rendered adjustments)", flatten(composite, options))
+            } else if (options.flattenOntoBackground) {
+                psdLayers.add(
+                    0,
                     PsdCodec.PsdLayer(
-                        name = entry.name,
-                        pixels = buffer,
-                        opacity = (entry.layer.opacity * 255f).roundToInt().coerceIn(0, 255),
-                        isVisible = entry.layer.isVisible,
-                        blendMode = entry.layer.blendMode,
-                    )
-                }
+                        "Export background",
+                        PixelBuffer.filled(composite.width, composite.height, options.backgroundColor or 0xFF000000.toInt()),
+                    ),
+                )
+            }
             return PsdCodec.write(
-                width = targetWidth,
-                height = targetHeight,
+                width = composite.width,
+                height = composite.height,
                 layers = psdLayers,
-                composite = scaled,
+                composite = flatten(composite, options),
                 dpi = options.dpi,
                 useRle = options.psdUseRle,
             )
@@ -348,265 +370,25 @@ class ArtworkExporter
                 frames.forEachIndexed { index, frame ->
                     val entry = ZipEntry("%s_%04d.png".format(prefix, index + 1))
                     zip.putNextEntry(entry)
-                    zip.write(BitmapPixelBridge.toPngBytes(flatten(frame, options)))
+                    zip.write(BitmapPixelBridge.toPngBytes(flatten(frame, options), options.dpi))
                     zip.closeEntry()
                 }
             }
             return out.toByteArray()
         }
 
-        /**
-         * MP4 via `MediaCodec` + `MediaMuxer` (H.264, one frame per input image).
-         *
-         * Uses `COLOR_FormatYUV420Flexible` in ByteBuffer input mode, which every API 26+ H.264
-         * encoder supports. H.264 requires even dimensions, so odd canvases are padded by one pixel.
-         */
-        private fun buildMp4(
+        /** The encoder preserves every source pixel and pads odd dimensions instead of shrinking. */
+        private suspend fun buildMp4(
             frames: List<PixelBuffer>,
             delaysMs: List<Int>,
             options: ExportOptions,
         ): ByteArray {
-            val source = frames.first()
-            val width = if (source.width % 2 == 1) source.width - 1 else source.width
-            val height = if (source.height % 2 == 1) source.height - 1 else source.height
-            if (width < 16 || height < 16) {
-                throw IllegalStateException("Canvas is too small for video export (minimum 16×16)")
-            }
-
             val tempFile = File.createTempFile("artflow-video", ".mp4", context.cacheDir)
-            val writer =
-                Mp4Writer(
-                    outputPath = tempFile.absolutePath,
-                    width = width,
-                    height = height,
-                    bitrate = options.videoBitrate.coerceIn(500_000, 40_000_000),
-                )
-            writer.use { encoder ->
-                var presentationTimeUs = 0L
-                frames.forEachIndexed { index, frame ->
-                    val scaled =
-                        if (frame.width == width && frame.height == height) {
-                            frame
-                        } else {
-                            frame.scaled(width, height)
-                        }
-                    encoder.encodeFrame(scaled.pixels, presentationTimeUs)
-                    val frameMs = (delaysMs.getOrNull(index) ?: 83).coerceAtLeast(10)
-                    presentationTimeUs += frameMs * 1000L
-                }
-            }
-
-            val bytes = tempFile.readBytes()
-            tempFile.delete()
-            return bytes
-        }
-
-        /**
-         * Small wrapper around one H.264 encoder + MP4 muxer pair.
-         *
-         * The muxer's track index is only known once the encoder reports its output format, so the
-         * writer keeps that state instead of threading it through every call site.
-         */
-        private class Mp4Writer(
-            private val outputPath: String,
-            private val width: Int,
-            private val height: Int,
-            private val bitrate: Int,
-        ) : AutoCloseable {
-            private val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
-            private val muxer = MediaMuxer(outputPath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-            private val bufferInfo = MediaCodec.BufferInfo()
-            private var trackIndex = -1
-            private var muxerStarted = false
-            private var released = false
-
-            init {
-                val format =
-                    MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
-                        setInteger(
-                            MediaFormat.KEY_COLOR_FORMAT,
-                            MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible,
-                        )
-                        setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
-                        setInteger(MediaFormat.KEY_FRAME_RATE, 30)
-                        setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
-                    }
-                codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-                codec.start()
-            }
-
-            fun encodeFrame(
-                argb: IntArray,
-                presentationTimeUs: Long,
-            ) {
-                val yuv = argbToNv12(argb, width, height)
-                var queued = false
-                var attempts = 0
-                while (!queued && attempts < 200) {
-                    attempts++
-                    val inputIndex = codec.dequeueInputBuffer(TIMEOUT_US)
-                    if (inputIndex >= 0) {
-                        val inputBuffer = codec.getInputBuffer(inputIndex) ?: continue
-                        inputBuffer.clear()
-                        if (inputBuffer.remaining() < yuv.size) {
-                            // The encoder buffer is smaller than our frame: let it configure first.
-                            drain()
-                            codec.queueInputBuffer(inputIndex, 0, 0, presentationTimeUs, 0)
-                            continue
-                        }
-                        inputBuffer.put(yuv)
-                        codec.queueInputBuffer(inputIndex, 0, yuv.size, presentationTimeUs, 0)
-                        queued = true
-                    } else {
-                        drain()
-                    }
-                }
-                drain()
-            }
-
-            /** Signals end-of-stream and muxes whatever is left. */
-            private fun signalEndOfStream() {
-                var attempts = 0
-                var queued = false
-                while (!queued && attempts < 200) {
-                    attempts++
-                    val inputIndex = codec.dequeueInputBuffer(TIMEOUT_US)
-                    if (inputIndex >= 0) {
-                        codec.queueInputBuffer(
-                            inputIndex,
-                            0,
-                            0,
-                            0L,
-                            MediaCodec.BUFFER_FLAG_END_OF_STREAM,
-                        )
-                        queued = true
-                    } else {
-                        drain()
-                    }
-                }
-
-                var outputDone = false
-                var guard = 0
-                while (!outputDone && guard < 1000) {
-                    guard++
-                    val outputIndex = codec.dequeueOutputBuffer(bufferInfo, TIMEOUT_US)
-                    when {
-                        outputIndex == MediaCodec.INFO_TRY_AGAIN_LATER -> outputDone = true
-                        outputIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> startMuxer()
-                        outputIndex >= 0 -> {
-                            writeOutput(outputIndex)
-                            if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) outputDone = true
-                        }
-                    }
-                }
-            }
-
-            private fun drain() {
-                while (true) {
-                    val outputIndex = codec.dequeueOutputBuffer(bufferInfo, 0)
-                    when {
-                        outputIndex == MediaCodec.INFO_TRY_AGAIN_LATER -> return
-                        outputIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> startMuxer()
-                        outputIndex >= 0 -> writeOutput(outputIndex)
-                    }
-                }
-            }
-
-            private fun startMuxer() {
-                if (muxerStarted) return
-                trackIndex = muxer.addTrack(codec.outputFormat)
-                muxer.start()
-                muxerStarted = true
-            }
-
-            private fun writeOutput(outputIndex: Int) {
-                val outputBuffer = codec.getOutputBuffer(outputIndex)
-                val isConfig = (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0
-                if (outputBuffer != null && bufferInfo.size > 0 && !isConfig) {
-                    if (!muxerStarted) startMuxer()
-                    outputBuffer.position(bufferInfo.offset)
-                    outputBuffer.limit(bufferInfo.offset + bufferInfo.size)
-                    muxer.writeSampleData(trackIndex, outputBuffer, bufferInfo)
-                }
-                codec.releaseOutputBuffer(outputIndex, false)
-            }
-
-            override fun close() {
-                if (released) return
-                released = true
-                try {
-                    signalEndOfStream()
-                } catch (e: Exception) {
-                    Timber.w(e, "Finishing the video encoder failed")
-                }
-                runCatching { codec.stop() }
-                runCatching { codec.release() }
-                if (muxerStarted) runCatching { muxer.stop() }
-                runCatching { muxer.release() }
-            }
-
-            companion object {
-                private const val TIMEOUT_US = 10_000L
-
-                /**
-                 * Converts ARGB pixels to NV12 (a Y plane followed by interleaved U/V).
-                 * Transparent pixels are composited over white so they do not turn black in the video.
-                 */
-                fun argbToNv12(
-                    pixels: IntArray,
-                    width: Int,
-                    height: Int,
-                ): ByteArray {
-                    val out = ByteArray(width * height * 3 / 2)
-                    val uvOffset = width * height
-                    for (y in 0 until height) {
-                        for (x in 0 until width) {
-                            val pixel = pixels[y * width + x]
-                            val alpha = (pixel ushr 24) and 0xFF
-                            var r = (pixel shr 16) and 0xFF
-                            var g = (pixel shr 8) and 0xFF
-                            var b = pixel and 0xFF
-                            if (alpha != 255) {
-                                val a = alpha / 255f
-                                r = (r * a + 255 * (1 - a)).roundToInt().coerceIn(0, 255)
-                                g = (g * a + 255 * (1 - a)).roundToInt().coerceIn(0, 255)
-                                b = (b * a + 255 * (1 - a)).roundToInt().coerceIn(0, 255)
-                            }
-                            val yValue = ((66 * r + 129 * g + 25 * b + 128) shr 8) + 16
-                            out[y * width + x] = yValue.coerceIn(0, 255).toByte()
-                        }
-                    }
-                    for (y in 0 until height step 2) {
-                        for (x in 0 until width step 2) {
-                            var uSum = 0
-                            var vSum = 0
-                            var samples = 0
-                            for (dy in 0 until 2) {
-                                for (dx in 0 until 2) {
-                                    val px = x + dx
-                                    val py = y + dy
-                                    if (px >= width || py >= height) continue
-                                    val pixel = pixels[py * width + px]
-                                    val r = (pixel shr 16) and 0xFF
-                                    val g = (pixel shr 8) and 0xFF
-                                    val b = pixel and 0xFF
-                                    uSum += ((-38 * r - 74 * g + 112 * b + 128) shr 8) + 128
-                                    vSum += ((112 * r - 94 * g - 18 * b + 128) shr 8) + 128
-                                    samples++
-                                }
-                            }
-                            if (samples == 0) continue
-                            val u = (uSum / samples).coerceIn(0, 255).toByte()
-                            val v = (vSum / samples).coerceIn(0, 255).toByte()
-                            val index = uvOffset + (y / 2) * width + (x and 1.inv())
-                            if (index + 1 < out.size) {
-                                out[index] = u
-                                out[index + 1] = v
-                            }
-                        }
-                    }
-                    return out
-                }
+            return try {
+                Mp4Encoder.encode(tempFile, frames, delaysMs, options)
+                withContext(Dispatchers.IO) { tempFile.readBytes() }
+            } finally {
+                tempFile.delete()
             }
         }
 
@@ -645,7 +427,7 @@ class ArtworkExporter
             if (!options.flattenOntoBackground) return source
             val out = PixelBuffer(source.width, source.height)
             for (i in out.pixels.indices) {
-                out.pixels[i] = BlendModes.sourceOver(options.backgroundColor, source.pixels[i])
+                out.pixels[i] = BlendModes.sourceOver(options.backgroundColor or 0xFF000000.toInt(), source.pixels[i])
             }
             return out
         }
@@ -654,50 +436,88 @@ class ArtworkExporter
         // Gallery publishing and sharing
         // -----------------------------------------------------------------------------------------
 
-        /**
-         * Copies an exported file into the device gallery under `Pictures/ArtFlow` so it shows up in
-         * the user's photo app.
-         *
-         * @return the MediaStore uri as a string, or null when publishing failed.
-         */
+        /** Publishes only supported image/video formats, removing incomplete MediaStore rows. */
         suspend fun publishToGallery(
             result: ExportResult,
             displayName: String,
         ): String? =
             withContext(Dispatchers.IO) {
+                if (!result.format.supportsGallery) return@withContext null
+                val resolver = context.contentResolver
+                var inserted: Uri? = null
+                var complete = false
                 try {
+                    val source = storage.exportedFile(result.filePath)
+                    val video = result.format == ExportFormat.MP4
                     val values =
                         ContentValues().apply {
                             put(MediaStore.MediaColumns.DISPLAY_NAME, result.fileName)
                             put(MediaStore.MediaColumns.MIME_TYPE, result.format.mimeType)
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/ArtFlow")
+                                val folder = if (video) Environment.DIRECTORY_MOVIES else Environment.DIRECTORY_PICTURES
+                                put(MediaStore.MediaColumns.RELATIVE_PATH, "$folder/ArtFlow")
                                 put(MediaStore.MediaColumns.IS_PENDING, 1)
                             }
                         }
-                    val resolver = context.contentResolver
                     val collection =
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                            MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                        if (video) {
+                            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
                         } else {
                             MediaStore.Images.Media.EXTERNAL_CONTENT_URI
                         }
-                    val uri = resolver.insert(collection, values) ?: return@withContext null
-                    resolver.openOutputStream(uri)?.use { output ->
-                        File(result.filePath).inputStream().use { input -> input.copyTo(output) }
+                    val uri = requireNotNull(resolver.insert(collection, values)) { "Cannot create a gallery item" }
+                    inserted = uri
+                    requireNotNull(resolver.openOutputStream(uri, "w")) { "Cannot open the gallery item" }.use { output ->
+                        source.inputStream().use { input -> input.copyTo(output) }
                     }
+                    currentCoroutineContext().ensureActive()
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         values.clear()
                         values.put(MediaStore.MediaColumns.IS_PENDING, 0)
-                        resolver.update(uri, values, null, null)
+                        check(resolver.update(uri, values, null, null) == 1) { "Cannot finish the gallery item" }
                     }
+                    complete = true
                     Timber.d("Published $displayName to the gallery")
                     uri.toString()
-                } catch (e: Exception) {
-                    Timber.w(e, "Could not publish the export to the gallery")
-                    null
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: java.io.IOException) {
+                    galleryFailure(error)
+                } catch (error: SecurityException) {
+                    galleryFailure(error)
+                } catch (error: IllegalArgumentException) {
+                    galleryFailure(error)
+                } catch (error: IllegalStateException) {
+                    galleryFailure(error)
+                } catch (error: UnsupportedOperationException) {
+                    galleryFailure(error)
+                } finally {
+                    if (!complete) {
+                        inserted?.let { uri ->
+                            runCatching { resolver.delete(uri, null, null) }
+                                .onFailure { Timber.w(it, "Could not remove an incomplete gallery item") }
+                        }
+                    }
                 }
             }
+
+        private fun galleryFailure(error: Exception): String? {
+            Timber.w(error, "Could not publish the export to the gallery")
+            return null
+        }
+
+        /** Copies an existing export into the exact destination granted by the system picker. */
+        suspend fun writeToDocument(
+            filePath: String,
+            destination: Uri,
+        ) = withContext(Dispatchers.IO) {
+            require(destination.scheme == "content") { "Choose a document destination" }
+            val source = storage.exportedFile(filePath)
+            requireNotNull(context.contentResolver.openOutputStream(destination, "wt")) { "Cannot open the chosen file" }.use { output ->
+                source.inputStream().use { input -> input.copyTo(output) }
+                output.flush()
+            }
+        }
 
         /** Share intent for an exported file, routed through the app's FileProvider. */
         fun shareIntent(
@@ -705,10 +525,11 @@ class ArtworkExporter
             chooserTitle: String = "Share artwork",
         ): Intent {
             val authority = "${context.packageName}.fileprovider"
-            val uri = FileProvider.getUriForFile(context, authority, File(result.filePath))
+            val uri = FileProvider.getUriForFile(context, authority, storage.exportedFile(result.filePath))
             val send =
                 Intent(Intent.ACTION_SEND).apply {
                     type = result.format.mimeType
+                    clipData = ClipData.newRawUri(result.fileName, uri)
                     putExtra(Intent.EXTRA_STREAM, uri)
                     putExtra(Intent.EXTRA_SUBJECT, result.fileName)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -719,8 +540,9 @@ class ArtworkExporter
         /** Open-in-place intent for the exported file (PDF viewers, image apps). */
         fun viewIntent(result: ExportResult): Intent {
             val authority = "${context.packageName}.fileprovider"
-            val uri = FileProvider.getUriForFile(context, authority, File(result.filePath))
+            val uri = FileProvider.getUriForFile(context, authority, storage.exportedFile(result.filePath))
             return Intent(Intent.ACTION_VIEW).apply {
+                clipData = ClipData.newRawUri(result.fileName, uri)
                 setDataAndType(uri, result.format.mimeType)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }

@@ -27,12 +27,15 @@ enum class ExportFormat(
     FRAME_SEQUENCE("PNG frames (zip)", "zip", "application/zip", requiresAnimation = true),
     ;
 
+    /** MediaStore accepts these image/video types; PSD/PDF/ZIP use the document picker. */
+    val supportsGallery: Boolean get() = this in setOf(PNG, JPEG, WEBP, GIF, MP4)
+
     companion object {
         /** Formats offered for a still image. */
         fun stillFormats(): List<ExportFormat> = listOf(PNG, JPEG, WEBP, PDF, PSD)
 
         /** Formats offered for an animation. */
-        fun animationFormats(): List<ExportFormat> = listOf(GIF, MP4, FRAME_SEQUENCE, PNG)
+        fun animationFormats(): List<ExportFormat> = listOf(GIF, MP4, FRAME_SEQUENCE)
 
         fun byName(name: String): ExportFormat? = entries.firstOrNull { it.name == name }
     }
@@ -143,7 +146,7 @@ object ExportPresets {
             ),
             ExportPreset(
                 "Print PDF",
-                "A4 at 300 DPI with vector text",
+                "A4 at 300 DPI with a high-resolution raster image",
                 ExportOptions(
                     format = ExportFormat.PDF,
                     pdfPageSize = PdfPageSize.A4_PORTRAIT,
@@ -163,7 +166,7 @@ object ExportPresets {
             ),
             ExportPreset(
                 "Video MP4",
-                "H.264 at 1080p, 8 Mbps",
+                "H.264 at the selected output size, 8 Mbps",
                 ExportOptions(format = ExportFormat.MP4, videoBitrate = 8_000_000),
             ),
             ExportPreset(
@@ -185,6 +188,7 @@ data class ExportResult(
     val frameCount: Int = 1,
     /** Set when the export was published to the device gallery. */
     val mediaStoreUri: String? = null,
+    val warning: String? = null,
 ) {
     val sizeLabel: String
         get() =
@@ -225,8 +229,6 @@ sealed class ExportError(
 
 /** Naming and sizing helpers shared by every exporter. */
 object ExportNaming {
-    private val timestampFormat = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US)
-
     /** `ProjectName-20260916-101500.png`, sanitised for the file system. */
     fun defaultFileName(
         projectName: String,
@@ -234,7 +236,23 @@ object ExportNaming {
         timestamp: Long = System.currentTimeMillis(),
     ): String {
         val safe = sanitize(projectName).ifEmpty { "ArtFlow" }
-        return "$safe-${timestampFormat.format(Date(timestamp))}.${format.extension}"
+        val stamp = SimpleDateFormat("yyyyMMdd-HHmmss-SSS", Locale.US).format(Date(timestamp))
+        return "$safe-$stamp.${format.extension}"
+    }
+
+    fun fileName(
+        projectName: String,
+        options: ExportOptions,
+    ): String {
+        val requested =
+            options.fileName?.trim()?.takeIf { it.isNotEmpty() }
+                ?: return defaultFileName(projectName, options.format)
+        require(requested.length <= 160 && requested.none { it == '/' || it == '\\' || it.code < 32 }) {
+            "Use a filename without folders and with at most 160 characters"
+        }
+        require(requested !in setOf(".", "..")) { "Invalid export filename" }
+        val suffix = ".${options.format.extension}"
+        return if (requested.endsWith(suffix, ignoreCase = true)) requested else requested + suffix
     }
 
     fun sanitize(name: String): String =
@@ -280,8 +298,8 @@ object ExportNaming {
         val scale = if (fitMode == FitMode.FIT) minOf(scaleX, scaleY) else maxOf(scaleX, scaleY)
         val drawWidth = max(1, (sourceWidth * scale).roundToInt())
         val drawHeight = max(1, (sourceHeight * scale).roundToInt())
-        val offsetX = if (fitMode == FitMode.FIT) (targetWidth - drawWidth) / 2 else 0
-        val offsetY = if (fitMode == FitMode.FIT) (targetHeight - drawHeight) / 2 else 0
+        val offsetX = (targetWidth - drawWidth) / 2
+        val offsetY = (targetHeight - drawHeight) / 2
         return FitPlacement(targetWidth, targetHeight, offsetX, offsetY, drawWidth, drawHeight)
     }
 

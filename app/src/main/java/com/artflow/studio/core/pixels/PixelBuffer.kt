@@ -7,6 +7,16 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
+internal fun checkedPixelCount(
+    width: Int,
+    height: Int,
+): Int {
+    require(width > 0 && height > 0) { "Pixel dimensions must be positive" }
+    val count = width.toLong() * height.toLong()
+    require(count <= 40_000_000L && width <= 8192 && height <= 8192) { "Pixel dimensions exceed the supported limits" }
+    return count.toInt()
+}
+
 /**
  * A mutable ARGB_8888 pixel buffer.
  *
@@ -20,11 +30,11 @@ import kotlin.math.roundToInt
 class PixelBuffer(
     val width: Int,
     val height: Int,
-    val pixels: IntArray = IntArray(width * height),
+    val pixels: IntArray = IntArray(checkedPixelCount(width, height)),
 ) {
     init {
         require(width > 0 && height > 0) { "PixelBuffer must be at least 1x1 (got ${width}x$height)" }
-        require(pixels.size == width * height) {
+        require(pixels.size == checkedPixelCount(width, height)) {
             "Pixel array size ${pixels.size} does not match ${width}x$height"
         }
     }
@@ -195,10 +205,12 @@ class PixelBuffer(
         val scaleX = width.toFloat() / newWidth
         val scaleY = height.toFloat() / newHeight
         for (y in 0 until newHeight) {
-            val sy = (y + 0.5f) * scaleY
+            val sy = ((y + 0.5f) * scaleY).coerceIn(0.5f, height - 0.5f)
             val row = y * newWidth
             for (x in 0 until newWidth) {
-                out.pixels[row + x] = sampleBilinear((x + 0.5f) * scaleX, sy)
+                // Resizing extends edge texels; transparent sampling remains correct for transforms.
+                val sx = ((x + 0.5f) * scaleX).coerceIn(0.5f, width - 0.5f)
+                out.pixels[row + x] = sampleBilinear(sx, sy)
             }
         }
         return out

@@ -1,6 +1,7 @@
 package com.artflow.studio.data.local
 
 import android.content.Context
+import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.domain.model.animation.AnimationFrame
 import com.artflow.studio.domain.model.animation.AnimationSettings
 import com.artflow.studio.domain.model.animation.TimelapseRecording
@@ -13,6 +14,9 @@ import kotlinx.serialization.json.Json
 import timber.log.Timber
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -77,13 +81,12 @@ data class CanvasDocument(
  * filesDir/projects/<id>/thumbnail.png         gallery thumbnail
  * filesDir/projects/<id>/autosave.artflow      rolling autosave used for crash recovery
  * filesDir/projects/<id>/layers/<layer>/v<n>.png  latest saved pixel content
- * filesDir/projects/<id>/exports/<name>        exported PNG/JPEG/PDF/GIF/PSD
+ * filesDir/exports/<id>/<name>                 exported files (the only FileProvider root)
  * ```
  *
- * Pixel content on disk is a *cache of the last save*, not the undo history. Undo/redo keeps
- * copy-on-write `PixelBuffer`s in memory (`CanvasRepositoryImpl`), so a save simply rewrites each
- * layer's current raster. The version segment exists so a future format can keep several raster
- * revisions side by side; today the repository always writes version 1.
+ * Raster files are immutable, content-addressed generations. Explicit saves and recovery snapshots
+ * may point to different generations of the same layer. A new manifest is published only after all
+ * of its referenced rasters are durable. Cleanup retains the union of both committed manifests.
  */
 @Singleton
 class ProjectStorage
@@ -102,7 +105,12 @@ class ProjectStorage
         // Paths
         // -----------------------------------------------------------------------------------------
 
-        fun projectDir(projectId: Long): File = File(context.filesDir, "projects/$projectId").apply { if (!exists()) mkdirs() }
+        fun projectDir(projectId: Long): File {
+            require(projectId > 0) { "Invalid project id" }
+            return File(context.filesDir, "projects/$projectId").apply {
+                check(isDirectory || mkdirs()) { "Cannot create project directory" }
+            }
+        }
 
         fun documentFile(projectId: Long): File = File(projectDir(projectId), DOCUMENT_NAME)
 
@@ -112,13 +120,35 @@ class ProjectStorage
 
         fun autosaveFile(projectId: Long): File = File(projectDir(projectId), AUTOSAVE_NAME)
 
-        fun exportsDir(projectId: Long): File = File(projectDir(projectId), EXPORTS_DIR).apply { if (!exists()) mkdirs() }
+        fun exportsDir(projectId: Long): File {
+            require(projectId > 0) { "Invalid project id" }
+            return File(context.filesDir, "$EXPORTS_DIR/$projectId").apply {
+                check(isDirectory || mkdirs()) { "Cannot create export directory" }
+            }
+        }
+
+        /** Only exported copies, never editable project documents, can be shared externally. */
+        fun exportedFile(path: String): File {
+            val root = File(context.filesDir, EXPORTS_DIR).canonicalFile
+            val file = File(path).canonicalFile
+            require(file.path.startsWith(root.path + File.separator) && file.isFile && file.length() > 0) {
+                "This exported file is no longer available; export it again"
+            }
+            return file
+        }
 
         /** Resolves a project-relative path such as `layers/3/v2.png`. */
         fun resolve(
             projectId: Long,
             relativePath: String,
-        ): File = File(projectDir(projectId), relativePath)
+        ): File {
+            require(relativePath.isNotBlank() && !File(relativePath).isAbsolute) { "Expected a relative project path" }
+            require('\\' !in relativePath && '\u0000' !in relativePath) { "Invalid project path" }
+            val root = projectDir(projectId).canonicalFile
+            val file = File(root, relativePath).canonicalFile
+            require(file.path.startsWith(root.path + File.separator)) { "Path escapes the project directory" }
+            return file
+        }
 
         // -----------------------------------------------------------------------------------------
         // Document
@@ -137,19 +167,23 @@ class ProjectStorage
                 file
             }
 
-        /** Writes the rolling autosave copy. Never fails the caller: a save must not break the editor. */
+        /** Writes recovery metadata only after the caller has committed its immutable rasters. */
         suspend fun saveAutosave(
             projectId: Long,
             document: CanvasDocument,
-        ): File? =
+        ): File =
             withContext(Dispatchers.IO) {
-                runCatching {
-                    val file = autosaveFile(projectId)
-                    writeAtomically(file) { out ->
-                        out.write(json.encodeToString(CanvasDocument.serializer(), document).toByteArray())
-                    }
-                    file
-                }.onFailure { Timber.w(it, "Autosave failed for project $projectId") }.getOrNull()
+                val file = autosaveFile(projectId)
+                writeAtomically(file) { out ->
+                    out.write(json.encodeToString(CanvasDocument.serializer(), document).toByteArray())
+                }
+                file
+            }
+
+        suspend fun discardAutosave(projectId: Long) =
+            withContext(Dispatchers.IO) {
+                val file = autosaveFile(projectId)
+                check(!file.exists() || file.delete()) { "Could not discard the recovery snapshot" }
             }
 
         suspend fun loadDocument(projectId: Long): CanvasDocument? =
@@ -170,18 +204,31 @@ class ProjectStorage
         private fun decodeDocument(
             file: File,
             projectId: Long,
-        ): CanvasDocument? =
-            try {
-                val document = json.decodeFromString(CanvasDocument.serializer(), file.readText())
-                if (document.version > CanvasDocument.CURRENT_VERSION) {
-                    Timber.w("Project $projectId was written by a newer app version (v${document.version})")
-                }
-                document
-            } catch (e: Exception) {
-                // A corrupt document must not take the app down; the flattened PNG is still usable.
-                Timber.e(e, "Failed to read project $projectId document")
-                null
+        ): CanvasDocument {
+            require(file.length() in 1..MAX_DOCUMENT_BYTES) { "Project $projectId metadata is empty or too large" }
+            // Missing is different from corrupt. Propagate invalid data; callers must NEVER replace it
+            // with a new blank canvas or silently discard a newer format's fields on the next save.
+            val document = json.decodeFromString(CanvasDocument.serializer(), file.readText())
+            require(document.version in 1..CanvasDocument.CURRENT_VERSION) { "Unsupported project version ${document.version}" }
+            require(CanvasOperations.isSizeSafe(document.width, document.height)) { "Invalid project dimensions" }
+            require(document.dpi in CanvasOperations.MIN_DPI..CanvasOperations.MAX_DPI) { "Invalid project DPI" }
+            val frames = document.resolvedFrames()
+            require(frames.size in 1..MAX_FRAMES) { "Project has too many animation frames" }
+            require(frames.map { it.id }.distinct().size == frames.size) { "Duplicate frame identifiers" }
+            val layers = frames.flatMap { it.layers }
+            require(layers.size <= MAX_LAYERS) { "Project has too many layers" }
+            require(layers.all { it.id > 0 && it.id < Long.MAX_VALUE }) { "Invalid layer identifier" }
+            require(layers.map { it.id }.distinct().size == layers.size) { "Duplicate layer identifiers" }
+            require(frames.all { it.layers.isNotEmpty() }) { "A frame must contain a layer" }
+            require(frames.all { it.durationMs in AnimationFrame.MIN_DURATION_MS..AnimationFrame.MAX_DURATION_MS }) {
+                "Invalid animation frame duration"
             }
+            layers.forEach { layer ->
+                require(layer.opacity.isFinite() && layer.opacity in 0f..1f) { "Invalid layer opacity" }
+                listOfNotNull(layer.rasterFile, layer.maskFile).forEach { resolve(projectId, it) }
+            }
+            return document
+        }
 
         /** True when the autosave is newer than the last explicit save. */
         suspend fun hasUnsavedRecovery(projectId: Long): Boolean =
@@ -230,8 +277,8 @@ class ProjectStorage
         /**
          * Writes a new immutable version of a layer's pixels and returns its project-relative path.
          *
-         * @param version raster revision, supplied by the repository. Every call currently writes
-         *   revision 1, so a later save of the same layer replaces the previous file.
+         * The content digest makes changed pixels a new file, so autosaving cannot mutate a raster
+         * referenced by the explicitly saved artwork. Legacy v1.png paths remain readable.
          */
         suspend fun writeRaster(
             projectId: Long,
@@ -240,7 +287,7 @@ class ProjectStorage
             pngBytes: ByteArray,
         ): String =
             withContext(Dispatchers.IO) {
-                val relative = "$LAYERS_DIR/$layerId/${RASTER_PREFIX}$version.png"
+                val relative = "$LAYERS_DIR/$layerId/${RASTER_PREFIX}$version-${digest(pngBytes)}.png"
                 val file = resolve(projectId, relative)
                 file.parentFile?.mkdirs()
                 writeAtomically(file) { out -> out.write(pngBytes) }
@@ -254,7 +301,8 @@ class ProjectStorage
             withContext(Dispatchers.IO) {
                 if (relativePath == null) return@withContext null
                 val file = resolve(projectId, relativePath)
-                if (file.exists()) file.readBytes() else null
+                require(file.isFile && file.length() in 1..MAX_RASTER_BYTES) { "Missing or invalid layer pixels: $relativePath" }
+                file.readBytes()
             }
 
         /** Layer mask and other auxiliary grayscale images share the raster storage. */
@@ -266,7 +314,8 @@ class ProjectStorage
             pngBytes: ByteArray,
         ): String =
             withContext(Dispatchers.IO) {
-                val relative = "$LAYERS_DIR/$layerId/$kind$version.png"
+                require(kind.matches(Regex("[a-zA-Z0-9_-]+"))) { "Invalid auxiliary image kind" }
+                val relative = "$LAYERS_DIR/$layerId/$kind$version-${digest(pngBytes)}.png"
                 val file = resolve(projectId, relative)
                 file.parentFile?.mkdirs()
                 writeAtomically(file) { out -> out.write(pngBytes) }
@@ -292,10 +341,17 @@ class ProjectStorage
             withContext(Dispatchers.IO) {
                 val layersDir = File(projectDir(projectId), LAYERS_DIR)
                 if (!layersDir.exists()) return@withContext 0
+                // Fail closed if either manifest is unreadable; never guess which artwork can be deleted.
+                val retained = keep.toMutableSet()
+                listOfNotNull(loadDocument(projectId), loadAutosave(projectId)).forEach { document ->
+                    document.resolvedFrames().flatMap { it.layers }.forEach { layer ->
+                        retained.addAll(listOfNotNull(layer.rasterFile, layer.maskFile))
+                    }
+                }
                 var deleted = 0
                 layersDir.walkTopDown().filter { it.isFile && it.extension == "png" }.forEach { file ->
                     val relative = file.relativeTo(projectDir(projectId)).path.replace('\\', '/')
-                    if (relative !in keep) {
+                    if (relative !in retained) {
                         if (file.delete()) deleted++
                     }
                 }
@@ -307,9 +363,72 @@ class ProjectStorage
                 deleted
             }
 
+        /** IDs with orphaned files remain reserved after an interrupted database transaction. */
+        fun maximumStoredProjectId(): Long =
+            File(context.filesDir, "projects")
+                .listFiles()
+                ?.mapNotNull { it.name.toLongOrNull() }
+                ?.maxOrNull() ?: 0L
+
+        /** Does not create a directory, unlike [projectDir]. */
+        fun projectDirectoryExists(projectId: Long): Boolean = File(context.filesDir, "projects/$projectId").exists()
+
+        /**
+         * Copies immutable saved/recovery generations into a new project, never sharing files with
+         * the original. Call inside the gallery transaction so an incomplete copy is not visible.
+         * Exports and unreferenced temporary generations are intentionally not duplicated.
+         */
+        suspend fun copyProject(
+            sourceId: Long,
+            destinationId: Long,
+        ): CanvasDocument? =
+            withContext(Dispatchers.IO) {
+                require(sourceId > 0 && destinationId > 0 && sourceId != destinationId) { "Invalid project copy" }
+                val document = loadDocument(sourceId)
+                val recovery = loadAutosave(sourceId)
+                val newerRecovery = hasUnsavedRecovery(sourceId)
+                val destination = File(context.filesDir, "projects/$destinationId")
+                check(!destination.exists()) { "The destination already contains project data" }
+                check(destination.mkdirs()) { "Cannot create the copied project directory" }
+                var completed = false
+                try {
+                    val paths =
+                        listOfNotNull(document, recovery)
+                            .flatMap { it.resolvedFrames() }
+                            .flatMap { it.layers }
+                            .flatMap { listOfNotNull(it.rasterFile, it.maskFile) }
+                            .distinct()
+                    paths.forEach { relative ->
+                        val bytes = requireNotNull(readRaster(sourceId, relative))
+                        writeAtomically(resolve(destinationId, relative)) { it.write(bytes) }
+                    }
+                    listOf(FLATTENED_NAME, THUMBNAIL_NAME).forEach { name ->
+                        val source = resolve(sourceId, name)
+                        if (source.isFile) {
+                            writeAtomically(resolve(destinationId, name)) { out -> source.inputStream().use { it.copyTo(out) } }
+                        }
+                    }
+                    // Preserve recovery ordering: the newer autosave is written AFTER the saved
+                    // manifest. savedAt is retained, so neither snapshot claims to be a new edit.
+                    document?.let { saveDocument(destinationId, it) }
+                    recovery?.let {
+                        saveAutosave(destinationId, it)
+                        val savedTime = documentFile(destinationId).lastModified()
+                        val modified = if (newerRecovery) savedTime + 1000L else (savedTime - 1000L).coerceAtLeast(0L)
+                        check(autosaveFile(destinationId).setLastModified(modified)) { "Cannot preserve recovery ordering" }
+                    }
+                    completed = true
+                    document
+                } finally {
+                    if (!completed) destination.deleteRecursively()
+                }
+            }
+
         /** Total bytes used by a project, shown in the settings storage screen. */
         fun projectSizeBytes(projectId: Long): Long =
-            File(context.filesDir, "projects/$projectId").walkTopDown().filter { it.isFile }.sumOf { it.length() }
+            listOf("projects/$projectId", "$EXPORTS_DIR/$projectId").sumOf { path ->
+                File(context.filesDir, path).walkTopDown().filter { it.isFile }.sumOf { it.length() }
+            }
 
         // -----------------------------------------------------------------------------------------
         // Exports
@@ -321,23 +440,27 @@ class ProjectStorage
             bytes: ByteArray,
         ): File =
             withContext(Dispatchers.IO) {
+                require(fileName.isNotBlank() && fileName.length <= 180 && fileName !in setOf(".", "..")) { "Invalid export filename" }
+                require(fileName.none { it == '/' || it == '\\' || it.code < 32 }) { "Export filename must not contain a path" }
+                require(bytes.isNotEmpty()) { "The export is empty" }
                 val file = File(exportsDir(projectId), fileName)
                 writeAtomically(file) { out -> out.write(bytes) }
                 file
             }
 
         fun listExports(projectId: Long): List<File> =
-            exportsDir(projectId).listFiles()?.sortedByDescending { it.lastModified() } ?: emptyList()
+            listOf(File(context.filesDir, "$EXPORTS_DIR/$projectId"), File(context.filesDir, "projects/$projectId/$EXPORTS_DIR"))
+                .flatMap { it.listFiles()?.filter { file -> file.isFile } ?: emptyList() }
+                .sortedByDescending { it.lastModified() }
 
         // -----------------------------------------------------------------------------------------
         // Deletion / housekeeping
         // -----------------------------------------------------------------------------------------
 
         fun deleteProjectFiles(projectId: Long) {
-            val dir = File(context.filesDir, "projects/$projectId")
-            if (dir.exists()) {
-                val deleted = dir.deleteRecursively()
-                Timber.d("Deleted project $projectId files: $deleted")
+            require(projectId > 0) { "Invalid project id" }
+            listOf(File(context.filesDir, "projects/$projectId"), File(context.filesDir, "$EXPORTS_DIR/$projectId")).forEach { dir ->
+                check(!dir.exists() || dir.deleteRecursively()) { "Could not delete all project files" }
             }
         }
 
@@ -351,7 +474,10 @@ class ProjectStorage
                 ?: emptySet()
 
         /** Total size of all projects, for the settings storage readout. */
-        fun totalStorageBytes(): Long = File(context.filesDir, "projects").walkTopDown().filter { it.isFile }.sumOf { it.length() }
+        fun totalStorageBytes(): Long =
+            listOf("projects", EXPORTS_DIR).sumOf { folder ->
+                File(context.filesDir, folder).walkTopDown().filter { it.isFile }.sumOf { it.length() }
+            }
 
         /** Deletes leftover export files older than [olderThanMs]. */
         fun pruneOldExports(
@@ -370,24 +496,46 @@ class ProjectStorage
          * Write through a temp file and rename, so an interrupted save can never leave a half-written
          * document or image behind.
          */
-        private inline fun writeAtomically(
+        internal fun writeAtomically(
             target: File,
             write: (FileOutputStream) -> Unit,
         ) {
-            target.parentFile?.mkdirs()
-            val temp = File(target.parentFile, "${target.name}.tmp")
-            FileOutputStream(temp).use { out ->
-                write(out)
-                out.flush()
-                out.fd.sync()
-            }
-            if (!temp.renameTo(target)) {
-                temp.copyTo(target, overwrite = true)
-                temp.delete()
+            val parent = requireNotNull(target.parentFile)
+            check(parent.isDirectory || parent.mkdirs()) { "Cannot create storage directory" }
+            val temp = File.createTempFile(".${target.name}-", ".tmp", parent)
+            try {
+                FileOutputStream(temp).use { out ->
+                    write(out)
+                    out.flush()
+                    out.fd.sync()
+                }
+                // Never fall back to an overwrite copy: a failed atomic replacement must leave the
+                // previous artwork intact. Both files are on the same app-private filesystem.
+                Files.move(temp.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+                val descriptor =
+                    android.system.Os.open(
+                        parent.path,
+                        android.system.OsConstants.O_RDONLY,
+                        0,
+                    )
+                try {
+                    android.system.Os.fsync(descriptor)
+                } finally {
+                    android.system.Os.close(descriptor)
+                }
+            } finally {
+                if (temp.exists()) temp.delete()
             }
         }
 
+        private fun digest(bytes: ByteArray): String =
+            MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it.toInt() and 255) }
+
         companion object {
+            private const val MAX_DOCUMENT_BYTES = 32L * 1024 * 1024
+            private const val MAX_RASTER_BYTES = 192L * 1024 * 1024
+            const val MAX_FRAMES = 240
+            const val MAX_LAYERS = 1024
             const val DOCUMENT_NAME = "canvas.artflow"
             const val AUTOSAVE_NAME = "autosave.artflow"
             const val FLATTENED_NAME = "canvas.png"

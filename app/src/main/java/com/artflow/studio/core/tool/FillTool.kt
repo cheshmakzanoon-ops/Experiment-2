@@ -2,10 +2,10 @@ package com.artflow.studio.core.tool
 
 import com.artflow.studio.core.pixels.BlendModes
 import com.artflow.studio.core.pixels.Channels
-import com.artflow.studio.core.pixels.ImageFilters
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
+import java.util.ArrayDeque
 import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
@@ -29,7 +29,7 @@ object FillTool {
         val alphaLock: Boolean = false,
         /** Soften the fill edge over 1px so it does not look jagged. */
         val antiAlias: Boolean = true,
-        /** Grow the fill region by this many pixels before filling (closes hairline gaps). */
+        /** Close gaps in the boundary by this pixel radius before finding connectivity. */
         val gapClose: Int = 0,
         /** How the fill colour is applied over existing pixels. */
         val mode: BlendModeChoice = BlendModeChoice.NORMAL,
@@ -98,7 +98,7 @@ object FillTool {
         color: Int,
         settings: Settings = Settings(),
     ): Result {
-        val coverage = settings.mask?.copy() ?: SelectionMask(target.width, target.height).apply { selectAll() }
+        val coverage = SelectionMask(target.width, target.height).apply { selectAll() }
         if (!coverage.isActive()) return Result(0, null, changed = false)
         return applyFill(target, coverage, color, settings)
     }
@@ -120,7 +120,7 @@ object FillTool {
             outline.coverage[i] = (o - n).coerceAtLeast(0).toByte()
         }
         if (!outline.isActive()) return Result(0, null, changed = false)
-        return applyFill(target, outline, color, settings)
+        return applyFill(target, outline, color, settings.copy(mask = null))
     }
 
     /** Copies [pattern] tiles across the fill area (Phase 22: pattern fill). */
@@ -145,60 +145,34 @@ object FillTool {
         val feather = if (settings.antiAlias) softenedCoverage(coverage) else coverage
         val pattern = settings.pattern
 
+        val mode =
+            when (settings.mode) {
+                BlendModeChoice.NORMAL -> com.artflow.studio.domain.model.layer.BlendMode.NORMAL
+                BlendModeChoice.MULTIPLY -> com.artflow.studio.domain.model.layer.BlendMode.MULTIPLY
+                BlendModeChoice.SCREEN -> com.artflow.studio.domain.model.layer.BlendMode.SCREEN
+                BlendModeChoice.DARKEN -> com.artflow.studio.domain.model.layer.BlendMode.DARKEN
+                BlendModeChoice.LIGHTEN -> com.artflow.studio.domain.model.layer.BlendMode.LIGHTEN
+            }
+
         for (y in 0 until target.height) {
             val row = y * target.width
             for (x in 0 until target.width) {
                 val index = row + x
-                var alpha = feather.alphaAt(index)
+                val selection = settings.mask?.coverageAt(x, y)?.div(255f) ?: 1f
+                val alpha = feather.alphaAt(index) * selection
                 if (alpha <= 0f) continue
-                if (settings.alphaLock) {
-                    // Alpha lock: the fill only affects pixels that are already opaque, and is
-                    // weighted by how opaque they are so soft edges stay soft.
-                    val destinationAlpha = (target.pixels[index] ushr 24) and 0xFF
-                    if (destinationAlpha == 0) continue
-                    alpha *= destinationAlpha / 255f
-                    if (alpha <= 0f) continue
-                }
-
-                val sourceColor =
-                    if (pattern != null) {
-                        pattern.getUnchecked(x % pattern.width, y % pattern.height)
-                    } else {
-                        color
-                    }
                 val existing = target.pixels[index]
-                val blended =
-                    when (settings.mode) {
-                        BlendModeChoice.NORMAL ->
-                            BlendModes.sourceOver(
-                                existing,
-                                Channels.scaleAlpha(sourceColor, alpha),
-                            )
-                        BlendModeChoice.MULTIPLY ->
-                            ImageFilters.lerpArgb(
-                                existing,
-                                BlendModes.blend(existing, sourceColor, com.artflow.studio.domain.model.layer.BlendMode.MULTIPLY),
-                                alpha,
-                            )
-                        BlendModeChoice.SCREEN ->
-                            ImageFilters.lerpArgb(
-                                existing,
-                                BlendModes.blend(existing, sourceColor, com.artflow.studio.domain.model.layer.BlendMode.SCREEN),
-                                alpha,
-                            )
-                        BlendModeChoice.DARKEN ->
-                            ImageFilters.lerpArgb(
-                                existing,
-                                BlendModes.blend(existing, sourceColor, com.artflow.studio.domain.model.layer.BlendMode.DARKEN),
-                                alpha,
-                            )
-                        BlendModeChoice.LIGHTEN ->
-                            ImageFilters.lerpArgb(
-                                existing,
-                                BlendModes.blend(existing, sourceColor, com.artflow.studio.domain.model.layer.BlendMode.LIGHTEN),
-                                alpha,
-                            )
+                val existingAlpha = (existing ushr 24) and 0xFF
+                if (settings.alphaLock && existingAlpha == 0) continue
+                val backdrop = if (settings.alphaLock) Channels.withAlpha(existing, 255) else existing
+                val sourceColor = pattern?.getUnchecked(x % pattern.width, y % pattern.height) ?: color
+                val mixed =
+                    if (settings.mode == BlendModeChoice.NORMAL) {
+                        BlendModes.sourceOver(backdrop, Channels.scaleAlpha(sourceColor, alpha))
+                    } else {
+                        BlendModes.blend(backdrop, sourceColor, mode, alpha)
                     }
+                val blended = if (settings.alphaLock) Channels.withAlpha(mixed, existingAlpha) else mixed
 
                 if (blended != existing) {
                     target.pixels[index] = blended
@@ -255,26 +229,27 @@ object FillTool {
         val toleranceSquared = toleranceSquared(settings.tolerance)
         val gapClose = settings.gapClose.coerceIn(0, 16)
 
-        /**
-         * Connectivity test. With gap closing enabled, a pixel counts as "connected" when any
-         * pixel inside the gap window matches, which lets the fill jump hairline gaps in line art.
-         */
+        // Close the *barrier*, not the matching region. Expanding matching pixels used to
+        // bridge across ink, opening closed shapes and flooding the rest of the canvas.
+        val closedBarrier =
+            if (gapClose > 0) {
+                val barrier = SelectionMask(width, height)
+                for (i in source.pixels.indices) {
+                    if (colorDistanceSquared(source.pixels[i], startColor) > toleranceSquared) {
+                        barrier.coverage[i] = 255.toByte()
+                    }
+                }
+                barrier.expanded(gapClose).expanded(-gapClose)
+            } else {
+                null
+            }
+
         fun matches(
             x: Int,
             y: Int,
-        ): Boolean {
-            if (gapClose == 0) {
-                return colorDistanceSquared(source.getUnchecked(x, y), startColor) <= toleranceSquared
-            }
-            for (dy in -gapClose..gapClose) {
-                for (dx in -gapClose..gapClose) {
-                    if (colorDistanceSquared(source.getSafe(x + dx, y + dy), startColor) <= toleranceSquared) {
-                        return true
-                    }
-                }
-            }
-            return false
-        }
+        ): Boolean =
+            colorDistanceSquared(source.getUnchecked(x, y), startColor) <= toleranceSquared &&
+                (closedBarrier?.coverageAt(x, y) ?: 0) == 0
 
         val stack = ArrayDeque<IntArray>()
         stack.addLast(intArrayOf(startX, startY))
@@ -330,9 +305,12 @@ object FillTool {
         b: Int,
     ): Float {
         val da = Channels.alpha(a) - Channels.alpha(b)
-        val dr = Channels.red(a) - Channels.red(b)
-        val dg = Channels.green(a) - Channels.green(b)
-        val db = Channels.blue(a) - Channels.blue(b)
+        // Hidden RGB in transparent PNG pixels must not split one visibly empty region.
+        val aa = Channels.alpha(a) / 255f
+        val ab = Channels.alpha(b) / 255f
+        val dr = Channels.red(a) * aa - Channels.red(b) * ab
+        val dg = Channels.green(a) * aa - Channels.green(b) * ab
+        val db = Channels.blue(a) * aa - Channels.blue(b) * ab
         return da * da + dr * dr + dg * dg + db * db
     }
 

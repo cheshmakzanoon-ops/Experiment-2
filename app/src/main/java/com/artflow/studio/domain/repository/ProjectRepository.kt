@@ -34,6 +34,9 @@ interface ProjectRepository {
      */
     suspend fun saveProject(project: Project): Long
 
+    /** Copies the saved artwork and recovery snapshot before exposing the new gallery entry. */
+    suspend fun duplicateProject(projectId: Long): Long
+
     /**
      * Update an existing project
      */
