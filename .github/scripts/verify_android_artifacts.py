@@ -18,7 +18,7 @@ MAX_LIBRARY_BYTES = 256 * 1024 * 1024
 
 
 def verify_elf(data: bytes, require_64: bool) -> list[str]:
-    """Validate ELF load segments and 64-bit LOAD/RELRO alignment."""
+    """Validate LOAD alignment and actual page-rounded RELRO protection safety."""
     if len(data) < 64 or data[:4] != b'\x7fELF':
         return ['not a complete ELF header']
     if data[4] not in (1, 2) or data[5] not in (1, 2):
@@ -38,23 +38,72 @@ def verify_elf(data: bytes, require_64: bool) -> list[str]:
     if not count or entsize < struct.calcsize(fmt) or phoff + entsize * count > len(data):
         return ['invalid program header table']
     errors = []
-    loads = 0
+    loads = []
+    relros = []
+    address_limit = 1 << (64 if is_64 else 32)
     for index in range(count):
         values = struct.unpack_from(fmt, data, phoff + index * entsize)
         if is_64:
-            kind, _, offset, vaddr, _, filesz, memsz, align = values
+            kind, flags, offset, vaddr, _, filesz, memsz, align = values
         else:
-            kind, offset, vaddr, _, filesz, memsz, _, align = values
+            kind, offset, vaddr, _, filesz, memsz, flags, align = values
         if kind == 1:  # PT_LOAD
-            loads += 1
-            if filesz > memsz or offset + filesz > len(data):
+            loads.append((index, flags, vaddr, vaddr + memsz))
+            if filesz > memsz or offset + filesz > len(data) or vaddr + memsz >= address_limit:
                 errors.append(f'LOAD {index}: invalid size or file offset')
             if is_64 and (align < PAGE_SIZE or align & (align - 1) or (vaddr - offset) % PAGE_SIZE):
                 errors.append(f'LOAD {index}: not 16 KB aligned (alignment {align})')
-        if kind == 0x6474E552 and is_64 and (vaddr + memsz) % PAGE_SIZE:  # PT_GNU_RELRO
-            errors.append(f'RELRO {index}: protection end not 16 KB aligned')
+        if kind == 0x6474E552 and is_64 and memsz:  # PT_GNU_RELRO
+            if vaddr + memsz >= address_limit:
+                errors.append(f'RELRO {index}: virtual address overflow')
+            else:
+                relros.append((index, vaddr, vaddr + memsz))
     if not loads:
         errors.append('ELF has no LOAD segments')
+    if is_64:
+        errors.extend(verify_relro(loads, relros))
+    return errors
+
+
+def covered(start: int, end: int, ranges: list[tuple[int, int]]) -> bool:
+    """Whether a union of half-open intervals covers every byte, without per-byte work."""
+    cursor = start
+    for low, high in sorted(ranges):
+        if low > cursor:
+            break
+        cursor = max(cursor, high)
+        if cursor >= end:
+            return True
+    return start >= end
+
+
+def verify_relro(loads: list[tuple[int, int, int, int]],
+                 relros: list[tuple[int, int, int]]) -> list[str]:
+    """Model Bionic's page_start(vaddr)..page_end(vaddr+memsz) mprotect.
+
+    A non-aligned raw RELRO end is safe when the rounded tail contains only padding.
+    Conversely, even an aligned end is unsafe if rounding its START protects live RW
+    bytes. Reject both forms of real overlap; do not whitelist a library or skip RELRO.
+    Source: platform/bionic linker/linker_phdr.cpp, _phdr_table_set_gnu_relro_prot.
+    """
+    errors = []
+    relro_ranges = [(start, end) for _, start, end in relros]
+    mapped_ranges = [(start // PAGE_SIZE * PAGE_SIZE,
+                      (end + PAGE_SIZE - 1) // PAGE_SIZE * PAGE_SIZE)
+                     for _, _, start, end in loads if end > start]
+    for index, start, end in relros:
+        page_start = start // PAGE_SIZE * PAGE_SIZE
+        page_end = (end + PAGE_SIZE - 1) // PAGE_SIZE * PAGE_SIZE
+        if not covered(page_start, page_end, mapped_ranges):
+            errors.append(f'RELRO {index}: protection includes unmapped pages')
+        for load_index, flags, low, high in loads:
+            overlap_start, overlap_end = max(page_start, low), min(page_end, high)
+            if overlap_start >= overlap_end:
+                continue
+            if flags & 1:  # PF_X: Bionic's PROT_READ also removes execute permission.
+                errors.append(f'RELRO {index}: protection overlaps executable LOAD {load_index}')
+            if flags & 2 and not covered(overlap_start, overlap_end, relro_ranges):
+                errors.append(f'RELRO {index}: protection overlaps live writable LOAD {load_index}')
     return errors
 
 
@@ -73,13 +122,14 @@ def verify_archive(path: Path) -> tuple[list[str], list[str]]:
         manifest = 'AndroidManifest.xml' if path.suffix.lower() == '.apk' else 'base/manifest/AndroidManifest.xml'
         if manifest not in names:
             errors.append(f'missing {manifest}')
-        abis = set()
+        libraries = {}
         for entry in archive.infolist():
             if not entry.filename.endswith('.so'):
                 continue
             parts = entry.filename.split('/')
             abi = parts[-2] if len(parts) >= 2 else ''
-            abis.add(abi)
+            key = '/'.join(parts[:-2] + [parts[-1]])
+            libraries.setdefault(key, set()).add(abi)
             if entry.file_size > MAX_LIBRARY_BYTES:
                 errors.append(f'{entry.filename}: unexpectedly large library')
                 continue
@@ -97,9 +147,10 @@ def verify_archive(path: Path) -> tuple[list[str], list[str]]:
                 data_offset = entry.header_offset + 30 + name_len + extra_len
                 if data_offset % PAGE_SIZE:
                     errors.append(f'{entry.filename}: uncompressed APK entry is not 16 KB aligned')
-        for abi32, abi64 in [('armeabi-v7a', 'arm64-v8a'), ('x86', 'x86_64')]:
-            if abi32 in abis and abi64 not in abis:
-                errors.append(f'{abi32} libraries have no corresponding {abi64} ABI')
+        for library, abis in libraries.items():
+            for abi32, abi64 in [('armeabi-v7a', 'arm64-v8a'), ('x86', 'x86_64')]:
+                if abi32 in abis and abi64 not in abis:
+                    errors.append(f'{library}: {abi32} library has no corresponding {abi64} ABI')
     return errors, inventory
 
 
