@@ -1,0 +1,67 @@
+name: Commit saved repair source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/commit-saved-repairs.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: commit-saved-artflow-repairs
+  cancel-in-progress: false
+
+jobs:
+  commit-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '10494592291'
+          run-id: 35216159218
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/saved-repairs
+          merge-multiple: true
+      - name: Verify and apply the saved source patch
+        env:
+          EXPECTED_HEAD: ${{ github.sha }}
+          CANDIDATE: ${{ runner.temp }}/saved-repairs
+        run: |
+          set -euo pipefail
+          test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$EXPECTED_HEAD"
+          echo "b6269fd00f8cb911ec3a7db748e944c22e0ec045bbd31fd69938f3749c32f299  $CANDIDATE/candidate.patch" | sha256sum -c -
+          echo "561b0008ad4cab9b949af87ba8fe17cca016a15fc84b859e3ed38446a3e29d2b  $CANDIDATE/candidate-source.tar.gz" | sha256sum -c -
+          git apply --check --exclude='.github/workflows/*' --exclude='*.pyc' "$CANDIDATE/candidate.patch"
+          git apply --exclude='.github/workflows/*' --exclude='*.pyc' "$CANDIDATE/candidate.patch"
+          # The connector applies workflow changes separately with workflow-write authority.
+          # Only Python interpreter caches are omitted from the application candidate.
+          printf '\n# Python interpreter caches (not source)\n__pycache__/\n*.py[cod]\n' >> .gitignore
+          git rm -r .github/hardening-parts .github/export-repair-parts .github/release-doc-parts
+          git rm .github/hardening-followup.patch.xz .github/finish-repairs.py .github/run-device-tests.sh
+          git add app README.md agent.md CONTRIBUTING.md docs .github/scripts .gitignore
+          git diff --cached --check
+          python -B -m unittest discover -s .github/scripts -p 'test_*.py'
+          bash -n .github/scripts/run-device-tests.sh
+      - name: Commit and push source without asserting production readiness
+        env:
+          EXPECTED_HEAD: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$EXPECTED_HEAD"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git diff --cached --stat
+          git commit -m 'fix: commit saved artwork, rendering, export and release-safety repairs' -m 'Persist the exact saved source candidate from run 35216159218, patch SHA256 b6269fd00f8cb911ec3a7db748e944c22e0ec045bbd31fd69938f3749c32f299. Remove superseded patch transport files and exclude generated Python bytecode. Requested source publication is not release approval: API 26 and artifact-preflight checks still failed in the latest full verification run.'
+          git push origin HEAD:main
+          echo "SOURCE_COMMIT=$(git rev-parse HEAD)"
+          test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$(git rev-parse HEAD)"
