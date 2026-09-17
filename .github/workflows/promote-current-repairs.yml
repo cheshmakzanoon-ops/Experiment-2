@@ -1,0 +1,44 @@
+name: Promote current repair sources
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/promote-current-repairs.yml
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+      - uses: actions/download-artifact@v4
+        with:
+          name: editor-repair-candidate
+          run-id: 35216159218
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/candidate
+      - name: Apply and publish the exact latest completed source candidate
+        env:
+          EXPECTED_BASE: ffc6c50af6e61bda12fd6280407ae011b96ab911
+        run: |
+          set -euo pipefail
+          current="$(git rev-parse HEAD)"
+          test "$current" = "$EXPECTED_BASE" || { echo "Unexpected main base: $current"; exit 1; }
+          (cd "${RUNNER_TEMP}/candidate" && sha256sum -c SHA256SUMS)
+          git apply --check "${RUNNER_TEMP}/candidate/candidate.patch"
+          git apply "${RUNNER_TEMP}/candidate/candidate.patch"
+          git rm .github/workflows/promote-current-repairs.yml
+          git add app README.md agent.md CONTRIBUTING.md docs .github/scripts .github/workflows/android-ci.yml
+          test -n "$(git status --porcelain)"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: commit all completed ArtFlow repair source changes' -m 'Promotes the exact latest repair candidate from verification run 35216159218 so all source, tests, documentation and release-hardening changes completed so far are present directly on main.'
+          git push origin HEAD:main
