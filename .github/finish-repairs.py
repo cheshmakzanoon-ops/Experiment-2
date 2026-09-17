@@ -1,35 +1,14 @@
+"""Apply the exact locally reviewed gallery, mask and export repairs."""
+import hashlib
+import lzma
+import subprocess
 from pathlib import Path
 
-ROOT = Path.cwd()
-BASE = 'app/src/main/java/com/artflow/studio/'
-
-
-def replace(path, old, new):
-    target = ROOT / path
-    text = target.read_text(encoding='utf-8')
-    if text.count(old) != 1:
-        raise RuntimeError(f'Expected exactly one edit target in {path}: {old[:80]}')
-    target.write_text(text.replace(old, new), encoding='utf-8')
-
-
-replace(BASE + 'core/render/Compositor.kt',
-'''                if (layer.adjustmentType != null) {
-                    if (options.applyAdjustments) applyAdjustment(clipBase ?: result, input)
-                    continue
-                }''',
-'''                if (layer.adjustmentType != null && options.applyAdjustments) {
-                    applyAdjustment(clipBase ?: result, input)
-                }
-                if (layer.adjustmentType != null) continue''')
-replace(BASE + 'core/render/StrokeRasterizer.kt',
-'''        val (target, stroke, params, totalLength, alphaLock, mask, random) = context''',
-'''        val target = context.target
-        val stroke = context.stroke
-        val params = context.params
-        val totalLength = context.totalLength
-        val alphaLock = context.alphaLock
-        val mask = context.mask
-        val random = context.random''')
-replace(BASE + 'data/local/ProjectStorage.kt',
-' or android.system.OsConstants.O_DIRECTORY', '')
-print('Applied compiler and analysis repairs; no quality checks disabled.')
+packed = b''.join(Path(f'.github/export-repair-parts/{i}.xzpart').read_bytes() for i in range(4))
+expected = '1f0f897fe16be31385d2f12ad7f63ea03335e4c476ccecd2a95fed26c530b686'
+if hashlib.sha256(packed).hexdigest() != expected:
+    raise RuntimeError('Export repair payload checksum mismatch')
+patch = lzma.decompress(packed)
+subprocess.run(['git', 'apply', '--check', '-'], input=patch, check=True)
+subprocess.run(['git', 'apply', '-'], input=patch, check=True)
+print('Applied checked gallery, export, mask and regression-test repairs.')

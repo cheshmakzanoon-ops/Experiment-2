@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - .github/finish-repairs.py
+      - .github/export-repair-parts/**
+      - .github/run-device-tests.sh
       - .github/workflows/hardening-verify.yml
   workflow_dispatch:
 
@@ -67,8 +69,14 @@ jobs:
             ${{ runner.temp }}/candidate.patch
             ${{ runner.temp }}/candidate-source.tar.gz
             ${{ runner.temp }}/SHA256SUMS
-            app/build/reports/
           if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: editor-repair-analysis
+          path: app/build/reports/
+          if-no-files-found: ignore
           retention-days: 14
 
   build:
@@ -85,11 +93,9 @@ jobs:
           path: ${{ runner.temp }}/candidate
       - name: Apply exact candidate
         run: |
-          cd "${RUNNER_TEMP}/candidate/_temp"
-          sha256sum -c SHA256SUMS
-          cd "$GITHUB_WORKSPACE"
-          git apply --check "${RUNNER_TEMP}/candidate/_temp/candidate.patch"
-          git apply "${RUNNER_TEMP}/candidate/_temp/candidate.patch"
+          (cd "${RUNNER_TEMP}/candidate" && sha256sum -c SHA256SUMS)
+          git apply --check "${RUNNER_TEMP}/candidate/candidate.patch"
+          git apply "${RUNNER_TEMP}/candidate/candidate.patch"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -109,6 +115,7 @@ jobs:
           name: editor-repair-build-results
           path: |
             app/build/reports/
+            app/build/test-results/
             ${{ runner.temp }}/build.log
           retention-days: 14
       - uses: actions/upload-artifact@v4
@@ -140,9 +147,9 @@ jobs:
           path: ${{ runner.temp }}/candidate
       - name: Apply exact candidate
         run: |
-          (cd "${RUNNER_TEMP}/candidate/_temp" && sha256sum -c SHA256SUMS)
-          git apply --check "${RUNNER_TEMP}/candidate/_temp/candidate.patch"
-          git apply "${RUNNER_TEMP}/candidate/_temp/candidate.patch"
+          (cd "${RUNNER_TEMP}/candidate" && sha256sum -c SHA256SUMS)
+          git apply --check "${RUNNER_TEMP}/candidate/candidate.patch"
+          git apply "${RUNNER_TEMP}/candidate/candidate.patch"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -165,7 +172,7 @@ jobs:
           target: google_apis
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: ./gradlew connectedDebugAndroidTest --stacktrace
+          script: bash .github/run-device-tests.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -173,6 +180,8 @@ jobs:
           path: |
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
+            ${{ runner.temp }}/device-logcat.txt
+            ${{ runner.temp }}/test-evidence/
           retention-days: 14
 
   publish-verified-repairs:
@@ -196,13 +205,13 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$EXPECTED_HEAD"
-          (cd "${RUNNER_TEMP}/candidate/_temp" && sha256sum -c SHA256SUMS)
-          git apply --check "${RUNNER_TEMP}/candidate/_temp/candidate.patch"
-          git apply "${RUNNER_TEMP}/candidate/_temp/candidate.patch"
-          git rm -r .github/hardening-parts
-          git rm .github/hardening-followup.patch.xz .github/finish-repairs.py .github/workflows/hardening-verify.yml .github/workflows/source-review.yml
+          (cd "${RUNNER_TEMP}/candidate" && sha256sum -c SHA256SUMS)
+          git apply --check "${RUNNER_TEMP}/candidate/candidate.patch"
+          git apply "${RUNNER_TEMP}/candidate/candidate.patch"
+          git rm -r .github/hardening-parts .github/export-repair-parts
+          git rm .github/hardening-followup.patch.xz .github/finish-repairs.py .github/run-device-tests.sh .github/workflows/hardening-verify.yml .github/workflows/source-review.yml
           git add app
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'fix: preserve artwork and repair painting, fills, layer compositing and renderer lifecycle' -m "Verified in run $GITHUB_RUN_ID: JVM tests, ktlint, detekt, debug/release lint, debug APK, release AAB and API 26/36 instrumentation."
+          git commit -m 'fix: preserve artwork, duplicate projects safely and repair rendering and exports' -m "Verified in run $GITHUB_RUN_ID: JVM tests, ktlint, detekt, debug/release lint, debug APK, release AAB and API 26/36 instrumentation."
           git push origin HEAD:main
