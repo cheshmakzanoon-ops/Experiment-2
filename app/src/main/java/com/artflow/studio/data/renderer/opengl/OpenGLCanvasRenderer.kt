@@ -6,8 +6,6 @@ import android.opengl.GLSurfaceView
 import android.opengl.GLUtils
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.data.renderer.BitmapPixelBridge
-import com.artflow.studio.domain.model.brush.Stroke
-import com.artflow.studio.domain.model.brush.StrokePoint
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -19,19 +17,14 @@ import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.sin
-import kotlin.math.sqrt
 
 /**
  * GPU canvas renderer.
  *
- * Two shader programs:
- * 1. **Textured quad** — draws the composited artwork. The composite is produced on the CPU by
- *    `Compositor`, which is the same code path used for saving and exporting, so what is on screen
- *    is exactly what gets written to disk. It is uploaded as a single texture, which makes
- *    correctness independent of the GPU's blend-mode support.
- * 2. **Capsule stroke** — draws the in-progress stroke. Each segment becomes a quad whose fragment
- *    shader computes the distance to the segment, giving round caps and analytic anti-aliasing with
- *    variable width, matching the CPU stroke rasteriser's geometry.
+ * A textured quad displays the composited artwork, including in-flight strokes inside their
+ * actual layer. The CPU compositor is shared by previews, commits, thumbnails and exports.
+ * There is no separate approximate brush overlay: erasing, masks, pressure, grain and opacity
+ * must look the same before and after the artist lifts the stylus.
  *
  * Onion-skin frames are drawn with the same textured-quad program in a tinted, alpha-blended pass.
  */
@@ -68,15 +61,6 @@ class OpenGLCanvasRenderer
         private var quadCanvasSizeHandle = 0
         private var quadUseTextureHandle = 0
 
-        private var strokeProgram = 0
-        private var strokePositionHandle = 0
-        private var strokeSegAHandle = 0
-        private var strokeSegBHandle = 0
-        private var strokeRadiiHandle = 0
-        private var strokeColorHandle = 0
-        private var strokeMatrixHandle = 0
-        private var strokeViewportScaleHandle = 0
-
         // --- Textures ------------------------------------------------------------------------------
 
         private var compositeTexture = 0
@@ -92,13 +76,6 @@ class OpenGLCanvasRenderer
         // bitmap; it must never recycle one that the GL thread is uploading.
         private val pendingComposite = AtomicReference<Bitmap?>(null)
         private val pendingOnionSkins = AtomicReference<List<Pair<Bitmap, Float>>?>(null)
-
-        private data class StrokeMesh(
-            val vertices: FloatArray,
-            val count: Int,
-        )
-
-        private val pendingStroke = AtomicReference<StrokeMesh?>(null)
 
         // GL-thread-owned images survive EGL context loss and can be reuploaded into the new context.
         private var retainedComposite: Bitmap? = null
@@ -146,15 +123,6 @@ class OpenGLCanvasRenderer
             quadAlphaHandle = GLES20.glGetUniformLocation(quadProgram, "uAlpha")
             quadCanvasSizeHandle = GLES20.glGetUniformLocation(quadProgram, "uCanvasSize")
             quadUseTextureHandle = GLES20.glGetUniformLocation(quadProgram, "uUseTexture")
-
-            strokeProgram = createProgram(STROKE_VERTEX_SHADER, STROKE_FRAGMENT_SHADER)
-            strokePositionHandle = GLES20.glGetAttribLocation(strokeProgram, "aPosition")
-            strokeSegAHandle = GLES20.glGetAttribLocation(strokeProgram, "aSegA")
-            strokeSegBHandle = GLES20.glGetAttribLocation(strokeProgram, "aSegB")
-            strokeRadiiHandle = GLES20.glGetAttribLocation(strokeProgram, "aRadii")
-            strokeColorHandle = GLES20.glGetAttribLocation(strokeProgram, "aColor")
-            strokeMatrixHandle = GLES20.glGetUniformLocation(strokeProgram, "uMatrix")
-            strokeViewportScaleHandle = GLES20.glGetUniformLocation(strokeProgram, "uViewportScale")
 
             checkerTexture = createCheckerboardTexture()
             isInitialized = true
@@ -224,11 +192,6 @@ class OpenGLCanvasRenderer
                 GLES20.glUniform4f(quadTintHandle, 1f, 1f, 1f, 1f)
                 drawQuad(compositeTexture, textureRepeat = false)
             }
-
-            // 4. Vertices and count travel together, so a frame cannot read half a stroke update.
-            pendingStroke.get()?.let { mesh ->
-                if (mesh.count > 0) drawStrokeSegments(mesh.vertices, mesh.count, matrix)
-            }
         }
 
         private fun refreshOnionTextures() {
@@ -279,27 +242,6 @@ class OpenGLCanvasRenderer
             pendingOnionSkins.getAndSet(emptyList())?.forEach { it.first.recycle() }
         }
 
-        /**
-         * Stages the in-progress stroke for rendering.
-         *
-         * The stroke is expanded into per-segment quads here (CPU) so the GL thread only has to upload
-         * a vertex buffer. Geometry matches `StrokeRasterizer`: round-capped segments with pressure
-         * interpolated across each segment.
-         */
-        fun setInProgressStroke(
-            stroke: Stroke?,
-            symmetryCopies: List<Stroke> = emptyList(),
-        ) {
-            val all = listOfNotNull(stroke) + symmetryCopies
-            if (all.isEmpty()) {
-                pendingStroke.set(null)
-                return
-            }
-            val builder = StrokeVertexBuilder()
-            all.forEach { builder.addStroke(it) }
-            pendingStroke.set(StrokeMesh(builder.toFloatArray(), builder.vertexCount))
-        }
-
         fun setCanvasSize(
             width: Int,
             height: Int,
@@ -342,7 +284,6 @@ class OpenGLCanvasRenderer
             compositeTexture = 0
             checkerTexture = 0
             quadProgram = 0
-            strokeProgram = 0
             onionTextures.clear()
             onionAlphas.clear()
             pendingComposite.getAndSet(null)?.recycle()
@@ -351,7 +292,6 @@ class OpenGLCanvasRenderer
             retainedComposite = null
             retainedOnions.forEach { it.first.recycle() }
             retainedOnions = emptyList()
-            pendingStroke.set(null)
             isInitialized = false
         }
 
@@ -387,56 +327,6 @@ class OpenGLCanvasRenderer
             GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
             GLES20.glDisableVertexAttribArray(quadPositionHandle)
             GLES20.glDisableVertexAttribArray(quadTexCoordHandle)
-        }
-
-        private fun drawStrokeSegments(
-            vertices: FloatArray,
-            vertexCount: Int,
-            matrix: FloatArray,
-        ) {
-            GLES20.glUseProgram(strokeProgram)
-            GLES20.glUniformMatrix4fv(strokeMatrixHandle, 1, false, matrix, 0)
-            // Convert pixel sizes into normalised device units so anti-aliasing is one pixel wide.
-            GLES20.glUniform2f(
-                strokeViewportScaleHandle,
-                2f / viewWidth.coerceAtLeast(1),
-                2f / viewHeight.coerceAtLeast(1),
-            )
-
-            val buffer =
-                ByteBuffer
-                    .allocateDirect(vertices.size * 4)
-                    .order(ByteOrder.nativeOrder())
-                    .asFloatBuffer()
-                    .apply {
-                        put(vertices)
-                        position(0)
-                    }
-
-            val stride = StrokeVertexBuilder.FLOATS_PER_VERTEX * 4
-            buffer.position(0)
-            GLES20.glEnableVertexAttribArray(strokePositionHandle)
-            GLES20.glVertexAttribPointer(strokePositionHandle, 2, GLES20.GL_FLOAT, false, stride, buffer)
-            buffer.position(2)
-            GLES20.glEnableVertexAttribArray(strokeSegAHandle)
-            GLES20.glVertexAttribPointer(strokeSegAHandle, 2, GLES20.GL_FLOAT, false, stride, buffer)
-            buffer.position(4)
-            GLES20.glEnableVertexAttribArray(strokeSegBHandle)
-            GLES20.glVertexAttribPointer(strokeSegBHandle, 2, GLES20.GL_FLOAT, false, stride, buffer)
-            buffer.position(6)
-            GLES20.glEnableVertexAttribArray(strokeRadiiHandle)
-            GLES20.glVertexAttribPointer(strokeRadiiHandle, 2, GLES20.GL_FLOAT, false, stride, buffer)
-            buffer.position(8)
-            GLES20.glEnableVertexAttribArray(strokeColorHandle)
-            GLES20.glVertexAttribPointer(strokeColorHandle, 4, GLES20.GL_FLOAT, false, stride, buffer)
-
-            GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, vertexCount)
-
-            GLES20.glDisableVertexAttribArray(strokePositionHandle)
-            GLES20.glDisableVertexAttribArray(strokeSegAHandle)
-            GLES20.glDisableVertexAttribArray(strokeSegBHandle)
-            GLES20.glDisableVertexAttribArray(strokeRadiiHandle)
-            GLES20.glDisableVertexAttribArray(strokeColorHandle)
         }
 
         // -----------------------------------------------------------------------------------------
@@ -577,124 +467,6 @@ class OpenGLCanvasRenderer
             return shader
         }
 
-        /**
-         * Expands strokes into per-segment triangle quads.
-         *
-         * Kept as its own class (and unit-testable except for the GL calls) so the geometry can be
-         * asserted in tests: each segment contributes six vertices covering the capsule, and the
-         * fragment shader turns that quad into a round-capped stroke.
-         */
-        class StrokeVertexBuilder {
-            private val vertices = ArrayList<Float>(1024)
-            var vertexCount: Int = 0
-                private set
-
-            fun addStroke(stroke: Stroke) {
-                val points = stroke.points
-                if (points.isEmpty()) return
-                val params = stroke.brushParams
-
-                if (points.size == 1) {
-                    // A tap is a single round dab; model it as a zero-length segment.
-                    addSegment(points[0], points[0], params)
-                    return
-                }
-
-                for (i in 1 until points.size) {
-                    addSegment(points[i - 1], points[i], params)
-                }
-            }
-
-            private fun addSegment(
-                a: StrokePoint,
-                b: StrokePoint,
-                params: com.artflow.studio.domain.model.brush.BrushParams,
-            ) {
-                val radiusA = max(0.5f, params.calculateEffectiveSize(a.pressure) / 2f)
-                val radiusB = max(0.5f, params.calculateEffectiveSize(b.pressure) / 2f)
-                val alpha = params.calculateEffectiveOpacity((a.pressure + b.pressure) / 2f)
-                val color = params.applyColorJitter(a.color, a.pressure)
-
-                val r = ((color shr 16) and 0xFF) / 255f
-                val g = ((color shr 8) and 0xFF) / 255f
-                val bl = (color and 0xFF) / 255f
-
-                val dx = b.x - a.x
-                val dy = b.y - a.y
-                val length = sqrt(dx * dx + dy * dy)
-                val normalX: Float
-                val normalY: Float
-                if (length < 1e-4f) {
-                    normalX = 0f
-                    normalY = 1f
-                } else {
-                    normalX = -dy / length
-                    normalY = dx / length
-                }
-
-                val maxRadius = max(radiusA, radiusB)
-                // Pad the quad by a pixel so the anti-aliased edge is not clipped.
-                val pad = maxRadius + 1f
-                val startX = a.x
-                val startY = a.y
-                val endX = b.x
-                val endY = b.y
-
-                // Four corners of the capsule's bounding quad.
-                val cornerAX = startX - normalX * pad
-                val cornerAY = startY - normalY * pad
-                val cornerBX = endX - normalX * pad
-                val cornerBY = endY - normalY * pad
-                val cornerCX = endX + normalX * pad
-                val cornerCY = endY + normalY * pad
-                val cornerDX = startX + normalX * pad
-                val cornerDY = startY + normalY * pad
-
-                emit(cornerAX, cornerAY, startX, startY, endX, endY, radiusA, radiusB, r, g, bl, alpha)
-                emit(cornerBX, cornerBY, startX, startY, endX, endY, radiusA, radiusB, r, g, bl, alpha)
-                emit(cornerCX, cornerCY, startX, startY, endX, endY, radiusA, radiusB, r, g, bl, alpha)
-
-                emit(cornerAX, cornerAY, startX, startY, endX, endY, radiusA, radiusB, r, g, bl, alpha)
-                emit(cornerCX, cornerCY, startX, startY, endX, endY, radiusA, radiusB, r, g, bl, alpha)
-                emit(cornerDX, cornerDY, startX, startY, endX, endY, radiusA, radiusB, r, g, bl, alpha)
-            }
-
-            private fun emit(
-                x: Float,
-                y: Float,
-                segAX: Float,
-                segAY: Float,
-                segBX: Float,
-                segBY: Float,
-                radiusA: Float,
-                radiusB: Float,
-                r: Float,
-                g: Float,
-                b: Float,
-                alpha: Float,
-            ) {
-                vertices.add(x)
-                vertices.add(y)
-                vertices.add(segAX)
-                vertices.add(segAY)
-                vertices.add(segBX)
-                vertices.add(segBY)
-                vertices.add(radiusA)
-                vertices.add(radiusB)
-                vertices.add(r)
-                vertices.add(g)
-                vertices.add(b)
-                vertices.add(alpha)
-                vertexCount++
-            }
-
-            fun toFloatArray(): FloatArray = FloatArray(vertices.size) { vertices[it] }
-
-            companion object {
-                const val FLOATS_PER_VERTEX = 12
-            }
-        }
-
         companion object {
             private val QUAD_VERTICES =
                 floatArrayOf(
@@ -742,55 +514,6 @@ class OpenGLCanvasRenderer
                 // uUseTexture = 1 samples the texture, 0 produces a solid tinted quad.
                 vec4 texel = mix(vec4(1.0, 1.0, 1.0, 1.0), sampled, uUseTexture);
                 gl_FragColor = texel * uTint * uAlpha;
-            }
-        """
-
-            private const val STROKE_VERTEX_SHADER = """
-            uniform mat4 uMatrix;
-            uniform vec2 uViewportScale;
-            attribute vec2 aPosition;
-            attribute vec2 aSegA;
-            attribute vec2 aSegB;
-            attribute vec2 aRadii;
-            attribute vec4 aColor;
-            varying vec2 vPosition;
-            varying vec2 vSegA;
-            varying vec2 vSegB;
-            varying vec2 vRadii;
-            varying vec4 vColor;
-            void main() {
-                gl_Position = uMatrix * vec4(aPosition, 0.0, 1.0);
-                vPosition = aPosition;
-                vSegA = aSegA;
-                vSegB = aSegB;
-                vRadii = aRadii;
-                vColor = aColor;
-            }
-        """
-
-            /**
-             * Capsule distance field: the fragment's alpha is derived from its distance to the
-             * segment, with the radius interpolated along the segment. This gives round caps and a
-             * one-pixel anti-aliased edge at any zoom level.
-             */
-            private const val STROKE_FRAGMENT_SHADER = """
-            precision mediump float;
-            varying vec2 vPosition;
-            varying vec2 vSegA;
-            varying vec2 vSegB;
-            varying vec2 vRadii;
-            varying vec4 vColor;
-            void main() {
-                vec2 ab = vSegB - vSegA;
-                float abLenSq = dot(ab, ab);
-                float t = abLenSq > 0.0001 ? clamp(dot(vPosition - vSegA, ab) / abLenSq, 0.0, 1.0) : 0.0;
-                vec2 closest = vSegA + ab * t;
-                float radius = mix(vRadii.x, vRadii.y, t);
-                float distanceToSegment = length(vPosition - closest);
-                float aa = max(0.5, radius * 0.08);
-                float coverage = 1.0 - smoothstep(radius - aa, radius, distanceToSegment);
-                if (coverage <= 0.0) discard;
-                gl_FragColor = vec4(vColor.rgb * vColor.a * coverage, vColor.a * coverage);
             }
         """
         }

@@ -22,6 +22,7 @@ data class BrushParams(
     val pressureToSize: Float = 0.5f, // How much pressure affects size
     val pressureToOpacity: Float = 0.3f, // How much pressure affects opacity
     val pressureCurve: PressureCurve = PressureCurve.LINEAR,
+    val customPressure: PressureResponse = PressureResponse(),
     // Color dynamics - Phase 9: Advanced Brush Parameters
     val hueJitter: Float = 0f, // Hue variation (0.0 - 1.0)
     val saturationJitter: Float = 0f, // Saturation variation (0.0 - 1.0)
@@ -55,7 +56,7 @@ data class BrushParams(
         EASE_IN, // Gradual start, sharp end
         EASE_OUT, // Sharp start, gradual end
         EASE_IN_OUT, // Gradual start and end
-        CUSTOM, // Custom curve (not yet implemented)
+        CUSTOM, // Editable monotone response with three pressure control points
     }
 
     /**
@@ -71,7 +72,7 @@ data class BrushParams(
 
         // Apply pressure dynamics
         if (pressureToSize > 0f) {
-            val pressureFactor = applyPressureCurve(pressure.coerceIn(0f, 1f), pressureCurve)
+            val pressureFactor = pressureResponse(pressure)
             val influence = pressureToSize.coerceIn(0f, 1f)
             effectiveSize *= 1f - influence + pressureFactor * influence
         }
@@ -104,7 +105,7 @@ data class BrushParams(
 
         // Apply pressure dynamics
         if (pressureToOpacity > 0f) {
-            val pressureFactor = applyPressureCurve(pressure.coerceIn(0f, 1f), pressureCurve)
+            val pressureFactor = pressureResponse(pressure)
             val influence = pressureToOpacity.coerceIn(0f, 1f)
             effectiveOpacity *= 1f - influence + pressureFactor * influence
         }
@@ -124,26 +125,24 @@ data class BrushParams(
         return effectiveOpacity.coerceIn(0f, 1f)
     }
 
-    /**
-     * Apply pressure curve transformation
-     */
-    private fun applyPressureCurve(
-        pressure: Float,
-        curve: PressureCurve,
-    ): Float =
-        when (curve) {
-            PressureCurve.LINEAR -> pressure
-            PressureCurve.EASE_IN -> pressure * pressure
-            PressureCurve.EASE_OUT -> pressure * (2f - pressure)
+    /** The same pressure mapping is used by painting, erasing, color dynamics and the UI graph. */
+    fun pressureResponse(pressure: Float): Float {
+        require(pressure.isFinite()) { "Pressure must be finite" }
+        val input = pressure.coerceIn(0f, 1f)
+        return when (pressureCurve) {
+            PressureCurve.LINEAR -> input
+            PressureCurve.EASE_IN -> input * input
+            PressureCurve.EASE_OUT -> input * (2f - input)
             PressureCurve.EASE_IN_OUT -> {
-                if (pressure < 0.5f) {
-                    2f * pressure * pressure
+                if (input < 0.5f) {
+                    2f * input * input
                 } else {
-                    1f - (-2f * pressure + 2f).let { it * it } / 2f
+                    1f - (-2f * input + 2f).let { it * it } / 2f
                 }
             }
-            PressureCurve.CUSTOM -> pressure // TODO: Implement custom curve
+            PressureCurve.CUSTOM -> customPressure.map(input)
         }
+    }
 
     /**
      * Calculate color with hue/saturation/brightness jitter applied
@@ -195,7 +194,7 @@ data class BrushParams(
 
         // Apply pressure-based color dynamics
         if (colorPressure) {
-            val pressureFactor = applyPressureCurve(pressure.coerceIn(0f, 1f), pressureCurve)
+            val pressureFactor = pressureResponse(pressure)
             hsv[2] *= (0.5f + pressureFactor * 0.5f) // Darker at low pressure
         }
 

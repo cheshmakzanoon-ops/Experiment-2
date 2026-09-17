@@ -277,7 +277,6 @@ class ArtFlowCanvasView
         fun cancelActiveGesture() {
             if (drawing) canvasRepository.cancelStroke(currentStrokeId)
             drawing = false
-            renderer.setInProgressStroke(null)
             pixelOpenJob?.cancel()
             rasterSession?.let { session ->
                 coroutineScope.launch(NonCancellable, start = CoroutineStart.UNDISPATCHED) { canvasRepository.cancelRasterEdit(session) }
@@ -422,7 +421,6 @@ class ArtFlowCanvasView
 
         fun undo() {
             if (canvasRepository.undo()) {
-                renderer.setInProgressStroke(null)
                 onionDirty = true
                 reportHistory()
             }
@@ -430,7 +428,6 @@ class ArtFlowCanvasView
 
         fun redo() {
             if (canvasRepository.redo()) {
-                renderer.setInProgressStroke(null)
                 onionDirty = true
                 reportHistory()
             }
@@ -585,11 +582,9 @@ class ArtFlowCanvasView
                     canvasRepository.observeCanvasInvalidation().collectLatest { event ->
                         when (event) {
                             is CanvasInvalidationEvent.StrokeCompleted -> {
-                                renderer.setInProgressStroke(null)
                                 refreshComposite()
                             }
                             is CanvasInvalidationEvent.FrameChanged -> {
-                                renderer.setInProgressStroke(null)
                                 onionDirty = true
                                 refreshComposite()
                                 refreshOnionSkins()
@@ -886,7 +881,6 @@ class ArtFlowCanvasView
                         if (cancelled) canvasRepository.cancelStroke(currentStrokeId) else canvasRepository.endStroke(currentStrokeId)
                     }
                     drawing = false
-                    renderer.setInProgressStroke(null)
                     reportHistory()
                 }
                 ToolType.SMUDGE, ToolType.HEALING, ToolType.LIQUIFY,
@@ -1043,13 +1037,9 @@ class ArtFlowCanvasView
         }
 
         private fun updateLiveStroke() {
-            val stroke = canvasRepository.activeStroke(currentStrokeId) ?: return
-            val copies =
-                SymmetryEngine
-                    .mirrorStroke(stroke, canvasWidth, canvasHeight, input.symmetry)
-                    .filterIndexed { index, _ -> index > 0 }
-            renderer.setInProgressStroke(stroke, copies)
-            requestRender()
+            // The repository snapshots in-flight strokes into their real layer. A topmost GL
+            // overlay cannot represent erasing, clipping, layer opacity, masks or textured paint.
+            requestPreviewRefresh()
         }
 
         // -----------------------------------------------------------------------------------------

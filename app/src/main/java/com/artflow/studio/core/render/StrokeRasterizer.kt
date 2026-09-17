@@ -85,11 +85,13 @@ class StrokeRasterizer {
         val buffer = scratchFor(target.width, target.height)
         buffer.clear()
         drawStrokeInto(buffer, stroke, params, points, alphaLock = false, mask = null, random = random)
+        val texture = BrushTexture.from(params)
         for (i in target.pixels.indices) {
             val source = buffer.pixels[i]
             if ((source ushr 24) == 0) continue
             val coverage = selectionCoverage(mask, target, i)
-            val effective = strokeAlpha * coverage
+            val grain = texture?.coverage(i % target.width, i / target.width) ?: 1f
+            val effective = strokeAlpha * coverage * grain
             if (effective <= 0f) continue
             val paint = Channels.scaleAlpha(source, effective)
             target.pixels[i] =
@@ -117,14 +119,18 @@ class StrokeRasterizer {
     ) {
         val buffer = scratchFor(target.width, target.height)
         buffer.clear()
-        drawStrokeInto(buffer, stroke, params, points, alphaLock = false, mask = null, random = random)
+        // Erasing depends on brush coverage, never on the selected ink color's alpha.
+        val eraseShape = stroke.copy(color = 0xFFFFFFFF.toInt())
+        drawStrokeInto(buffer, eraseShape, params, points, alphaLock = false, mask = null, random = random)
+        val texture = BrushTexture.from(params)
         for (i in target.pixels.indices) {
             val source = buffer.pixels[i]
             val sourceCoverage = ((source ushr 24) and 0xFF) / 255f
             if (sourceCoverage <= 0f) continue
             val selectionCoverage = selectionCoverage(mask, target, i)
             if (selectionCoverage <= 0f) continue
-            val erase = (strokeAlpha * sourceCoverage * selectionCoverage).coerceIn(0f, 1f)
+            val grain = texture?.coverage(i % target.width, i / target.width) ?: 1f
+            val erase = (strokeAlpha * sourceCoverage * selectionCoverage * grain).coerceIn(0f, 1f)
             val destination = target.pixels[i]
             val destinationAlpha = (destination ushr 24) and 0xFF
             if (destinationAlpha == 0) continue

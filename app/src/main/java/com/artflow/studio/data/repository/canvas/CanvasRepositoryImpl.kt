@@ -8,6 +8,7 @@ import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.pixels.Stamping
 import com.artflow.studio.core.render.Compositor
+import com.artflow.studio.core.render.LayerStrokeRenderer
 import com.artflow.studio.core.render.StrokeRasterizer
 import com.artflow.studio.core.symmetry.SymmetryEngine
 import com.artflow.studio.data.local.CanvasDocument
@@ -545,28 +546,22 @@ class CanvasRepositoryImpl
                     color = points.firstOrNull()?.color ?: strokeColor,
                     isEraser = isEraser,
                 )
+            // Preview and commit share this exact raw-pixel operation. Compute first so a failed
+            // allocation or render cannot add an undo entry or modify the committed document.
+            val incoming = SymmetryEngine.mirrorStroke(stroke, canvasWidth, canvasHeight, symmetrySettings)
+            val base =
+                LayerStrokeRenderer.render(
+                    layer.raster,
+                    layer.strokes.toList(),
+                    incoming,
+                    canvasWidth,
+                    canvasHeight,
+                    layer.isAlphaLocked,
+                    activeSelection,
+                )
             pushUndo()
-
-            // Strokes are baked into the layer's pixel buffer as soon as they finish.
-            //
-            // Replaying the stroke list on every composite would make compositing O(strokes) and the
-            // editor would get slower with every brush stroke; baking makes a composite a plain layer
-            // blend, and the symmetry copies are baked in the same pass so save/export agree with the
-            // screen. Vector strokes remain supported for imported documents (the compositor still
-            // replays `layer.strokes` when a layer has them), they are just not how painting works.
-            val base = layer.raster?.copy() ?: PixelBuffer(canvasWidth, canvasHeight)
-            val rasterizer = strokeRasterizer()
-            SymmetryEngine
-                .mirrorStroke(stroke, canvasWidth, canvasHeight, symmetrySettings)
-                .forEach { copy ->
-                    rasterizer.draw(
-                        target = base,
-                        stroke = copy,
-                        alphaLock = layer.isAlphaLocked,
-                        mask = activeSelection,
-                    )
-                }
             layer.raster = base
+            layer.strokes.clear()
             layer.rasterFile = null
             dirtyRasters += layer.id
             dirty = true
@@ -1649,6 +1644,14 @@ class CanvasRepositoryImpl
             return withContext(Dispatchers.Default) { renderFrozen(snapshot.first, snapshot.second, includeHidden, applyAdjustments) }
         }
 
+        private data class PreviewSnapshot(
+            val layers: List<LayerData>,
+            val document: CanvasDocument,
+            val strokes: List<Stroke>,
+            val selection: SelectionMask?,
+            val symmetry: SymmetryEngine.Settings,
+        )
+
         override suspend fun compositePreview(): PixelBuffer? {
             val snapshot =
                 withState {
@@ -1661,10 +1664,37 @@ class CanvasRepositoryImpl
                                 }
                             }
                         }
-                    layers to canvasSnapshot()
+                    PreviewSnapshot(
+                        layers,
+                        canvasSnapshot(),
+                        activeStrokes.keys.mapNotNull { activeStroke(it) },
+                        activeSelection?.copy(),
+                        symmetrySettings,
+                    )
                 }
             return withContext(Dispatchers.Default) {
-                renderFrozen(snapshot.first, snapshot.second, transparentBackground = true)
+                val strokesByLayer = snapshot.strokes.groupBy { it.layerId }
+                for (layer in snapshot.layers) {
+                    coroutineContext.ensureActive()
+                    val active = strokesByLayer[layer.id]
+                    if (active == null || !layer.canPaint()) continue
+                    val incoming =
+                        active.flatMap {
+                            SymmetryEngine.mirrorStroke(it, snapshot.document.width, snapshot.document.height, snapshot.symmetry)
+                        }
+                    layer.raster =
+                        LayerStrokeRenderer.render(
+                            layer.raster,
+                            layer.strokes.toList(),
+                            incoming,
+                            snapshot.document.width,
+                            snapshot.document.height,
+                            layer.isAlphaLocked,
+                            snapshot.selection,
+                        )
+                    layer.strokes.clear()
+                }
+                renderFrozen(snapshot.layers, snapshot.document, transparentBackground = true)
             }
         }
 

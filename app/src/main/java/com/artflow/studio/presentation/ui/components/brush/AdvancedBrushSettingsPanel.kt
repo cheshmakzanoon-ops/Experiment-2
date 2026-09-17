@@ -1,8 +1,11 @@
 package com.artflow.studio.presentation.ui.components.brush
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandMore
@@ -12,12 +15,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PointMode
-import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.core.render.BrushPreview
+import com.artflow.studio.core.render.BrushTexture
+import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.PressureResponse
 
 /**
  * Advanced brush settings panel for configuring detailed brush parameters
@@ -139,9 +145,45 @@ fun AdvancedBrushSettingsPanel(
 
             // Pressure Curve Selection
             PressureCurveSelector(
-                selectedCurve = brushParams.pressureCurve,
-                onCurveSelected = { onBrushParamsChanged(brushParams.copy(pressureCurve = it)) },
+                brushParams = brushParams,
+                onBrushParamsChanged = onBrushParamsChanged,
             )
+        }
+
+        BrushSettingsSection(title = "Brush Grain") {
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilterChip(
+                    selected = !brushParams.blendTexture || brushParams.textureId == null,
+                    onClick = { onBrushParamsChanged(brushParams.copy(textureId = null, blendTexture = false)) },
+                    label = { Text("None") },
+                )
+                BrushTexture.Kind.entries.forEach { texture ->
+                    FilterChip(
+                        selected = brushParams.blendTexture && brushParams.textureId == texture.id,
+                        onClick = { onBrushParamsChanged(brushParams.copy(textureId = texture.id, blendTexture = true)) },
+                        label = { Text(texture.label) },
+                    )
+                }
+            }
+            if (brushParams.blendTexture && brushParams.textureId != null) {
+                LabeledSlider(
+                    label = "Grain scale",
+                    value = brushParams.textureScale.coerceIn(0.25f, 8f),
+                    onValueChange = { onBrushParamsChanged(brushParams.copy(textureScale = it)) },
+                    valueRange = 0.25f..8f,
+                    valueDisplay = "%.2f×".format(brushParams.textureScale),
+                )
+                LabeledSlider(
+                    label = "Grain rotation",
+                    value = brushParams.textureRotation.coerceIn(0f, 360f),
+                    onValueChange = { onBrushParamsChanged(brushParams.copy(textureRotation = it)) },
+                    valueRange = 0f..360f,
+                    valueDisplay = "%.0f°".format(brushParams.textureRotation),
+                )
+            }
         }
 
         // Scatter & Count Section
@@ -249,90 +291,12 @@ private fun BrushPreviewWidget(
     brushParams: BrushParams,
     modifier: Modifier = Modifier,
 ) {
-    Box(
-        modifier = modifier,
-        contentAlignment = Alignment.Center,
-    ) {
-        Canvas(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-        ) {
-            val canvasWidth = size.width
-            val canvasHeight = size.height
-
-            // Draw guide line
-            drawLine(
-                color = Color.Gray.copy(alpha = 0.3f),
-                start = Offset(0f, canvasHeight / 2),
-                end = Offset(canvasWidth, canvasHeight / 2),
-                strokeWidth = 1f,
-            )
-
-            // Simulate brush stroke with current parameters
-            val effectiveSize = brushParams.size.coerceIn(5f, 50f)
-            val strokeColor = Color(0xFFFF6B5C)
-
-            // Draw multiple sample dabs to show spacing effect
-            val numDabs = (canvasWidth / (effectiveSize * (brushParams.spacing + 0.5f))).toInt().coerceAtLeast(3)
-            val spacing = canvasWidth / (numDabs + 1)
-
-            for (i in 1..numDabs) {
-                val x = i * spacing.toFloat()
-                val y = canvasHeight / 2
-
-                // Apply scatter
-                val scatteredY = y + (Math.random().toFloat() - 0.5f) * brushParams.scatter * 30f
-
-                // Calculate size with taper simulation (smaller at ends)
-                val positionRatio = i.toFloat() / numDabs
-                val taperFactor =
-                    if (positionRatio < 0.2f) {
-                        positionRatio / 0.2f * (1f - brushParams.taperStart) + brushParams.taperStart
-                    } else if (positionRatio > 0.8f) {
-                        (1f - positionRatio) / 0.2f * (1f - brushParams.taperEnd) + brushParams.taperEnd
-                    } else {
-                        1f
-                    }
-
-                val taperedSize = effectiveSize * taperFactor
-
-                // Draw brush dab
-                drawCircle(
-                    color = strokeColor.copy(alpha = brushParams.opacity),
-                    radius = taperedSize / 2,
-                    center = Offset(x, scatteredY),
-                )
-            }
-
-            // Draw continuous stroke overlay
-            drawLine(
-                brush =
-                    Brush.horizontalGradient(
-                        colors =
-                            listOf(
-                                strokeColor.copy(alpha = 0.3f),
-                                strokeColor.copy(alpha = brushParams.opacity),
-                                strokeColor.copy(alpha = 0.3f),
-                            ),
-                    ),
-                start = Offset(20f, canvasHeight / 2),
-                end = Offset(canvasWidth - 20f, canvasHeight / 2),
-                strokeWidth = effectiveSize * 0.5f,
-                cap = StrokeCap.Round,
-            )
-        }
-
-        // Label
-        Text(
-            text = "Sample Stroke",
-            style = MaterialTheme.typography.labelSmall,
-            color = Color.White.copy(alpha = 0.7f),
-            modifier =
-                Modifier
-                    .align(Alignment.TopStart)
-                    .padding(8.dp),
+    val image = remember(brushParams) { BitmapPixelBridge.toBitmap(BrushPreview.render(brushParams)).asImageBitmap() }
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        Image(
+            bitmap = image,
+            contentDescription = "Real brush preview with pressure increasing and decreasing; large brush sizes fitted to the preview",
+            modifier = Modifier.fillMaxSize().padding(8.dp),
         )
     }
 }
@@ -434,8 +398,8 @@ private fun LabeledSlider(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PressureCurveSelector(
-    selectedCurve: BrushParams.PressureCurve,
-    onCurveSelected: (BrushParams.PressureCurve) -> Unit,
+    brushParams: BrushParams,
+    onBrushParamsChanged: (BrushParams) -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -448,13 +412,13 @@ private fun PressureCurveSelector(
         )
 
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             BrushParams.PressureCurve.entries.forEach { curve ->
                 FilterChip(
-                    selected = selectedCurve == curve,
-                    onClick = { onCurveSelected(curve) },
+                    selected = brushParams.pressureCurve == curve,
+                    onClick = { onBrushParamsChanged(brushParams.copy(pressureCurve = curve)) },
                     label = {
                         Text(
                             text =
@@ -470,9 +434,13 @@ private fun PressureCurveSelector(
             }
         }
 
-        // Visual curve preview
+        if (brushParams.pressureCurve == BrushParams.PressureCurve.CUSTOM) {
+            CustomPressureControls(brushParams, onBrushParamsChanged)
+        }
+
+        // Visual curve preview uses exactly the engine's pressure function.
         PressureCurvePreview(
-            curve = selectedCurve,
+            brushParams = brushParams,
             modifier =
                 Modifier
                     .fillMaxWidth()
@@ -490,7 +458,7 @@ private fun PressureCurveSelector(
  */
 @Composable
 private fun PressureCurvePreview(
-    curve: BrushParams.PressureCurve,
+    brushParams: BrushParams,
     modifier: Modifier = Modifier,
 ) {
     // Resolved outside the draw lambda: MaterialTheme is @Composable and cannot be
@@ -523,20 +491,7 @@ private fun PressureCurvePreview(
 
         for (i in 0..steps) {
             val input = i.toFloat() / steps // Input pressure (0-1)
-            val output =
-                when (curve) {
-                    BrushParams.PressureCurve.LINEAR -> input
-                    BrushParams.PressureCurve.EASE_IN -> input * input
-                    BrushParams.PressureCurve.EASE_OUT -> input * (2f - input)
-                    BrushParams.PressureCurve.EASE_IN_OUT -> {
-                        if (input < 0.5f) {
-                            2f * input * input
-                        } else {
-                            -1f + (4f - 2f * input) * input
-                        }
-                    }
-                    BrushParams.PressureCurve.CUSTOM -> input // Simplified for custom
-                }
+            val output = brushParams.pressureResponse(input)
 
             val x = padding + input * (width - 2 * padding)
             val y = height - padding - output * (height - 2 * padding)
@@ -553,4 +508,42 @@ private fun PressureCurvePreview(
             )
         }
     }
+}
+
+@Composable
+private fun CustomPressureControls(
+    brushParams: BrushParams,
+    onBrushParamsChanged: (BrushParams) -> Unit,
+) {
+    val response = brushParams.customPressure
+    LabeledSlider(
+        label = "Output at 25% pressure",
+        value = response.low,
+        onValueChange = { value ->
+            val curve = PressureResponse(value, maxOf(value, response.middle), maxOf(value, response.high))
+            onBrushParamsChanged(brushParams.copy(customPressure = curve))
+        },
+        valueRange = 0f..1f,
+        valueDisplay = "%.0f%%".format(response.low * 100),
+    )
+    LabeledSlider(
+        label = "Output at 50% pressure",
+        value = response.middle,
+        onValueChange = { value ->
+            val curve = PressureResponse(minOf(response.low, value), value, maxOf(value, response.high))
+            onBrushParamsChanged(brushParams.copy(customPressure = curve))
+        },
+        valueRange = 0f..1f,
+        valueDisplay = "%.0f%%".format(response.middle * 100),
+    )
+    LabeledSlider(
+        label = "Output at 75% pressure",
+        value = response.high,
+        onValueChange = { value ->
+            val curve = PressureResponse(minOf(response.low, value), minOf(response.middle, value), value)
+            onBrushParamsChanged(brushParams.copy(customPressure = curve))
+        },
+        valueRange = 0f..1f,
+        valueDisplay = "%.0f%%".format(response.high * 100),
+    )
 }
