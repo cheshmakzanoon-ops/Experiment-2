@@ -36,10 +36,20 @@ symmetry and perspective guides, add text and frames, then save and export real 
 - Stroke smoothing and start/end tapering
 - Advanced parameters: size / opacity / hue / saturation / brightness jitter, scatter, count,
   spacing, wet mix, flow, tilt influence, velocity dynamics
-- Pressure-curve types (linear, ease-in, ease-out, ease-in-out); `PressureCurve.CUSTOM` falls back
-  to a linear curve — this is the one `TODO` left in `app/src/main`
-- `BrushParams` carries texture *fields*, but no texture assets are bundled and nothing applies a
-  texture to a stroke, so textured brushes are not available (see [Known gaps](#-known-gaps))
+- Pressure-curve types (linear, ease-in, ease-out, ease-in-out), plus a monotone custom response
+  with editable output controls at 25%, 50% and 75% input pressure
+- Deterministic procedural paper, canvas and charcoal grains, with scale/rotation controls;
+  preview and commit use the same raw-pixel renderer. Imported/dual textures remain a roadmap gap.
+
+Destructive document operations prepare replacement pixels before committing a single undo step.
+Merges preserve transparency and reject combinations whose blend/clipping context cannot be baked
+faithfully. A merged copy hides, rather than deletes, its retained sources. Empty selections block
+painting instead of becoming unrestricted edits. Quarter-turn canvas transforms retain legacy
+vector ink and transform masks across every animation frame.
+
+Empty filter layers affect the stack below; layers with their own pixels retain per-layer filters.
+Filter masks and opacity control the effect, and baking uses the same compositor as the preview.
+Backdrop-dependent baking may be refused rather than silently changing the artwork.
 
 ### Pixel engine (`core/pixels`)
 - `PixelBuffer`: ARGB buffer with region maths, tiling and `IntBounds` clipping
@@ -133,7 +143,7 @@ The table below reflects the code that is currently in the repository.
 | Project gallery | Implemented — list, create, rename, delete, independent artwork duplication, real thumbnails, search, sort, favourites |
 | Canvas screen + GL surface | Implemented |
 | Brush engine + parameters | Implemented via `StrokeRasterizer`/`Compositor` + `BrushParams` |
-| Brush textures | **Not implemented** — `BrushParams` carries texture fields, but no assets are bundled and nothing applies them |
+| Brush textures | Three built-in procedural grains with scale/rotation; custom texture import and dual textures are not implemented |
 | Pixel engine (buffers, blend modes, adjustments, filters) | Implemented |
 | Tools (smudge, clone, heal, liquify, fill, gradient, text, shapes) | Implemented |
 | Selection / transform | Selection implemented (magic wand + boolean combining); transform is **translate only** |
@@ -152,15 +162,11 @@ The table below reflects the code that is currently in the repository.
 | Native C++ brush engine | Unintegrated source prototype; not built or packaged by the application Gradle configuration |
 | Timelapse recording | **Not implemented** (the `.artflow` format reserves timelapse metadata) |
 | Instrumentation tests | Launch, GL rendering, storage/recovery, independent duplication, export formats/provider access and export/privacy UI regression tests |
-| CI | GitHub Actions: JVM tests, ktlint, detekt, Android lint, APK/AAB builds and API 26/36 instrumentation; see the workflow and release evidence |
+| CI | GitHub Actions: JVM tests, ktlint, detekt, Android lint, APK/AAB builds and API 26/35 (16 KB)/36 instrumentation plus minified launch; consult completed run evidence |
 
-One `TODO` marker remains in the source:
-
-```bash
-grep -rn "TODO" app/src/main
-```
-
-It is a documented gap rather than hidden work: `PressureCurve.CUSTOM` falls back to a linear curve.
+Source markers are not a completion measure. The custom pressure curve and procedural brush grains
+are implemented; the original roadmap still includes missing workflows listed below. A passing
+build is not a signed Google Play release.
 
 ---
 
@@ -176,8 +182,8 @@ only provided them) has been deleted.
   layers cannot be nested or collapsed.
 - **Transform beyond translation.** Rotate, scale, skew, perspective, distortion and snapping are
   not implemented; `MOVE`/`TRANSFORM` translate pixels only.
-- **Texture brushes.** No texture assets ship and no render path consumes the texture fields in
-  `BrushParams`.
+- **Imported and dual brush textures.** Built-in procedural grains are implemented; a custom
+  texture importer/library and dual-texture mixing are not.
 - **The native module.** `app/src/main/jni` remains an unintegrated C++ prototype. The application
   no longer builds or packages that unused module. The active engine is Kotlin; no NDK or
   `-PnoNativeBuild` switch is needed for the normal application build.
@@ -379,7 +385,8 @@ table and is kept in step with the code. Summarised:
 - **Foundation (1–8)**: project setup, DI, architecture, design system, canvas, input, stroke
   engine, layers — ✅
 - **Core drawing (9–16)**: advanced brush params, colour dynamics, blend modes, selection,
-  alpha lock, masks — ✅; texture brushes — ⬜ *not implemented*; transform — 🟡 *translate only*
+  alpha lock, masks and custom pressure — ✅; textures — 🟡 *three procedural grains, no custom import*;
+  transform — 🟡 *translate only*
 - **Professional tools (17–24)**: smudge, liquify, clone, heal, gradient, fill, text, shapes — ✅
 - **Advanced layers (25–30)**: adjustments and filter layers — ✅; layer groups, layer linking UI
   and smart objects — ⬜ *not implemented*

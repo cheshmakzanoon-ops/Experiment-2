@@ -40,7 +40,7 @@ data class Layer(
     /** Phase 25: non-destructive colour correction applied to everything below this layer. */
     val adjustmentType: AdjustmentType? = null,
     val adjustmentParameters: Map<String, Float> = emptyMap(),
-    /** Phase 29: non-destructive filter applied to the layer's own pixels. */
+    /** Phase 29: filters own pixels when present; an empty filter layer affects the stack below. */
     val filterType: FilterType? = null,
     val filterAmount: Float = 0f,
     /** Phase 27: reference layer, shown on a side panel and never composited into the artwork. */
@@ -60,8 +60,10 @@ data class Layer(
     /** True when the layer has pixel data that tools can modify. */
     fun hasRaster(): Boolean = rasterFile != null
 
-    /** True when painting on this layer is allowed (visible, unlocked, not a reference/adjustment). */
-    fun acceptsPaint(): Boolean = isVisible && !isLocked && !isReference && adjustmentType == null
+    /** True when painting is allowed; reference and effect layers are not paint destinations. */
+    fun acceptsPaint(): Boolean = canEdit() && !isReference && !hasEffect()
+
+    private fun hasEffect(): Boolean = adjustmentType != null || filterType != null
 
     /** True when the layer has an active mask that must be applied during compositing. */
     fun hasMask(): Boolean = hasInMemoryMask || maskFile != null

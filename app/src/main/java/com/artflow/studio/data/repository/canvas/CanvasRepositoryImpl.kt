@@ -133,6 +133,7 @@ class CanvasRepositoryImpl
             val projectId: Long,
             val layer: LayerData,
             val original: PixelBuffer?,
+            val originalStrokes: List<Stroke>,
             val session: CanvasRepository.RasterEditSession,
         )
 
@@ -650,9 +651,11 @@ class CanvasRepositoryImpl
         ): Boolean =
             withState {
                 val layer = layerById(layerId) ?: return@withState false
+                if (!layer.canPaint()) return@withState false
+                val owned = strokes.map { it.copy(layerId = layerId, points = it.points.toList()) }
                 pushUndo()
                 layer.strokes.clear()
-                layer.strokes.addAll(strokes)
+                layer.strokes.addAll(owned)
                 dirty = true
                 emit(CanvasInvalidationEvent.Full)
                 true
@@ -662,15 +665,16 @@ class CanvasRepositoryImpl
         // Pixel editing
         // -----------------------------------------------------------------------------------------
 
-        override suspend fun layerPixels(layerId: Long): PixelBuffer? = withState { layerById(layerId)?.raster?.copy() }
+        override suspend fun layerPixels(layerId: Long): PixelBuffer? =
+            withState { layerById(layerId)?.let { rawLayerPixels(it, canvasWidth, canvasHeight)?.copy() } }
 
         override suspend fun beginRasterEdit(layerId: Long): CanvasRepository.RasterEditSession? =
             withState {
                 val layer = layerById(layerId) ?: return@withState null
                 if (!layer.canPaint() || pendingEdits.values.any { it.layer.id == layerId }) return@withState null
-                val buffer = layer.raster?.copy() ?: PixelBuffer(canvasWidth, canvasHeight)
+                val buffer = rawLayerPixels(layer, canvasWidth, canvasHeight)?.copy() ?: PixelBuffer(canvasWidth, canvasHeight)
                 val session = CanvasRepository.RasterEditSession(layerId, buffer, ++rasterEditToken)
-                pendingEdits[session.snapshotToken] = PendingEdit(currentProjectId, layer, layer.raster, session)
+                pendingEdits[session.snapshotToken] = PendingEdit(currentProjectId, layer, layer.raster, layer.strokes.toList(), session)
                 session
             }
 
@@ -683,11 +687,13 @@ class CanvasRepositoryImpl
                 val layer = layerById(session.layerId) ?: return@withState false
                 if (pending.session !== session || pending.projectId != currentProjectId) return@withState false
                 if (layer !== pending.layer || layer.raster !== pending.original || !layer.canPaint()) return@withState false
+                if (layer.strokes != pending.originalStrokes) return@withState false
                 if (session.buffer.width != canvasWidth || session.buffer.height != canvasHeight) return@withState false
                 // A session is provisional until here: cancellation cannot remove someone else's undo
                 // entry, and autosave/export can never publish half a drag or a failed tool operation.
                 pushUndo()
                 layer.raster = session.buffer.copy()
+                layer.strokes.clear()
                 layer.rasterFile = null
                 dirtyRasters += layer.id
                 dirty = true
@@ -726,6 +732,7 @@ class CanvasRepositoryImpl
                 if (!layer.canPaint() || buffer.width != canvasWidth || buffer.height != canvasHeight) return@withState false
                 pushUndo()
                 layer.raster = buffer.copy()
+                layer.strokes.clear()
                 layer.rasterFile = null
                 dirtyRasters += layer.id
                 dirty = true
@@ -744,10 +751,15 @@ class CanvasRepositoryImpl
         // Selection
         // -----------------------------------------------------------------------------------------
 
-        override fun selection(): SelectionMask? = activeSelection
+        override fun selection(): SelectionMask? = activeSelection?.copy()
 
         override fun setSelection(mask: SelectionMask?) {
-            activeSelection = mask?.takeIf { it.isActive() }
+            require(mask == null || (mask.width == canvasWidth && mask.height == canvasHeight)) {
+                "Selection dimensions must match the canvas"
+            }
+            // Empty coverage means select nothing, not select everything. Only null deselects.
+            // Own both sides of the boundary so an asynchronous tool cannot mutate a live mask.
+            activeSelection = mask?.copy()
         }
 
         override fun clearSelection() {
@@ -764,6 +776,7 @@ class CanvasRepositoryImpl
             opacity: Float,
         ): Layer =
             withState {
+                require(hasLayerCapacity(1)) { "Maximum project layer count reached" }
                 pushUndo()
                 val layerId = nextLayerId++
                 val layers = currentLayers()
@@ -821,7 +834,7 @@ class CanvasRepositoryImpl
             withState {
                 val layers = currentLayers()
                 val position = layers.indexOfFirst { it.id == layerId }
-                if (position == -1) return@withState null
+                if (position == -1 || !hasLayerCapacity(1)) return@withState null
 
                 pushUndo()
                 val source = layers[position]
@@ -843,44 +856,26 @@ class CanvasRepositoryImpl
             targetLayerId: Long,
         ): Boolean =
             withState {
-                if (sourceLayerId == targetLayerId) return@withState false
                 val layers = currentLayers()
-                val sourceIndex = layers.indexOfFirst { it.id == sourceLayerId }
-                val targetIndex = layers.indexOfFirst { it.id == targetLayerId }
-                if (sourceIndex == -1 || targetIndex == -1) return@withState false
-
-                pushUndo()
-                val merged = rasterizeLayers(listOf(layers[sourceIndex], layers[targetIndex]))
-                layers[targetIndex].raster = merged
-                layers[targetIndex].strokes.clear()
-                layers[targetIndex].rasterFile = null
-                layers.removeAt(sourceIndex)
-                setActiveLayerId(targetLayerId)
-                dirtyRasters += targetLayerId
-                dirty = true
-                emit(CanvasInvalidationEvent.LayersChanged)
-                true
+                val source = layers.indexOfFirst { it.id == sourceLayerId }
+                val target = layers.indexOfFirst { it.id == targetLayerId }
+                // A non-adjacent merge changes intervening compositing order; never silently do so.
+                if (source < 0 || target < 0 || kotlin.math.abs(source - target) != 1) return@withState false
+                val selected = listOf(layers[source], layers[target])
+                if (selected.any { !it.isVisible || it.isLocked || it.isReference }) return@withState false
+                val lowerIndex = minOf(source, target)
+                mergeStack(selected.map { it.id }.toSet(), targetLayerId, layers[target].name, lowerIndex) != null
             }
 
         override suspend fun mergeVisibleLayers(keepOriginals: Boolean): Long? =
             withState {
                 val layers = currentLayers()
-                val visible = layers.filter { it.isVisible }
-                if (visible.size < 2) return@withState null
-
-                pushUndo()
-                val merged = rasterizeLayers(visible)
-                val newId = nextLayerId++
-                val insertionIndex = layers.indexOfFirst { it.isVisible }.coerceAtLeast(0)
-                if (!keepOriginals) layers.removeAll { it.isVisible }
-                val mergedLayer = LayerData(id = newId, name = "Merged")
-                mergedLayer.raster = merged
-                layers.add(insertionIndex.coerceIn(0, layers.size), mergedLayer)
-                setActiveLayerId(newId)
-                dirtyRasters += newId
-                dirty = true
-                emit(CanvasInvalidationEvent.LayersChanged)
-                newId
+                val selected = layers.filter { it.isVisible && !it.isReference }
+                if (selected.size < 2 || selected.any { it.isLocked }) return@withState null
+                if (keepOriginals && !hasLayerCapacity(1)) return@withState null
+                val merged = mergeStack(selected.map { it.id }.toSet(), nextLayerId, "Merged", layers.size, keepOriginals)
+                if (merged != null) nextLayerId++
+                merged
             }
 
         override suspend fun mergeLayerDown(layerId: Long): Boolean =
@@ -888,38 +883,86 @@ class CanvasRepositoryImpl
                 val layers = currentLayers()
                 val index = layers.indexOfFirst { it.id == layerId }
                 if (index <= 0) return@withState false
-
-                pushUndo()
-                val upper = layers[index]
-                val lower = layers[index - 1]
-                lower.raster = rasterizeLayers(listOf(lower, upper))
-                lower.strokes.clear()
-                lower.rasterFile = null
-                layers.removeAt(index)
-                setActiveLayerId(lower.id)
-                dirtyRasters += lower.id
-                dirty = true
-                emit(CanvasInvalidationEvent.LayersChanged)
-                true
+                mergeLayers(layerId, layers[index - 1].id)
             }
 
         override suspend fun flattenAllLayers(): Long? =
             withState {
                 val layers = currentLayers()
-                if (layers.size <= 1) return@withState null
-                pushUndo()
-                val flattened = rasterizeLayers(layers)
-                val newId = nextLayerId++
-                val merged = LayerData(id = newId, name = "Flattened")
-                merged.raster = flattened
-                layers.clear()
-                layers.add(merged)
-                setActiveLayerId(newId)
-                dirtyRasters += newId
-                dirty = true
-                emit(CanvasInvalidationEvent.LayersChanged)
-                newId
+                val selected = layers.filter { !it.isReference }
+                if (selected.isEmpty() || selected.any { it.isLocked }) return@withState null
+                val merged = mergeStack(selected.map { it.id }.toSet(), nextLayerId, "Flattened", layers.size)
+                if (merged != null) nextLayerId++
+                merged
             }
+
+        /** Prepare off-thread, then atomically publish only if the captured document is still current. */
+        private suspend fun mergeStack(
+            selectedIds: Set<Long>,
+            mergedId: Long,
+            name: String,
+            insertionIndex: Int,
+            keepOriginals: Boolean = false,
+        ): Long? {
+            if (activeStrokes.isNotEmpty() || pendingEdits.isNotEmpty()) return null
+            val live = currentLayers()
+            val revision = editRevision
+            val project = currentProjectId
+            val document = canvasSnapshot()
+            val frozen = live.map { it.snapshotCopy() }
+            markRastersShared()
+            val candidate =
+                withContext(Dispatchers.Default) {
+                    val selected = frozen.filter { it.id in selectedIds }
+                    val baked = LayerData(id = mergedId, name = name)
+                    // Raster content excludes the canvas background. All per-layer effects are already
+                    // baked; the replacement must have neutral opacity, blend mode, mask and strokes.
+                    baked.raster = renderFrozen(selected, document, transparentBackground = true)
+                    val remaining = frozen.filter { keepOriginals || it.id !in selectedIds }.map { it.snapshotCopy() }.toMutableList()
+                    if (keepOriginals) remaining.filter { it.id in selectedIds }.forEach { it.isVisible = false }
+                    val position = frozen.take(insertionIndex).count { keepOriginals || it.id !in selectedIds }
+                    remaining.add(position, baked)
+                    // An isolated partial merge cannot always represent backdrop-dependent blend or
+                    // clipping groups. Reject instead of changing the artwork or pretending success.
+                    if (mergePreservesAppearance(frozen, remaining, document)) remaining else null
+                } ?: return null
+            if (currentProjectId != project || currentLayers() !== live || editRevision != revision) return null
+            if (activeStrokes.isNotEmpty() || pendingEdits.isNotEmpty()) return null
+            pushUndo()
+            live.clear()
+            live.addAll(candidate)
+            setActiveLayerId(mergedId)
+            dirtyRasters += mergedId
+            dirty = true
+            syncTimeline()
+            emit(CanvasInvalidationEvent.LayersChanged)
+            return mergedId
+        }
+
+        private fun mergePreservesAppearance(
+            original: List<LayerData>,
+            candidate: List<LayerData>,
+            document: CanvasDocument,
+        ): Boolean =
+            listOf(true, false).all { transparent ->
+                val before = renderFrozen(original, document, transparentBackground = transparent)
+                val after = renderFrozen(candidate, document, transparentBackground = transparent)
+                before.pixels.indices.all { index -> sameVisiblePixel(before.pixels[index], after.pixels[index]) }
+            }
+
+        private fun sameVisiblePixel(
+            a: Int,
+            b: Int,
+        ): Boolean {
+            // Source-over regrouping may differ by one 8-bit rounding unit. Ignore only RGB
+            // under fully transparent pixels; alpha itself must always match within one unit.
+            if (kotlin.math.abs((a ushr 24) - (b ushr 24)) > 1) return false
+            if (a ushr 24 == 0 && b ushr 24 == 0) return true
+            for (shift in 0..16 step 8) {
+                if (kotlin.math.abs(((a ushr shift) and 255) - ((b ushr shift) and 255)) > 1) return false
+            }
+            return true
+        }
 
         override suspend fun setLayerVisibility(
             layerId: Long,
@@ -1230,6 +1273,7 @@ class CanvasRepositoryImpl
             index: Int?,
         ): Layer? =
             withState {
+                if (!hasLayerCapacity(1)) return@withState null
                 pushUndo()
                 val layers = currentLayers()
                 val layerId = nextLayerId++
@@ -1294,6 +1338,7 @@ class CanvasRepositoryImpl
             index: Int?,
         ): Layer? =
             withState {
+                if (!hasLayerCapacity(1)) return@withState null
                 pushUndo()
                 val layers = currentLayers()
                 val layerId = nextLayerId++
@@ -1319,7 +1364,7 @@ class CanvasRepositoryImpl
         ): Boolean =
             withState {
                 val layer = layerById(layerId) ?: return@withState false
-                if (layer.filterType == null) return@withState false
+                if (layer.filterType == null || !amount.isFinite()) return@withState false
                 layer.filterAmount = amount.coerceIn(0f, 1f)
                 dirty = true
                 emit(CanvasInvalidationEvent.Full)
@@ -1328,26 +1373,11 @@ class CanvasRepositoryImpl
 
         override suspend fun rasterizeFilterLayer(layerId: Long): Boolean =
             withState {
-                val layers = currentLayers()
-                val index = layers.indexOfFirst { it.id == layerId }
-                if (index <= 0) return@withState false
-                val filterLayer = layers[index]
-                val type = filterLayer.filterType ?: return@withState false
-
-                pushUndo()
-                val target = layers[index - 1]
-                val buffer = target.raster?.copy() ?: PixelBuffer(canvasWidth, canvasHeight)
-                compositor.applyFilter(buffer, type, filterLayer.filterAmount)
-                // Bake the filter layer's own pixels (if any) on top of the target.
-                filterLayer.raster?.let { extra -> buffer.drawInto(extra, 0, 0) }
-                target.raster = buffer
-                target.rasterFile = null
-                layers.removeAt(index)
-                setActiveLayerId(target.id)
-                dirtyRasters += target.id
-                dirty = true
-                emit(CanvasInvalidationEvent.LayersChanged)
-                true
+                val layer = layerById(layerId) ?: return@withState false
+                if (layer.filterType == null) return@withState false
+                // Use the exact preview compositor, including opacity/masks and vector ink. A
+                // context-dependent filter that cannot be represented by this pair is not baked.
+                mergeLayerDown(layerId)
             }
 
         // -----------------------------------------------------------------------------------------
@@ -1362,43 +1392,16 @@ class CanvasRepositoryImpl
         ): Boolean =
             withState {
                 if (!CanvasOperations.isSizeSafe(width, height)) return@withState false
-                requireCanvasMemory(width, height)
                 if (width == canvasWidth && height == canvasHeight) return@withState true
-                pushUndo()
-
                 val properties = CanvasOperations.CanvasProperties(canvasWidth, canvasHeight, canvasDpi, backgroundColor)
-                allLayers().forEach { layer ->
-                    val buffer = layer.raster ?: return@forEach
-                    val result =
-                        if (resample) {
-                            CanvasOperations.resample(buffer, width, height, properties)
-                        } else {
-                            CanvasOperations.resizeCanvas(buffer, width, height, anchor, properties, fillColor = 0)
-                        }
-                    layer.raster = result.buffer
-                    layer.rasterFile = null
-                    dirtyRasters += layer.id
-                }
-                allLayers().forEach { layer ->
-                    layer.mask?.let { mask ->
-                        val result =
-                            if (resample) {
-                                CanvasOperations.resample(mask, width, height, properties)
-                            } else {
-                                CanvasOperations.resizeCanvas(mask, width, height, anchor, properties, fillColor = 0xFF000000.toInt())
-                            }
-                        layer.mask = result.buffer
-                        layer.maskFile = null
-                        dirtyRasters += layer.id
+                transformCanvas(width, height) { buffer, mask ->
+                    if (resample) {
+                        CanvasOperations.resample(buffer, width, height, properties).buffer
+                    } else {
+                        val fill = if (mask) 0xFF000000.toInt() else 0
+                        CanvasOperations.resizeCanvas(buffer, width, height, anchor, properties, fillColor = fill).buffer
                     }
                 }
-
-                canvasWidth = width
-                canvasHeight = height
-                activeSelection = null
-                dirty = true
-                emit(CanvasInvalidationEvent.Full)
-                true
             }
 
         override suspend fun cropCanvas(bounds: IntBounds): Boolean =
@@ -1406,97 +1409,87 @@ class CanvasRepositoryImpl
                 val clamped = bounds.intersect(IntBounds(0, 0, canvasWidth - 1, canvasHeight - 1))
                 if (clamped.isEmpty) return@withState false
                 if (clamped.width == canvasWidth && clamped.height == canvasHeight) return@withState true
-                pushUndo()
-                val properties = CanvasOperations.CanvasProperties(canvasWidth, canvasHeight, canvasDpi, backgroundColor)
-                allLayers().forEach { layer ->
-                    layer.raster?.let { buffer ->
-                        layer.raster = CanvasOperations.crop(buffer, clamped, properties).buffer
-                        layer.rasterFile = null
-                        dirtyRasters += layer.id
-                    }
-                    layer.mask?.let { mask ->
-                        layer.mask = CanvasOperations.crop(mask, clamped, properties).buffer
-                        layer.maskFile = null
-                    }
-                    // Strokes are stored in canvas coordinates, so shift them into the new origin.
-                    if (layer.strokes.isNotEmpty() && (clamped.left != 0 || clamped.top != 0)) {
-                        val shifted =
-                            layer.strokes.map { stroke ->
-                                stroke.copy(
-                                    points =
-                                        stroke.points.map { point ->
-                                            point.copy(x = point.x - clamped.left, y = point.y - clamped.top)
-                                        },
-                                )
-                            }
-                        layer.strokes.clear()
-                        layer.strokes.addAll(shifted)
-                    }
-                }
-                canvasWidth = clamped.width
-                canvasHeight = clamped.height
-                activeSelection = null
-                dirty = true
-                emit(CanvasInvalidationEvent.Full)
-                true
+                transformCanvas(clamped.width, clamped.height) { buffer, _ -> buffer.crop(clamped) }
             }
 
         override suspend fun rotateCanvas(degrees: Int): Boolean =
             withState {
                 val normalized = ((degrees % 360) + 360) % 360
+                if (normalized % 90 != 0) return@withState false
                 if (normalized == 0) return@withState true
-                pushUndo()
-                val properties = CanvasOperations.CanvasProperties(canvasWidth, canvasHeight, canvasDpi, backgroundColor)
-                allLayers().forEach { layer ->
-                    layer.raster?.let { buffer ->
-                        layer.raster = CanvasOperations.rotate(buffer, normalized, properties).buffer
-                        layer.rasterFile = null
-                        dirtyRasters += layer.id
-                    }
-                    layer.mask?.let { mask ->
-                        layer.mask = CanvasOperations.rotate(mask, normalized, properties).buffer
-                        layer.maskFile = null
-                    }
-                    if (layer.strokes.isNotEmpty()) {
-                        layer.strokes.clear()
-                    }
-                }
-                val rotated = CanvasOperations.rotate(PixelBuffer(canvasWidth, canvasHeight), normalized, properties)
-                canvasWidth = rotated.buffer.width
-                canvasHeight = rotated.buffer.height
-                activeSelection = null
-                dirty = true
-                emit(CanvasInvalidationEvent.Full)
-                true
+                val swap = normalized == 90 || normalized == 270
+                val width = if (swap) canvasHeight else canvasWidth
+                val height = if (swap) canvasWidth else canvasHeight
+                transformCanvas(width, height) { buffer, _ -> buffer.rotated(normalized) }
             }
 
         override suspend fun flipCanvas(vertical: Boolean): Boolean =
             withState {
-                pushUndo()
                 val properties = CanvasOperations.CanvasProperties(canvasWidth, canvasHeight, canvasDpi, backgroundColor)
                 val axis = if (vertical) CanvasOperations.FlipAxis.VERTICAL else CanvasOperations.FlipAxis.HORIZONTAL
-                allLayers().forEach { layer ->
-                    layer.raster?.let { buffer ->
-                        layer.raster = CanvasOperations.flip(buffer, axis, properties).buffer
-                        layer.rasterFile = null
-                        dirtyRasters += layer.id
-                    }
-                    layer.mask?.let { mask ->
-                        layer.mask = CanvasOperations.flip(mask, axis, properties).buffer
-                        layer.maskFile = null
-                    }
-                    if (layer.strokes.isNotEmpty()) {
-                        layer.strokes.clear()
+                transformCanvas(canvasWidth, canvasHeight) { buffer, _ -> CanvasOperations.flip(buffer, axis, properties).buffer }
+            }
+
+        /** Rasterise legacy vectors BEFORE transforming, retaining masks/effects as independent data. */
+        private suspend fun transformCanvas(
+            width: Int,
+            height: Int,
+            transform: (PixelBuffer, Boolean) -> PixelBuffer,
+        ): Boolean {
+            if (activeStrokes.isNotEmpty() || pendingEdits.isNotEmpty()) return false
+            requireCanvasMemory(width, height)
+            val liveFrames = frameList
+            val revision = editRevision
+            val project = currentProjectId
+            val snapshot = currentSnapshot()
+            val planes =
+                snapshot.frames.sumOf { frame ->
+                    frame.layers.sumOf { layer ->
+                        (if (layer.raster != null || layer.strokes.isNotEmpty()) 1L else 0L) + (if (layer.mask != null) 1L else 0L)
                     }
                 }
-                dirty = true
-                emit(CanvasInvalidationEvent.Full)
-                true
-            }
+            val required = width.toLong() * height * 4L * (planes + 6L)
+            require(
+                required <= Runtime.getRuntime().maxMemory() * 3 / 5,
+            ) { "This transformation needs more memory than this device provides" }
+            val transformed =
+                withContext(Dispatchers.Default) {
+                    snapshot.frames
+                        .map { frame ->
+                            val layers =
+                                frame.layers
+                                    .map { layer ->
+                                        coroutineContext.ensureActive()
+                                        layer.snapshotCopy().also { result ->
+                                            result.raster =
+                                                rawLayerPixels(layer, snapshot.width, snapshot.height)?.let { transform(it, false) }
+                                            result.strokes.clear()
+                                            result.rasterFile = null
+                                            result.mask = layer.mask?.let { transform(it, true) }
+                                            result.maskFile = null
+                                        }
+                                    }.toMutableList()
+                            FrameData(frame.id, frame.name, frame.durationMs, layers, frame.isKeyframe, frame.activeLayerId)
+                        }.toMutableList()
+                }
+            val documentChanged = currentProjectId != project || frameList !== liveFrames || editRevision != revision
+            if (documentChanged || activeFrame != snapshot.activeFrame) return false
+            if (activeStrokes.isNotEmpty() || pendingEdits.isNotEmpty()) return false
+            pushUndo()
+            frameList = transformed
+            canvasWidth = width
+            canvasHeight = height
+            activeSelection = null
+            dirtyRasters.addAll(allLayers().map { it.id })
+            dirty = true
+            syncTimeline()
+            emit(CanvasInvalidationEvent.Full)
+            return true
+        }
 
         override suspend fun trimTransparent(): Boolean =
             withState {
-                val composite = rasterizeLayers(currentLayers().filter { it.isVisible })
+                val composite = renderFrozen(currentLayers(), canvasSnapshot(), transparentBackground = true)
                 val content = composite.contentBounds() ?: return@withState false
                 cropCanvas(content)
             }
@@ -1539,12 +1532,40 @@ class CanvasRepositoryImpl
             toAllLayers: Boolean,
         ): Boolean =
             withState {
-                val targets = if (toAllLayers) currentLayers() else listOfNotNull(activeLayerData())
+                if (activeStrokes.isNotEmpty() || pendingEdits.isNotEmpty()) return@withState false
+                if (parameters.values.any { !it.isFinite() }) return@withState false
+                val selection = activeSelection
+                if (selection != null && !selection.isActive()) return@withState false
+                val live = currentLayers()
+                val revision = editRevision
+                val project = currentProjectId
+                val targets =
+                    (if (toAllLayers) live else listOfNotNull(activeLayerData()))
+                        .filter { it.canPaint() && (it.raster != null || it.strokes.isNotEmpty()) }
+                        .map { it.snapshotCopy() }
                 if (targets.isEmpty()) return@withState false
+                val width = canvasWidth
+                val height = canvasHeight
+                val required = width.toLong() * height * 4L * (targets.size + 6L)
+                require(required <= Runtime.getRuntime().maxMemory() * 3 / 5) {
+                    "This adjustment needs more memory than this device provides"
+                }
+                val values = parameters.mapValues { (key, value) -> type.validateParameter(key, value) }
+                markRastersShared()
+                val changed =
+                    withContext(Dispatchers.Default) {
+                        targets.associate { layer ->
+                            coroutineContext.ensureActive()
+                            val raw = requireNotNull(rawLayerPixels(layer, width, height))
+                            layer.id to AdjustmentProcessor.apply(raw, type, values, 1f, selection?.coverage)
+                        }
+                    }
+                if (currentProjectId != project || currentLayers() !== live || editRevision != revision) return@withState false
+                if (activeSelection !== selection || activeStrokes.isNotEmpty() || pendingEdits.isNotEmpty()) return@withState false
                 pushUndo()
-                targets.forEach { layer ->
-                    val base = layer.raster ?: rasterizeLayers(listOf(layer))
-                    layer.raster = AdjustmentProcessor.apply(base, type, parameters, 1f, activeSelection?.coverage)
+                live.filter { it.id in changed }.forEach { layer ->
+                    layer.raster = changed.getValue(layer.id)
+                    layer.strokes.clear()
                     layer.rasterFile = null
                     dirtyRasters += layer.id
                 }
@@ -1573,8 +1594,11 @@ class CanvasRepositoryImpl
         override suspend fun addFrame(duplicateCurrent: Boolean) =
             withState {
                 require(frameList.size < ProjectStorage.MAX_FRAMES) { "Maximum ${ProjectStorage.MAX_FRAMES} frames reached" }
-                pushUndo()
                 val source = frameList.getOrNull(activeFrame)
+                val addedLayers = if (duplicateCurrent && source != null) source.layers.size else 1
+                require(hasLayerCapacity(addedLayers)) { "Maximum project layer count reached" }
+                require(nextFrameId in 1 until Long.MAX_VALUE) { "Frame identifiers are exhausted" }
+                pushUndo()
                 val frame =
                     if (duplicateCurrent && source != null) {
                         FrameData(
@@ -1828,7 +1852,7 @@ class CanvasRepositoryImpl
                         delaysMs = frames.map { it.durationMs },
                         layers = layerPixels,
                         selection = frozen.third,
-                        hasAdjustmentLayers = selectedLayers.any { it.adjustmentType != null },
+                        hasAdjustmentLayers = selectedLayers.any { it.adjustmentType != null || it.filterType != null },
                     )
                 } finally {
                     renderer.release()
@@ -2039,34 +2063,21 @@ class CanvasRepositoryImpl
 
         private fun strokeRasterizer(): StrokeRasterizer = StrokeRasterizer()
 
-        /** Composites [layers] using the shared compositor. */
-        private fun rasterizeLayers(
-            layers: List<LayerData>,
-            includeHidden: Boolean = false,
-            applyAdjustments: Boolean = true,
-        ): PixelBuffer {
-            val inputs =
-                layers.mapIndexed { index, data ->
-                    Compositor.LayerInput(
-                        layer = data.toDomain(index),
-                        raster = data.raster,
-                        strokes = data.strokes.toList(),
-                        mask = data.mask,
-                    )
-                }
-            return compositor.composite(
-                inputs = inputs,
-                width = canvasWidth,
-                height = canvasHeight,
-                backgroundColor = backgroundColor,
-                options =
-                    Compositor.Options(
-                        includeHiddenLayers = includeHidden,
-                        selection = null,
-                        applyAdjustments = applyAdjustments,
-                    ),
-            )
-        }
+        private fun rawLayerPixels(
+            layer: LayerData,
+            width: Int,
+            height: Int,
+        ): PixelBuffer? =
+            if (layer.strokes.isEmpty()) {
+                layer.raster
+            } else {
+                LayerStrokeRenderer.render(layer.raster, layer.strokes, emptyList(), width, height, layer.isAlphaLocked, null)
+            }
+
+        private fun hasLayerCapacity(additional: Int): Boolean =
+            frameList.sumOf { it.layers.size } <= ProjectStorage.MAX_LAYERS - additional &&
+                nextLayerId > 0 &&
+                nextLayerId <= Long.MAX_VALUE - additional
 
         private fun requireCanvasMemory(
             width: Int,

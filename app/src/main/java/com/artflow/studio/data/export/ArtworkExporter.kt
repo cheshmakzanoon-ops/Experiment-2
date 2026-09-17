@@ -134,7 +134,7 @@ class ArtworkExporter
                             height = prepared.height,
                             warning =
                                 if (options.format == ExportFormat.PSD && hasAdjustmentLayers) {
-                                    "Adjustment effects are baked into a visible Artwork layer; original pixel layers are included hidden."
+                                    "Adjustment/filter effects are baked into Artwork; original pixel layers are included hidden."
                                 } else {
                                     null
                                 },
@@ -313,7 +313,7 @@ class ArtworkExporter
                         )
                     }.toMutableList()
             if (hasAdjustmentLayers) {
-                psdLayers += PsdCodec.PsdLayer("Artwork (rendered adjustments)", flatten(composite, options))
+                psdLayers += PsdCodec.PsdLayer("Artwork (rendered effects)", flatten(composite, options))
             } else if (options.flattenOntoBackground) {
                 psdLayers.add(
                     0,

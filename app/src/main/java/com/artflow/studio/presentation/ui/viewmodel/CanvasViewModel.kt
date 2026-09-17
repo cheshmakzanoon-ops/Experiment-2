@@ -598,31 +598,45 @@ class CanvasViewModel
 
         fun duplicateLayer(layerId: Long) {
             viewModelScope.launch(editorErrors) {
-                canvasRepository.duplicateLayer(layerId)
+                if (canvasRepository.duplicateLayer(layerId) ==
+                    null
+                ) {
+                    notify("Cannot duplicate: source missing or project layer limit reached")
+                }
                 refreshLayers()
             }
         }
 
         fun mergeLayerDown(layerId: Long) {
             viewModelScope.launch(editorErrors) {
-                if (!canvasRepository.mergeLayerDown(layerId)) notify("Nothing to merge into")
+                if (!canvasRepository.mergeLayerDown(layerId)) {
+                    notify("Merge not applied. Show and unlock both layers; complex blend or clipping groups may need flattening.")
+                }
                 refreshLayers()
             }
         }
 
         fun flattenAllLayers() {
             viewModelScope.launch(editorErrors) {
-                canvasRepository.flattenAllLayers()
+                val result = canvasRepository.flattenAllLayers()
                 refreshLayers()
-                notify("Layers flattened")
+                notify(if (result != null) "Layers flattened" else "Flatten not applied. Unlock layers and finish active edits.")
             }
         }
 
         fun mergeVisibleLayers() {
             viewModelScope.launch(editorErrors) {
-                canvasRepository.mergeVisibleLayers()
+                val result = canvasRepository.mergeVisibleLayers()
                 refreshLayers()
-                notify("Visible layers merged")
+                notify(
+                    if (result !=
+                        null
+                    ) {
+                        "Visible layers merged"
+                    } else {
+                        "Merge not applied. Check layer visibility, locks and blend groups."
+                    },
+                )
             }
         }
 
@@ -750,7 +764,7 @@ class CanvasViewModel
 
         fun addAdjustmentLayer(type: AdjustmentType) {
             viewModelScope.launch(editorErrors) {
-                canvasRepository.addAdjustmentLayer(type)
+                if (canvasRepository.addAdjustmentLayer(type) == null) notify("Project layer limit reached")
                 refreshLayers()
             }
         }
@@ -775,7 +789,7 @@ class CanvasViewModel
 
         fun addFilterLayer(type: FilterType) {
             viewModelScope.launch(editorErrors) {
-                canvasRepository.addFilterLayer(type)
+                if (canvasRepository.addFilterLayer(type) == null) notify("Project layer limit reached")
                 refreshLayers()
             }
         }
@@ -792,9 +806,15 @@ class CanvasViewModel
 
         fun rasterizeFilterLayer(layerId: Long) {
             viewModelScope.launch(editorErrors) {
-                canvasRepository.rasterizeFilterLayer(layerId)
+                val baked = canvasRepository.rasterizeFilterLayer(layerId)
                 refreshLayers()
-                notify("Filter baked into the layer below")
+                notify(
+                    if (baked) {
+                        "Filter baked into the layer below"
+                    } else {
+                        "Cannot bake this filter without changing the image. Show/unlock the layers, or flatten the stack."
+                    },
+                )
             }
         }
 

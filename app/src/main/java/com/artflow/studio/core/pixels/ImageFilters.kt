@@ -414,19 +414,24 @@ object ImageFilters {
         return out
     }
 
-    /** Linear interpolation between two ARGB pixels (used by depth-of-field style effects). */
+    /** Interpolates premultiplied colour, then returns straight ARGB without dark alpha fringes. */
     fun lerpArgb(
         from: Int,
         to: Int,
         t: Float,
     ): Int {
         val clamped = t.coerceIn(0f, 1f)
-        val inv = 1f - clamped
+        if (clamped <= 0f) return from
+        if (clamped >= 1f) return to
+        val fromWeight = Channels.alpha(from) * (1f - clamped)
+        val toWeight = Channels.alpha(to) * clamped
+        val alpha = fromWeight + toWeight
+        if (alpha <= 0f) return 0
         return Channels.fromFloats(
-            a = Channels.alpha(from) * inv + Channels.alpha(to) * clamped,
-            r = Channels.red(from) * inv + Channels.red(to) * clamped,
-            g = Channels.green(from) * inv + Channels.green(to) * clamped,
-            b = Channels.blue(from) * inv + Channels.blue(to) * clamped,
+            a = alpha,
+            r = (Channels.red(from) * fromWeight + Channels.red(to) * toWeight) / alpha,
+            g = (Channels.green(from) * fromWeight + Channels.green(to) * toWeight) / alpha,
+            b = (Channels.blue(from) * fromWeight + Channels.blue(to) * toWeight) / alpha,
         )
     }
 

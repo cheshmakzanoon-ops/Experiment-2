@@ -191,7 +191,7 @@ interface CanvasRepository {
     /** The active selection, or null when nothing is selected. */
     fun selection(): SelectionMask?
 
-    /** Replaces the selection (null clears it). */
+    /** Owns a copy of canvas-sized coverage. Empty means select nothing; only null clears it. */
     fun setSelection(mask: SelectionMask?)
 
     /** Clears the selection. */
@@ -533,5 +533,6 @@ data class CanvasExportSnapshot(
     val delaysMs: List<Int>,
     val layers: List<Pair<Layer, PixelBuffer>>,
     val selection: SelectionMask?,
+    /** Stack effects need a rendered PSD appearance layer; includes filters as well as adjustments. */
     val hasAdjustmentLayers: Boolean,
 )

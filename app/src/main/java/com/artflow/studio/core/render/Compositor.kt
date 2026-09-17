@@ -57,7 +57,7 @@ class Compositor(
         val includeReferenceLayers: Boolean = false,
         /** Restrict the result to a selection (export selection, fill selection). */
         val selection: SelectionMask? = null,
-        /** Skip adjustment layers (used to preview raw layer content). */
+        /** Skip stack adjustment/filter layers (used to preview raw layer content). */
         val applyAdjustments: Boolean = true,
     )
 
@@ -123,10 +123,9 @@ class Compositor(
                 if (layer.opacity <= 0f) continue
                 if (layer.isClippingMask && clipBase == null) continue
 
-                if (layer.adjustmentType != null && options.applyAdjustments) {
-                    applyAdjustment(clipBase ?: result, input)
-                }
-                if (layer.adjustmentType != null) continue
+                val stackEffect = isStackEffect(input)
+                if (stackEffect && options.applyAdjustments) applyStackEffect(clipBase ?: result, input)
+                if (stackEffect) continue
                 val content = renderLayerContent(input, result.width, result.height, bufferPool) ?: continue
                 if (layer.isClippingMask) {
                     blendAndRelease(checkNotNull(clipBase), content, layer, clipped = true)
@@ -141,6 +140,11 @@ class Compositor(
         }
 
         options.selection?.let { selection -> applySelection(result, selection) }
+    }
+
+    private fun isStackEffect(input: LayerInput): Boolean {
+        if (input.layer.adjustmentType != null) return true
+        return input.layer.filterType != null && input.raster == null && input.strokes.isEmpty()
     }
 
     private fun blendAndRelease(
@@ -346,27 +350,29 @@ class Compositor(
         }
     }
 
-    /** Applies an adjustment input to the accumulated [result] below it. */
-    private fun applyAdjustment(
+    /** Empty filter layers, like adjustment layers, operate non-destructively on the stack below. */
+    private fun applyStackEffect(
         result: PixelBuffer,
         input: LayerInput,
     ) {
         val layer = input.layer
-        val type = layer.adjustmentType ?: return
+        val type = layer.adjustmentType
         val adjusted =
-            AdjustmentProcessor.apply(
-                source = result,
-                type = type,
-                parameters = layer.adjustmentParameters,
-                intensity = 1f,
-            )
+            if (type != null) {
+                AdjustmentProcessor.apply(result, type, layer.adjustmentParameters, 1f)
+            } else {
+                result.copy().also { applyFilter(it, requireNotNull(layer.filterType), layer.filterAmount) }
+            }
         val intensity = layer.opacity.coerceIn(0f, 1f)
         val mask = if (layer.maskEnabled) preparedMask(input.mask, layer) else null
         for (y in 0 until result.height) {
             for (x in 0 until result.width) {
                 val i = y * result.width + x
                 val amount = intensity * maskFactor(mask, layer, x, y)
-                result.pixels[i] = ImageFilters.lerpArgb(result.pixels[i], adjusted.pixels[i], amount)
+                val original = result.pixels[i]
+                val mixed = ImageFilters.lerpArgb(original, adjusted.pixels[i], amount)
+                // A clipped blur may change colour, never the isolated clipping base's coverage.
+                result.pixels[i] = if (layer.isClippingMask) Channels.withAlpha(mixed, original ushr 24) else mixed
             }
         }
     }

@@ -33,12 +33,12 @@ phase describes · **⛔ unreachable** — the code exists but nothing calls it 
 | Phases | Scope | Status in this repository |
 |--------|-------|---------------------------|
 | 1–8 | Setup, DI, architecture, design system, canvas, input, brush, layers | ✅ The Gradle wrapper, build config, dark-first design system, GL canvas, stylus/gesture input, stroke engine and layer stack all work. Strokes are rasterised by `Compositor` + `StrokeRasterizer`; the live layer state is `CanvasRepositoryImpl`. ktlint and detekt are configured (see *Tooling gaps*). |
-| 9–16 | Advanced brush params, textures, colour dynamics, blend modes, selection, transform, alpha lock, masks | 🟡 Blend modes, jitter/scatter/taper dynamics, the selection engine and layer masks run in the app. Brush **textures** are ⬜ not implemented: `BrushParams` carries the fields, but no assets are bundled and no render path consumes them. Transform is 🟡 translate only (see phase 14). A layer mask can be created empty (white) or from the current selection; alpha and gradient sources are ⬜. |
+| 9–16 | Advanced brush params, textures, colour dynamics, blend modes, selection, transform, alpha lock, masks | 🟡 Blend modes, jitter/scatter/taper dynamics, the selection engine and layer masks run in the app. Brush textures are 🟡 partial: paper/canvas/charcoal procedural grains are rendered, with scale/rotation controls; custom import, a user texture library and dual textures remain absent. The custom pressure response has three editable monotone control points. Transform is 🟡 translate only (see phase 14). Masks support reveal/hide painting, selection and layer-alpha sources, and horizontal/vertical/radial gradients, with transactional preview and undo. |
 | 17–24 | Smudge, liquify, clone stamp, healing, gradient, paint bucket, text, shapes | ✅ `PixelBrushes` (smudge/clone/heal) and `LiquifyTool` are driven from `ArtFlowCanvasView`, alongside paint bucket, gradient, text and shapes. Shape drawing lives in `ArtFlowCanvasView`; corner radius and boolean ops are ⬜. |
 | 25–30 | Adjustment layers, layer groups, reference layers, layer linking, filter layers, smart objects | 🟡 Adjustments (`AdjustmentProcessor`) and filter layers (`ImageFilters`, via `addFilterLayer` / `rasterizeFilterLayer`) are wired, and reference layers exist as a flag plus a label in the layer sheet — though no UI sets the flag. ⬜ Layer groups, layer-linking UI, smart objects. |
 | 31–36 | Colour picker, palettes, symmetry, perspective guides, canvas properties, quick menu | ✅ `ColorPanel`, `Palette` with `PaletteCodec` for persistence, `ColorHarmony`, `SymmetryEngine`, `PerspectiveGuide`, `CanvasOperations` and the quick menu. ⬜ Shortcut remapping and stylus-button mapping. |
 | 37–42 | Save system, PNG/JPEG export, PSD, PDF, gallery, cloud sync | ✅ Wired: `.artflow` documents (v2: per-layer rasters, frames, timelapse metadata), autosave with crash recovery, PNG/JPEG/WebP/PDF/PSD export and gallery publishing. ⬜ PSD **import**, ⬜ cloud sync. |
-| 43–50 | Animation timeline, animation export, timelapse, performance, tutorials, settings, QA, release | 🟡 Timeline, onion skinning and GIF/MP4/frame-sequence export work; settings, help centre and onboarding exist, and device regressions cover storage, rendering, duplication, exports and selected UI flows. ⬜ Timelapse recording, ⬜ analytics/crash reporting, ⬜ benchmark module (the `benchmark` build type has nothing to run), 🟡 broader physical-device and end-to-end coverage. ✅ Signing configuration is validated; production builds can require it with `-PrequireReleaseSigning=true`. CI can build unsigned candidates, which are not approved releases. |
+| 43–50 | Animation timeline, animation export, timelapse, performance, tutorials, settings, QA, release | 🟡 Timeline, onion skinning and GIF/MP4/frame-sequence export work; settings, help centre and onboarding exist, and device regressions cover storage, rendering, duplication, exports and selected UI flows. ⬜ Timelapse recording, ⬜ analytics/crash reporting, ⬜ benchmark module (`benchmark` is used for a minified launch smoke test, not a performance benchmark), 🟡 broader physical-device and end-to-end coverage. ✅ Signing configuration is validated; production builds can require it with `-PrequireReleaseSigning=true`. CI can build unsigned candidates, which are not approved releases. |
 
 ### Known gaps
 
@@ -52,9 +52,9 @@ this document listed as dead code — `core/layer`, `core/selection`, `core/tran
 - **Layer groups** — `Layer.parentGroupId` exists, but no repository operation or screen sets it.
 - **Layer-linking UI** — `CanvasRepositoryImpl` can set and clear `linkGroupId`; nothing calls it.
 - **Transform beyond translation** — no rotate, scale, skew, perspective, distortion or snapping.
-- **Texture brushes** — the texture fields in `BrushParams` are never consumed and no assets ship.
-- **Mask sources** — a mask can be created empty or from the current selection, not from layer
-  alpha or a gradient.
+- **Imported and dual textures** — three procedural grains are wired, but custom texture import,
+  a user texture library and dual-texture mixing remain absent. Mask sources and custom pressure
+  controls are implemented; their earlier “not implemented” status was stale.
 - **Native engine** — the C++ prototype remains unintegrated and is excluded from the app build.
 - **PSD import, cloud sync, smart objects, timelapse recording, analytics/crash reporting.**
 - **Benchmark module** and a comprehensive physical-device, stylus, GPU and low-memory test campaign.

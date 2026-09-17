@@ -68,6 +68,39 @@ incomplete release verification. Source publication is not a Google Play release
 sign-off. Keep the failing checks enabled and resolve their reports before release. Subsequent CI
 runs on the committed source supersede this checkpoint only where they actually complete.
 
+## Document mutation and filter repair — September 17, 2026
+
+This batch starts from published commit `526cd27dacb3b9ca3845f62691ee0c15db25cc88`;
+it preserves the previously published brush, mask, export and persistence repairs.
+
+- Merge preparation excludes the canvas background and resets already-baked mask/opacity/effect
+  state. Partial blends or clipping configurations are rejected when the replacement would change
+  the rendered image (at most one 8-bit rounding unit is accepted). Retained source copies become
+  hidden so their opacity is not applied twice. No active drag is merged.
+- Canvas quarter-turn, flip, resize and crop operations rasterize legacy vector ink before the
+  transformation, transform masks on every frame, and publish atomically. Cancellation or a newer
+  document revision cannot publish a stale result. Invalid angles do not add undo entries.
+- Pixel sessions include historical ink, reject changed vector sources, and clear baked vector
+  records after commit. Selection ownership is isolated; empty coverage is not unrestricted paint.
+- Applied adjustments operate on editable raw layers, retain transparency and masks, and prepare
+  their results before adding history. Locked, hidden, reference and effect layers are excluded.
+- Empty filter layers now affect the stack below. Filter opacity/masks work independently, clipped
+  blur retains base alpha, and partial-alpha mixing uses premultiplied colour to avoid dark fringes.
+- Layer and frame creation respect the same total-layer limit as project loading. The generated
+  version-1 Room schema is committed as the starting point for explicit future migration tests.
+
+`CanvasMutationTest` and `FilterLayerTest` exercise production repository/compositor code on the
+JVM. Their initial runs reproduced 13 mutation failures, then seven selection/adjustment failures,
+then three filter/alpha failures before the corresponding repairs. Additional cases cover project
+capacity, all-frame/mask transformations, provisional edits and compatible filter baking.
+`DocumentMutationDeviceTest` adds actual Android storage/codec round trips. Its source is not proof
+of execution: use the completed API 26/35/36 reports for the exact candidate being evaluated.
+
+Earlier tables remain historical evidence, not current sign-off. A verification job that publishes
+source must bind the patch checksum, base commit and resulting Git tree, then pass all build and
+emulator jobs before publication. The resulting main commit contains ordinary source, not the
+transport patch. Private signing and physical-device/Play Console gates below still apply.
+
 ## Required publisher and device gates
 
 The following items require separate evidence before a production rollout:
@@ -96,7 +129,7 @@ release are different deliverables.
 | --- | --- |
 | Advanced transform tools | MOVE/TRANSFORM translate pixels; general scale/skew/perspective/distortion is not implemented. Canvas-wide operations are separate. |
 | Layer groups, linking and references | Grouping UI and operations are absent; linking/reference model support is not a complete user workflow. |
-| Texture brushes and custom pressure curves | Texture fields are not a texture implementation; CUSTOM pressure still uses the documented linear fallback. |
+| Custom texture workflows | Three procedural grains and editable monotone custom pressure are implemented. Imported/dual textures and a user texture library remain absent. |
 | Native engine and benchmarks | C++ is an unintegrated prototype. No benchmark module or measured device-performance acceptance report exists. |
 | PSD import and smart objects | Import/smart objects are absent. Export has explicit fidelity limits for effects and does not promise Photoshop round-trip equivalence. |
 | Timelapse recording | Animation export is not recording the drawing process. Timelapse recording is absent. |
@@ -130,3 +163,12 @@ Reviewed September 17, 2026. Recheck these pages and the app's own Play Console 
 - Privacy policy and user data: https://support.google.com/googleplay/android-developer/answer/10144311?hl=en
 - Android backup behavior: https://developer.android.com/identity/data/autobackup
 - 16 KB alignment and runtime validation: https://developer.android.com/guide/practices/page-sizes
+
+### Layered export appearance after stack filtering
+
+Stack filters use the same PSD appearance fallback as adjustment layers: the rendered Artwork
+layer is visible, original pixel layers are retained hidden, and export returns an explicit
+warning that the effects were baked. This prevents a PSD reader that recomposites layers from
+losing the filtered appearance shown in the editor and stored composite. Filter parameters
+are not exported as editable Photoshop filters. Regression coverage checks the snapshot flag,
+hidden-layer inclusion, and a real Android PSD write/read with visible-layer pixel equality.
