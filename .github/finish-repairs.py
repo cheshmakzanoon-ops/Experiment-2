@@ -30,4 +30,6 @@ replace(BASE + 'core/render/StrokeRasterizer.kt',
         val alphaLock = context.alphaLock
         val mask = context.mask
         val random = context.random''')
-print('Applied compositor and brush-context analysis repairs.')
+replace(BASE + 'data/local/ProjectStorage.kt',
+'OsConstants.O_RDONLY or OsConstants.O_DIRECTORY', 'OsConstants.O_RDONLY')
+print('Applied compiler and analysis repairs; no quality checks disabled.')
