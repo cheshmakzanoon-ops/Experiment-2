@@ -30,6 +30,7 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
+          log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@v4
       - name: Apply hash-verified source edits
         shell: python
@@ -56,12 +57,19 @@ jobs:
               path.parent.mkdir(parents=True, exist_ok=True)
               path.write_bytes(new)
           print(f'Applied {len(entries)} source files; all before/after hashes verified.')
+          path = root / 'app/src/main/java/com/artflow/studio/presentation/ui/components/canvas/ArtFlowCanvasView.kt'
+          text = path.read_text()
+          old = '                    if (!canvasRepository.commitRasterEdit(session, description)) onStatusMessage?.invoke("The layer changed; this gesture was discarded")'
+          new = '                    if (!canvasRepository.commitRasterEdit(session, description)) {\n                        onStatusMessage?.invoke("The layer changed; this gesture was discarded")\n                    }'
+          assert text.count(old) == 1, 'Expected the exact overlong statement'
+          path.write_text(text.replace(old, new))
       - name: Format candidate with existing repository rules
-        run: ./gradlew ktlintFormat --stacktrace
+        run: ./gradlew ktlintFormat ktlintCheck --stacktrace
       - name: Archive exact candidate
         if: always()
         run: |
           git add app
+          git archive --format=tar.gz "$(git write-tree)" > "${RUNNER_TEMP}/candidate-source.tar.gz"
           git diff --cached --binary HEAD -- app > "${RUNNER_TEMP}/candidate.patch"
           cd "${RUNNER_TEMP}"
           sha256sum candidate.patch > SHA256SUMS
@@ -71,6 +79,7 @@ jobs:
           name: editor-repair-candidate
           path: |
             ${{ runner.temp }}/candidate.patch
+            ${{ runner.temp }}/candidate-source.tar.gz
             ${{ runner.temp }}/SHA256SUMS
           if-no-files-found: error
           retention-days: 14
@@ -99,15 +108,20 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
+          log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@v4
       - name: Unit tests, analysis, APK and minified bundle
-        run: ./gradlew testDebugUnitTest ktlintCheck detekt lintDebug assembleDebug bundleRelease --continue --stacktrace
+        run: |
+          set -o pipefail
+          ./gradlew testDebugUnitTest ktlintCheck detekt lintDebug lintRelease assembleDebug bundleRelease --continue --stacktrace 2>&1 | tee "${RUNNER_TEMP}/build.log"
       - name: Upload reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: editor-repair-build-results
-          path: app/build/reports/
+          path: |
+            app/build/reports/
+            ${{ runner.temp }}/build.log
           if-no-files-found: ignore
           retention-days: 14
       - name: Upload candidate builds
@@ -150,6 +164,7 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
+          log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@v4
       - name: Enable KVM
         run: |
@@ -206,6 +221,7 @@ jobs:
           git apply --check "${RUNNER_TEMP}/candidate/candidate.patch"
           git apply "${RUNNER_TEMP}/candidate/candidate.patch"
           git rm -r .github/hardening-parts
+          git rm .github/workflows/hardening-verify.yml .github/workflows/source-review.yml
           git add app
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
