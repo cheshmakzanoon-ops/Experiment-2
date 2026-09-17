@@ -1,25 +1,25 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!--
-      Base application theme.
+      Base application theme (API 26-30 devices).
 
       The app is dark-first: Compose draws the real UI from `ArtFlowTheme`, but the window itself
       (behind the first frame, in system dialogs and in the status/navigation bars) uses these
       platform attributes. Keep this in step with `domain/model/settings/AppSettings` so the window
       never flashes a light surface before Compose composes.
+
+      `statusBarColor`/`navigationBarColor` are deprecated from API 35 and ignored when a window is
+      edge-to-edge, so they are intentionally not set here: the near-black window background reads
+      correctly behind the system bars.
     -->
     <style name="Theme.ArtFlow" parent="android:Theme.Material.NoActionBar">
         <!-- Primary brand color -->
         <item name="android:colorPrimary">@color/artflow_primary</item>
-        <item name="android:colorPrimaryDark">@color/artflow_primary_dark</item>
         <item name="android:colorAccent">@color/artflow_primary</item>
 
         <!-- Background colors -->
         <item name="android:colorBackground">@color/artflow_background</item>
         <item name="android:windowBackground">@color/artflow_background</item>
 
-        <!-- Status bar -->
-        <item name="android:statusBarColor">@color/artflow_background</item>
-        <item name="android:navigationBarColor">@color/artflow_surface</item>
         <!-- Light icon treatment would be invisible on the near-black bars above. -->
         <item name="android:windowLightStatusBar">false</item>
 
@@ -37,12 +37,5 @@
     -->
     <style name="Theme.ArtFlow.Starting" parent="Theme.ArtFlow">
         <item name="android:windowBackground">@drawable/splash_background</item>
-    </style>
-
-    <!-- Dialog theme (Material dialogs are dark to match the editor chrome). -->
-    <style name="Theme.ArtFlow.Dialog" parent="android:Theme.Material.Dialog">
-        <item name="android:colorPrimary">@color/artflow_primary</item>
-        <item name="android:colorAccent">@color/artflow_primary</item>
-        <item name="android:background">@color/artflow_surface</item>
     </style>
 </resources>

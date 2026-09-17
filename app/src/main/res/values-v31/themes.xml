@@ -1,14 +1,22 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <!--
       Android 12+ replaces the starting window with the system splash screen API. Without these
       attributes the platform derives the splash from the launcher icon, which ignores the app's
       dark palette. `postSplashScreenTheme` is intentionally absent: the theme swap happens in
       MainActivity.onCreate so the app does not depend on the AndroidX splash screen library.
+
+      The base `values` theme covers API 26-30; this file only carries the API 31+ additions.
     -->
+    <style name="Theme.ArtFlow" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+
     <style name="Theme.ArtFlow.Starting" parent="Theme.ArtFlow">
         <item name="android:windowBackground">@drawable/splash_background</item>
         <item name="android:windowSplashScreenBackground">@color/artflow_background</item>
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
         <item name="android:windowSplashScreenIconBackgroundColor">@color/ic_launcher_background</item>
+        <!-- API 36: prefer the app's splash icon over the platform's vector default. -->
+        <item name="android:windowSplashScreenBehavior" tools:targetApi="36">icon_preferred</item>
     </style>
 </resources>

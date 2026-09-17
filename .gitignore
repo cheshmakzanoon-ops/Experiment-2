@@ -23,6 +23,9 @@ release/
 obj/
 libs/
 
+# Kotlin compiler session data (Kotlin 2.x)
+.kotlin/
+
 # Local configuration (machine-specific, must never be committed)
 local.properties
 keystore.properties

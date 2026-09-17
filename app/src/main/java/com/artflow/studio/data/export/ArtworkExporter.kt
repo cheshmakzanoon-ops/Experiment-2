@@ -16,6 +16,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
+import androidx.core.graphics.createBitmap
 import com.artflow.studio.core.export.ExportError
 import com.artflow.studio.core.export.ExportFormat
 import com.artflow.studio.core.export.ExportNaming
@@ -752,7 +753,7 @@ class ArtworkExporter
             buffer: PixelBuffer,
             cellSize: Int = 16,
         ): Bitmap {
-            val bitmap = Bitmap.createBitmap(buffer.width, buffer.height, Bitmap.Config.ARGB_8888)
+            val bitmap = createBitmap(buffer.width, buffer.height)
             val canvas = AndroidCanvas(bitmap)
             val light = Paint().apply { color = 0xFFFFFFFF.toInt() }
             val dark = Paint().apply { color = 0xFFCCCCCC.toInt() }

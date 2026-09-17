@@ -10,7 +10,7 @@
       app never queries the user's media library.
     -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="29"
+        android:maxSdkVersion="28"
         tools:ignore="ScopedStorage" />
 
     <!--
@@ -22,14 +22,22 @@
         android:glEsVersion="0x00020000"
         android:required="true" />
 
-    <!-- Stylus and input features -->
-    <uses-feature
-        android:name="android.hardware.touchscreen"
-        android:required="true" />
+    <!--
+      Stylus and input features. Touch support is assumed (Play filters devices without a
+      touchscreen for every app), so only multi-touch — which the pinch-zoom canvas genuinely
+      needs — is declared. Marking plain `touchscreen` required would hide the app from some
+      Chromebook-class devices that run Android apps fine.
+    -->
     <uses-feature
         android:name="android.hardware.touchscreen.multitouch"
         android:required="true" />
 
+    <!--
+      Apps targeting API 35+ are forced edge-to-edge: the window draws under the status and
+      navigation bars regardless of the theme's statusBarColor/navigationBarColor. The Compose
+      chrome (Scaffold) already insets itself, but the platform window theme still paints opaque
+      bars and the GL canvas view is not inset-aware, so opt out for now.
+    -->
     <application
         android:name=".ArtFlowApplication"
         android:allowBackup="true"
@@ -43,7 +51,8 @@
         android:hardwareAccelerated="true"
         android:largeHeap="true"
         android:enableOnBackInvokedCallback="true"
-        tools:targetApi="34">
+        android:windowOptOutEdgeToEdgeEnforcement="true"
+        tools:targetApi="36">
 
         <activity
             android:name=".presentation.ui.MainActivity"

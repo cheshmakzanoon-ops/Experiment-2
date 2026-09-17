@@ -200,6 +200,9 @@ class ArtFlowCanvasView
         var onRedoRequested: (() -> Unit)? = null
         var onViewChanged: ((scale: Float, offsetX: Float, offsetY: Float, rotation: Float) -> Unit)? = null
         var onTextPlacementRequested: ((x: Float, y: Float) -> Unit)? = null
+
+        /** Invoked by accessibility clicks (see [performClick]); unused by direct touch. */
+        var onToolStripToggle: (() -> Unit)? = null
         var onCloneSourceChanged: ((Pair<Float, Float>) -> Unit)? = null
         var onStatusMessage: ((String) -> Unit)? = null
 
@@ -592,6 +595,17 @@ class ArtFlowCanvasView
         // -----------------------------------------------------------------------------------------
         // Pointer handling
         // -----------------------------------------------------------------------------------------
+
+        /**
+         * Accessibility click: tapping the canvas toggles the tool strip so switcher-style
+         * accessibility services can reach it. The editor's real interaction is drawing, which
+         * [onTouchEvent] handles.
+         */
+        override fun performClick(): Boolean {
+            super.performClick()
+            onToolStripToggle?.invoke()
+            return true
+        }
 
         override fun onTouchEvent(event: MotionEvent): Boolean {
             gestureMaxPointers = max(gestureMaxPointers, event.pointerCount)
