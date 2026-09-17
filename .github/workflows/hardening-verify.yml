@@ -64,7 +64,9 @@ jobs:
           assert text.count(old) == 1, 'Expected the exact overlong statement'
           path.write_text(text.replace(old, new))
       - name: Format candidate with existing repository rules
-        run: ./gradlew ktlintFormat ktlintCheck --stacktrace
+        run: |
+          ./gradlew ktlintFormat --stacktrace
+          ./gradlew ktlintCheck --stacktrace
       - name: Archive exact candidate
         if: always()
         run: |
