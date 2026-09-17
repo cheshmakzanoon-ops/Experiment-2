@@ -21,6 +21,8 @@ jobs:
     steps:
       - name: Check out
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Archive exact source revision
         run: |
@@ -47,15 +49,27 @@ jobs:
         uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
+          log-accepted-android-sdk-licenses: false
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+
+      - name: Test the artifact verifier
+        run: python -m unittest discover -s .github/scripts -p 'test_*.py'
+
+      - name: Verify production builds reject missing signing inputs
+        run: |
+          if ./gradlew help -PrequireReleaseSigning=true > "${RUNNER_TEMP}/signing-negative.log" 2>&1; then
+            echo "Production signing guard unexpectedly accepted an unsigned checkout"
+            exit 1
+          fi
+          grep -F "Production signing is required" "${RUNNER_TEMP}/signing-negative.log"
 
       - name: Run JVM unit tests
         run: ./gradlew testDebugUnitTest --stacktrace
 
       - name: Static analysis
-        run: ./gradlew ktlintCheck detekt lintDebug --stacktrace
+        run: ./gradlew ktlintCheck detekt lintDebug lintRelease --stacktrace
 
       - name: Assemble debug APK
         run: ./gradlew assembleDebug --stacktrace
@@ -63,12 +77,29 @@ jobs:
       - name: Assemble release bundle
         run: ./gradlew bundleRelease --stacktrace
 
+      - name: Check packaged artifact integrity and native alignment
+        run: |
+          set -o pipefail
+          python .github/scripts/verify_android_artifacts.py app/build/outputs/apk/debug/*.apk app/build/outputs/bundle/release/*.aab | tee "${RUNNER_TEMP}/artifact-preflight.txt"
+
+      - name: Preserve generated Room schemas
+        uses: actions/upload-artifact@v4
+        with:
+          name: room-schemas
+          path: app/schemas/
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Upload test and analysis reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: verification-reports
-          path: app/build/reports/
+          path: |
+            app/build/reports/
+            app/build/test-results/
+            ${{ runner.temp }}/artifact-preflight.txt
+            ${{ runner.temp }}/signing-negative.log
           if-no-files-found: ignore
           retention-days: 14
 
@@ -91,9 +122,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api: [26, 36]
+        include:
+          - api: 26
+            target: google_apis
+            page_size: 4096
+          - api: 35
+            target: google_apis_ps16k
+            page_size: 16384
+          - api: 36
+            target: google_apis
+            page_size: 4096
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -101,6 +143,7 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
+          log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@v4
       - name: Enable KVM
         run: |
@@ -108,14 +151,16 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Run instrumentation tests
+        env:
+          EXPECTED_PAGE_SIZE: ${{ matrix.page_size }}
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api }}
           arch: x86_64
-          target: google_apis
+          target: ${{ matrix.target }}
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: ./gradlew connectedDebugAndroidTest --stacktrace
+          script: bash .github/scripts/run-device-tests.sh
       - name: Upload device test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -124,5 +169,6 @@ jobs:
           path: |
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
+            ${{ runner.temp }}/artflow-device/
           if-no-files-found: ignore
           retention-days: 14
