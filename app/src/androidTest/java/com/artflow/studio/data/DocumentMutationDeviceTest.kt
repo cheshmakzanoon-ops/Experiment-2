@@ -15,12 +15,14 @@ import com.artflow.studio.data.repository.canvas.CanvasRepositoryImpl
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.model.brush.StrokePoint
+import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.layer.FilterType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -143,6 +145,68 @@ class DocumentMutationDeviceTest {
             assertTrue(parsed.layers.any { !it.isVisible })
             assertArrayEquals(snapshot.frames.single().pixels, visible.single().pixels.pixels)
             assertArrayEquals(snapshot.frames.single().pixels, requireNotNull(parsed.composite).pixels)
+        }
+
+    @Test
+    fun effectParameterUndoAndRedoSurviveRealStorageReload() =
+        runBlocking(Dispatchers.Main) {
+            repository.loadOrCreate(projectId, 32, 24, 72)
+            repository.setLayerPixels(repository.getActiveLayerId(), PixelBuffer.filled(32, 24, 0xFF52637A.toInt()), "Ink")
+            val adjustment = requireNotNull(repository.addAdjustmentLayer(AdjustmentType.BRIGHTNESS_CONTRAST)).id
+            val filter = requireNotNull(repository.addFilterLayer(FilterType.VIGNETTE)).id
+            val before = requireNotNull(repository.compositeFrame(0, transparentBackground = true)).pixels.copyOf()
+            val depth = repository.undoDepth
+            assertTrue(repository.setAdjustmentParameters(adjustment, mapOf("brightness" to 25f, "contrast" to 10f)))
+            assertTrue(repository.setFilterAmount(filter, 0.9f))
+            assertEquals(depth + 2, repository.undoDepth)
+            val changed = requireNotNull(repository.compositeFrame(0, transparentBackground = true)).pixels.copyOf()
+            assertFalse(before.contentEquals(changed))
+            assertTrue(repository.undo())
+            assertTrue(repository.undo())
+            assertArrayEquals(before, requireNotNull(repository.compositeFrame(0, transparentBackground = true)).pixels)
+            assertTrue(repository.redo())
+            assertTrue(repository.redo())
+            assertArrayEquals(changed, requireNotNull(repository.compositeFrame(0, transparentBackground = true)).pixels)
+            assertTrue(repository.saveCanvas(projectId) != null)
+            assertTrue(repository.loadCanvas(projectId) != null)
+            assertArrayEquals(changed, requireNotNull(repository.compositeFrame(0, transparentBackground = true)).pixels)
+            val layers = repository.getAllLayers().associateBy { it.id }
+            assertEquals(25f, layers.getValue(adjustment).adjustmentParameters.getValue("brightness"), 0f)
+            assertEquals(10f, layers.getValue(adjustment).adjustmentParameters.getValue("contrast"), 0f)
+            assertEquals(0.9f, layers.getValue(filter).filterAmount, 0f)
+        }
+
+    @Test
+    fun noOpAndInvalidParametersLeaveSavedArtworkCleanAndReadable() =
+        runBlocking(Dispatchers.Main) {
+            repository.loadOrCreate(projectId, 32, 24, 72)
+            val ink = repository.getActiveLayerId()
+            repository.setLayerPixels(ink, PixelBuffer.filled(32, 24, 0xA052637A.toInt()), "Ink")
+            repository.createLayerMask(ink, LayerMaskSource.HORIZONTAL)
+            val adjustment = requireNotNull(repository.addAdjustmentLayer(AdjustmentType.BRIGHTNESS_CONTRAST)).id
+            val filter = requireNotNull(repository.addFilterLayer(FilterType.VIGNETTE)).id
+            assertTrue(repository.saveCanvas(projectId) != null)
+            assertFalse(repository.hasUnsavedChanges())
+            val before = requireNotNull(repository.compositeFrame(0, transparentBackground = true)).pixels.copyOf()
+            val depth = repository.undoDepth
+            val revision = repository.contentRevision
+            assertTrue(repository.setLayerOpacity(ink, 1f))
+            assertTrue(repository.setLayerMaskDensity(ink, 1f))
+            assertTrue(repository.setLayerMaskFeather(ink, 0f))
+            assertTrue(repository.resetAdjustment(adjustment))
+            assertTrue(repository.setAdjustmentParameters(adjustment, emptyMap()))
+            assertTrue(repository.setFilterAmount(filter, FilterType.VIGNETTE.defaultAmount))
+            assertFalse(repository.setLayerOpacity(ink, Float.NaN))
+            assertFalse(repository.setLayerMaskDensity(ink, Float.POSITIVE_INFINITY))
+            assertFalse(repository.setLayerMaskFeather(ink, Float.NEGATIVE_INFINITY))
+            assertFalse(repository.setAdjustmentParameters(adjustment, linkedMapOf("brightness" to 50f, "contrast" to Float.NaN)))
+            assertFalse(repository.setFilterAmount(filter, Float.NaN))
+            assertFalse(repository.hasUnsavedChanges())
+            assertEquals(depth, repository.undoDepth)
+            assertEquals(revision, repository.contentRevision)
+            assertArrayEquals(before, requireNotNull(repository.compositeFrame(0, transparentBackground = true)).pixels)
+            assertTrue(repository.loadCanvas(projectId) != null)
+            assertArrayEquals(before, requireNotNull(repository.compositeFrame(0, transparentBackground = true)).pixels)
         }
 
     private companion object {

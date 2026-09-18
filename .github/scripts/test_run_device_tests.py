@@ -52,6 +52,12 @@ exit 0
         self.assertNotIn('getconf', calls)
         self.assertIn('assembleBenchmark', calls)
 
+    def test_instrumentation_evidence_is_captured_before_replacing_the_app(self):
+        result, calls = self.run_harness('4096')
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertLess(calls.index('logcat -b all -d'), calls.index('assembleBenchmark'))
+        self.assertLess(calls.index('pull /sdcard/Android/data/'), calls.index('install -r'))
+
     def test_16k_expectation_is_sent_to_real_instrumentation(self):
         result, calls = self.run_harness('16384')
         self.assertEqual(0, result.returncode, result.stderr)

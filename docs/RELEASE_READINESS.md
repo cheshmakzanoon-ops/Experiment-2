@@ -260,3 +260,58 @@ original alpha value while blending colours source-atop; it does not progressive
 edges opaque. Small selection masks use coordinates rather than a mismatched row stride.
 Non-finite coordinates/opacity fail without painting. Regression sources are `GradientToolTest`
 and the real-view `FillGestureDeviceTest`; completed CI reports remain the execution evidence.
+
+## Atomic layer parameters and history — September 18, 2026
+
+This independent repair starts from published main commit
+`2c1437345c97354c72c78a294c3695eb70840c16`. It does not include the unpublished
+selection/stroke candidate described below.
+
+Adjustment and filter parameter changes now create their own undo/redo steps instead of
+falling through to an earlier document operation. A bulk adjustment validates every key and
+finite value before modifying the live map, prepares an owned replacement, and commits one
+history entry. Unknown keys and NaN/infinite values are rejected without partial mutations.
+Finite out-of-range inputs still clamp to the documented ranges. Opacity and mask density/
+feather inputs receive the same finite-value checks. Identical values, empty adjustment
+batches and an already-default reset leave revision, dirty state and undo/redo unchanged.
+
+Executed local regression evidence: all 12 `LayerParameterEditTest` cases failed against the
+unchanged published implementation (the production sources were not modified for that run).
+After the repair, the same 12 cases passed with zero failures, errors or skips. The tests call
+the real repository and compositor; they cover exact pixel restoration as well as parameter
+values, owned maps, invalid batches, redo preservation and unchanged revisions. Local runs
+used the repository's Gradle 8.14.3 and dependency versions, offline Android 36 SDK and JDK 21
+with the existing Java 17 source/target. CI separately uses JDK 17.
+
+Two added `DocumentMutationDeviceTest` cases exercise real Android save/reopen after effect
+undo/redo, and clean persisted documents after invalid/no-op parameter calls. Their source
+alone is not execution evidence: the publication commit must identify the completed host
+and API 26/35-16k/36/36-16k run for this exact candidate.
+
+Runtime diagnostics now write SDK, ABI, process page size and build fingerprint to per-test
+logcat as well as an app-owned file. The harness collects instrumentation logs before the
+minified APK installation, since test-runner cleanup may remove app-owned files. All-buffer
+logs and original test-failure exit codes are preserved. A host regression checks capture
+ordering. The x86_64 16 KB images emulate the userspace page-size contract; this is not proof
+of a physical ARM device's kernel page size or stylus behavior. See Android's explanation:
+https://android-developers.googleblog.com/2024/08/adding-16-kb-page-size-to-android.html
+
+## Unpublished selection/stroke candidate remains blocked
+
+Run [35343177188](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/35343177188)
+tested ordinary source tree `013a25342846017615a6a18fe399450ecbe7dc3e` on temporary branch
+`repair/selection`. All 267 JVM tests and host analysis/build/artifact checks passed. API 26,
+API 36, API 36 with the 16 KB contract, the unchanged API 35 16 KB base control and candidate
+API 35 16 KB run B completed instrumentation and minified launch successfully. Candidate
+API 35 16 KB run A still crashed in a native ART/JIT path while traversing files, with a null
+program counter and `kotlin.io.FileTreeWalk` in the backtrace. Publication was correctly
+skipped because that mandatory lane failed.
+
+Earlier independent attempts crashed in different ART/Hilt/Compose paths. More guest RAM
+did not consistently resolve the issue. These observations do not prove a root cause, and
+a successful sibling run does not cancel a failed run. Keep that candidate and its failure
+evidence separate from the independently verified layer-parameter repair. Do not publish it
+by suppressing tests, disabling JIT, or treating the fault as conclusively external.
+
+All original roadmap gaps and required publisher/physical-device gates above remain open.
+This repair is not a signed Google Play release or a claim of unconditional crash-free use.

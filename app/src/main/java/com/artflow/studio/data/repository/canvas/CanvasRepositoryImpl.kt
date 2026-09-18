@@ -780,6 +780,7 @@ class CanvasRepositoryImpl
             opacity: Float,
         ): Layer =
             withState {
+                require(opacity.isFinite()) { "Layer opacity must be finite" }
                 require(hasLayerCapacity(1)) { "Maximum project layer count reached" }
                 pushUndo()
                 val layerId = nextLayerId++
@@ -987,6 +988,7 @@ class CanvasRepositoryImpl
         ): Boolean =
             withState {
                 val layer = layerById(layerId) ?: return@withState false
+                if (!opacity.isFinite()) return@withState false
                 val clamped = opacity.coerceIn(0f, 1f)
                 if (layer.opacity == clamped) return@withState true
                 pushUndo()
@@ -1231,8 +1233,11 @@ class CanvasRepositoryImpl
         ): Boolean =
             withState {
                 val layer = layerById(layerId) ?: return@withState false
+                if (!density.isFinite()) return@withState false
+                val clamped = density.coerceIn(0f, 1f)
+                if (layer.maskDensity == clamped) return@withState true
                 pushUndo()
-                layer.maskDensity = density.coerceIn(0f, 1f)
+                layer.maskDensity = clamped
                 dirty = true
                 emit(CanvasInvalidationEvent.Full)
                 true
@@ -1244,8 +1249,11 @@ class CanvasRepositoryImpl
         ): Boolean =
             withState {
                 val layer = layerById(layerId) ?: return@withState false
+                if (!radius.isFinite()) return@withState false
+                val clamped = radius.coerceIn(0f, 64f)
+                if (layer.maskFeather == clamped) return@withState true
                 pushUndo()
-                layer.maskFeather = radius.coerceIn(0f, 64f)
+                layer.maskFeather = clamped
                 dirty = true
                 emit(CanvasInvalidationEvent.Full)
                 true
@@ -1301,15 +1309,7 @@ class CanvasRepositoryImpl
             layerId: Long,
             key: String,
             value: Float,
-        ): Boolean =
-            withState {
-                val layer = layerById(layerId) ?: return@withState false
-                val type = layer.adjustmentType ?: return@withState false
-                layer.adjustmentParams[key] = type.validateParameter(key, value)
-                dirty = true
-                emit(CanvasInvalidationEvent.Full)
-                true
-            }
+        ): Boolean = setAdjustmentParameters(layerId, mapOf(key to value))
 
         override suspend fun setAdjustmentParameters(
             layerId: Long,
@@ -1318,9 +1318,17 @@ class CanvasRepositoryImpl
             withState {
                 val layer = layerById(layerId) ?: return@withState false
                 val type = layer.adjustmentType ?: return@withState false
-                values.forEach { (key, value) ->
-                    layer.adjustmentParams[key] = type.validateParameter(key, value)
+                // Validate the entire batch before touching live state or history. Preparing
+                // an owned map also prevents a caller's later changes from altering the edit.
+                val replacement = layer.adjustmentParams.toMutableMap()
+                for ((key, value) in values) {
+                    val range = type.parameterRanges[key] ?: return@withState false
+                    if (!value.isFinite()) return@withState false
+                    replacement[key] = value.coerceIn(range)
                 }
+                if (replacement == layer.adjustmentParams) return@withState true
+                pushUndo()
+                layer.adjustmentParams = replacement
                 dirty = true
                 emit(CanvasInvalidationEvent.Full)
                 true
@@ -1330,6 +1338,7 @@ class CanvasRepositoryImpl
             withState {
                 val layer = layerById(layerId) ?: return@withState false
                 val type = layer.adjustmentType ?: return@withState false
+                if (layer.adjustmentParams == type.defaultParameters) return@withState true
                 pushUndo()
                 layer.adjustmentParams = type.defaultParameters.toMutableMap()
                 dirty = true
@@ -1369,7 +1378,10 @@ class CanvasRepositoryImpl
             withState {
                 val layer = layerById(layerId) ?: return@withState false
                 if (layer.filterType == null || !amount.isFinite()) return@withState false
-                layer.filterAmount = amount.coerceIn(0f, 1f)
+                val clamped = amount.coerceIn(0f, 1f)
+                if (layer.filterAmount == clamped) return@withState true
+                pushUndo()
+                layer.filterAmount = clamped
                 dirty = true
                 emit(CanvasInvalidationEvent.Full)
                 true

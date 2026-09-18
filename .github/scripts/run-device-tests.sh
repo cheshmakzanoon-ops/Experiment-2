@@ -4,7 +4,7 @@ set -uo pipefail
 root="${RUNNER_TEMP:-/tmp}/artflow-device"
 mkdir -p "$root"
 collect() {
-  timeout 15 adb logcat -d > "$root/device-logcat.txt" || true
+  timeout 15 adb logcat -b all -d > "$root/device-logcat.txt" || true
   timeout 15 adb pull /sdcard/Android/data/com.artflow.studio/files/test-evidence "$root/test-evidence" || true
 }
 trap collect EXIT
@@ -17,6 +17,11 @@ esac
 ./gradlew connectedDebugAndroidTest \
   "-Pandroid.testInstrumentationRunnerArguments.expectedPageSize=${EXPECTED_PAGE_SIZE}" \
   --stacktrace || exit $?
+
+# Capture evidence before the release-equivalent install replaces instrumentation state.
+# RuntimeEnvironmentTest also logs measured values into UTP's preserved per-test logcat.
+timeout 15 adb logcat -b all -d > "$root/instrumentation-logcat.txt" || true
+timeout 15 adb pull /sdcard/Android/data/com.artflow.studio/files/test-evidence "$root/instrumentation-evidence" || true
 
 # Benchmark inherits release R8/resource shrinking but uses the disposable debug key.
 # This is a release-equivalent launch smoke test, NOT a publisher-signed release.
