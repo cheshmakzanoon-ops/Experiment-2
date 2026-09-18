@@ -44,15 +44,19 @@ import com.artflow.studio.presentation.ui.components.canvas.ShapeKind
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -306,8 +310,7 @@ class CanvasViewModel
                         }
                         refreshHistory()
                         _dirty.value = canvasRepository.hasUnsavedChanges()
-                        _selection.value = canvasRepository.selection()
-                        _selectionCount.value = canvasRepository.selection()?.selectedPixelCount() ?: 0
+                        refreshSelection()
                         refreshUiStateFrames()
                     }
                 }
@@ -357,8 +360,9 @@ class CanvasViewModel
         }
 
         private fun refreshSelection() {
-            _selection.value = canvasRepository.selection()
-            _selectionCount.value = canvasRepository.selection()?.selectedPixelCount() ?: 0
+            val mask = canvasRepository.selection()
+            _selection.value = mask
+            _selectionCount.value = mask?.selectedPixelCount() ?: 0
         }
 
         private fun refreshUiStateFrames() {
@@ -537,7 +541,7 @@ class CanvasViewModel
 
         fun invertSelection() {
             val mask =
-                canvasRepository.selection()?.copy()
+                canvasRepository.selection()
                     ?: SelectionMask(canvasSize().first, canvasSize().second).apply { selectAll() }
             mask.invert()
             canvasRepository.setSelection(mask)
@@ -545,21 +549,21 @@ class CanvasViewModel
         }
 
         fun featherSelection(radius: Int) {
-            val current = canvasRepository.selection() ?: return
-            canvasRepository.setSelection(current.feathered(radius))
-            refreshSelection()
+            runSelectionEdit { session ->
+                val current = session.original ?: return@runSelectionEdit null
+                withContext(Dispatchers.Default) { current.feathered(radius) { ensureActive() } }
+            }
         }
 
         fun selectionFromAlphaOfActiveLayer() {
-            viewModelScope.launch(editorErrors) {
-                val layerId = canvasRepository.getActiveLayerId()
+            val layerId = canvasRepository.getActiveLayerId()
+            runSelectionEdit {
                 val buffer = canvasRepository.layerPixels(layerId)
                 if (buffer == null) {
                     notify("This layer has no pixels yet")
-                    return@launch
+                    return@runSelectionEdit null
                 }
-                canvasRepository.setSelection(SelectionMask.fromAlphaOf(buffer))
-                refreshSelection()
+                withContext(Dispatchers.Default) { SelectionMask.fromAlphaOf(buffer, checkActive = { ensureActive() }) }
             }
         }
 
@@ -567,15 +571,32 @@ class CanvasViewModel
             color: Int,
             tolerance: Int,
         ) {
-            viewModelScope.launch(editorErrors) {
+            runSelectionEdit {
                 val buffer = canvasRepository.compositeBuffer()
                 if (buffer == null) {
                     notify("Nothing to sample")
-                    return@launch
+                    return@runSelectionEdit null
                 }
-                canvasRepository.setSelection(SelectionMask.colorRange(buffer, color, tolerance))
-                refreshSelection()
+                withContext(Dispatchers.Default) {
+                    SelectionMask.colorRange(buffer, color, tolerance, checkActive = { ensureActive() })
+                }
             }
+        }
+
+        private var selectionJob: Job? = null
+
+        private fun runSelectionEdit(compute: suspend (CanvasRepository.SelectionEditSession) -> SelectionMask?) {
+            selectionJob?.cancel()
+            val session = canvasRepository.beginSelectionEdit()
+            selectionJob =
+                viewModelScope.launch(editorErrors, start = CoroutineStart.UNDISPATCHED) {
+                    try {
+                        val mask = compute(session) ?: return@launch
+                        if (canvasRepository.commitSelectionEdit(session, mask)) refreshSelection()
+                    } finally {
+                        canvasRepository.cancelSelectionEdit(session)
+                    }
+                }
         }
 
         // -----------------------------------------------------------------------------------------

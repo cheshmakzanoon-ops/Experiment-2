@@ -118,7 +118,7 @@ jobs:
           retention-days: 14
 
   device-tests:
-    name: Device tests (API ${{ matrix.api }})
+    name: Device tests (${{ matrix.label }})
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -126,14 +126,30 @@ jobs:
       matrix:
         include:
           - api: 26
+            label: API 26
+            artifact: '26'
             target: google_apis
             page_size: 4096
           - api: 35
+            label: API 35
+            artifact: '35'
             target: google_apis_ps16k
             page_size: 16384
           - api: 36
+            label: API 36
+            artifact: '36'
             target: google_apis
             page_size: 4096
+          - api: 35
+            label: API 35 independent 16 KB repeat
+            artifact: 35-16k-repeat
+            target: google_apis_ps16k
+            page_size: 16384
+          - api: 36
+            label: API 36 16 KB
+            artifact: 36-16k
+            target: google_apis_ps16k
+            page_size: 16384
     steps:
       - uses: actions/checkout@v4
         with:
@@ -167,7 +183,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: device-test-results-api-${{ matrix.api }}
+          name: device-test-results-api-${{ matrix.artifact }}
           path: |
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/

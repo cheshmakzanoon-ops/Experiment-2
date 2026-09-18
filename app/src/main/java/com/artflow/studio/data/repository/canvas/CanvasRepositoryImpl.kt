@@ -109,6 +109,13 @@ class CanvasRepositoryImpl
         private var symmetrySettings = SymmetryEngine.Settings()
         private var activeSelection: SelectionMask? = null
 
+        private data class PendingSelection(
+            val session: CanvasRepository.SelectionEditSession,
+            val revision: Long,
+        )
+
+        private var pendingSelection: PendingSelection? = null
+
         private val _timeline = MutableStateFlow(AnimationTimeline.State())
         override val timeline: StateFlow<AnimationTimeline.State> = _timeline.asStateFlow()
 
@@ -196,6 +203,7 @@ class CanvasRepositoryImpl
                     ),
                 )
             activeFrame = 0
+            pendingSelection = null
             activeSelection = null
             activeStrokes.clear()
             strokeBrushParams.clear()
@@ -317,6 +325,7 @@ class CanvasRepositoryImpl
             frameList[activeFrame].activeLayerId = document.activeLayerId.takeIf { id ->
                 frameList[activeFrame].layers.any { it.id == id }
             } ?: frameList[activeFrame].layers.firstOrNull()?.id ?: 0L
+            pendingSelection = null
             activeSelection = null
             activeStrokes.clear()
             strokeBrushParams.clear()
@@ -763,11 +772,34 @@ class CanvasRepositoryImpl
             }
             // Empty coverage means select nothing, not select everything. Only null deselects.
             // Own both sides of the boundary so an asynchronous tool cannot mutate a live mask.
-            activeSelection = mask?.copy()
+            val owned = mask?.copy()
+            pendingSelection = null
+            activeSelection = owned
+            emitAsync(CanvasInvalidationEvent.Full)
         }
 
-        override fun clearSelection() {
-            activeSelection = null
+        override fun clearSelection() = setSelection(null)
+
+        override fun beginSelectionEdit(): CanvasRepository.SelectionEditSession {
+            val session = CanvasRepository.SelectionEditSession(canvasWidth, canvasHeight, activeSelection?.copy())
+            pendingSelection = PendingSelection(session, editRevision)
+            return session
+        }
+
+        override fun commitSelectionEdit(
+            session: CanvasRepository.SelectionEditSession,
+            mask: SelectionMask,
+        ): Boolean {
+            val pending = pendingSelection ?: return false
+            if (pending.session !== session) return false
+            pendingSelection = null
+            if (pending.revision != editRevision || mask.width != canvasWidth || mask.height != canvasHeight) return false
+            setSelection(mask)
+            return true
+        }
+
+        override fun cancelSelectionEdit(session: CanvasRepository.SelectionEditSession) {
+            if (pendingSelection?.session === session) pendingSelection = null
         }
 
         // -----------------------------------------------------------------------------------------
@@ -1495,6 +1527,7 @@ class CanvasRepositoryImpl
             frameList = transformed
             canvasWidth = width
             canvasHeight = height
+            pendingSelection = null
             activeSelection = null
             dirtyRasters.addAll(allLayers().map { it.id })
             dirty = true
@@ -1686,6 +1719,7 @@ class CanvasRepositoryImpl
             withState {
                 val clamped = index.coerceIn(0, frameList.lastIndex.coerceAtLeast(0))
                 if (clamped == activeFrame) return@withState
+                pendingSelection = null
                 activeFrame = clamped
                 syncTimeline()
                 emit(CanvasInvalidationEvent.FrameChanged(activeFrame))
@@ -2061,6 +2095,7 @@ class CanvasRepositoryImpl
             backgroundColor = snapshot.backgroundColor
             animationSettings = snapshot.animation
             pendingEdits.clear()
+            pendingSelection = null
             activeSelection = null
             activeStrokes.clear()
             strokeBrushParams.clear()
@@ -2137,6 +2172,7 @@ class CanvasRepositoryImpl
         }
 
         private fun setActiveLayerId(layerId: Long) {
+            if (activeLayerId() != layerId) pendingSelection = null
             frameList.getOrNull(activeFrame)?.activeLayerId = layerId
         }
 
@@ -2192,6 +2228,7 @@ class CanvasRepositoryImpl
         }
 
         override fun dispose() {
+            pendingSelection = null
             editRevision++
             compositor.release()
             pendingEdits.clear()

@@ -396,3 +396,93 @@ legacy exports directory linked to another project could expose its pixels to ex
 a linked top-level export root could reclassify editable files as shareable exports. Six additional
 Android storage regressions exercise these paths, plus a pure JVM read/write-path guard test.
 The guards do not claim race-free defense against hostile concurrent filesystem replacement.
+
+## Local selection-safety candidate — September 18, 2026
+
+This **unpublished, not release-approved** candidate starts from main commit
+`427248b828ad70c7df525902ef4e2577898a474c`, source tree
+`008353bd73ddbd9238481227cf27af959e061d45`. It preserves the independently published storage,
+resampling and atomic-layer-parameter repairs. It does not integrate the blocked stroke-ownership
+implementation from `repair/selection`, and does not waive that branch's native-runtime failures.
+The current work session could read GitHub but had no available repository-write action or
+usable authenticated CLI. These new changes were prepared locally, not pushed to GitHub.
+
+### Selection repairs
+
+The published selection kernel failed seven controlled standalone reproductions: a uniform 4x4
+magic wand overflowed its frontier; invisible RGB split transparent regions; a smaller explicit
+mask caused an index error; a distant negative rectangle wrapped into the canvas; a large finite
+ellipse failed to select its interior; minimum-integer shrinking did not erode; and maximum-integer
+feathering attempted a negative array allocation. The identical seven probes now pass against
+this candidate. Original-source failure and repaired-source success are recorded separately.
+
+Colour selection now discovers and marks complete scanline runs before queuing them. Colour
+distance includes alpha and premultiplied RGB, so invisible RGB cannot create a false boundary.
+Contiguous antialiasing adds a one-pixel fringe without connecting another island through a
+weak-colour bridge. Global wand and colour-range selection share matching semantics. An explicit
+limiting mask is applied by canvas coordinates, including when its dimensions are smaller.
+
+Selection geometry clips original finite endpoints before integer conversion. Ellipses and lassos
+use 4x4 subpixel coverage; brush-path selection rasterizes continuous segments without making
+iteration counts proportional to off-canvas travel. Ellipse interval calculations preserve both
+small nonzero widths and small edge offsets beside very large bounds. Fourteen extreme ellipse
+fixtures are compared with exact BigDecimal implicit-equation arithmetic, not the production
+interval formula. Non-finite geometry is rejected before rasterization.
+
+Feathering and binary square-radius expansion/erosion use separable sliding windows. Work and
+scratch size depend on canvas dimensions rather than the radius; Int.MAX_VALUE feathering and
+Int.MIN_VALUE shrinking are handled without integer overflow. Cancellation checks cover geometry,
+colour matching, feathering, morphology, alpha extraction and selection combination. This is
+algorithmic and standalone-JVM evidence, not a physical-device performance benchmark.
+
+### Cross-panel ownership and input integration
+
+A repository-owned selection session captures dimensions, an owned original mask and the document
+revision. New requests, explicit clear/select actions, frame or active-layer changes, document
+replacement, mutation, undo/redo and disposal prevent an older result from publishing. Cancelling
+an old request cannot cancel a newer request. Selection publication remains outside artwork undo
+history and dirty state. Both the canvas View and selection panel use this shared ownership rule.
+Feathering, alpha extraction and colour-range work run off the main dispatcher, and UI observation
+reuses one owned mask snapshot rather than copying the entire mask twice for its count.
+
+Magic-wand taps choose the containing pixel using floor, not nearest-integer rounding. Replace
+and add modes can select outside the previous selection: the old mask is combined after computing
+the new region instead of incorrectly clipping the new region first. Android regressions include
+subpixel boundary taps and test-only barriers at actual sampling/commit boundaries; they do not
+assume that switching dispatchers necessarily suspends a fast worker.
+
+### Verification scope of this local candidate
+
+| Check | Observed result and scope |
+| --- | --- |
+| Identical seven-case baseline/repaired probe | Published baseline: 7 failures, process exit 1. Repaired kernel: 0 failures, process exit 0. |
+| Standalone production selection kernels | 11 groups passed, covering 32,120 comparisons and boundary checks under a 96 MB JVM heap. |
+| Existing and new Python verifier/harness tests | 28 passed. These test verification infrastructure, not Android app behavior. |
+| Kotlin compiler syntax parsing | 133 Kotlin source files parsed with zero syntax errors; this is not dependency resolution or type checking. |
+| Full Gradle unit/style/analysis/lint attempt | Blocked before compilation by UnknownHostException for services.gradle.org while downloading Gradle 8.14.3. |
+| New JUnit source | 20 colour-selection cases, 11 shared-kernel groups and 13 repository transaction cases added. The JUnit runner was not executed in this session. |
+| New Android source | 13 real-View selection cases added. They have not been executed for this candidate. |
+| APK/AAB, signed release and physical-device checks | Not built or run for this candidate; old-main artifacts do not validate these new sources. |
+| GitHub publication | Not performed for this local candidate. |
+
+The standalone kernel command is:
+
+```bash
+python .github/scripts/verify_selection_kernels.py --output build/selection-kernel-checks
+```
+
+It requires installed Python, Kotlin and Java, downloads no tooling, records source SHA-256 values,
+and compiles the real pixel implementations. The only adapter extracts the unchanged BlendMode
+enum from its production file without its serialization annotation. It does not replace Android
+with fake implementations or claim that the JUnit/Android suites ran. The observed local compiler
+was Kotlin 1.9.0, targeting JVM 17, on JDK 21; the configured Android release toolchain remains
+Kotlin 2.0.21/JDK 17 and still needs its own complete build and verification.
+
+Permanent CI retains its original API 26/35/36 jobs and adds an independent Android 15 16 KB repeat
+and Android 16 16 KB coverage, each with a unique artifact name. These are configured future gates,
+not successful execution evidence. No JIT switch, skipped failure, relaxed assertion, altered
+signing policy, force push or overwritten remote history is used to approve this candidate.
+
+The original roadmap gaps, pending stroke/native-runtime work, real publisher signing, physical
+phone/tablet/stylus testing and Play Console requirements above remain unresolved. Apply this patch
+to its stated base and obtain a successful full Android verification run before promoting it.

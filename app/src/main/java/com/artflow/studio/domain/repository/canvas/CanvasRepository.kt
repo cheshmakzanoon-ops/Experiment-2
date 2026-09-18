@@ -193,14 +193,33 @@ interface CanvasRepository {
     // Selection
     // -----------------------------------------------------------------------------------------
 
-    /** The active selection, or null when nothing is selected. */
+    /** An owned coverage snapshot. Null means unrestricted; an empty mask means select nothing. */
     fun selection(): SelectionMask?
 
     /** Owns a copy of canvas-sized coverage. Empty means select nothing; only null clears it. */
     fun setSelection(mask: SelectionMask?)
 
-    /** Clears the selection. */
+    /** Clears the selection and supersedes pending selection computations. */
     fun clearSelection()
+
+    /** Caller-owned input for a selection computation. All lifecycle methods run on the UI thread. */
+    class SelectionEditSession internal constructor(
+        val width: Int,
+        val height: Int,
+        val original: SelectionMask?,
+    )
+
+    /** Supersedes older requests from either the canvas View or the selection panel. */
+    fun beginSelectionEdit(): SelectionEditSession
+
+    /** Publishes only into the same document revision, frame, layer and selection context. */
+    fun commitSelectionEdit(
+        session: SelectionEditSession,
+        mask: SelectionMask,
+    ): Boolean
+
+    /** Cancels only this request, not a newer selection or any artwork/history. */
+    fun cancelSelectionEdit(session: SelectionEditSession)
 
     // -----------------------------------------------------------------------------------------
     // Layers

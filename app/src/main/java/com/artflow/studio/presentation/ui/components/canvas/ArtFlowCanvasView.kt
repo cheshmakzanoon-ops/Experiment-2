@@ -40,6 +40,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -49,6 +50,7 @@ import javax.inject.Inject
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -508,7 +510,7 @@ class ArtFlowCanvasView
         fun invertSelection() {
             selectionJob?.cancel()
             val mask =
-                canvasRepository.selection()?.copy()
+                canvasRepository.selection()
                     ?: SelectionMask(canvasWidth, canvasHeight).apply { selectAll() }
             mask.invert()
             canvasRepository.setSelection(mask)
@@ -516,11 +518,10 @@ class ArtFlowCanvasView
         }
 
         fun featherSelection(radius: Int) {
-            selectionJob?.cancel()
-            val current = canvasRepository.selection() ?: return
-            val feathered = current.feathered(radius)
-            canvasRepository.setSelection(feathered)
-            onSelectionChanged?.invoke(feathered, feathered.selectedPixelCount())
+            runSelectionEdit(SelectionCombineMode.REPLACE) { session ->
+                val mask = session.original ?: return@runSelectionEdit null
+                withContext(Dispatchers.Default) { mask.feathered(radius) { ensureActive() } }
+            }
         }
 
         /** Bakes a text run into the active layer at a canvas position. */
@@ -1126,7 +1127,7 @@ class ArtFlowCanvasView
 
             val layerId = activeLayerId
             val gestureInput = input
-            val gestureSelection = canvasRepository.selection()?.copy()
+            val gestureSelection = canvasRepository.selection()
             pixelOpenJob =
                 coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
                     val session = canvasRepository.beginRasterEdit(layerId)
@@ -1497,72 +1498,84 @@ class ArtFlowCanvasView
             points: List<Pair<Float, Float>>,
         ) {
             if (points.size < 2) return
-            val width = canvasWidth
-            val height = canvasHeight
             val mode = input.selectionMode
-            val existing = canvasRepository.selection()
-            selectionJob?.cancel()
-            selectionJob =
-                coroutineScope.launch {
-                    val mask =
-                        withContext(Dispatchers.Default) {
-                            when (tool) {
-                                ToolType.SELECT_RECTANGLE ->
-                                    SelectionMask.rectangle(
-                                        width,
-                                        height,
-                                        points.first().first,
-                                        points.first().second,
-                                        points.last().first,
-                                        points.last().second,
-                                    )
-                                ToolType.SELECT_ELLIPSE ->
-                                    SelectionMask.ellipse(
-                                        width,
-                                        height,
-                                        points.first().first,
-                                        points.first().second,
-                                        points.last().first,
-                                        points.last().second,
-                                    )
-                                ToolType.SELECT_LASSO -> SelectionMask.polygon(width, height, points)
-                                else -> SelectionMask.fromStroke(width, height, points, radius = 12f)
-                            }
-                        }
-                    val combined = combineSelection(existing, mask, mode)
-                    canvasRepository.setSelection(combined)
-                    onSelectionChanged?.invoke(combined, combined.selectedPixelCount())
+            runSelectionEdit(mode) { session ->
+                withContext(Dispatchers.Default) {
+                    when (tool) {
+                        ToolType.SELECT_RECTANGLE ->
+                            SelectionMask.rectangle(
+                                session.width,
+                                session.height,
+                                points.first().first,
+                                points.first().second,
+                                points.last().first,
+                                points.last().second,
+                                checkActive = { ensureActive() },
+                            )
+                        ToolType.SELECT_ELLIPSE ->
+                            SelectionMask.ellipse(
+                                session.width,
+                                session.height,
+                                points.first().first,
+                                points.first().second,
+                                points.last().first,
+                                points.last().second,
+                                checkActive = { ensureActive() },
+                            )
+                        ToolType.SELECT_LASSO ->
+                            SelectionMask.polygon(session.width, session.height, points, checkActive = { ensureActive() })
+                        else ->
+                            SelectionMask.fromStroke(session.width, session.height, points, radius = 12f, checkActive = { ensureActive() })
+                    }
                 }
+            }
         }
 
         private fun magicWandSelect(
             x: Float,
             y: Float,
         ) {
-            val cx = x.roundToInt()
-            val cy = y.roundToInt()
+            if (!x.isFinite() || !y.isFinite()) return
+            val cx = floor(x).toInt()
+            val cy = floor(y).toInt()
             val tolerance = input.fillTolerance
             val contiguous = input.fillContiguous
             val mode = input.selectionMode
+            runSelectionEdit(mode) {
+                val source = canvasRepository.compositeBuffer() ?: return@runSelectionEdit null
+                withContext(Dispatchers.Default) {
+                    SelectionMask.magicWand(
+                        buffer = source,
+                        startX = cx,
+                        startY = cy,
+                        tolerance = tolerance,
+                        contiguous = contiguous,
+                        checkActive = { ensureActive() },
+                    )
+                }
+            }
+        }
+
+        private fun runSelectionEdit(
+            mode: SelectionCombineMode,
+            compute: suspend (CanvasRepository.SelectionEditSession) -> SelectionMask?,
+        ) {
             selectionJob?.cancel()
+            val session = canvasRepository.beginSelectionEdit()
             selectionJob =
-                coroutineScope.launch {
-                    val existing = canvasRepository.selection()
-                    val mask =
-                        withContext(Dispatchers.Default) {
-                            val source = canvasRepository.compositeBuffer() ?: return@withContext null
-                            SelectionMask.magicWand(
-                                buffer = source,
-                                startX = cx,
-                                startY = cy,
-                                tolerance = tolerance,
-                                contiguous = contiguous,
-                                respectExistingSelection = existing,
-                            )
-                        } ?: return@launch
-                    val combined = combineSelection(existing, mask, mode)
-                    canvasRepository.setSelection(combined)
-                    onSelectionChanged?.invoke(combined, combined.selectedPixelCount())
+                coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                    try {
+                        val mask = compute(session) ?: return@launch
+                        val combined =
+                            withContext(Dispatchers.Default) {
+                                combineSelection(session.original, mask, mode) { ensureActive() }
+                            }
+                        if (canvasRepository.commitSelectionEdit(session, combined)) {
+                            onSelectionChanged?.invoke(combined, combined.selectedPixelCount())
+                        }
+                    } finally {
+                        canvasRepository.cancelSelectionEdit(session)
+                    }
                 }
         }
 
@@ -1570,13 +1583,16 @@ class ArtFlowCanvasView
             existing: SelectionMask?,
             added: SelectionMask,
             mode: SelectionCombineMode,
+            checkActive: () -> Unit,
         ): SelectionMask {
+            checkActive()
             if (existing == null || mode == SelectionCombineMode.REPLACE) return added
             if (existing.width != added.width || existing.height != added.height) return added
-            if (mode == SelectionCombineMode.INTERSECT) return SelectionMask.intersect(existing, added)
+            if (mode == SelectionCombineMode.INTERSECT) return SelectionMask.intersect(existing, added, checkActive)
 
             val result = existing.copy()
             for (i in result.coverage.indices) {
+                if (i % 8192 == 0) checkActive()
                 val a = result.coverage[i].toInt() and 0xFF
                 val b = added.coverage[i].toInt() and 0xFF
                 val value = if (mode == SelectionCombineMode.ADD) max(a, b) else max(0, a - b)
