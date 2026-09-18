@@ -14,7 +14,9 @@ import kotlinx.serialization.json.Json
 import timber.log.Timber
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.nio.file.Files
+import java.nio.file.LinkOption
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import javax.inject.Inject
@@ -105,31 +107,39 @@ class ProjectStorage
         // Paths
         // -----------------------------------------------------------------------------------------
 
+        private fun ownedPath(relative: String): File =
+            File(context.filesDir, relative).apply { StorageFileTree.requireUnlinked(this, context.filesDir) }
+
         fun projectDir(projectId: Long): File {
             require(projectId > 0) { "Invalid project id" }
-            return File(context.filesDir, "projects/$projectId").apply {
+            return ownedPath("projects/$projectId").apply {
                 check(isDirectory || mkdirs()) { "Cannot create project directory" }
             }
         }
 
-        fun documentFile(projectId: Long): File = File(projectDir(projectId), DOCUMENT_NAME)
+        private fun projectFile(
+            projectId: Long,
+            name: String,
+        ): File = File(projectDir(projectId), name).apply { StorageFileTree.requireUnlinked(this, context.filesDir) }
 
-        fun flattenedFile(projectId: Long): File = File(projectDir(projectId), FLATTENED_NAME)
+        fun documentFile(projectId: Long): File = projectFile(projectId, DOCUMENT_NAME)
 
-        fun thumbnailFile(projectId: Long): File = File(projectDir(projectId), THUMBNAIL_NAME)
+        fun flattenedFile(projectId: Long): File = projectFile(projectId, FLATTENED_NAME)
 
-        fun autosaveFile(projectId: Long): File = File(projectDir(projectId), AUTOSAVE_NAME)
+        fun thumbnailFile(projectId: Long): File = projectFile(projectId, THUMBNAIL_NAME)
+
+        fun autosaveFile(projectId: Long): File = projectFile(projectId, AUTOSAVE_NAME)
 
         fun exportsDir(projectId: Long): File {
             require(projectId > 0) { "Invalid project id" }
-            return File(context.filesDir, "$EXPORTS_DIR/$projectId").apply {
+            return ownedPath("$EXPORTS_DIR/$projectId").apply {
                 check(isDirectory || mkdirs()) { "Cannot create export directory" }
             }
         }
 
         /** Only exported copies, never editable project documents, can be shared externally. */
         fun exportedFile(path: String): File {
-            val root = File(context.filesDir, EXPORTS_DIR).canonicalFile
+            val root = ownedPath(EXPORTS_DIR).canonicalFile
             val file = File(path).canonicalFile
             require(file.path.startsWith(root.path + File.separator) && file.isFile && file.length() > 0) {
                 "This exported file is no longer available; export it again"
@@ -144,9 +154,10 @@ class ProjectStorage
         ): File {
             require(relativePath.isNotBlank() && !File(relativePath).isAbsolute) { "Expected a relative project path" }
             require('\\' !in relativePath && '\u0000' !in relativePath) { "Invalid project path" }
-            val root = projectDir(projectId).canonicalFile
-            val file = File(root, relativePath).canonicalFile
+            val root = projectDir(projectId).absoluteFile.normalize()
+            val file = File(root, relativePath).absoluteFile.normalize()
             require(file.path.startsWith(root.path + File.separator)) { "Path escapes the project directory" }
+            StorageFileTree.requireUnlinked(file, context.filesDir)
             return file
         }
 
@@ -330,9 +341,8 @@ class ProjectStorage
         /**
          * Deletes every pixel file that is not referenced by [keep].
          *
-         * Called by `CanvasRepositoryImpl.saveCanvas`. Because a save rewrites rasters in place, the
-         * files this reclaims are the ones belonging to layers (and masks) that no longer exist in the
-         * document — without it they would stay on disk until the whole project is deleted.
+         * Called after an atomic save. Rasters are immutable generations; both the saved document
+         * and recovery manifest retain their own generations. Never traverse directory links.
          */
         suspend fun pruneRasters(
             projectId: Long,
@@ -348,30 +358,29 @@ class ProjectStorage
                         retained.addAll(listOfNotNull(layer.rasterFile, layer.maskFile))
                     }
                 }
-                var deleted = 0
-                layersDir.walkTopDown().filter { it.isFile && it.extension == "png" }.forEach { file ->
-                    val relative = file.relativeTo(projectDir(projectId)).path.replace('\\', '/')
-                    if (relative !in retained) {
-                        if (file.delete()) deleted++
+                val deleted =
+                    StorageFileTree.prune(layersDir, context.filesDir) { file ->
+                        val relative = file.relativeTo(projectDir(projectId)).path.replace('\\', '/')
+                        file.extension == "png" && relative !in retained
                     }
-                }
-                // Remove directories that are now empty.
-                layersDir.walkBottomUp().filter { it.isDirectory && it.listFiles()?.isEmpty() == true }.forEach {
-                    it.delete()
-                }
                 if (deleted > 0) Timber.d("Pruned $deleted stale raster versions for project $projectId")
                 deleted
             }
 
         /** IDs with orphaned files remain reserved after an interrupted database transaction. */
         fun maximumStoredProjectId(): Long =
-            File(context.filesDir, "projects")
+            ownedPath("projects")
                 .listFiles()
                 ?.mapNotNull { it.name.toLongOrNull() }
                 ?.maxOrNull() ?: 0L
 
         /** Does not create a directory, unlike [projectDir]. */
-        fun projectDirectoryExists(projectId: Long): Boolean = File(context.filesDir, "projects/$projectId").exists()
+        fun projectDirectoryExists(projectId: Long): Boolean {
+            require(projectId > 0) { "Invalid project id" }
+            val parent = ownedPath("projects")
+            // A dangling link is still occupied; do not recycle an ID whose path already exists.
+            return Files.exists(File(parent, "$projectId").toPath(), LinkOption.NOFOLLOW_LINKS)
+        }
 
         /**
          * Copies immutable saved/recovery generations into a new project, never sharing files with
@@ -387,8 +396,8 @@ class ProjectStorage
                 val document = loadDocument(sourceId)
                 val recovery = loadAutosave(sourceId)
                 val newerRecovery = hasUnsavedRecovery(sourceId)
-                val destination = File(context.filesDir, "projects/$destinationId")
-                check(!destination.exists()) { "The destination already contains project data" }
+                val destination = ownedPath("projects/$destinationId")
+                check(!Files.exists(destination.toPath(), LinkOption.NOFOLLOW_LINKS)) { "The destination already contains project data" }
                 check(destination.mkdirs()) { "Cannot create the copied project directory" }
                 var completed = false
                 try {
@@ -420,14 +429,21 @@ class ProjectStorage
                     completed = true
                     document
                 } finally {
-                    if (!completed) destination.deleteRecursively()
+                    if (!completed) {
+                        try {
+                            StorageFileTree.delete(destination, context.filesDir)
+                        } catch (cleanupFailure: IOException) {
+                            // Preserve the original copy failure; an orphan still reserves its ID.
+                            Timber.w(cleanupFailure, "Could not remove incomplete project copy")
+                        }
+                    }
                 }
             }
 
         /** Total bytes used by a project, shown in the settings storage screen. */
         fun projectSizeBytes(projectId: Long): Long =
             listOf("projects/$projectId", "$EXPORTS_DIR/$projectId").sumOf { path ->
-                File(context.filesDir, path).walkTopDown().filter { it.isFile }.sumOf { it.length() }
+                StorageFileTree.sizeBytes(File(context.filesDir, path), context.filesDir)
             }
 
         // -----------------------------------------------------------------------------------------
@@ -448,10 +464,12 @@ class ProjectStorage
                 file
             }
 
-        fun listExports(projectId: Long): List<File> =
-            listOf(File(context.filesDir, "$EXPORTS_DIR/$projectId"), File(context.filesDir, "projects/$projectId/$EXPORTS_DIR"))
-                .flatMap { it.listFiles()?.filter { file -> file.isFile } ?: emptyList() }
+        fun listExports(projectId: Long): List<File> {
+            require(projectId > 0) { "Invalid project id" }
+            return listOf(ownedPath("$EXPORTS_DIR/$projectId"), ownedPath("projects/$projectId/$EXPORTS_DIR"))
+                .flatMap { it.listFiles()?.filter { file -> Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS) } ?: emptyList() }
                 .sortedByDescending { it.lastModified() }
+        }
 
         // -----------------------------------------------------------------------------------------
         // Deletion / housekeeping
@@ -460,13 +478,13 @@ class ProjectStorage
         fun deleteProjectFiles(projectId: Long) {
             require(projectId > 0) { "Invalid project id" }
             listOf(File(context.filesDir, "projects/$projectId"), File(context.filesDir, "$EXPORTS_DIR/$projectId")).forEach { dir ->
-                check(!dir.exists() || dir.deleteRecursively()) { "Could not delete all project files" }
+                StorageFileTree.delete(dir, context.filesDir)
             }
         }
 
         /** Project ids that still have a folder on disk (used to find orphaned files). */
         fun projectIdsOnDisk(): Set<Long> =
-            File(context.filesDir, "projects")
+            ownedPath("projects")
                 .listFiles()
                 ?.filter { it.isDirectory }
                 ?.mapNotNull { it.name.toLongOrNull() }
@@ -476,7 +494,7 @@ class ProjectStorage
         /** Total size of all projects, for the settings storage readout. */
         fun totalStorageBytes(): Long =
             listOf("projects", EXPORTS_DIR).sumOf { folder ->
-                File(context.filesDir, folder).walkTopDown().filter { it.isFile }.sumOf { it.length() }
+                StorageFileTree.sizeBytes(File(context.filesDir, folder), context.filesDir)
             }
 
         /** Deletes leftover export files older than [olderThanMs]. */
@@ -484,10 +502,12 @@ class ProjectStorage
             projectId: Long,
             olderThanMs: Long,
         ): Int {
+            require(olderThanMs >= 0) { "Invalid export retention age" }
             val cutoff = System.currentTimeMillis() - olderThanMs
             var deleted = 0
             listExports(projectId).filter { it.lastModified() < cutoff }.forEach {
-                if (it.delete()) deleted++
+                StorageFileTree.requireUnlinked(it, context.filesDir)
+                if (Files.deleteIfExists(it.toPath())) deleted++
             }
             return deleted
         }
@@ -500,6 +520,7 @@ class ProjectStorage
             target: File,
             write: (FileOutputStream) -> Unit,
         ) {
+            StorageFileTree.requireUnlinked(target, context.filesDir)
             val parent = requireNotNull(target.parentFile)
             check(parent.isDirectory || parent.mkdirs()) { "Cannot create storage directory" }
             val temp = File.createTempFile(".${target.name}-", ".tmp", parent)

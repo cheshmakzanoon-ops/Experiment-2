@@ -315,3 +315,84 @@ by suppressing tests, disabling JIT, or treating the fault as conclusively exter
 
 All original roadmap gaps and required publisher/physical-device gates above remain open.
 This repair is not a signed Google Play release or a claim of unconditional crash-free use.
+
+
+## Storage isolation and transparent-edge resampling — September 18, 2026
+
+This repair is based on published main `229e0fee08d3c4b74546679b1dbc41e548fe5dc2`.
+It does not include or approve the separate selection/stroke candidate. Reconciled selection run
+35352111382 again failed an Android 15 16 KB lane, this time in native ART/JIT frames involving
+`kotlin.collections.ArrayDeque.get` and `java.util.AbstractList$Itr.next`. Removing FileTreeWalk
+was not sufficient to resolve that crash. The failure remains a release blocker, not a waived check.
+
+The old housekeeping implementation followed symbolic directory links when pruning rasters;
+a controlled local fixture reproduced deletion of another project's artwork through such a link.
+Storage traversal now uses NIO without FOLLOW_LINKS. ProjectStorage passes its trusted files
+boundary so linked ancestors (for example a linked project with a real `layers` child) are also
+rejected before pruning, counting or deletion. Root links are unlinked rather than traversed;
+nested links never contribute their target's bytes. Saved and recovery manifests retain their
+referenced raster generations. Failed copy cleanup preserves the original failure. Missing roots
+are harmless, while traversal/deletion errors propagate. These checks protect existing links in
+app-private storage; they do not claim to defeat hostile concurrent filesystem replacement.
+
+Local Kotlin/JDK probes reproduced the legacy deletion and the ancestor-link edge case, then
+passed 1,000 preservation cycles for each repaired scenario. Android tests exercise actual
+ProjectStorage with linked project roots, containers, nested links and 200 repeated cleanup cycles.
+`StorageFileTreeTest` adds 14 JVM cases; `StorageTraversalDeviceTest` has five Android cases.
+
+Bilinear resampling now weights RGB by alpha before interpolation and unpremultiplies once.
+Previously an opaque red pixel beside invisible blue produced a purple half-covered midpoint;
+transparent exterior taps also darkened edges. Resize, translated/rotated pixels and Liquify share
+the repaired sampler. Exact texel samples preserve the original bits, including invisible RGB,
+so an identity transform remains a no-op. Fully transparent interpolated mixtures are canonical
+transparent black. Non-finite sampling/transform parameters and non-invertible scales are rejected;
+huge exterior coordinates are checked before integer-neighbour conversion.
+
+A standalone production-kernel probe passed 100,000 seeded cases against an independent
+Double-precision premultiplied-alpha oracle, allowing one 8-bit quantization unit per channel.
+This local probe used Kotlin 1.9/JDK 21, not the release toolchain. The repository's 14 new JVM
+resampling tests and two Android tests cover resize, displacement, exact undo/redo, saved PNG
+pixels and scaled PNG export. Source presence and local probes are not substitutes for completed
+CI; the publication commit identifies the exact frozen source and required completed run.
+
+The original roadmap, private signing, physical-device campaign and Play Console requirements
+remain unchanged. The previous native-runtime failures are not reclassified as successful tests.
+
+
+### Deterministic fill-policy ordering regression
+
+Run 35354218869 passed the full host build/analysis/binary gates and the API 36, API 35 16 KB
+B and unchanged-main control lanes. Its API 26 lane timed out in the existing stale bucket-policy
+test; API 35 16 KB A separately failed with application and unrelated system-process crashes.
+Neither failure is a pass, and the source publication remains gated.
+
+The stale-fill test assumed a different coroutine dispatcher always suspends the caller. A local
+Kotlin/coroutines scheduling probe observed the fast worker finish before the next caller statement
+in 1,042 of 20,000 executions. That order is legal: a completed fill followed by a lock change is
+not a stale commit. The regression now holds at commit using a test-only delegating repository,
+changes the actual layer policy, releases the barrier, and executes the real production commit.
+It repeats that schedule ten times for both bucket and gradient, requires the same rejection,
+checks unchanged pixels/revision/history, and confirms the provisional session is released.
+Two positive controls verify that a fill completed before a later lock change remains valid and
+both operations undo independently. No production scheduler or acceptance check is disabled.
+The local scheduling probe is not evidence that Android execution of the revised tests passed.
+
+The failing 16 KB A image logged repeated ReferenceQueueDaemon crashes in Play services before
+app instrumentation, followed by launcher, app and system_server failures. These cross-process
+observations suggest an environment problem but do not prove a root cause or certify the app.
+Normal-runtime repeated device lanes remain required; do not replace them with JIT-disabled runs.
+
+
+### Read/write and export path isolation
+
+Read/write path checks now reject existing symbolic links at project roots, metadata files,
+raster leaves, intermediate directories and export roots. Resolving a raster no longer accepts
+a linked project as a new trusted root. Atomic writes validate the original owned path before
+creating a temporary file. Only trusted Context.filesDir aliases above the managed boundary
+are allowed. Occupied dangling project links keep their IDs reserved.
+
+Legacy export-folder cleanup also validates parents and excludes linked files. Previously a
+legacy exports directory linked to another project could expose its pixels to expiry deletion;
+a linked top-level export root could reclassify editable files as shareable exports. Six additional
+Android storage regressions exercise these paths, plus a pure JVM read/write-path guard test.
+The guards do not claim race-free defense against hostile concurrent filesystem replacement.

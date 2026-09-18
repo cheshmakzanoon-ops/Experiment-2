@@ -8,6 +8,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.data.local.ProjectStorage
+import com.artflow.studio.data.local.StorageFileTree
 import com.artflow.studio.data.local.database.ArtFlowDatabase
 import com.artflow.studio.data.repository.ProjectRepositoryImpl
 import com.artflow.studio.data.repository.canvas.CanvasRepositoryImpl
@@ -48,7 +49,7 @@ class ProjectDuplicationTest {
     fun cleanup() {
         runBlocking(Dispatchers.Main) { canvas.dispose() }
         database.close()
-        directory.deleteRecursively()
+        StorageFileTree.delete(directory)
     }
 
     @Test

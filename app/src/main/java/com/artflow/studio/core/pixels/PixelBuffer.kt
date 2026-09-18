@@ -107,12 +107,17 @@ class PixelBuffer(
 
     /**
      * Bilinear sample in buffer space. Out-of-bounds taps read as transparent.
+     * Interpolation uses alpha-weighted colour, then returns straight ARGB; hidden RGB cannot bleed.
      * Used for scaling, liquify and transform resampling.
      */
     fun sampleBilinear(
         xf: Float,
         yf: Float,
     ): Int {
+        require(xf.isFinite() && yf.isFinite()) { "Sampling coordinates must be finite" }
+        // Reject the fully exterior footprint before converting a potentially enormous Float to Int.
+        if (xf <= -0.5f || xf >= width + 0.5f) return 0
+        if (yf <= -0.5f || yf >= height + 0.5f) return 0
         val x = xf - 0.5f
         val y = yf - 0.5f
         val x0 = floor(x).toInt()
@@ -294,12 +299,14 @@ class PixelBuffer(
         pivotX: Float,
         pivotY: Float,
     ): PixelBuffer {
+        require(listOf(translateX, translateY, scaleX, scaleY, rotationDegrees, pivotX, pivotY).all { it.isFinite() }) {
+            "Transform parameters must be finite"
+        }
+        require(abs(scaleX) >= 1e-4f && abs(scaleY) >= 1e-4f) { "Transform scale must be invertible" }
         val out = PixelBuffer(targetWidth, targetHeight)
         val radians = Math.toRadians(rotationDegrees.toDouble())
         val cos = kotlin.math.cos(radians).toFloat()
         val sin = kotlin.math.sin(radians).toFloat()
-        val safeScaleX = if (abs(scaleX) < 1e-4f) 1e-4f else scaleX
-        val safeScaleY = if (abs(scaleY) < 1e-4f) 1e-4f else scaleY
 
         for (y in 0 until targetHeight) {
             val row = y * targetWidth
@@ -309,8 +316,8 @@ class PixelBuffer(
                 var sy = y + 0.5f - translateY - pivotY
                 val rx = sx * cos + sy * sin
                 val ry = -sx * sin + sy * cos
-                sx = rx / safeScaleX + pivotX
-                sy = ry / safeScaleY + pivotY
+                sx = rx / scaleX + pivotX
+                sy = ry / scaleY + pivotY
                 if (sx < -1f || sy < -1f || sx > width + 1f || sy > height + 1f) continue
                 out.pixels[row + x] = sampleBilinear(sx, sy)
             }
@@ -337,6 +344,7 @@ class PixelBuffer(
             argb: Int,
         ): PixelBuffer = PixelBuffer(width, height).also { it.fill(argb) }
 
+        /** Bilinear factors are in 0..1; alpha-weighted RGB is unpremultiplied exactly once. */
         fun mix4(
             p00: Int,
             p10: Int,
@@ -345,23 +353,34 @@ class PixelBuffer(
             fx: Float,
             fy: Float,
         ): Int {
-            val w00 = (1 - fx) * (1 - fy)
-            val w10 = fx * (1 - fy)
-            val w01 = (1 - fx) * fy
-            val w11 = fx * fy
+            require(fx in 0f..1f && fy in 0f..1f) { "Bilinear factors must be finite and in 0..1" }
+            // Preserve exact texels (including invisible RGB) at grid points and identity transforms.
+            if (fx == 0f && fy == 0f) return p00
+            if (fx == 1f && fy == 0f) return p10
+            if (fx == 0f && fy == 1f) return p01
+            if (fx == 1f && fy == 1f) return p11
+            var w00 = (1 - fx) * (1 - fy)
+            var w10 = fx * (1 - fy)
+            var w01 = (1 - fx) * fy
+            var w11 = fx * fy
+            val a00 = Channels.alpha(p00)
+            val a10 = Channels.alpha(p10)
+            val a01 = Channels.alpha(p01)
+            val a11 = Channels.alpha(p11)
+            val alpha = a00 * w00 + a10 * w10 + a01 * w01 + a11 * w11
+            if (alpha < 0.5f) return 0
+            // Equal-alpha/opaque interpolation retains its existing arithmetic and appearance.
+            if (a00 != a10 || a00 != a01 || a00 != a11) {
+                w00 = w00 * a00 / alpha
+                w10 = w10 * a10 / alpha
+                w01 = w01 * a01 / alpha
+                w11 = w11 * a11 / alpha
+            }
             return Channels.fromFloats(
-                a =
-                    Channels.alpha(p00) * w00 + Channels.alpha(p10) * w10 +
-                        Channels.alpha(p01) * w01 + Channels.alpha(p11) * w11,
-                r =
-                    Channels.red(p00) * w00 + Channels.red(p10) * w10 +
-                        Channels.red(p01) * w01 + Channels.red(p11) * w11,
-                g =
-                    Channels.green(p00) * w00 + Channels.green(p10) * w10 +
-                        Channels.green(p01) * w01 + Channels.green(p11) * w11,
-                b =
-                    Channels.blue(p00) * w00 + Channels.blue(p10) * w10 +
-                        Channels.blue(p01) * w01 + Channels.blue(p11) * w11,
+                a = alpha,
+                r = Channels.red(p00) * w00 + Channels.red(p10) * w10 + Channels.red(p01) * w01 + Channels.red(p11) * w11,
+                g = Channels.green(p00) * w00 + Channels.green(p10) * w10 + Channels.green(p01) * w01 + Channels.green(p11) * w11,
+                b = Channels.blue(p00) * w00 + Channels.blue(p10) * w10 + Channels.blue(p01) * w01 + Channels.blue(p11) * w11,
             )
         }
     }

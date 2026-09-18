@@ -19,6 +19,7 @@ import com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView
 import com.artflow.studio.presentation.ui.components.canvas.EditorInput
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -145,15 +146,83 @@ class FillGestureDeviceTest {
     ) = withCanvas(id) { canvas ->
         val layer = repository.getActiveLayerId()
         canvas.setEditorInput(settings(tool))
+        // A different dispatcher does not guarantee suspension: a fast worker may finish
+        // before launch returns. Stop at the real commit boundary instead of racing it.
+        repeat(10) { attempt ->
+            repository.setLayerAlphaLock(layer, false)
+            val reachedCommit = CompletableDeferred<Unit>()
+            val releaseCommit = CompletableDeferred<Unit>()
+            val releasedSession = CompletableDeferred<Unit>()
+            val delegate = canvas.canvasRepository
+            canvas.canvasRepository =
+                object : CanvasRepository by delegate {
+                    override suspend fun commitRasterEdit(
+                        session: CanvasRepository.RasterEditSession,
+                        description: String,
+                    ): Boolean {
+                        reachedCommit.complete(Unit)
+                        releaseCommit.await()
+                        return delegate.commitRasterEdit(session, description)
+                    }
+
+                    override suspend fun cancelRasterEdit(session: CanvasRepository.RasterEditSession) {
+                        try {
+                            delegate.cancelRasterEdit(session)
+                        } finally {
+                            releasedSession.complete(Unit)
+                        }
+                    }
+                }
+            var status: String? = null
+            canvas.onStatusMessage = { status = it }
+            try {
+                trigger(canvas, tool)
+                await("$tool attempt $attempt reaching commit; status=$status") { reachedCommit.isCompleted }
+                repository.setLayerAlphaLock(layer, true)
+                val depth = repository.undoDepth
+                val revision = repository.contentRevision
+                releaseCommit.complete(Unit)
+                await("$tool attempt $attempt rejecting the stale edit") { status != null && releasedSession.isCompleted }
+                assertTrue(requireNotNull(status).startsWith("The document changed"))
+                assertEquals(depth, repository.undoDepth)
+                assertEquals(revision, repository.contentRevision)
+                assertTrue(requireNotNull(repository.layerPixels(layer)).isEmpty())
+                val nextSession = requireNotNull(repository.beginRasterEdit(layer))
+                repository.cancelRasterEdit(nextSession)
+            } finally {
+                releaseCommit.complete(Unit)
+                canvas.canvasRepository = delegate
+            }
+        }
+    }
+
+    @Test fun completedBucketRemainsValidWhenAlphaLockChangesLater() = completedBeforePolicyChange(11, ToolType.PAINT_BUCKET)
+
+    @Test fun completedGradientRemainsValidWhenAlphaLockChangesLater() = completedBeforePolicyChange(12, ToolType.GRADIENT)
+
+    private fun completedBeforePolicyChange(
+        id: Int,
+        tool: ToolType,
+    ) = withCanvas(id) { canvas ->
+        val layer = repository.getActiveLayerId()
+        canvas.setEditorInput(settings(tool))
+        val depth = repository.undoDepth
+        var completed = false
         var status: String? = null
+        canvas.onHistoryChanged = { _, _ -> completed = true }
         canvas.onStatusMessage = { status = it }
         trigger(canvas, tool)
-        // The main dispatcher cannot publish the worker result until this policy change completes.
+        await("$tool completing before the later policy change") { completed }
+        assertEquals(depth + 1, repository.undoDepth)
+        assertTrue("A successful fill must not report rejection: $status", status == null)
+        val filled = requireNotNull(repository.layerPixels(layer)).pixels.copyOf()
+        assertTrue(filled.all { it == Color.RED })
         repository.setLayerAlphaLock(layer, true)
-        val depth = repository.undoDepth
-        await { status != null }
-        assertTrue(requireNotNull(status).startsWith("The document changed"))
-        assertEquals(depth, repository.undoDepth)
+        assertEquals(depth + 2, repository.undoDepth)
+        assertArrayEquals(filled, requireNotNull(repository.layerPixels(layer)).pixels)
+        repository.undo()
+        assertArrayEquals(filled, requireNotNull(repository.layerPixels(layer)).pixels)
+        repository.undo()
         assertTrue(requireNotNull(repository.layerPixels(layer)).isEmpty())
     }
 
@@ -210,7 +279,7 @@ class FillGestureDeviceTest {
             }
             runBlocking(Dispatchers.Main) {
                 val canvas = requireNotNull(view)
-                await { canvas.width > 0 && canvas.height > 0 }
+                await("canvas layout") { canvas.width > 0 && canvas.height > 0 }
                 canvas.fitToView()
                 eventTime = SystemClock.uptimeMillis()
                 block(canvas)
@@ -222,10 +291,13 @@ class FillGestureDeviceTest {
         }
     }
 
-    private suspend fun await(condition: () -> Boolean) {
+    private suspend fun await(
+        stage: String = "canvas operation",
+        condition: () -> Boolean,
+    ) {
         val deadline = SystemClock.elapsedRealtime() + 10_000
         while (!condition() && SystemClock.elapsedRealtime() < deadline) delay(10)
-        assertTrue("Canvas operation did not finish before its deadline", condition())
+        assertTrue("Timed out waiting for $stage", condition())
     }
 
     private data class Touch(
