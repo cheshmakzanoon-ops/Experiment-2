@@ -1399,31 +1399,22 @@ class ArtFlowCanvasView
         ) {
             val cx = x.roundToInt()
             val cy = y.roundToInt()
-            val layerId = activeLayerId
-            coroutineScope.launch {
-                val selection = canvasRepository.selection()
-                val applied =
-                    withContext(Dispatchers.Default) {
-                        canvasRepository.applyRasterEdit(layerId, "Paint bucket") { target ->
-                            FillTool.floodFill(
-                                target = target,
-                                startX = cx,
-                                startY = cy,
-                                color = input.brushColor,
-                                settings =
-                                    FillTool.Settings(
-                                        tolerance = input.fillTolerance,
-                                        contiguous = input.fillContiguous,
-                                        mask = selection,
-                                    ),
-                            )
-                        }
-                    }
-                if (applied) {
-                    reportHistory()
-                } else {
-                    onStatusMessage?.invoke("Nothing to fill here")
-                }
+            val captured = input
+            applyFillEdit("Paint bucket") { target, selection, alphaLocked ->
+                FillTool
+                    .floodFill(
+                        target = target,
+                        startX = cx,
+                        startY = cy,
+                        color = captured.brushColor,
+                        settings =
+                            FillTool.Settings(
+                                tolerance = captured.fillTolerance,
+                                contiguous = captured.fillContiguous,
+                                mask = selection,
+                                alphaLock = alphaLocked,
+                            ),
+                    ).changed
             }
         }
 
@@ -1431,26 +1422,45 @@ class ArtFlowCanvasView
             start: Pair<Float, Float>,
             end: Pair<Float, Float>,
         ) {
+            val gradient = input.gradient.copy(type = input.gradientType, stops = input.gradient.stops.toList())
+            applyFillEdit("Gradient") { target, selection, alphaLocked ->
+                GradientTool
+                    .draw(
+                        target = target,
+                        startX = start.first,
+                        startY = start.second,
+                        endX = end.first,
+                        endY = end.second,
+                        settings = GradientTool.Settings(gradient = gradient, mask = selection, alphaLock = alphaLocked),
+                    ).changed
+            }
+        }
+
+        /** Capture the destination and policy before yielding; a no-op never consumes history. */
+        private fun applyFillEdit(
+            description: String,
+            edit: (PixelBuffer, SelectionMask?, Boolean) -> Boolean,
+        ) {
             val layerId = activeLayerId
-            coroutineScope.launch {
-                val selection = canvasRepository.selection()
-                withContext(Dispatchers.Default) {
-                    canvasRepository.applyRasterEdit(layerId, "Gradient") { target ->
-                        GradientTool.draw(
-                            target = target,
-                            startX = start.first,
-                            startY = start.second,
-                            endX = end.first,
-                            endY = end.second,
-                            settings =
-                                GradientTool.Settings(
-                                    gradient = input.gradient.copy(type = input.gradientType),
-                                    mask = selection,
-                                ),
-                        )
-                    }
+            val selection = canvasRepository.selection()
+            coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                val session = canvasRepository.beginRasterEdit(layerId)
+                if (session == null) {
+                    onStatusMessage?.invoke("This layer cannot be edited right now")
+                    return@launch
                 }
-                reportHistory()
+                try {
+                    val changed = withContext(Dispatchers.Default) { edit(session.buffer, selection, session.alphaLocked) }
+                    if (!changed) {
+                        onStatusMessage?.invoke("$description did not change any pixels")
+                    } else if (canvasRepository.commitRasterEdit(session, description)) {
+                        reportHistory()
+                    } else {
+                        onStatusMessage?.invoke("The document changed before $description could be applied")
+                    }
+                } finally {
+                    withContext(NonCancellable) { canvasRepository.cancelRasterEdit(session) }
+                }
             }
         }
 

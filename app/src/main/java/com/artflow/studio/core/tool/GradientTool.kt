@@ -51,23 +51,7 @@ object GradientTool {
         val sortedStops: List<Stop> get() = stops.sortedBy { it.position }
 
         /** Colour at [t] (`0..1`) along the ramp. */
-        fun colorAt(t: Float): Int {
-            val sorted = sortedStops
-            val clamped = t.coerceIn(0f, 1f)
-            if (clamped <= sorted.first().position) return sorted.first().color
-            if (clamped >= sorted.last().position) return sorted.last().color
-
-            for (i in 0 until sorted.size - 1) {
-                val a = sorted[i]
-                val b = sorted[i + 1]
-                if (clamped in a.position..b.position) {
-                    val span = (b.position - a.position)
-                    val localT = if (span <= 1e-6f) 0f else (clamped - a.position) / span
-                    return lerpColor(a.color, b.color, localT)
-                }
-            }
-            return sorted.last().color
-        }
+        fun colorAt(t: Float): Int = sampleStops(sortedStops, t)
     }
 
     data class Settings(
@@ -103,12 +87,11 @@ object GradientTool {
         endY: Float,
         settings: Settings = Settings(),
     ): Result {
+        val length = dragLength(startX, startY, endX, endY) ?: return Result(null, changed = false)
         val dx = endX - startX
         val dy = endY - startY
-        val length = sqrt(dx * dx + dy * dy)
-        if (length < 0.5f) return Result(null, changed = false)
 
-        val opacity = settings.opacity.coerceIn(0f, 1f)
+        val opacity = if (settings.opacity.isFinite()) settings.opacity.coerceIn(0f, 1f) else 0f
         if (opacity <= 0f) return Result(null, changed = false)
 
         var minX = target.width
@@ -118,21 +101,20 @@ object GradientTool {
         var changed = false
 
         // A 4x4 Bayer matrix for ordered dithering.
+        // Freeze/sort once per gesture, not once for every canvas pixel.
+        val stops = settings.gradient.sortedStops
         val bayer = BAYER_4X4
         val tStep = if (settings.dither) 1f / 512f else 0f
 
         for (y in 0 until target.height) {
             for (x in 0 until target.width) {
                 val index = y * target.width + x
-                var coverage = settings.mask?.alphaAt(index) ?: 1f
+                val coverage = (settings.mask?.coverageAt(x, y)?.div(255f) ?: 1f) * opacity
                 if (coverage <= 0f) continue
 
                 val existing = target.pixels[index]
-                if (settings.alphaLock) {
-                    val destinationAlpha = (existing ushr 24) and 0xFF
-                    if (destinationAlpha == 0) continue
-                    coverage *= destinationAlpha / 255f
-                }
+                val destinationAlpha = existing ushr 24
+                if (settings.alphaLock && destinationAlpha == 0) continue
 
                 val positionX = x + 0.5f
                 val positionY = y + 0.5f
@@ -172,8 +154,10 @@ object GradientTool {
                 }
                 if (settings.reverse) t = 1f - t
 
-                val stopColor = settings.gradient.colorAt(t)
-                val blended = resolve(existing, stopColor, coverage)
+                val stopColor = sampleStops(stops, t)
+                val backdrop = if (settings.alphaLock) Channels.withAlpha(existing, 255) else existing
+                val mixed = resolve(backdrop, stopColor, coverage)
+                val blended = if (settings.alphaLock) Channels.withAlpha(mixed, destinationAlpha) else mixed
 
                 if (blended != existing) {
                     target.pixels[index] = blended
@@ -188,6 +172,44 @@ object GradientTool {
 
         val bounds = if (maxX >= minX && maxY >= minY) IntBounds(minX, minY, maxX, maxY) else null
         return Result(bounds, changed)
+    }
+
+    private fun finitePoint(
+        x: Float,
+        y: Float,
+    ): Boolean = x.isFinite() && y.isFinite()
+
+    /** Reject invalid coordinates and overflowing axes before any pixel is touched. */
+    private fun dragLength(
+        startX: Float,
+        startY: Float,
+        endX: Float,
+        endY: Float,
+    ): Float? {
+        if (!finitePoint(startX, startY) || !finitePoint(endX, endY)) return null
+        val dx = endX - startX
+        val dy = endY - startY
+        val length = sqrt(dx * dx + dy * dy)
+        return length.takeIf { it.isFinite() && it >= 0.5f }
+    }
+
+    private fun sampleStops(
+        sorted: List<Stop>,
+        t: Float,
+    ): Int {
+        val clamped = t.coerceIn(0f, 1f)
+        if (clamped <= sorted.first().position) return sorted.first().color
+        if (clamped >= sorted.last().position) return sorted.last().color
+        for (i in 0 until sorted.size - 1) {
+            val a = sorted[i]
+            val b = sorted[i + 1]
+            if (clamped in a.position..b.position) {
+                val span = b.position - a.position
+                val localT = if (span <= 1e-6f) 0f else (clamped - a.position) / span
+                return lerpColor(a.color, b.color, localT)
+            }
+        }
+        return sorted.last().color
     }
 
     private fun resolve(

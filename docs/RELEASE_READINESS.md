@@ -245,3 +245,18 @@ Regression tests cover alpha masks, transparent source samples, unlocked control
 selections, real layer flags, policy changes, clone sampling and immediate-release gestures.
 These repairs do not complete the original roadmap, certify physical-device performance,
 or replace the required publisher and release gates.
+
+## Fill policy and opacity repair — September 18, 2026
+
+Bucket and gradient gestures now capture the target layer and parameters before yielding to a
+worker. Both pass the actual layer alpha-lock into the pixel engine; a changed lock policy rejects
+the pending edit. Empty selections, identical fills and transparent gradients do not change
+artwork, document revision or undo history. Provisional sessions are released even when the
+operation is cancelled or fails. Changing controls after release does not replace the captured
+colour or gradient stops of the submitted operation.
+
+Gradient opacity multiplies source/selection coverage exactly once. Alpha lock keeps each
+original alpha value while blending colours source-atop; it does not progressively make soft
+edges opaque. Small selection masks use coordinates rather than a mismatched row stride.
+Non-finite coordinates/opacity fail without painting. Regression sources are `GradientToolTest`
+and the real-view `FillGestureDeviceTest`; completed CI reports remain the execution evidence.
