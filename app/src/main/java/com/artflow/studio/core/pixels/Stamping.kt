@@ -169,12 +169,13 @@ object Stamping {
         strength: Float,
         hardness: Float,
         mask: SelectionMask? = null,
+        alphaLock: Boolean = false,
     ) {
         if (radius <= 0f || strength <= 0f) return
         // Read the source patch first: dragging while reading would smear the write back in.
         val patch = readPatch(target, fromX, fromY, radius)
         val alpha = strength.coerceIn(0f, 1f)
-        stampPatch(target, patch, toX, toY, radius, alpha, hardness, mask)
+        stampPatch(target, patch, toX, toY, radius, alpha, hardness, mask, alphaLock)
     }
 
     /** Reads a circular patch into a (2r+1)^2 buffer so it can be written back displaced. */
@@ -209,6 +210,7 @@ object Stamping {
         strength: Float,
         hardness: Float,
         mask: SelectionMask? = null,
+        alphaLock: Boolean = false,
     ) {
         val r = (sqrt(patch.size.toFloat()).toInt() - 1) / 2
         if (r <= 0) return
@@ -234,7 +236,14 @@ object Stamping {
                 val effective = falloff * strength * coverage
                 if (effective <= 0f) continue
                 val sample = patch[(dy + r) * (r * 2 + 1) + (dx + r)]
-                target.pixels[index] = ImageFilters.lerpArgb(target.pixels[index], sample, effective)
+                val existing = target.pixels[index]
+                if (alphaLock && (existing ushr 24) == 0) continue
+                target.pixels[index] =
+                    if (alphaLock) {
+                        BlendModes.sourceAtop(existing, Channels.scaleAlpha(sample, effective))
+                    } else {
+                        ImageFilters.lerpArgb(existing, sample, effective)
+                    }
             }
         }
     }

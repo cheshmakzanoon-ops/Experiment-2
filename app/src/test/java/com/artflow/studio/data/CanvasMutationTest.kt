@@ -85,6 +85,48 @@ class CanvasMutationTest {
     }
 
     @Test
+    fun alphaLockChangesInvalidatePendingRasterEdits() =
+        runTest {
+            repository.createCanvas(16, 16, 72)
+            val layer = repository.getActiveLayerId()
+            val session = requireNotNull(repository.beginRasterEdit(layer))
+            assertFalse(session.alphaLocked)
+            session.buffer.fill(0xFFFF0000.toInt())
+            repository.setLayerAlphaLock(layer, true)
+            val depth = repository.undoDepth
+            assertFalse(repository.commitRasterEdit(session, "Stale lock policy"))
+            assertEquals(depth, repository.undoDepth)
+            assertTrue(repository.layerPixels(layer)?.isEmpty() != false)
+            val lockedSession = requireNotNull(repository.beginRasterEdit(layer))
+            assertTrue(lockedSession.alphaLocked)
+            repository.cancelRasterEdit(lockedSession)
+        }
+
+    @Test
+    fun transientToolRevisionChangesForCreateCommitUndoRedoAndDispose() =
+        runTest {
+            val initial = repository.contentRevision
+            val layer = open()
+            val created = repository.contentRevision
+            assertTrue(created > initial)
+            val session = requireNotNull(repository.beginRasterEdit(layer))
+            assertEquals(created, session.contentRevision)
+            assertEquals(created, repository.contentRevision)
+            session.buffer.fill(red)
+            assertTrue(repository.commitRasterEdit(session, "Revision fixture"))
+            val committed = repository.contentRevision
+            assertTrue(committed > created)
+            assertTrue(repository.undo())
+            val undone = repository.contentRevision
+            assertTrue(undone > committed)
+            assertTrue(repository.redo())
+            val redone = repository.contentRevision
+            assertTrue(redone > undone)
+            repository.dispose()
+            assertTrue(repository.contentRevision > redone)
+        }
+
+    @Test
     fun mergeDownPreservesAlphaAndDoesNotApplyMaskOrOpacityTwice() =
         runTest {
             val lower = open()

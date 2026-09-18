@@ -11,6 +11,7 @@ import android.util.AttributeSet
 import android.view.MotionEvent
 import androidx.core.math.MathUtils
 import com.artflow.studio.core.canvas.PointerGestureRouter
+import com.artflow.studio.core.canvas.PointerPressure
 import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.Channels
 import com.artflow.studio.core.pixels.PixelBuffer
@@ -202,6 +203,25 @@ class ArtFlowCanvasView
         private var cloneSession: PixelBrushes.CloneSession? = null
         private var healingSession: PixelBrushes.HealingSession? = null
         private var liquifySession: LiquifyTool.Session? = null
+
+        private data class LiquifyReference(
+            val projectId: Long,
+            val layerId: Long,
+            val frameId: Long?,
+            val revision: Long,
+            val contextVersion: Long,
+            val original: PixelBuffer,
+        )
+
+        private var liquifyReference: LiquifyReference? = null
+        private var liquifyContextVersion = 0L
+
+        private fun resetLiquifyReference() {
+            liquifyContextVersion++
+            liquifyReference = null
+        }
+
+        private var gestureLiquifyReference: LiquifyReference? = null
         private var cloneSource: Pair<Float, Float>? = null
         private var cloneDragStarted = false
         private var lastPreviewRequest = 0L
@@ -317,9 +337,11 @@ class ArtFlowCanvasView
             cloneSession = null
             healingSession = null
             liquifySession = null
+            gestureLiquifyReference = null
         }
 
         override fun onDetachedFromWindow() {
+            resetLiquifyReference()
             cancelActiveGesture()
             coroutineScope.cancel()
             observingInvalidations = false
@@ -335,13 +357,17 @@ class ArtFlowCanvasView
         fun setEditorInput(newInput: EditorInput) {
             val destinationChanged = newInput.tool != input.tool || newInput.strokeDestination != input.strokeDestination
             if (destinationChanged || newInput.fingerPainting != input.fingerPainting) cancelActiveGesture()
+            if (destinationChanged) resetLiquifyReference()
             input = newInput
             canvasRepository.setStrokeColor(newInput.brushColor)
             canvasRepository.setSymmetry(newInput.symmetry)
         }
 
         fun setActiveLayerId(layerId: Long) {
-            if (layerId != activeLayerId) cancelActiveGesture()
+            if (layerId != activeLayerId) {
+                resetLiquifyReference()
+                cancelActiveGesture()
+            }
             activeLayerId = layerId
         }
 
@@ -353,7 +379,10 @@ class ArtFlowCanvasView
             backgroundColor: Int,
         ) {
             val dimensionsChanged = width != canvasWidth || height != canvasHeight
-            if (dimensionsChanged) cancelActiveGesture()
+            if (dimensionsChanged) {
+                resetLiquifyReference()
+                cancelActiveGesture()
+            }
             canvasWidth = max(1, width)
             canvasHeight = max(1, height)
             canvasDpi = dpi
@@ -598,6 +627,7 @@ class ArtFlowCanvasView
                         .observeCanvasInvalidation()
                         .onEach { event ->
                             if (event is CanvasInvalidationEvent.FrameChanged) {
+                                resetLiquifyReference()
                                 cancelActiveGesture()
                                 onionDirty = true
                             }
@@ -1067,8 +1097,8 @@ class ArtFlowCanvasView
         /**
          * Opens one raster edit session for the whole gesture.
          *
-         * Copy-on-write means the session's buffer *is* the layer's buffer, so the tools mutate live
-         * pixels while the pre-gesture state stays safe in the undo snapshot. Samples that arrive
+         * The buffer is provisional: previews can show it, but save/export only see committed
+         * artwork. The repository takes an undo snapshot only at a valid commit. Samples that arrive
          * before the session is open are queued and replayed, which keeps fast taps from being lost.
          */
         private fun startPixelGesture(
@@ -1095,8 +1125,10 @@ class ArtFlowCanvasView
             moveStart = x to y
 
             val layerId = activeLayerId
+            val gestureInput = input
+            val gestureSelection = canvasRepository.selection()?.copy()
             pixelOpenJob =
-                coroutineScope.launch {
+                coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
                     val session = canvasRepository.beginRasterEdit(layerId)
                     if (session == null) {
                         pixelTool = null
@@ -1104,15 +1136,62 @@ class ArtFlowCanvasView
                         return@launch
                     }
                     rasterSession = session
-                    rasterBuffer = session.buffer
                     rasterBase = session.buffer.copy()
-                    if (tool == ToolType.CLONE_STAMP || tool == ToolType.HEALING) {
-                        rasterSource = withContext(Dispatchers.Default) { canvasRepository.compositeBuffer() }
+                    if (tool == ToolType.LIQUIFY && !prepareLiquifyReference(session, gestureInput)) {
+                        canvasRepository.cancelRasterEdit(session)
+                        rasterSession = null
+                        rasterBuffer = null
+                        rasterBase = null
+                        pixelTool = null
+                        return@launch
                     }
-                    initToolSession(tool, session.buffer, x, y)
+                    if (tool == ToolType.CLONE_STAMP || tool == ToolType.HEALING) {
+                        rasterSource =
+                            if (tool == ToolType.CLONE_STAMP && gestureInput.clone.sampleAllLayers) {
+                                withContext(Dispatchers.Default) { canvasRepository.compositeBuffer() }
+                            } else {
+                                rasterBase
+                            }
+                    }
+                    initToolSession(tool, session.buffer, x, y, pressure, gestureInput, gestureSelection)
+                    rasterBuffer = session.buffer
                     drainPendingSamples()
                     if (pendingPixelCommit) commitPixelGesture(cancelled = pendingPixelCancel)
                 }
+        }
+
+        private fun prepareLiquifyReference(
+            session: CanvasRepository.RasterEditSession,
+            gestureInput: EditorInput,
+        ): Boolean {
+            val frameId =
+                canvasRepository.timeline.value.activeFrame
+                    ?.id
+            val valid =
+                liquifyReference?.takeIf {
+                    it.projectId == canvasRepository.projectId() &&
+                        it.layerId == session.layerId &&
+                        it.frameId == frameId &&
+                        it.revision == session.contentRevision &&
+                        it.contextVersion == liquifyContextVersion
+                }
+            liquifyReference = valid
+            if (gestureInput.liquify.mode == LiquifyTool.Mode.RECONSTRUCT && valid == null) {
+                onStatusMessage?.invoke(
+                    "Reconstruct needs a previous liquify gesture on this layer. " +
+                        "Other edits, undo or reopening reset it.",
+                )
+                return false
+            }
+            gestureLiquifyReference = valid ?: LiquifyReference(
+                canvasRepository.projectId(),
+                session.layerId,
+                frameId,
+                session.contentRevision,
+                liquifyContextVersion,
+                requireNotNull(rasterBase),
+            )
+            return true
         }
 
         private fun initToolSession(
@@ -1120,15 +1199,18 @@ class ArtFlowCanvasView
             buffer: PixelBuffer,
             x: Float,
             y: Float,
+            pressure: Float,
+            gestureInput: EditorInput,
+            selection: SelectionMask?,
         ) {
-            val selection = canvasRepository.selection()
+            val alphaLocked = rasterSession?.alphaLocked == true
             when (tool) {
                 ToolType.SMUDGE ->
                     smudgeSession =
                         PixelBrushes.beginSmudge(
                             x,
                             y,
-                            input.smudge.copy(size = input.brushParams.size, mask = selection),
+                            gestureInput.smudge.copy(size = gestureInput.brushParams.size, mask = selection, alphaLock = alphaLocked),
                         )
                 ToolType.CLONE_STAMP -> {
                     val source = cloneSource ?: (x to y)
@@ -1138,11 +1220,21 @@ class ArtFlowCanvasView
                             targetY = y,
                             sourceX = source.first,
                             sourceY = source.second,
-                            settings = input.clone.copy(size = input.brushParams.size, mask = selection),
+                            settings =
+                                gestureInput.clone.copy(
+                                    size = gestureInput.brushParams.size,
+                                    mask = selection,
+                                    alphaLock = alphaLocked,
+                                ),
                         )
                 }
                 ToolType.HEALING -> {
-                    val settings = input.healing.copy(size = input.brushParams.size, mask = selection)
+                    val settings =
+                        gestureInput.healing.copy(
+                            size = gestureInput.brushParams.size,
+                            mask = selection,
+                            alphaLock = alphaLocked,
+                        )
                     val (sourceX, sourceY) = PixelBrushes.findSpotSource(buffer, x, y, settings)
                     healingSession = PixelBrushes.beginHealing(x, y, sourceX, sourceY, settings)
                 }
@@ -1151,7 +1243,13 @@ class ArtFlowCanvasView
                         LiquifyTool.beginSession(
                             x = x,
                             y = y,
-                            settings = input.liquify.copy(size = input.brushParams.size, mask = selection),
+                            settings =
+                                gestureInput.liquify.copy(
+                                    size = gestureInput.brushParams.size,
+                                    pressure = pressure,
+                                    mask = selection,
+                                    alphaLock = alphaLocked,
+                                ),
                             width = buffer.width,
                             height = buffer.height,
                         )
@@ -1190,7 +1288,7 @@ class ArtFlowCanvasView
                 ToolType.CLONE_STAMP -> cloneSession?.dragTo(x, y, buffer, rasterSource ?: buffer)
                 ToolType.HEALING -> healingSession?.dragTo(x, y, buffer, rasterSource ?: buffer)
                 ToolType.LIQUIFY -> {
-                    liquifySession?.dragTo(x, y)
+                    liquifySession?.dragTo(x, y, pressure)
                     previewLiquify(buffer)
                 }
                 ToolType.MOVE, ToolType.TRANSFORM -> {
@@ -1216,7 +1314,7 @@ class ArtFlowCanvasView
             if (now - lastLiquifyPreview < LIQUIFY_PREVIEW_INTERVAL_MS) return
             lastLiquifyPreview = now
             if (buffer.width * buffer.height > LIQUIFY_PREVIEW_MAX_PIXELS) return
-            val preview = session.map.apply(base)
+            val preview = session.render(base, gestureLiquifyReference?.original)
             preview.pixels.copyInto(buffer.pixels)
         }
 
@@ -1228,8 +1326,9 @@ class ArtFlowCanvasView
 
         private fun endPixelGesture(cancelled: Boolean) {
             if (pixelTool == null) return
-            if (rasterSession == null) {
-                // The session is still opening; it commits itself once it is ready.
+            if (rasterBuffer == null) {
+                // Source snapshotting may still be opening the tool after beginRasterEdit.
+                // Keep the final samples and release/cancel decision until it is ready.
                 pendingPixelCommit = true
                 pendingPixelCancel = cancelled
                 return
@@ -1241,6 +1340,7 @@ class ArtFlowCanvasView
             val session = rasterSession ?: return
             val description = pixelCommitDescription
             val finalLiquify = liquifySession
+            val reference = gestureLiquifyReference
             val original = rasterBase
             rasterSession = null
             rasterBuffer = null
@@ -1253,6 +1353,7 @@ class ArtFlowCanvasView
             cloneSession = null
             healingSession = null
             liquifySession = null
+            gestureLiquifyReference = null
             coroutineScope.launch {
                 try {
                     if (!cancelled) {
@@ -1260,16 +1361,24 @@ class ArtFlowCanvasView
                         // Commit the complete map off the UI thread, never the last partial preview.
                         if (finalLiquify != null && original != null) {
                             withContext(Dispatchers.Default) {
-                                finalLiquify.map
-                                    .apply(original)
+                                finalLiquify
+                                    .render(original, reference?.original)
                                     .pixels
                                     .copyInto(session.buffer.pixels)
                             }
                         }
-                        if (!canvasRepository.commitRasterEdit(session, description)) {
-                            onStatusMessage?.invoke("The layer changed; this gesture was discarded")
+                        val changed =
+                            original == null || withContext(Dispatchers.Default) { !original.pixels.contentEquals(session.buffer.pixels) }
+                        if (changed) {
+                            if (canvasRepository.commitRasterEdit(session, description)) {
+                                if (finalLiquify != null && reference != null && reference.contextVersion == liquifyContextVersion) {
+                                    liquifyReference = reference.copy(revision = canvasRepository.contentRevision)
+                                }
+                                reportHistory()
+                            } else {
+                                onStatusMessage?.invoke("The layer changed; this gesture was discarded")
+                            }
                         }
-                        reportHistory()
                     }
                 } finally {
                     withContext(NonCancellable) { canvasRepository.cancelRasterEdit(session) }
@@ -1709,13 +1818,8 @@ class ArtFlowCanvasView
             val toolType = event.getToolType(index)
             val pressure = if (history < 0) event.getPressure(index) else event.getHistoricalPressure(index, history)
             val size = if (history < 0) event.getSize(index) else event.getHistoricalSize(index, history)
-            val value =
-                if (toolType == MotionEvent.TOOL_TYPE_STYLUS || toolType == MotionEvent.TOOL_TYPE_ERASER) {
-                    pressure
-                } else {
-                    0.35f + min(1f, size * 3f) * 0.65f
-                }
-            return if (value.isFinite()) value.coerceIn(MIN_PRESSURE, 1f) else 1f
+            val stylus = toolType == MotionEvent.TOOL_TYPE_STYLUS || toolType == MotionEvent.TOOL_TYPE_ERASER
+            return PointerPressure.normalize(stylus, pressure, size)
         }
 
         private fun axisOf(
@@ -1752,7 +1856,6 @@ class ArtFlowCanvasView
             private const val MAX_SCALE = 32f
             private const val TAP_SLOP = 24f
             private const val TAP_TIMEOUT_MS = 320L
-            private const val MIN_PRESSURE = 0.05f
             private const val SNAP_TOLERANCE = 12f
             private const val PREVIEW_INTERVAL_MS = 66L
             private const val LIQUIFY_PREVIEW_INTERVAL_MS = 140L

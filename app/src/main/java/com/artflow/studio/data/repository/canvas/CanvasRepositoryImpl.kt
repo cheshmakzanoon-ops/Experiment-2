@@ -118,6 +118,7 @@ class CanvasRepositoryImpl
         private val redoStack = ArrayDeque<Snapshot>()
 
         private var editRevision = 0L
+        override val contentRevision: Long get() = editRevision
         private var dirty = false
             set(value) {
                 if (value) editRevision++
@@ -183,6 +184,7 @@ class CanvasRepositoryImpl
             nextLayerId = 1
             nextFrameId = 1
             nextStrokeId = 1
+            editRevision++
 
             frameList =
                 mutableListOf(
@@ -287,6 +289,7 @@ class CanvasRepositoryImpl
                         )
                     }.toMutableList()
             coroutineContext.ensureActive()
+            editRevision++
             currentProjectId = projectId
             canvasWidth = document.width
             canvasHeight = document.height
@@ -673,7 +676,7 @@ class CanvasRepositoryImpl
                 val layer = layerById(layerId) ?: return@withState null
                 if (!layer.canPaint() || pendingEdits.values.any { it.layer.id == layerId }) return@withState null
                 val buffer = rawLayerPixels(layer, canvasWidth, canvasHeight)?.copy() ?: PixelBuffer(canvasWidth, canvasHeight)
-                val session = CanvasRepository.RasterEditSession(layerId, buffer, ++rasterEditToken)
+                val session = CanvasRepository.RasterEditSession(layerId, buffer, ++rasterEditToken, editRevision, layer.isAlphaLocked)
                 pendingEdits[session.snapshotToken] = PendingEdit(currentProjectId, layer, layer.raster, layer.strokes.toList(), session)
                 session
             }
@@ -688,6 +691,7 @@ class CanvasRepositoryImpl
                 if (pending.session !== session || pending.projectId != currentProjectId) return@withState false
                 if (layer !== pending.layer || layer.raster !== pending.original || !layer.canPaint()) return@withState false
                 if (layer.strokes != pending.originalStrokes) return@withState false
+                if (layer.isAlphaLocked != session.alphaLocked) return@withState false
                 if (session.buffer.width != canvasWidth || session.buffer.height != canvasHeight) return@withState false
                 // A session is provisional until here: cancellation cannot remove someone else's undo
                 // entry, and autosave/export can never publish half a drag or a failed tool operation.
@@ -2176,6 +2180,7 @@ class CanvasRepositoryImpl
         }
 
         override fun dispose() {
+            editRevision++
             compositor.release()
             pendingEdits.clear()
             activeStrokes.clear()

@@ -79,7 +79,9 @@ object Tutorials {
             TutorialStep(
                 "Liquify",
                 "Liquify builds a displacement map across the gesture so distortion accumulates smoothly. " +
-                    "Push, twirl, pinch or bloat, then release to commit one undo step.",
+                    "Push, twirl, pinch or bloat, then release to commit one undo step. " +
+                    "Reconstruct gradually restores the image before your current liquify sequence. " +
+                    "Another edit, undo, reopening, or changing the tool, layer or frame resets that reference.",
                 "tool.liquify",
             ),
             TutorialStep(

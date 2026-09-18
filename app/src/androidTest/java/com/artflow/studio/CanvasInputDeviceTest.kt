@@ -13,6 +13,7 @@ import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.text.TextLayout
 import com.artflow.studio.core.tool.LiquifyTool
+import com.artflow.studio.core.tool.PixelBrushes
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.domain.model.brush.BrushParams
@@ -26,6 +27,7 @@ import dagger.hilt.android.testing.HiltAndroidTest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -370,7 +372,9 @@ class CanvasInputDeviceTest {
             repository.setLayerPixels(repository.getActiveLayerId(), fixture, "Liquify fixture")
             val settings = brush.copy(tool = ToolType.LIQUIFY, brushParams = brush.brushParams.copy(size = 30f))
             canvas.setEditorInput(settings)
-            val expectedSession = LiquifyTool.beginSession(15f, 30f, settings.liquify.copy(size = 30f), 64, 64)
+            // Finger calibration uses the 0.1 contact size sent by this fixture: 0.35 + 0.3 * 0.65.
+            val calibrated = settings.liquify.copy(size = 30f, pressure = 0.545f)
+            val expectedSession = LiquifyTool.beginSession(15f, 30f, calibrated, 64, 64)
             expectedSession.dragTo(20f, 30f)
             expectedSession.dragTo(32f, 30f)
             val expected = expectedSession.map.apply(fixture)
@@ -454,6 +458,278 @@ class CanvasInputDeviceTest {
             assertTrue(image().isEmpty())
         }
 
+    @Test
+    fun liquifyReconstructRestoresEarlierArtworkAndRemainsUndoable() =
+        withCanvas(19) { canvas ->
+            val layer = repository.getActiveLayerId()
+            val original = liquifyFixture()
+            repository.setLayerPixels(layer, original, "Reconstruction fixture")
+            val settings = LiquifyTool.Settings(size = 40f, strength = 1f)
+            canvas.setEditorInput(brush.copy(tool = ToolType.LIQUIFY, brushParams = brush.brushParams.copy(size = 40f), liquify = settings))
+            var depth = repository.undoDepth
+            liquifyDrag(canvas)
+            await { repository.undoDepth == depth + 1 }
+            val warped = image().copy()
+            val initialError = pixelDifference(original, warped)
+            assertTrue("The warp fixture must actually change", initialError > 0)
+            depth = repository.undoDepth
+            canvas.setEditorInput(
+                brush.copy(
+                    tool = ToolType.LIQUIFY,
+                    brushParams = brush.brushParams.copy(size = 40f),
+                    liquify = settings.copy(mode = LiquifyTool.Mode.RECONSTRUCT),
+                ),
+            )
+            liquifyDrag(canvas)
+            await { repository.undoDepth == depth + 1 }
+            assertTrue("Reconstruct must move pixels closer to the pre-liquify image", pixelDifference(original, image()) < initialError)
+            assertTrue(repository.undo())
+            assertArrayEquals(warped.pixels, image().pixels)
+            // Undo is itself a newer revision; a stale reference may never undo that newer decision.
+            depth = repository.undoDepth
+            liquifyDrag(canvas)
+            delay(150)
+            assertEquals(depth, repository.undoDepth)
+            assertArrayEquals(warped.pixels, image().pixels)
+        }
+
+    @Test
+    fun reconstructNeverOverwritesAnInterveningEditOrAnotherDocument() =
+        withCanvas(20) { canvas ->
+            val layer = repository.getActiveLayerId()
+            repository.setLayerPixels(layer, liquifyFixture(), "Reconstruction fixture")
+            val settings =
+                brush.copy(
+                    tool = ToolType.LIQUIFY,
+                    brushParams = brush.brushParams.copy(size = 40f),
+                    liquify = LiquifyTool.Settings(strength = 1f),
+                )
+            canvas.setEditorInput(settings)
+            var depth = repository.undoDepth
+            liquifyDrag(canvas)
+            await { repository.undoDepth == depth + 1 }
+            repository.setLayerPixels(layer, PixelBuffer.filled(64, 64, Color.GREEN), "Newer artwork")
+            val changedRevision = repository.contentRevision
+            canvas.setEditorInput(settings.copy(liquify = settings.liquify.copy(mode = LiquifyTool.Mode.RECONSTRUCT)))
+            depth = repository.undoDepth
+            var message = ""
+            canvas.onStatusMessage = { message = it }
+            liquifyDrag(canvas)
+            delay(150)
+            assertEquals(depth, repository.undoDepth)
+            assertTrue(message.contains("previous liquify"))
+            assertTrue(image().pixels.all { it == Color.GREEN })
+            // IDs can be reused by a newly loaded document. Revision must still change.
+            repository.createCanvas(64, 64, 72)
+            assertTrue(repository.contentRevision > changedRevision)
+            canvas.setActiveLayerId(repository.getActiveLayerId())
+            liquifyDrag(canvas)
+            delay(150)
+            assertEquals(0, repository.undoDepth)
+            assertTrue(image().isEmpty())
+        }
+
+    @Test
+    fun frozenAndZeroPressureLiquifyGesturesCreateNoUndoEntries() =
+        withCanvas(21) { canvas ->
+            repository.setLayerPixels(repository.getActiveLayerId(), liquifyFixture(), "Pressure fixture")
+            val before = image().pixels.copyOf()
+            val depth = repository.undoDepth
+            val settings = brush.copy(tool = ToolType.LIQUIFY, brushParams = brush.brushParams.copy(size = 40f))
+            canvas.setEditorInput(settings.copy(liquify = LiquifyTool.Settings(freezeMask = BooleanArray(64 * 64) { true })))
+            liquifyDrag(canvas)
+            delay(150)
+            assertEquals(depth, repository.undoDepth)
+            canvas.setEditorInput(settings)
+            val pen = Touch(4, 18f, 32f, MotionEvent.TOOL_TYPE_STYLUS, pressure = 0f)
+            send(canvas, MotionEvent.ACTION_DOWN, pen)
+            send(canvas, MotionEvent.ACTION_MOVE, pen.copy(x = 32f))
+            send(canvas, MotionEvent.ACTION_UP, pen.copy(x = 40f))
+            delay(150)
+            assertEquals(depth, repository.undoDepth)
+            assertArrayEquals(before, image().pixels)
+        }
+
+    @Test
+    fun cancellingReconstructKeepsTheLastSuccessfulReference() =
+        withCanvas(22) { canvas ->
+            repository.setLayerPixels(repository.getActiveLayerId(), liquifyFixture(), "Cancellation fixture")
+            val settings =
+                brush.copy(
+                    tool = ToolType.LIQUIFY,
+                    brushParams = brush.brushParams.copy(size = 40f),
+                    liquify = LiquifyTool.Settings(strength = 1f),
+                )
+            canvas.setEditorInput(settings)
+            var depth = repository.undoDepth
+            liquifyDrag(canvas)
+            await { repository.undoDepth == depth + 1 }
+            val warped = image().pixels.copyOf()
+            depth = repository.undoDepth
+            canvas.setEditorInput(settings.copy(liquify = settings.liquify.copy(mode = LiquifyTool.Mode.RECONSTRUCT)))
+            val pen = Touch(4, 18f, 32f, MotionEvent.TOOL_TYPE_STYLUS)
+            send(canvas, MotionEvent.ACTION_DOWN, pen)
+            send(canvas, MotionEvent.ACTION_MOVE, pen.copy(x = 35f))
+            send(canvas, MotionEvent.ACTION_CANCEL, pen.copy(x = 35f))
+            delay(150)
+            assertEquals(depth, repository.undoDepth)
+            assertArrayEquals(warped, image().pixels)
+            liquifyDrag(canvas)
+            await { repository.undoDepth == depth + 1 }
+            assertFalse(warped.contentEquals(image().pixels))
+        }
+
+    @Test
+    fun savedReloadChangesRevisionEvenWhenProjectAndLayerIdsAreReused() =
+        withCanvas(23) { _ ->
+            val project = repository.projectId()
+            val layer = repository.getActiveLayerId()
+            repository.setLayerPixels(layer, liquifyFixture(), "Reload fixture")
+            repository.saveCanvas(project)
+            val before = repository.contentRevision
+            repository.loadCanvas(project)
+            assertTrue(repository.contentRevision > before)
+            assertEquals(layer, repository.getActiveLayerId())
+            val session = requireNotNull(repository.beginRasterEdit(layer))
+            assertEquals(repository.contentRevision, session.contentRevision)
+            repository.cancelRasterEdit(session)
+        }
+
+    @Test
+    fun retouchToolsHonorLayerAlphaLockFromTheActualDocument() =
+        withCanvas(24) { canvas ->
+            val layer = repository.getActiveLayerId()
+            val fixture =
+                PixelBuffer(64, 64).apply {
+                    for (y in 0 until height) {
+                        for (x in 0 until width) {
+                            val alpha =
+                                if (x >= 36) {
+                                    0
+                                } else if (x >= 26) {
+                                    64
+                                } else {
+                                    255
+                                }
+                            pixels[y * width + x] = (alpha shl 24) or (x * 3 shl 16) or (y * 3)
+                        }
+                    }
+                }
+            for (tool in listOf(ToolType.SMUDGE, ToolType.CLONE_STAMP, ToolType.HEALING, ToolType.LIQUIFY)) {
+                repository.setLayerPixels(layer, fixture, "Alpha lock fixture")
+                repository.setLayerAlphaLock(layer, true)
+                canvas.setEditorInput(brush.copy(tool = tool, brushParams = brush.brushParams.copy(size = 24f)))
+                if (tool == ToolType.CLONE_STAMP) {
+                    send(canvas, MotionEvent.ACTION_DOWN, Touch(1, 12f, 30f))
+                    send(canvas, MotionEvent.ACTION_UP, Touch(1, 12f, 30f))
+                }
+                val depth = repository.undoDepth
+                send(canvas, MotionEvent.ACTION_DOWN, Touch(1, 24f, 30f))
+                send(canvas, MotionEvent.ACTION_MOVE, Touch(1, 30f, 30f))
+                send(canvas, MotionEvent.ACTION_UP, Touch(1, 40f, 30f))
+                awaitRasterIdle(layer)
+                val result = requireNotNull(repository.layerPixels(layer))
+                assertArrayEquals(fixture.pixels.map { it ushr 24 }.toIntArray(), result.pixels.map { it ushr 24 }.toIntArray())
+                if (tool == ToolType.SMUDGE || tool == ToolType.CLONE_STAMP || tool == ToolType.LIQUIFY) {
+                    assertEquals("The tool must not be disabled to enforce alpha lock", depth + 1, repository.undoDepth)
+                }
+            }
+        }
+
+    @Test
+    fun cloneSampleAllLayersSwitchControlsTheCapturedSourceEvenForImmediateRelease() =
+        withCanvas(25) { canvas ->
+            val layer = repository.getActiveLayerId()
+            val overlay = repository.addLayer("Separate green artwork").id
+            repository.setLayerPixels(overlay, PixelBuffer.filled(64, 64, Color.GREEN), "Overlay fixture")
+            canvas.setActiveLayerId(layer)
+            val original =
+                PixelBuffer(64, 64).apply {
+                    for (y in 0 until height) {
+                        for (x in 0 until 32) setUnchecked(x, y, Color.RED)
+                    }
+                }
+            for (allLayers in listOf(false, true)) {
+                repository.setLayerPixels(layer, original, "Clone fixture")
+                canvas.setEditorInput(
+                    brush.copy(
+                        tool = ToolType.CLONE_STAMP,
+                        brushParams = brush.brushParams.copy(size = 12f),
+                        clone = PixelBrushes.CloneSettings(sampleAllLayers = allLayers),
+                    ),
+                )
+                if (!allLayers) {
+                    send(canvas, MotionEvent.ACTION_DOWN, Touch(1, 10f, 30f))
+                    send(canvas, MotionEvent.ACTION_UP, Touch(1, 10f, 30f))
+                }
+                val depth = repository.undoDepth
+                // No delay: samples and UP must survive asynchronous composite-source capture.
+                send(canvas, MotionEvent.ACTION_DOWN, Touch(1, 44f, 30f))
+                send(canvas, MotionEvent.ACTION_MOVE, Touch(1, 49f, 30f))
+                send(canvas, MotionEvent.ACTION_UP, Touch(1, 54f, 30f))
+                await { repository.undoDepth == depth + 1 }
+                val result = requireNotNull(repository.layerPixels(layer))
+                assertEquals(if (allLayers) Color.GREEN else Color.RED, result.getSafe(50, 30))
+                assertEquals(Color.GREEN, requireNotNull(repository.layerPixels(overlay)).getSafe(50, 30))
+                assertTrue(repository.undo())
+                assertArrayEquals(original.pixels, requireNotNull(repository.layerPixels(layer)).pixels)
+            }
+        }
+
+    @Test
+    fun changingAlphaLockDuringAnOpenToolDiscardsTheStaleEdit() =
+        withCanvas(26) { canvas ->
+            val layer = repository.getActiveLayerId()
+            val original = liquifyFixture()
+            repository.setLayerPixels(layer, original, "Lock-change fixture")
+            canvas.setEditorInput(brush.copy(tool = ToolType.LIQUIFY))
+            send(canvas, MotionEvent.ACTION_DOWN, Touch(1, 15f, 30f))
+            send(canvas, MotionEvent.ACTION_MOVE, Touch(1, 22f, 30f))
+            repository.setLayerAlphaLock(layer, true)
+            val depth = repository.undoDepth
+            send(canvas, MotionEvent.ACTION_UP, Touch(1, 32f, 30f))
+            awaitRasterIdle(layer)
+            assertEquals(depth, repository.undoDepth)
+            assertArrayEquals(original.pixels, requireNotNull(repository.layerPixels(layer)).pixels)
+        }
+
+    private suspend fun awaitRasterIdle(layerId: Long) {
+        // Yield to the completed gesture, then acquire/release a real edit as a settlement barrier.
+        delay(1)
+        withTimeout(10_000) {
+            while (true) {
+                val barrier = repository.beginRasterEdit(layerId)
+                if (barrier != null) {
+                    repository.cancelRasterEdit(barrier)
+                    break
+                }
+                delay(10)
+            }
+        }
+    }
+
+    private fun liquifyDrag(canvas: ArtFlowCanvasView) {
+        val pen = Touch(4, 18f, 32f, MotionEvent.TOOL_TYPE_STYLUS)
+        send(canvas, MotionEvent.ACTION_DOWN, pen)
+        send(canvas, MotionEvent.ACTION_MOVE, pen.copy(x = 32f))
+        send(canvas, MotionEvent.ACTION_UP, pen.copy(x = 40f))
+    }
+
+    private fun liquifyFixture(): PixelBuffer =
+        PixelBuffer(64, 64).apply {
+            for (y in 0 until height) for (x in 0 until width) setUnchecked(x, y, Color.rgb(x * 3, y * 3, 40))
+        }
+
+    private fun pixelDifference(
+        a: PixelBuffer,
+        b: PixelBuffer,
+    ): Long =
+        a.pixels.indices.sumOf { index ->
+            val x = a.pixels[index]
+            val y = b.pixels[index]
+            listOf(0, 8, 16, 24).sumOf { shift -> kotlin.math.abs(((x ushr shift) and 255) - ((y ushr shift) and 255)).toLong() }
+        }
+
     private fun withCanvas(
         id: Int,
         block: suspend (ArtFlowCanvasView) -> Unit,
@@ -512,6 +788,7 @@ class CanvasInputDeviceTest {
         val x: Float,
         val y: Float,
         val type: Int = MotionEvent.TOOL_TYPE_FINGER,
+        val pressure: Float = 1f,
     )
 
     private fun send(
@@ -539,7 +816,7 @@ class CanvasInputDeviceTest {
                     MotionEvent.PointerCoords().apply {
                         x = point.first
                         y = point.second
-                        pressure = 1f
+                        pressure = touch.pressure
                         size = 0.1f
                     }
                 }.toTypedArray()

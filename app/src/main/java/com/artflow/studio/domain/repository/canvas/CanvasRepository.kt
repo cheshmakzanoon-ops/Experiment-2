@@ -72,6 +72,9 @@ interface CanvasRepository {
     /** True when there are unsaved changes. */
     fun hasUnsavedChanges(): Boolean
 
+    /** Monotone in-memory revision. Reload/dispose also invalidate transient tool references. */
+    val contentRevision: Long
+
     /** Total undo steps currently held. */
     val undoDepth: Int
 
@@ -148,6 +151,8 @@ interface CanvasRepository {
         val layerId: Long,
         val buffer: PixelBuffer,
         internal val snapshotToken: Long,
+        val contentRevision: Long,
+        val alphaLocked: Boolean,
     )
 
     /** A caller-owned copy of the layer's committed pixels. */

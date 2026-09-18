@@ -5,6 +5,7 @@ import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.pixels.Stamping
+import com.artflow.studio.core.pixels.checkedPixelCount
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
@@ -42,9 +43,12 @@ object LiquifyTool {
         val width: Int,
         val height: Int,
     ) {
-        val offsetX = FloatArray(width * height)
-        val offsetY = FloatArray(width * height)
-        private val touched = BooleanArray(width * height)
+        private val count = checkedPixelCount(width, height)
+
+        // Reconstruct/no-op sessions do not need a pair of full-canvas displacement arrays.
+        val offsetX: FloatArray by lazy { FloatArray(count) }
+        val offsetY: FloatArray by lazy { FloatArray(count) }
+        private val touched: BooleanArray by lazy { BooleanArray(count) }
 
         /** Union of every pixel this map has modified, so callers can invalidate precisely. */
         var dirtyBounds: IntBounds? = null
@@ -57,6 +61,8 @@ object LiquifyTool {
             dy: Float,
         ) {
             if (x < 0 || y < 0 || x >= width || y >= height) return
+            if (!dx.isFinite() || !dy.isFinite()) return
+            if (dx == 0f && dy == 0f) return
             val index = y * width + x
             offsetX[index] += dx
             offsetY[index] += dy
@@ -67,9 +73,10 @@ object LiquifyTool {
 
         fun hasDisplacement(index: Int): Boolean = touched[index]
 
-        fun isEmpty(): Boolean = touched.none { it }
+        fun isEmpty(): Boolean = dirtyBounds == null
 
         fun clear() {
+            if (isEmpty()) return
             offsetX.fill(0f)
             offsetY.fill(0f)
             touched.fill(false)
@@ -78,6 +85,8 @@ object LiquifyTool {
 
         /** Bilinear resample of [source] through this field. */
         fun apply(source: PixelBuffer): PixelBuffer {
+            require(source.width == width && source.height == height) { "Displacement dimensions must match the layer" }
+            if (isEmpty()) return source.copy()
             val out = PixelBuffer(source.width, source.height)
             for (y in 0 until source.height) {
                 for (x in 0 until source.width) {
@@ -113,8 +122,9 @@ object LiquifyTool {
         val freezeMask: BooleanArray? = null,
         /** Optional selection restricting the distortion. */
         val mask: SelectionMask? = null,
+        val alphaLock: Boolean = false,
     ) {
-        val radius: Float get() = (size / 2f).coerceAtLeast(1f)
+        val radius: Float get() = if (size.isFinite()) (size / 2f).coerceIn(1f, 4096f) else 1f
     }
 
     /**
@@ -129,6 +139,10 @@ object LiquifyTool {
     ) {
         private var lastX = startX
         private var lastY = startY
+        private var samplePressure = unit(settings.pressure)
+        private var reconstruction: FloatArray? = null
+        private var reconstructionBounds: IntBounds? = null
+        val dirtyBounds: IntBounds? get() = map.dirtyBounds ?: reconstructionBounds
         var totalDistance: Float = 0f
             private set
 
@@ -139,19 +153,30 @@ object LiquifyTool {
         fun dragTo(
             x: Float,
             y: Float,
+            pressure: Float = settings.pressure,
         ): IntBounds? {
+            if (!x.isFinite() || !y.isFinite()) return null
+            samplePressure = unit(pressure)
             val dx = x - lastX
             val dy = y - lastY
             val distance = sqrt(dx * dx + dy * dy)
-            if (distance < 0.01f) return null
+            if (!distance.isFinite() || distance < 0.01f) return null
 
-            when (settings.mode) {
-                Mode.PUSH -> applyPush(dx, dy, distance)
-                Mode.TWIRL_CLOCKWISE -> applyTwirl(distance, clockwise = true)
-                Mode.TWIRL_COUNTER_CLOCKWISE -> applyTwirl(distance, clockwise = false)
-                Mode.PINCH -> applyRadialScale(distance, pinch = true)
-                Mode.BLOAT -> applyRadialScale(distance, pinch = false)
-                Mode.RECONSTRUCT -> Unit
+            val spacing = (settings.radius * (0.12f - unit(settings.density) * 0.08f)).coerceIn(0.5f, 4f)
+            val samples = ceil(distance / spacing).toInt().coerceIn(1, 65536)
+            for (sample in 1..samples) {
+                val t = (sample - 0.5f) / samples
+                val centerX = lastX + dx * t
+                val centerY = lastY + dy * t
+                val stepDistance = distance / samples
+                when (settings.mode) {
+                    Mode.PUSH -> applyPush(centerX, centerY, dx / distance, dy / distance, stepDistance)
+                    Mode.TWIRL_CLOCKWISE -> applyTwirl(centerX, centerY, stepDistance, clockwise = true)
+                    Mode.TWIRL_COUNTER_CLOCKWISE -> applyTwirl(centerX, centerY, stepDistance, clockwise = false)
+                    Mode.PINCH -> applyRadialScale(centerX, centerY, stepDistance, pinch = true)
+                    Mode.BLOAT -> applyRadialScale(centerX, centerY, stepDistance, pinch = false)
+                    Mode.RECONSTRUCT -> applyReconstruction(centerX, centerY, stepDistance)
+                }
             }
 
             totalDistance += distance
@@ -162,44 +187,38 @@ object LiquifyTool {
         }
 
         private fun applyPush(
-            dxTotal: Float,
-            dyTotal: Float,
+            centerX: Float,
+            centerY: Float,
+            directionX: Float,
+            directionY: Float,
             distance: Float,
         ) {
-            val radius = settings.radius
-            // Spacing between samples in pixels; smaller spacing = denser, stronger distortion.
-            val spacing = max(1f, radius * (0.5f - settings.density.coerceIn(0f, 1f) * 0.4f))
-            val samples = ceil(distance / spacing).toInt().coerceAtLeast(1)
-            for (i in 1..samples) {
-                val t = i.toFloat() / samples
-                val px = lastX + dxTotal * t
-                val py = lastY + dyTotal * t
-                val directionX = dxTotal / distance
-                val directionY = dyTotal / distance
-                forEachPixelInBrush(px, py, radius) { pixelX, pixelY, falloff ->
-                    val amount = smoothstep(falloff) * effectiveStrength() * radius * 0.35f
-                    map.add(pixelX, pixelY, directionX * amount, directionY * amount)
-                }
+            forEachPixelInBrush(centerX, centerY, settings.radius) { px, py, falloff ->
+                // Inverse lookup: a rightward push reads pixels on its LEFT.
+                val amount = smoothstep(falloff) * effectiveStrength() * coverage(px, py) * distance * 0.7f
+                map.add(px, py, -directionX * amount, -directionY * amount)
             }
         }
 
         private fun applyTwirl(
+            centerX: Float,
+            centerY: Float,
             distance: Float,
             clockwise: Boolean,
         ) {
             val radius = settings.radius
             val anglePerSample = (distance / radius).coerceAtMost(0.5f) * 45f
-            val direction = if (clockwise) 1f else -1f
-            forEachPixelInBrush(lastX, lastY, radius) { pixelX, pixelY, falloff ->
-                val offsetX = pixelX + 0.5f - lastX
-                val offsetY = pixelY + 0.5f - lastY
+            val direction = if (clockwise) -1f else 1f
+            forEachPixelInBrush(centerX, centerY, radius) { pixelX, pixelY, falloff ->
+                val offsetX = pixelX + 0.5f - centerX
+                val offsetY = pixelY + 0.5f - centerY
                 val pixelDistance = sqrt(offsetX * offsetX + offsetY * offsetY)
                 if (pixelDistance < 0.5f) {
                     map.add(pixelX, pixelY, 0f, 0f)
                 } else {
                     val angle =
                         Math.toRadians(
-                            (anglePerSample * direction * smoothstep(falloff) * effectiveStrength()).toDouble(),
+                            (anglePerSample * direction * smoothstep(falloff) * effectiveStrength() * coverage(pixelX, pixelY)).toDouble(),
                         )
                     val cosA = kotlin.math.cos(angle).toFloat()
                     val sinA = kotlin.math.sin(angle).toFloat()
@@ -211,15 +230,17 @@ object LiquifyTool {
         }
 
         private fun applyRadialScale(
+            centerX: Float,
+            centerY: Float,
             distance: Float,
             pinch: Boolean,
         ) {
             val radius = settings.radius
-            val base = (distance / radius).coerceAtMost(1f) * if (pinch) -0.5f else 0.5f
-            forEachPixelInBrush(lastX, lastY, radius) { pixelX, pixelY, falloff ->
-                val offsetX = pixelX + 0.5f - lastX
-                val offsetY = pixelY + 0.5f - lastY
-                val scale = base * smoothstep(falloff) * effectiveStrength()
+            val base = (distance / radius).coerceAtMost(1f) * if (pinch) 0.5f else -0.5f
+            forEachPixelInBrush(centerX, centerY, radius) { pixelX, pixelY, falloff ->
+                val offsetX = pixelX + 0.5f - centerX
+                val offsetY = pixelY + 0.5f - centerY
+                val scale = base * smoothstep(falloff) * effectiveStrength() * coverage(pixelX, pixelY)
                 map.add(pixelX, pixelY, offsetX * scale, offsetY * scale)
             }
         }
@@ -251,7 +272,71 @@ object LiquifyTool {
             }
         }
 
-        private fun effectiveStrength(): Float = settings.strength.coerceIn(0f, 1f) * settings.pressure.coerceIn(0f, 1f)
+        private fun effectiveStrength(): Float = unit(settings.strength) * samplePressure
+
+        private fun coverage(
+            x: Int,
+            y: Int,
+        ): Float = settings.mask?.alphaAt(y * map.width + x) ?: 1f
+
+        private fun applyReconstruction(
+            centerX: Float,
+            centerY: Float,
+            distance: Float,
+        ) {
+            if (effectiveStrength() <= 0f) return
+            val restored = reconstruction ?: FloatArray(map.width * map.height).also { reconstruction = it }
+            forEachPixelInBrush(centerX, centerY, settings.radius) { px, py, falloff ->
+                val index = py * map.width + px
+                val amount = (smoothstep(falloff) * effectiveStrength() * coverage(px, py) * distance / settings.radius).coerceIn(0f, 1f)
+                if (amount > 0f) {
+                    restored[index] += (1f - restored[index]) * amount
+                    val pixel = IntBounds(px, py, px, py)
+                    reconstructionBounds = reconstructionBounds?.union(pixel) ?: pixel
+                }
+            }
+        }
+
+        /** Reconstruct always reads a fixed pre-liquify reference, never its own previous preview. */
+        fun render(
+            source: PixelBuffer,
+            original: PixelBuffer? = null,
+        ): PixelBuffer {
+            if (settings.mode != Mode.RECONSTRUCT) return retainCoverage(map.apply(source), source)
+            require(source.width == map.width && source.height == map.height) { "Reconstruct dimensions must match the layer" }
+            val out = source.copy()
+            val reference = original ?: return out
+            require(reference.width == source.width && reference.height == source.height) { "Reconstruct reference dimensions must match" }
+            val restored = reconstruction ?: return out
+            for (index in out.pixels.indices) {
+                if (restored[index] >
+                    0f
+                ) {
+                    out.pixels[index] = ImageFilters.lerpArgb(source.pixels[index], reference.pixels[index], restored[index])
+                }
+            }
+            return retainCoverage(out, source)
+        }
+
+        /** Preserve the layer silhouette without inventing colour from zero-alpha samples. */
+        private fun retainCoverage(
+            result: PixelBuffer,
+            source: PixelBuffer,
+        ): PixelBuffer {
+            if (!settings.alphaLock) return result
+            for (index in result.pixels.indices) {
+                val original = source.pixels[index]
+                val candidate = result.pixels[index]
+                val alpha = original ushr 24
+                result.pixels[index] =
+                    if (alpha == 0 || (candidate ushr 24) == 0) {
+                        original
+                    } else {
+                        (candidate and 0x00FFFFFF) or (alpha shl 24)
+                    }
+            }
+            return result
+        }
 
         private fun smoothstep(falloff: Float): Float {
             val t = falloff.coerceIn(0f, 1f)
@@ -265,17 +350,30 @@ object LiquifyTool {
         settings: Settings,
         width: Int,
         height: Int,
-    ): Session = Session(x, y, settings, DisplacementMap(width, height))
+    ): Session {
+        require(x.isFinite() && y.isFinite()) { "Liquify coordinates must be finite" }
+        val count = checkedPixelCount(width, height)
+        require(settings.freezeMask == null || settings.freezeMask.size == count) { "Freeze mask dimensions must match" }
+        require(
+            settings.mask == null || (settings.mask.width == width && settings.mask.height == height),
+        ) { "Selection dimensions must match" }
+        val owned = settings.copy(freezeMask = settings.freezeMask?.copyOf(), mask = settings.mask?.copy())
+        return Session(x, y, owned, DisplacementMap(width, height))
+    }
+
+    private fun unit(value: Float): Float = if (value.isFinite()) value.coerceIn(0f, 1f) else 0f
 
     /** Applies the accumulated displacement to the layer in place. */
     fun commit(
         target: PixelBuffer,
         session: Session,
+        original: PixelBuffer? = null,
     ): IntBounds? {
-        if (session.map.isEmpty()) return null
-        val warped = session.map.apply(target)
+        val bounds = session.dirtyBounds ?: return null
+        val warped = session.render(target, original)
+        if (warped.pixels.contentEquals(target.pixels)) return null
         System.arraycopy(warped.pixels, 0, target.pixels, 0, target.pixels.size)
-        return session.map.dirtyBounds
+        return bounds
     }
 
     /**

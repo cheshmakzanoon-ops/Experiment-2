@@ -157,6 +157,26 @@ original layer/document before asynchronous rasterization; stale commits remain 
 `RasterOverlayTest` covers the pixel math and `CanvasInputDeviceTest` checks real shape/text
 placement, exact undo restoration, feathering, alpha lock and a destination change during rendering.
 
+## Liquify direction and reconstruction repair
+
+Push, twirl, pinch and bloat now use inverse-sampling directions consistent with their visible
+operation. All modes follow the drag path; push strength integrates travel distance rather than
+multiplying by the number of touch events. Live pressure and soft selection coverage scale the
+operation, and gesture-owned masks cannot change underneath a running tool.
+
+Reconstruct now gradually restores the pre-liquify image within the current uninterrupted liquify
+editing context. It remains an undoable pixel edit, honors selection/freeze coverage, and uses a
+fixed reference rather than repeatedly blurring the last preview. Leaving the tool, changing
+layer/frame/dimensions, undo/redo, another document mutation, disposal or reopening invalidates
+that transient reference. It is not persistent liquify history or a smart object. Missing references
+produce an explanatory message without changing artwork/history. Zero-effect pixel drags add no
+undo entry. Monotone document revisions also distinguish a reload that reuses the same IDs.
+
+`LiquifyToolTest` contains pixel-ramp direction checks plus pressure, coverage, freeze, sampling,
+reconstruction and invalid-dimension cases. Additional `CanvasInputDeviceTest` cases exercise
+real-view reconstruction, exact undo, cancellation, stale references and document reloads. Source
+presence is not execution evidence; use the publication's exact completed validation run.
+
 ## Original roadmap gaps
 
 | Goal | Current limitation |
@@ -206,3 +226,22 @@ warning that the effects were baked. This prevents a PSD reader that recomposite
 losing the filtered appearance shown in the editor and stored composite. Filter parameters
 are not exported as editable Photoshop filters. Regression coverage checks the snapshot flag,
 hidden-layer inclusion, and a real Android PSD write/read with visible-layer pixel equality.
+
+## Retouch coverage and sampling repair — September 18, 2026
+
+Smudge, Clone, Healing and Liquify now take alpha-lock from the real layer at gesture start;
+locked zero-alpha pixels and feathered coverage are preserved. Clone/Healing/Smudge stamp
+using source-atop when locked; transparent source samples cannot erase locked artwork.
+Liquify preserves the original silhouette while retaining colour displacement. Changing a
+layer's alpha-lock during an open raster edit invalidates that edit rather than committing
+under an obsolete policy.
+
+Clone's `Sample all layers` switch now selects between the captured composite and the
+original active-layer pixels. Healing samples the active layer. Selection masks are copied
+at pointer-down. Early movement, final pointer-up and cancellation remain queued until an
+asynchronous clone source has been captured, rather than being lost before the tool exists.
+
+Regression tests cover alpha masks, transparent source samples, unlocked controls, empty
+selections, real layer flags, policy changes, clone sampling and immediate-release gestures.
+These repairs do not complete the original roadmap, certify physical-device performance,
+or replace the required publisher and release gates.

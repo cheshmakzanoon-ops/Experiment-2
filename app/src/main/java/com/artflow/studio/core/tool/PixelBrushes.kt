@@ -85,6 +85,7 @@ object PixelBrushes {
                 strength = strength,
                 hardness = settings.hardness,
                 mask = settings.mask,
+                alphaLock = settings.alphaLock,
             )
 
             accumulatedDistance += distance
@@ -240,6 +241,7 @@ object PixelBrushes {
                 strength = settings.opacity,
                 hardness = settings.hardness,
                 mask = settings.mask,
+                alphaLock = settings.alphaLock,
             )
             previewSourceX = sourceX
             previewSourceY = sourceY
@@ -419,6 +421,7 @@ object PixelBrushes {
                 strength = settings.strength,
                 hardness = settings.hardness,
                 mask = settings.mask,
+                alphaLock = settings.alphaLock,
             )
         }
     }
