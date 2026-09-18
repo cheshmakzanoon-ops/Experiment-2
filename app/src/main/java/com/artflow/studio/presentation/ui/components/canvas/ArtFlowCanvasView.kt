@@ -6,12 +6,15 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Typeface
 import android.opengl.GLSurfaceView
+import android.os.Build
 import android.util.AttributeSet
 import android.view.MotionEvent
 import androidx.core.math.MathUtils
+import com.artflow.studio.core.canvas.PointerGestureRouter
 import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.Channels
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.pixels.RasterOverlay
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.symmetry.SymmetryEngine
 import com.artflow.studio.core.text.TextLayout
@@ -159,12 +162,11 @@ class ArtFlowCanvasView
 
         // --- Gesture state ------------------------------------------------------------------------
 
-        private var activePointerId = INVALID_POINTER_ID
+        private val pointerRouter = PointerGestureRouter(TAP_SLOP, TAP_TIMEOUT_MS)
         private var lastPointerX = 0f
         private var lastPointerY = 0f
         private var gestureStartTime = 0L
         private var gestureMoved = 0f
-        private var gestureMaxPointers = 0
         private var gestureTool: ToolType? = null
 
         private var drawing = false
@@ -193,6 +195,7 @@ class ArtFlowCanvasView
         private var pendingPixelCommit = false
         private var pendingPixelCancel = false
         private var pixelOpenJob: Job? = null
+        private var selectionJob: Job? = null
         private var pixelCommitDescription = ""
 
         private var smudgeSession: PixelBrushes.SmudgeSession? = null
@@ -250,6 +253,7 @@ class ArtFlowCanvasView
         }
 
         fun pauseRendering() {
+            cancelActiveGesture()
             if (rendererAttached) onPause()
         }
 
@@ -278,9 +282,26 @@ class ArtFlowCanvasView
         }
 
         fun cancelActiveGesture() {
+            pointerRouter.suppress()
+            resetNavigation()
+            cancelToolInteraction()
+        }
+
+        private fun cancelToolInteraction() {
+            gestureTool = null
+            previewPoints.clear()
+            shapeOrigin = null
+            gradientOrigin = null
             if (drawing) canvasRepository.cancelStroke(currentStrokeId)
             drawing = false
+            cancelPixelInteraction()
+            selectionJob?.cancel()
+            onDragPreview?.invoke(null)
+        }
+
+        private fun cancelPixelInteraction() {
             pixelOpenJob?.cancel()
+            pixelOpenJob = null
             rasterSession?.let { session ->
                 coroutineScope.launch(NonCancellable, start = CoroutineStart.UNDISPATCHED) { canvasRepository.cancelRasterEdit(session) }
             }
@@ -292,7 +313,10 @@ class ArtFlowCanvasView
             pendingSamples.clear()
             pendingPixelCommit = false
             pendingPixelCancel = false
-            onDragPreview?.invoke(null)
+            smudgeSession = null
+            cloneSession = null
+            healingSession = null
+            liquifySession = null
         }
 
         override fun onDetachedFromWindow() {
@@ -310,14 +334,14 @@ class ArtFlowCanvasView
         /** Pushes the whole editor state; cheap enough to call on every recomposition. */
         fun setEditorInput(newInput: EditorInput) {
             val destinationChanged = newInput.tool != input.tool || newInput.strokeDestination != input.strokeDestination
-            if (destinationChanged && (drawing || pixelTool != null)) cancelActiveGesture()
+            if (destinationChanged || newInput.fingerPainting != input.fingerPainting) cancelActiveGesture()
             input = newInput
             canvasRepository.setStrokeColor(newInput.brushColor)
             canvasRepository.setSymmetry(newInput.symmetry)
         }
 
         fun setActiveLayerId(layerId: Long) {
-            if (layerId != activeLayerId && (drawing || pixelTool != null)) cancelActiveGesture()
+            if (layerId != activeLayerId) cancelActiveGesture()
             activeLayerId = layerId
         }
 
@@ -329,6 +353,7 @@ class ArtFlowCanvasView
             backgroundColor: Int,
         ) {
             val dimensionsChanged = width != canvasWidth || height != canvasHeight
+            if (dimensionsChanged) cancelActiveGesture()
             canvasWidth = max(1, width)
             canvasHeight = max(1, height)
             canvasDpi = dpi
@@ -439,17 +464,20 @@ class ArtFlowCanvasView
         }
 
         fun clearSelection() {
+            selectionJob?.cancel()
             canvasRepository.clearSelection()
             onSelectionChanged?.invoke(null, 0)
         }
 
         fun selectAll() {
+            selectionJob?.cancel()
             val mask = SelectionMask(canvasWidth, canvasHeight).apply { selectAll() }
             canvasRepository.setSelection(mask)
             onSelectionChanged?.invoke(mask, mask.selectedPixelCount())
         }
 
         fun invertSelection() {
+            selectionJob?.cancel()
             val mask =
                 canvasRepository.selection()?.copy()
                     ?: SelectionMask(canvasWidth, canvasHeight).apply { selectAll() }
@@ -459,6 +487,7 @@ class ArtFlowCanvasView
         }
 
         fun featherSelection(radius: Int) {
+            selectionJob?.cancel()
             val current = canvasRepository.selection() ?: return
             val feathered = current.feathered(radius)
             canvasRepository.setSelection(feathered)
@@ -474,12 +503,8 @@ class ArtFlowCanvasView
             color: Int,
         ) {
             if (text.isBlank()) return
-            coroutineScope.launch {
-                val buffer =
-                    withContext(Dispatchers.Default) {
-                        rasterizeText(canvasWidth, canvasHeight, x, y, text, style, color)
-                    }
-                applyBufferEdit(buffer, "Text")
+            applyOverlayEdit("Text") { width, height ->
+                rasterizeText(width, height, x, y, text, style, color)
             }
         }
 
@@ -493,23 +518,8 @@ class ArtFlowCanvasView
             color: Int,
             strokeWidth: Float,
         ) {
-            coroutineScope.launch {
-                val buffer =
-                    withContext(Dispatchers.Default) {
-                        buildShapeBuffer(
-                            canvasWidth,
-                            canvasHeight,
-                            kind,
-                            startX,
-                            startY,
-                            endX,
-                            endY,
-                            filled,
-                            color,
-                            strokeWidth,
-                        )
-                    }
-                applyBufferEdit(buffer, "Shape")
+            applyOverlayEdit("Shape") { width, height ->
+                buildShapeBuffer(width, height, kind, startX, startY, endX, endY, filled, color, strokeWidth)
             }
         }
 
@@ -587,7 +597,10 @@ class ArtFlowCanvasView
                     canvasRepository
                         .observeCanvasInvalidation()
                         .onEach { event ->
-                            if (event is CanvasInvalidationEvent.FrameChanged) onionDirty = true
+                            if (event is CanvasInvalidationEvent.FrameChanged) {
+                                cancelActiveGesture()
+                                onionDirty = true
+                            }
                         }.conflate()
                         .collect {
                             // A busy renderer must complete frames instead of cancelling each one
@@ -691,57 +704,86 @@ class ArtFlowCanvasView
         }
 
         override fun onTouchEvent(event: MotionEvent): Boolean {
-            gestureMaxPointers = max(gestureMaxPointers, event.pointerCount)
-
-            // Extra fingers during a stylus stroke are a resting palm, not a new gesture.
-            if (drawing && event.pointerCount > 1) return true
-
-            if (event.pointerCount > 1) {
-                handleNavigation(event)
-                return true
-            }
-
-            val stylusIndex = stylusPointerIndex(event)
-            val isStylus = stylusIndex >= 0
-            val index =
-                if (stylusIndex >= 0) {
-                    stylusIndex
-                } else {
-                    val tracked = activePointerIndex(event)
-                    if (event.actionMasked == MotionEvent.ACTION_MOVE && tracked >= 0) tracked else 0
+            val action =
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> PointerGestureRouter.Event.DOWN
+                    MotionEvent.ACTION_POINTER_DOWN -> PointerGestureRouter.Event.POINTER_DOWN
+                    MotionEvent.ACTION_MOVE -> PointerGestureRouter.Event.MOVE
+                    MotionEvent.ACTION_POINTER_UP -> PointerGestureRouter.Event.POINTER_UP
+                    MotionEvent.ACTION_UP -> PointerGestureRouter.Event.UP
+                    MotionEvent.ACTION_CANCEL -> PointerGestureRouter.Event.CANCEL
+                    else -> return false
                 }
-
-            val x = event.getX(index)
-            val y = event.getY(index)
-
-            return when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> beginGesture(event, index, x, y, isStylus)
-                MotionEvent.ACTION_MOVE -> continueGesture(event, index, x, y)
-                MotionEvent.ACTION_UP -> {
+            if (action == PointerGestureRouter.Event.MOVE) {
+                for (history in 0 until event.historySize) pointerRouter.observe(pointers(event, history))
+            }
+            val samples = pointers(event)
+            val cancelled = Build.VERSION.SDK_INT >= 33 && (event.flags and MotionEvent.FLAG_CANCELED) != 0
+            val route = pointerRouter.route(action, samples, event.actionIndex, event.eventTime, cancelled)
+            if (route.cancelTool) cancelToolInteraction()
+            when (route.action) {
+                PointerGestureRouter.Action.START_TOOL -> {
+                    resetNavigation()
+                    val pointer = samples[route.index]
+                    beginGesture(event, route.index, pointer.x, pointer.y, pointer.stylus)
+                }
+                PointerGestureRouter.Action.MOVE_TOOL -> {
+                    for (history in 0 until event.historySize) {
+                        continueGesture(
+                            event,
+                            route.index,
+                            event.getHistoricalX(route.index, history),
+                            event.getHistoricalY(route.index, history),
+                            history,
+                        )
+                    }
+                    continueGesture(event, route.index, event.getX(route.index), event.getY(route.index))
+                }
+                PointerGestureRouter.Action.END_TOOL -> {
+                    val x = event.getX(route.index)
+                    val y = event.getY(route.index)
+                    // Pointer-up can carry the final segment without an intervening MOVE.
+                    if (x != lastPointerX || y != lastPointerY) continueGesture(event, route.index, x, y)
                     endGesture(event, x, y, cancelled = false)
-                    true
                 }
-                MotionEvent.ACTION_CANCEL -> {
-                    endGesture(event, x, y, cancelled = true)
-                    true
+                PointerGestureRouter.Action.CANCEL -> cancelActiveGesture()
+                PointerGestureRouter.Action.REBASE_NAVIGATION -> {
+                    val remaining =
+                        if (action ==
+                            PointerGestureRouter.Event.POINTER_UP
+                        ) {
+                            samples.filterIndexed { i, _ -> i != event.actionIndex }
+                        } else {
+                            samples
+                        }
+                    rebaseNavigation(remaining)
                 }
-                MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_POINTER_UP -> true
-                else -> false
+                PointerGestureRouter.Action.NAVIGATE -> navigate(samples)
+                PointerGestureRouter.Action.FINISH_NAVIGATION -> {
+                    resetNavigation()
+                    when (route.historyPointers) {
+                        2 -> onUndoRequested?.invoke()
+                        3 -> onRedoRequested?.invoke()
+                    }
+                }
+                PointerGestureRouter.Action.IGNORE -> Unit
             }
+            return true
         }
 
-        private fun stylusPointerIndex(event: MotionEvent): Int {
-            for (i in 0 until event.pointerCount) {
-                val toolType = event.getToolType(i)
-                if (toolType == MotionEvent.TOOL_TYPE_STYLUS || toolType == MotionEvent.TOOL_TYPE_ERASER) {
-                    return i
-                }
+        private fun pointers(
+            event: MotionEvent,
+            history: Int = -1,
+        ): List<PointerGestureRouter.Pointer> =
+            List(event.pointerCount) { index ->
+                val type = event.getToolType(index)
+                PointerGestureRouter.Pointer(
+                    event.getPointerId(index),
+                    if (history < 0) event.getX(index) else event.getHistoricalX(index, history),
+                    if (history < 0) event.getY(index) else event.getHistoricalY(index, history),
+                    type == MotionEvent.TOOL_TYPE_STYLUS || type == MotionEvent.TOOL_TYPE_ERASER,
+                )
             }
-            return -1
-        }
-
-        private fun activePointerIndex(event: MotionEvent): Int =
-            if (activePointerId == INVALID_POINTER_ID) -1 else event.findPointerIndex(activePointerId)
 
         private fun beginGesture(
             event: MotionEvent,
@@ -750,15 +792,13 @@ class ArtFlowCanvasView
             y: Float,
             isStylus: Boolean,
         ): Boolean {
-            activePointerId = event.getPointerId(index)
             lastPointerX = x
             lastPointerY = y
             gestureStartTime = event.eventTime
             gestureMoved = 0f
-            gestureMaxPointers = event.pointerCount
 
-            val tool = input.tool
-            // Palm rejection: a stylus always paints, fingers only when fingerprint painting is on.
+            val tool = if (event.getToolType(index) == MotionEvent.TOOL_TYPE_ERASER) ToolType.ERASER else input.tool
+            // Palm rejection: a stylus always paints, fingers only when finger painting is on.
             if (!isStylus && !input.fingerPainting) {
                 gestureTool = null
                 return true
@@ -794,7 +834,7 @@ class ArtFlowCanvasView
                 ToolType.SELECT_LASSO, ToolType.SELECT_FREEHAND,
                 ->
                     previewPoints = mutableListOf(canvasX to canvasY)
-                else -> Unit // Pant bucket, magic wand, text, eyedropper and zoom act on release.
+                else -> Unit // Paint bucket, magic wand, text, eyedropper and zoom act on release.
             }
             return true
         }
@@ -804,14 +844,17 @@ class ArtFlowCanvasView
             index: Int,
             x: Float,
             y: Float,
+            history: Int = -1,
         ): Boolean {
             val dx = x - lastPointerX
             val dy = y - lastPointerY
             gestureMoved += sqrt(dx * dx + dy * dy)
 
+            lastPointerX = x
+            lastPointerY = y
             val tool = gestureTool ?: return true
             val (canvasX, canvasY) = snapped(event, x, y, index)
-            val pressure = pressureOf(event, index)
+            val pressure = pressureOf(event, index, history)
 
             when (tool) {
                 ToolType.BRUSH, ToolType.ERASER ->
@@ -821,8 +864,8 @@ class ArtFlowCanvasView
                             x = canvasX,
                             y = canvasY,
                             pressure = pressure,
-                            tiltX = tiltOf(event, index),
-                            tiltY = orientationOf(event, index),
+                            tiltX = axisOf(event, index, MotionEvent.AXIS_TILT, history),
+                            tiltY = axisOf(event, index, MotionEvent.AXIS_ORIENTATION, history),
                         )
                         updateLiveStroke()
                     }
@@ -861,18 +904,13 @@ class ArtFlowCanvasView
             y: Float,
             cancelled: Boolean,
         ) {
-            val tool: ToolType =
-                gestureTool ?: run {
-                    activePointerId = INVALID_POINTER_ID
-                    return
-                }
+            val tool = gestureTool ?: return
             val (canvasX, canvasY) = viewToCanvas(x, y)
             val elapsed = event.eventTime - gestureStartTime
             val wasTap = gestureMoved <= TAP_SLOP && elapsed < TAP_TIMEOUT_MS
 
-            activePointerId = INVALID_POINTER_ID
             gestureTool = null
-            val previewedTool = tool
+            val selectionPoints = previewPoints.toList()
             val shapeStart = shapeOrigin
             val gradientStart = gradientOrigin
             previewPoints = mutableListOf()
@@ -891,7 +929,7 @@ class ArtFlowCanvasView
                 ToolType.MOVE, ToolType.TRANSFORM,
                 -> endPixelGesture(cancelled)
                 ToolType.CLONE_STAMP -> {
-                    if (cloneSource == null && wasTap) {
+                    if (!cancelled && cloneSource == null && wasTap) {
                         cloneSource = canvasX to canvasY
                         onCloneSourceChanged?.invoke(canvasX to canvasY)
                         onStatusMessage?.invoke("Clone source set — drag to stamp")
@@ -927,7 +965,7 @@ class ArtFlowCanvasView
                 ToolType.SELECT_RECTANGLE, ToolType.SELECT_ELLIPSE,
                 ToolType.SELECT_FREEHAND, ToolType.SELECT_LASSO,
                 -> {
-                    if (!cancelled) commitSelectionDrag(previewedTool)
+                    if (!cancelled) commitSelectionDrag(tool, selectionPoints)
                     onDragPreview?.invoke(null)
                 }
                 ToolType.ZOOM -> Unit
@@ -939,76 +977,50 @@ class ArtFlowCanvasView
         // Two-finger navigation (pan / zoom / rotate / gesture undo-redo)
         // -----------------------------------------------------------------------------------------
 
-        private fun handleNavigation(event: MotionEvent) {
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
-                    navPrevDistance = spacing(event)
-                    navPrevAngle = angle(event)
-                    navPrevMidX = midpointX(event)
-                    navPrevMidY = midpointY(event)
-                    navAnchor = viewToCanvas(navPrevMidX, navPrevMidY)
-                    if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-                        gestureStartTime = event.eventTime
-                        gestureMoved = 0f
-                    }
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    val distance = spacing(event)
-                    val eventAngle = angle(event)
-                    val midX = midpointX(event)
-                    val midY = midpointY(event)
-                    gestureMoved +=
-                        sqrt(
-                            (midX - navPrevMidX) * (midX - navPrevMidX) +
-                                (midY - navPrevMidY) * (midY - navPrevMidY),
-                        )
+        private fun resetNavigation() {
+            navAnchor = null
+            navPrevDistance = 0f
+        }
 
-                    if (navPrevDistance > 1f && distance > 1f) {
-                        val anchor = navAnchor
-                        if (anchor != null) {
-                            scale = MathUtils.clamp(scale * (distance / navPrevDistance), MIN_SCALE, MAX_SCALE)
-                            rotationDegrees = normalizeDegrees(rotationDegrees + (eventAngle - navPrevAngle))
-                            // Keep the canvas point that was under the fingers pinned to the fingers.
-                            val radians = Math.toRadians(rotationDegrees.toDouble())
-                            val cosR = cos(radians).toFloat()
-                            val sinR = sin(radians).toFloat()
-                            val u = scale * (anchor.first - canvasWidth / 2f)
-                            val v = scale * (anchor.second - canvasHeight / 2f)
-                            offsetX = midX - width / 2f - (u * cosR - v * sinR)
-                            offsetY = midY - height / 2f - (u * sinR + v * cosR)
-                            pushTransform()
-                        }
-                    } else {
-                        offsetX += midX - navPrevMidX
-                        offsetY += midY - navPrevMidY
-                        pushTransform()
-                    }
+        private fun rebaseNavigation(pointers: List<PointerGestureRouter.Pointer>) {
+            resetNavigation()
+            if (pointers.size < 2) return
+            val ordered = pointers.sortedBy { it.id }
+            navPrevDistance = spacing(ordered)
+            navPrevAngle = angle(ordered)
+            navPrevMidX = ordered.map { it.x }.average().toFloat()
+            navPrevMidY = ordered.map { it.y }.average().toFloat()
+            navAnchor = viewToCanvas(navPrevMidX, navPrevMidY)
+        }
 
-                    navPrevDistance = distance
-                    navPrevAngle = eventAngle
-                    navPrevMidX = midX
-                    navPrevMidY = midY
-                    navAnchor = viewToCanvas(midX, midY)
+        private fun navigate(pointers: List<PointerGestureRouter.Pointer>) {
+            if (pointers.size < 2) return // Do not turn a trailing navigation finger into a brush.
+            val ordered = pointers.sortedBy { it.id }
+            val anchor =
+                navAnchor ?: run {
+                    rebaseNavigation(ordered)
+                    return
                 }
-                MotionEvent.ACTION_POINTER_UP -> {
-                    navPrevDistance = 0f
-                    navAnchor = null
-                }
-                MotionEvent.ACTION_UP -> {
-                    val elapsed = event.eventTime - gestureStartTime
-                    if (gestureMoved <= TAP_SLOP && elapsed < TAP_TIMEOUT_MS) {
-                        if (gestureMaxPointers >= 3) onRedoRequested?.invoke() else onUndoRequested?.invoke()
-                    }
-                    gestureMaxPointers = 1
-                    navAnchor = null
-                    navPrevDistance = 0f
-                }
-                MotionEvent.ACTION_CANCEL -> {
-                    gestureMaxPointers = 1
-                    navAnchor = null
-                    navPrevDistance = 0f
-                }
+            val distance = spacing(ordered)
+            val eventAngle = angle(ordered)
+            val midX = ordered.map { it.x }.average().toFloat()
+            val midY = ordered.map { it.y }.average().toFloat()
+            if (navPrevDistance > 1f && distance > 1f) {
+                scale = MathUtils.clamp(scale * (distance / navPrevDistance), MIN_SCALE, MAX_SCALE)
+                rotationDegrees = normalizeDegrees(rotationDegrees + (eventAngle - navPrevAngle))
+                val radians = Math.toRadians(rotationDegrees.toDouble())
+                val cosR = cos(radians).toFloat()
+                val sinR = sin(radians).toFloat()
+                val u = scale * (anchor.first - canvasWidth / 2f)
+                val v = scale * (anchor.second - canvasHeight / 2f)
+                offsetX = midX - width / 2f - (u * cosR - v * sinR)
+                offsetY = midY - height / 2f - (u * sinR + v * cosR)
+            } else {
+                offsetX += midX - navPrevMidX
+                offsetY += midY - navPrevMidY
             }
+            pushTransform()
+            rebaseNavigation(ordered)
         }
 
         // -----------------------------------------------------------------------------------------
@@ -1066,9 +1078,7 @@ class ArtFlowCanvasView
             pressure: Float,
             description: String,
         ) {
-            pixelTool = tool
-            pixelCommitDescription = description
-            cancelActiveGesture()
+            cancelPixelInteraction()
             pixelTool = tool
             pixelCommitDescription = description
             pendingPixelCommit = false
@@ -1230,6 +1240,8 @@ class ArtFlowCanvasView
         private fun commitPixelGesture(cancelled: Boolean) {
             val session = rasterSession ?: return
             val description = pixelCommitDescription
+            val finalLiquify = liquifySession
+            val original = rasterBase
             rasterSession = null
             rasterBuffer = null
             rasterSource = null
@@ -1242,17 +1254,25 @@ class ArtFlowCanvasView
             healingSession = null
             liquifySession = null
             coroutineScope.launch {
-                if (cancelled) {
-                    canvasRepository.cancelRasterEdit(session)
-                } else {
-                    if (!canvasRepository.commitRasterEdit(
-                            session,
-                            description,
-                        )
-                    ) {
-                        onStatusMessage?.invoke("The layer changed; this gesture was discarded")
+                try {
+                    if (!cancelled) {
+                        // The preview is throttled and may omit the final drag sample or a large canvas.
+                        // Commit the complete map off the UI thread, never the last partial preview.
+                        if (finalLiquify != null && original != null) {
+                            withContext(Dispatchers.Default) {
+                                finalLiquify.map
+                                    .apply(original)
+                                    .pixels
+                                    .copyInto(session.buffer.pixels)
+                            }
+                        }
+                        if (!canvasRepository.commitRasterEdit(session, description)) {
+                            onStatusMessage?.invoke("The layer changed; this gesture was discarded")
+                        }
+                        reportHistory()
                     }
-                    reportHistory()
+                } finally {
+                    withContext(NonCancellable) { canvasRepository.cancelRasterEdit(session) }
                 }
             }
         }
@@ -1353,43 +1373,47 @@ class ArtFlowCanvasView
         // Selection
         // -----------------------------------------------------------------------------------------
 
-        private fun commitSelectionDrag(tool: ToolType) {
-            val points = previewPoints.toList()
+        private fun commitSelectionDrag(
+            tool: ToolType,
+            points: List<Pair<Float, Float>>,
+        ) {
             if (points.size < 2) return
             val width = canvasWidth
             val height = canvasHeight
             val mode = input.selectionMode
             val existing = canvasRepository.selection()
-            coroutineScope.launch {
-                val mask =
-                    withContext(Dispatchers.Default) {
-                        when (tool) {
-                            ToolType.SELECT_RECTANGLE ->
-                                SelectionMask.rectangle(
-                                    width,
-                                    height,
-                                    points.first().first,
-                                    points.first().second,
-                                    points.last().first,
-                                    points.last().second,
-                                )
-                            ToolType.SELECT_ELLIPSE ->
-                                SelectionMask.ellipse(
-                                    width,
-                                    height,
-                                    points.first().first,
-                                    points.first().second,
-                                    points.last().first,
-                                    points.last().second,
-                                )
-                            ToolType.SELECT_LASSO -> SelectionMask.polygon(width, height, points)
-                            else -> SelectionMask.fromStroke(width, height, points, radius = 12f)
+            selectionJob?.cancel()
+            selectionJob =
+                coroutineScope.launch {
+                    val mask =
+                        withContext(Dispatchers.Default) {
+                            when (tool) {
+                                ToolType.SELECT_RECTANGLE ->
+                                    SelectionMask.rectangle(
+                                        width,
+                                        height,
+                                        points.first().first,
+                                        points.first().second,
+                                        points.last().first,
+                                        points.last().second,
+                                    )
+                                ToolType.SELECT_ELLIPSE ->
+                                    SelectionMask.ellipse(
+                                        width,
+                                        height,
+                                        points.first().first,
+                                        points.first().second,
+                                        points.last().first,
+                                        points.last().second,
+                                    )
+                                ToolType.SELECT_LASSO -> SelectionMask.polygon(width, height, points)
+                                else -> SelectionMask.fromStroke(width, height, points, radius = 12f)
+                            }
                         }
-                    }
-                val combined = combineSelection(existing, mask, mode)
-                canvasRepository.setSelection(combined)
-                onSelectionChanged?.invoke(combined, combined.selectedPixelCount())
-            }
+                    val combined = combineSelection(existing, mask, mode)
+                    canvasRepository.setSelection(combined)
+                    onSelectionChanged?.invoke(combined, combined.selectedPixelCount())
+                }
         }
 
         private fun magicWandSelect(
@@ -1401,24 +1425,26 @@ class ArtFlowCanvasView
             val tolerance = input.fillTolerance
             val contiguous = input.fillContiguous
             val mode = input.selectionMode
-            coroutineScope.launch {
-                val existing = canvasRepository.selection()
-                val mask =
-                    withContext(Dispatchers.Default) {
-                        val source = canvasRepository.compositeBuffer() ?: return@withContext null
-                        SelectionMask.magicWand(
-                            buffer = source,
-                            startX = cx,
-                            startY = cy,
-                            tolerance = tolerance,
-                            contiguous = contiguous,
-                            respectExistingSelection = existing,
-                        )
-                    } ?: return@launch
-                val combined = combineSelection(existing, mask, mode)
-                canvasRepository.setSelection(combined)
-                onSelectionChanged?.invoke(combined, combined.selectedPixelCount())
-            }
+            selectionJob?.cancel()
+            selectionJob =
+                coroutineScope.launch {
+                    val existing = canvasRepository.selection()
+                    val mask =
+                        withContext(Dispatchers.Default) {
+                            val source = canvasRepository.compositeBuffer() ?: return@withContext null
+                            SelectionMask.magicWand(
+                                buffer = source,
+                                startX = cx,
+                                startY = cy,
+                                tolerance = tolerance,
+                                contiguous = contiguous,
+                                respectExistingSelection = existing,
+                            )
+                        } ?: return@launch
+                    val combined = combineSelection(existing, mask, mode)
+                    canvasRepository.setSelection(combined)
+                    onSelectionChanged?.invoke(combined, combined.selectedPixelCount())
+                }
         }
 
         private fun combineSelection(
@@ -1456,26 +1482,42 @@ class ArtFlowCanvasView
         // Buffer helpers
         // -----------------------------------------------------------------------------------------
 
-        private fun applyBufferEdit(
-            buffer: PixelBuffer,
+        /** Text and shapes are overlays, never replacements for the layer's existing pixels. */
+        private fun applyOverlayEdit(
             description: String,
+            render: (Int, Int) -> PixelBuffer,
         ) {
             val layerId = activeLayerId
-            coroutineScope.launch {
-                val selection = canvasRepository.selection()
-                canvasRepository.applyRasterEdit(layerId, description) { target ->
-                    if (selection == null) {
-                        buffer.pixels.copyInto(target.pixels)
-                    } else {
-                        for (i in target.pixels.indices) {
-                            val coverage = selection.alphaAt(i)
-                            if (coverage <= 0f) continue
-                            val source = buffer.pixels[i]
-                            target.pixels[i] = if (coverage >= 1f) source else Channels.scaleAlpha(source, coverage)
+            val selection = canvasRepository.selection()
+            val alphaLocked = canvasRepository.getAllLayers().firstOrNull { it.id == layerId }?.isAlphaLocked ?: false
+            // Bind the transaction before rasterization yields. Changing layers, frames, documents
+            // or dimensions must not redirect completed work into a different document snapshot.
+            coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                val session = canvasRepository.beginRasterEdit(layerId)
+                if (session == null) {
+                    onStatusMessage?.invoke("This layer cannot be edited right now")
+                    return@launch
+                }
+                try {
+                    val changed =
+                        withContext(Dispatchers.Default) {
+                            RasterOverlay.draw(
+                                session.buffer,
+                                render(session.buffer.width, session.buffer.height),
+                                selection,
+                                alphaLocked,
+                            )
+                        }
+                    if (changed) {
+                        if (canvasRepository.commitRasterEdit(session, description)) {
+                            reportHistory()
+                        } else {
+                            onStatusMessage?.invoke("The document changed before $description could be applied")
                         }
                     }
+                } finally {
+                    withContext(NonCancellable) { canvasRepository.cancelRasterEdit(session) }
                 }
-                reportHistory()
             }
         }
 
@@ -1489,12 +1531,12 @@ class ArtFlowCanvasView
             val height = min(target.height, source.height)
             val width = min(target.width, source.width)
             for (y in 0 until height) {
-                val sourceY = y + dy
+                val sourceY = y - dy
                 if (sourceY < 0 || sourceY >= source.height) continue
                 val targetRow = y * target.width
                 val sourceRow = sourceY * source.width
                 for (x in 0 until width) {
-                    val sourceX = x + dx
+                    val sourceX = x - dx
                     if (sourceX < 0 || sourceX >= source.width) continue
                     target.pixels[targetRow + x] = source.pixels[sourceRow + sourceX]
                 }
@@ -1599,13 +1641,14 @@ class ArtFlowCanvasView
                         }
                         ShapeKind.POLYGON -> {
                             val sides = 6
-                            val radius = max(abs(endX - startX), abs(endY - startY))
+                            val radiusX = abs(endX - startX) / 2f
+                            val radiusY = abs(endY - startY) / 2f
                             val cx = (startX + endX) / 2f
                             val cy = (startY + endY) / 2f
                             for (i in 0 until sides) {
                                 val angle = (i / sides.toFloat()) * 2f * Math.PI.toFloat() - Math.PI.toFloat() / 2f
-                                val px = cx + cos(angle) * radius
-                                val py = cy + sin(angle) * radius
+                                val px = cx + cos(angle) * radiusX
+                                val py = cy + sin(angle) * radiusY
                                 if (i == 0) path.moveTo(px, py) else path.lineTo(px, py)
                             }
                             path.close()
@@ -1614,7 +1657,7 @@ class ArtFlowCanvasView
                 },
                 fillColor = if (filled) color else 0,
                 strokeColor = if (!filled || kind == ShapeKind.LINE) color else 0,
-                strokeWidth = if (kind == ShapeKind.LINE) max(1f, strokeWidth) else 0f,
+                strokeWidth = if (!filled || kind == ShapeKind.LINE) max(1f, strokeWidth) else 0f,
             )
 
         // -----------------------------------------------------------------------------------------
@@ -1661,56 +1704,42 @@ class ArtFlowCanvasView
         private fun pressureOf(
             event: MotionEvent,
             index: Int,
+            history: Int = -1,
         ): Float {
             val toolType = event.getToolType(index)
-            return if (toolType == MotionEvent.TOOL_TYPE_STYLUS || toolType == MotionEvent.TOOL_TYPE_ERASER) {
-                event.getPressure(index).coerceIn(MIN_PRESSURE, 1f)
-            } else {
-                // Fingers report contact size rather than pressure; use it as a gentle proxy.
-                (0.35f + min(1f, event.getSize(index) * 3f) * 0.65f).coerceIn(MIN_PRESSURE, 1f)
-            }
+            val pressure = if (history < 0) event.getPressure(index) else event.getHistoricalPressure(index, history)
+            val size = if (history < 0) event.getSize(index) else event.getHistoricalSize(index, history)
+            val value =
+                if (toolType == MotionEvent.TOOL_TYPE_STYLUS || toolType == MotionEvent.TOOL_TYPE_ERASER) {
+                    pressure
+                } else {
+                    0.35f + min(1f, size * 3f) * 0.65f
+                }
+            return if (value.isFinite()) value.coerceIn(MIN_PRESSURE, 1f) else 1f
         }
 
-        private fun tiltOf(
+        private fun axisOf(
             event: MotionEvent,
             index: Int,
+            axis: Int,
+            history: Int,
         ): Float {
-            if (event.getToolType(index) != MotionEvent.TOOL_TYPE_STYLUS) return 0f
-            return event.getAxisValue(MotionEvent.AXIS_TILT, index)
+            val type = event.getToolType(index)
+            if (type != MotionEvent.TOOL_TYPE_STYLUS && type != MotionEvent.TOOL_TYPE_ERASER) return 0f
+            val value = if (history < 0) event.getAxisValue(axis, index) else event.getHistoricalAxisValue(axis, index, history)
+            return if (value.isFinite()) value else 0f
         }
 
-        private fun orientationOf(
-            event: MotionEvent,
-            index: Int,
-        ): Float {
-            if (event.getToolType(index) != MotionEvent.TOOL_TYPE_STYLUS) return 0f
-            return event.getAxisValue(MotionEvent.AXIS_ORIENTATION, index)
-        }
-
-        private fun spacing(event: MotionEvent): Float {
-            if (event.pointerCount < 2) return 0f
-            val dx = event.getX(0) - event.getX(1)
-            val dy = event.getY(0) - event.getY(1)
+        private fun spacing(pointers: List<PointerGestureRouter.Pointer>): Float {
+            val dx = pointers[0].x - pointers[1].x
+            val dy = pointers[0].y - pointers[1].y
             return sqrt(dx * dx + dy * dy)
         }
 
-        private fun angle(event: MotionEvent): Float {
-            if (event.pointerCount < 2) return 0f
-            val dx = event.getX(0) - event.getX(1)
-            val dy = event.getY(0) - event.getY(1)
+        private fun angle(pointers: List<PointerGestureRouter.Pointer>): Float {
+            val dx = pointers[0].x - pointers[1].x
+            val dy = pointers[0].y - pointers[1].y
             return Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()
-        }
-
-        private fun midpointX(event: MotionEvent): Float {
-            var sum = 0f
-            for (i in 0 until event.pointerCount) sum += event.getX(i)
-            return sum / event.pointerCount
-        }
-
-        private fun midpointY(event: MotionEvent): Float {
-            var sum = 0f
-            for (i in 0 until event.pointerCount) sum += event.getY(i)
-            return sum / event.pointerCount
         }
 
         private fun normalizeDegrees(value: Float): Float {
@@ -1719,7 +1748,6 @@ class ArtFlowCanvasView
         }
 
         companion object {
-            private const val INVALID_POINTER_ID = -1
             private const val MIN_SCALE = 0.05f
             private const val MAX_SCALE = 32f
             private const val TAP_SLOP = 24f

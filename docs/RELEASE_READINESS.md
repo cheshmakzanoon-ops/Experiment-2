@@ -123,6 +123,40 @@ No signing key, Play Console approval, physical-device campaign or unconditional
 operation is claimed by this repository. An internal testing candidate and a public production
 release are different deliverables.
 
+## Pointer and drag repair candidate — September 18, 2026
+
+The input repair tracks the owning pointer by ID rather than assuming array index zero.
+Stylus and hardware-eraser strokes continue alongside resting fingers; owner cancellation
+(including Android 13+ `FLAG_CANCELED`) discards provisional ink. Extra fingers cancel a
+finger-painted stroke before navigation, and trailing navigation fingers cannot become paint.
+Two-/three-finger history taps finish only on the last pointer-up; pinch, rotation, long holds,
+batched movement and cancelled streams are not history taps. Tool/destination/layer changes,
+frame switches and rendering pause cancel in-flight tool interactions.
+
+Selection geometry survives pointer-up cleanup, and pointer-up contributes the final drag segment.
+Clearing a selection cancels its pending computation. Cancelled clone-source taps no longer set a
+source. Move drags follow the pointer rather than its inverse. Unfilled shapes have visible outlines,
+polygons fit their drag bounds, and liquify commits the complete displacement map rather than the
+last throttled preview. Batched stylus samples and pressure are replayed in order.
+
+Regression sources: `PointerGestureRouterTest` exercises pure pointer routing and history-tap
+classification; `CanvasInputDeviceTest` drives real Android MotionEvents through the canvas view
+and document for selections, painting, cancellation, navigation, hardware erasing, move, shape and
+liquify behavior. The latter uses synthetic input, not a physical stylus/device certification.
+The publication commit identifies the candidate tree and the exact CI run; only that run's completed
+gates provide execution evidence. None of these repairs resolves the outstanding roadmap and
+publisher/device gates below.
+
+## Overlay preservation repair
+
+Text and shape placement now composite source-over onto the existing layer instead of replacing
+its entire raster. Transparent glyph/shape backgrounds leave prior artwork unchanged; feathered
+selections multiply source coverage without erasing the backdrop. Alpha-locked layers retain their
+original coverage. Empty overlays create no undo entry. The raster transaction is bound to the
+original layer/document before asynchronous rasterization; stale commits remain rejected.
+`RasterOverlayTest` covers the pixel math and `CanvasInputDeviceTest` checks real shape/text
+placement, exact undo restoration, feathering, alpha lock and a destination change during rendering.
+
 ## Original roadmap gaps
 
 | Goal | Current limitation |
