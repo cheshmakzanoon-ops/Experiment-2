@@ -1,116 +1,94 @@
 # ArtFlow — Digital Art Studio for Android
 
 A native, offline painting studio built with **Kotlin, Jetpack Compose and a shared pixel engine**.
-Create artwork, paint with pressure-sensitive brushes, compose layers and masks, animate frames,
-and save or export real documents.
+Paint with pressure-sensitive brushes, compose layers and masks, animate frames, and save or export real documents.
 
 **Working editor. Not yet Procreate-equivalent or approved for a production release.**
-A similar appearance, passing builds or a long feature list do not prove equivalent drawing feel,
-reliability or usability. The [Procreate workflow comparison](docs/PROCREATE_PARITY.md) records
-what remains; [release readiness](docs/RELEASE_READINESS.md) records the separate distribution gates.
+The [Procreate comparison](docs/PROCREATE_PARITY.md) separates implemented workflows from missing capabilities.
+[Release readiness](docs/RELEASE_READINESS.md) tracks the separate distribution requirements.
 
-## New: Brush Studio
+## Latest improvement: Brush Studio follow-through
 
-Open **Brush** in the editor for three connected workspaces:
+Brush Studio now clears search focus when a preset or another tab is chosen, gives the complete
+**Drawing pad** label room to wrap, and preserves the practice surface's aspect ratio instead of
+stretching test marks. The pending fixes from the previous work session are included, not abandoned.
+The API 26 drawing-pad regression now checks actual whole-screen pixels using accessibility bounds:
+Compose's dialog-only capture API does not support API 26. It checks blank → painted → cleared pixels
+without skipping that device or dropping the assertion. Formatting and complexity findings are fixed
+without changing analysis rules or baselines. This revision requires its own complete CI run.
 
-| Workspace | What you can do |
-| --- | --- |
-| **Library** | Search eight original starter presets, filter Sketch / Ink / Texture / Paint, and compare real-engine stroke samples. |
-| **Settings** | Edit size, opacity, spacing, smoothing, pressure curves, taper, grains, scatter, jitter, rotation and wet mix. Tap a displayed value for exact numerical entry. |
-| **Drawing pad** | Test your own marks without touching the artwork. Change settings and return to see the same marks re-rendered with the new brush. Clear the pad independently. |
+## Brush Studio
 
-Edits are **staged**: **Use brush** applies the draft; Close, Back or outside dismissal discards it.
-**Restore initial** restores the settings present when the studio opened. Applying selects the
-painting tool while preserving an already-active brush mask destination. Selecting a preset or
-scribbling on the pad does not create document edits or undo entries. The studio cancels an active
-canvas gesture before opening, and its settings area scrolls within the available screen.
+Open **Brush** in the editor. **Library** searches eight original starter presets and filters
+Sketch, Ink, Texture and Paint, with samples rendered by the painting engine. **Settings** edits
+size, opacity, spacing, smoothing, pressure curves, taper, procedural grain, scatter, jitter,
+rotation and wet mix. Tap a displayed value for exact numeric entry. **Drawing pad** tests your own
+marks without touching the artwork; return after changing settings to see those marks re-rendered.
 
-Numerical entry supports decimal points and decimal commas. Percentage values map to the engine's
-0–1 ranges. Invalid/out-of-range entries cannot be confirmed; count and integer rotation controls
-reject fractional values. Validation does not silently replace an invalid entry with a boundary.
+Changes remain a **draft** until **Use brush**. Close, Back or outside dismissal discards the draft;
+**Restore initial** restores the opening parameters. Applying selects Brush and preserves an
+already-active brush mask destination. Preset selection and practice strokes do not alter document
+pixels or undo history. Opening the studio cancels an active canvas gesture.
 
-The presets are ArtFlow-authored starting points, **not** Procreate assets or an artist-validated
-professional brush collection. Samples and practice marks use the real `StrokeRasterizer` on a
-worker dispatcher. The practice surface is **320×180**, keeps the last **8 strokes**, caps each at
-**128 points**, and fits brush sizes to **48 preview pixels**. It is not a full-resolution canvas or
-a physical stylus benchmark. Custom preset persistence/import, imported shapes/grains, dual brushes
-and a comparable curated brush library remain unfinished.
+Numeric entry accepts decimal points/commas, maps percentages to engine values, rejects out-of-range
+values, and rejects fractions for integer controls. The practice buffer is **320×180**, retains the
+last **8 strokes**, caps each at **128 points**, and limits preview brush sizes to **48 pixels**.
+These are preview limits, not document limits. Presets are original starting points, not Procreate
+assets or a professionally validated equivalent library. Custom preset persistence, imported
+shape/grain textures and dual brushes remain unfinished.
 
-## Other recent studio improvements
+## Studio workflows
 
-**Canvas-first controls.** Brush, Smudge and Eraser stay in the compact dock. **All tools** expands
-the collection; a selected secondary tool stays visible afterwards. **Workspace menu → Focus mode**
-hides editor bars without replacing the GL drawing surface. A visible exit control or Android Back
-restores the workspace before an unsaved-document prompt. Titles truncate rather than crowding controls.
+**Workspace.** Brush, Smudge and Eraser stay in a compact dock; All tools exposes the other tools.
+Focus mode hides the bars without replacing the drawing surface. A visible exit button or Android
+Back restores the workspace before the unsaved-document prompt. Guides, Animation, Canvas and Text
+have actual menu routes and explicit close controls.
 
-**Reference companion.** **Workspace menu → Reference image → Choose image** opens the Android
-picker. Drag the window header, pan/pinch the image, use zoom/fit, and sample with pick mode or a
-long press. A centre-sample accessibility action is available. Preview dimensions are bounded to
-1024 pixels per axis; letterboxing cannot supply false colour samples. Only granted `content://`
-images are decoded, without new storage/network permissions. References do not enter layers or
-exports. Source embedding, indefinite URI grants, manual window resizing and a live canvas reference
-are not implemented; sampling is from the decoded preview, not an ICC-managed full-size source.
+**Reference.** Choose an image through the Android picker, drag its floating window, pan/pinch the
+image, zoom/fit and sample colours by long press or pick mode. A centre-sample accessibility action
+is available. Decoding is limited to a 1024-pixel preview per axis. Only granted content URIs are
+accepted; references never enter layers, history or exports. Source embedding, indefinite grants,
+live canvas references and manual window resizing are not implemented.
 
-**Connected editing workflows.** Guides, Animation, Canvas and Text now have actual workspace-menu
-routes and explicit close buttons. Text follows **edit → Place on canvas → tap position → confirm**;
-cancelling an anchor does not stamp text. Layers display topmost-first with working up/down ordering
-and an opacity control on the active row. Canvas background state follows edits and undo/redo rather
-than always showing white. Large-target preferences and named controls improve accessibility.
+**Layers and text.** Layers display topmost-first with working up/down ordering, visibility,
+opacity, blending, alpha lock, clipping, masks, adjustments and filters. Text uses
+edit → Place on canvas → tap position → confirm; cancelling an anchor does not stamp text.
+Canvas background state follows the document through edits and undo/redo.
 
-## Capabilities and limits
+## Capability boundaries
 
-| Area | Implemented | Still missing or unverified |
+| Area | Available | Important gaps |
 | --- | --- | --- |
-| Painting | Pressure, smoothing/taper, flow, wet mix, jitter/scatter, procedural grains, custom monotone pressure response, draft Brush Studio and test pad | Imported/dual textures, persistent custom preset management and measured physical-stylus parity |
-| Tools | Brush, eraser, smudge, clone, healing, liquify, bucket, gradients, text and shapes | Shape tools are not QuickShape recognition; no ColorDrop-style drag workflow |
-| Selections | Rectangle, ellipse, freehand/lasso, magic wand, boolean combining, invert and feather | Equivalent selection ergonomics and reusable saved selections |
-| Transform | MOVE/TRANSFORM drag translation | Interactive rotate/scale/skew/perspective/warp/snapping with preview/apply/cancel |
-| Layers | Add/remove/duplicate/reorder, visibility, opacity, blending, alpha lock, clipping, masks, adjustments and filters | Nested groups, linking UI and fill-reference layer workflow |
-| Colour and guides | Wheel, RGB/HSV/CMYK controls, hex, harmonies, palettes, symmetry and perspective | CMYK sliders are not ICC-managed painting or print fidelity |
-| Canvas | Resize/crop/rotate/flip, trim, DPI and background controls | Large-document performance and broader device validation |
-| Animation | Frames, duplication/order/duration/FPS, onion skin, playback and animated exports | Drawing-process timelapse, Page Assist and 3D painting |
-| Documents | Atomic `.artflow` storage, pixels/masks/frames, thumbnails, autosave and recovery | Broader process-death, low-storage and long-session acceptance |
-| Export | PNG, JPEG, WebP, PDF, PSD, GIF, MP4, frame-sequence ZIP; gallery, picker and sharing | PSD import and broader external-application interoperability fixtures |
+| Painting | Pressure/dynamics, smoothing, taper, flow, wet mix, jitter, three procedural grains, staged Brush Studio | Persistent custom presets, imported/dual textures, curated-library and stylus-feel parity |
+| Tools | Brush, eraser, smudge, clone, healing, liquify, bucket, gradients, text and shapes | QuickShape recognition and ColorDrop-style interaction |
+| Selections | Rectangle/ellipse/lasso/wand, combine/invert/feather | Saved selections and equivalent gesture ergonomics |
+| Transform | MOVE/TRANSFORM translation | Interactive scale/rotate/distort/warp/snapping with preview/apply/cancel |
+| Layers | Pixel/mask/effect workflows and reorder | Nested groups, linking UI and fill-reference workflow |
+| Colour | Wheel, RGB/HSV/CMYK controls, palettes, harmonies | ICC-managed working spaces and print fidelity; CMYK sliders are not colour management |
+| Animation | Frames, duration/FPS, onion skin, playback and animated export | Drawing timelapse, Page Assist and 3D painting |
+| Documents | Atomic `.artflow` saves, thumbnails, autosave and recovery | Broader interruption, low-storage and long-session acceptance |
+| Export | PNG/JPEG/WebP/PDF/PSD/GIF/MP4 and frame-sequence ZIP; picker/gallery/sharing | PSD import and broader external interoperability fixtures |
 
 Cloud collaboration and smart objects are separate roadmap ideas, not asserted Procreate features.
-The app declares no internet permission; analytics and crash telemetry are deliberately absent.
-A missing telemetry service is not a painting-quality defect.
+No internet permission, analytics or crash telemetry is added.
 
-## Architecture and artwork safety
+## Architecture and safety
 
-```text
-app/src/main/java/com/artflow/studio/
-├── core/           Pixel buffers, strokes, compositing, tools, guides and codecs
-├── domain/         Models, original brush presets and repository contracts
-├── data/           Room, atomic document storage, repositories, rendering and export
-├── di/             Hilt modules
-└── presentation/   Compose screens/components, ViewModels and ArtFlowCanvasView
+`core/` holds pixels, strokes, compositing, tools, guides and codecs. `domain/` holds models and
+repository contracts. `data/` contains Room metadata, atomic artwork storage, repositories and
+export. `presentation/` contains Compose screens, ViewModels and `ArtFlowCanvasView`; `di/` uses Hilt.
+The stack also uses Coroutines/Flow, kotlinx.serialization, Coil, Navigation Compose and Timber.
 
-app/src/test/         JVM regression suites
-app/src/androidTest/  Real input, storage, rendering, export and Compose regressions
-.github/              CI, artifact validation and diagnostic collection
-```
+Strokes/composition run CPU-side on `PixelBuffer`; OpenGL ES 2.0 displays the result. This is not
+Vulkan. The C++ prototype is not built or packaged. Provisional edits remain separate from committed
+artwork. Destructive edits prepare replacements before one undo commit, reject stale sessions and
+refuse unsupported backdrop-dependent merges. History is snapshot-based, not unbounded.
 
-`StrokeRasterizer` paints CPU-side `PixelBuffer` data. `Compositor` applies blending, opacity,
-clipping, masks, adjustments and filters; `OpenGLCanvasRenderer` displays the result through
-**OpenGL ES 2.0**. This is not Vulkan. The C++ source in `app/src/main/jni` is an unintegrated
-prototype, not built or packaged. ViewModels use repository interfaces directly; there is no
-separate use-case layer. Room stores metadata; `.artflow` stores artwork data. The stack also uses
-Coroutines/Flow, kotlinx.serialization, Hilt, Coil, Navigation Compose and Timber.
+## Build and verify
 
-Provisional edits are separate from committed artwork; saving/exporting reads committed content.
-Destructive operations prepare replacements before one undo commit, reject stale edit sessions,
-and refuse unsupported backdrop-dependent merges instead of silently changing the image. Empty
-selections select nothing. Canvas transforms retain legacy vector ink and masks across animation
-frames. History is snapshot-based, not a proven unbounded-memory system. Reference images and the
-Brush Studio practice surface are deliberately outside document history.
-
-## Build and verification
-
-Use **JDK 17**, the committed **Gradle 8.14.3** wrapper, Android SDK **36** and platform-tools.
-Set `ANDROID_HOME` or a git-ignored `local.properties` with `sdk.dir=...`. Android Studio must
-support AGP 8.10.1. Normal builds require no NDK or `-PnoNativeBuild`. Minimum Android is **API 26**;
-compile/target SDK is 36. On Windows use `gradlew.bat`.
+Use **JDK 17**, committed **Gradle 8.14.3**, SDK **36**, platform-tools and AGP 8.10.1-compatible Android
+Studio. Set `ANDROID_HOME` or an ignored `local.properties` with `sdk.dir`. Minimum Android is API 26.
+No NDK is required. On Windows substitute `gradlew.bat`.
 
 ```bash
 ./gradlew testDebugUnitTest ktlintCheck detekt lintDebug lintRelease
@@ -120,30 +98,16 @@ python -m unittest discover -s .github/scripts -p 'test_*.py'
 python .github/scripts/verify_android_artifacts.py app/build/outputs/apk/debug/app-debug.apk app/build/outputs/bundle/release/app-release.aab
 ```
 
-CI retains all five device configurations: API 26, API 35/16 KB, API 36/4 KB, an independent
-API 35/16 KB repeat and API 36/16 KB. Each includes the instrumentation suite and minified launch.
-`benchmark` is a release-like smoke-test variant, **not** a performance benchmark suite.
+CI retains API 26, API 35/16 KB, API 36/4 KB, an independent API 35/16 KB repeat and API 36/16 KB,
+plus minified launch checks. `benchmark` is a release-like smoke-test variant, not a performance suite.
+Read completed reports for the **exact commit**. Existing detekt baselines, lint warnings and physical
+latency/artist-validation gaps are not erased by a passing build. `TestEvidence` stores running-app
+captures via UTP's `additionalTestOutputDir`; CI archives `connected_android_test_additional_output`.
 
-The Brush Studio milestone adds seven shared core/JUnit checks and UI tests for search, staged
-apply/cancel/reset, exact values, drawing-pad retention/cancellation and bounded history. The real
-artwork workflow also tests that practice does not alter canvas pixels or undo depth. Local
-standalone compilation executed the actual brush renderer/math with compile-only platform adapters;
-all seven groups passed, as did 30 Python verifier tests. This is not a substitute for exact-commit
-Gradle, JUnit, Android or static-analysis results.
+## Signed releases
 
-Prior candidate `68d29a3` passed its JVM step after repairing asynchronous metadata-test timing;
-remaining formatting findings in reference/evidence code were corrected without suppressing rules.
-Consult the **completed run for the exact revision** before calling a candidate verified. Failed
-attempts remain documented in the [comparison register](docs/PROCREATE_PARITY.md).
-
-`detekt` retains the existing baseline. A pass does not erase historical findings, Android lint
-warnings or untested device conditions. `TestEvidence` saves actual screenshots through UTP's
-`additionalTestOutputDir`; CI archives `connected_android_test_additional_output`. These are running
-app captures, not design mockups. Emulator results do not establish physical latency or artist approval.
-
-## Signed release candidates
-
-Keep the upload keystore outside Git. Put private signing inputs in ignored `keystore.properties`:
+Keep signing keys outside Git and preserve the upload-key identity of an existing Play app. Store
+private signing inputs in ignored root `keystore.properties`:
 
 ```properties
 storeFile=/absolute/path/to/private-upload-key.jks
@@ -152,29 +116,21 @@ keyAlias=YOUR_UPLOAD_ALIAS
 keyPassword=YOUR_PRIVATE_KEY_PASSWORD
 ```
 
-Relative `storeFile` paths resolve from the repository root. Preserve the upload-key identity for
-an existing Play app. Never commit keys/passwords. Require signing explicitly:
-
 ```bash
 ./gradlew bundleRelease -PrequireReleaseSigning=true
 ```
 
-This rejects missing signing inputs. A normal unsigned CI AAB is **not** a Play-upload-ready release.
-Verify the final signature, application ID/version, generated splits and Play Console requirements.
-The artifact verifier does not replace runtime 16 KB testing or distribution review.
+The production command rejects missing signing inputs. Unsigned CI bundles are not Play-upload-ready.
+Verify signatures, application ID/version, generated splits and Play Console requirements separately.
 
 ## Documentation and privacy
 
-[Procreate comparison](docs/PROCREATE_PARITY.md) · [Release readiness](docs/RELEASE_READINESS.md) ·
-[Original plan](agent.md) · [Store listing](docs/play-listing.md) ·
-[Privacy policy](docs/privacy-policy.md) · [Contributing](CONTRIBUTING.md)
+[Comparison](docs/PROCREATE_PARITY.md) · [Readiness](docs/RELEASE_READINESS.md) · [Original plan](agent.md) ·
+[Store listing](docs/play-listing.md) · [Privacy](docs/privacy-policy.md) · [Contributing](CONTRIBUTING.md)
 
-The privacy policy is available offline in Settings. Android backup/transfer follows the device
-owner's settings and may use their cloud account. External apps/providers can handle exported files.
-The publisher still needs to complete Play's Data safety declarations.
-
-Update this README and the comparison register with every landed improvement, including limits and
-executed evidence. A class, placeholder control or unexecuted test is not a completed workflow.
+The privacy policy is also available offline in Settings. Android backup/transfer follows the device
+owner's settings; external providers/apps may handle exports. Complete Play Data safety declarations.
+Every landed improvement must update this README with its limits and executed evidence.
 
 ## License
 

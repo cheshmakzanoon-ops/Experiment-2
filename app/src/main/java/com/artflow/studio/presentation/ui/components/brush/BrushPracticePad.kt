@@ -59,7 +59,8 @@ fun BrushPracticePad(
     }
 
     fun point(event: MotionEvent): StrokePoint? {
-        if (size.width <= 0 || size.height <= 0 || !event.x.isFinite() || !event.y.isFinite()) return null
+        if (size.width <= 0 || size.height <= 0) return null
+        if (!event.x.isFinite() || !event.y.isFinite()) return null
         return StrokePoint(
             x = (event.x / size.width * BrushPractice.WIDTH).coerceIn(0f, BrushPractice.WIDTH.toFloat()),
             y = (event.y / size.height * BrushPractice.HEIGHT).coerceIn(0f, BrushPractice.HEIGHT.toFloat()),
@@ -84,51 +85,53 @@ fun BrushPracticePad(
                 onChange(emptyList())
             }) { Text("Clear pad") }
         }
-        Canvas(
-            Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color(BrushPractice.PAPER))
-                .onSizeChanged {
-                    if (size != it) active = null
-                    size = it
-                }.testTag("brush-practice-pad")
-                .semantics {
-                    contentDescription = "Brush practice pad"
-                    stateDescription = "${strokes.size} test strokes; not part of artwork"
-                }.pointerInteropFilter { event ->
-                    when (event.actionMasked) {
-                        MotionEvent.ACTION_DOWN -> {
-                            suppress = false
-                            point(event)?.let {
-                                active =
-                                    Stroke(
-                                        id = (latestStrokes.lastOrNull()?.id ?: 0L) + 1L,
-                                        points = listOf(it),
-                                        brushParams = latestParameters,
-                                        layerId = 0L,
-                                        color = BrushPractice.INK,
-                                        timestamp = 0L,
-                                    )
+        Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+            Canvas(
+                Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(BrushPractice.WIDTH.toFloat() / BrushPractice.HEIGHT)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(BrushPractice.PAPER))
+                    .onSizeChanged {
+                        if (size != it) active = null
+                        size = it
+                    }.testTag("brush-practice-pad")
+                    .semantics {
+                        contentDescription = "Brush practice pad"
+                        stateDescription = "${strokes.size} test strokes; not part of artwork"
+                    }.pointerInteropFilter { event ->
+                        when (event.actionMasked) {
+                            MotionEvent.ACTION_DOWN -> {
+                                suppress = false
+                                point(event)?.let {
+                                    active =
+                                        Stroke(
+                                            id = (latestStrokes.lastOrNull()?.id ?: 0L) + 1L,
+                                            points = listOf(it),
+                                            brushParams = latestParameters,
+                                            layerId = 0L,
+                                            color = BrushPractice.INK,
+                                            timestamp = 0L,
+                                        )
+                                }
                             }
-                        }
-                        MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_CANCEL -> {
-                            active = null
-                            suppress = true
-                        }
-                        MotionEvent.ACTION_MOVE -> if (!suppress) append(event)
-                        MotionEvent.ACTION_UP ->
-                            if (!suppress) {
-                                append(event)
-                                active?.let { onChange((latestStrokes + it).takeLast(BrushPractice.MAX_STROKES)) }
+                            MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_CANCEL -> {
                                 active = null
+                                suppress = true
                             }
-                    }
-                    true
-                },
-        ) {
-            image?.let { drawImage(it, dstSize = IntSize(size.width.toInt(), size.height.toInt())) }
+                            MotionEvent.ACTION_MOVE -> if (!suppress) append(event)
+                            MotionEvent.ACTION_UP ->
+                                if (!suppress) {
+                                    append(event)
+                                    active?.let { onChange((latestStrokes + it).takeLast(BrushPractice.MAX_STROKES)) }
+                                    active = null
+                                }
+                        }
+                        true
+                    },
+            ) {
+                image?.let { drawImage(it, dstSize = IntSize(size.width.toInt(), size.height.toInt())) }
+            }
         }
         Text(
             "Test only · Last 8 strokes · Preview size capped at 48 px",

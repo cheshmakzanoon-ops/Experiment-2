@@ -6,12 +6,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artflow.studio.core.render.BrushPractice
@@ -41,6 +40,7 @@ class BrushStudioUiTest {
         }
         compose.onNodeWithText("Search brushes").performTextInput("fine liner")
         compose.onNodeWithText("Fine liner").performClick()
+        compose.onNodeWithText("Search brushes").assertIsNotFocused()
         compose.runOnIdle { assertNull(applied) }
         TestEvidence.screenshot("studio-brush-library.png")
         compose.onNodeWithContentDescription("Cancel brush changes").performClick()
@@ -89,6 +89,9 @@ class BrushStudioUiTest {
                 if (open) BrushStudioDialog(BrushParams(), { applied.add(it) }, { open = false })
             }
         }
+        val layouts = mutableListOf<TextLayoutResult>()
+        compose.onNodeWithText("Drawing pad").performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertFalse("The full Drawing pad label must fit", layouts.single().hasVisualOverflow)
         compose.onNodeWithText("Search brushes").performTextInput("fine liner")
         compose.onNodeWithText("Fine liner").performClick()
         compose.onNodeWithText("Use brush").performClick()
@@ -137,6 +140,7 @@ class BrushStudioUiTest {
             MaterialTheme { BrushStudioDialog(BrushParams(), { applied = it }, {}) }
         }
         compose.onNodeWithText("Drawing pad").performClick()
+        awaitPracticePixels(blank = true)
         compose.onNodeWithTag("brush-practice-pad").performTouchInput {
             swipe(Offset(width * 0.2f, height * 0.5f), Offset(width * 0.8f, height * 0.5f))
         }
@@ -148,16 +152,12 @@ class BrushStudioUiTest {
             .performSemanticsAction(SemanticsActions.SetProgress) { it(0.4f) }
         compose.onNodeWithText("Drawing pad").performClick()
         assertStrokes(1)
-        compose.waitUntil(10_000) {
-            val pixels = compose.onNodeWithTag("brush-practice-pad").captureToImage().toPixelMap()
-            (pixels.width / 3 until pixels.width * 2 / 3).any { x ->
-                pixels[x, pixels.height / 2].toArgb() != BrushPractice.PAPER
-            }
-        }
+        awaitPracticePixels(blank = false)
         TestEvidence.screenshot("studio-brush-pad.png")
         compose.runOnIdle { assertNull(applied) }
         compose.onNodeWithText("Clear pad").performClick()
         assertStrokes(0)
+        awaitPracticePixels(blank = true)
         compose.onNodeWithText("Use brush").performClick()
         compose.runOnIdle { assertEquals(0.4f, requireNotNull(applied).spacing, 0.001f) }
     }
@@ -169,6 +169,8 @@ class BrushStudioUiTest {
             MaterialTheme { BrushPracticePad(BrushParams(), strokes, { strokes = it }, Modifier.widthIn(max = 320.dp).height(400.dp)) }
         }
         val pad = compose.onNodeWithTag("brush-practice-pad")
+        val bounds = pad.getUnclippedBoundsInRoot()
+        assertEquals(320f / 180f, bounds.width.value / bounds.height.value, 0.02f)
         pad.performTouchInput {
             down(center)
             moveTo(Offset(width * 0.8f, height * 0.5f))
@@ -178,6 +180,13 @@ class BrushStudioUiTest {
         repeat(10) { pad.performTouchInput { click(center) } }
         assertStrokes(8)
         compose.runOnIdle { assertTrue(strokes.all { it.points.size <= 128 }) }
+    }
+
+    private fun awaitPracticePixels(blank: Boolean) {
+        compose.waitUntil(10_000) {
+            val pixels = TestEvidence.centreRowColors("Brush practice pad")
+            pixels != null && if (blank) pixels.all { it == BrushPractice.PAPER } else pixels.any { it != BrushPractice.PAPER }
+        }
     }
 
     private fun assertStrokes(count: Int) {

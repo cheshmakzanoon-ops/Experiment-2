@@ -15,7 +15,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -37,8 +39,15 @@ fun BrushStudioDialog(
     var applying by remember { mutableStateOf(false) }
     var strokes by remember { mutableStateOf<List<Stroke>>(emptyList()) }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        val focusManager = LocalFocusManager.current
         Surface(
-            modifier = Modifier.padding(12.dp).widthIn(max = 900.dp).fillMaxWidth().heightIn(max = 760.dp).fillMaxHeight(0.94f),
+            modifier =
+                Modifier
+                    .padding(12.dp)
+                    .widthIn(max = 900.dp)
+                    .fillMaxWidth()
+                    .heightIn(max = 760.dp)
+                    .fillMaxHeight(0.94f),
             shape = RoundedCornerShape(20.dp),
             tonalElevation = 2.dp,
         ) {
@@ -61,7 +70,14 @@ fun BrushStudioDialog(
                 }
                 TabRow(selectedTabIndex = tab) {
                     listOf("Library", "Settings", "Drawing pad").forEachIndexed { index, title ->
-                        Tab(selected = tab == index, onClick = { tab = index }, text = { Text(title, maxLines = 1) })
+                        Tab(
+                            selected = tab == index,
+                            onClick = {
+                                focusManager.clearFocus()
+                                tab = index
+                            },
+                            text = { Text(title, maxLines = 2, textAlign = TextAlign.Center) },
+                        )
                     }
                 }
                 Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -97,6 +113,7 @@ fun StudioBrushLibrary(
 ) {
     var query by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("All") }
+    val focusManager = LocalFocusManager.current
     val matches = remember(query, category) { StudioBrushes.search(query, category) }
     Column(modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
@@ -130,7 +147,11 @@ fun StudioBrushLibrary(
                     border =
                         BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
                     color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
-                    modifier = Modifier.fillMaxWidth().selectable(selected, role = Role.RadioButton) { onSelect(preset.parameters) },
+                    modifier =
+                        Modifier.fillMaxWidth().selectable(selected, role = Role.RadioButton) {
+                            focusManager.clearFocus()
+                            onSelect(preset.parameters)
+                        },
                 ) {
                     Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                         Text(preset.name, style = MaterialTheme.typography.titleSmall)

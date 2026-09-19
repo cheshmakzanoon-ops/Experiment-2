@@ -72,22 +72,7 @@ fun AdvancedBrushSettingsPanel(
             }
         }
 
-        BrushSettingsSection(title = "Brush Properties") {
-            BrushParameterSlider(
-                label = "Brush size",
-                value = brushParams.size,
-                onValueChange = { onBrushParamsChanged(brushParams.copy(size = it)) },
-                valueRange = 1f..512f,
-                valueDisplay = "%.1f px".format(brushParams.size),
-            )
-            BrushParameterSlider(
-                label = "Brush opacity",
-                value = brushParams.opacity,
-                onValueChange = { onBrushParamsChanged(brushParams.copy(opacity = it)) },
-                valueRange = 0.01f..1f,
-                valueDisplay = "%.0f%%".format(brushParams.opacity * 100),
-            )
-        }
+        BrushProperties(brushParams, onBrushParamsChanged)
 
         // Stroke Dynamics Section
         BrushSettingsSection(title = "Stroke Dynamics") {
@@ -521,4 +506,27 @@ private fun CustomPressureControls(
         valueRange = 0f..1f,
         valueDisplay = "%.0f%%".format(response.high * 100),
     )
+}
+
+@Composable
+private fun BrushProperties(
+    brushParams: BrushParams,
+    onBrushParamsChanged: (BrushParams) -> Unit,
+) {
+    BrushSettingsSection(title = "Brush Properties") {
+        BrushParameterSlider(
+            label = "Brush size",
+            value = brushParams.size,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(size = it)) },
+            valueRange = 1f..512f,
+            valueDisplay = "%.1f px".format(brushParams.size),
+        )
+        BrushParameterSlider(
+            label = "Brush opacity",
+            value = brushParams.opacity,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(opacity = it)) },
+            valueRange = 0.01f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.opacity * 100),
+        )
+    }
 }
