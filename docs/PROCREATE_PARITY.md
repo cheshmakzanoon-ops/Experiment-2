@@ -90,3 +90,13 @@ Accessibility inspection also corrected text scaling: the extra text-size prefer
 text once, without also scaling layout density and shrinking the usable workspace. The independent
 large-target preference still controls touch-target size. A real Compose density regression guards
 this distinction.
+
+### Inspection follow-up — Readable studio colours
+
+The six saved accent seeds are preserved, but UI foreground/background roles are generated for each
+light/dark and normal/high-contrast combination. Enabled accent and status text is checked against
+all neutral studio surfaces; filled controls receive contrasting foregrounds. The calculation uses
+[WCAG relative-luminance contrast](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html),
+with 4.5:1 and [enhanced 7:1](https://www.w3.org/WAI/WCAG22/Understanding/contrast-enhanced.html)
+targets. These are colour-role tests, not a blanket accessibility or Procreate-aesthetics claim.
+Brush colours, exported pixels and canvas colour management are unaffected.

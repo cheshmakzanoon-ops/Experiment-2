@@ -12,6 +12,13 @@ symmetry and perspective guides, add text and frames, then save and export real 
 > file describes what is actually in the repository: [Project status](#-project-status) for the
 > per-area breakdown, and [Known gaps](#-known-gaps) for what is genuinely missing.
 
+**Contrast inspection:** all six accents now receive separate light/dark UI roles. The original
+Ink seed had only 1.21:1 contrast as text against the dark surface; Ochre with white text had
+3.61:1. Enabled accent/status text now targets at least 4.5:1 (7:1 in high-contrast mode) against
+the limiting studio surface. Tonal containers are opaque and neutral, and button foregrounds are
+chosen by measured luminance. Artwork and colour-picker values are not changed. These colour-role
+checks are not a claim that every screen is accessibility-certified.
+
 ---
 
 ## 🎯 Procreate comparison and current milestone

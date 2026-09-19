@@ -537,3 +537,10 @@ but failed Detekt on three new-source organization/nesting findings and did not 
 verification. This inspection refactors those checks without reducing their 39,714 comparisons
 and hosts the full editor UI tests in the injected `MainActivity` required by `ArtFlowCanvasView`.
 The failed run is diagnostic evidence, not an acceptance result; a fresh full matrix is required.
+
+### Studio contrast inspection — pending exact-candidate Android verification
+
+Theme-role contrast now uses a pure sRGB luminance calculation with unrounded thresholds. JVM
+regressions cover reference ratios, all saved accent seeds, dark/light backgrounds, enhanced mode,
+exact mixtures and invalid/transparent inputs. Actual Compose theme-role and screenshot evidence
+must still pass on the final candidate; this does not certify complete accessibility.
