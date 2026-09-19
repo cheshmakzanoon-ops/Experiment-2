@@ -56,11 +56,13 @@ class SettingsRepositoryImpl
                 val candidate = transform(state.value.ownedCopy())
                 require(candidate.uiScale.isFinite()) { "UI scale must be finite" }
                 val updated =
-                    candidate.copy(
-                        uiScale = candidate.uiScale.coerceIn(MIN_UI_SCALE, MAX_UI_SCALE),
-                        autosaveIntervalMs = candidate.autosaveIntervalMs.coerceIn(MIN_AUTOSAVE, MAX_AUTOSAVE),
-                        recentColors = candidate.recentColors.distinct().take(MAX_RECENT_COLORS),
-                    ).ownedCopy()
+                    candidate
+                        .copy(
+                            uiScale = candidate.uiScale.coerceIn(MIN_UI_SCALE, MAX_UI_SCALE),
+                            autosaveIntervalMs = candidate.autosaveIntervalMs.coerceIn(MIN_AUTOSAVE, MAX_AUTOSAVE),
+                            recentColors = candidate.recentColors.distinct().take(MAX_RECENT_COLORS),
+                        )
+                        .ownedCopy()
                 if (updated == state.value) return@withLock
                 currentCoroutineContext().ensureActive()
                 // Once this small transaction begins, finish both durability and publication.

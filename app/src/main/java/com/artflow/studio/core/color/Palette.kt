@@ -3,8 +3,11 @@ package com.artflow.studio.core.color
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.ByteArrayOutputStream
+import java.io.DataOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.Locale
+import kotlin.math.roundToInt
 
 /**
  * Colour palettes (Phase 32).
@@ -217,7 +220,7 @@ object PaletteCodec {
                 val r = (color shr 16) and 0xFF
                 val g = (color shr 8) and 0xFF
                 val b = color and 0xFF
-                appendLine("%3d %3d %3d\t${ColorHarmony.nameOf(color)}".format(r, g, b))
+                appendLine("%3d %3d %3d\t${ColorHarmony.nameOf(color)}".format(Locale.ROOT, r, g, b))
             }
         }
 
@@ -338,71 +341,76 @@ object PaletteCodec {
     private const val ASE_BLOCK_GROUP_START = 0xC001
     private const val ASE_BLOCK_GROUP_END = 0xC002
 
-    /** Palette names are capped at 256 UTF-16 characters, so 64 KiB per block is ample. */
-    private const val MAX_BLOCK_BYTES = 64 * 1024
+    private const val MAX_ASE_COLORS = 65_536
+    private const val MAX_ASE_BYTES = 16 * 1024 * 1024
+    private const val MAX_ASE_NAME_UNITS = 65_534
 
-    /** Writes an ASE file. RGB colours use the "RGB " model, which every Adobe app understands. */
+    /** Writes RGB swatches; ASE does not carry alpha or ArtFlow palette metadata. */
     fun exportAse(palette: Palette): ByteArray {
+        require(palette.colors.size <= MAX_ASE_COLORS) { "Too many ASE swatches" }
+        require(palette.name.length <= MAX_ASE_NAME_UNITS) { "The palette name is too long for ASE" }
         val output = ByteArrayOutputStream()
         output.write(ASE_HEADER.toByteArray(Charsets.US_ASCII))
         output.writeShortBE(1)
         output.writeShortBE(0)
-
-        // Group start block so the palette shows up as a named folder in Photoshop.
-        output.writeBlock(ASE_BLOCK_GROUP_START) { buffer ->
-            buffer.writeUtf16BeString(palette.name)
-        }
-        // Blocks written: group start + one per colour + group end.
-        val blockCount = 2 + palette.colors.size
-
+        // The count occupies four bytes BEFORE the first block, not over its header.
+        output.writeIntBE(2 + palette.colors.size)
+        output.writeBlock(ASE_BLOCK_GROUP_START) { it.writeUtf16BeString(palette.name) }
         palette.colors.forEach { color ->
-            output.writeBlock(ASE_BLOCK_COLOR) { buffer ->
-                buffer.writeUtf16BeString(ColorHarmony.nameOf(color))
-                buffer.put("RGB ".toByteArray(Charsets.US_ASCII))
-                buffer.putFloatBE(((color shr 16) and 0xFF) / 255f)
-                buffer.putFloatBE(((color shr 8) and 0xFF) / 255f)
-                buffer.putFloatBE((color and 0xFF) / 255f)
-                buffer.putShort(0) // global colour type
+            output.writeBlock(ASE_BLOCK_COLOR) { body ->
+                body.writeUtf16BeString(ColorHarmony.nameOf(color))
+                body.write("RGB ".toByteArray(Charsets.US_ASCII))
+                body.writeFloat(((color shr 16) and 0xFF) / 255f)
+                body.writeFloat(((color shr 8) and 0xFF) / 255f)
+                body.writeFloat((color and 0xFF) / 255f)
+                body.writeShort(0) // global colour type
             }
         }
         output.writeBlock(ASE_BLOCK_GROUP_END) { /* empty */ }
-
-        val payload = output.toByteArray()
-        // Patch the block count into the header (bytes 8..11).
-        val final = payload.copyOf()
-        ByteBuffer.wrap(final).order(ByteOrder.BIG_ENDIAN).putInt(8, blockCount)
-        return final
+        return output.toByteArray()
     }
 
+    /** Malformed or unsupported colour records fail as a whole, never as a successful partial palette. */
     fun importAse(
         bytes: ByteArray,
         fallbackName: String = "Imported Swatch",
     ): Palette? {
-        if (bytes.size < 12) return null
-        val header = String(bytes, 0, 4, Charsets.US_ASCII)
-        if (header != ASE_HEADER) return null
-
+        if (bytes.size !in 12..MAX_ASE_BYTES) return null
+        if (String(bytes, 0, 4, Charsets.US_ASCII) != ASE_HEADER) return null
         val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN)
-        buffer.position(8)
+        buffer.position(4)
+        if (buffer.short.toInt() != 1 || buffer.short.toInt() != 0) return null
         val blockCount = buffer.int
+        if (blockCount !in 0..(buffer.remaining() / 6)) return null
         val colors = mutableListOf<Int>()
         var groupName: String? = null
-
-        var block = 0
-        while (block < blockCount && buffer.remaining() >= 6) {
+        var groupDepth = 0
+        repeat(blockCount) {
+            if (buffer.remaining() < 6) return null
             val type = buffer.short.toInt() and 0xFFFF
             val length = buffer.int
-            if (length < 0 || buffer.remaining() < length) break
-            val blockStart = buffer.position()
+            if (length !in 0..buffer.remaining()) return null
+            // A short record cannot borrow name/channel bytes from the following block.
+            val body = buffer.slice().order(ByteOrder.BIG_ENDIAN).apply { limit(length) }
             when (type) {
-                ASE_BLOCK_COLOR -> readColorBlock(buffer)?.let { colors += it }
-                ASE_BLOCK_GROUP_START -> groupName = readUtf16BeString(buffer)
-                ASE_BLOCK_GROUP_END -> Unit
+                ASE_BLOCK_COLOR -> {
+                    if (colors.size == MAX_ASE_COLORS) return null
+                    colors += readColorBlock(body) ?: return null
+                }
+                ASE_BLOCK_GROUP_START -> {
+                    val name = if (length == 0) "" else readUtf16BeString(body) ?: return null
+                    if (groupName == null) groupName = name
+                    groupDepth++
+                }
+                ASE_BLOCK_GROUP_END -> {
+                    if (groupDepth == 0) return null
+                    groupDepth--
+                }
             }
-            buffer.position(blockStart + length)
-            block++
+            // Unknown block types and block-local application metadata are safely skipped.
+            buffer.position(buffer.position() + length)
         }
-
+        if (buffer.hasRemaining() || groupDepth != 0) return null
         if (colors.isEmpty()) return null
         return Palette(
             name = groupName?.trim()?.ifEmpty { fallbackName } ?: fallbackName,
@@ -417,35 +425,30 @@ object PaletteCodec {
         val modelBytes = ByteArray(4)
         buffer.get(modelBytes)
         val model = String(modelBytes, Charsets.US_ASCII)
+        val channels =
+            when (model) {
+                "RGB ", "LAB " -> 3
+                "CMYK" -> 4
+                "Gray" -> 1
+                else -> return null
+            }
+        // Float channels plus the required 16-bit colour type must fit within THIS block.
+        if (buffer.remaining() < channels * 4 + 2) return null
+        val values = FloatArray(channels) { buffer.float }
+        if (values.any { !it.isFinite() }) return null
+        val colorType = buffer.short.toInt() and 0xFFFF
+        if (colorType !in 0..2) return null
         return when (model) {
-            "RGB " -> {
-                val r = buffer.float.coerceIn(0f, 1f)
-                val g = buffer.float.coerceIn(0f, 1f)
-                val b = buffer.float.coerceIn(0f, 1f)
-                ColorHarmony.fromRgb((r * 255f).toInt(), (g * 255f).toInt(), (b * 255f).toInt())
-            }
-            "Gray" -> {
-                val gray = buffer.float.coerceIn(0f, 1f)
-                val value = (gray * 255f).toInt()
-                ColorHarmony.fromRgb(value, value, value)
-            }
-            "CMYK" -> {
-                val c = buffer.float
-                val m = buffer.float
-                val y = buffer.float
-                val k = buffer.float
-                ColorHarmony.fromCmyk(c, m, y, k)
-            }
-            // LAB swatches are converted through their L*a*b* values via XYZ and sRGB.
-            "LAB " -> {
-                val l = buffer.float
-                val a = buffer.float
-                val b = buffer.float
-                labToArgb(l, a, b)
-            }
+            "RGB " -> ColorHarmony.fromRgb(values[0].toByteChannel(), values[1].toByteChannel(), values[2].toByteChannel())
+            "Gray" -> values[0].toByteChannel().let { ColorHarmony.fromRgb(it, it, it) }
+            "CMYK" -> ColorHarmony.fromCmyk(values[0], values[1], values[2], values[3])
+            // ASE stores L in 0..1; labToArgb accepts conventional L* in 0..100.
+            "LAB " -> labToArgb(values[0].coerceIn(0f, 1f) * 100f, values[1], values[2])
             else -> null
         }
     }
+
+    private fun Float.toByteChannel(): Int = (coerceIn(0f, 1f) * 255f).roundToInt()
 
     /** CIE L*a*b* (D65) to sRGB, used so LAB swatches survive an ASE import. */
     fun labToArgb(
@@ -556,36 +559,31 @@ object PaletteCodec {
         write(value and 0xFF)
     }
 
-    /**
-     * Writes one ASE block: a 16-bit type, a 32-bit big-endian payload length, then the payload.
-     * The staging buffer is large enough for the longest palette name we allow plus an RGB entry.
-     */
+    private fun ByteArrayOutputStream.writeIntBE(value: Int) {
+        write((value ushr 24) and 0xFF)
+        write((value ushr 16) and 0xFF)
+        write((value ushr 8) and 0xFF)
+        write(value and 0xFF)
+    }
+
+    /** Stages only the actual payload; a legal UTF-16 name can exceed the old fixed 64 KiB buffer. */
     private fun ByteArrayOutputStream.writeBlock(
         type: Int,
-        fill: (ByteBuffer) -> Unit,
+        fill: (DataOutputStream) -> Unit,
     ) {
         val body = ByteArrayOutputStream()
-        val buffer = ByteBuffer.allocate(MAX_BLOCK_BYTES).order(ByteOrder.BIG_ENDIAN)
-        fill(buffer)
-        buffer.flip()
-        val bytes = ByteArray(buffer.remaining())
-        buffer.get(bytes)
-        body.write(bytes)
-
+        DataOutputStream(body).use(fill)
         val payload = body.toByteArray()
         writeShortBE(type)
-        write((payload.size shr 24) and 0xFF)
-        write((payload.size shr 16) and 0xFF)
-        write((payload.size shr 8) and 0xFF)
-        write(payload.size and 0xFF)
+        writeIntBE(payload.size)
         write(payload)
     }
 
-    private fun ByteBuffer.writeUtf16BeString(value: String) {
-        val chars = value.toCharArray()
-        putShort((chars.size + 1).toShort())
-        chars.forEach { putShort(it.code.toShort()) }
-        putShort(0)
+    private fun DataOutputStream.writeUtf16BeString(value: String) {
+        require(value.length <= MAX_ASE_NAME_UNITS) { "The swatch name is too long for ASE" }
+        writeShort(value.length + 1)
+        value.forEach { writeChar(it.code) }
+        writeShort(0)
     }
 
     private fun readUtf16BeString(buffer: ByteBuffer): String? {
@@ -593,13 +591,8 @@ object PaletteCodec {
         val length = buffer.short.toInt() and 0xFFFF
         if (length == 0) return ""
         if (buffer.remaining() < length * 2) return null
-        val chars = CharArray(length)
-        for (i in 0 until length) {
-            chars[i] = (buffer.short.toInt() and 0xFFFF).toChar()
-        }
-        // The last character is the null terminator.
-        return String(chars).trimEnd('\u0000')
+        val chars = CharArray(length - 1) { buffer.short.toInt().toChar() }
+        if (buffer.short.toInt() != 0) return null
+        return String(chars)
     }
-
-    private fun ByteBuffer.putFloatBE(value: Float) = putFloat(value)
 }
