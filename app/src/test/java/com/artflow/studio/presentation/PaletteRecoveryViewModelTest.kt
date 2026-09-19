@@ -10,9 +10,6 @@ import com.artflow.studio.data.repository.settings.SettingsRepositoryImpl
 import com.artflow.studio.domain.repository.ProjectRepository
 import com.artflow.studio.presentation.ui.viewmodel.MainUiState
 import com.artflow.studio.presentation.ui.viewmodel.MainViewModel
-import io.mockk.coEvery
-import io.mockk.every
-import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
@@ -25,6 +22,8 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.Assert.*
 import org.junit.Test
+import org.mockito.Mockito.mock
+import org.mockito.Mockito.`when`
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.OutputStream
@@ -49,9 +48,9 @@ class PaletteRecoveryViewModelTest {
                             super.close()
                         }
                     }
-                val resolver = mockk<ContentResolver>()
-                val destination = mockk<Uri>()
-                every { resolver.openOutputStream(destination, "wt") } returns output
+                val resolver = mock(ContentResolver::class.java)
+                val destination = mock(Uri::class.java)
+                `when`(resolver.openOutputStream(destination, "wt")).thenReturn(output)
                 viewModel.backUpAndResetPalettes(resolver, destination)
                 viewModel.paletteRecoveryRunning.first { !it }
                 assertTrue(closed)
@@ -70,13 +69,13 @@ class PaletteRecoveryViewModelTest {
             Dispatchers.setMain(StandardTestDispatcher(testScheduler))
             val fixture = Fixture()
             try {
-                val resolver = mockk<ContentResolver>()
-                val destination = mockk<Uri>()
+                val resolver = mock(ContentResolver::class.java)
+                val destination = mock(Uri::class.java)
                 val output =
                     object : OutputStream() {
                         override fun write(value: Int): Unit = throw IOException("Storage is full")
                     }
-                every { resolver.openOutputStream(destination, "wt") } returns output
+                `when`(resolver.openOutputStream(destination, "wt")).thenReturn(output)
                 fixture.viewModel.backUpAndResetPalettes(resolver, destination)
                 fixture.viewModel.paletteRecoveryRunning.first { !it }
                 assertEquals(0, fixture.writes)
@@ -94,13 +93,13 @@ class PaletteRecoveryViewModelTest {
             Dispatchers.setMain(StandardTestDispatcher(testScheduler))
             val fixture = Fixture()
             try {
-                val resolver = mockk<ContentResolver>()
-                val destination = mockk<Uri>()
+                val resolver = mock(ContentResolver::class.java)
+                val destination = mock(Uri::class.java)
                 val output =
                     object : ByteArrayOutputStream() {
                         override fun close(): Unit = throw IOException("Could not finalize the document")
                     }
-                every { resolver.openOutputStream(destination, "wt") } returns output
+                `when`(resolver.openOutputStream(destination, "wt")).thenReturn(output)
                 fixture.viewModel.backUpAndResetPalettes(resolver, destination)
                 fixture.viewModel.paletteRecoveryRunning.first { !it }
                 assertEquals(0, fixture.writes)
@@ -117,16 +116,23 @@ class PaletteRecoveryViewModelTest {
         val rows = MutableStateFlow(listOf(SettingsEntity(key = "color.palettes", value = original)))
         var writes = 0
         private val dao =
-            mockk<SettingsDao>().also { dao ->
-                every { dao.getAllSettings() } returns rows
-                coEvery { dao.insertSettings(any()) } answers {
-                    writes++
-                    rows.value = firstArg()
+            mock(SettingsDao::class.java) { call ->
+                when (call.method.name) {
+                    "getAllSettings" -> rows
+                    "insertSettings" -> {
+                        writes++
+                        rows.value = call.getArgument(0)
+                        Unit
+                    }
+                    else -> error("Unexpected DAO call: ${call.method.name}")
                 }
             }
         val repository = SettingsRepositoryImpl(dao)
-        private val projects = mockk<ProjectRepository>().also { every { it.getAllProjects() } returns flowOf(emptyList()) }
-        private val storage = mockk<ProjectStorage>().also { every { it.totalStorageBytes() } returns 0L }
+        private val projects =
+            mock(ProjectRepository::class.java).also {
+                `when`(it.getAllProjects()).thenReturn(flowOf(emptyList()))
+            }
+        private val storage = mock(ProjectStorage::class.java).also { `when`(it.totalStorageBytes()).thenReturn(0L) }
         val viewModel = MainViewModel(projects, repository, storage)
     }
 }
