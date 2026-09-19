@@ -1,0 +1,80 @@
+name: Prepare studio candidate
+
+on:
+  push:
+    branches: [studio-prepare-20260919]
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Apply reviewed source with exact tree guards
+        run: |
+          python - <<'PY'
+          import base64, hashlib, json, lzma, pathlib, subprocess
+          encoded = b''.join(pathlib.Path(f'.github/studio-candidate-{i}.b64').read_bytes() for i in range(4))
+          assert hashlib.sha256(encoded).hexdigest() == '5bee920a83b7f62f7d901dc08f710ede5fb4666a2d2f43e25959b8d53348997c'
+          payload = json.loads(lzma.decompress(base64.b64decode(encoded, validate=True)))
+          assert payload['base'] == 'c2e4eee1ef0cc1e65ebfd49ca7c01b9f2b94d5df'
+          def git(*args, **kwargs):
+              return subprocess.run(['git', *args], check=True, **kwargs)
+          git('config', 'user.name', 'cheshmakzanoon-ops')
+          git('config', 'user.email', '318354914+cheshmakzanoon-ops@users.noreply.github.com')
+          git('checkout', '--detach', payload['base'])
+          for commit in payload['commits']:
+              patch = commit['patch'].encode('utf-8')
+              git('apply', '--index', '--check', input=patch)
+              git('apply', '--index', input=patch)
+              tree = git('write-tree', capture_output=True, text=True).stdout.strip()
+              assert tree == commit['tree'], (tree, commit['tree'])
+              git('commit', '-m', commit['message'])
+              print('Verified feature tree:', tree)
+          assert not git('status', '--porcelain', capture_output=True, text=True).stdout.strip()
+          PY
+      - name: Apply repository-pinned Kotlin formatter
+        run: ./gradlew ktlintFormat --continue --stacktrace
+      - name: Publish clean candidate only
+        run: |
+          python - <<'PY'
+          import subprocess
+          paths = subprocess.check_output(['git', 'diff', '--name-only'], text=True).splitlines()
+          assert all(p.endswith(('.kt', '.kts')) for p in paths), paths
+          PY
+          git add -u
+          if ! git diff --cached --quiet; then
+            git commit -m "style(studio): apply repository-pinned Kotlin formatting"
+          fi
+          git push origin HEAD:refs/heads/studio-parity-20260919
+      - name: Archive exact candidate and diagnostic diff
+        if: always()
+        run: |
+          mkdir -p "${RUNNER_TEMP}/studio-candidate"
+          git rev-parse HEAD > "${RUNNER_TEMP}/studio-candidate/REVISION.txt"
+          git rev-parse 'HEAD^{tree}' > "${RUNNER_TEMP}/studio-candidate/TREE.txt"
+          git status --short > "${RUNNER_TEMP}/studio-candidate/STATUS.txt"
+          git diff --binary > "${RUNNER_TEMP}/studio-candidate/uncommitted.patch"
+          git archive --format=tar.gz HEAD > "${RUNNER_TEMP}/studio-candidate/artflow-source.tar.gz"
+      - name: Preserve exact candidate source
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-candidate-source
+          path: ${{ runner.temp }}/studio-candidate/
+          if-no-files-found: error
+          retention-days: 14
