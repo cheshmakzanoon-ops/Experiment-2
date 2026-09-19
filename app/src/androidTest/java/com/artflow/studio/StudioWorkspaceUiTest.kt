@@ -263,7 +263,7 @@ class StudioWorkspaceUiTest {
 
     private fun screenshot(name: String) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val directory = File(instrumentation.targetContext.getExternalFilesDir(null), "test-evidence").apply { mkdirs() }
+        val directory = InstrumentedEvidence.directory()
         val bitmap = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
         try {
             File(directory, name).outputStream().use { stream -> assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)) }

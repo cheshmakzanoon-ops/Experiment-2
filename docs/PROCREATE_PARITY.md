@@ -100,3 +100,15 @@ all neutral studio surfaces; filled controls receive contrasting foregrounds. Th
 with 4.5:1 and [enhanced 7:1](https://www.w3.org/WAI/WCAG22/Understanding/contrast-enhanced.html)
 targets. These are colour-role tests, not a blanket accessibility or Procreate-aesthetics claim.
 Brush colours, exported pixels and canvas colour management are unaffected.
+
+### Inspection follow-up — Draft validation and durable visual evidence
+
+The numerical controls now own one immutable draft. Both enabled state and Apply use the same
+production transform validation; the click boundary rejects a stale invalid draft instead of
+throwing before its error handler. Dedicated draft tests cover zero/negative percentages, free vs
+uniform scaling, commas, non-finite input and immutable editing.
+
+Device evidence now goes to the `additionalTestOutputDir` supplied by Android's test runner. UTP
+copies it before package uninstall; the CI artifact includes the resulting host directory. This
+also preserves export samples and measured page-size records that an after-uninstall `adb pull`
+could lose. CI requires the four actual workspace screenshots; no generated mockup substitutes.

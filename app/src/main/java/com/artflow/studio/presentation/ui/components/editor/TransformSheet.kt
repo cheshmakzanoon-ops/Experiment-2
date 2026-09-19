@@ -22,26 +22,17 @@ fun TransformSheet(
     onApply: suspend (LayerTransform.Parameters) -> Boolean,
     onClose: () -> Unit,
 ) {
-    var width by remember { mutableStateOf("100") }
-    var height by remember { mutableStateOf("100") }
-    var rotation by remember { mutableStateOf("0") }
-    var skew by remember { mutableStateOf("0") }
-    var offsetX by remember { mutableStateOf("0") }
-    var offsetY by remember { mutableStateOf("0") }
-    var uniform by remember { mutableStateOf(true) }
-    var flipX by remember { mutableStateOf(false) }
-    var flipY by remember { mutableStateOf(false) }
-    var interpolation by remember { mutableStateOf(LayerTransform.Interpolation.BILINEAR) }
+    var draft by remember { mutableStateOf(TransformDraft()) }
     var applying by remember { mutableStateOf(false) }
     var failure by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
-    val parsedWidth = finiteNumber(width)?.takeIf { it in 1f..1600f }
-    val parsedHeight = finiteNumber(if (uniform) width else height)?.takeIf { it in 1f..1600f }
-    val parsedRotation = finiteNumber(rotation)
-    val parsedSkew = finiteNumber(skew)?.takeIf { it in -80f..80f }
-    val parsedX = finiteNumber(offsetX)
-    val parsedY = finiteNumber(offsetY)
-    val valid = listOf(parsedWidth, parsedHeight, parsedRotation, parsedSkew, parsedX, parsedY).all { it != null }
+    val parsedWidth = finiteNumber(draft.width)?.takeIf { it in 1f..1600f }
+    val parsedHeight = finiteNumber(if (draft.uniform) draft.width else draft.height)?.takeIf { it in 1f..1600f }
+    val parsedRotation = finiteNumber(draft.rotation)
+    val parsedSkew = finiteNumber(draft.skew)?.takeIf { it in -80f..80f }
+    val parsedX = finiteNumber(draft.offsetX)
+    val parsedY = finiteNumber(draft.offsetY)
+    val valid = draft.parametersOrNull() != null
 
     Column(
         modifier =
@@ -62,47 +53,46 @@ fun TransformSheet(
             Text("Deselect before transforming the entire layer.", color = MaterialTheme.colorScheme.error)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TransformNumber("Width %", width, parsedWidth != null, !applying, { width = it }, Modifier.weight(1f))
+            TransformNumber("Width %", draft.width, parsedWidth != null, !applying, { draft = draft.copy(width = it) }, Modifier.weight(1f))
             TransformNumber(
                 "Height %",
-                if (uniform) width else height,
+                if (draft.uniform) draft.width else draft.height,
                 parsedHeight != null,
-                !applying && !uniform,
-                { height = it },
+                !applying && !draft.uniform,
+                { draft = draft.copy(height = it) },
                 Modifier.weight(1f),
             )
         }
         FilterChip(
-            selected = uniform,
+            selected = draft.uniform,
             onClick = {
-                height = width
-                uniform = !uniform
+                draft = draft.copy(height = draft.width, uniform = !draft.uniform)
             },
             enabled = !applying,
             label = { Text("Keep proportions") },
         )
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TransformNumber("Rotation °", rotation, parsedRotation != null, !applying, { rotation = it }, Modifier.weight(1f))
-            TransformNumber("Horizontal skew °", skew, parsedSkew != null, !applying, { skew = it }, Modifier.weight(1f))
+            TransformNumber("Rotation °", draft.rotation, parsedRotation != null, !applying, { draft = draft.copy(rotation = it) }, Modifier.weight(1f))
+            TransformNumber("Horizontal skew °", draft.skew, parsedSkew != null, !applying, { draft = draft.copy(skew = it) }, Modifier.weight(1f))
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            OutlinedButton(onClick = { rotation = ((parsedRotation ?: 0f) - 90f).toString() }, enabled = !applying) { Text("−90°") }
-            OutlinedButton(onClick = { rotation = ((parsedRotation ?: 0f) + 90f).toString() }, enabled = !applying) { Text("+90°") }
+            OutlinedButton(onClick = { draft = draft.copy(rotation = ((parsedRotation ?: 0f) - 90f).toString()) }, enabled = !applying) { Text("−90°") }
+            OutlinedButton(onClick = { draft = draft.copy(rotation = ((parsedRotation ?: 0f) + 90f).toString()) }, enabled = !applying) { Text("+90°") }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TransformNumber("Move X (px)", offsetX, parsedX != null, !applying, { offsetX = it }, Modifier.weight(1f))
-            TransformNumber("Move Y (px)", offsetY, parsedY != null, !applying, { offsetY = it }, Modifier.weight(1f))
+            TransformNumber("Move X (px)", draft.offsetX, parsedX != null, !applying, { draft = draft.copy(offsetX = it) }, Modifier.weight(1f))
+            TransformNumber("Move Y (px)", draft.offsetY, parsedY != null, !applying, { draft = draft.copy(offsetY = it) }, Modifier.weight(1f))
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            FilterChip(selected = flipX, onClick = { flipX = !flipX }, enabled = !applying, label = { Text("Flip horizontal") })
-            FilterChip(selected = flipY, onClick = { flipY = !flipY }, enabled = !applying, label = { Text("Flip vertical") })
+            FilterChip(selected = draft.flipX, onClick = { draft = draft.copy(flipX = !draft.flipX) }, enabled = !applying, label = { Text("Flip horizontal") })
+            FilterChip(selected = draft.flipY, onClick = { draft = draft.copy(flipY = !draft.flipY) }, enabled = !applying, label = { Text("Flip vertical") })
         }
         Text("Resampling", style = MaterialTheme.typography.labelLarge)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             LayerTransform.Interpolation.entries.forEach { mode ->
                 FilterChip(
-                    selected = interpolation == mode,
-                    onClick = { interpolation = mode },
+                    selected = draft.interpolation == mode,
+                    onClick = { draft = draft.copy(interpolation = mode) },
                     enabled = !applying,
                     label = { Text(mode.label) },
                 )
@@ -122,19 +112,13 @@ fun TransformSheet(
             TextButton(onClick = onClose, enabled = !applying) { Text("Cancel") }
             Button(
                 enabled = valid && !hasSelection && !applying,
-                onClick = {
-                    val parameters =
-                        LayerTransform.Parameters(
-                            translationX = requireNotNull(parsedX),
-                            translationY = requireNotNull(parsedY),
-                            scaleX = requireNotNull(parsedWidth) / 100f,
-                            scaleY = requireNotNull(parsedHeight) / 100f,
-                            rotationDegrees = requireNotNull(parsedRotation),
-                            skewXDegrees = requireNotNull(parsedSkew),
-                            flipHorizontal = flipX,
-                            flipVertical = flipY,
-                            interpolation = interpolation,
-                        )
+                onClick = apply@{
+                    // Validate the latest draft again at the mutation boundary, not just in UI semantics.
+                    val parameters = draft.parametersOrNull()
+                    if (parameters == null || hasSelection || applying) {
+                        failure = "Enter valid values and deselect before applying."
+                        return@apply
+                    }
                     applying = true
                     failure = null
                     scope.launch {

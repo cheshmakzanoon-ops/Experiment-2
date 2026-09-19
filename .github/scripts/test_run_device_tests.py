@@ -9,7 +9,7 @@ SCRIPT = Path(__file__).with_name('run-device-tests.sh').resolve()
 
 
 class DeviceHarnessTest(unittest.TestCase):
-    def run_harness(self, expected, gradle_status=0):
+    def run_harness(self, expected, gradle_status=0, evidence="valid"):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             commands = root / 'commands'
@@ -35,6 +35,15 @@ exit 0
             gradle = root / 'gradlew'
             gradle.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$CALLS"\nexit "$GRADLE_STATUS"\n')
             gradle.chmod(0o755)
+            # Host-side UTP fixture, not synthetic artwork offered as visual evidence.
+            output = root / 'app/build/outputs/connected_android_test_additional_output/device'
+            output.mkdir(parents=True)
+            names = ('studio-dark.png', 'studio-light.png', 'studio-focus.png', 'studio-palette-large-text.png')
+            for index, name in enumerate(names):
+                if evidence == 'missing' and index == 0:
+                    continue
+                payload = b'not a png' if evidence == 'corrupt' and index == 0 else b'\x89PNG\r\n\x1a\n'
+                (output / name).write_bytes(payload)
             log = root / 'calls.txt'
             env = dict(os.environ, PATH=f'{commands}:{os.environ["PATH"]}',
                        RUNNER_TEMP=str(root), CALLS=str(log), GRADLE_STATUS=str(gradle_status))
@@ -74,6 +83,19 @@ exit 0
     def test_failed_device_tests_cannot_be_replaced_by_a_successful_launch(self):
         result, calls = self.run_harness('4096', gradle_status=37)
         self.assertEqual(37, result.returncode)
+        self.assertNotIn('assembleBenchmark', calls)
+        self.assertIn('logcat', calls)
+
+    def test_missing_screenshot_evidence_blocks_successful_launch(self):
+        result, calls = self.run_harness('4096', evidence='missing')
+        self.assertEqual(1, result.returncode)
+        self.assertIn('Missing executed studio screenshot', result.stderr)
+        self.assertNotIn('assembleBenchmark', calls)
+        self.assertIn('logcat', calls)
+
+    def test_corrupt_screenshot_evidence_blocks_successful_launch(self):
+        result, calls = self.run_harness('4096', evidence='corrupt')
+        self.assertEqual(1, result.returncode)
         self.assertNotIn('assembleBenchmark', calls)
         self.assertIn('logcat', calls)
 

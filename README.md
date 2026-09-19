@@ -19,6 +19,11 @@ the limiting studio surface. Tonal containers are opaque and neutral, and button
 chosen by measured luminance. Artwork and colour-picker values are not changed. These colour-role
 checks are not a claim that every screen is accessibility-certified.
 
+**Validation and evidence inspection:** transform controls share one immutable draft and revalidate
+it with the production transform contract at Apply, so invalid percentages cannot reach a pixel
+transaction. Device screenshots, export samples and page-size records now use UTP's pre-uninstall
+output directory; CI archives them and requires all four executed workspace screenshots.
+
 ---
 
 ## 🎯 Procreate comparison and current milestone

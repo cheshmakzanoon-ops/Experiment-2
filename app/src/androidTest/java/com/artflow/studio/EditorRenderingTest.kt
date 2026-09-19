@@ -275,7 +275,7 @@ class EditorRenderingTest {
             assertTrue("PixelCopy did not finish", completed.await(10, TimeUnit.SECONDS))
             if (status != PixelCopy.SUCCESS) return null
             if (saveEvidence) {
-                val directory = File(view.context.getExternalFilesDir(null), "test-evidence").apply { mkdirs() }
+                val directory = InstrumentedEvidence.directory()
                 File(directory, "editor-gl-recovered.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
             }
             return bitmap.getPixel(bitmap.width / 2, bitmap.height / 2)

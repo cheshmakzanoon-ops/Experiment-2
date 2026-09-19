@@ -1061,7 +1061,10 @@ class CanvasViewModel
             y: Float,
         ) {
             val size = canvasRepository.getCanvasSize()
-            if (!x.isFinite() || !y.isFinite() || x < 0f || y < 0f || x >= size.width || y >= size.height) {
+            // These comparisons also reject NaN and infinities without a six-part condition.
+            val insideX = x >= 0f && x < size.width
+            val insideY = y >= 0f && y < size.height
+            if (!insideX || !insideY) {
                 notify("Tap inside the artwork to position text")
                 return
             }

@@ -14,6 +14,7 @@ import android.os.ParcelFileDescriptor
 import androidx.core.content.FileProvider
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.artflow.studio.InstrumentedEvidence
 import com.artflow.studio.core.export.ExportFormat
 import com.artflow.studio.core.export.ExportOptions
 import com.artflow.studio.core.export.ExportResult
@@ -322,7 +323,7 @@ class ExportDeviceTest {
         result: ExportResult,
         name: String,
     ) {
-        val directory = File(context.getExternalFilesDir(null), "test-evidence").apply { check(isDirectory || mkdirs()) }
+        val directory = InstrumentedEvidence.directory()
         File(result.filePath).copyTo(File(directory, name), overwrite = true)
     }
 }

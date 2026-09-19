@@ -544,3 +544,22 @@ Theme-role contrast now uses a pure sRGB luminance calculation with unrounded th
 regressions cover reference ratios, all saved accent seeds, dark/light backgrounds, enhanced mode,
 exact mixtures and invalid/transparent inputs. Actual Compose theme-role and screenshot evidence
 must still pass on the final candidate; this does not certify complete accessibility.
+
+### Second studio inspection — run 35440493662, not accepted
+
+All **411 JVM tests** passed. The Android 8 suite completed **157 cases**, with one transform
+invalid-number assertion failure and two platform-conditional skips; the new real-workspace tests
+passed. The build retained one Detekt complex-condition finding, now split into independent bounds
+checks. An Android 15 repeat again crashed in ART's Profile Saver, so it remains an unsuccessful
+lane, not waived evidence.
+
+Follow-up source adds immutable draft/Apply-boundary validation and actual-field assertions. It
+also switches evidence to UTP's supplied pre-uninstall output directory and requires the four
+workspace PNGs. A fresh complete normal-runtime matrix is still required.
+
+The completed second run also passed its API 35, API 36 (4 KB), and API 36 (16 KB)
+lanes, including minified launch. Those successes do not erase API 26's invalid-draft
+failure or the independent API 35 repeat's ART abort. Before the next candidate,
+the immutable production draft parser passed a standalone 33,146-assertion Kotlin
+probe. The host harness now has explicit missing/corrupt-screenshot failure tests;
+its 32 Python tests pass locally. These are not new Android pass claims.

@@ -55,6 +55,7 @@ class TransformUiRegressionTest {
             }
         }
         compose.onNodeWithText("Width %").performScrollTo().performTextReplacement("0")
+        compose.onNodeWithText("Width %").assertTextContains("0", substring = false)
         compose.onNodeWithText("Apply transform").performScrollTo().assertIsNotEnabled()
         compose.onNodeWithText("Cancel").performScrollTo().performClick()
         compose.runOnIdle {
