@@ -1073,7 +1073,8 @@ class CanvasViewModel
         fun takePendingText(): PendingText? {
             val pending = _pendingText.value ?: return null
             _pendingText.value = null
-            if (pending.projectId != currentProjectId || pending.layerId != canvasRepository.getActiveLayerId() ||
+            if (pending.projectId != currentProjectId ||
+                pending.layerId != canvasRepository.getActiveLayerId() ||
                 pending.revision != canvasRepository.contentRevision
             ) {
                 notify("The artwork changed. Tap again to choose a fresh text position.")

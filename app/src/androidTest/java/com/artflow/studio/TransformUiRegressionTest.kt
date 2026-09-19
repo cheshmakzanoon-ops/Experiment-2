@@ -6,8 +6,8 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artflow.studio.core.canvas.LayerTransform
 import com.artflow.studio.domain.model.settings.AppSettings
-import com.artflow.studio.presentation.ui.theme.ArtFlowTheme
 import com.artflow.studio.presentation.ui.components.editor.TransformSheet
+import com.artflow.studio.presentation.ui.theme.ArtFlowTheme
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -70,19 +70,35 @@ class TransformUiRegressionTest {
         compose.onNodeWithText("Deselect before transforming the entire layer.").assertIsDisplayed()
         compose.onNodeWithText("Apply transform").performScrollTo().assertIsNotEnabled()
     }
+
     @Test
     fun signedNumbersAndWrappedControlsRemainUsableWithLargeText() {
         var result: LayerTransform.Parameters? = null
         compose.setContent {
             ArtFlowTheme(AppSettings(uiScale = 1.6f, largeTouchTargets = true, reduceMotion = true)) {
-                TransformSheet("Ink layer", false, { result = it; true }, {})
+                TransformSheet("Ink layer", false, {
+                    result = it
+                    true
+                }, {})
             }
         }
         compose.onNodeWithText("Move X (px)").performScrollTo().performTextReplacement("-12.5")
         compose.onNodeWithText("Horizontal skew °").performScrollTo().performTextReplacement("-20")
-        compose.onNodeWithText("Flip vertical").performScrollTo().assertIsDisplayed().performClick()
-        compose.onNodeWithText("Pixel art").performScrollTo().assertIsDisplayed().performClick()
-        compose.onNodeWithText("Apply transform").performScrollTo().assertIsDisplayed().performClick()
+        compose
+            .onNodeWithText("Flip vertical")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+        compose
+            .onNodeWithText("Pixel art")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+        compose
+            .onNodeWithText("Apply transform")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
         compose.runOnIdle {
             val applied = requireNotNull(result)
             assertEquals(-12.5f, applied.translationX, 0f)
@@ -91,5 +107,4 @@ class TransformUiRegressionTest {
             assertEquals(LayerTransform.Interpolation.NEAREST, applied.interpolation)
         }
     }
-
 }

@@ -74,17 +74,26 @@ object LayerTransformChecks {
         }
     }
 
-    private fun checkTranslation(source: PixelBuffer, dx: Int, dy: Int, mode: LayerTransform.Interpolation) {
-        val result = LayerTransform.apply(
-            source,
-            LayerTransform.Parameters(translationX = dx.toFloat(), translationY = dy.toFloat(), interpolation = mode),
-        )
+    private fun checkTranslation(
+        source: PixelBuffer,
+        dx: Int,
+        dy: Int,
+        mode: LayerTransform.Interpolation,
+    ) {
+        val result =
+            LayerTransform.apply(
+                source,
+                LayerTransform.Parameters(translationX = dx.toFloat(), translationY = dy.toFloat(), interpolation = mode),
+            )
         for (y in 0 until source.height) {
             for (x in 0 until source.width) expect(result.getUnchecked(x, y) == source.getSafe(x - dx, y - dy))
         }
     }
 
-    private fun checkRectangularFlips(width: Int, height: Int) {
+    private fun checkRectangularFlips(
+        width: Int,
+        height: Int,
+    ) {
         val rectangle = fixture(width, height)
         val horizontal = LayerTransform.apply(rectangle, LayerTransform.Parameters(flipHorizontal = true))
         val vertical = LayerTransform.apply(rectangle, LayerTransform.Parameters(flipVertical = true))

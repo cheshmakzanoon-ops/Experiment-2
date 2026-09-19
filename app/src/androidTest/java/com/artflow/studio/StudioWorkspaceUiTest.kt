@@ -201,8 +201,14 @@ class StudioWorkspaceUiTest {
         compose.onNodeWithText("Content").performTextReplacement("Title")
         compose.onNodeWithText("Choose position").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(ToolType.TEXT, viewModel.input.value.tool) }
-        Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom(ArtFlowCanvasView::class.java))
-            .perform(androidx.test.espresso.action.ViewActions.click())
+        Espresso
+            .onView(
+                androidx.test.espresso.matcher.ViewMatchers
+                    .isAssignableFrom(ArtFlowCanvasView::class.java),
+            ).perform(
+                androidx.test.espresso.action.ViewActions
+                    .click(),
+            )
         compose.onNodeWithText("Place on canvas").performScrollTo().performClick()
         compose.waitUntil(10_000) { canvas.undoDepth == depth + 1 }
         compose.runOnIdle { assertNull(viewModel.pendingText.value) }
