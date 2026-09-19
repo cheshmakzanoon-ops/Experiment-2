@@ -11,17 +11,23 @@ object ThemeContrast {
     private const val WHITE = -1
 
     /** WCAG relative-luminance contrast; thresholds are compared without rounding. */
-    fun ratio(first: Int, second: Int): Double {
+    fun ratio(
+        first: Int,
+        second: Int,
+    ): Double {
         val a = luminance(first)
         val b = luminance(second)
         return (max(a, b) + 0.05) / (min(a, b) + 0.05)
     }
 
-    fun contentOn(background: Int): Int =
-        if (ratio(WHITE, background) >= ratio(BLACK, background)) WHITE else BLACK
+    fun contentOn(background: Int): Int = if (ratio(WHITE, background) >= ratio(BLACK, background)) WHITE else BLACK
 
     /** Retain the seed when readable; otherwise find the nearest mixture toward black or white. */
-    fun fit(seed: Int, background: Int, minimum: Double): Int {
+    fun fit(
+        seed: Int,
+        background: Int,
+        minimum: Double,
+    ): Int {
         require(minimum.isFinite() && minimum in 1.0..21.0) { "Invalid contrast target" }
         if (ratio(seed, background) >= minimum) return seed
         val endpoint = contentOn(background)
@@ -43,10 +49,15 @@ object ThemeContrast {
     }
 
     /** An opaque tonal surface is predictable; a translucent token depends on what is behind it. */
-    fun mix(from: Int, to: Int, fraction: Double): Int {
+    fun mix(
+        from: Int,
+        to: Int,
+        fraction: Double,
+    ): Int {
         requireOpaque(from)
         requireOpaque(to)
         require(fraction.isFinite() && fraction in 0.0..1.0) { "Invalid colour mixture" }
+
         fun channel(shift: Int): Int {
             val start = (from ushr shift) and 255
             val end = (to ushr shift) and 255
@@ -57,6 +68,7 @@ object ThemeContrast {
 
     private fun luminance(color: Int): Double {
         requireOpaque(color)
+
         fun linear(shift: Int): Double {
             val value = ((color ushr shift) and 255) / 255.0
             return if (value <= 0.04045) value / 12.92 else ((value + 0.055) / 1.055).pow(2.4)

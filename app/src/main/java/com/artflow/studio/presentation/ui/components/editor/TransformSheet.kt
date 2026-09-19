@@ -72,20 +72,58 @@ fun TransformSheet(
             label = { Text("Keep proportions") },
         )
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TransformNumber("Rotation °", draft.rotation, parsedRotation != null, !applying, { draft = draft.copy(rotation = it) }, Modifier.weight(1f))
-            TransformNumber("Horizontal skew °", draft.skew, parsedSkew != null, !applying, { draft = draft.copy(skew = it) }, Modifier.weight(1f))
+            TransformNumber(
+                "Rotation °",
+                draft.rotation,
+                parsedRotation != null,
+                !applying,
+                { draft = draft.copy(rotation = it) },
+                Modifier.weight(1f),
+            )
+            TransformNumber(
+                "Horizontal skew °",
+                draft.skew,
+                parsedSkew != null,
+                !applying,
+                { draft = draft.copy(skew = it) },
+                Modifier.weight(1f),
+            )
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            OutlinedButton(onClick = { draft = draft.copy(rotation = ((parsedRotation ?: 0f) - 90f).toString()) }, enabled = !applying) { Text("−90°") }
-            OutlinedButton(onClick = { draft = draft.copy(rotation = ((parsedRotation ?: 0f) + 90f).toString()) }, enabled = !applying) { Text("+90°") }
+            OutlinedButton(
+                onClick = { draft = draft.copy(rotation = ((parsedRotation ?: 0f) - 90f).toString()) },
+                enabled = !applying,
+            ) { Text("−90°") }
+            OutlinedButton(
+                onClick = { draft = draft.copy(rotation = ((parsedRotation ?: 0f) + 90f).toString()) },
+                enabled = !applying,
+            ) { Text("+90°") }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TransformNumber("Move X (px)", draft.offsetX, parsedX != null, !applying, { draft = draft.copy(offsetX = it) }, Modifier.weight(1f))
-            TransformNumber("Move Y (px)", draft.offsetY, parsedY != null, !applying, { draft = draft.copy(offsetY = it) }, Modifier.weight(1f))
+            TransformNumber(
+                "Move X (px)",
+                draft.offsetX,
+                parsedX != null,
+                !applying,
+                { draft = draft.copy(offsetX = it) },
+                Modifier.weight(1f),
+            )
+            TransformNumber(
+                "Move Y (px)",
+                draft.offsetY,
+                parsedY != null,
+                !applying,
+                { draft = draft.copy(offsetY = it) },
+                Modifier.weight(1f),
+            )
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            FilterChip(selected = draft.flipX, onClick = { draft = draft.copy(flipX = !draft.flipX) }, enabled = !applying, label = { Text("Flip horizontal") })
-            FilterChip(selected = draft.flipY, onClick = { draft = draft.copy(flipY = !draft.flipY) }, enabled = !applying, label = { Text("Flip vertical") })
+            FilterChip(selected = draft.flipX, onClick = {
+                draft = draft.copy(flipX = !draft.flipX)
+            }, enabled = !applying, label = { Text("Flip horizontal") })
+            FilterChip(selected = draft.flipY, onClick = {
+                draft = draft.copy(flipY = !draft.flipY)
+            }, enabled = !applying, label = { Text("Flip vertical") })
         }
         Text("Resampling", style = MaterialTheme.typography.labelLarge)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {

@@ -7,11 +7,12 @@ import java.io.File
 object InstrumentedEvidence {
     fun directory(): File {
         val injected = InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")
-        val directory = if (!injected.isNullOrBlank()) {
-            File(injected)
-        } else {
-            File(InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null), "test-evidence")
-        }
+        val directory =
+            if (!injected.isNullOrBlank()) {
+                File(injected)
+            } else {
+                File(InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null), "test-evidence")
+            }
         check(directory.isDirectory || directory.mkdirs()) { "Cannot create instrumented evidence directory" }
         return directory
     }

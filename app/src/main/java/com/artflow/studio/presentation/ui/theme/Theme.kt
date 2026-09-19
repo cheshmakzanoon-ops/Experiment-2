@@ -31,51 +31,60 @@ data class ArtFlowThemeFlags(
 val LocalArtFlowFlags = staticCompositionLocalOf { ArtFlowThemeFlags() }
 
 /** Neutral surfaces keep the artwork, not a default Material tint, at the centre of the studio. */
-private fun darkScheme(highContrast: Boolean) = darkColorScheme(
-    background = if (highContrast) Color(0xFF0E0E10) else ArtFlowBackground,
-    onBackground = Color.White,
-    surface = if (highContrast) Color(0xFF1C1C20) else ArtFlowSurface,
-    onSurface = Color.White,
-    surfaceVariant = if (highContrast) Color(0xFF303036) else ArtFlowSurfaceVariant,
-    onSurfaceVariant = if (highContrast) Color(0xFFEDEDED) else Color(0xFFB8B8C0),
-    surfaceDim = if (highContrast) Color(0xFF0E0E10) else ArtFlowBackground,
-    surfaceBright = if (highContrast) Color(0xFF303036) else ArtFlowSurfaceVariant,
-    surfaceContainerLowest = if (highContrast) Color(0xFF0E0E10) else ArtFlowBackground,
-    surfaceContainerLow = if (highContrast) Color(0xFF16161A) else Color(0xFF252525),
-    surfaceContainer = if (highContrast) Color(0xFF1C1C20) else ArtFlowSurface,
-    surfaceContainerHigh = if (highContrast) Color(0xFF26262C) else Color(0xFF343434),
-    surfaceContainerHighest = if (highContrast) Color(0xFF303036) else ArtFlowSurfaceVariant,
-    inverseSurface = Color(0xFFE7E7EC),
-    inverseOnSurface = Color(0xFF14161B),
-    outlineVariant = if (highContrast) Color(0xFF8A8A92) else Color(0xFF62626A),
-)
+private fun darkScheme(highContrast: Boolean) =
+    darkColorScheme(
+        background = if (highContrast) Color(0xFF0E0E10) else ArtFlowBackground,
+        onBackground = Color.White,
+        surface = if (highContrast) Color(0xFF1C1C20) else ArtFlowSurface,
+        onSurface = Color.White,
+        surfaceVariant = if (highContrast) Color(0xFF303036) else ArtFlowSurfaceVariant,
+        onSurfaceVariant = if (highContrast) Color(0xFFEDEDED) else Color(0xFFB8B8C0),
+        surfaceDim = if (highContrast) Color(0xFF0E0E10) else ArtFlowBackground,
+        surfaceBright = if (highContrast) Color(0xFF303036) else ArtFlowSurfaceVariant,
+        surfaceContainerLowest = if (highContrast) Color(0xFF0E0E10) else ArtFlowBackground,
+        surfaceContainerLow = if (highContrast) Color(0xFF16161A) else Color(0xFF252525),
+        surfaceContainer = if (highContrast) Color(0xFF1C1C20) else ArtFlowSurface,
+        surfaceContainerHigh = if (highContrast) Color(0xFF26262C) else Color(0xFF343434),
+        surfaceContainerHighest = if (highContrast) Color(0xFF303036) else ArtFlowSurfaceVariant,
+        inverseSurface = Color(0xFFE7E7EC),
+        inverseOnSurface = Color(0xFF14161B),
+        outlineVariant = if (highContrast) Color(0xFF8A8A92) else Color(0xFF62626A),
+    )
 
-private fun lightScheme(highContrast: Boolean) = lightColorScheme(
-    background = CanvasWhite,
-    onBackground = Color(0xFF14161B),
-    surface = Color(0xFFF7F7F9),
-    onSurface = Color(0xFF14161B),
-    surfaceVariant = Color(0xFFE7E7EC),
-    onSurfaceVariant = if (highContrast) Color(0xFF2A2D34) else Color(0xFF4A4E57),
-    surfaceDim = Color(0xFFE7E7EC),
-    surfaceBright = Color.White,
-    surfaceContainerLowest = Color.White,
-    surfaceContainerLow = Color(0xFFF7F7F9),
-    surfaceContainer = Color(0xFFF1F1F4),
-    surfaceContainerHigh = Color(0xFFECECF0),
-    surfaceContainerHighest = Color(0xFFE7E7EC),
-    inverseSurface = Color(0xFF303036),
-    inverseOnSurface = Color.White,
-    outlineVariant = if (highContrast) Color(0xFF686B73) else Color(0xFFC5C7CE),
-)
+private fun lightScheme(highContrast: Boolean) =
+    lightColorScheme(
+        background = CanvasWhite,
+        onBackground = Color(0xFF14161B),
+        surface = Color(0xFFF7F7F9),
+        onSurface = Color(0xFF14161B),
+        surfaceVariant = Color(0xFFE7E7EC),
+        onSurfaceVariant = if (highContrast) Color(0xFF2A2D34) else Color(0xFF4A4E57),
+        surfaceDim = Color(0xFFE7E7EC),
+        surfaceBright = Color.White,
+        surfaceContainerLowest = Color.White,
+        surfaceContainerLow = Color(0xFFF7F7F9),
+        surfaceContainer = Color(0xFFF1F1F4),
+        surfaceContainerHigh = Color(0xFFECECF0),
+        surfaceContainerHighest = Color(0xFFE7E7EC),
+        inverseSurface = Color(0xFF303036),
+        inverseOnSurface = Color.White,
+        outlineVariant = if (highContrast) Color(0xFF686B73) else Color(0xFFC5C7CE),
+    )
 
 /** Checked UI roles, separate from the unchanged colour seeds displayed by the accent picker. */
-internal fun studioColorScheme(dark: Boolean, accent: Color, highContrast: Boolean): ColorScheme {
+internal fun studioColorScheme(
+    dark: Boolean,
+    accent: Color,
+    highContrast: Boolean,
+): ColorScheme {
     val base = if (dark) darkScheme(highContrast) else lightScheme(highContrast)
     val minimum = if (highContrast) 7.0 else 4.5
+
     // The darkest light-mode / lightest dark-mode surface is the limiting text background.
     fun readable(seed: Color) = Color(ThemeContrast.fit(seed.toArgb(), base.surfaceVariant.toArgb(), minimum))
+
     fun content(color: Color) = Color(ThemeContrast.contentOn(color.toArgb()))
+
     fun container(seed: Color) = Color(ThemeContrast.mix(base.surface.toArgb(), seed.toArgb(), if (highContrast) 0.10 else 0.18))
     val primary = readable(accent)
     val primaryContainer = container(accent)
@@ -128,9 +137,10 @@ fun ArtFlowTheme(
             ThemeMode.DARK -> true
         }
     val accent = settings.accent.composeColor()
-    val colorScheme = remember(darkTheme, accent, settings.highContrast) {
-        studioColorScheme(darkTheme, accent, settings.highContrast)
-    }
+    val colorScheme =
+        remember(darkTheme, accent, settings.highContrast) {
+            studioColorScheme(darkTheme, accent, settings.highContrast)
+        }
 
     val view = LocalView.current
     if (!view.isInEditMode) {

@@ -53,37 +53,54 @@ class ThemeRolesUiTest {
         compose.runOnIdle {
             val colors = provided()
             val minimum = if (enhanced) 7.0 else 4.5
-            val surfaces = listOf(
-                colors.background, colors.surface, colors.surfaceVariant,
-                colors.surfaceContainerLowest, colors.surfaceContainerLow, colors.surfaceContainer,
-                colors.surfaceContainerHigh, colors.surfaceContainerHighest, colors.surfaceDim, colors.surfaceBright,
-            )
+            val surfaces =
+                listOf(
+                    colors.background,
+                    colors.surface,
+                    colors.surfaceVariant,
+                    colors.surfaceContainerLowest,
+                    colors.surfaceContainerLow,
+                    colors.surfaceContainer,
+                    colors.surfaceContainerHigh,
+                    colors.surfaceContainerHighest,
+                    colors.surfaceDim,
+                    colors.surfaceBright,
+                )
             for (surface in surfaces) {
                 checkForegrounds(colors, surface, minimum)
             }
-            val filledPairs = listOf(
-                colors.onPrimary to colors.primary,
-                colors.onPrimaryContainer to colors.primaryContainer,
-                colors.onSecondary to colors.secondary,
-                colors.onSecondaryContainer to colors.secondaryContainer,
-                colors.onTertiary to colors.tertiary,
-                colors.onTertiaryContainer to colors.tertiaryContainer,
-                colors.onError to colors.error,
-                colors.onErrorContainer to colors.errorContainer,
-                colors.inverseOnSurface to colors.inverseSurface,
-                colors.inversePrimary to colors.inverseSurface,
-            )
+            val filledPairs =
+                listOf(
+                    colors.onPrimary to colors.primary,
+                    colors.onPrimaryContainer to colors.primaryContainer,
+                    colors.onSecondary to colors.secondary,
+                    colors.onSecondaryContainer to colors.secondaryContainer,
+                    colors.onTertiary to colors.tertiary,
+                    colors.onTertiaryContainer to colors.tertiaryContainer,
+                    colors.onError to colors.error,
+                    colors.onErrorContainer to colors.errorContainer,
+                    colors.inverseOnSurface to colors.inverseSurface,
+                    colors.inversePrimary to colors.inverseSurface,
+                )
             filledPairs.forEach { (text, background) -> checkPair(text, background, minimum) }
         }
     }
 
-    private fun checkForegrounds(colors: ColorScheme, surface: Color, minimum: Double) {
+    private fun checkForegrounds(
+        colors: ColorScheme,
+        surface: Color,
+        minimum: Double,
+    ) {
         listOf(colors.primary, colors.secondary, colors.tertiary, colors.error, colors.onSurface, colors.onSurfaceVariant)
             .forEach { checkPair(it, surface, minimum) }
         checkPair(colors.outline, surface, 3.0)
     }
 
-    private fun checkPair(text: Color, background: Color, minimum: Double) {
+    private fun checkPair(
+        text: Color,
+        background: Color,
+        minimum: Double,
+    ) {
         assertEquals(1f, text.alpha, 0f)
         assertEquals(1f, background.alpha, 0f)
         val ratio = ThemeContrast.ratio(text.toArgb(), background.toArgb())

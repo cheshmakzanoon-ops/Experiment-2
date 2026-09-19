@@ -36,7 +36,11 @@ class ThemeContrastTest {
         }
     }
 
-    private fun checkTargets(seed: Int, background: Int, minimum: Double) {
+    private fun checkTargets(
+        seed: Int,
+        background: Int,
+        minimum: Double,
+    ) {
         val fitted = ThemeContrast.fit(seed, background, minimum)
         assertTrue(ThemeContrast.ratio(fitted, background) >= minimum)
         assertTrue(ThemeContrast.ratio(ThemeContrast.contentOn(fitted), fitted) >= minimum)
