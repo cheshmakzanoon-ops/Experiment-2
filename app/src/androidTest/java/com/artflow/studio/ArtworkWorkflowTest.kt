@@ -115,7 +115,8 @@ class ArtworkWorkflowTest {
     }
 
     private fun createArtwork(name: String) {
-        compose.onNodeWithText("New artwork").performClick()
+        awaitGallery()
+        compose.onNodeWithText("New artwork", useUnmergedTree = true).performClick()
         compose.onNodeWithText("Name").performTextInput(name)
         compose.onNodeWithText("Custom").performClick()
         compose.onNodeWithText("Width").performTextReplacement("64")
@@ -125,7 +126,7 @@ class ArtworkWorkflowTest {
     }
 
     private fun awaitGallery() {
-        compose.waitUntil(15_000) { compose.onAllNodesWithText("New artwork").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("New artwork", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         compose.waitForIdle()
     }
 

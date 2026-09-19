@@ -1,5 +1,7 @@
 package com.artflow.studio.domain.model
 
+import kotlin.math.roundToInt
+
 /**
  * Domain model representing a color with ARGB components
  * Used throughout the app for brush colors, shape fills, etc.
@@ -57,7 +59,7 @@ data class Color(
     fun withAlpha(alphaFloat: Float): Color = withAlpha((alphaFloat * 255).toInt().coerceIn(0, 255))
 
     /**
-     * Blend this color with another using a factor (0.0 - 1.0)
+     * Blend this color with another using a factor (0.0 = this color, 1.0 = other color)
      * @param other The color to blend with
      * @param factor Blend factor (0.0 = this color, 1.0 = other color)
      */
@@ -153,6 +155,7 @@ data class Color(
             saturation: Float,
             value: Float,
         ): Int {
+            require(hue.isFinite() && saturation.isFinite() && value.isFinite()) { "HSV components must be finite" }
             val s = saturation.coerceIn(0f, 1f)
             val v = value.coerceIn(0f, 1f)
             val h = ((hue % 360f) + 360f) % 360f
@@ -172,9 +175,11 @@ data class Color(
                 }
 
             val m = v - c
-            val r = ((r1 + m) * 255f).toInt().coerceIn(0, 255)
-            val g = ((g1 + m) * 255f).toInt().coerceIn(0, 255)
-            val b = ((b1 + m) * 255f).toInt().coerceIn(0, 255)
+            // Round to the nearest channel: truncation darkens exact RGB -> HSV -> RGB
+            // round trips and turns full-brightness picker corners into channel 254.
+            val r = ((r1 + m) * 255f).roundToInt().coerceIn(0, 255)
+            val g = ((g1 + m) * 255f).roundToInt().coerceIn(0, 255)
+            val b = ((b1 + m) * 255f).roundToInt().coerceIn(0, 255)
 
             return (0xFF shl 24) or (r shl 16) or (g shl 8) or b
         }
