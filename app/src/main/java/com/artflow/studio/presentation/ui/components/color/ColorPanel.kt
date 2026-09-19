@@ -1,11 +1,8 @@
 package com.artflow.studio.presentation.ui.components.color
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -22,26 +19,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.artflow.studio.core.color.ColorHarmony
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.color.PaletteLibrary
-import kotlin.math.atan2
-import kotlin.math.cos
-import kotlin.math.hypot
 import kotlin.math.roundToInt
-import kotlin.math.sin
-
-/** Fraction of the ring radius occupied by the saturation/brightness square. */
-private const val SQUARE_FRACTION = 0.66f
 
 /**
  * Colour picker (Phases 31-32).
@@ -265,136 +250,6 @@ private fun Swatch(
                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
                 .clickable(onClick = onClick),
     )
-}
-
-/** Hue ring with a saturation/brightness square; dragging anywhere picks a colour. */
-@Composable
-private fun ColorWheel(
-    color: Int,
-    onColorSelected: (Int) -> Unit,
-) {
-    val hsv = remember(color) { argbToHsv(color) }
-
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Canvas(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .height(240.dp)
-                    .pointerInput(hsv[0], hsv[1], hsv[2]) {
-                        val center = Offset(size.width / 2f, size.height / 2f)
-                        val radius = minOf(size.width, size.height) / 2f - 12f
-                        if (radius <= 0f) return@pointerInput
-                        detectDragGestures(
-                            onDragStart = { offset -> onColorSelected(pickPoint(offset, center, radius, hsv)) },
-                            onDrag = { change, _ -> onColorSelected(pickPoint(change.position, center, radius, hsv)) },
-                        )
-                    }.pointerInput(hsv[0], hsv[1], hsv[2]) {
-                        val center = Offset(size.width / 2f, size.height / 2f)
-                        val radius = minOf(size.width, size.height) / 2f - 12f
-                        if (radius <= 0f) return@pointerInput
-                        detectTapGestures { offset -> onColorSelected(pickPoint(offset, center, radius, hsv)) }
-                    },
-        ) {
-            val center = Offset(size.width / 2f, size.height / 2f)
-            val radius = minOf(size.width, size.height) / 2f - 12f
-            if (radius <= 0f) return@Canvas
-
-            // Hue ring, drawn as short arcs so it stays crisp at any size.
-            val segments = 180
-            for (i in 0 until segments) {
-                val startAngle = i * (360f / segments)
-                drawArc(
-                    color = Color(ColorHarmony.fromHsv(startAngle, 1f, 1f)),
-                    startAngle = startAngle,
-                    sweepAngle = 360f / segments + 1f,
-                    useCenter = false,
-                    topLeft = Offset(center.x - radius, center.y - radius),
-                    size = Size(radius * 2, radius * 2),
-                    style = Stroke(width = radius * 0.22f),
-                )
-            }
-
-            // Saturation / brightness square inside the ring.
-            val inner = radius * SQUARE_FRACTION
-            val topLeft = Offset(center.x - inner, center.y - inner)
-            val squareSize = Size(inner * 2, inner * 2)
-            drawRect(
-                brush =
-                    Brush.horizontalGradient(
-                        listOf(Color.White, Color(ColorHarmony.fromHsv(hsv[0], 1f, 1f))),
-                    ),
-                topLeft = topLeft,
-                size = squareSize,
-            )
-            drawRect(
-                brush = Brush.verticalGradient(listOf(Color.Transparent, Color.Black)),
-                topLeft = topLeft,
-                size = squareSize,
-            )
-
-            // Hue marker on the ring.
-            val angle = Math.toRadians(hsv[0].toDouble())
-            val marker =
-                Offset(
-                    center.x + cos(angle).toFloat() * radius,
-                    center.y + sin(angle).toFloat() * radius,
-                )
-            drawCircle(Color.White, radius = 9f, center = marker)
-            drawCircle(Color.Black, radius = 9f, center = marker, style = Stroke(2f))
-
-            // Saturation / brightness marker in the square.
-            val saturationPoint =
-                Offset(
-                    topLeft.x + hsv[1] * squareSize.width,
-                    topLeft.y + (1f - hsv[2]) * squareSize.height,
-                )
-            drawCircle(Color.White, radius = 7f, center = saturationPoint)
-            drawCircle(Color.Black, radius = 7f, center = saturationPoint, style = Stroke(2f))
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("Brightness", style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(72.dp))
-            Slider(
-                value = hsv[2],
-                onValueChange = { onColorSelected(ColorHarmony.fromHsv(hsv[0], hsv[1], it)) },
-                valueRange = 0f..1f,
-                modifier = Modifier.weight(1f),
-            )
-        }
-    }
-}
-
-/** Maps a wheel touch to a hue (ring) or a saturation/brightness pair (square). */
-private fun pickPoint(
-    offset: Offset,
-    center: Offset,
-    radius: Float,
-    current: FloatArray,
-): Int {
-    val inner = radius * SQUARE_FRACTION
-    val dx = offset.x - center.x
-    val dy = offset.y - center.y
-    val distance = hypot(dx, dy)
-    return if (distance > inner) {
-        var hue = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()
-        if (hue < 0f) hue += 360f
-        ColorHarmony.fromHsv(hue, current[1].coerceAtLeast(0.15f), current[2])
-    } else {
-        val saturation = (dx / inner + 1f) / 2f
-        val brightness = 1f - (dy / inner + 1f) / 2f
-        ColorHarmony.fromHsv(current[0], saturation.coerceIn(0f, 1f), brightness.coerceIn(0f, 1f))
-    }
-}
-
-/** Platform hue conversion; the pure core only needs the inverse direction. */
-private fun argbToHsv(argb: Int): FloatArray {
-    val hsv = FloatArray(3)
-    android.graphics.Color.colorToHSV(argb, hsv)
-    return hsv
 }
 
 @Composable
