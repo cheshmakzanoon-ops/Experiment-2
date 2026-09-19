@@ -14,6 +14,24 @@ symmetry and perspective guides, add text and frames, then save and export real 
 
 ---
 
+## 🎯 Procreate comparison and current milestone
+
+**Not Procreate parity.** Passing reliability checks is not equivalent to matching the drawing
+feel, workflow depth or visual polish of a professional painting app. The explicit comparison and
+acceptance criteria live in [the Procreate parity ledger](docs/PROCREATE_PARITY.md).
+
+The September 19 transform milestone adds numerical whole-layer affine editing with a shared
+pixel/mask geometry, a single resampling pass, one-step undo, and cancellation/stale-edit guards.
+The standalone kernel probe passed **39,714 comparisons and boundary checks in six groups**. These
+are not 39,714 JUnit tests. New repository, persistence and Compose regressions require the exact
+candidate's normal Android CI; old green runs do not validate this milestone.
+
+Open **Transform**, set scale/rotation/skew/movement and resampling, then press **Apply transform**.
+The panel explains whole-layer scope and clipping. Deselect before use. Cancelling a draft leaves
+both the artwork and history untouched. Existing animation frames and unrelated layers are retained.
+
+---
+
 ## 🎨 What is implemented
 
 ### Canvas & rendering
@@ -73,8 +91,12 @@ Backdrop-dependent baking may be refused rather than silently changing the artwo
   (rectangle, ellipse, polygon, line; fill or stroke)
 - **Selection**: rectangle, ellipse, freehand, lasso and a magic wand, combinable with
   replace / add / subtract / intersect
-- **Transform**: 🟡 translate only — the `MOVE` and `TRANSFORM` tools shift pixels by the drag
-  delta. Rotate, scale, skew, perspective and distortion are not implemented
+- **Precision layer transform**: numerical move, uniform/free scale, rotation, horizontal skew and
+  horizontal/vertical flips, with smooth or pixel-art resampling. `Transform` opens a draft panel;
+  Apply transforms the entire active layer and its editable mask together in **one undo step**.
+  Cancelling does not change pixels. The pivot is the canvas centre; off-canvas content clips.
+  Selected-pixel transforms, live handles, perspective, warp and snapping are **not implemented**.
+  Simple drag translation remains available for unmasked, unlinked layers without a selection.
 - Smudge, clone, heal and liquify run through `PixelBrushes` / `LiquifyTool` on `PixelBuffer`s
 
 ### Layers
@@ -146,7 +168,7 @@ The table below reflects the code that is currently in the repository.
 | Brush textures | Three built-in procedural grains with scale/rotation; custom texture import and dual textures are not implemented |
 | Pixel engine (buffers, blend modes, adjustments, filters) | Implemented |
 | Tools (smudge, clone, heal, liquify, fill, gradient, text, shapes) | Implemented |
-| Selection / transform | Selection implemented (magic wand + boolean combining); transform is **translate only** |
+| Selection / transform | Selection implemented; whole-layer affine transform and editable-mask resampling with exact numerical controls. Interactive handles, selected-content transforms, warp and snapping remain missing. |
 | Layers / masks / adjustments / filter layers | Implemented |
 | Layer groups / layer linking | **Not available** — no grouping UI or repository operation; `linkGroupId` is stored but never set from the UI |
 | Undo / redo | Implemented (snapshot history) |
@@ -180,8 +202,10 @@ only provided them) has been deleted.
 
 - **Layer groups.** `Layer.parentGroupId` exists, but no repository operation or UI sets it, so
   layers cannot be nested or collapsed.
-- **Transform beyond translation.** Rotate, scale, skew, perspective, distortion and snapping are
-  not implemented; `MOVE`/`TRANSFORM` translate pixels only.
+- **Advanced transform workflow.** Whole-layer numerical affine transforms are implemented, but
+  on-canvas handles/live preview, selected-pixel transforms, configurable pivot, perspective,
+  distortion/warp, snapping and linked-layer transforms are not. Selections and linked layers are
+  explicitly rejected, not silently transformed incorrectly.
 - **Imported and dual brush textures.** Built-in procedural grains are implemented; a custom
   texture importer/library and dual-texture mixing are not.
 - **The native module.** `app/src/main/jni` remains an unintegrated C++ prototype. The application
@@ -386,7 +410,7 @@ table and is kept in step with the code. Summarised:
   engine, layers — ✅
 - **Core drawing (9–16)**: advanced brush params, colour dynamics, blend modes, selection,
   alpha lock, masks and custom pressure — ✅; textures — 🟡 *three procedural grains, no custom import*;
-  transform — 🟡 *translate only*
+  transform — 🟡 *whole-layer numerical affine controls; no interactive handles or selected-pixel transforms*
 - **Professional tools (17–24)**: smudge, liquify, clone, heal, gradient, fill, text, shapes — ✅
 - **Advanced layers (25–30)**: adjustments and filter layers — ✅; layer groups, layer linking UI
   and smart objects — ⬜ *not implemented*

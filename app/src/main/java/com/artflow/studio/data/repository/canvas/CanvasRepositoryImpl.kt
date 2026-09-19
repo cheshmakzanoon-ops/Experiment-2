@@ -2,6 +2,7 @@ package com.artflow.studio.data.repository.canvas
 
 import com.artflow.studio.core.animation.AnimationTimeline
 import com.artflow.studio.core.canvas.CanvasOperations
+import com.artflow.studio.core.canvas.LayerTransform
 import com.artflow.studio.core.pixels.AdjustmentProcessor
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.LayerMaskFactory
@@ -751,6 +752,54 @@ class CanvasRepositoryImpl
                 dirty = true
                 emit(CanvasInvalidationEvent.Full)
                 Timber.d("Set pixels for layer ${layer.name} ($description)")
+                true
+            }
+
+        override suspend fun transformLayer(
+            layerId: Long,
+            parameters: LayerTransform.Parameters,
+            expectedRevision: Long,
+        ): Boolean =
+            withState {
+                val layer = activeLayerData() ?: return@withState false
+                if (layer.id != layerId || !layer.canPaint() || layer.linkGroupId != null) return@withState false
+                if (editRevision != expectedRevision || activeSelection != null) return@withState false
+                if (activeStrokes.isNotEmpty() || pendingEdits.isNotEmpty()) return@withState false
+                if (parameters.isIdentity) return@withState true
+                requireCanvasMemory(canvasWidth, canvasHeight)
+                val project = currentProjectId
+                val frame = activeFrame
+                val width = canvasWidth
+                val height = canvasHeight
+                markRastersShared()
+                val frozen = layer.snapshotCopy()
+                // Prepare BOTH planes before touching live state. Preview, autosave and export
+                // continue to read the previous committed document while resampling is in flight.
+                val result =
+                    withContext(Dispatchers.Default) {
+                        val source = rawLayerPixels(frozen, width, height) ?: PixelBuffer(width, height)
+                        val pixels = LayerTransform.apply(source, parameters, checkActive = { ensureActive() })
+                        val sourceMask = frozen.mask
+                        val mask = sourceMask?.let { LayerTransform.apply(it, parameters, checkActive = { ensureActive() }) }
+                        val samePixels = frozen.strokes.isEmpty() && source.pixels.contentEquals(pixels.pixels)
+                        val sameMask = if (sourceMask == null) mask == null else sourceMask.pixels.contentEquals(mask?.pixels)
+                        Triple(pixels, mask, samePixels && sameMask)
+                    }
+                coroutineContext.ensureActive()
+                if (currentProjectId != project || activeFrame != frame || activeLayerData() !== layer) return@withState false
+                if (editRevision != expectedRevision || activeSelection != null) return@withState false
+                if (activeStrokes.isNotEmpty() || pendingEdits.isNotEmpty()) return@withState false
+                if (result.third) return@withState true
+                pushUndo()
+                layer.raster = result.first
+                layer.strokes.clear()
+                layer.rasterFile = null
+                layer.mask = result.second
+                layer.maskFile = null
+                layer.maskOwned = true
+                dirtyRasters += layer.id
+                dirty = true
+                emit(CanvasInvalidationEvent.Full)
                 true
             }
 

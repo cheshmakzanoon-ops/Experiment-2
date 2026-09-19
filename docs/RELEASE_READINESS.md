@@ -181,7 +181,7 @@ presence is not execution evidence; use the publication's exact completed valida
 
 | Goal | Current limitation |
 | --- | --- |
-| Advanced transform tools | MOVE/TRANSFORM translate pixels; general scale/skew/perspective/distortion is not implemented. Canvas-wide operations are separate. |
+| Advanced transform tools | Whole-layer numerical move/scale/rotate/horizontal-skew/flip with editable-mask resampling is implemented. Handles, selected-pixel transforms, perspective, distortion and snapping remain missing. Canvas-wide operations are separate. |
 | Layer groups, linking and references | Grouping UI and operations are absent; linking/reference model support is not a complete user workflow. |
 | Custom texture workflows | Three procedural grains and editable monotone custom pressure are implemented. Imported/dual textures and a user texture library remain absent. |
 | Native engine and benchmarks | C++ is an unintegrated prototype. No benchmark module or measured device-performance acceptance report exists. |
@@ -486,3 +486,22 @@ signing policy, force push or overwritten remote history is used to approve this
 The original roadmap gaps, pending stroke/native-runtime work, real publisher signing, physical
 phone/tablet/stylus testing and Play Console requirements above remain unresolved. Apply this patch
 to its stated base and obtain a successful full Android verification run before promoting it.
+
+## Procreate workflow milestone — September 19, 2026
+
+The new `LayerTransform` kernel is Android-independent and resamples once around a consistent
+canvas-centre pivot. The repository prepares pixel and mask planes off the main dispatcher and
+commits one history entry only after rechecking the document revision, frame, active layer and
+provisional gesture state. Empty and nonempty selections are explicitly unsupported for this
+whole-layer operation. Linked, locked, hidden and effect layers are rejected.
+
+The Transform panel keeps local drafts, validates finite/ranged input, and does not edit the document
+until Apply. Cancellation before commit leaves it untouched. The old unused transform helper's
+double-pivot positioning was removed. Drag translation now refuses masked/linked/selected layers
+instead of moving only one plane or losing selected pixels. Use the precision panel for masks.
+
+`python .github/scripts/verify_transform_kernels.py` passed six shared check groups with 39,714
+comparisons/boundary assertions in a 96 MB JVM. It is **not** an Android, Gradle/JUnit, lint or release
+result. `LayerTransformTest`, `LayerTransformTransactionTest`, `TransformUiRegressionTest` and a
+real persistence regression are included for the ordinary CI suites. Their exact-commit execution
+evidence must be checked separately. This feature milestone does not close the parity ledger.

@@ -10,6 +10,7 @@ import android.os.Build
 import android.util.AttributeSet
 import android.view.MotionEvent
 import androidx.core.math.MathUtils
+import com.artflow.studio.core.canvas.LayerTransform
 import com.artflow.studio.core.canvas.PointerGestureRouter
 import com.artflow.studio.core.canvas.PointerPressure
 import com.artflow.studio.core.perspective.PerspectiveGuide
@@ -553,63 +554,17 @@ class ArtFlowCanvasView
             }
         }
 
-        /** Moves the active layer's pixels by a canvas-space offset. */
+        /** Move both the complete layer and its mask, never just the currently visible raster. */
         fun moveActiveLayer(
             dx: Float,
             dy: Float,
         ) {
-            if (dx == 0f && dy == 0f) return
+            val parameters = LayerTransform.Parameters(translationX = dx, translationY = dy)
             val layerId = activeLayerId
+            val revision = canvasRepository.contentRevision
             coroutineScope.launch {
-                val base = canvasRepository.layerPixels(layerId) ?: return@launch
-                canvasRepository.applyRasterEdit(layerId, "Move layer") { target ->
-                    target.clear()
-                    drawShifted(target, base, dx.roundToInt(), dy.roundToInt())
-                }
-                reportHistory()
-            }
-        }
-
-        /**
-         * Bakes the active layer through a free transform about ([pivotX], [pivotY]).
-         *
-         * Scaling and rotation follow the canvas centre because the layer buffer is canvas sized; the
-         * pivot only decides where the transformed result is placed.
-         */
-        fun transformActiveLayer(
-            pivotX: Float,
-            pivotY: Float,
-            scaleFactor: Float,
-            rotation: Float,
-            flipHorizontal: Boolean,
-            flipVertical: Boolean,
-        ) {
-            val layerId = activeLayerId
-            coroutineScope.launch {
-                val base = canvasRepository.layerPixels(layerId) ?: return@launch
-                val transformed =
-                    withContext(Dispatchers.Default) {
-                        var buffer = base
-                        if (flipHorizontal) buffer = buffer.flippedHorizontally()
-                        if (flipVertical) buffer = buffer.flippedVertically()
-                        val degrees = rotation.roundToInt()
-                        if (degrees % 360 != 0) buffer = buffer.rotated(degrees)
-                        if (abs(scaleFactor - 1f) > 0.001f) {
-                            val targetWidth = (buffer.width * scaleFactor).roundToInt().coerceAtLeast(1)
-                            val targetHeight = (buffer.height * scaleFactor).roundToInt().coerceAtLeast(1)
-                            buffer = buffer.scaled(targetWidth, targetHeight)
-                        }
-                        buffer
-                    }
-                canvasRepository.applyRasterEdit(layerId, "Transform layer") { target ->
-                    target.clear()
-                    val dx =
-                        (pivotX - transformed.width / 2f).roundToInt() +
-                            (canvasWidth - transformed.width) / 2
-                    val dy =
-                        (pivotY - transformed.height / 2f).roundToInt() +
-                            (canvasHeight - transformed.height) / 2
-                    drawShifted(target, transformed, dx, dy)
+                if (!canvasRepository.transformLayer(layerId, parameters, revision)) {
+                    onStatusMessage?.invoke("Deselect first and use an unlocked layer to move the entire layer")
                 }
                 reportHistory()
             }
@@ -1110,6 +1065,13 @@ class ArtFlowCanvasView
             description: String,
         ) {
             cancelPixelInteraction()
+            if (tool == ToolType.MOVE || tool == ToolType.TRANSFORM) {
+                val layer = canvasRepository.getActiveLayer()
+                if (canvasRepository.selection() != null || layer?.hasMask() == true || layer?.linkGroupId != null) {
+                    onStatusMessage?.invoke("Use Transform options for masked layers. Deselect before moving the whole layer.")
+                    return
+                }
+            }
             pixelTool = tool
             pixelCommitDescription = description
             pendingPixelCommit = false

@@ -45,6 +45,7 @@ import com.artflow.studio.presentation.ui.components.editor.QuickMenuSheet
 import com.artflow.studio.presentation.ui.components.editor.SelectionSheet
 import com.artflow.studio.presentation.ui.components.editor.TextSheet
 import com.artflow.studio.presentation.ui.components.editor.ToolStrip
+import com.artflow.studio.presentation.ui.components.editor.TransformSheet
 import com.artflow.studio.presentation.ui.components.export.ExportSheet
 import com.artflow.studio.presentation.ui.components.export.rememberExportActions
 import com.artflow.studio.presentation.ui.viewmodel.CanvasUiState
@@ -60,6 +61,7 @@ private enum class EditorPanel(
     COLOUR("Colour"),
     LAYERS("Layers"),
     SELECTION("Selection"),
+    TRANSFORM("Transform layer"),
     GUIDES("Guides"),
     ANIMATION("Animation"),
     CANVAS("Canvas"),
@@ -115,6 +117,8 @@ fun CanvasScreen(
     var showRecoveryDialog by remember { mutableStateOf(false) }
     var showBrushEditor by remember { mutableStateOf(false) }
     var showExitConfirm by remember { mutableStateOf(false) }
+    // A draft belongs to the layer/revision present when the panel opens, not a later frame.
+    val transformTarget = remember(panel, projectId) { activeLayerId to viewModel.transformRevision() }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, canvasView) {
@@ -257,12 +261,16 @@ fun CanvasScreen(
                         TextButton(onClick = { panel = EditorPanel.SELECTION }) {
                             Text(if (selectionCount > 0) "Select ($selectionCount)" else "Select")
                         }
+                        TextButton(onClick = { panel = EditorPanel.TRANSFORM }) { Text("Transform") }
                         TextButton(onClick = { panel = EditorPanel.TOOLS }) { Text("Options") }
                         TextButton(onClick = { panel = EditorPanel.EXPORT }) { Text("Export") }
                     }
                     ToolStrip(
                         activeTool = input.tool,
-                        onToolSelected = { viewModel.setTool(it) },
+                        onToolSelected = {
+                            viewModel.setTool(it)
+                            if (it == ToolType.TRANSFORM) panel = EditorPanel.TRANSFORM
+                        },
                     )
                 }
             }
@@ -359,6 +367,13 @@ fun CanvasScreen(
                     modifier = Modifier.padding(start = 16.dp, top = 4.dp),
                 )
                 when (panel) {
+                    EditorPanel.TRANSFORM ->
+                        TransformSheet(
+                            layerName = layers.firstOrNull { it.id == transformTarget.first }?.name ?: "Layer",
+                            hasSelection = selection != null,
+                            onApply = { viewModel.transformLayer(transformTarget.first, transformTarget.second, it) },
+                            onClose = { panel = EditorPanel.NONE },
+                        )
                     EditorPanel.TOOLS -> ToolOptionsPanel(viewModel, input)
                     EditorPanel.COLOUR ->
                         ColorPanel(
