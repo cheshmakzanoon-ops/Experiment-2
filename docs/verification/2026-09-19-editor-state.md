@@ -44,3 +44,34 @@ These repairs do not complete the original 50-phase roadmap or establish a bug-f
 Google Play release. The gaps in README.md and RELEASE_READINESS.md remain explicit.
 Publisher signing, Play Console declarations and testing, physical stylus/GPU/codec
 coverage and low-memory performance evidence remain necessary release work.
+
+## Playback session repair
+
+The editor now publishes playing state independently of document timeline snapshots,
+so frame changes do not reset the Pause button back to Play. Forward and ping-pong
+playback honor the saved inclusive range and per-frame holds. Disabling looping
+ends a forward clip, or one forward/return ping-pong pass, after its final hold.
+Looping ping-pong does not duplicate endpoint holds. Single-frame ranges do not
+start an idle playback loop.
+
+Pause, backgrounding, opening another project and frame/timing changes cancel the
+owned playback session. A cancelled old loop cannot clear a newer session's state,
+and a delayed frame advance cannot target another open project. Changing animation
+FPS or loop settings no longer rewrites the independent onion-skin preference.
+Playback selection itself does not add document edits or history.
+
+Six policy tests and twelve real-repository/ViewModel virtual-time tests cover
+ranges, frame holds, looping, ping-pong, cancellation, rapid restart and preferences.
+Two Android UI tests exercise the actual animation sheet with the real ViewModel.
+The six policy tests passed locally against the actual PlaybackStepper,
+AnimationTimeline and animation models, with minimal Layer/serialization/JUnit
+bridges; this is not represented as a full Gradle run. The final CI executes the
+registered tests without those local bridges. UI timing on loaded hardware is not
+a measured frame-rate guarantee.
+
+The metadata commit's run `35429630738` executed all 377 JVM tests, including the
+ten repository and eight ViewModel metadata/result cases, with zero failures,
+errors or skips. Detekt passed, but ktlint found nine test-formatting findings;
+the playback batch fixes their formatting without changing assertions. A failed
+static-analysis gate is not a successful full build. Read the final combined
+commit's completed CI evidence before deciding whether to distribute it.

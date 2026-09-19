@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.artflow.studio.core.animation.AnimationTimeline
+import com.artflow.studio.core.animation.PlaybackStepper
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.color.ColorHarmony
 import com.artflow.studio.core.color.Palette
@@ -190,6 +191,8 @@ class CanvasViewModel
 
         private var project: Project? = null
         private var playbackJob: Job? = null
+        private var playbackGeneration = 0L
+        private var playbackActive = false
         private var autosaveJob: Job? = null
         private var observationJob: Job? = null
         private var currentProjectId: Long = 0L
@@ -217,7 +220,7 @@ class CanvasViewModel
                 }
             }
             viewModelScope.launch(editorErrors) {
-                canvasRepository.timeline.collect { _timeline.value = it }
+                canvasRepository.timeline.collect { _timeline.value = it.copy(isPlaying = playbackActive) }
             }
         }
 
@@ -230,7 +233,7 @@ class CanvasViewModel
             loadJob?.cancel()
             autosaveJob?.cancel()
             observationJob?.cancel()
-            playbackJob?.cancel()
+            stopPlayback()
             allowAutosave = true
             currentProjectId = projectId
             loadJob =
@@ -971,6 +974,7 @@ class CanvasViewModel
         // -----------------------------------------------------------------------------------------
 
         fun addFrame(duplicateCurrent: Boolean) {
+            stopPlayback()
             viewModelScope.launch(editorErrors) {
                 canvasRepository.addFrame(duplicateCurrent)
                 refreshLayers()
@@ -979,6 +983,7 @@ class CanvasViewModel
         }
 
         fun deleteFrame(index: Int) {
+            stopPlayback()
             viewModelScope.launch(editorErrors) {
                 if (!canvasRepository.deleteFrame(index)) notify("The last frame cannot be deleted")
                 refreshLayers()
@@ -990,6 +995,7 @@ class CanvasViewModel
             from: Int,
             to: Int,
         ) {
+            stopPlayback()
             viewModelScope.launch(editorErrors) {
                 canvasRepository.moveFrame(from, to)
                 refreshUiStateFrames()
@@ -997,6 +1003,7 @@ class CanvasViewModel
         }
 
         fun selectFrame(index: Int) {
+            stopPlayback()
             viewModelScope.launch(editorErrors) { canvasRepository.selectFrame(index) }
         }
 
@@ -1004,14 +1011,13 @@ class CanvasViewModel
             index: Int,
             durationMs: Int,
         ) {
+            stopPlayback()
             viewModelScope.launch(editorErrors) { canvasRepository.setFrameDuration(index, durationMs) }
         }
 
         fun updateAnimationSettings(settings: AnimationSettings) {
-            viewModelScope.launch(editorErrors) {
-                canvasRepository.updateAnimationSettings(settings)
-                settingsRepository.setOnionSkin(settings.onionSkinFrames > 0)
-            }
+            stopPlayback()
+            viewModelScope.launch(editorErrors) { canvasRepository.updateAnimationSettings(settings) }
         }
 
         fun toggleOnionSkin(enabled: Boolean) {
@@ -1076,6 +1082,7 @@ class CanvasViewModel
         }
 
         fun saveRecoveryOnBackground() {
+            stopPlayback()
             if (!allowAutosave || !_settings.value.autosaveEnabled || _saving.value) return
             val state = _uiState.value as? CanvasUiState.Ready ?: return
             if (state.recoveryAvailable || !canvasRepository.hasUnsavedChanges()) return
@@ -1274,44 +1281,53 @@ class CanvasViewModel
             viewModelScope.launch(editorErrors) { settingsRepository.setPerspectiveGuides(visible) }
         }
 
-        /**
-         * Playback with real timing.
-         *
-         * Frames are advanced by their own duration (not by the fps field) so an animation with
-         * non-uniform exposure plays exactly as it will export; ping-pong reverses at the ends.
-         */
+        /** Per-frame holds; a busy device can delay presentation, but never bypass cancellation. */
         fun togglePlayback() {
-            if (playbackJob?.isActive == true) {
-                playbackJob?.cancel()
-                playbackJob = null
+            if (playbackActive) {
+                stopPlayback()
                 return
             }
+            if (_uiState.value !is CanvasUiState.Ready) return
+            val initial = PlaybackStepper.start(canvasRepository.timeline.value) ?: return
+            val owner = ++playbackGeneration
+            val projectId = currentProjectId
+            setPlaybackState(true)
             playbackJob =
                 viewModelScope.launch(editorErrors) {
-                    var index = canvasRepository.activeFrameIndex()
-                    var direction = 1
-                    while (true) {
-                        val frames = canvasRepository.frames()
-                        if (frames.size <= 1) return@launch
-                        val current = frames.getOrNull(index) ?: frames.first()
-                        delay(current.durationMs.toLong().coerceAtLeast(16L))
-                        index += direction
-                        if (index > frames.lastIndex) {
-                            if (_timeline.value.settings.pingPong) {
-                                direction = -1
-                                index = (frames.size - 2).coerceAtLeast(0)
-                            } else if (_timeline.value.settings.loop) {
-                                index = 0
-                            } else {
-                                return@launch
-                            }
-                        } else if (index < 0) {
-                            direction = 1
-                            index = 1.coerceAtMost(frames.lastIndex)
+                    try {
+                        if (projectId != canvasRepository.projectId()) return@launch
+                        var cursor = initial
+                        canvasRepository.selectFrame(cursor.index)
+                        while (true) {
+                            if (projectId != canvasRepository.projectId()) break
+                            val frame = canvasRepository.frames().getOrNull(cursor.index) ?: break
+                            delay(frame.durationMs.toLong().coerceAtLeast(16L))
+                            if (projectId != canvasRepository.projectId()) break
+                            val state = canvasRepository.timeline.value
+                            if (state.frames.getOrNull(cursor.index)?.id != frame.id) break
+                            cursor = PlaybackStepper.next(state, cursor) ?: break
+                            canvasRepository.selectFrame(cursor.index)
                         }
-                        canvasRepository.selectFrame(index)
+                    } finally {
+                        // A cancelled old loop must not clear a newer playback session's state.
+                        if (owner == playbackGeneration) {
+                            playbackJob = null
+                            setPlaybackState(false)
+                        }
                     }
                 }
+        }
+
+        private fun stopPlayback() {
+            playbackGeneration++
+            playbackJob?.cancel()
+            playbackJob = null
+            setPlaybackState(false)
+        }
+
+        private fun setPlaybackState(playing: Boolean) {
+            playbackActive = playing
+            _timeline.value = _timeline.value.copy(isPlaying = playing)
         }
 
         fun quickFill(color: Int) {
@@ -1333,7 +1349,7 @@ class CanvasViewModel
             loadJob?.cancel()
             observationJob?.cancel()
             autosaveJob?.cancel()
-            playbackJob?.cancel()
+            stopPlayback()
             canvasRepository.dispose()
         }
 

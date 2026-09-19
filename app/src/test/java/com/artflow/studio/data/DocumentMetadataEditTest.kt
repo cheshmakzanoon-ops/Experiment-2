@@ -73,7 +73,8 @@ class DocumentMetadataEditTest {
             assertSame(CanvasInvalidationEvent.Full, events.last())
             assertTrue(repository.hasUnsavedChanges())
             assertEquals(1, repository.undoDepth)
-            assertEquals(500, repository.timeline.value.frames.single().durationMs)
+            val changedFrame = repository.timeline.value.frames.single()
+            assertEquals(500, changedFrame.durationMs)
             assertTrue(repository.undo())
             assertEquals(original, repository.frames().single().durationMs)
             assertTrue(repository.redo())
@@ -88,7 +89,8 @@ class DocumentMetadataEditTest {
             assertEquals(1, repository.activeFrameIndex())
             assertTrue(repository.setFrameDuration(0, 350))
             assertEquals(1, repository.activeFrameIndex())
-            assertEquals(350, repository.timeline.value.frames[0].durationMs)
+            val editedFrame = repository.timeline.value.frames[0]
+            assertEquals(350, editedFrame.durationMs)
         }
 
     @Test
@@ -164,9 +166,10 @@ class DocumentMetadataEditTest {
             val before = repository.timeline.value
             val revision = repository.contentRevision
             for (invalid in listOf(Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY)) {
-                val result = runCatching {
-                    repository.updateAnimationSettings(before.settings.copy(fps = 60, onionSkinOpacity = invalid))
-                }
+                val result =
+                    runCatching {
+                        repository.updateAnimationSettings(before.settings.copy(fps = 60, onionSkinOpacity = invalid))
+                    }
                 assertTrue(result.exceptionOrNull() is IllegalArgumentException)
                 assertEquals(before, repository.timeline.value)
                 assertEquals(0, repository.undoDepth)
