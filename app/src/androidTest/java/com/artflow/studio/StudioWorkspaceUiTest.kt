@@ -1,9 +1,11 @@
 package com.artflow.studio
 
 import android.graphics.Bitmap
+import androidx.activity.compose.setContent
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.lifecycle.viewModelScope
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -18,6 +20,8 @@ import com.artflow.studio.domain.model.settings.ThemeMode
 import com.artflow.studio.domain.repository.ProjectRepository
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import com.artflow.studio.domain.repository.settings.SettingsRepository
+import com.artflow.studio.presentation.ui.MainActivity
+import com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView
 import com.artflow.studio.presentation.ui.components.editor.StudioAction
 import com.artflow.studio.presentation.ui.components.editor.StudioToolPalette
 import com.artflow.studio.presentation.ui.screens.canvas.CanvasScreen
@@ -46,7 +50,7 @@ class StudioWorkspaceUiTest {
     val hilt = HiltAndroidRule(this)
 
     @get:Rule(order = 1)
-    val compose = createComposeRule()
+    val compose = createAndroidComposeRule<MainActivity>()
 
     @Inject lateinit var projects: ProjectRepository
 
@@ -68,7 +72,15 @@ class StudioWorkspaceUiTest {
         runBlocking(Dispatchers.Main) { viewModel = CanvasViewModel(canvas, projects, settings, exporter) }
     }
 
+    private fun setEditorContent(content: @Composable () -> Unit) {
+        // ArtFlowCanvasView is a Hilt AndroidEntryPoint, so it needs the real injected activity.
+        compose.runOnUiThread { compose.activity.setContent(content = content) }
+    }
+
     @After fun cleanup() {
+        // Detach GL and lifecycle observers before disposing their repository.
+        setEditorContent {}
+        compose.waitForIdle()
         if (::viewModel.isInitialized) {
             runBlocking(Dispatchers.Main) {
                 viewModel.viewModelScope.cancel()
@@ -82,7 +94,7 @@ class StudioWorkspaceUiTest {
     }
 
     private fun openEditor(preferences: AppSettings = AppSettings(themeMode = ThemeMode.DARK)) {
-        compose.setContent {
+        setEditorContent {
             ArtFlowTheme(preferences) {
                 CanvasScreen(projectId, { navigations++ }, viewModel = viewModel)
             }
@@ -153,7 +165,7 @@ class StudioWorkspaceUiTest {
     @Test fun allNineteenToolsRemainSelectableAtLargeTextSize() {
         var chosen by mutableStateOf(ToolType.BRUSH)
         val actions = mutableListOf<StudioAction>()
-        compose.setContent {
+        setEditorContent {
             ArtFlowTheme(AppSettings(themeMode = ThemeMode.LIGHT, uiScale = 1.6f, largeTouchTargets = true, reduceMotion = true)) {
                 StudioToolPalette(chosen, { chosen = it }, { actions += it })
             }
@@ -176,6 +188,71 @@ class StudioWorkspaceUiTest {
         compose.onNodeWithContentDescription("Eraser").assertIsSelected()
         compose.onNodeWithContentDescription("Tools").performScrollTo().assertIsDisplayed()
         screenshot("studio-light.png")
+    }
+
+    @Test
+    fun textSettingsChoosesPositionPlacesOnceAndRestoresExactUndo() {
+        openEditor()
+        val id = canvas.getActiveLayerId()
+        val before = runBlocking { requireNotNull(canvas.layerPixels(id)).pixels.copyOf() }
+        val depth = canvas.undoDepth
+        compose.onNodeWithContentDescription("Tools").performClick()
+        compose.onNodeWithText("Text settings").performScrollTo().performClick()
+        compose.onNodeWithText("Content").performTextReplacement("Title")
+        compose.onNodeWithText("Choose position").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(ToolType.TEXT, viewModel.input.value.tool) }
+        Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom(ArtFlowCanvasView::class.java))
+            .perform(androidx.test.espresso.action.ViewActions.click())
+        compose.onNodeWithText("Place on canvas").performScrollTo().performClick()
+        compose.waitUntil(10_000) { canvas.undoDepth == depth + 1 }
+        compose.runOnIdle { assertNull(viewModel.pendingText.value) }
+        compose.onNodeWithText("Place on canvas").assertDoesNotExist()
+        val after = runBlocking { requireNotNull(canvas.layerPixels(id)).pixels }
+        assertFalse(before.contentEquals(after))
+        compose.onNodeWithContentDescription("Undo").performClick()
+        val undone = runBlocking { requireNotNull(canvas.layerPixels(id)).pixels }
+        assertArrayEquals(before, undone)
+    }
+
+    @Test
+    fun dismissingTextClearsItsPositionAndDoesNotPlaceArtwork() {
+        openEditor()
+        val depth = canvas.undoDepth
+        compose.runOnIdle { viewModel.requestTextAt(50f, 60f) }
+        compose.onNodeWithText("Place on canvas").assertIsDisplayed()
+        Espresso.pressBack()
+        compose.runOnIdle { assertNull(viewModel.pendingText.value) }
+        compose.runOnIdle { assertEquals(depth, canvas.undoDepth) }
+        // The same point can be chosen afresh; it is not an abandoned placement from before.
+        compose.runOnIdle { viewModel.requestTextAt(50f, 60f) }
+        compose.onNodeWithText("Place on canvas").assertIsDisplayed()
+        Espresso.pressBack()
+        compose.runOnIdle { assertNull(viewModel.pendingText.value) }
+    }
+
+    @Test
+    fun textScaleAppliesOnceWithoutShrinkingTheLayoutWidth() {
+        var baseDensity = 0f
+        var baseFont = 0f
+        var scaledDensity = 0f
+        var scaledFont = 0f
+        setEditorContent {
+            val before = LocalDensity.current
+            ArtFlowTheme(AppSettings(uiScale = 1.6f)) {
+                val after = LocalDensity.current
+                SideEffect {
+                    baseDensity = before.density
+                    baseFont = before.fontScale
+                    scaledDensity = after.density
+                    scaledFont = after.fontScale
+                }
+            }
+        }
+        compose.runOnIdle {
+            assertTrue(baseDensity > 0f)
+            assertEquals(baseDensity, scaledDensity, 0f)
+            assertEquals(baseFont * 1.6f, scaledFont, 0.00001f)
+        }
     }
 
     private fun screenshot(name: String) {

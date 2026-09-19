@@ -78,3 +78,15 @@ and does not run on idle, unselected canvases.
 Real Compose regressions cover routes, selected semantics, focus restoration and large text; named
 screenshot artifacts are captured only by actual Android execution. Tablet/phone artist testing
 and measured aesthetics remain open, not replaced by the existence of these tests.
+
+### Inspection follow-up — Placement ownership and accessible controls
+
+Text placement now explicitly chooses a position, consumes it only once, and rejects a changed
+project/layer/revision. Dismissal clears the position and playback stops before choosing a target.
+Text controls and transform action rows wrap; transform input does not depend on an IME supplying
+a numeric minus key. These are workflow corrections, not a claim of typography parity.
+
+Accessibility inspection also corrected text scaling: the extra text-size preference now scales
+text once, without also scaling layout density and shrinking the usable workspace. The independent
+large-target preference still controls touch-target size. A real Compose density regression guards
+this distinction.

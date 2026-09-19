@@ -517,3 +517,23 @@ and does not continuously animate with no selection. The obsolete permanent tool
 
 CI execution and screenshot inspection must still be recorded for the exact final source; compiling
 a UI or listing tests is not equivalent to running them. This does not certify artist-rated parity.
+
+## Studio inspection follow-up — September 19, 2026
+
+The new text route uses an explicit Choose position / Place on canvas sequence. Placements are
+bound to project, layer and content revision, consumed once, and cancelled on dismissal or document
+opening. Changed targets cannot reuse a stale point. Text playback is stopped before positioning.
+Transform and text action rows wrap at large text sizes; signed transform entry works without a
+numeric-keyboard minus key. Normal exact-candidate CI and actual screenshots must validate this
+follow-up as well; the preceding green baseline is not evidence for these changes.
+
+Accessibility inspection also corrected text scaling: the extra text-size preference now scales
+text once, without also scaling layout density and shrinking the usable workspace. The independent
+large-target preference still controls touch-target size. A real Compose density regression guards
+this distinction.
+
+The first candidate run (`35439604147`) passed JVM tests, ktlint and both Android lint variants,
+but failed Detekt on three new-source organization/nesting findings and did not complete device
+verification. This inspection refactors those checks without reducing their 39,714 comparisons
+and hosts the full editor UI tests in the injected `MainActivity` required by `ArtFlowCanvasView`.
+The failed run is diagnostic evidence, not an acceptance result; a fresh full matrix is required.

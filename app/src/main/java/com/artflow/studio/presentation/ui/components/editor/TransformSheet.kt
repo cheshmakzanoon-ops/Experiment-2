@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.artflow.studio.presentation.ui.components.editor
 
 import androidx.compose.foundation.layout.*
@@ -83,7 +85,7 @@ fun TransformSheet(
             TransformNumber("Rotation °", rotation, parsedRotation != null, !applying, { rotation = it }, Modifier.weight(1f))
             TransformNumber("Horizontal skew °", skew, parsedSkew != null, !applying, { skew = it }, Modifier.weight(1f))
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             OutlinedButton(onClick = { rotation = ((parsedRotation ?: 0f) - 90f).toString() }, enabled = !applying) { Text("−90°") }
             OutlinedButton(onClick = { rotation = ((parsedRotation ?: 0f) + 90f).toString() }, enabled = !applying) { Text("+90°") }
         }
@@ -91,12 +93,12 @@ fun TransformSheet(
             TransformNumber("Move X (px)", offsetX, parsedX != null, !applying, { offsetX = it }, Modifier.weight(1f))
             TransformNumber("Move Y (px)", offsetY, parsedY != null, !applying, { offsetY = it }, Modifier.weight(1f))
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             FilterChip(selected = flipX, onClick = { flipX = !flipX }, enabled = !applying, label = { Text("Flip horizontal") })
             FilterChip(selected = flipY, onClick = { flipY = !flipY }, enabled = !applying, label = { Text("Flip vertical") })
         }
         Text("Resampling", style = MaterialTheme.typography.labelLarge)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             LayerTransform.Interpolation.entries.forEach { mode ->
                 FilterChip(
                     selected = interpolation == mode,
@@ -110,10 +112,14 @@ fun TransformSheet(
             "All changes are combined in one resampling pass and one undo step. No change is made until Apply.",
             style = MaterialTheme.typography.bodySmall,
         )
+        Text("Scale: 1–1600% · Skew: −80° to 80°", style = MaterialTheme.typography.bodySmall)
         failure?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, androidx.compose.ui.Alignment.End),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
             TextButton(onClick = onClose, enabled = !applying) { Text("Cancel") }
-            Spacer(Modifier.weight(1f))
             Button(
                 enabled = valid && !hasSelection && !applying,
                 onClick = {
@@ -173,7 +179,8 @@ private fun TransformNumber(
         isError = !valid,
         enabled = enabled,
         singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        // Decimal-only IMEs may omit a minus key, making negative movement/skew impossible.
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
         modifier = modifier,
     )
 }

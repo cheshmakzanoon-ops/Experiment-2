@@ -131,7 +131,9 @@ fun ArtFlowTheme(
             ),
         LocalDensity provides
             Density(
-                density = baseDensity.density * uiScale,
+                // uiScale is an extra TEXT scale. Scaling density as well would apply it
+                // twice to text and shrink the usable layout width on accessible settings.
+                density = baseDensity.density,
                 fontScale = baseDensity.fontScale * uiScale,
             ),
     ) {

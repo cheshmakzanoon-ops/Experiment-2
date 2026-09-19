@@ -165,7 +165,12 @@ fun CanvasScreen(
         if (panel == EditorPanel.EXPORT) previewBytes = null
     }
 
-    BackHandler(enabled = panel != EditorPanel.NONE) { panel = EditorPanel.NONE }
+    fun dismissPanel() {
+        if (panel == EditorPanel.TEXT) viewModel.cancelText()
+        panel = EditorPanel.NONE
+    }
+
+    BackHandler(enabled = panel != EditorPanel.NONE) { dismissPanel() }
     BackHandler(enabled = panel == EditorPanel.NONE && dirty && !focusCanvas) { showExitConfirm = true }
     BackHandler(enabled = panel == EditorPanel.NONE && focusCanvas) { focusCanvas = false }
 
@@ -392,7 +397,7 @@ fun CanvasScreen(
 
     if (panel != EditorPanel.NONE) {
         ModalBottomSheet(
-            onDismissRequest = { panel = EditorPanel.NONE },
+            onDismissRequest = { dismissPanel() },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false),
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -423,7 +428,10 @@ fun CanvasScreen(
                                         StudioAction.GUIDES -> EditorPanel.GUIDES
                                         StudioAction.ANIMATION -> EditorPanel.ANIMATION
                                         StudioAction.CANVAS -> EditorPanel.CANVAS
-                                        StudioAction.TEXT -> EditorPanel.TEXT
+                                        StudioAction.TEXT -> {
+                                            viewModel.setTool(ToolType.TEXT)
+                                            EditorPanel.TEXT
+                                        }
                                         StudioAction.EXPORT -> EditorPanel.EXPORT
                                     }
                             },
@@ -555,20 +563,19 @@ fun CanvasScreen(
                             onTextChange = { viewModel.setText(it, input.textStyle) },
                             onStyleChange = { viewModel.setText(input.text, it) },
                             onColorChange = { viewModel.setColor(it) },
+                            hasPosition = pendingText != null,
                             onPlace = {
-                                val pending = pendingText
-                                val view = canvasView
-                                if (pending != null && view != null) {
-                                    view.placeText(
-                                        pending.x,
-                                        pending.y,
-                                        input.text,
-                                        input.textStyle,
-                                        input.brushColor,
-                                    )
-                                    viewModel.cancelText()
+                                if (pendingText == null) {
+                                    viewModel.setTool(ToolType.TEXT)
+                                    panel = EditorPanel.NONE
+                                    viewModel.notify("Tap inside the artwork to position text")
                                 } else {
-                                    viewModel.notify("Tap the canvas to choose where the text goes")
+                                    val pending = viewModel.takePendingText()
+                                    val view = canvasView
+                                    if (pending != null && view != null) {
+                                        view.placeText(pending.x, pending.y, input.text, input.textStyle, input.brushColor)
+                                    }
+                                    dismissPanel()
                                 }
                             },
                         )

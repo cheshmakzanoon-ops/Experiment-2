@@ -42,14 +42,7 @@ object LayerTransformChecks {
         for (dx in -9..9) {
             for (dy in -7..7) {
                 for (mode in LayerTransform.Interpolation.entries) {
-                    val result =
-                        LayerTransform.apply(
-                            source,
-                            LayerTransform.Parameters(translationX = dx.toFloat(), translationY = dy.toFloat(), interpolation = mode),
-                        )
-                    for (y in 0 until 5) {
-                        for (x in 0 until 7) expect(result.getUnchecked(x, y) == source.getSafe(x - dx, y - dy))
-                    }
+                    checkTranslation(source, dx, dy, mode)
                 }
             }
         }
@@ -76,20 +69,34 @@ object LayerTransformChecks {
         }
         for (width in 1..9) {
             for (height in 1..8) {
-                val rectangle = fixture(width, height)
-                val horizontal = LayerTransform.apply(rectangle, LayerTransform.Parameters(flipHorizontal = true))
-                val vertical = LayerTransform.apply(rectangle, LayerTransform.Parameters(flipVertical = true))
-                val half = LayerTransform.apply(rectangle, LayerTransform.Parameters(rotationDegrees = 180f))
-                for (y in 0 until height) {
-                    for (x in 0 until width) {
-                        expect(horizontal.getUnchecked(x, y) == rectangle.getUnchecked(width - 1 - x, y))
-                        expect(vertical.getUnchecked(x, y) == rectangle.getUnchecked(x, height - 1 - y))
-                        expect(half.getUnchecked(x, y) == rectangle.getUnchecked(width - 1 - x, height - 1 - y))
-                    }
-                }
-                same(rectangle.pixels, LayerTransform.apply(horizontal, LayerTransform.Parameters(flipHorizontal = true)).pixels)
+                checkRectangularFlips(width, height)
             }
         }
+    }
+
+    private fun checkTranslation(source: PixelBuffer, dx: Int, dy: Int, mode: LayerTransform.Interpolation) {
+        val result = LayerTransform.apply(
+            source,
+            LayerTransform.Parameters(translationX = dx.toFloat(), translationY = dy.toFloat(), interpolation = mode),
+        )
+        for (y in 0 until source.height) {
+            for (x in 0 until source.width) expect(result.getUnchecked(x, y) == source.getSafe(x - dx, y - dy))
+        }
+    }
+
+    private fun checkRectangularFlips(width: Int, height: Int) {
+        val rectangle = fixture(width, height)
+        val horizontal = LayerTransform.apply(rectangle, LayerTransform.Parameters(flipHorizontal = true))
+        val vertical = LayerTransform.apply(rectangle, LayerTransform.Parameters(flipVertical = true))
+        val half = LayerTransform.apply(rectangle, LayerTransform.Parameters(rotationDegrees = 180f))
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                expect(horizontal.getUnchecked(x, y) == rectangle.getUnchecked(width - 1 - x, y))
+                expect(vertical.getUnchecked(x, y) == rectangle.getUnchecked(x, height - 1 - y))
+                expect(half.getUnchecked(x, y) == rectangle.getUnchecked(width - 1 - x, height - 1 - y))
+            }
+        }
+        same(rectangle.pixels, LayerTransform.apply(horizontal, LayerTransform.Parameters(flipHorizontal = true)).pixels)
     }
 
     fun scaleSkewAndCustomPivot() {

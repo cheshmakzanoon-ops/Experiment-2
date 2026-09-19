@@ -30,21 +30,6 @@ import com.artflow.studio.core.tool.ToolGroup
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.presentation.ui.theme.LocalArtFlowFlags
 
-/** Workflow routes, distinct from tools that operate directly on the canvas. */
-enum class StudioAction(
-    val label: String,
-) {
-    BRUSH_STUDIO("Brush Studio"),
-    TOOL_OPTIONS("Tool options"),
-    SELECTION("Selection options"),
-    TRANSFORM("Layer transform"),
-    GUIDES("Drawing guides"),
-    ANIMATION("Animation"),
-    CANVAS("Canvas setup"),
-    TEXT("Text settings"),
-    EXPORT("Export artwork"),
-}
-
 private fun StudioAction.icon(): ImageVector =
     when (this) {
         StudioAction.BRUSH_STUDIO -> Icons.Default.Brush
@@ -111,7 +96,7 @@ private fun DockButton(
     Column(
         modifier =
             modifier
-                .heightIn(min = 52.dp)
+                .heightIn(min = if (LocalArtFlowFlags.current.largeTouchTargets) 60.dp else 52.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
                 .clickable(role = Role.Button, onClick = onClick)

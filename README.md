@@ -36,6 +36,16 @@ control. `StudioWorkspaceUiTest` exercises real navigation, every tool, large te
 workspaces and screenshot capture. Screenshots and test outcomes are evidence only after CI runs;
 the redesign alone is not proof of aesthetic or usability parity.
 
+The follow-up inspection hardens text placement: **Text settings → Choose position → tap the
+artwork → Place on canvas**. Cancelling clears the position; a changed document/layer invalidates
+it rather than placing text into a different target. Transform fields accept negative values even
+on keyboards without a numeric minus key, and action rows wrap at large text sizes.
+
+Accessibility inspection also corrected text scaling: the extra text-size preference now scales
+text once, without also scaling layout density and shrinking the usable workspace. The independent
+large-target preference still controls touch-target size. A real Compose density regression guards
+this distinction.
+
 ---
 
 ## 🎨 What is implemented

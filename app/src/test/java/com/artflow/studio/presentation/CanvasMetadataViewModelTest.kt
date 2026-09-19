@@ -201,6 +201,100 @@ class CanvasMetadataViewModelTest {
             }
         }
 
+    @Test
+    fun textPlacementIsConsumedOnceAndCancellationLeavesHistoryUntouched() =
+        runTest {
+            Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+            val fixture = Fixture()
+            try {
+                fixture.viewModel.open(1L)
+                runCurrent()
+                fixture.viewModel.requestTextAt(3f, 2f)
+                assertNotNull(fixture.viewModel.pendingText.value)
+                val point = requireNotNull(fixture.viewModel.takePendingText())
+                assertEquals(3f, point.x, 0f)
+                assertEquals(fixture.repository.getActiveLayerId(), point.layerId)
+                assertNull(fixture.viewModel.takePendingText())
+                fixture.viewModel.requestTextAt(3f, 2f)
+                fixture.viewModel.cancelText()
+                assertNull(fixture.viewModel.takePendingText())
+                assertEquals(0, fixture.repository.undoDepth)
+                assertFalse(fixture.repository.hasUnsavedChanges())
+            } finally {
+                fixture.close()
+                Dispatchers.resetMain()
+            }
+        }
+
+    @Test
+    fun changedDocumentRevisionAndLayerRejectAnOldTextPosition() =
+        runTest {
+            Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+            val fixture = Fixture()
+            try {
+                fixture.viewModel.open(1L)
+                runCurrent()
+                fixture.viewModel.requestTextAt(3f, 2f)
+                fixture.repository.setCanvasDpi(300)
+                assertNull(fixture.viewModel.takePendingText())
+                val depth = fixture.repository.undoDepth
+                assertEquals(1, depth)
+                fixture.viewModel.requestTextAt(3f, 2f)
+                fixture.repository.addLayer("New target")
+                val withLayer = fixture.repository.undoDepth
+                assertNull(fixture.viewModel.takePendingText())
+                assertEquals(withLayer, fixture.repository.undoDepth)
+            } finally {
+                fixture.close()
+                Dispatchers.resetMain()
+            }
+        }
+
+    @Test
+    fun openingAnotherDocumentClearsThePendingTextPosition() =
+        runTest {
+            Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+            val fixture = Fixture()
+            try {
+                fixture.viewModel.open(1L)
+                runCurrent()
+                fixture.viewModel.requestTextAt(3f, 2f)
+                fixture.viewModel.open(2L)
+                assertNull(fixture.viewModel.pendingText.value)
+                runCurrent()
+                assertNull(fixture.viewModel.takePendingText())
+            } finally {
+                fixture.close()
+                Dispatchers.resetMain()
+            }
+        }
+
+    @Test
+    fun textPlacementRejectsInvalidCoordinatesAndStopsAnimation() =
+        runTest {
+            Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+            val fixture = Fixture()
+            try {
+                fixture.viewModel.open(1L)
+                runCurrent()
+                for ((x, y) in listOf(-1f to 2f, 8f to 2f, 2f to 6f, Float.NaN to 2f, 2f to Float.POSITIVE_INFINITY)) {
+                    fixture.viewModel.requestTextAt(x, y)
+                    assertNull(fixture.viewModel.pendingText.value)
+                }
+                fixture.viewModel.addFrame(true)
+                runCurrent()
+                fixture.viewModel.togglePlayback()
+                runCurrent()
+                assertTrue(fixture.viewModel.timeline.value.isPlaying)
+                fixture.viewModel.requestTextAt(3f, 2f)
+                assertFalse(fixture.viewModel.timeline.value.isPlaying)
+                assertNotNull(fixture.viewModel.takePendingText())
+            } finally {
+                fixture.close()
+                Dispatchers.resetMain()
+            }
+        }
+
     private class Fixture {
         private val storage =
             mock(ProjectStorage::class.java) { call ->
