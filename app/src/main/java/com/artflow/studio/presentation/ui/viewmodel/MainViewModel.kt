@@ -1,5 +1,7 @@
 package com.artflow.studio.presentation.ui.viewmodel
 
+import android.content.ContentResolver
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.artflow.studio.core.canvas.CanvasOperations
@@ -24,6 +26,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
+import java.io.IOException
 import javax.inject.Inject
 
 /** Gallery state. */
@@ -63,6 +66,9 @@ class MainViewModel
         private val _settingsLoaded = MutableStateFlow(false)
         val settingsLoaded: StateFlow<Boolean> = _settingsLoaded.asStateFlow()
 
+        private val _paletteRecoveryRunning = MutableStateFlow(false)
+        val paletteRecoveryRunning: StateFlow<Boolean> = _paletteRecoveryRunning.asStateFlow()
+
         private val _query = MutableStateFlow("")
         val query: StateFlow<String> = _query.asStateFlow()
 
@@ -82,6 +88,11 @@ class MainViewModel
         init {
             viewModelScope.launch(galleryErrors) {
                 settingsRepository.settings.collect { stored ->
+                    if (stored.paletteRecoveryRequired && !_settings.value.paletteRecoveryRequired) {
+                        messages.trySend(
+                            "Saved palettes need recovery. Your artwork is available; open Settings to preserve the palette data.",
+                        )
+                    }
                     _settings.value = stored
                     _settingsLoaded.value = true
                     publish()
@@ -274,6 +285,36 @@ class MainViewModel
 
         fun clearRecentColors() {
             viewModelScope.launch(galleryErrors) { settingsRepository.clearRecentColors() }
+        }
+
+        fun backUpAndResetPalettes(
+            resolver: ContentResolver,
+            destination: Uri,
+        ) {
+            if (_paletteRecoveryRunning.value) return
+            _paletteRecoveryRunning.value = true
+            viewModelScope.launch(galleryErrors) {
+                try {
+                    val reset =
+                        settingsRepository.backupAndResetUnreadablePalettes { original ->
+                            writePaletteBackup(resolver, destination, original)
+                        }
+                    messages.send(if (reset) "Palette data backed up. You can now save new palettes." else "No palette recovery is needed.")
+                } finally {
+                    _paletteRecoveryRunning.value = false
+                }
+            }
+        }
+
+        private suspend fun writePaletteBackup(
+            resolver: ContentResolver,
+            destination: Uri,
+            original: String,
+        ) = withContext(Dispatchers.IO) {
+            val stream =
+                resolver.openOutputStream(destination, "wt")
+                    ?: throw IOException("The backup destination could not be opened")
+            stream.bufferedWriter(Charsets.UTF_8).use { it.write(original) }
         }
 
         fun storageSummary(): String {

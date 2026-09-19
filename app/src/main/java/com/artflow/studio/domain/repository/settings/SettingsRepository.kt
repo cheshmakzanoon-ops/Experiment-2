@@ -21,6 +21,13 @@ interface SettingsRepository {
 
     suspend fun update(transform: (AppSettings) -> AppSettings)
 
+    /**
+     * Preserve unreadable palette text using [writeBackup], then reset only that row.
+     * The writer must finish and close its user-selected destination before returning.
+     * Failed/cancelled backups leave the original untouched; other preferences remain editable.
+     */
+    suspend fun backupAndResetUnreadablePalettes(writeBackup: suspend (String) -> Unit): Boolean
+
     // Convenience setters for the settings screen.
     suspend fun setThemeMode(mode: ThemeMode)
 

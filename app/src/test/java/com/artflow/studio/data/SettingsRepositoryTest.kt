@@ -174,13 +174,139 @@ class SettingsRepositoryTest {
         }
 
     @Test
-    fun malformedPaletteDataIsNotSilentlyErasedByAnUnrelatedEdit() =
+    fun damagedPalettesDoNotBlockOtherPreferencesOrGetOverwritten() =
         runTest {
             val damaged = "{\"name\":\"unclosed"
-            val dao = MemorySettingsDao(mapOf("color.palettes" to damaged))
+            val dao = MemorySettingsDao(mapOf("color.palettes" to damaged, "theme.mode" to "DARK"))
             val repository = SettingsRepositoryImpl(dao)
-            assertTrue(runCatching { repository.setHighContrast(true) }.isFailure)
+            val loaded = repository.settings.first()
+            assertEquals(ThemeMode.DARK, loaded.themeMode)
+            assertTrue(loaded.paletteRecoveryRequired)
+            repository.setHighContrast(true)
+            assertTrue(repository.current().highContrast)
             assertEquals(damaged, dao.rows["color.palettes"]!!.value)
+            assertEquals(1, dao.writes)
+            assertTrue(SettingsRepositoryImpl(dao).settings.first().paletteRecoveryRequired)
+        }
+
+    @Test
+    fun paletteEditsCannotBypassTheRecoveryGuard() =
+        runTest {
+            val dao = MemorySettingsDao(mapOf("color.palettes" to "invalid"))
+            val repository = SettingsRepositoryImpl(dao)
+            assertTrue(runCatching { repository.addPalette(Palette(name = "New", colors = listOf(1))) }.isFailure)
+            repository.update { it.copy(paletteRecoveryRequired = false, highContrast = true) }
+            assertTrue(repository.current().paletteRecoveryRequired)
+            assertTrue(repository.current().highContrast)
+            assertEquals("invalid", dao.rows["color.palettes"]!!.value)
+        }
+
+    @Test
+    fun successfulBackupPreservesExactOriginalBeforeResetAndAllowsNewPalettes() =
+        runTest {
+            val damaged = "  {broken;; \"ink\" 🎨\n"
+            val dao = MemorySettingsDao(mapOf("color.palettes" to damaged, "theme.mode" to "DARK"))
+            val repository = SettingsRepositoryImpl(dao)
+            var backup: String? = null
+            val reset =
+                repository.backupAndResetUnreadablePalettes {
+                    assertEquals(damaged, dao.rows["color.palettes"]!!.value)
+                    backup = it
+                }
+            assertTrue(reset)
+            assertEquals(damaged, backup)
+            assertFalse(repository.current().paletteRecoveryRequired)
+            assertTrue(repository.current().customPalettes.isEmpty())
+            assertEquals(ThemeMode.DARK, repository.current().themeMode)
+            val palette = Palette(name = "New", colors = listOf(1))
+            repository.addPalette(palette)
+            assertEquals(listOf(palette), SettingsRepositoryImpl(dao).settings.first().customPalettes)
+        }
+
+    @Test
+    fun failedBackupDoesNotWriteResetOrClearTheWarning() =
+        runTest {
+            val dao = MemorySettingsDao(mapOf("color.palettes" to "invalid"))
+            val repository = SettingsRepositoryImpl(dao)
+            assertTrue(runCatching { repository.backupAndResetUnreadablePalettes { throw IOException("Provider failed") } }.isFailure)
+            assertTrue(repository.current().paletteRecoveryRequired)
+            assertEquals("invalid", dao.rows["color.palettes"]!!.value)
+            assertEquals(0, dao.writes)
+        }
+
+    @Test
+    fun cancelledBackupNeverReachesTheResetTransaction() =
+        runTest {
+            val dao = MemorySettingsDao(mapOf("color.palettes" to "invalid"))
+            val repository = SettingsRepositoryImpl(dao)
+            val gate = CompletableDeferred<Unit>()
+            val operation = launch { repository.backupAndResetUnreadablePalettes { gate.await() } }
+            runCurrent()
+            operation.cancel()
+            operation.join()
+            assertEquals(0, dao.writes)
+            assertTrue(repository.current().paletteRecoveryRequired)
+            assertEquals("invalid", dao.rows["color.palettes"]!!.value)
+        }
+
+    @Test
+    fun unrelatedEditsDuringBackupAreNotLostOrBlocked() =
+        runTest {
+            val dao = MemorySettingsDao(mapOf("color.palettes" to "invalid"))
+            val repository = SettingsRepositoryImpl(dao)
+            val gate = CompletableDeferred<Unit>()
+            val backup = launch { repository.backupAndResetUnreadablePalettes { gate.await() } }
+            runCurrent()
+            repository.setThemeMode(ThemeMode.DARK)
+            assertTrue(backup.isActive)
+            gate.complete(Unit)
+            backup.join()
+            assertEquals(ThemeMode.DARK, repository.current().themeMode)
+            assertFalse(repository.current().paletteRecoveryRequired)
+            assertEquals(repository.current(), SettingsRepositoryImpl(dao).settings.first())
+        }
+
+    @Test
+    fun failedResetRetainsTheOriginalEvenAfterBackupSucceeds() =
+        runTest {
+            val dao = MemorySettingsDao(mapOf("color.palettes" to "invalid"))
+            dao.writeFailure = IOException("Disk full")
+            val repository = SettingsRepositoryImpl(dao)
+            var backedUp = false
+            assertTrue(runCatching { repository.backupAndResetUnreadablePalettes { backedUp = true } }.isFailure)
+            assertTrue(backedUp)
+            assertTrue(repository.current().paletteRecoveryRequired)
+            assertEquals("invalid", dao.rows["color.palettes"]!!.value)
+            dao.writeFailure = null
+            assertTrue(repository.backupAndResetUnreadablePalettes {})
+            assertFalse(repository.current().paletteRecoveryRequired)
+        }
+
+    @Test
+    fun aStaleBackupCannotResetNewlySavedPalettes() =
+        runTest {
+            val dao = MemorySettingsDao(mapOf("color.palettes" to "invalid"))
+            val repository = SettingsRepositoryImpl(dao)
+            val gate = CompletableDeferred<Unit>()
+            val stale =
+                async {
+                    runCatching { repository.backupAndResetUnreadablePalettes { gate.await() } }
+                }
+            runCurrent()
+            assertTrue(repository.backupAndResetUnreadablePalettes {})
+            val palette = Palette(name = "Keep", colors = listOf(1))
+            repository.addPalette(palette)
+            gate.complete(Unit)
+            assertTrue(stale.await().isFailure)
+            assertEquals(listOf(palette), SettingsRepositoryImpl(dao).settings.first().customPalettes)
+        }
+
+    @Test
+    fun recoveryWithoutCorruptionIsANoOp() =
+        runTest {
+            val dao = MemorySettingsDao()
+            val repository = SettingsRepositoryImpl(dao)
+            assertFalse(repository.backupAndResetUnreadablePalettes { error("Unexpected backup") })
             assertEquals(0, dao.writes)
         }
 

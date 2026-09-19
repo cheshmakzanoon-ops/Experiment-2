@@ -145,12 +145,12 @@ private suspend fun PointerInputScope.trackColorWheel(
         down.consume()
         select(current().pick(down.position.x, down.position.y, geometry, region))
         while (true) {
-            val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
-            if (change.isConsumed) break
-            if (size.width.toFloat() != geometry.width || size.height.toFloat() != geometry.height) break
+            val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: return@awaitEachGesture
+            if (change.isConsumed) return@awaitEachGesture
+            if (size.width.toFloat() != geometry.width || size.height.toFloat() != geometry.height) return@awaitEachGesture
             select(current().pick(change.position.x, change.position.y, geometry, region))
             change.consume()
-            if (!change.pressed) break
+            if (!change.pressed) return@awaitEachGesture
         }
     }
 }

@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.data.local.database.ArtFlowDatabase
+import com.artflow.studio.data.local.entity.SettingsEntity
 import com.artflow.studio.data.repository.settings.SettingsRepositoryImpl
 import com.artflow.studio.domain.model.settings.ThemeMode
 import kotlinx.coroutines.Dispatchers
@@ -59,6 +60,26 @@ class SettingsPersistenceTest {
             database.close()
             database = openDatabase()
             assertEquals(expected, SettingsRepositoryImpl(database.settingsDao()).settings.first())
+        }
+
+    @Test
+    fun unreadablePaletteRowSurvivesUnrelatedEditsAndOnlyResetsAfterBackup() =
+        runBlocking {
+            val original = "  {damaged;; 🎨\n"
+            database.settingsDao().insertSetting(SettingsEntity(key = "color.palettes", value = original))
+            val repository = SettingsRepositoryImpl(database.settingsDao())
+            assertTrue(repository.settings.first().paletteRecoveryRequired)
+            repository.setThemeMode(ThemeMode.DARK)
+            assertEquals(original, database.settingsDao().getSettingByKey("color.palettes")!!.value)
+            var backup: String? = null
+            repository.backupAndResetUnreadablePalettes { backup = it }
+            assertEquals(original, backup)
+            database.close()
+            database = openDatabase()
+            val reopened = SettingsRepositoryImpl(database.settingsDao()).settings.first()
+            assertFalse(reopened.paletteRecoveryRequired)
+            assertTrue(reopened.customPalettes.isEmpty())
+            assertEquals(ThemeMode.DARK, reopened.themeMode)
         }
 
     @Test

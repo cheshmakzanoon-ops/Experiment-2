@@ -24,8 +24,7 @@ data class ColorWheelState(
         )
     }
 
-    fun withValue(brightness: Float): ColorWheelState =
-        if (brightness.isFinite()) copy(value = brightness.coerceIn(0f, 1f)) else this
+    fun withValue(brightness: Float): ColorWheelState = if (brightness.isFinite()) copy(value = brightness.coerceIn(0f, 1f)) else this
 
     /** [region] belongs to pointer-down and never changes midway through a drag. */
     fun pick(
@@ -71,7 +70,7 @@ data class ColorWheelGeometry(
 ) {
     val centerX: Float get() = width / 2f
     val centerY: Float get() = height / 2f
-    val radius: Float get() = minOf(width, height) / 2f - 12f
+    val radius: Float get() = (minOf(width, height) / 2f - 12f) / 1.11f
     val inner: Float get() = radius * 0.60f
     val ringStroke: Float get() = radius * 0.22f
     val valid: Boolean get() = width.isFinite() && height.isFinite() && radius > 0f

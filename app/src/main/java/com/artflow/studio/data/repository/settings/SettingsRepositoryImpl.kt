@@ -40,6 +40,7 @@ class SettingsRepositoryImpl
         private val mutex = Mutex()
         private val state = MutableStateFlow(AppSettings())
         private var loaded = false
+        private var unreadablePalettes: String? = null
 
         // Do not emit defaults before Room has been read. Every collector gets an owned snapshot.
         override val settings: Flow<AppSettings> =
@@ -55,11 +56,15 @@ class SettingsRepositoryImpl
                 ensureLoaded()
                 val candidate = transform(state.value.ownedCopy())
                 require(candidate.uiScale.isFinite()) { "UI scale must be finite" }
+                check(unreadablePalettes == null || candidate.customPalettes == state.value.customPalettes) {
+                    "Saved palettes need recovery. Open Settings to back up and reset them; the original data is preserved."
+                }
                 val normalized =
                     candidate.copy(
                         uiScale = candidate.uiScale.coerceIn(MIN_UI_SCALE, MAX_UI_SCALE),
                         autosaveIntervalMs = candidate.autosaveIntervalMs.coerceIn(MIN_AUTOSAVE, MAX_AUTOSAVE),
                         recentColors = candidate.recentColors.distinct().take(MAX_RECENT_COLORS),
+                        paletteRecoveryRequired = unreadablePalettes != null,
                     )
                 val updated = normalized.ownedCopy()
                 if (updated == state.value) return@withLock
@@ -70,6 +75,28 @@ class SettingsRepositoryImpl
                     persist(updated)
                     state.value = updated
                 }
+            }
+        }
+
+        override suspend fun backupAndResetUnreadablePalettes(writeBackup: suspend (String) -> Unit): Boolean {
+            val original =
+                mutex.withLock {
+                    ensureLoaded()
+                    unreadablePalettes
+                } ?: return false
+            // Do not hold the preference mutex while a document provider writes the backup.
+            writeBackup(original)
+            currentCoroutineContext().ensureActive()
+            return mutex.withLock {
+                check(unreadablePalettes == original) { "Palette recovery changed; no stored data was reset" }
+                val updated = state.value.copy(customPalettes = emptyList(), paletteRecoveryRequired = false)
+                currentCoroutineContext().ensureActive()
+                withContext(NonCancellable) {
+                    persist(updated, preserveUnreadable = false)
+                    unreadablePalettes = null
+                    state.value = updated
+                }
+                true
             }
         }
 
@@ -166,9 +193,14 @@ class SettingsRepositoryImpl
             loaded = true
         }
 
-        private suspend fun persist(settings: AppSettings) {
+        private suspend fun persist(
+            settings: AppSettings,
+            preserveUnreadable: Boolean = true,
+        ) {
+            val values = encode(settings)
+            val protectPalettes = preserveUnreadable && unreadablePalettes != null
             dao.insertSettings(
-                encode(settings).map { (key, value) ->
+                values.filterKeys { it != KEY_PALETTES || !protectPalettes }.map { (key, value) ->
                     SettingsEntity(key = key, value = value, category = categoryOf(key))
                 },
             )
@@ -209,10 +241,7 @@ class SettingsRepositoryImpl
                     ?.distinct()
                     ?.take(MAX_RECENT_COLORS)
                     ?: defaults.recentColors
-            val palettes =
-                stored[KEY_PALETTES]
-                    ?.let(StoredPaletteCodec::decode)
-                    ?: defaults.customPalettes
+            val palettes = readPalettes(stored[KEY_PALETTES])
             return AppSettings(
                 themeMode =
                     stored[KEY_THEME]?.let { name -> ThemeMode.entries.firstOrNull { it.name == name } }
@@ -252,7 +281,20 @@ class SettingsRepositoryImpl
                         ?: defaults.dismissedTips,
                 recentColors = recentColors,
                 customPalettes = palettes,
+                paletteRecoveryRequired = unreadablePalettes != null,
             )
+        }
+
+        private fun readPalettes(stored: String?): List<Palette> {
+            unreadablePalettes = null
+            if (stored == null) return emptyList()
+            return try {
+                StoredPaletteCodec.decode(stored)
+            } catch (invalid: IllegalArgumentException) {
+                // One damaged optional row must not block the gallery or reset unrelated preferences.
+                unreadablePalettes = stored
+                emptyList()
+            }
         }
 
         private fun categoryOf(key: String): String =

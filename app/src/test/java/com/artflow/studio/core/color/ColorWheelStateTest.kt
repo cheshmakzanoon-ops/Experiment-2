@@ -91,6 +91,14 @@ class ColorWheelStateTest {
     }
 
     @Test
+    fun ringStrokeFitsAtPhoneTabletAndHighDensitySizes() {
+        for (size in listOf(100f, 240f, 480f, 960f)) {
+            val bounds = ColorWheelGeometry(size, size * 1.5f)
+            assertTrue(bounds.radius + bounds.ringStroke / 2f <= size / 2f)
+        }
+    }
+
+    @Test
     fun hueRingHitTestingMatchesAllFourCardinalPoints() {
         val points = listOf(1f to 0f, 0f to 1f, -1f to 0f, 0f to -1f)
         points.forEachIndexed { index, (dx, dy) ->

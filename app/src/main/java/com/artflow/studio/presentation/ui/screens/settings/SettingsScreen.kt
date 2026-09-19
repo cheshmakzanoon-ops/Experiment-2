@@ -2,6 +2,8 @@
 
 package com.artflow.studio.presentation.ui.screens.settings
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -13,6 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -34,6 +37,12 @@ fun SettingsScreen(
     viewModel: MainViewModel = hiltViewModel(),
 ) {
     val settings by viewModel.settings.collectAsState()
+    val recoveryRunning by viewModel.paletteRecoveryRunning.collectAsState()
+    val resolver = LocalContext.current.contentResolver
+    val paletteBackup =
+        rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { destination ->
+            if (destination != null) viewModel.backUpAndResetPalettes(resolver, destination)
+        }
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(viewModel) {
         viewModel.messageFlow.collect { snackbar.showSnackbar(it) }
@@ -61,6 +70,9 @@ fun SettingsScreen(
                     .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            if (settings.paletteRecoveryRequired) {
+                PaletteRecoveryNotice(recoveryRunning) { paletteBackup.launch("ArtFlow-unreadable-palettes.txt") }
+            }
             SettingsSection("Appearance")
             Text("Theme", style = MaterialTheme.typography.labelMedium)
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -80,6 +80,8 @@ data class AppSettings(
     // Colour state that has to survive a restart
     val recentColors: List<Int> = emptyList(),
     val customPalettes: List<Palette> = emptyList(),
+    /** Runtime diagnostic, not a preference: unreadable palette data is retained until backed up. */
+    val paletteRecoveryRequired: Boolean = false,
 ) {
     /** True when a finger may paint. */
     val fingerPainting: Boolean get() = !stylusOnly
