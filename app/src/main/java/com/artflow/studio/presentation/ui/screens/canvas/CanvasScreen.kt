@@ -12,9 +12,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -43,8 +45,8 @@ import com.artflow.studio.presentation.ui.components.editor.LayerStackActions
 import com.artflow.studio.presentation.ui.components.editor.LayersSheet
 import com.artflow.studio.presentation.ui.components.editor.QuickMenuSheet
 import com.artflow.studio.presentation.ui.components.editor.SelectionSheet
+import com.artflow.studio.presentation.ui.components.editor.StudioToolDock
 import com.artflow.studio.presentation.ui.components.editor.TextSheet
-import com.artflow.studio.presentation.ui.components.editor.ToolStrip
 import com.artflow.studio.presentation.ui.components.export.ExportSheet
 import com.artflow.studio.presentation.ui.components.export.rememberExportActions
 import com.artflow.studio.presentation.ui.viewmodel.CanvasUiState
@@ -115,6 +117,9 @@ fun CanvasScreen(
     var showRecoveryDialog by remember { mutableStateOf(false) }
     var showBrushEditor by remember { mutableStateOf(false) }
     var showExitConfirm by remember { mutableStateOf(false) }
+    var focusMode by rememberSaveable(projectId) { mutableStateOf(false) }
+    var toolsExpanded by rememberSaveable(projectId) { mutableStateOf(false) }
+    var showWorkspaceMenu by remember { mutableStateOf(false) }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, canvasView) {
@@ -152,118 +157,159 @@ fun CanvasScreen(
     }
 
     BackHandler(enabled = panel != EditorPanel.NONE) { panel = EditorPanel.NONE }
-    BackHandler(enabled = panel == EditorPanel.NONE && dirty) { showExitConfirm = true }
+    BackHandler(enabled = panel == EditorPanel.NONE && dirty && !focusMode) { showExitConfirm = true }
+    BackHandler(enabled = panel == EditorPanel.NONE && focusMode) {
+        canvasView?.cancelActiveGesture()
+        focusMode = false
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = ready?.projectName ?: "Loading…",
-                            style = MaterialTheme.typography.titleMedium,
-                            maxLines = 1,
-                        )
-                        ready?.let {
+            if (!focusMode) {
+                TopAppBar(
+                    title = {
+                        Column {
                             Text(
-                                text =
-                                    "${it.width}×${it.height} px · ${it.dpi} dpi" +
-                                        if (it.frameCount > 1) " · ${it.frameCount} frames" else "",
-                                style = MaterialTheme.typography.labelSmall,
+                                text = ready?.projectName ?: "Loading…",
+                                style = MaterialTheme.typography.titleMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            ready?.let {
+                                Text(
+                                    text =
+                                        "${it.width}×${it.height} px · ${it.dpi} dpi" +
+                                            if (it.frameCount > 1) " · ${it.frameCount} frames" else "",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = {
+                            if (dirty) showExitConfirm = true else onNavigateBack()
+                        }) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = viewModel::undo, enabled = history.canUndo) {
+                            Icon(Icons.Default.Undo, contentDescription = "Undo")
+                        }
+                        IconButton(onClick = viewModel::redo, enabled = history.canRedo) {
+                            Icon(Icons.Default.Redo, contentDescription = "Redo")
+                        }
+                        IconButton(onClick = { viewModel.save() }, enabled = !saving && ready != null) {
+                            Icon(
+                                imageVector = if (dirty) Icons.Default.Save else Icons.Default.Check,
+                                contentDescription = "Save",
                             )
                         }
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = {
-                        if (dirty) showExitConfirm = true else onNavigateBack()
-                    }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = viewModel::undo, enabled = history.canUndo) {
-                        Icon(Icons.Default.Undo, contentDescription = "Undo")
-                    }
-                    IconButton(onClick = viewModel::redo, enabled = history.canRedo) {
-                        Icon(Icons.Default.Redo, contentDescription = "Redo")
-                    }
-                    IconButton(onClick = { viewModel.save() }, enabled = !saving && ready != null) {
-                        Icon(
-                            imageVector = if (dirty) Icons.Default.Save else Icons.Default.CloudDone,
-                            contentDescription = "Save",
-                        )
-                    }
-                    IconButton(onClick = { panel = EditorPanel.QUICK }) {
-                        Icon(Icons.Default.Bolt, contentDescription = "Quick menu")
-                    }
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
-                    }
-                },
-            )
+                        Box {
+                            IconButton(onClick = { showWorkspaceMenu = true }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "Workspace menu")
+                            }
+                            DropdownMenu(expanded = showWorkspaceMenu, onDismissRequest = { showWorkspaceMenu = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("Focus mode") },
+                                    leadingIcon = { Icon(Icons.Default.Fullscreen, contentDescription = null) },
+                                    onClick = {
+                                        canvasView?.cancelActiveGesture()
+                                        panel = EditorPanel.NONE
+                                        showWorkspaceMenu = false
+                                        focusMode = true
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Quick menu") },
+                                    onClick = {
+                                        showWorkspaceMenu = false
+                                        panel = EditorPanel.QUICK
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Settings") },
+                                    onClick = {
+                                        showWorkspaceMenu = false
+                                        onOpenSettings()
+                                    },
+                                )
+                            }
+                        }
+                    },
+                )
+            }
         },
         bottomBar = {
             // The app is edge-to-edge from API 35, and the opt-out attribute is ignored from API 36,
             // so the tool strip has to inset itself: without this the navigation bar covers the
             // tool row. Scaffold only insets *content* when a bottomBar is present, not the bar.
-            Surface(
-                tonalElevation = 4.dp,
-                modifier =
-                    Modifier.windowInsetsPadding(
-                        WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
-                    ),
-            ) {
-                Column {
-                    BrushOptionsRow(
-                        tool = input.tool,
-                        size = input.brushParams.size,
-                        opacity = input.brushParams.opacity,
-                        eraserSize = input.eraserSize,
-                        tolerance = input.fillTolerance,
-                        onSizeChanged = viewModel::setBrushSize,
-                        onOpacityChanged = viewModel::setBrushOpacity,
-                        onEraserSizeChanged = viewModel::setEraserSize,
-                        onToleranceChanged = { viewModel.setFillSettings(it, input.fillContiguous) },
-                    )
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState())
-                                .padding(horizontal = 12.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        ColorChip(color = input.brushColor, onClick = { panel = EditorPanel.COLOUR })
-                        if (input.strokeDestination.isMask) {
-                            TextButton(onClick = { viewModel.setTool(ToolType.BRUSH) }) {
-                                Text(
-                                    if (input.strokeDestination ==
-                                        StrokeDestination.MASK_REVEAL
-                                    ) {
-                                        "Mask: reveal • Done"
-                                    } else {
-                                        "Mask: hide • Done"
-                                    },
-                                )
+            if (!focusMode) {
+                Surface(
+                    tonalElevation = 2.dp,
+                    modifier =
+                        Modifier.windowInsetsPadding(
+                            WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
+                        ),
+                ) {
+                    Column {
+                        BrushOptionsRow(
+                            tool = input.tool,
+                            size = input.brushParams.size,
+                            opacity = input.brushParams.opacity,
+                            eraserSize = input.eraserSize,
+                            tolerance = input.fillTolerance,
+                            onSizeChanged = viewModel::setBrushSize,
+                            onOpacityChanged = viewModel::setBrushOpacity,
+                            onEraserSizeChanged = viewModel::setEraserSize,
+                            onToleranceChanged = { viewModel.setFillSettings(it, input.fillContiguous) },
+                        )
+                        Row(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState())
+                                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            ColorChip(color = input.brushColor, onClick = { panel = EditorPanel.COLOUR })
+                            if (input.strokeDestination.isMask) {
+                                TextButton(onClick = { viewModel.setTool(ToolType.BRUSH) }) {
+                                    Text(
+                                        if (input.strokeDestination ==
+                                            StrokeDestination.MASK_REVEAL
+                                        ) {
+                                            "Mask: reveal • Done"
+                                        } else {
+                                            "Mask: hide • Done"
+                                        },
+                                    )
+                                }
                             }
+                            TextButton(onClick = { showBrushEditor = true }) { Text("Brush") }
+                            TextButton(onClick = { panel = EditorPanel.LAYERS }) {
+                                Text("Layers (${layers.size})")
+                            }
+                            TextButton(onClick = { panel = EditorPanel.SELECTION }) {
+                                Text(if (selectionCount > 0) "Select ($selectionCount)" else "Select")
+                            }
+                            TextButton(onClick = { panel = EditorPanel.TOOLS }) { Text("Options") }
+                            TextButton(onClick = { panel = EditorPanel.EXPORT }) { Text("Export") }
                         }
-                        TextButton(onClick = { showBrushEditor = true }) { Text("Brush") }
-                        TextButton(onClick = { panel = EditorPanel.LAYERS }) {
-                            Text("Layers (${layers.size})")
-                        }
-                        TextButton(onClick = { panel = EditorPanel.SELECTION }) {
-                            Text(if (selectionCount > 0) "Select ($selectionCount)" else "Select")
-                        }
-                        TextButton(onClick = { panel = EditorPanel.TOOLS }) { Text("Options") }
-                        TextButton(onClick = { panel = EditorPanel.EXPORT }) { Text("Export") }
+                        StudioToolDock(
+                            activeTool = input.tool,
+                            expanded = toolsExpanded,
+                            onToolSelected = { viewModel.setTool(it) },
+                            onExpandedChange = {
+                                canvasView?.cancelActiveGesture()
+                                toolsExpanded = it
+                            },
+                        )
                     }
-                    ToolStrip(
-                        activeTool = input.tool,
-                        onToolSelected = { viewModel.setTool(it) },
-                    )
                 }
             }
         },
@@ -330,7 +376,7 @@ fun CanvasScreen(
                         modifier = Modifier.fillMaxSize(),
                     )
 
-                    if (settings.showSymmetryGuides || settings.showPerspectiveGuides) {
+                    if (!focusMode && (settings.showSymmetryGuides || settings.showPerspectiveGuides)) {
                         // Guides are always available from the quick menu; the chip is a reminder.
                         Text(
                             text = "Guides on",
@@ -342,6 +388,21 @@ fun CanvasScreen(
                                     .padding(8.dp),
                         )
                     }
+                }
+            }
+            if (focusMode) {
+                FilledTonalIconButton(
+                    onClick = {
+                        canvasView?.cancelActiveGesture()
+                        focusMode = false
+                    },
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopStart)
+                            .padding(8.dp)
+                            .size(if (settings.largeTouchTargets) 56.dp else 48.dp),
+                ) {
+                    Icon(Icons.Default.FullscreenExit, contentDescription = "Exit focus mode")
                 }
             }
         }

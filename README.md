@@ -1,321 +1,140 @@
 # ArtFlow — Digital Art Studio for Android
 
-ArtFlow is an Android digital-painting application built with Kotlin and Jetpack Compose.
-It is a **working editor**: you can create a project, paint with a pressure-sensitive brush
-engine, build up layers with masks and adjustments, fill and transform pixels, draw with
-symmetry and perspective guides, add text and frames, then save and export real files.
+A native Android painting studio built with **Kotlin, Jetpack Compose and a shared pixel engine**.
+Create an artwork, paint with pressure-sensitive tools, work with layers and masks, animate frames,
+and save or export real documents. The application works offline; it declares no internet permission.
 
-> **Documentation accuracy note.** Earlier revisions of this README both over- and under-stated the
-> project: one described a finished product (cloud sync, collaboration, Vulkan rendering) that does
-> not exist, a later one described a bare skeleton after the editor had been built, and a still
-> later one listed a large "unreachable" prototype layer that has since been deleted outright. This
-> file describes what is actually in the repository: [Project status](#-project-status) for the
-> per-area breakdown, and [Known gaps](#-known-gaps) for what is genuinely missing.
+**Status: working editor, not yet Procreate-equivalent or signed off for Google Play.**
+Passing tests, a large feature list and a similar colour scheme are not proof of equivalent drawing
+feel, visual polish or reliability. [Procreate comparison and acceptance gates](docs/PROCREATE_PARITY.md)
+record the remaining product gaps. [Release readiness](docs/RELEASE_READINESS.md) records release work.
 
----
+## Latest improvement — canvas-first workspace
 
-## 🎨 What is implemented
+The painting dock now keeps **Brush, Smudge and Eraser** immediately available. **All tools** expands
+the existing collection; selecting another tool keeps it visible after the collection collapses.
+Tool buttons expose their toggle state to accessibility services and honour larger touch targets.
 
-### Canvas & rendering
-- `GLSurfaceView`-based canvas (`ArtFlowCanvasView`) driven by `OpenGLCanvasRenderer`
-- OpenGL **ES 2.0** rendering (`GLES20`); strokes are rasterised on the CPU into layer buffers and
-  uploaded as textures
-- A `Compositor` that flattens the layer stack with blend modes, opacity, clipping and masks, and a
-  `StrokeRasterizer` that turns stroke samples into dabs
-- Zoom / pan / pinch / rotation handled in `ArtFlowCanvasView.onTouchEvent`
-- **Two-finger tap = undo, three-finger tap = redo**, also handled inline in `onTouchEvent`
-- A `BitmapPixelBridge` for lossless project rasters and platform image encoding
-- Edge-to-edge layout from API 35: the Material 3 top bars and `Scaffold` slots consume the system
-  insets, and the editor's tool strip pads itself with the safe-drawing insets, so the chrome is
-  not covered by the status or navigation bars
+**Workspace menu → Focus mode** hides the editor bars without recreating the drawing surface.
+The visible exit button or Android Back restores the workspace before any unsaved-document exit
+prompt. Active input is cancelled before layout changes so a gesture cannot bridge changed canvas
+geometry. Project titles truncate instead of wrapping into controls. The saved-state icon no longer
+suggests nonexistent cloud storage.
 
-### Brush engine
-- Strokes are rasterised by `StrokeRasterizer` + `Compositor` into per-layer buffers, driven by the
-  parameters in `BrushParams`; `ArtFlowCanvasView` captures stylus/finger input and calls the
-  repository, which keeps a copy-on-write buffer for the edit in progress
-- Stroke smoothing and start/end tapering
-- Advanced parameters: size / opacity / hue / saturation / brightness jitter, scatter, count,
-  spacing, wet mix, flow, tilt influence, velocity dynamics
-- Pressure-curve types (linear, ease-in, ease-out, ease-in-out), plus a monotone custom response
-  with editable output controls at 25%, 50% and 75% input pressure
-- Deterministic procedural paper, canvas and charcoal grains, with scale/rotation controls;
-  preview and commit use the same raw-pixel renderer. Imported/dual textures remain a roadmap gap.
+`StudioToolDockTest` exercises primary/secondary tool navigation. `ArtworkWorkflowTest` additionally
+checks focus entry/exit, the same GL view instance, increased drawing area, unchanged pixels and
+unchanged undo history. Device CI collects normal/focus screenshots for inspection. The presence
+of these tests is not a recorded pass: consult the completed run for the exact commit.
 
-Destructive document operations prepare replacement pixels before committing a single undo step.
-Merges preserve transparency and reject combinations whose blend/clipping context cannot be baked
-faithfully. A merged copy hides, rather than deletes, its retained sources. Empty selections block
-painting instead of becoming unrestricted edits. Quarter-turn canvas transforms retain legacy
-vector ink and transform masks across every animation frame.
+## What works, and where it stops
 
-Empty filter layers affect the stack below; layers with their own pixels retain per-layer filters.
-Filter masks and opacity control the effect, and baking uses the same compositor as the preview.
-Backdrop-dependent baking may be refused rather than silently changing the artwork.
+| Area | Implemented | Important limits |
+| --- | --- | --- |
+| Workspace | Compact painting dock, expandable tools, focus mode, brush options, quick menu, sheet panels, gallery and settings | No movable/handedness-aware sidebar or artist-validated tablet panel layout |
+| Painting | Pressure-sensitive strokes, smoothing, taper, scatter/jitter, flow, wet mix, tilt/velocity dynamics, editable monotone pressure curve | Three procedural grains only; no imported/dual textures or measured Procreate-level stylus response |
+| Pixel tools | Brush, eraser, smudge, clone, healing, liquify, bucket, gradients, text and shapes | A shape tool is not QuickShape recognition |
+| Selections | Rectangle, ellipse, freehand/lasso, magic wand, boolean combining, invert and feather | No claim of equivalent selection gesture ergonomics |
+| Transform | MOVE/TRANSFORM drag translation | No reachable rotate/scale/skew/perspective/warp/snapping workflow |
+| Layers | Add, remove, reorder, duplicate, visibility, opacity, blend modes, alpha lock, clipping, masks, adjustments and filters | No layer groups or linking UI; the reference flag has no user control |
+| Colour and guides | Wheel, RGB/HSV/CMYK controls, hex, harmonies, saved palettes, symmetry and perspective guides | CMYK sliders are not an ICC-managed print workflow |
+| Canvas operations | Resize, crop, rotate, flip, trim/expand, DPI and presets | Large-document/device performance still needs measurement |
+| Animation | Frames, duplication, ordering, duration/FPS, onion skin and playback | Drawing-process timelapse is absent |
+| Documents | Atomic `.artflow` saves, per-layer pixels, frames, autosave/recovery and thumbnails | Physical interruption/low-storage/long-session acceptance is still required |
+| Export | PNG, JPEG, WebP, PDF, PSD, GIF, MP4 and PNG frame-sequence ZIP; document picker, gallery and sharing | PSD **import** is absent; external-application interoperability needs broader fixtures |
 
-### Pixel engine (`core/pixels`)
-- `PixelBuffer`: ARGB buffer with region maths, tiling and `IntBounds` clipping
-- `BlendModes`: Normal, Multiply, Screen, Overlay, Darken, Lighten, Color Dodge, Color Burn,
-  Hard Light, Soft Light, Difference, Exclusion, Hue, Saturation, Color, Luminosity (+ Pass Through
-  for groups)
-- `AdjustmentProcessor`: Brightness/Contrast, Hue/Saturation, Color Balance, Curves, Levels,
-  Invert, Posterize, Selective Color, Gradient Map
-- `ImageFilters`: Gaussian / box / motion blur, sharpen, noise, chromatic aberration, vignette,
-  tilt-shift, find edges, emboss and generic 3×3 convolution
-- `SelectionMask`: selection storage with feathering, inversion and boolean combination
-- `Stamping`: stamp-based dab compositing
+### Engine and document safety
 
-### Tools (`core/tool`)
-- `ToolType` is the single source of truth for the tool bar, quick menu and gesture bindings, and
-  defines 19 tools across paint, fill, vector, selection, transform and utility groups
-- **Paint**: Brush, Eraser, Smudge, Clone Stamp, Healing (with spot-heal source search), Liquify
-- **Fill**: Paint Bucket (flood fill with tolerance / contiguous / pattern / all-layers) and
-  Gradient (linear, radial, angular, diamond, with a gradient editor and presets)
-- **Vector**: Text (font, size, style, alignment, kerning/leading, rasterize to layer) and Shapes
-  (rectangle, ellipse, polygon, line; fill or stroke)
-- **Selection**: rectangle, ellipse, freehand, lasso and a magic wand, combinable with
-  replace / add / subtract / intersect
-- **Transform**: 🟡 translate only — the `MOVE` and `TRANSFORM` tools shift pixels by the drag
-  delta. Rotate, scale, skew, perspective and distortion are not implemented
-- Smudge, clone, heal and liquify run through `PixelBrushes` / `LiquifyTool` on `PixelBuffer`s
+`StrokeRasterizer` renders into `PixelBuffer` layer data. `Compositor` applies blend modes,
+opacity, clipping, masks, adjustments and filters. `OpenGLCanvasRenderer` displays the result
+through **OpenGL ES 2.0**. Strokes and composition are CPU-side; this is not a Vulkan renderer.
+The C++ prototype in `app/src/main/jni` is not built or packaged by the application.
 
-### Layers
-- The layer stack lives in `CanvasRepositoryImpl`: add / remove / reorder / duplicate / merge (down,
-  visible, flatten), visibility, opacity, rename, lock, alpha lock, clipping masks, blend modes and
-  layer thumbnails
-- Layer masks: add (optionally from the current selection), paint, invert, enable/disable, density
-  and feather, with mask previews in the layer sheet
-- Adjustment layers: 9 adjustment types (`AdjustmentProcessor`) with validated parameter ranges,
-  applied non-destructively by the compositor
-- Filter layers (`addFilterLayer` / `rasterizeFilterLayer`) through `ImageFilters`
-- Reference layers: 🟡 a `reference` flag that `Compositor` keeps out of the flattened output, shown
-  as a `· reference` label in the layer sheet — but no screen sets the flag, so the feature is not
-  reachable in practice. There is no reference window and no copy-from-reference
-- Layer linking exists in the repository (`linkGroupId`, set/unset per layer) but has no UI
-- **Layer groups are not available** — see [Known gaps](#-known-gaps)
+Provisional pixel edits are separate from committed artwork. Saving/exporting uses committed
+content. Destructive document operations prepare replacements before committing one undo step;
+stale edit sessions are rejected. Merges reject unsupported backdrop-dependent combinations rather
+than silently changing artwork. Empty selections select nothing, not the whole canvas. Canvas
+transforms retain legacy vector ink and masks across animation frames. Snapshot history supplies
+undo/redo; it is not a measured unbounded-memory history system.
 
-### Undo / redo
-- Snapshot-based history in `CanvasRepositoryImpl` — every destructive operation (pixel tools,
-  adjustments, canvas ops, layer edits) snapshots before it runs, with `undoDepth` / `redoDepth`
+Adjustment layers support brightness/contrast, hue/saturation, colour balance, curves, levels,
+invert, posterize, selective colour and gradient mapping. Filters include blur, sharpen, noise,
+chromatic aberration, vignette, tilt-shift, edges and emboss. Empty filter layers affect the stack
+below; layers with their own pixels retain per-layer effects. Masks/opacity control the result.
 
-### Colour, guides and canvas operations
-- Advanced colour picker: colour wheel, RGB / HSV / CMYK sliders, hex, colour harmonies, recents
-  and saved palettes (`Palette` with `PaletteCodec` for persistence, `ColorHarmony`)
-- Symmetry: vertical, horizontal, quadrant and radial (`SymmetryEngine`)
-- Perspective guides: 1-point, 2-point, 3-point and isometric, with draggable vanishing points
-- Canvas operations: resize, crop, rotate (quarter turns and free), straighten, flip, expand /
-  trim to content, fit to content, DPI changes and preset canvas sizes
+### Explicitly unfinished
 
-### Animation
-- `AnimationTimeline` + `AnimationFrame` model: frames, duplication, reordering, onion skinning,
-  playback and FPS control
+Layer groups; transforms beyond translation; custom/dual brush textures; a reference companion;
+layer-linking controls; PSD import; QuickShape-style recognition; ICC-managed colour; drawing
+timelapse; Page Assist and 3D painting; measured physical-stylus/performance parity.
+Cloud sync, collaboration and smart objects are separate roadmap ideas, not asserted Procreate
+features. Analytics/crash reporting are intentionally absent; telemetry is not a parity requirement.
+See the [workflow comparison](docs/PROCREATE_PARITY.md) instead of treating source markers as progress.
 
-### Persistence and export
-- `.artflow` document format: JSON metadata (kotlinx.serialization) plus per-layer raster blobs,
-  written **atomically**
-- Autosave, crash recovery, thumbnails and a flattened preview PNG per project
-- Export via `ArtworkExporter`: **PNG, JPEG, WebP, PDF, PSD, animated GIF, MP4 and a PNG
-  frame-sequence zip**, with scale, quality, area (full canvas / frame / all frames / selection /
-  trim to content) and transparency handling
-- Export publishing to the correct image/video gallery collection, Android document-picker save, and read-granted share/view intents. Editable project files are excluded from FileProvider access
+## Build and run
 
-### App shell
-- Project gallery: list, create, rename, delete, thumbnails, search, sort and favourites
-- Full-screen editor with tool strip, brush options, quick menu and sheet-based panels for layers,
-  selection, canvas ops, guides, text and animation
-- Settings screen backed by a Room-stored preferences repository, plus a help centre and
-  first-run onboarding
+Use **JDK 17**, the committed **Gradle 8.14.3** wrapper, Android SDK **36** and platform-tools.
+Set `ANDROID_HOME` or a git-ignored `local.properties` with `sdk.dir=...`. Android Studio must
+support Android Gradle Plugin 8.10.1. Normal builds do not require an NDK or `-PnoNativeBuild`.
+The app supports Android **8.0 / API 26+**, with compile/target SDK 36.
 
-### Data & architecture
-- Room persistence for projects, brushes and settings; `.artflow` documents hold the canvas pixels
-- Layering: `domain` (models + repository interfaces), `data` (Room, repositories, renderers,
-  export), `presentation` (Compose screens + ViewModels + the GL canvas view)
-- Both ViewModels talk to the repository interfaces directly; there is no separate use-case layer
-- Hilt dependency injection, Timber logging, Coil for image loading, Navigation Compose for routing
-- JVM unit tests for the pure-Kotlin engines (`core/pixels`, `core/canvas`, `core/symmetry`)
-
----
-
-## 🚧 Project status
-
-The table below reflects the code that is currently in the repository.
-
-| Area | Status |
-|------|--------|
-| Project gallery | Implemented — list, create, rename, delete, independent artwork duplication, real thumbnails, search, sort, favourites |
-| Canvas screen + GL surface | Implemented |
-| Brush engine + parameters | Implemented via `StrokeRasterizer`/`Compositor` + `BrushParams` |
-| Brush textures | Three built-in procedural grains with scale/rotation; custom texture import and dual textures are not implemented |
-| Pixel engine (buffers, blend modes, adjustments, filters) | Implemented |
-| Tools (smudge, clone, heal, liquify, fill, gradient, text, shapes) | Implemented |
-| Selection / transform | Selection implemented (magic wand + boolean combining); transform is **translate only** |
-| Layers / masks / adjustments / filter layers | Implemented |
-| Layer groups / layer linking | **Not available** — no grouping UI or repository operation; `linkGroupId` is stored but never set from the UI |
-| Undo / redo | Implemented (snapshot history) |
-| Save / load projects | Implemented — `.artflow` documents with layer pixels, autosave and recovery |
-| Export (PNG/JPEG/WebP/PDF/PSD/GIF/MP4/frame sequence) | Implemented |
-| Animation timeline + animation export | Implemented |
-| Symmetry, perspective guides, canvas properties | Implemented |
-| Colour picker, harmonies, palettes | Implemented |
-| Settings, help centre, onboarding | Implemented |
-| Cloud sync / collaboration | **Not implemented** |
-| Reference layers | 🟡 Model + compositor support and a `· reference` label, but no control sets the flag; no reference window, no copy-from-reference |
-| Layer linking, smart objects | **Not implemented** (no UI; no smart-object concept in the model) |
-| Native C++ brush engine | Unintegrated source prototype; not built or packaged by the application Gradle configuration |
-| Timelapse recording | **Not implemented** (the `.artflow` format reserves timelapse metadata) |
-| Instrumentation tests | Launch, GL rendering, storage/recovery, independent duplication, export formats/provider access and export/privacy UI regression tests |
-| CI | GitHub Actions: JVM tests, ktlint, detekt, Android lint, APK/AAB builds and API 26/35 (16 KB)/36 instrumentation plus minified launch; consult completed run evidence |
-
-Source markers are not a completion measure. The custom pressure curve and procedural brush grains
-are implemented; the original roadmap still includes missing workflows listed below. A passing
-build is not a signed Google Play release.
-
----
-
-## 🔌 Known gaps
-
-These are the features the app does **not** have. Nothing in `app/src/main` is known to be
-unreachable — the prototype layer that an earlier revision of this file described as dead code
-(`core/layer`, `core/selection`, `core/transform`, `core/shape`, `core/brush`, `domain/usecase`,
-`data/repository/texture`, `data/renderer/native`, the texture library UI and the Hilt modules that
-only provided them) has been deleted.
-
-- **Layer groups.** `Layer.parentGroupId` exists, but no repository operation or UI sets it, so
-  layers cannot be nested or collapsed.
-- **Transform beyond translation.** Rotate, scale, skew, perspective, distortion and snapping are
-  not implemented; `MOVE`/`TRANSFORM` translate pixels only.
-- **Imported and dual brush textures.** Built-in procedural grains are implemented; a custom
-  texture importer/library and dual-texture mixing are not.
-- **The native module.** `app/src/main/jni` remains an unintegrated C++ prototype. The application
-  no longer builds or packages that unused module. The active engine is Kotlin; no NDK or
-  `-PnoNativeBuild` switch is needed for the normal application build.
-- **Reference layers.** The flag is honoured when compositing, but no screen sets it, so the
-  feature cannot actually be used.
-- **PSD import.** PSD *export* works; importing a Photoshop document does not.
-- **Cloud sync, collaboration, smart objects, layer linking UI, timelapse recording.**
-- **Analytics and crash reporting.** Deliberately absent: the app declares no `INTERNET`
-  permission, which is what the privacy policy and the Play data-safety answers rely on.
-- **Benchmarks and broader device coverage.** Repository, rendering, export and selected Compose
-  UI regressions now have automated tests. This is not exhaustive UI coverage or measured
-  performance on low-memory phones, physical styluses and every GPU/codec. No benchmark module
-  is present. See [release readiness](docs/RELEASE_READINESS.md) before distribution.
-
----
-
-## 📱 System requirements
-
-- **OS**: Android 8.0 (API 26) or higher
-- **Target SDK**: 36 (required by Google Play for new apps and updates since 2026-08-31)
-- **RAM**: 4 GB recommended for large canvases or many frames
-- **Stylus**: pressure-sensitive stylus optional; finger input falls back to
-  `MotionEvent.size` as a pressure proxy
-
----
-
-## 🏗️ Architecture
-
-### Tech stack
-
-- **Language**: Kotlin (there are **no Java sources**)
-- **UI**: Jetpack Compose with Material 3 (dark-first theme)
-- **Graphics**: OpenGL ES 2.0 through `GLSurfaceView` / `GLES20`, CPU-side pixel pipeline
-- **Native**: unintegrated C++ prototype retained as source; not part of the application build
-- **Architecture**: MVVM with a layered `domain` / `data` / `presentation` split
-- **DI**: Hilt (Dagger)
-- **Async**: Kotlin Coroutines + Flow / StateFlow
-- **Persistence**: Room + kotlinx.serialization documents
-- **Image loading**: Coil
-- **Logging**: Timber
-
-### Project structure
-
-```
-app/src/main/java/com/artflow/studio/
-├── core/                       # Engines; the pixel ones deliberately avoid android.* so they
-│   │                           # stay testable on the JVM
-│   ├── animation/              # AnimationTimeline
-│   ├── canvas/                 # CanvasOperations (resize / crop / rotate / trim)
-│   ├── color/                  # Palette, ColorHarmony
-│   ├── export/                 # ExportOptions, PsdCodec, GifEncoder
-│   ├── perspective/            # PerspectiveGuide
-│   ├── pixels/                 # PixelBuffer, BlendModes, AdjustmentProcessor, ImageFilters,
-│   │                           # SelectionMask, Stamping
-│   ├── render/                 # Compositor, StrokeRasterizer
-│   ├── symmetry/               # SymmetryEngine
-│   ├── text/                   # TextLayout
-│   └── tool/                   # ToolType, FillTool, GradientTool, LiquifyTool, PixelBrushes
-├── domain/
-│   ├── model/                  # Color, Project, animation/, brush/, layer/, settings/
-│   └── repository/             # Project / canvas / settings repository interfaces
-├── data/
-│   ├── export/                 # ArtworkExporter (PNG/JPEG/WebP/PDF/PSD/GIF/MP4/zip)
-│   ├── local/                  # Room database, DAOs, entities, ProjectStorage (.artflow files)
-│   ├── renderer/               # OpenGLCanvasRenderer, BitmapPixelBridge
-│   └── repository/             # Repository implementations (canvas/, settings/)
-├── di/                         # Hilt modules: CanvasRepository, Database, Repository, Settings
-└── presentation/
-    └── ui/                     # Compose app (ArtFlowApp, MainActivity), components/{brush,canvas,
-                                # color,editor,export,layer}, screens/{canvas,gallery,help,settings},
-                                # theme, viewmodel
-
-app/src/main/jni/               # Unintegrated C++ prototype, excluded from the app build
-app/src/test/                   # JVM unit tests (JUnit)
-app/src/androidTest/            # Device regressions, Compose tests and Hilt test runner
-```
-
----
-
-## 🚀 Getting started
-
-### Prerequisites
-- JDK 17 and the committed Gradle 8.14.3 wrapper; no global Gradle install is needed.
-- Android SDK platform 36 and platform-tools. Set `ANDROID_HOME` or a git-ignored
-  `local.properties` containing `sdk.dir=...`.
-- An Android Studio release compatible with Android Gradle Plugin 8.10.1 when using the IDE.
-- At least 6 GB of available build memory, plus emulator memory for device tests. The daemon
-  budgets 2.5 GB heap and 1 GB metaspace, uses the in-process Kotlin compiler and two workers.
-  These are build settings, not a claim about the app's minimum device RAM.
-
-### Build and verify
+Allow at least 6 GB of build memory plus emulator memory. The daemon budgets 2.5 GB heap and
+1 GB metaspace, with two workers and the in-process Kotlin compiler. These are build settings,
+not measured minimum app RAM. A pressure-sensitive stylus is optional; finger input is supported.
 
 ```bash
 ./gradlew testDebugUnitTest ktlintCheck detekt lintDebug lintRelease
 ./gradlew assembleDebug bundleRelease
-./gradlew connectedDebugAndroidTest  # requires a running device/emulator, API 26 or newer
+./gradlew connectedDebugAndroidTest
 python -m unittest discover -s .github/scripts -p 'test_*.py'
 python .github/scripts/verify_android_artifacts.py app/build/outputs/apk/debug/app-debug.apk app/build/outputs/bundle/release/app-release.aab
 ```
 
-On Windows use `gradlew.bat` and your Python command. Build variants are `debug`, `release` and
-`benchmark`; the last is a release-like build type, not a benchmark suite. Minimum SDK is 26,
-compile/target SDK is 36, and the Java/Kotlin bytecode target is 17. The unused C++ prototype does
-not require the NDK for these builds.
+On Windows use `gradlew.bat` and your Python command. Device tests require a running API 26+
+device/emulator. Variants are `debug`, `release` and `benchmark`; the last is release-like for a
+minified launch smoke test, **not** a performance benchmark suite.
 
-### What the tests cover
+## Architecture
 
-JVM suites exercise canvas operations, pixel buffers, selections, symmetry, flood filling,
-deterministic brush/compositor behavior and image codecs. PNG tests use an independent JDK decoder;
-PSD tests cover raw/RLE output, alpha, Unicode layer names, clipping and resolution metadata.
+```text
+app/src/main/java/com/artflow/studio/
+├── core/           Pure Kotlin pixels, strokes, compositing, tools, guides and codecs
+├── domain/         Immutable models and repository contracts
+├── data/           Room, atomic document storage, repositories, rendering and export
+├── di/             Hilt modules
+└── presentation/   Compose screens/components, ViewModels and ArtFlowCanvasView
 
-Device suites exercise project round trips, incomplete saves, recovery, stale edit rejection,
-independent duplication and rollback, actual GL output, file-provider isolation, image/document/
-video exports, video frame timing, and selected export/privacy UI interactions. Source tests are
-not proof of passing execution: consult [release evidence](docs/RELEASE_READINESS.md) and the
-Actions reports for the exact commit and device. Legacy and modern Android storage paths differ;
-a conditional API-specific test is not evidence for the untested path.
+app/src/test/         JVM regression suites
+app/src/androidTest/  Real input, storage, rendering, export and Compose regressions
+.github/              CI, artifact verification and diagnostic collection
+```
 
-`detekt` uses the existing `config/detekt/baseline.xml`; a successful run means no findings beyond
-that baseline, not that every historical finding has been eliminated. `ktlint` follows
-`.editorconfig`. No benchmark module or exhaustive physical-device test campaign is claimed.
+ViewModels use repository interfaces directly; there is no separate use-case layer. Room stores
+project/brush/settings metadata; `.artflow` documents store artwork data. Dependencies include
+Coroutines/Flow, kotlinx.serialization, Hilt, Coil, Navigation Compose and Timber. The application
+source language is Kotlin. The unintegrated C++ source is not the active painting engine.
 
-The APK/AAB preflight checks archive integrity, packaged native-library inventory and 16 KB binary
-alignment. It does not replace a 16 KB runtime test, Play's generated-split checks, signing
-verification or Play Console review.
+## Verification and evidence
 
----
+CI runs JVM tests, Python verifier tests, ktlint, detekt, debug/release Android lint, APK/AAB builds,
+artifact checks and device suites on API 26/35/36, including 16 KB configurations and minified launch.
+Read the **completed exact-commit run**, not just a badge or the latest run number.
 
-## 📦 Building for release
+Tests cover pixel/selection/fill kernels, deterministic rendering, codecs, document round-trips,
+recovery, stale edits, duplication, actual GL output, export/provider isolation, animation timing
+and selected UI workflows. This is not exhaustive coverage of every device, codec, low-memory
+condition, physical stylus, process interruption or long drawing session.
 
-Keep the upload keystore outside source control. Create a git-ignored `keystore.properties` at the
-repository root:
+`detekt` retains the existing `config/detekt/baseline.xml`; a pass does not erase historical findings.
+Android lint warnings likewise must be reviewed, not described as fixed merely because lint passes.
+The artifact verifier checks archive integrity, native inventory and alignment. It does not replace
+16 KB runtime tests, Play-generated split checks, signing verification or Play Console review.
+
+Workspace screenshots from instrumentation are collected under `test-evidence` by the existing
+CI diagnostic script. They are evidence of the running build, not substitute design mockups.
+
+## Private-key release build
+
+Keep the upload keystore outside source control. Use a git-ignored root `keystore.properties`:
 
 ```properties
 storeFile=/absolute/path/to/private-upload-key.jks
@@ -324,91 +143,31 @@ keyAlias=YOUR_UPLOAD_ALIAS
 keyPassword=YOUR_PRIVATE_KEY_PASSWORD
 ```
 
-A relative `storeFile` is resolved from the repository root. Preserve the same upload-key identity
-for existing Play applications; do not generate a replacement casually. Never paste signing
-passwords or keys into issues, source files, build artifacts or public logs.
+A relative `storeFile` resolves from the repository root. Preserve the existing upload-key identity
+for an existing Play app. Never publish passwords, signing keys or private files in source or logs.
 
 ```bash
 ./gradlew bundleRelease -PrequireReleaseSigning=true
 ```
 
-The production command fails when signing inputs are missing. An incomplete properties file or a
-missing keystore also fails configuration. Without the opt-in flag and without a properties file,
-CI may deliberately build an **unsigned candidate**, which is not a Play-upload-ready artifact.
-Release builds run R8 and resource shrinking. Confirm the final bundle's signature, application ID,
-version code and packaged SDK behavior before uploading to an internal test track.
+This production command rejects missing signing inputs. Without the flag and without signing
+properties, CI may build an **unsigned candidate**, not a Play-upload-ready release. Release uses
+R8/resource shrinking. Verify the final signature, application ID, version code and generated splits.
 
-The app includes an offline privacy policy in Settings; the matching public-policy source is
-[docs/privacy-policy.md](docs/privacy-policy.md). Android backup/device transfer follows device
-settings and may use the device owner's cloud account. Exported copies can be handled by external
-apps/providers. A missing network permission does not exempt an app from Play's Data safety form.
+## Documentation and privacy
 
-See [release readiness](docs/RELEASE_READINESS.md), [store listing](docs/play-listing.md) and the
-unchanged future-feature goals in [agent.md](agent.md). Build success alone does not certify
-production readiness or completion of all 50 phases.
+[Product comparison](docs/PROCREATE_PARITY.md) · [Release readiness](docs/RELEASE_READINESS.md) ·
+[Original 50-phase plan](agent.md) · [Store listing](docs/play-listing.md) ·
+[Privacy policy](docs/privacy-policy.md) · [Contributing](CONTRIBUTING.md)
 
----
+The app includes its policy offline in Settings. Android backup/device transfer follows the device
+owner's settings and may use their cloud account. Exported files can be handled by external apps
+and providers. No internet permission does not exempt a publisher from Play's Data safety form.
 
-## 🤝 Contributing
+Update the README and comparison status with every landed improvement, including its limitations
+and executed evidence. Do not mark a roadmap phase complete because a class or test exists.
+Report reproducible problems through this repository's issue tracker.
 
-1. Fork the repository and create a feature branch.
-2. Make your changes and add/update tests.
-3. Ensure `./gradlew testDebugUnitTest` passes and the project compiles.
-4. Open a pull request.
+## License
 
-### Code style
-Follow the [Kotlin coding conventions](https://kotlinlang.org/docs/coding-conventions.html).
-
-`ktlint` and `detekt` **are** configured (root `.editorconfig`, `config/detekt/`), so run
-`./gradlew ktlintCheck detekt` before opening a pull request — CI runs both. `detekt` only fails on
-findings that are not in the baseline, so new code is held to the standard without rewriting
-existing code first.
-
-### Commit messages
-Conventional commits are preferred: `feat:`, `fix:`, `docs:`, `style:`, `refactor:`,
-`test:`, `chore:`.
-
----
-
-## 📄 License
-
-This project is licensed under the **GNU General Public License v3.0** — see the
-[LICENSE](LICENSE) file for the full text.
-
----
-
-## 🗺️ Roadmap
-
-The detailed 50-phase plan lives in [`agent.md`](agent.md), which carries the per-phase status
-table and is kept in step with the code. Summarised:
-
-- **Foundation (1–8)**: project setup, DI, architecture, design system, canvas, input, stroke
-  engine, layers — ✅
-- **Core drawing (9–16)**: advanced brush params, colour dynamics, blend modes, selection,
-  alpha lock, masks and custom pressure — ✅; textures — 🟡 *three procedural grains, no custom import*;
-  transform — 🟡 *translate only*
-- **Professional tools (17–24)**: smudge, liquify, clone, heal, gradient, fill, text, shapes — ✅
-- **Advanced layers (25–30)**: adjustments and filter layers — ✅; layer groups, layer linking UI
-  and smart objects — ⬜ *not implemented*
-- **Colour & canvas (31–36)**: pickers, palettes, symmetry, perspective, canvas properties,
-  quick menu — ✅; shortcut remapping — ⬜
-- **File operations (37–42)**: save, PNG/JPEG/WebP/PSD/PDF export, gallery — ✅; PSD import and
-  cloud sync — ⬜
-- **Animation & advanced (43–50)**: timeline, animation export, settings, help centre, onboarding,
-  CI — ✅; timelapse recording, analytics/crash reporting and a benchmark module — ⬜
-
----
-
-## 📞 Support
-
-- Issue tracker: open an issue on the repository hosting this project
-- The `https://docs.artflow.studio`, Discord, and email addresses used in earlier revisions of
-  this document are placeholders and do not resolve
-
----
-
-<div align="center">
-
-**Built with Kotlin and Jetpack Compose for Android artists**
-
-</div>
+GNU General Public License v3.0. See [LICENSE](LICENSE).

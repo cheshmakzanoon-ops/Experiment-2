@@ -1,5 +1,6 @@
 package com.artflow.studio
 
+import android.graphics.Bitmap
 import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
@@ -8,6 +9,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.domain.repository.ProjectRepository
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
@@ -24,6 +26,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 import javax.inject.Inject
 
 /** Real navigation, ViewModels, input, Room and document storage in the unmodified app shell. */
@@ -67,6 +70,7 @@ class ArtworkWorkflowTest {
             compose.waitUntil(15_000) { runBlocking(Dispatchers.Main) { canvas.hasUnsavedChanges() } }
             val painted = pixels()
             assertFalse("Input through the editor must change real artwork", blank.contentEquals(painted))
+            inspectFocusMode(scenario, painted)
 
             // Exercise the save-before-navigation callback, not a direct repository save.
             compose.onNodeWithContentDescription("Back").performClick()
@@ -111,6 +115,53 @@ class ArtworkWorkflowTest {
                 }
                 settings.update { originalSettings }
             }
+        }
+    }
+
+    private fun inspectFocusMode(
+        scenario: ActivityScenario<MainActivity>,
+        expectedPixels: IntArray,
+    ) {
+        var originalView: ArtFlowCanvasView? = null
+        var originalHeight = 0
+        scenario.onActivity {
+            originalView = findCanvas(it.window.decorView)
+            originalHeight = requireNotNull(originalView).height
+        }
+        val undoDepth = runBlocking(Dispatchers.Main) { canvas.undoDepth }
+        captureWorkspace("studio-workspace.png")
+        compose.onNodeWithContentDescription("Workspace menu").performClick()
+        compose.onNodeWithText("Focus mode").performClick()
+        compose.onNodeWithContentDescription("Exit focus mode").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Save").assertDoesNotExist()
+        compose.waitForIdle()
+        scenario.onActivity {
+            val focusedView = findCanvas(it.window.decorView)
+            assertSame("Focus must not recreate the GL canvas", originalView, focusedView)
+            assertTrue(requireNotNull(focusedView).height > originalHeight)
+        }
+        captureWorkspace("studio-focus.png")
+        assertArrayEquals(expectedPixels, pixels())
+        scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        compose.onNodeWithContentDescription("Save").assertIsDisplayed()
+        compose.onNodeWithText("Save changes?").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Workspace menu").performClick()
+        compose.onNodeWithText("Focus mode").performClick()
+        compose.onNodeWithContentDescription("Exit focus mode").performClick()
+        compose.onNodeWithContentDescription("Save").assertIsDisplayed()
+        assertArrayEquals(expectedPixels, pixels())
+        assertEquals(undoDepth, runBlocking(Dispatchers.Main) { canvas.undoDepth })
+        assertTrue(runBlocking(Dispatchers.Main) { canvas.hasUnsavedChanges() })
+    }
+
+    private fun captureWorkspace(name: String) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val image = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
+        try {
+            val directory = File(instrumentation.targetContext.getExternalFilesDir(null), "test-evidence").apply { mkdirs() }
+            File(directory, name).outputStream().use { assertTrue(image.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+        } finally {
+            image.recycle()
         }
     }
 
