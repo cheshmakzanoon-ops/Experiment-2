@@ -7,6 +7,34 @@ Paint with pressure-sensitive brushes, compose layers and masks, animate frames,
 The [Procreate comparison](docs/PROCREATE_PARITY.md) separates implemented workflows from missing capabilities.
 [Release readiness](docs/RELEASE_READINESS.md) tracks the separate distribution requirements.
 
+## Local candidate: brush attribute navigation and connected dynamics
+
+The candidate following `019648e` adds **ten named setting groups** plus **All settings** to
+Brush Studio. Wide settings panes use a scrollable attribute sidebar; compact panes use a
+horizontal selector. Choose Pressure, Grain or Wet paint directly instead of scrolling past every
+other group. Returning from Library or Drawing pad retains the selected group and the same draft.
+Changing groups starts the new panel at the top without resetting brush values. Navigation and the
+new pressure toggle honour the larger-touch-target preference.
+
+**Speed & colour** now exposes the existing engine's speed-to-size, speed-to-opacity and
+speed-to-hue parameters, plus pressure-dependent brightness. These controls were missing from
+the editor despite the parameters already affecting the rasterizer. They use the same exact-value
+entry and staged Use brush/Cancel workflow as the other settings, and complete-parameter saved
+copies already preserve them. No new document format, permission or dependency is required.
+
+The active engine still uses round brush tips: its stored tilt settings and general tip rotation
+are **not** implemented rendering features. The Rotation group states that limitation; procedural
+**grain rotation** does affect the texture. There is no claim of imported tips, realistic media or
+physical-stylus parity here.
+
+Seven new core/JUnit cases exercise group routing and actual rendered size/alpha/colour changes,
+source-alpha preservation, custom pressure response and determinism. Their shared production-core
+checks passed locally, alongside the seven existing Brush Studio check groups. Five new Compose
+tests cover group navigation, draft preservation, matching parameter updates, staged application,
+cancellation and large targets. They are **written but not executed locally**. All previous slider
+labels and existing regression tests are retained. This candidate is not yet published or Android
+verified; [verification follow-through](docs/STUDIO_VERIFICATION.md) records the boundaries.
+
 ## Candidate follow-through: tablet labels and verification
 
 The candidate based on `019648e` preserves the existing neutral theme and tablet layout while
@@ -64,7 +92,8 @@ rename and **confirmed deletion**. Built-in presets cannot be renamed or deleted
 Saved brushes participate in search; copies have independent identities even when names match.
 
 A saved copy preserves the **entire brush parameter model**, including custom pressure response,
-procedural grain, colour/velocity/tilt dynamics and wet mix. Saving a copy is an explicit library
+procedural grain, colour/velocity settings, reserved tilt fields and wet mix. Persisted tilt fields
+do not establish tilt-aware rendering. Saving a copy is an explicit library
 operation independent of **Use brush**: it does not apply the draft or edit artwork. Closing the
 studio still discards unapplied draft changes but does not undo a confirmed library save.
 
@@ -94,8 +123,9 @@ assertion or analysis rule has been disabled to obtain a pass.
 
 Open **Brush** in the editor. **Library** searches eight original starter presets and filters
 Sketch, Ink, Texture and Paint, with samples rendered by the painting engine. **Settings** edits
-size, opacity, spacing, smoothing, pressure curves, taper, procedural grain, scatter, jitter,
-rotation and wet mix. Tap a displayed value for exact numeric entry. **Drawing pad** tests your own
+size, opacity, spacing, smoothing, pressure curves, taper, procedural grain, scatter, jitter and wet
+mix. The local candidate adds attribute navigation and speed/colour controls. General tip rotation
+is reserved metadata; grain rotation is active. Tap a displayed value for exact numeric entry. **Drawing pad** tests your own
 marks without touching the artwork; return after changing settings to see those marks re-rendered.
 
 Changes remain a **draft** until **Use brush**. Close, Back or outside dismissal discards the draft;
@@ -131,7 +161,7 @@ Canvas background state follows the document through edits and undo/redo.
 
 | Area | Available | Important gaps |
 | --- | --- | --- |
-| Painting | Pressure/dynamics, smoothing, taper, flow, wet mix, jitter, three procedural grains, staged Brush Studio | Preset interchange, imported/dual textures, curated-library and stylus-feel parity |
+| Painting | Pressure/dynamics, smoothing, taper, flow, wet mix, jitter, three procedural grains, staged Brush Studio | Preset interchange, imported/shaped/dual textures, tilt rendering, curated-library and stylus-feel parity |
 | Tools | Brush, eraser, smudge, clone, healing, liquify, bucket, gradients, text and shapes | QuickShape recognition and ColorDrop-style interaction |
 | Selections | Rectangle/ellipse/lasso/wand, combine/invert/feather | Saved selections and equivalent gesture ergonomics |
 | Transform | MOVE/TRANSFORM translation | Interactive scale/rotate/distort/warp/snapping with preview/apply/cancel |

@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
@@ -38,6 +39,7 @@ fun BrushStudioContent(
     val original = remember { initial }
     var draft by remember { mutableStateOf(original) }
     var tab by remember { mutableIntStateOf(0) }
+    var attribute by rememberSaveable { mutableStateOf(BrushAttribute.ALL) }
     var applying by remember { mutableStateOf(false) }
     var strokes by remember { mutableStateOf<List<Stroke>>(emptyList()) }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -100,7 +102,7 @@ fun BrushStudioContent(
                                 if (tab == 0) {
                                     StudioBrushLibrary(draft, { draft = it }, Modifier.fillMaxSize(), library)
                                 } else {
-                                    AdvancedBrushSettingsPanel(draft, { draft = it }, Modifier.fillMaxSize())
+                                    BrushSettingsWorkspace(draft, { draft = it }, attribute, { attribute = it }, Modifier.fillMaxSize())
                                 }
                             }
                             VerticalDivider(Modifier.fillMaxHeight())
@@ -109,7 +111,7 @@ fun BrushStudioContent(
                     } else {
                         when (tab) {
                             0 -> StudioBrushLibrary(draft, { draft = it }, Modifier.fillMaxSize(), library)
-                            1 -> AdvancedBrushSettingsPanel(draft, { draft = it }, Modifier.fillMaxSize())
+                            1 -> BrushSettingsWorkspace(draft, { draft = it }, attribute, { attribute = it }, Modifier.fillMaxSize())
                             else -> BrushPracticePad(draft, strokes, { strokes = it }, Modifier.fillMaxSize())
                         }
                     }

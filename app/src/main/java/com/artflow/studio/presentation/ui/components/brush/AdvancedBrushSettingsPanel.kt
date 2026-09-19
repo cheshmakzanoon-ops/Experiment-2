@@ -18,22 +18,22 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PointMode
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.artflow.studio.core.render.BrushTexture
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.PressureResponse
+import com.artflow.studio.presentation.ui.theme.LocalArtFlowFlags
 
-/**
- * Advanced brush settings panel for configuring detailed brush parameters
- * Implements Phase 9: Advanced Brush Parameters
- */
-@OptIn(ExperimentalMaterial3Api::class)
+/** All settings remain available; the studio can also show one named attribute at a time. */
 @Composable
 fun AdvancedBrushSettingsPanel(
     brushParams: BrushParams,
     onBrushParamsChanged: (BrushParams) -> Unit,
     modifier: Modifier = Modifier,
+    attribute: BrushAttribute = BrushAttribute.ALL,
 ) {
     Column(
         modifier =
@@ -43,245 +43,342 @@ fun AdvancedBrushSettingsPanel(
                 .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        // Brush Preview Section
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
+        if (attribute == BrushAttribute.ALL) {
+            BrushPreviewWidget(
+                brushParams,
+                Modifier.fillMaxWidth().height(120.dp).background(MaterialTheme.colorScheme.surfaceContainerHigh),
+            )
+        }
+        BrushAttribute.visible(attribute).forEach { item ->
+            key(item) { BrushAttributeSettings(item, brushParams, onBrushParamsChanged) }
+        }
+    }
+}
+
+@Composable
+private fun BrushAttributeSettings(
+    attribute: BrushAttribute,
+    brushParams: BrushParams,
+    onBrushParamsChanged: (BrushParams) -> Unit,
+) {
+    when (attribute) {
+        BrushAttribute.PROPERTIES -> BrushProperties(brushParams, onBrushParamsChanged)
+        BrushAttribute.STROKE -> BrushStrokeSettings(brushParams, onBrushParamsChanged)
+        BrushAttribute.TAPER -> BrushTaperSettings(brushParams, onBrushParamsChanged)
+        BrushAttribute.PRESSURE -> BrushPressureSettings(brushParams, onBrushParamsChanged)
+        BrushAttribute.GRAIN -> BrushGrainSettings(brushParams, onBrushParamsChanged)
+        BrushAttribute.SCATTER -> BrushScatterSettings(brushParams, onBrushParamsChanged)
+        BrushAttribute.COLOUR -> BrushJitterSettings(brushParams, onBrushParamsChanged)
+        BrushAttribute.ROTATION -> BrushRotationSettings(brushParams, onBrushParamsChanged)
+        BrushAttribute.WET -> BrushWetSettings(brushParams, onBrushParamsChanged)
+        BrushAttribute.DYNAMICS -> BrushSpeedSettings(brushParams, onBrushParamsChanged)
+        BrushAttribute.ALL -> Unit
+    }
+}
+
+@Composable
+private fun BrushStrokeSettings(
+    brushParams: BrushParams,
+    onBrushParamsChanged: (BrushParams) -> Unit,
+) {
+    BrushSettingsSection(title = "Stroke Dynamics") {
+        // Spacing Control
+        BrushParameterSlider(
+            label = "Spacing",
+            value = brushParams.spacing,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(spacing = it)) },
+            valueRange = 0.01f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.spacing * 100),
+        )
+
+        // Smoothing Control
+        BrushParameterSlider(
+            label = "Smoothing",
+            value = brushParams.smoothing,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(smoothing = it)) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.smoothing * 100),
+        )
+
+        // Flow Control
+        BrushParameterSlider(
+            label = "Flow",
+            value = brushParams.flow,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(flow = it)) },
+            valueRange = 0.01f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.flow * 100),
+        )
+    }
+}
+
+@Composable
+private fun BrushTaperSettings(
+    brushParams: BrushParams,
+    onBrushParamsChanged: (BrushParams) -> Unit,
+) {
+    BrushSettingsSection(title = "Tapering") {
+        // Start Taper
+        BrushParameterSlider(
+            label = "Start Taper",
+            value = brushParams.taperStart,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(taperStart = it)) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.taperStart * 100),
+        )
+
+        // End Taper
+        BrushParameterSlider(
+            label = "End Taper",
+            value = brushParams.taperEnd,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(taperEnd = it)) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.taperEnd * 100),
+        )
+    }
+}
+
+@Composable
+private fun BrushPressureSettings(
+    brushParams: BrushParams,
+    onBrushParamsChanged: (BrushParams) -> Unit,
+) {
+    BrushSettingsSection(title = "Pressure Dynamics") {
+        // Pressure to Size
+        BrushParameterSlider(
+            label = "Pressure → Size",
+            value = brushParams.pressureToSize,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(pressureToSize = it)) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.pressureToSize * 100),
+        )
+
+        // Pressure to Opacity
+        BrushParameterSlider(
+            label = "Pressure → Opacity",
+            value = brushParams.pressureToOpacity,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(pressureToOpacity = it)) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.pressureToOpacity * 100),
+        )
+
+        // Pressure Curve Selection
+        PressureCurveSelector(
+            brushParams = brushParams,
+            onBrushParamsChanged = onBrushParamsChanged,
+        )
+    }
+}
+
+@Composable
+private fun BrushGrainSettings(
+    brushParams: BrushParams,
+    onBrushParamsChanged: (BrushParams) -> Unit,
+) {
+    BrushSettingsSection(title = "Brush Grain") {
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag("brush-grain-options"),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text(
-                    text = "Brush Preview",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-
-                BrushPreviewWidget(
-                    brushParams = brushParams,
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .height(120.dp)
-                            .background(
-                                Color(0xFF2D2D2D),
-                                RoundedCornerShape(8.dp),
-                            ),
-                )
-            }
-        }
-
-        BrushProperties(brushParams, onBrushParamsChanged)
-
-        // Stroke Dynamics Section
-        BrushSettingsSection(title = "Stroke Dynamics") {
-            // Spacing Control
-            BrushParameterSlider(
-                label = "Spacing",
-                value = brushParams.spacing,
-                onValueChange = { onBrushParamsChanged(brushParams.copy(spacing = it)) },
-                valueRange = 0.01f..1f,
-                valueDisplay = "%.0f%%".format(brushParams.spacing * 100),
+            FilterChip(
+                selected = !brushParams.blendTexture || brushParams.textureId == null,
+                onClick = { onBrushParamsChanged(brushParams.copy(textureId = null, blendTexture = false)) },
+                label = { Text("None") },
             )
-
-            // Smoothing Control
-            BrushParameterSlider(
-                label = "Smoothing",
-                value = brushParams.smoothing,
-                onValueChange = { onBrushParamsChanged(brushParams.copy(smoothing = it)) },
-                valueRange = 0f..1f,
-                valueDisplay = "%.0f%%".format(brushParams.smoothing * 100),
-            )
-
-            // Flow Control
-            BrushParameterSlider(
-                label = "Flow",
-                value = brushParams.flow,
-                onValueChange = { onBrushParamsChanged(brushParams.copy(flow = it)) },
-                valueRange = 0.01f..1f,
-                valueDisplay = "%.0f%%".format(brushParams.flow * 100),
-            )
-        }
-
-        // Tapering Section
-        BrushSettingsSection(title = "Tapering") {
-            // Start Taper
-            BrushParameterSlider(
-                label = "Start Taper",
-                value = brushParams.taperStart,
-                onValueChange = { onBrushParamsChanged(brushParams.copy(taperStart = it)) },
-                valueRange = 0f..1f,
-                valueDisplay = "%.0f%%".format(brushParams.taperStart * 100),
-            )
-
-            // End Taper
-            BrushParameterSlider(
-                label = "End Taper",
-                value = brushParams.taperEnd,
-                onValueChange = { onBrushParamsChanged(brushParams.copy(taperEnd = it)) },
-                valueRange = 0f..1f,
-                valueDisplay = "%.0f%%".format(brushParams.taperEnd * 100),
-            )
-        }
-
-        // Pressure Dynamics Section
-        BrushSettingsSection(title = "Pressure Dynamics") {
-            // Pressure to Size
-            BrushParameterSlider(
-                label = "Pressure → Size",
-                value = brushParams.pressureToSize,
-                onValueChange = { onBrushParamsChanged(brushParams.copy(pressureToSize = it)) },
-                valueRange = 0f..1f,
-                valueDisplay = "%.0f%%".format(brushParams.pressureToSize * 100),
-            )
-
-            // Pressure to Opacity
-            BrushParameterSlider(
-                label = "Pressure → Opacity",
-                value = brushParams.pressureToOpacity,
-                onValueChange = { onBrushParamsChanged(brushParams.copy(pressureToOpacity = it)) },
-                valueRange = 0f..1f,
-                valueDisplay = "%.0f%%".format(brushParams.pressureToOpacity * 100),
-            )
-
-            // Pressure Curve Selection
-            PressureCurveSelector(
-                brushParams = brushParams,
-                onBrushParamsChanged = onBrushParamsChanged,
-            )
-        }
-
-        BrushSettingsSection(title = "Brush Grain") {
-            Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag("brush-grain-options"),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
+            BrushTexture.Kind.entries.forEach { texture ->
                 FilterChip(
-                    selected = !brushParams.blendTexture || brushParams.textureId == null,
-                    onClick = { onBrushParamsChanged(brushParams.copy(textureId = null, blendTexture = false)) },
-                    label = { Text("None") },
-                )
-                BrushTexture.Kind.entries.forEach { texture ->
-                    FilterChip(
-                        selected = brushParams.blendTexture && brushParams.textureId == texture.id,
-                        onClick = { onBrushParamsChanged(brushParams.copy(textureId = texture.id, blendTexture = true)) },
-                        label = { Text(texture.label) },
-                    )
-                }
-            }
-            if (brushParams.blendTexture && brushParams.textureId != null) {
-                BrushParameterSlider(
-                    label = "Grain scale",
-                    value = brushParams.textureScale.coerceIn(0.25f, 8f),
-                    onValueChange = { onBrushParamsChanged(brushParams.copy(textureScale = it)) },
-                    valueRange = 0.25f..8f,
-                    valueDisplay = "%.2f×".format(brushParams.textureScale),
-                )
-                BrushParameterSlider(
-                    label = "Grain rotation",
-                    value = brushParams.textureRotation.coerceIn(0f, 360f),
-                    onValueChange = { onBrushParamsChanged(brushParams.copy(textureRotation = it)) },
-                    valueRange = 0f..360f,
-                    valueDisplay = "%.0f°".format(brushParams.textureRotation),
+                    selected = brushParams.blendTexture && brushParams.textureId == texture.id,
+                    onClick = { onBrushParamsChanged(brushParams.copy(textureId = texture.id, blendTexture = true)) },
+                    label = { Text(texture.label) },
                 )
             }
         }
-
-        // Scatter & Count Section
-        BrushSettingsSection(title = "Scatter & Count") {
-            // Scatter
+        if (brushParams.blendTexture && brushParams.textureId != null) {
             BrushParameterSlider(
-                label = "Scatter",
-                value = brushParams.scatter,
-                onValueChange = { onBrushParamsChanged(brushParams.copy(scatter = it)) },
-                valueRange = 0f..2f,
-                valueDisplay = "%.0f%%".format(brushParams.scatter * 100),
+                label = "Grain scale",
+                value = brushParams.textureScale.coerceIn(0.25f, 8f),
+                onValueChange = { onBrushParamsChanged(brushParams.copy(textureScale = it)) },
+                valueRange = 0.25f..8f,
+                valueDisplay = "%.2f×".format(brushParams.textureScale),
             )
-
-            // Count
             BrushParameterSlider(
-                label = "Count",
-                value = brushParams.count.toFloat(),
-                onValueChange = { onBrushParamsChanged(brushParams.copy(count = it.toInt())) },
-                valueRange = 1f..5f,
-                valueDisplay = "%d".format(brushParams.count),
-                isInteger = true,
-            )
-        }
-
-        // Jitter Section - Phase 9: Advanced Brush Parameters
-        BrushSettingsSection(title = "Jitter & Randomization") {
-            // Size Jitter
-            BrushParameterSlider(
-                label = "Size Jitter",
-                value = brushParams.sizeJitter,
-                onValueChange = { onBrushParamsChanged(brushParams.copy(sizeJitter = it)) },
-                valueRange = 0f..1f,
-                valueDisplay = "%.0f%%".format(brushParams.sizeJitter * 100),
-            )
-
-            // Opacity Jitter
-            BrushParameterSlider(
-                label = "Opacity Jitter",
-                value = brushParams.opacityJitter,
-                onValueChange = { onBrushParamsChanged(brushParams.copy(opacityJitter = it)) },
-                valueRange = 0f..1f,
-                valueDisplay = "%.0f%%".format(brushParams.opacityJitter * 100),
-            )
-
-            // Hue Jitter
-            BrushParameterSlider(
-                label = "Hue Jitter",
-                value = brushParams.hueJitter,
-                onValueChange = { onBrushParamsChanged(brushParams.copy(hueJitter = it)) },
-                valueRange = 0f..1f,
-                valueDisplay = "%.0f%%".format(brushParams.hueJitter * 100),
-            )
-
-            // Saturation Jitter
-            BrushParameterSlider(
-                label = "Saturation Jitter",
-                value = brushParams.saturationJitter,
-                onValueChange = { onBrushParamsChanged(brushParams.copy(saturationJitter = it)) },
-                valueRange = 0f..1f,
-                valueDisplay = "%.0f%%".format(brushParams.saturationJitter * 100),
-            )
-
-            // Brightness Jitter
-            BrushParameterSlider(
-                label = "Brightness Jitter",
-                value = brushParams.brightnessJitter,
-                onValueChange = { onBrushParamsChanged(brushParams.copy(brightnessJitter = it)) },
-                valueRange = 0f..1f,
-                valueDisplay = "%.0f%%".format(brushParams.brightnessJitter * 100),
-            )
-        }
-
-        // Rotation Section
-        BrushSettingsSection(title = "Rotation") {
-            // Brush Rotation
-            BrushParameterSlider(
-                label = "Rotation",
-                value = brushParams.rotation,
-                onValueChange = { onBrushParamsChanged(brushParams.copy(rotation = it)) },
+                label = "Grain rotation",
+                value = brushParams.textureRotation.coerceIn(0f, 360f),
+                onValueChange = { onBrushParamsChanged(brushParams.copy(textureRotation = it)) },
                 valueRange = 0f..360f,
-                valueDisplay = "%.0f°".format(brushParams.rotation),
-                isInteger = true,
+                valueDisplay = "%.0f°".format(brushParams.textureRotation),
             )
         }
+    }
+}
 
-        // Wet Mix Section (for watercolor/oil brushes)
-        BrushSettingsSection(title = "Wet Paint") {
-            // Wet Mix
-            BrushParameterSlider(
-                label = "Wet Mix",
-                value = brushParams.wetMix,
-                onValueChange = { onBrushParamsChanged(brushParams.copy(wetMix = it)) },
-                valueRange = 0f..1f,
-                valueDisplay = "%.0f%%".format(brushParams.wetMix * 100),
+@Composable
+private fun BrushScatterSettings(
+    brushParams: BrushParams,
+    onBrushParamsChanged: (BrushParams) -> Unit,
+) {
+    BrushSettingsSection(title = "Scatter & Count") {
+        // Scatter
+        BrushParameterSlider(
+            label = "Scatter",
+            value = brushParams.scatter,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(scatter = it)) },
+            valueRange = 0f..2f,
+            valueDisplay = "%.0f%%".format(brushParams.scatter * 100),
+        )
+
+        // Count
+        BrushParameterSlider(
+            label = "Count",
+            value = brushParams.count.toFloat(),
+            onValueChange = { onBrushParamsChanged(brushParams.copy(count = it.toInt())) },
+            valueRange = 1f..5f,
+            valueDisplay = "%d".format(brushParams.count),
+            isInteger = true,
+        )
+    }
+}
+
+@Composable
+private fun BrushJitterSettings(
+    brushParams: BrushParams,
+    onBrushParamsChanged: (BrushParams) -> Unit,
+) {
+    BrushSettingsSection(title = "Jitter & Randomization") {
+        // Size Jitter
+        BrushParameterSlider(
+            label = "Size Jitter",
+            value = brushParams.sizeJitter,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(sizeJitter = it)) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.sizeJitter * 100),
+        )
+
+        // Opacity Jitter
+        BrushParameterSlider(
+            label = "Opacity Jitter",
+            value = brushParams.opacityJitter,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(opacityJitter = it)) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.opacityJitter * 100),
+        )
+
+        // Hue Jitter
+        BrushParameterSlider(
+            label = "Hue Jitter",
+            value = brushParams.hueJitter,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(hueJitter = it)) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.hueJitter * 100),
+        )
+
+        // Saturation Jitter
+        BrushParameterSlider(
+            label = "Saturation Jitter",
+            value = brushParams.saturationJitter,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(saturationJitter = it)) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.saturationJitter * 100),
+        )
+
+        // Brightness Jitter
+        BrushParameterSlider(
+            label = "Brightness Jitter",
+            value = brushParams.brightnessJitter,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(brightnessJitter = it)) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.brightnessJitter * 100),
+        )
+    }
+}
+
+@Composable
+private fun BrushRotationSettings(
+    brushParams: BrushParams,
+    onBrushParamsChanged: (BrushParams) -> Unit,
+) {
+    BrushSettingsSection(title = "Rotation") {
+        Text(
+            "Rotation does not change the current round brush tip. Grain rotation changes texture orientation.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        // Brush Rotation
+        BrushParameterSlider(
+            label = "Rotation",
+            value = brushParams.rotation,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(rotation = it)) },
+            valueRange = 0f..360f,
+            valueDisplay = "%.0f°".format(brushParams.rotation),
+            isInteger = true,
+        )
+    }
+}
+
+@Composable
+private fun BrushWetSettings(
+    brushParams: BrushParams,
+    onBrushParamsChanged: (BrushParams) -> Unit,
+) {
+    BrushSettingsSection(title = "Wet Paint") {
+        // Wet Mix
+        BrushParameterSlider(
+            label = "Wet Mix",
+            value = brushParams.wetMix,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(wetMix = it)) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.wetMix * 100),
+        )
+    }
+}
+
+@Composable
+private fun BrushSpeedSettings(
+    brushParams: BrushParams,
+    onBrushParamsChanged: (BrushParams) -> Unit,
+) {
+    val touchSize = if (LocalArtFlowFlags.current.largeTouchTargets) 56.dp else 48.dp
+    BrushSettingsSection(title = "Speed and colour dynamics") {
+        Text(
+            "Faster strokes can become thinner, lighter or shift hue. Test the response in the drawing pad.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        BrushParameterSlider(
+            label = "Speed → size",
+            value = brushParams.velocityToSize,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(velocityToSize = it)) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.velocityToSize * 100),
+        )
+        BrushParameterSlider(
+            label = "Speed → opacity",
+            value = brushParams.velocityToOpacity,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(velocityToOpacity = it)) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.velocityToOpacity * 100),
+        )
+        BrushParameterSlider(
+            label = "Speed → hue",
+            value = brushParams.velocityToHue,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(velocityToHue = it)) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.velocityToHue * 100),
+        )
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Pressure changes brightness", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+            Switch(
+                checked = brushParams.colorPressure,
+                onCheckedChange = { onBrushParamsChanged(brushParams.copy(colorPressure = it)) },
+                modifier =
+                    Modifier.sizeIn(minWidth = touchSize, minHeight = touchSize)
+                        .semantics { contentDescription = "Pressure changes brightness" },
             )
         }
+        Text(
+            "Pressure response depends on input hardware. Tilt and shaped brush tips are not implemented in the active renderer.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

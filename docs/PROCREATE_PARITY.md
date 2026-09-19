@@ -6,13 +6,17 @@ Original comparison baseline: `c2e4eee1ef0cc1e65ebfd49ca7c01b9f2b94d5df`.
 not a release certificate. A feature counts only when it is reachable and behaves correctly in the
 editor; a helper class, placeholder control or passing compile does not establish completion.
 
+Latest inspected remote baseline: `019648ea501c8de5f3d0af04fc16bc97b05d8923`. The comparison
+below describes that remote baseline. Local candidate additions and their unexecuted Android gates
+are recorded separately; they are not silently counted as shipped capabilities.
+
 ## Current comparison
 
 | Workflow | Reference product | ArtFlow now | Remaining work |
 | --- | --- | --- | --- |
 | Canvas-first workspace | Primary painting controls, movable sidebar, hide-interface mode [1] | Compact dock, focus mode, explicit panel closing, neutral contrast-tested themes and split-view tablet Brush Studio | Handedness-aware sidebar, anchored canvas panels, broader adaptive-layout and artist validation |
 | Brush library | Search, organization and management [13] | Eight original starter presets; searchable saved copies with rename and confirmed deletion | Favorites, user sets, preset interchange, a professionally curated and artist-tested collection |
-| Brush Studio | Staged settings, numerical input, re-rendering drawing pad, custom shapes/grains and dual brushes [2] | Local draft/apply/cancel/reset, exact values, pressure curves, procedural grains, isolated practice, complete-parameter saved copies | Imported shape/grain assets, dual-brush workflow and physical-stylus response validation |
+| Brush Studio | Staged settings, numerical input, re-rendering drawing pad, custom shapes/grains and dual brushes [2] | Local draft/apply/cancel/reset, exact values, pressure curves, procedural grains, isolated practice, complete-parameter saved copies | Imported shape/grain assets, dual-brush workflow, tilt-aware rendering and physical-stylus response validation |
 | Transform | Scale, rotate, distort, warp, snapping and interpolation controls [3] | Reachable MOVE/TRANSFORM translation only | Interactive handles/pivot, preview/apply/cancel, mask/selection alignment and no cumulative preview resampling |
 | Layer organization | Multi-selection, drag ordering and nested groups [4] | Topmost-first stack, active-layer up/down, masks, opacity, blending, adjustments and filters | Nested groups, multi-selection/linking UI, atomic group operations with faithful composition and reload |
 | Reference companion | Floating canvas/image reference with sampling and navigation [5] | Movable image window with bounded decode, pan/zoom/fit, long-press/pick-mode sampling | Live canvas view, manual resize and source persistence; sampling currently uses a decoded preview |
@@ -113,6 +117,49 @@ two device tests add exact-revision verification. A sixth CI lane uses the API 3
 all five existing device configurations and their minified launch checks remain. Actual tablet and
 compact captures must be inspected before claiming visual acceptance.
 
+## Local candidate: attribute-first editing, not feature-count inflation
+
+`BrushSettingsWorkspace` adds a ten-group selector, keeping All settings for the existing full
+panel. A settings pane at least 480 dp wide has an attribute sidebar; smaller panes use a scrollable
+selector. Selection lives above the tab/layout-specific subtrees. Only the panel's scroll position
+resets when a different group opens; the brush draft and practice paths are not replaced.
+Controls retain selected semantics, the existing theme and the larger-touch-target preference.
+
+The Speed & colour group wires `velocityToSize`, `velocityToOpacity`, `velocityToHue` and
+`colorPressure` to their existing production parameter functions. Pixel tests confirm the effects
+reach `StrokeRasterizer`, rather than merely testing that a slider callback stores a value.
+The engine normalizes velocity over 0–10 document pixels per millisecond. At full influence its
+speed response can reduce size by up to 50%, opacity by up to 30%, and shift hue by up to 60 degrees.
+Those are this engine's parameter contracts, not measurements or claims about Procreate's feel.
+
+Inspection also found a misleading implication in the previous documentation: storing
+`tiltInfluence` and `tiltToRotation` does not make tilt active. Neither field is consumed by the
+current rasterizer. The general rotation field likewise does not rotate a shaped tip; round tips
+are still used. Grain rotation remains a separate, implemented texture operation. These gaps stay
+open instead of receiving disconnected UI controls or a feature-completion checkmark.
+
+Added verification: seven shared core/JUnit cases and five Compose cases. Local standalone checks
+compile and execute the actual enum, parameter functions, colour conversions, pixel kernels and
+rasterizer, with compile-only adapters for unavailable serialization annotations and unused Android/
+Compose type signatures. Android rendering, generated serializers and Compose compilation are not
+covered by those adapters. The seven existing Brush Studio check groups also still pass. New
+Compose checks require the full device matrix; no baseline, assertion or job is removed.
+
+### Highest-impact work still needed after this candidate
+
+| Priority | Missing workflow / quality | Concrete acceptance task |
+| --- | --- | --- |
+| 1 | Reliable, discoverable editing | All six device lanes pass with preserved crash evidence; inspect phone/tablet, large text and theme captures. Complete paint → change brush → edit layer → save → reopen without hidden controls. |
+| 2 | Useful transformations and layer organization | Reconcile unmerged PR #34 without overwriting newer work. Then transform selected/masked art with handles and cancel/undo/redo; organize nested groups and preserve composition on reload. |
+| 3 | Artist-grade brushes | Imported shape/grain sources, real tilt-aware tips, dual brushes and curated presets. Compare named physical styluses using the same pressure/tilt/speed tasks, not parameter counts. |
+| 4 | Drawing assistance and colour fidelity | Editable hold-to-recognize shapes, interactive colour-drop filling, saved selections, ICC-tagged workflows and external layered-document fixtures. |
+| 5 | Broader Procreate workflows | Drawing-process timelapse, Page Assist and 3D painting remain explicit product-scope gaps. |
+
+A high-contrast theme is not whole-app accessibility; a decoder is not faithful interchange;
+a numerical transform helper is not an ergonomic transform workflow; and automated tests alone
+are not measured input latency or artist approval. No parity percentage is assigned without a
+scoped, executed task matrix. The reference remains Procreate's own handbook [1][2][3][4][8][10].
+
 ## Verification record
 
 | Candidate / run | Observed result | Meaning |
@@ -124,6 +171,7 @@ compact captures must be inspected before claiming visual acceptance.
 | `ba70a98` / `35449641066` | JVM step passed; static findings and API 26 dialog-capture incompatibility remained | Whole-screen accessibility-bounded pixel checks replace the unsupported capture API, retaining blank/painted/cleared assertions. |
 | `b27de13` / `35451246630` | 409 JVM tests passed with zero failures/errors/skips; ktlint, detekt, both lint variants, APK/AAB and artifact preflight passed | All five device lanes stopped at compilation of a DpRect assertion. This is not runtime or parity approval. |
 | `925550d` / `35452229998` | 418 JVM tests passed; all five device configurations passed; API 36 had 165 cases with zero failures/errors/skips | ktlint formatting blocked the build job; those findings are repaired in the theme/adaptive milestone without suppressions. |
+| `019648e` / `35453272406` | 425 JVM tests passed; four of six device jobs passed. Tablet: one label-overflow assertion among 167 cases; API 35: native crash after 76 reported cases. Three static findings blocked the build job. | Local candidate addresses tab layout/static structure, adds diagnostics and brush navigation. Native crash root cause remains unresolved. Exact-candidate Android/static/build verification is pending. |
 
 Local Python artifact-verifier suite: 30 tests passed during the saved-library implementation.
 New Kotlin/UI/storage tests are not represented as locally executed Android tests.
