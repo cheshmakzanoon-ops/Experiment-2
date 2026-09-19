@@ -7,6 +7,25 @@ Paint with pressure-sensitive brushes, compose layers and masks, animate frames,
 The [Procreate comparison](docs/PROCREATE_PARITY.md) separates implemented workflows from missing capabilities.
 [Release readiness](docs/RELEASE_READINESS.md) tracks the separate distribution requirements.
 
+## Candidate follow-through: tablet labels and verification
+
+The candidate based on `019648e` preserves the existing neutral theme and tablet layout while
+addressing the three static-analysis findings from run `35453272406`. Palette tests retain every
+accent/mode combination and every contrast assertion; their nested bodies are factored into helpers.
+Brush Studio tabs use content-measured height rather than the text-baseline layout. The device
+regression now checks **all three labels**, with width/height overflow diagnostics, instead of only
+Drawing pad. This is a proposed fix pending a new Android run, not a recorded device pass.
+
+The prior run passed its JVM step and four of six device jobs. API 36 tablet reported label
+overflow. API 35/16 KB terminated with a native main-thread SIGSEGV in JIT-compiled Compose animation
+code during saved-brush renaming. That stack is **not** the prior ART Profile Saver abort signature;
+its root cause remains unresolved. Neither the failed run nor its assertions are waived.
+
+Local checks: all six production palette groups passed (24 theme/accent combinations and 1,000
+seed cases), and all 30 Python verifier tests passed. Gradle bootstrap is blocked by DNS resolution
+for `services.gradle.org`; Android/JUnit/static-analysis execution for this candidate is pending.
+See [verification follow-through](docs/STUDIO_VERIFICATION.md) for exact artifacts and promotion gates.
+
 ## Latest improvement: neutral, readable and adaptive studio
 
 ArtFlow now defines every Material surface/container role rather than mixing its own dark palette

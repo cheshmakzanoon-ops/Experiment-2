@@ -89,9 +89,15 @@ class BrushStudioUiTest {
                 if (open) BrushStudioContent(BrushParams(), { applied.add(it) }, { open = false })
             }
         }
-        val layouts = mutableListOf<TextLayoutResult>()
-        compose.onNodeWithText("Drawing pad").performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
-        assertFalse("The full Drawing pad label must fit", layouts.single().hasVisualOverflow)
+        listOf("Library", "Settings", "Drawing pad").forEach { label ->
+            val layouts = mutableListOf<TextLayoutResult>()
+            compose.onNodeWithText(label).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            val layout = layouts.single()
+            assertFalse(
+                "$label must fit: size=${layout.size}, widthOverflow=${layout.didOverflowWidth}, heightOverflow=${layout.didOverflowHeight}",
+                layout.hasVisualOverflow,
+            )
+        }
         compose.onNodeWithText("Search brushes").performTextInput("fine liner")
         compose.onNodeWithText("Fine liner").performClick()
         compose.onNodeWithText("Use brush").performClick()

@@ -116,6 +116,7 @@ object StudioPalette {
 
     private fun luminance(color: Int): Double {
         require(color ushr 24 == 255) { "UI contrast requires opaque colours" }
+
         fun channel(shift: Int): Double {
             val value = (color ushr shift and 255) / 255.0
             return if (value <= 0.04045) value / 12.92 else ((value + 0.055) / 1.055).pow(2.4)

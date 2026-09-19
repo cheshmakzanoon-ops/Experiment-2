@@ -79,8 +79,17 @@ fun BrushStudioContent(
                                 focusManager.clearFocus()
                                 tab = index
                             },
-                            text = { Text(title, maxLines = 2, textAlign = TextAlign.Center) },
-                        )
+                            modifier = Modifier.heightIn(min = 48.dp),
+                        ) {
+                            // Let the content determine height instead of imposing text baselines.
+                            Text(
+                                title,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+                                style = MaterialTheme.typography.labelLarge,
+                                maxLines = 2,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
                     }
                 }
                 BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {

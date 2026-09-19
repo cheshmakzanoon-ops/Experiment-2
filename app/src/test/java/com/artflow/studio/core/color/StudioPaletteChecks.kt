@@ -17,30 +17,38 @@ object StudioPaletteChecks {
         for (seed in seeds) {
             for (dark in listOf(false, true)) {
                 for (highContrast in listOf(false, true)) {
-                    val surfaces = StudioPalette.surfaces(dark, highContrast)
-                    val accent = StudioPalette.accent(seed, dark, highContrast)
-                    val minimum = if (highContrast) 7.0 else 4.5
-                    val backgrounds =
-                        listOf(
-                            surfaces.background,
-                            surfaces.surface,
-                            surfaces.variant,
-                            surfaces.lowest,
-                            surfaces.low,
-                            surfaces.normal,
-                            surfaces.high,
-                            surfaces.highest,
-                        )
-                    for (background in backgrounds) {
-                        check(StudioPalette.contrast(accent.primary, background) >= minimum)
-                        check(StudioPalette.contrast(surfaces.text, background) >= minimum)
-                        check(StudioPalette.contrast(surfaces.secondaryText, background) >= minimum)
-                    }
-                    check(StudioPalette.contrast(accent.primary, accent.onPrimary) >= minimum)
-                    check(StudioPalette.contrast(accent.container, accent.onContainer) >= minimum)
+                    checkPalette(seed, dark, highContrast)
                 }
             }
         }
+    }
+
+    private fun checkPalette(
+        seed: Int,
+        dark: Boolean,
+        highContrast: Boolean,
+    ) {
+        val surfaces = StudioPalette.surfaces(dark, highContrast)
+        val accent = StudioPalette.accent(seed, dark, highContrast)
+        val minimum = if (highContrast) 7.0 else 4.5
+        val backgrounds =
+            listOf(
+                surfaces.background,
+                surfaces.surface,
+                surfaces.variant,
+                surfaces.lowest,
+                surfaces.low,
+                surfaces.normal,
+                surfaces.high,
+                surfaces.highest,
+            )
+        for (background in backgrounds) {
+            check(StudioPalette.contrast(accent.primary, background) >= minimum)
+            check(StudioPalette.contrast(surfaces.text, background) >= minimum)
+            check(StudioPalette.contrast(surfaces.secondaryText, background) >= minimum)
+        }
+        check(StudioPalette.contrast(accent.primary, accent.onPrimary) >= minimum)
+        check(StudioPalette.contrast(accent.container, accent.onContainer) >= minimum)
     }
 
     fun surfacesStayOpaqueNeutralAndOrdered() {
