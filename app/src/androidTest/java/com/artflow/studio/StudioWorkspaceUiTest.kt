@@ -42,13 +42,20 @@ import javax.inject.Inject
 @HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
 class StudioWorkspaceUiTest {
-    @get:Rule(order = 0) val hilt = HiltAndroidRule(this)
-    @get:Rule(order = 1) val compose = createComposeRule()
+    @get:Rule(order = 0)
+    val hilt = HiltAndroidRule(this)
+
+    @get:Rule(order = 1)
+    val compose = createComposeRule()
 
     @Inject lateinit var projects: ProjectRepository
+
     @Inject lateinit var canvas: CanvasRepository
+
     @Inject lateinit var settings: SettingsRepository
+
     @Inject lateinit var exporter: ArtworkExporter
+
     @Inject lateinit var storage: ProjectStorage
 
     private lateinit var viewModel: CanvasViewModel
@@ -87,12 +94,13 @@ class StudioWorkspaceUiTest {
             for (y in 0 until 256) {
                 for (x in 0 until 256) {
                     val distance = (x - 150) * (x - 150) + (y - 92) * (y - 92)
-                    val color = when {
-                        distance < 30 * 30 -> 0xFFFFD9A0.toInt()
-                        y > 195 + x / 8 -> 0xFF182B38.toInt()
-                        y > 160 - x / 5 -> 0xFF395761.toInt()
-                        else -> 0xFF586D80.toInt()
-                    }
+                    val color =
+                        when {
+                            distance < 30 * 30 -> 0xFFFFD9A0.toInt()
+                            y > 195 + x / 8 -> 0xFF182B38.toInt()
+                            y > 160 - x / 5 -> 0xFF395761.toInt()
+                            else -> 0xFF586D80.toInt()
+                        }
                     image.setUnchecked(x, y, color)
                 }
             }
@@ -121,17 +129,18 @@ class StudioWorkspaceUiTest {
 
     @Test fun formerlyHiddenWorkflowPanelsAreReachableFromTheEditor() {
         openEditor()
-        val routes = listOf(
-            "Drawing guides" to "Guides",
-            "Animation" to "Animation",
-            "Canvas setup" to "Canvas",
-            "Text settings" to "Text",
-            "Layer transform" to "Transform layer",
-            "Selection options" to "Selection",
-            "Tool options" to "Tool options",
-            "Export artwork" to "Export",
-            "Brush Studio" to "Brush settings",
-        )
+        val routes =
+            listOf(
+                "Drawing guides" to "Guides",
+                "Animation" to "Animation",
+                "Canvas setup" to "Canvas",
+                "Text settings" to "Text",
+                "Layer transform" to "Transform layer",
+                "Selection options" to "Selection",
+                "Tool options" to "Tool options",
+                "Export artwork" to "Export",
+                "Brush Studio" to "Brush settings",
+            )
         for ((action, title) in routes) {
             compose.onNodeWithContentDescription("Tools").performClick()
             compose.onNodeWithText(action).performScrollTo().performClick()

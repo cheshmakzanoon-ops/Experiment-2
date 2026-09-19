@@ -8,7 +8,9 @@ import kotlin.math.tan
 
 /** Canvas-sized, inverse-mapped affine resampling. No Android types or document mutations. */
 object LayerTransform {
-    enum class Interpolation(val label: String) {
+    enum class Interpolation(
+        val label: String,
+    ) {
         BILINEAR("Smooth"),
         NEAREST("Pixel art"),
     }
@@ -33,8 +35,15 @@ object LayerTransform {
         }
 
         val isIdentity: Boolean
-            get() = translationX == 0f && translationY == 0f && scaleX == 1f && scaleY == 1f &&
-                rotationDegrees % 360f == 0f && skewXDegrees == 0f && !flipHorizontal && !flipVertical
+            get() =
+                translationX == 0f &&
+                    translationY == 0f &&
+                    scaleX == 1f &&
+                    scaleY == 1f &&
+                    rotationDegrees % 360f == 0f &&
+                    skewXDegrees == 0f &&
+                    !flipHorizontal &&
+                    !flipVertical
     }
 
     /**

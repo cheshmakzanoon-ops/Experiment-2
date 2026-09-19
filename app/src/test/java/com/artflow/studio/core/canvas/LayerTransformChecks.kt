@@ -13,12 +13,17 @@ object LayerTransformChecks {
         check(value) { "Transform comparison $comparisons failed" }
     }
 
-    private fun same(expected: IntArray, actual: IntArray) {
+    private fun same(
+        expected: IntArray,
+        actual: IntArray,
+    ) {
         expect(expected.contentEquals(actual))
     }
 
-    private fun fixture(width: Int, height: Int): PixelBuffer =
-        PixelBuffer(width, height, IntArray(width * height) { 0xFF000000.toInt() or (it + 1) })
+    private fun fixture(
+        width: Int,
+        height: Int,
+    ): PixelBuffer = PixelBuffer(width, height, IntArray(width * height) { 0xFF000000.toInt() or (it + 1) })
 
     fun identityAndOwnership() {
         val source = PixelBuffer(3, 2, intArrayOf(0x00010203, 0x80FF0000.toInt(), 0, -1, 17, 99))
@@ -37,10 +42,11 @@ object LayerTransformChecks {
         for (dx in -9..9) {
             for (dy in -7..7) {
                 for (mode in LayerTransform.Interpolation.entries) {
-                    val result = LayerTransform.apply(
-                        source,
-                        LayerTransform.Parameters(translationX = dx.toFloat(), translationY = dy.toFloat(), interpolation = mode),
-                    )
+                    val result =
+                        LayerTransform.apply(
+                            source,
+                            LayerTransform.Parameters(translationX = dx.toFloat(), translationY = dy.toFloat(), interpolation = mode),
+                        )
                     for (y in 0 until 5) {
                         for (x in 0 until 7) expect(result.getUnchecked(x, y) == source.getSafe(x - dx, y - dy))
                     }
@@ -98,14 +104,15 @@ object LayerTransformChecks {
             val pivotX = random.nextInt(0, 8).toFloat()
             val pivotY = random.nextInt(0, 8).toFloat()
             val flip = random.nextBoolean()
-            val parameters = LayerTransform.Parameters(
-                translationX = dx,
-                translationY = dy,
-                scaleX = sx,
-                scaleY = sy,
-                flipHorizontal = flip,
-                interpolation = LayerTransform.Interpolation.NEAREST,
-            )
+            val parameters =
+                LayerTransform.Parameters(
+                    translationX = dx,
+                    translationY = dy,
+                    scaleX = sx,
+                    scaleY = sy,
+                    flipHorizontal = flip,
+                    interpolation = LayerTransform.Interpolation.NEAREST,
+                )
             val result = LayerTransform.apply(source, parameters, pivotX, pivotY)
             for (y in 0 until 7) {
                 for (x in 0 until 7) {
@@ -128,10 +135,11 @@ object LayerTransformChecks {
         expect(smooth.pixels[0] == 0x80FF0000.toInt())
         expect(smooth.pixels[1] == 0x80FF0000.toInt())
         expect(smooth.pixels[2] ushr 24 == 0)
-        val nearest = LayerTransform.apply(
-            source,
-            LayerTransform.Parameters(translationX = 0.5f, interpolation = LayerTransform.Interpolation.NEAREST),
-        )
+        val nearest =
+            LayerTransform.apply(
+                source,
+                LayerTransform.Parameters(translationX = 0.5f, interpolation = LayerTransform.Interpolation.NEAREST),
+            )
         expect(nearest.pixels[0] == red)
         expect(nearest.pixels[1] == 0x000000FF)
         // A mask and its raw pixels get identical geometric coordinates in separate passes.
@@ -141,14 +149,15 @@ object LayerTransformChecks {
     }
 
     fun validationAndCancellation() {
-        val invalid = listOf<() -> LayerTransform.Parameters>(
-            { LayerTransform.Parameters(scaleX = 0f) },
-            { LayerTransform.Parameters(scaleY = -1f) },
-            { LayerTransform.Parameters(scaleX = 17f) },
-            { LayerTransform.Parameters(rotationDegrees = Float.NaN) },
-            { LayerTransform.Parameters(translationX = Float.POSITIVE_INFINITY) },
-            { LayerTransform.Parameters(skewXDegrees = 81f) },
-        )
+        val invalid =
+            listOf<() -> LayerTransform.Parameters>(
+                { LayerTransform.Parameters(scaleX = 0f) },
+                { LayerTransform.Parameters(scaleY = -1f) },
+                { LayerTransform.Parameters(scaleX = 17f) },
+                { LayerTransform.Parameters(rotationDegrees = Float.NaN) },
+                { LayerTransform.Parameters(translationX = Float.POSITIVE_INFINITY) },
+                { LayerTransform.Parameters(skewXDegrees = 81f) },
+            )
         invalid.forEach { construct ->
             var rejected = false
             try {

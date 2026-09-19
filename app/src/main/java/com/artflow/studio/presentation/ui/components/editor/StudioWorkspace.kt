@@ -31,7 +31,9 @@ import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.presentation.ui.theme.LocalArtFlowFlags
 
 /** Workflow routes, distinct from tools that operate directly on the canvas. */
-enum class StudioAction(val label: String) {
+enum class StudioAction(
+    val label: String,
+) {
     BRUSH_STUDIO("Brush Studio"),
     TOOL_OPTIONS("Tool options"),
     SELECTION("Selection options"),
@@ -81,7 +83,10 @@ fun StudioDock(
         }
         DockButton("Colour", false, onColor, Modifier.width(target)) {
             Box(
-                Modifier.size(24.dp).clip(CircleShape).background(Color(color))
+                Modifier
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .background(Color(color))
                     .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), CircleShape),
             )
         }
@@ -104,13 +109,16 @@ private fun DockButton(
     glyph: @Composable () -> Unit,
 ) {
     Column(
-        modifier = modifier.heightIn(min = 52.dp).clip(RoundedCornerShape(12.dp))
-            .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-            .clickable(role = Role.Button, onClick = onClick)
-            .semantics(mergeDescendants = true) {
-                selected = isSelected
-                contentDescription = description
-            }.padding(vertical = 6.dp),
+        modifier =
+            modifier
+                .heightIn(min = 52.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+                .clickable(role = Role.Button, onClick = onClick)
+                .semantics(mergeDescendants = true) {
+                    selected = isSelected
+                    contentDescription = description
+                }.padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterVertically),
     ) {
@@ -144,7 +152,11 @@ fun StudioToolPalette(
         }
         HorizontalDivider()
         ToolGroup.entries.forEach { group ->
-            Text(group.displayName.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                group.displayName.uppercase(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 ToolType.entries.filter { it.group == group }.forEach { tool ->
                     FilterChip(

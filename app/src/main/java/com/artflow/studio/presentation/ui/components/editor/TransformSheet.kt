@@ -42,7 +42,12 @@ fun TransformSheet(
     val valid = listOf(parsedWidth, parsedHeight, parsedRotation, parsedSkew, parsedX, parsedY).all { it != null }
 
     Column(
-        modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).imePadding().padding(16.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .imePadding()
+                .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(layerName, style = MaterialTheme.typography.titleLarge)
@@ -145,7 +150,12 @@ fun TransformSheet(
     }
 }
 
-private fun finiteNumber(text: String): Float? = text.trim().replace(',', '.').toFloatOrNull()?.takeIf { it.isFinite() }
+private fun finiteNumber(text: String): Float? =
+    text
+        .trim()
+        .replace(',', '.')
+        .toFloatOrNull()
+        ?.takeIf { it.isFinite() }
 
 @Composable
 private fun TransformNumber(
