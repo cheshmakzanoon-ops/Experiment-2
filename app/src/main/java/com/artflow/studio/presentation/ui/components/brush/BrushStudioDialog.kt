@@ -86,7 +86,7 @@ fun BrushStudioContent(
                             // Let the content determine height instead of imposing text baselines.
                             Text(
                                 title,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
                                 style = MaterialTheme.typography.labelLarge,
                                 maxLines = 2,
                                 textAlign = TextAlign.Center,

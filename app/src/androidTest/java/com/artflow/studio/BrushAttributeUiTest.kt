@@ -77,7 +77,11 @@ class BrushAttributeUiTest {
         change("Speed → size", 0.8f)
         change("Speed → opacity", 0.6f)
         change("Speed → hue", 0.4f)
-        compose.onNodeWithContentDescription("Pressure changes brightness").performScrollTo().performClick().assertIsOn()
+        compose
+            .onNodeWithContentDescription("Pressure changes brightness")
+            .performScrollTo()
+            .performClick()
+            .assertIsOn()
         compose.runOnIdle {
             assertEquals(
                 original.copy(velocityToSize = 0.8f, velocityToOpacity = 0.6f, velocityToHue = 0.4f, colorPressure = true),
@@ -141,7 +145,10 @@ class BrushAttributeUiTest {
             }
         }
         compose.onNodeWithText("All settings").assertHeightIsAtLeast(56.dp)
-        compose.onNodeWithContentDescription("Pressure changes brightness").performScrollTo().assertHeightIsAtLeast(56.dp)
+        compose
+            .onNodeWithContentDescription("Pressure changes brightness")
+            .performScrollTo()
+            .assertHeightIsAtLeast(56.dp)
     }
 
     private fun choose(label: String) {

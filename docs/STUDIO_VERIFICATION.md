@@ -1,5 +1,12 @@
 # Studio verification follow-through — 19 September 2026
 
+## Published run 67 — corrective follow-through
+
+`db596080afc8869537df7488550cbba44059197b` triggered run `35476665563`.
+The JVM-test step passed. Static analysis failed only on ktlint formatting in
+`BrushAttributeUiTest.kt` (the new pressure-brightness chains). Every device lane reached
+instrumentation and reported the same `BrushStudioUiTest.selectingAndUsingAPresetPublishesExactlyOnce`
+NaNNaNNaNNaNNaNNaN
 Base: `019648ea501c8de5f3d0af04fc16bc97b05d8923`.
 Source artifact: `10587885892`, run `35453272406`.
 The extracted and locally indexed tree is `88bf0c2d3b76b65ca160c1512359e395839dc351`,

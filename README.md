@@ -62,6 +62,21 @@ checks that every original test file and test-case count is retained and that th
 slider labels remain available. Local candidate verification is not a replacement for ktlint,
 Detekt, Android compilation or device testing.
 
+### Published run 67 corrective pass
+
+Published commit `db596080` / run `35476665563` passed the JVM-test step, then exposed two
+problems introduced by the latest candidate. Ktlint rejected two compact method chains in
+`BrushAttributeUiTest.kt`. All six device configurations reached instrumentation and failed the
+same Brush Studio label check: `Library` reported `didOverflowWidth=true` even though its measured
+text width was only 46–89 px. The tab text was being content-sized, leaving Compose's fractional
+text measurement at the layout edge.
+
+This follow-through makes each tab label consume the width already allocated by `TabRow`, while
+retaining centered text, two-line wrapping and the existing overflow assertion. The two rejected
+test chains are formatted without changing their assertions. The two API 35 jobs also recorded
+separate selection-gesture failures/process termination; those are preserved as independent
+evidence and are not suppressed by this repair. Exact-commit CI is required before a pass claim.
+
 ## Latest improvement: neutral, readable and adaptive studio
 
 ArtFlow now defines every Material surface/container role rather than mixing its own dark palette
