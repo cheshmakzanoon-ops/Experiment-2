@@ -134,7 +134,13 @@ private fun SavedBrushNameDialog(
         },
         confirmButton = {
             TextButton(onClick = { onConfirm(normalized) }, enabled = valid && !controls.state.busy) {
-                Text(if (controls.state.busy) "Saving…" else if (initialName.isEmpty()) "Save copy" else "Rename")
+                val caption =
+                    when {
+                        controls.state.busy -> "Saving…"
+                        initialName.isEmpty() -> "Save copy"
+                        else -> "Rename"
+                    }
+                Text(caption)
             }
         },
         dismissButton = { TextButton(onClick = onDismiss, enabled = !controls.state.busy) { Text("Cancel") } },

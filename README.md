@@ -7,7 +7,37 @@ Paint with pressure-sensitive brushes, compose layers and masks, animate frames,
 The [Procreate comparison](docs/PROCREATE_PARITY.md) separates implemented workflows from missing capabilities.
 [Release readiness](docs/RELEASE_READINESS.md) tracks the separate distribution requirements.
 
-## Latest improvement: saved custom brushes
+## Latest improvement: neutral, readable and adaptive studio
+
+ArtFlow now defines every Material surface/container role rather than mixing its own dark palette
+with the default tinted containers. Neutral grey surfaces keep the artwork visually dominant;
+accent colours remain on selected controls and actions. The default Ink accent previously measured
+only **1.21:1** on the old dark surface. The new opaque UI palette adjusts each accent for readable
+foreground/background combinations: tested normal text pairs meet **4.5:1**, with **7:1** for the
+high-contrast mode. These are measured palette contracts, not a claim of whole-app WCAG compliance.
+Artwork pixels and working colours are not modified by this UI colour adjustment.
+
+Interface scale now applies once to both controls and text while preserving Android's independent
+font-size preference. Previously multiplying density and font scale applied the interface factor
+twice to text. Invalid scale values fall back safely and valid settings retain their supported range.
+
+On sufficiently wide and tall windows, **Brush Studio shows Library or Settings beside the drawing
+pad**. Change parameters while the same practice marks remain visible. Compact windows retain the
+three-tab layout; Drawing pad can still occupy its own page. The practice surface fits both width
+and height without stretching strokes. Draft settings and retained practice paths survive switching
+between the layout modes and light/dark themes.
+
+Six pure-Kotlin palette checks executed locally, including all **24 accent/theme combinations** and
+**1,000 generated accent seeds**. Seven JUnit checks connect the math to the actual Material colour
+roles. New device checks cover scaling and theme/draft/practice retention, with a new **API 36 tablet**
+CI lane alongside all five existing configurations. Exact-commit Android execution is still required.
+
+The previous `925550d` revision passed **418 JVM tests** and **all five device configurations**.
+Its remaining ktlint findings are corrected here without changing rules, baselines or assertions.
+The API 36 report contains 165 instrumentation cases with zero failures/errors/skips, including
+saved brush UI/storage and the repaired whole-screen drawing-pad checks.
+
+## Saved custom brushes
 
 Brush Studio now has **Save a copy** and a **Saved** library category. Give a tuned brush a name,
 reopen the studio or restart the app, and select that saved copy again. The row menu supports
@@ -122,7 +152,7 @@ python .github/scripts/verify_android_artifacts.py app/build/outputs/apk/debug/a
 ```
 
 CI retains API 26, API 35/16 KB, API 36/4 KB, an independent API 35/16 KB repeat and API 36/16 KB,
-plus minified launch checks. `benchmark` is a release-like smoke-test variant, not a performance suite.
+and adds API 36 with a Pixel C tablet profile. Every lane retains the minified launch checks. `benchmark` is a release-like smoke-test variant, not a performance suite.
 Read completed reports for the **exact commit**. Existing detekt baselines, lint warnings and physical
 latency/artist-validation gaps are not erased by a passing build. `TestEvidence` stores running-app
 captures via UTP's `additionalTestOutputDir`; CI archives `connected_android_test_additional_output`.

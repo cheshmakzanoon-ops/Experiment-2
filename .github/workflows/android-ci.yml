@@ -150,6 +150,12 @@ jobs:
             artifact: 36-16k
             target: google_apis_ps16k
             page_size: 16384
+          - api: 36
+            label: API 36 tablet
+            artifact: 36-tablet
+            target: google_apis
+            page_size: 4096
+            profile: pixel_c
     steps:
       - uses: actions/checkout@v4
         with:
@@ -176,6 +182,7 @@ jobs:
           api-level: ${{ matrix.api }}
           arch: x86_64
           target: ${{ matrix.target }}
+          profile: ${{ matrix.profile }}
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -memory 4096
           script: bash .github/scripts/run-device-tests.sh

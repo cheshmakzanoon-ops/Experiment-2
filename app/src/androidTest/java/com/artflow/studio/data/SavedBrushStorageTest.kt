@@ -39,13 +39,16 @@ class SavedBrushStorageTest {
                         textureScale = 3f,
                     )
                 store.saveCopy("My ink", parameters)
-                val id = store.brushes.first().single().id
+                val saved = store.brushes.first().single()
+                val id = saved.id
                 database.close()
                 database = Room.databaseBuilder(context, ArtFlowDatabase::class.java, name).build()
                 val reopened = BrushLibraryStore(database.settingsDao())
-                assertEquals(parameters, reopened.brushes.first().single().parameters)
+                val reloaded = reopened.brushes.first().single()
+                assertEquals(parameters, reloaded.parameters)
                 reopened.rename(id, "New name")
-                assertEquals("New name", BrushLibraryStore(database.settingsDao()).brushes.first().single().name)
+                val renamed = BrushLibraryStore(database.settingsDao()).brushes.first()
+                assertEquals("New name", renamed.single().name)
                 reopened.delete(id)
                 assertTrue(BrushLibraryStore(database.settingsDao()).brushes.first().isEmpty())
                 assertEquals("DARK", database.settingsDao().getSettingByKey("theme.mode")!!.value)

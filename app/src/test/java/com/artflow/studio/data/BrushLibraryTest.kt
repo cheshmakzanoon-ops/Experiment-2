@@ -121,7 +121,8 @@ class BrushLibraryTest {
             assertEquals(durable, dao.rows)
             dao.failure = null
             store.rename(before.single().id, "Updated")
-            assertEquals("Updated", BrushLibraryStore(dao).brushes.first().single().name)
+            val reopened = BrushLibraryStore(dao).brushes.first()
+            assertEquals("Updated", reopened.single().name)
         }
 
     @Test(timeout = 10_000)

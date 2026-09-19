@@ -85,11 +85,12 @@ fun BrushPracticePad(
                 onChange(emptyList())
             }) { Text("Clear pad") }
         }
-        Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+        BoxWithConstraints(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+            val ratio = BrushPractice.WIDTH.toFloat() / BrushPractice.HEIGHT
+            val padWidth = minOf(maxWidth, maxHeight * ratio)
             Canvas(
                 Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(BrushPractice.WIDTH.toFloat() / BrushPractice.HEIGHT)
+                    .size(padWidth, padWidth / ratio)
                     .clip(RoundedCornerShape(12.dp))
                     .background(Color(BrushPractice.PAPER))
                     .onSizeChanged {

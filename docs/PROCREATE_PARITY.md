@@ -10,7 +10,7 @@ editor; a helper class, placeholder control or passing compile does not establis
 
 | Workflow | Reference product | ArtFlow now | Remaining work |
 | --- | --- | --- | --- |
-| Canvas-first workspace | Primary painting controls, movable sidebar, hide-interface mode [1] | Compact Brush/Smudge/Eraser dock, expandable tools, focus mode, explicit panel closing | Handedness-aware sidebar, anchored tablet panels, complete adaptive-layout and artist validation |
+| Canvas-first workspace | Primary painting controls, movable sidebar, hide-interface mode [1] | Compact dock, focus mode, explicit panel closing, neutral contrast-tested themes and split-view tablet Brush Studio | Handedness-aware sidebar, anchored canvas panels, broader adaptive-layout and artist validation |
 | Brush library | Search, organization and management [13] | Eight original starter presets; searchable saved copies with rename and confirmed deletion | Favorites, user sets, preset interchange, a professionally curated and artist-tested collection |
 | Brush Studio | Staged settings, numerical input, re-rendering drawing pad, custom shapes/grains and dual brushes [2] | Local draft/apply/cancel/reset, exact values, pressure curves, procedural grains, isolated practice, complete-parameter saved copies | Imported shape/grain assets, dual-brush workflow and physical-stylus response validation |
 | Transform | Scale, rotate, distort, warp, snapping and interpolation controls [3] | Reachable MOVE/TRANSFORM translation only | Interactive handles/pivot, preview/apply/cancel, mask/selection alignment and no cumulative preview resampling |
@@ -89,6 +89,30 @@ payloads, failed writes, concurrent saves, cancellation, owned snapshots, capaci
 and save-versus-apply behavior. The previous aspect-ratio test compile error is corrected using
 DpRect edge coordinates. **New tests require their exact published revision's completed CI.**
 
+## Neutral theme, scale correction and adaptive Brush Studio
+
+All Material surface roles are now explicitly neutral, including elevated container roles that
+previously inherited unrelated default tints. Opaque accent/text pairs are derived from the selected
+accent with measured sRGB contrast. Tests assert at least 4.5:1 for normal text pairs and 7:1 for
+high-contrast pairs across six accents, light/dark modes and both contrast settings. The old Ink
+accent against its dark surface measured 1.2061:1. Palette contracts are not a full accessibility
+certification; disabled controls, composited overlays and every actual screen still need evaluation.
+The colour calculation affects UI roles only, never artwork data or working-space profiles.
+
+Interface scaling no longer multiplies both density and fontScale; geometry/text scale once and
+the independent Android text-size preference is retained. Non-finite values fall back to 1.0.
+
+Brush Studio uses a side-by-side settings/library and practice layout when its available body is
+at least 720 dp wide and 320 dp tall. Compact or short windows retain tabs; the drawing pad can
+also be maximized to its own tab. The practice image fits both dimensions at its original aspect
+ratio. Draft parameters and immutable test strokes remain hoisted across layout/theme switches.
+
+Executed locally: six production-math check groups, all 24 theme/accent combinations and 1,000
+generated seeds, plus 30 Python verifier tests. Six JUnit math wrappers, one Material-role test and
+two device tests add exact-revision verification. A sixth CI lane uses the API 36 Pixel C profile;
+all five existing device configurations and their minified launch checks remain. Actual tablet and
+compact captures must be inspected before claiming visual acceptance.
+
 ## Verification record
 
 | Candidate / run | Observed result | Meaning |
@@ -99,6 +123,7 @@ DpRect edge coordinates. **New tests require their exact published revision's co
 | `68d29a3` / `35448121991` | JVM step passed; remaining chain-format findings blocked the build job | Corrected without changing baselines or device coverage. |
 | `ba70a98` / `35449641066` | JVM step passed; static findings and API 26 dialog-capture incompatibility remained | Whole-screen accessibility-bounded pixel checks replace the unsupported capture API, retaining blank/painted/cleared assertions. |
 | `b27de13` / `35451246630` | 409 JVM tests passed with zero failures/errors/skips; ktlint, detekt, both lint variants, APK/AAB and artifact preflight passed | All five device lanes stopped at compilation of a DpRect assertion. This is not runtime or parity approval. |
+| `925550d` / `35452229998` | 418 JVM tests passed; all five device configurations passed; API 36 had 165 cases with zero failures/errors/skips | ktlint formatting blocked the build job; those findings are repaired in the theme/adaptive milestone without suppressions. |
 
 Local Python artifact-verifier suite: 30 tests passed during the saved-library implementation.
 New Kotlin/UI/storage tests are not represented as locally executed Android tests.

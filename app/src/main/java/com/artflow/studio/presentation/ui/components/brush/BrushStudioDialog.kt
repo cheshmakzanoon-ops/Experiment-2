@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -82,11 +83,26 @@ fun BrushStudioContent(
                         )
                     }
                 }
-                Box(Modifier.weight(1f).fillMaxWidth()) {
-                    when (tab) {
-                        0 -> StudioBrushLibrary(draft, { draft = it }, Modifier.fillMaxSize(), library)
-                        1 -> AdvancedBrushSettingsPanel(draft, { draft = it }, Modifier.fillMaxSize())
-                        else -> BrushPracticePad(draft, strokes, { strokes = it }, Modifier.fillMaxSize())
+                BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                    val split = maxWidth >= 720.dp && maxHeight >= 320.dp && tab != 2
+                    if (split) {
+                        Row(Modifier.fillMaxSize().testTag("studio-split-layout")) {
+                            Box(Modifier.weight(0.55f).fillMaxHeight()) {
+                                if (tab == 0) {
+                                    StudioBrushLibrary(draft, { draft = it }, Modifier.fillMaxSize(), library)
+                                } else {
+                                    AdvancedBrushSettingsPanel(draft, { draft = it }, Modifier.fillMaxSize())
+                                }
+                            }
+                            VerticalDivider(Modifier.fillMaxHeight())
+                            BrushPracticePad(draft, strokes, { strokes = it }, Modifier.weight(0.45f).fillMaxHeight())
+                        }
+                    } else {
+                        when (tab) {
+                            0 -> StudioBrushLibrary(draft, { draft = it }, Modifier.fillMaxSize(), library)
+                            1 -> AdvancedBrushSettingsPanel(draft, { draft = it }, Modifier.fillMaxSize())
+                            else -> BrushPracticePad(draft, strokes, { strokes = it }, Modifier.fillMaxSize())
+                        }
                     }
                 }
                 HorizontalDivider()
