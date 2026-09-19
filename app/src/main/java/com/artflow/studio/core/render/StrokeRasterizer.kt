@@ -56,13 +56,16 @@ class StrokeRasterizer {
      *
      * @param alphaLock restricts paint to pixels that are already opaque.
      * @param mask optional selection coverage.
+     * @param enableWetMix opt in for new strokes; legacy vector replay keeps its original dry pixels.
      */
     fun draw(
         target: PixelBuffer,
         stroke: Stroke,
         alphaLock: Boolean = false,
         mask: SelectionMask? = null,
+        enableWetMix: Boolean = false,
     ) {
+        if (enableWetMix) require(stroke.brushParams.wetMix in 0f..1f) { "Wet mix must be finite and between zero and one" }
         val points = stroke.points
         if (points.isEmpty()) return
 
@@ -84,7 +87,16 @@ class StrokeRasterizer {
 
         val buffer = scratchFor(target.width, target.height)
         buffer.clear()
-        drawStrokeInto(buffer, stroke, params, points, alphaLock = false, mask = null, random = random)
+        drawStrokeInto(
+            buffer,
+            stroke,
+            params,
+            points,
+            alphaLock = false,
+            mask = null,
+            random = random,
+            pickupSource = if (enableWetMix && params.wetMix > 0f) target else null,
+        )
         val texture = BrushTexture.from(params)
         for (i in target.pixels.indices) {
             val source = buffer.pixels[i]
@@ -154,8 +166,9 @@ class StrokeRasterizer {
         alphaLock: Boolean,
         mask: SelectionMask?,
         random: Random,
+        pickupSource: PixelBuffer? = null,
     ) {
-        if (canUseCapsule(params, points)) {
+        if (pickupSource == null && canUseCapsule(params, points)) {
             drawSegment(target, stroke, params, points.first(), points.last(), alphaLock, mask, random)
             return
         }
@@ -166,7 +179,7 @@ class StrokeRasterizer {
 
         // Spacing is expressed as a fraction of the brush size; a minimum of one dab per segment
         // keeps single-point taps visible.
-        val context = DabContext(target, stroke, params, totalLength, alphaLock, mask, random)
+        val context = DabContext(target, stroke, params, totalLength, alphaLock, mask, random, pickupSource)
         val spacingPx = max(1f, params.size * params.spacing.coerceIn(0.01f, 4f))
         var carry = 0f
         var accumulatedDistance = 0f
@@ -242,6 +255,7 @@ class StrokeRasterizer {
         val alphaLock: Boolean,
         val mask: SelectionMask?,
         val random: Random,
+        val pickupSource: PixelBuffer?,
     )
 
     private fun drawDabAt(
@@ -287,12 +301,14 @@ class StrokeRasterizer {
             val offsetX = jitterX + offsetScale * (if (distance > 0f) -(current.y - previous.y) / distance else 0f)
             val offsetY = jitterY + offsetScale * (if (distance > 0f) (current.x - previous.x) / distance else 0f)
 
+            val pigment =
+                context.pickupSource?.let { WetPaint.pickup(it, x + offsetX, y + offsetY, radius, color, params.wetMix) } ?: color
             Stamping.dab(
                 target = target,
                 x = x + offsetX,
                 y = y + offsetY,
                 radius = radius,
-                color = Channels.withAlpha(color, (Channels.alpha(color) * opacity).roundToInt().coerceIn(0, 255)),
+                color = Channels.withAlpha(pigment, (Channels.alpha(pigment) * opacity).roundToInt().coerceIn(0, 255)),
                 strength = 1f,
                 // Flow controls deposited coverage; repeated strokes can build it up.
                 hardness = hardnessForFlow(params),

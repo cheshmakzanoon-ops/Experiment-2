@@ -7,7 +7,56 @@ Paint with pressure-sensitive brushes, compose layers and masks, animate frames,
 The [Procreate comparison](docs/PROCREATE_PARITY.md) separates implemented workflows from missing capabilities.
 [Release readiness](docs/RELEASE_READINESS.md) tracks the separate distribution requirements.
 
-## Latest improvement: neutral, readable and adaptive studio
+## Latest improvement: real colour pickup and multi-colour practice
+
+**Brush → Settings → Wet Paint → Wet Mix** now changes newly painted pixels. Previously the
+parameter could be edited and saved but the active renderer never read it. Zero deposits dry ink;
+higher values pick up more existing colour from the **active layer**. Transparent hidden RGB is
+ignored and ink alpha is retained. Selection coverage, alpha lock, grain and stroke opacity are
+still applied by their existing stages. Erasing and painting layer masks do not pick up pigment.
+
+Pickup uses five alpha-weighted samples per dab from the layer as it stood before that stroke;
+there is no per-dab layer copy. Preview and commit use the same path. New strokes bake into pixels;
+**older saved vector strokes retain their original dry replay**, even when their stored wet-mix
+value was nonzero. Reopening old artwork must not silently reinterpret how it was painted.
+
+The drawing pad has a **Practice ink** menu with Clay, Ocean, Ochre and Graphite. Changing ink
+colours only subsequent test strokes; earlier marks retain their recorded colours. Change Wet Mix
+and return to the pad to inspect the same marks against each other. Clear removes test paths but
+keeps the selected practice ink. Neither practice ink nor its marks change document ink or pixels.
+
+This is bounded RGB colour pickup, **not full Procreate wet-media equivalence**: no paint reservoir,
+dilution/charge/attack model, directional pigment transport, wet-edge simulation or spectral mixing.
+It samples the active layer, not the composite. The practice paper participates in pickup; library
+samples on transparency contain no existing pigment and therefore do not demonstrate mixing.
+
+Seven new core/JUnit checks cover known colour mixtures, transparent RGB, invalid input, legacy
+replay, coverage, ownership and 10,000 deterministic generated samples. Five repository/device
+cases cover actual preview/commit, cancellation, save/reopen, undo/redo, masks and layer isolation.
+Two UI cases check per-stroke practice ink and actual rendered colour changes. The core checks and
+existing seven Brush Studio checks passed in standalone Kotlin; full Android CI is a separate gate.
+
+**Audit correction:** smoothing, brush-tip rotation and tilt-response fields are stored but are
+not consumed by the active round-dab renderer. Grain rotation is implemented and is a different
+setting. Their controls/persistence are not counted as delivered painting effects. Advanced
+transforms in open PR #34 also remain separate from this main-line milestone; they are not lost
+or misrepresented as already merged. See the [gap register](docs/PROCREATE_PARITY.md).
+
+## Verification follow-through: adaptive studio
+
+The `019648e` candidate's unit tests and four device lanes passed, but it was not a
+verified milestone: two deeply nested test helpers blocked Detekt, a tablet tab label
+failed the no-overflow assertion, and API 35 terminated with a native SIGSEGV. The tab
+now sizes its content without a fixed text-baseline slot, preserving its full label.
+The palette checks are factored into helpers with every original assertion retained.
+
+Run `35453272406` and its original artifacts remain the failure record. The API 35
+stack was on the main thread in generated Compose animation code, **not** a demonstrated
+Profile Saver abort. Its root cause is unresolved; the independent 16 KB repeat passed.
+No JIT setting, test assertion, device lane or analysis threshold was relaxed.
+Promotion requires the candidate review branch to pass the complete CI matrix.
+
+## Neutral, readable and adaptive studio
 
 ArtFlow now defines every Material surface/container role rather than mixing its own dark palette
 with the default tinted containers. Neutral grey surfaces keep the artwork visually dominant;
@@ -76,7 +125,7 @@ assertion or analysis rule has been disabled to obtain a pass.
 Open **Brush** in the editor. **Library** searches eight original starter presets and filters
 Sketch, Ink, Texture and Paint, with samples rendered by the painting engine. **Settings** edits
 size, opacity, spacing, smoothing, pressure curves, taper, procedural grain, scatter, jitter,
-rotation and wet mix. Tap a displayed value for exact numeric entry. **Drawing pad** tests your own
+rotation and wet mix. Stored smoothing/tip rotation do not yet affect rendering. Tap a displayed value for exact numeric entry. **Drawing pad** tests your own
 marks without touching the artwork; return after changing settings to see those marks re-rendered.
 
 Changes remain a **draft** until **Use brush**. Close, Back or outside dismissal discards the draft;
@@ -112,7 +161,7 @@ Canvas background state follows the document through edits and undo/redo.
 
 | Area | Available | Important gaps |
 | --- | --- | --- |
-| Painting | Pressure/dynamics, smoothing, taper, flow, wet mix, jitter, three procedural grains, staged Brush Studio | Preset interchange, imported/dual textures, curated-library and stylus-feel parity |
+| Painting | Pressure/velocity dynamics, taper, flow, active-layer colour pickup, jitter, procedural grains and staged Brush Studio | Active smoothing/tilt/tip rotation; imported/dual textures; media simulation and physical-stylus parity |
 | Tools | Brush, eraser, smudge, clone, healing, liquify, bucket, gradients, text and shapes | QuickShape recognition and ColorDrop-style interaction |
 | Selections | Rectangle/ellipse/lasso/wand, combine/invert/feather | Saved selections and equivalent gesture ergonomics |
 | Transform | MOVE/TRANSFORM translation | Interactive scale/rotate/distort/warp/snapping with preview/apply/cancel |

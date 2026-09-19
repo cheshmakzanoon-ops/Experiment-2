@@ -23,7 +23,11 @@ object BrushPractice {
         val renderer = StrokeRasterizer()
         try {
             for (stroke in strokes) {
-                renderer.draw(result, stroke.copy(brushParams = parameters.copy(size = parameters.size.coerceIn(1f, 48f))))
+                renderer.draw(
+                    result,
+                    stroke.copy(brushParams = parameters.copy(size = parameters.size.coerceIn(1f, 48f))),
+                    enableWetMix = true,
+                )
             }
         } finally {
             renderer.release()

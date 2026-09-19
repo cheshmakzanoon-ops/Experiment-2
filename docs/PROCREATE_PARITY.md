@@ -12,8 +12,9 @@ editor; a helper class, placeholder control or passing compile does not establis
 | --- | --- | --- | --- |
 | Canvas-first workspace | Primary painting controls, movable sidebar, hide-interface mode [1] | Compact dock, focus mode, explicit panel closing, neutral contrast-tested themes and split-view tablet Brush Studio | Handedness-aware sidebar, anchored canvas panels, broader adaptive-layout and artist validation |
 | Brush library | Search, organization and management [13] | Eight original starter presets; searchable saved copies with rename and confirmed deletion | Favorites, user sets, preset interchange, a professionally curated and artist-tested collection |
+| Wet-media response | Dilution, charge, attack, pull and blur [14] | New-stroke active-layer RGB pickup and four practice inks | Reservoir/depletion, directional transport, wet edges and realistic media validation |
 | Brush Studio | Staged settings, numerical input, re-rendering drawing pad, custom shapes/grains and dual brushes [2] | Local draft/apply/cancel/reset, exact values, pressure curves, procedural grains, isolated practice, complete-parameter saved copies | Imported shape/grain assets, dual-brush workflow and physical-stylus response validation |
-| Transform | Scale, rotate, distort, warp, snapping and interpolation controls [3] | Reachable MOVE/TRANSFORM translation only | Interactive handles/pivot, preview/apply/cancel, mask/selection alignment and no cumulative preview resampling |
+| Transform | Scale, rotate, distort, warp, snapping and interpolation controls [3] | Main has translation; advanced transactional transforms exist in open, conflicting PR #34 and are not merged | Reconcile and verify PR #34; interactive handles/pivot, perspective/warp/snapping and selection-aware transforms remain gaps |
 | Layer organization | Multi-selection, drag ordering and nested groups [4] | Topmost-first stack, active-layer up/down, masks, opacity, blending, adjustments and filters | Nested groups, multi-selection/linking UI, atomic group operations with faithful composition and reload |
 | Reference companion | Floating canvas/image reference with sampling and navigation [5] | Movable image window with bounded decode, pan/zoom/fit, long-press/pick-mode sampling | Live canvas view, manual resize and source persistence; sampling currently uses a decoded preview |
 | Selections and fill | Automatic/freehand/rectangle/ellipse selection and ColorDrop [6] | Selection masks, boolean combination, invert/feather and bucket fill | Drag-from-colour fill, interactive threshold feedback, reusable selections and equivalent ergonomics |
@@ -113,6 +114,42 @@ two device tests add exact-revision verification. A sixth CI lane uses the API 3
 all five existing device configurations and their minified launch checks remain. Actual tablet and
 compact captures must be inspected before claiming visual acceptance.
 
+## Active-layer colour pickup and practice inks
+
+Source inspection found `wetMix` was stored and exposed but not consumed by `StrokeRasterizer`.
+New strokes now opt into five alpha-weighted source taps per dab, using the layer before the
+stroke as the immutable pickup source. Opacity/selection/alpha-lock/grain coverage stays in its
+existing pipeline; masks and erasers remain coverage-only. No full-buffer copy is made per dab.
+
+Historical vector replay is deliberately dry, preserving the pixels old versions produced from
+previously inert wet-mix values. Incoming paint is composited once and baked into the layer raster.
+Preview, commit and practice share the new kernel; saved pixels do not need schema migration.
+Four practice inks can be layered without recolouring earlier paths or changing document ink.
+
+Limits are explicit: this is RGB pickup, not Procreate's dilution/charge/attack/pull/blur system
+[14]. There is no reservoir, directional pigment transport, spectral mixing or whole-canvas pickup.
+Opaque practice paper participates in mixing; transparent catalogue previews have nothing to pick up.
+
+The same audit found `smoothing`, brush-tip `rotation`, `tiltInfluence` and `tiltToRotation` are not
+read by the active round-dab rendering path. Editable/saved fields do not count as working effects.
+Texture/grain rotation is separate and is rendered. These omissions remain functional parity gaps,
+not polish tasks. Open PR #34 is preserved as unmerged advanced-transform work and needs conflict
+resolution plus exact-revision verification before its features can be counted on main.
+
+Added checks: seven core/JUnit cases including 10,000 generated samples, five real repository/device
+cases and two practice UI cases. Standalone production-kernel checks and all seven existing Brush
+Studio check groups passed; compile-only platform/serialization adapters were used, not replacements
+for renderer logic. Android builds, static analysis and device cases require the candidate's CI.
+No physical stylus or artist validation has been completed.
+
+## Adaptive verification repairs
+
+The tablet no-overflow assertion found that the fixed text-baseline slot in Material Tab could
+clip Drawing pad. Tab content now measures its full text with a minimum touch height. Palette
+checks use smaller helpers without dropping any accent, surface or assertion. The retained API 35
+failure is a main-thread SIGSEGV through generated Compose animation code, not a proven ART
+Profile Saver failure. No JIT disablement, lane removal, baseline relaxation or crash waiver is used.
+
 ## Verification record
 
 | Candidate / run | Observed result | Meaning |
@@ -124,6 +161,8 @@ compact captures must be inspected before claiming visual acceptance.
 | `ba70a98` / `35449641066` | JVM step passed; static findings and API 26 dialog-capture incompatibility remained | Whole-screen accessibility-bounded pixel checks replace the unsupported capture API, retaining blank/painted/cleared assertions. |
 | `b27de13` / `35451246630` | 409 JVM tests passed with zero failures/errors/skips; ktlint, detekt, both lint variants, APK/AAB and artifact preflight passed | All five device lanes stopped at compilation of a DpRect assertion. This is not runtime or parity approval. |
 | `925550d` / `35452229998` | 418 JVM tests passed; all five device configurations passed; API 36 had 165 cases with zero failures/errors/skips | ktlint formatting blocked the build job; those findings are repaired in the theme/adaptive milestone without suppressions. |
+
+| `019648e` / `35453272406` | JVM step and four device lanes passed; Detekt rejected two nested test helpers, tablet label overflow failed, API 35 crashed | Original artifacts retained. Main-thread generated Compose animation SIGSEGV is not a proven Profile Saver abort. Independent API 35 repeat passed. |
 
 Local Python artifact-verifier suite: 30 tests passed during the saved-library implementation.
 New Kotlin/UI/storage tests are not represented as locally executed Android tests.
@@ -164,3 +203,5 @@ These references document Procreate; they do not validate ArtFlow.
 [11]: https://help.procreate.com/procreate/handbook/gallery/gallery-import-share
 [12]: https://procreate.com/procreate
 [13]: https://help.procreate.com/procreate/handbook/brushes/brush-library
+
+[14]: https://help.procreate.com/procreate/handbook/brushes/brush-studio-settings
