@@ -18,6 +18,19 @@ esac
   "-Pandroid.testInstrumentationRunnerArguments.expectedPageSize=${EXPECTED_PAGE_SIZE}" \
   --stacktrace || exit $?
 
+# UTP already copied this evidence before uninstalling instrumentation APKs. Require the actual
+# studio captures so a green job cannot silently omit its visual-inspection evidence.
+python - <<'PYVERIFY'
+from pathlib import Path
+root = Path("app/build/outputs/connected_android_test_additional_output")
+for name in ("studio-dark.png", "studio-light.png", "studio-focus.png", "studio-palette-large-text.png"):
+    matches = list(root.rglob(name))
+    assert matches, f"Missing executed studio screenshot: {name}"
+    assert all(p.read_bytes().startswith(b"\x89PNG\r\n\x1a\n") for p in matches), name
+print("Executed studio screenshot evidence: PASS")
+PYVERIFY
+if [ "$?" -ne 0 ]; then exit 1; fi
+
 # Capture evidence before the release-equivalent install replaces instrumentation state.
 # RuntimeEnvironmentTest also logs measured values into UTP's preserved per-test logcat.
 timeout 15 adb logcat -b all -d > "$root/instrumentation-logcat.txt" || true

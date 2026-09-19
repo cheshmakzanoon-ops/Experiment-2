@@ -1,6 +1,7 @@
 package com.artflow.studio.domain.repository.canvas
 
 import com.artflow.studio.core.animation.AnimationTimeline
+import com.artflow.studio.core.canvas.LayerTransform
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.PixelBuffer
@@ -182,6 +183,17 @@ interface CanvasRepository {
         layerId: Long,
         buffer: PixelBuffer,
         description: String,
+    ): Boolean
+
+    /**
+     * Affine transform of the complete active layer and its editable mask, as one undo step.
+     * Rejects selections, in-flight gestures and stale callers; never transforms another frame.
+     * Geometry is about the canvas centre. Off-canvas content is clipped and recoverable by Undo.
+     */
+    suspend fun transformLayer(
+        layerId: Long,
+        parameters: LayerTransform.Parameters,
+        expectedRevision: Long,
     ): Boolean
 
     /** Sets the ink colour used by subsequent strokes. */

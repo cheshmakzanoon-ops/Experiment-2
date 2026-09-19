@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.artflow.studio.core.animation.AnimationTimeline
 import com.artflow.studio.core.animation.PlaybackStepper
 import com.artflow.studio.core.canvas.CanvasOperations
+import com.artflow.studio.core.canvas.LayerTransform
 import com.artflow.studio.core.color.ColorHarmony
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.color.PaletteLibrary
@@ -108,6 +109,9 @@ sealed class ExportUiState {
 data class PendingText(
     val x: Float,
     val y: Float,
+    val projectId: Long,
+    val layerId: Long,
+    val revision: Long,
     val id: Long = System.nanoTime(),
 )
 
@@ -230,6 +234,7 @@ class CanvasViewModel
 
         fun open(projectId: Long) {
             if (currentProjectId == projectId && _uiState.value is CanvasUiState.Ready) return
+            cancelText()
             loadJob?.cancel()
             autosaveJob?.cancel()
             observationJob?.cancel()
@@ -489,6 +494,29 @@ class CanvasViewModel
 
         fun onCloneSourceChanged(source: Pair<Float, Float>) {
             _cloneSource.value = source
+        }
+
+        /** Exposed only to bind a transform panel to the document revision it was opened against. */
+        fun transformRevision(): Long = canvasRepository.contentRevision
+
+        suspend fun transformLayer(
+            layerId: Long,
+            revision: Long,
+            parameters: LayerTransform.Parameters,
+        ): Boolean {
+            if (canvasRepository.selection() != null) {
+                notify("Deselect first: precision transforms currently affect the entire layer")
+                return false
+            }
+            val applied = canvasRepository.transformLayer(layerId, parameters, revision)
+            if (applied) {
+                refreshLayers()
+                refreshHistory()
+                _dirty.value = canvasRepository.hasUnsavedChanges()
+            } else {
+                notify("The layer is locked, linked, or changed. Close Transform and reopen it on an editable layer.")
+            }
+            return applied
         }
 
         fun notify(message: String) {
@@ -1032,7 +1060,30 @@ class CanvasViewModel
             x: Float,
             y: Float,
         ) {
-            _pendingText.value = PendingText(x, y)
+            val size = canvasRepository.getCanvasSize()
+            // These comparisons also reject NaN and infinities without a six-part condition.
+            val insideX = x >= 0f && x < size.width
+            val insideY = y >= 0f && y < size.height
+            if (!insideX || !insideY) {
+                notify("Tap inside the artwork to position text")
+                return
+            }
+            stopPlayback()
+            _pendingText.value = PendingText(x, y, currentProjectId, canvasRepository.getActiveLayerId(), canvasRepository.contentRevision)
+        }
+
+        /** Consume a placement once, and only in the document state in which the artist chose it. */
+        fun takePendingText(): PendingText? {
+            val pending = _pendingText.value ?: return null
+            _pendingText.value = null
+            if (pending.projectId != currentProjectId ||
+                pending.layerId != canvasRepository.getActiveLayerId() ||
+                pending.revision != canvasRepository.contentRevision
+            ) {
+                notify("The artwork changed. Tap again to choose a fresh text position.")
+                return null
+            }
+            return pending
         }
 
         fun cancelText() {

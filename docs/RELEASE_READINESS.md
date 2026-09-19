@@ -181,7 +181,7 @@ presence is not execution evidence; use the publication's exact completed valida
 
 | Goal | Current limitation |
 | --- | --- |
-| Advanced transform tools | MOVE/TRANSFORM translate pixels; general scale/skew/perspective/distortion is not implemented. Canvas-wide operations are separate. |
+| Advanced transform tools | Whole-layer numerical move/scale/rotate/horizontal-skew/flip with editable-mask resampling is implemented. Handles, selected-pixel transforms, perspective, distortion and snapping remain missing. Canvas-wide operations are separate. |
 | Layer groups, linking and references | Grouping UI and operations are absent; linking/reference model support is not a complete user workflow. |
 | Custom texture workflows | Three procedural grains and editable monotone custom pressure are implemented. Imported/dual textures and a user texture library remain absent. |
 | Native engine and benchmarks | C++ is an unintegrated prototype. No benchmark module or measured device-performance acceptance report exists. |
@@ -486,3 +486,80 @@ signing policy, force push or overwritten remote history is used to approve this
 The original roadmap gaps, pending stroke/native-runtime work, real publisher signing, physical
 phone/tablet/stylus testing and Play Console requirements above remain unresolved. Apply this patch
 to its stated base and obtain a successful full Android verification run before promoting it.
+
+## Procreate workflow milestone — September 19, 2026
+
+The new `LayerTransform` kernel is Android-independent and resamples once around a consistent
+canvas-centre pivot. The repository prepares pixel and mask planes off the main dispatcher and
+commits one history entry only after rechecking the document revision, frame, active layer and
+provisional gesture state. Empty and nonempty selections are explicitly unsupported for this
+whole-layer operation. Linked, locked, hidden and effect layers are rejected.
+
+The Transform panel keeps local drafts, validates finite/ranged input, and does not edit the document
+until Apply. Cancellation before commit leaves it untouched. The old unused transform helper's
+double-pivot positioning was removed. Drag translation now refuses masked/linked/selected layers
+instead of moving only one plane or losing selected pixels. Use the precision panel for masks.
+
+`python .github/scripts/verify_transform_kernels.py` passed six shared check groups with 39,714
+comparisons/boundary assertions in a 96 MB JVM. It is **not** an Android, Gradle/JUnit, lint or release
+result. `LayerTransformTest`, `LayerTransformTransactionTest`, `TransformUiRegressionTest` and a
+real persistence regression are included for the ordinary CI suites. Their exact-commit execution
+evidence must be checked separately. This feature milestone does not close the parity ledger.
+
+### Workspace access and interaction checks
+
+`StudioWorkspaceUiTest` opens the real `CanvasScreen`, checks focus restoration by both button and
+Back, visits all nine workspace panels, selects every `ToolType`, and exercises large text plus
+light/dark layouts. It captures actual Android screenshots to the existing `test-evidence` path.
+The new tool palette restores missing opening routes for guides, animation, canvas setup and text.
+No save/project operations are removed by focus mode. The selection outline respects reduce-motion
+and does not continuously animate with no selection. The obsolete permanent tool strip was removed.
+
+CI execution and screenshot inspection must still be recorded for the exact final source; compiling
+a UI or listing tests is not equivalent to running them. This does not certify artist-rated parity.
+
+## Studio inspection follow-up — September 19, 2026
+
+The new text route uses an explicit Choose position / Place on canvas sequence. Placements are
+bound to project, layer and content revision, consumed once, and cancelled on dismissal or document
+opening. Changed targets cannot reuse a stale point. Text playback is stopped before positioning.
+Transform and text action rows wrap at large text sizes; signed transform entry works without a
+numeric-keyboard minus key. Normal exact-candidate CI and actual screenshots must validate this
+follow-up as well; the preceding green baseline is not evidence for these changes.
+
+Accessibility inspection also corrected text scaling: the extra text-size preference now scales
+text once, without also scaling layout density and shrinking the usable workspace. The independent
+large-target preference still controls touch-target size. A real Compose density regression guards
+this distinction.
+
+The first candidate run (`35439604147`) passed JVM tests, ktlint and both Android lint variants,
+but failed Detekt on three new-source organization/nesting findings and did not complete device
+verification. This inspection refactors those checks without reducing their 39,714 comparisons
+and hosts the full editor UI tests in the injected `MainActivity` required by `ArtFlowCanvasView`.
+The failed run is diagnostic evidence, not an acceptance result; a fresh full matrix is required.
+
+### Studio contrast inspection — pending exact-candidate Android verification
+
+Theme-role contrast now uses a pure sRGB luminance calculation with unrounded thresholds. JVM
+regressions cover reference ratios, all saved accent seeds, dark/light backgrounds, enhanced mode,
+exact mixtures and invalid/transparent inputs. Actual Compose theme-role and screenshot evidence
+must still pass on the final candidate; this does not certify complete accessibility.
+
+### Second studio inspection — run 35440493662, not accepted
+
+All **411 JVM tests** passed. The Android 8 suite completed **157 cases**, with one transform
+invalid-number assertion failure and two platform-conditional skips; the new real-workspace tests
+passed. The build retained one Detekt complex-condition finding, now split into independent bounds
+checks. An Android 15 repeat again crashed in ART's Profile Saver, so it remains an unsuccessful
+lane, not waived evidence.
+
+Follow-up source adds immutable draft/Apply-boundary validation and actual-field assertions. It
+also switches evidence to UTP's supplied pre-uninstall output directory and requires the four
+workspace PNGs. A fresh complete normal-runtime matrix is still required.
+
+The completed second run also passed its API 35, API 36 (4 KB), and API 36 (16 KB)
+lanes, including minified launch. Those successes do not erase API 26's invalid-draft
+failure or the independent API 35 repeat's ART abort. Before the next candidate,
+the immutable production draft parser passed a standalone 33,146-assertion Kotlin
+probe. The host harness now has explicit missing/corrupt-screenshot failure tests;
+its 32 Python tests pass locally. These are not new Android pass claims.

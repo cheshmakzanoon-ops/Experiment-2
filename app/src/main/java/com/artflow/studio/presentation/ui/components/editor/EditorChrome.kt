@@ -7,9 +7,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -33,6 +31,7 @@ import com.artflow.studio.core.symmetry.SymmetryEngine
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.presentation.ui.components.canvas.DragPreview
+import com.artflow.studio.presentation.ui.theme.LocalArtFlowFlags
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -59,103 +58,6 @@ fun ToolType.icon(): androidx.compose.ui.graphics.vector.ImageVector =
         ToolType.MOVE -> Icons.Default.PanTool
         ToolType.ZOOM -> Icons.Default.ZoomIn
     }
-
-/** Tool groups used to split the strip into labelled clusters. */
-private val TOOL_GROUPS: List<Pair<String, List<ToolType>>> =
-    listOf(
-        "Paint" to
-            listOf(
-                ToolType.BRUSH,
-                ToolType.ERASER,
-                ToolType.SMUDGE,
-                ToolType.CLONE_STAMP,
-                ToolType.HEALING,
-                ToolType.LIQUIFY,
-            ),
-        "Fill" to listOf(ToolType.PAINT_BUCKET, ToolType.GRADIENT),
-        "Vector" to listOf(ToolType.TEXT, ToolType.SHAPE),
-        "Select" to
-            listOf(
-                ToolType.SELECT_RECTANGLE,
-                ToolType.SELECT_ELLIPSE,
-                ToolType.SELECT_FREEHAND,
-                ToolType.SELECT_LASSO,
-                ToolType.SELECT_MAGIC_WAND,
-            ),
-        "Edit" to listOf(ToolType.TRANSFORM, ToolType.MOVE, ToolType.EYEDROPPER),
-    )
-
-/**
- * Bottom tool strip.
- *
- * Tools are grouped and labelled so the strip stays usable on a phone, and every entry is a real
- * tool from `ToolType` — there are no placeholders here.
- */
-@Composable
-fun ToolStrip(
-    activeTool: ToolType,
-    onToolSelected: (ToolType) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(modifier = modifier) {
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            TOOL_GROUPS.forEachIndexed { index, (label, tools) ->
-                if (index > 0) {
-                    Box(
-                        modifier =
-                            Modifier
-                                .padding(horizontal = 6.dp)
-                                .width(1.dp)
-                                .height(40.dp)
-                                .background(MaterialTheme.colorScheme.outlineVariant),
-                    )
-                }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        label.uppercase(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                        tools.forEach { tool ->
-                            val selected = tool == activeTool
-                            IconButton(
-                                onClick = { onToolSelected(tool) },
-                                colors =
-                                    IconButtonDefaults.iconButtonColors(
-                                        containerColor =
-                                            if (selected) {
-                                                MaterialTheme.colorScheme.primaryContainer
-                                            } else {
-                                                Color.Transparent
-                                            },
-                                    ),
-                            ) {
-                                Icon(
-                                    imageVector = tool.icon(),
-                                    contentDescription = tool.displayName,
-                                    tint =
-                                        if (selected) {
-                                            MaterialTheme.colorScheme.onPrimaryContainer
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurface
-                                        },
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
 /** Size / opacity controls, shown for the tools where they mean something. */
 @Composable
@@ -279,12 +181,18 @@ fun GuidesOverlay(
     preview: DragPreview?,
     modifier: Modifier = Modifier,
 ) {
-    val dashPhase by rememberInfiniteTransition(label = "ants").animateFloat(
-        initialValue = 0f,
-        targetValue = 24f,
-        animationSpec = infiniteRepeatable(tween(durationMillis = 900)),
-        label = "dash",
-    )
+    val dashPhase =
+        if (selection != null && !LocalArtFlowFlags.current.reduceMotion) {
+            val phase by rememberInfiniteTransition(label = "ants").animateFloat(
+                initialValue = 0f,
+                targetValue = 24f,
+                animationSpec = infiniteRepeatable(tween(durationMillis = 900)),
+                label = "dash",
+            )
+            phase
+        } else {
+            0f
+        }
 
     var maskBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(selection) {

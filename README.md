@@ -12,6 +12,52 @@ symmetry and perspective guides, add text and frames, then save and export real 
 > file describes what is actually in the repository: [Project status](#-project-status) for the
 > per-area breakdown, and [Known gaps](#-known-gaps) for what is genuinely missing.
 
+**Contrast inspection:** all six accents now receive separate light/dark UI roles. The original
+Ink seed had only 1.21:1 contrast as text against the dark surface; Ochre with white text had
+3.61:1. Enabled accent/status text now targets at least 4.5:1 (7:1 in high-contrast mode) against
+the limiting studio surface. Tonal containers are opaque and neutral, and button foregrounds are
+chosen by measured luminance. Artwork and colour-picker values are not changed. These colour-role
+checks are not a claim that every screen is accessibility-certified.
+
+**Validation and evidence inspection:** transform controls share one immutable draft and revalidate
+it with the production transform contract at Apply, so invalid percentages cannot reach a pixel
+transaction. Device screenshots, export samples and page-size records now use UTP's pre-uninstall
+output directory; CI archives them and requires all four executed workspace screenshots.
+
+---
+
+## 🎯 Procreate comparison and current milestone
+
+**Not Procreate parity.** Passing reliability checks is not equivalent to matching the drawing
+feel, workflow depth or visual polish of a professional painting app. The explicit comparison and
+acceptance criteria live in [the Procreate parity ledger](docs/PROCREATE_PARITY.md).
+
+The September 19 transform milestone adds numerical whole-layer affine editing with a shared
+pixel/mask geometry, a single resampling pass, one-step undo, and cancellation/stale-edit guards.
+The standalone kernel probe passed **39,714 comparisons and boundary checks in six groups**. These
+are not 39,714 JUnit tests. New repository, persistence and Compose regressions require the exact
+candidate's normal Android CI; old green runs do not validate this milestone.
+
+Open **Tools → Layer transform**, set scale/rotation/skew/movement and resampling, then press **Apply transform**.
+The panel explains whole-layer scope and clipping. Deselect before use. Cancelling a draft leaves
+both the artwork and history untouched. Existing animation frames and unrelated layers are retained.
+
+The second milestone makes the editor canvas-first: a compact painting dock, a complete Tools
+palette, reachable guides/animation/text/canvas workflows and focus mode with an explicit restore
+control. `StudioWorkspaceUiTest` exercises real navigation, every tool, large text, light/dark
+workspaces and screenshot capture. Screenshots and test outcomes are evidence only after CI runs;
+the redesign alone is not proof of aesthetic or usability parity.
+
+The follow-up inspection hardens text placement: **Text settings → Choose position → tap the
+artwork → Place on canvas**. Cancelling clears the position; a changed document/layer invalidates
+it rather than placing text into a different target. Transform fields accept negative values even
+on keyboards without a numeric minus key, and action rows wrap at large text sizes.
+
+Accessibility inspection also corrected text scaling: the extra text-size preference now scales
+text once, without also scaling layout density and shrinking the usable workspace. The independent
+large-target preference still controls touch-target size. A real Compose density regression guards
+this distinction.
+
 ---
 
 ## 🎨 What is implemented
@@ -73,8 +119,12 @@ Backdrop-dependent baking may be refused rather than silently changing the artwo
   (rectangle, ellipse, polygon, line; fill or stroke)
 - **Selection**: rectangle, ellipse, freehand, lasso and a magic wand, combinable with
   replace / add / subtract / intersect
-- **Transform**: 🟡 translate only — the `MOVE` and `TRANSFORM` tools shift pixels by the drag
-  delta. Rotate, scale, skew, perspective and distortion are not implemented
+- **Precision layer transform**: numerical move, uniform/free scale, rotation, horizontal skew and
+  horizontal/vertical flips, with smooth or pixel-art resampling. `Transform` opens a draft panel;
+  Apply transforms the entire active layer and its editable mask together in **one undo step**.
+  Cancelling does not change pixels. The pivot is the canvas centre; off-canvas content clips.
+  Selected-pixel transforms, live handles, perspective, warp and snapping are **not implemented**.
+  Simple drag translation remains available for unmasked, unlinked layers without a selection.
 - Smudge, clone, heal and liquify run through `PixelBrushes` / `LiquifyTool` on `PixelBuffer`s
 
 ### Layers
@@ -118,8 +168,17 @@ Backdrop-dependent baking may be refused rather than silently changing the artwo
 - Export publishing to the correct image/video gallery collection, Android document-picker save, and read-granted share/view intents. Editable project files are excluded from FileProvider access
 
 ### App shell
+- Canvas-first studio dock with Brush, Smudge, Eraser, Colour, Layers and Tools; size/opacity
+  remain immediately available. All **19 tools** and nine workspace routes are reachable from a
+  scrollable, wrapping palette rather than three permanent tool rows.
+- **Workspace menu → Focus canvas** hides the chrome; **Show controls** or Android Back restores
+  it without leaving the artwork. The focus choice survives recreation; saving/recovery still run.
+- Tools opens Brush Studio, per-tool settings, selection options, numerical layer transforms,
+  guides, animation, canvas setup, text and export. These routes now actually open their panels.
+- Large touch targets, selected-tool accessibility semantics, dark/light themes and reduced-motion
+  selection outlines. Idle canvases no longer run an unnecessary marching-ants animation.
 - Project gallery: list, create, rename, delete, thumbnails, search, sort and favourites
-- Full-screen editor with tool strip, brush options, quick menu and sheet-based panels for layers,
+- Full-screen editor with a compact studio dock, brush options, quick menu and sheet-based panels for layers,
   selection, canvas ops, guides, text and animation
 - Settings screen backed by a Room-stored preferences repository, plus a help centre and
   first-run onboarding
@@ -146,7 +205,7 @@ The table below reflects the code that is currently in the repository.
 | Brush textures | Three built-in procedural grains with scale/rotation; custom texture import and dual textures are not implemented |
 | Pixel engine (buffers, blend modes, adjustments, filters) | Implemented |
 | Tools (smudge, clone, heal, liquify, fill, gradient, text, shapes) | Implemented |
-| Selection / transform | Selection implemented (magic wand + boolean combining); transform is **translate only** |
+| Selection / transform | Selection implemented; whole-layer affine transform and editable-mask resampling with exact numerical controls. Interactive handles, selected-content transforms, warp and snapping remain missing. |
 | Layers / masks / adjustments / filter layers | Implemented |
 | Layer groups / layer linking | **Not available** — no grouping UI or repository operation; `linkGroupId` is stored but never set from the UI |
 | Undo / redo | Implemented (snapshot history) |
@@ -180,8 +239,10 @@ only provided them) has been deleted.
 
 - **Layer groups.** `Layer.parentGroupId` exists, but no repository operation or UI sets it, so
   layers cannot be nested or collapsed.
-- **Transform beyond translation.** Rotate, scale, skew, perspective, distortion and snapping are
-  not implemented; `MOVE`/`TRANSFORM` translate pixels only.
+- **Advanced transform workflow.** Whole-layer numerical affine transforms are implemented, but
+  on-canvas handles/live preview, selected-pixel transforms, configurable pivot, perspective,
+  distortion/warp, snapping and linked-layer transforms are not. Selections and linked layers are
+  explicitly rejected, not silently transformed incorrectly.
 - **Imported and dual brush textures.** Built-in procedural grains are implemented; a custom
   texture importer/library and dual-texture mixing are not.
 - **The native module.** `app/src/main/jni` remains an unintegrated C++ prototype. The application
@@ -386,7 +447,7 @@ table and is kept in step with the code. Summarised:
   engine, layers — ✅
 - **Core drawing (9–16)**: advanced brush params, colour dynamics, blend modes, selection,
   alpha lock, masks and custom pressure — ✅; textures — 🟡 *three procedural grains, no custom import*;
-  transform — 🟡 *translate only*
+  transform — 🟡 *whole-layer numerical affine controls; no interactive handles or selected-pixel transforms*
 - **Professional tools (17–24)**: smudge, liquify, clone, heal, gradient, fill, text, shapes — ✅
 - **Advanced layers (25–30)**: adjustments and filter layers — ✅; layer groups, layer linking UI
   and smart objects — ⬜ *not implemented*

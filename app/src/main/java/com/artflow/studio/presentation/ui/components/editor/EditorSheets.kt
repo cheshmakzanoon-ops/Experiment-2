@@ -1,4 +1,7 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.foundation.layout.ExperimentalLayoutApi::class,
+)
 
 package com.artflow.studio.presentation.ui.components.editor
 
@@ -1007,6 +1010,7 @@ fun TextSheet(
     onStyleChange: (TextLayout.TextStyle) -> Unit,
     onColorChange: (Int) -> Unit,
     onPlace: () -> Unit,
+    hasPosition: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -1014,16 +1018,19 @@ fun TextSheet(
             modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
+                .imePadding()
                 .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(
+        FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text("Text", style = MaterialTheme.typography.titleMedium)
-            Button(onClick = onPlace, enabled = text.isNotBlank()) { Text("Place on canvas") }
+            Button(onClick = onPlace, enabled = text.isNotBlank()) {
+                Text(if (hasPosition) "Place on canvas" else "Choose position")
+            }
         }
 
         OutlinedTextField(
@@ -1075,7 +1082,7 @@ fun TextSheet(
             onChange = { onStyleChange(style.copy(maxWidth = if (it <= 0f) null else it)) },
         )
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             FilterChip(
                 selected = style.bold,
                 onClick = { onStyleChange(style.copy(bold = !style.bold)) },
@@ -1099,7 +1106,7 @@ fun TextSheet(
         }
 
         Text("Alignment", style = MaterialTheme.typography.labelMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             TextLayout.Alignment.entries.forEach { alignment ->
                 FilterChip(
                     selected = style.alignment == alignment,
@@ -1110,7 +1117,7 @@ fun TextSheet(
         }
 
         Text("Colour", style = MaterialTheme.typography.labelMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             ColorChip(0xFF111111.toInt(), onClick = { onColorChange(0xFF111111.toInt()) })
             ColorChip(0xFFFFFFFF.toInt(), onClick = { onColorChange(0xFFFFFFFF.toInt()) })
             ColorChip(color, onClick = { })

@@ -1,20 +1,25 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.foundation.layout.ExperimentalLayoutApi::class,
+)
 
 package com.artflow.studio.presentation.ui.screens.canvas
 
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -34,7 +39,6 @@ import com.artflow.studio.presentation.ui.components.color.ColorPanel
 import com.artflow.studio.presentation.ui.components.editor.AnimationSheet
 import com.artflow.studio.presentation.ui.components.editor.BrushOptionsRow
 import com.artflow.studio.presentation.ui.components.editor.CanvasOpsSheet
-import com.artflow.studio.presentation.ui.components.editor.ColorChip
 import com.artflow.studio.presentation.ui.components.editor.GuidesOverlay
 import com.artflow.studio.presentation.ui.components.editor.GuidesSheet
 import com.artflow.studio.presentation.ui.components.editor.LayerMaskActions
@@ -42,9 +46,13 @@ import com.artflow.studio.presentation.ui.components.editor.LayerRowActions
 import com.artflow.studio.presentation.ui.components.editor.LayerStackActions
 import com.artflow.studio.presentation.ui.components.editor.LayersSheet
 import com.artflow.studio.presentation.ui.components.editor.QuickMenuSheet
+import com.artflow.studio.presentation.ui.components.editor.RestoreStudioButton
 import com.artflow.studio.presentation.ui.components.editor.SelectionSheet
+import com.artflow.studio.presentation.ui.components.editor.StudioAction
+import com.artflow.studio.presentation.ui.components.editor.StudioDock
+import com.artflow.studio.presentation.ui.components.editor.StudioToolPalette
 import com.artflow.studio.presentation.ui.components.editor.TextSheet
-import com.artflow.studio.presentation.ui.components.editor.ToolStrip
+import com.artflow.studio.presentation.ui.components.editor.TransformSheet
 import com.artflow.studio.presentation.ui.components.export.ExportSheet
 import com.artflow.studio.presentation.ui.components.export.rememberExportActions
 import com.artflow.studio.presentation.ui.viewmodel.CanvasUiState
@@ -56,10 +64,12 @@ private enum class EditorPanel(
     val title: String,
 ) {
     NONE(""),
+    PALETTE("Studio tools"),
     TOOLS("Tool options"),
     COLOUR("Colour"),
     LAYERS("Layers"),
     SELECTION("Selection"),
+    TRANSFORM("Transform layer"),
     GUIDES("Guides"),
     ANIMATION("Animation"),
     CANVAS("Canvas"),
@@ -108,6 +118,8 @@ fun CanvasScreen(
     val exportActions = rememberExportActions(viewModel)
 
     var panel by remember { mutableStateOf(EditorPanel.NONE) }
+    var focusCanvas by rememberSaveable(projectId) { mutableStateOf(false) }
+    var showWorkspaceMenu by remember { mutableStateOf(false) }
     var canvasView by remember { mutableStateOf<ArtFlowCanvasView?>(null) }
     var dragPreview by remember { mutableStateOf<DragPreview?>(null) }
     var previewBytes by remember { mutableStateOf<ByteArray?>(null) }
@@ -115,6 +127,8 @@ fun CanvasScreen(
     var showRecoveryDialog by remember { mutableStateOf(false) }
     var showBrushEditor by remember { mutableStateOf(false) }
     var showExitConfirm by remember { mutableStateOf(false) }
+    // A draft belongs to the layer/revision present when the panel opens, not a later frame.
+    val transformTarget = remember(panel, projectId) { activeLayerId to viewModel.transformRevision() }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, canvasView) {
@@ -151,92 +165,124 @@ fun CanvasScreen(
         if (panel == EditorPanel.EXPORT) previewBytes = null
     }
 
-    BackHandler(enabled = panel != EditorPanel.NONE) { panel = EditorPanel.NONE }
-    BackHandler(enabled = panel == EditorPanel.NONE && dirty) { showExitConfirm = true }
+    fun dismissPanel() {
+        if (panel == EditorPanel.TEXT) viewModel.cancelText()
+        panel = EditorPanel.NONE
+    }
+
+    BackHandler(enabled = panel != EditorPanel.NONE) { dismissPanel() }
+    BackHandler(enabled = panel == EditorPanel.NONE && dirty && !focusCanvas) { showExitConfirm = true }
+    BackHandler(enabled = panel == EditorPanel.NONE && focusCanvas) { focusCanvas = false }
+
+    LaunchedEffect(pendingText) {
+        if (pendingText != null) {
+            focusCanvas = false
+            panel = EditorPanel.TEXT
+        }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = ready?.projectName ?: "Loading…",
-                            style = MaterialTheme.typography.titleMedium,
-                            maxLines = 1,
-                        )
-                        ready?.let {
+            if (!focusCanvas) {
+                TopAppBar(
+                    title = {
+                        Column {
                             Text(
-                                text =
-                                    "${it.width}×${it.height} px · ${it.dpi} dpi" +
-                                        if (it.frameCount > 1) " · ${it.frameCount} frames" else "",
-                                style = MaterialTheme.typography.labelSmall,
+                                text = ready?.projectName ?: "Loading…",
+                                style = MaterialTheme.typography.titleMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            ready?.let {
+                                Text(
+                                    text =
+                                        "${it.width}×${it.height} px · ${it.dpi} dpi" +
+                                            if (it.frameCount > 1) " · ${it.frameCount} frames" else "",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = {
+                            if (dirty) showExitConfirm = true else onNavigateBack()
+                        }) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = viewModel::undo, enabled = history.canUndo) {
+                            Icon(Icons.Default.Undo, contentDescription = "Undo")
+                        }
+                        IconButton(onClick = viewModel::redo, enabled = history.canRedo) {
+                            Icon(Icons.Default.Redo, contentDescription = "Redo")
+                        }
+                        IconButton(onClick = { viewModel.save() }, enabled = !saving && ready != null) {
+                            Icon(
+                                imageVector = if (dirty) Icons.Default.Save else Icons.Default.CheckCircleOutline,
+                                contentDescription = "Save",
                             )
                         }
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = {
-                        if (dirty) showExitConfirm = true else onNavigateBack()
-                    }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = viewModel::undo, enabled = history.canUndo) {
-                        Icon(Icons.Default.Undo, contentDescription = "Undo")
-                    }
-                    IconButton(onClick = viewModel::redo, enabled = history.canRedo) {
-                        Icon(Icons.Default.Redo, contentDescription = "Redo")
-                    }
-                    IconButton(onClick = { viewModel.save() }, enabled = !saving && ready != null) {
-                        Icon(
-                            imageVector = if (dirty) Icons.Default.Save else Icons.Default.CloudDone,
-                            contentDescription = "Save",
-                        )
-                    }
-                    IconButton(onClick = { panel = EditorPanel.QUICK }) {
-                        Icon(Icons.Default.Bolt, contentDescription = "Quick menu")
-                    }
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
-                    }
-                },
-            )
+                        Box {
+                            IconButton(onClick = { showWorkspaceMenu = true }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "Workspace menu")
+                            }
+                            DropdownMenu(expanded = showWorkspaceMenu, onDismissRequest = { showWorkspaceMenu = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("Focus canvas") },
+                                    enabled = ready != null,
+                                    onClick = {
+                                        canvasView?.cancelActiveGesture()
+                                        showWorkspaceMenu = false
+                                        focusCanvas = true
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.Fullscreen, contentDescription = null) },
+                                )
+                                DropdownMenuItem(text = { Text("Quick menu") }, onClick = {
+                                    showWorkspaceMenu = false
+                                    panel = EditorPanel.QUICK
+                                })
+                                DropdownMenuItem(text = { Text("Export artwork") }, onClick = {
+                                    showWorkspaceMenu = false
+                                    panel = EditorPanel.EXPORT
+                                })
+                                DropdownMenuItem(text = { Text("Settings") }, onClick = {
+                                    showWorkspaceMenu = false
+                                    onOpenSettings()
+                                })
+                            }
+                        }
+                    },
+                )
+            }
         },
         bottomBar = {
             // The app is edge-to-edge from API 35, and the opt-out attribute is ignored from API 36,
             // so the tool strip has to inset itself: without this the navigation bar covers the
             // tool row. Scaffold only insets *content* when a bottomBar is present, not the bar.
-            Surface(
-                tonalElevation = 4.dp,
-                modifier =
-                    Modifier.windowInsetsPadding(
-                        WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
-                    ),
-            ) {
-                Column {
-                    BrushOptionsRow(
-                        tool = input.tool,
-                        size = input.brushParams.size,
-                        opacity = input.brushParams.opacity,
-                        eraserSize = input.eraserSize,
-                        tolerance = input.fillTolerance,
-                        onSizeChanged = viewModel::setBrushSize,
-                        onOpacityChanged = viewModel::setBrushOpacity,
-                        onEraserSizeChanged = viewModel::setEraserSize,
-                        onToleranceChanged = { viewModel.setFillSettings(it, input.fillContiguous) },
-                    )
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState())
-                                .padding(horizontal = 12.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        ColorChip(color = input.brushColor, onClick = { panel = EditorPanel.COLOUR })
+            if (!focusCanvas) {
+                Surface(
+                    tonalElevation = 2.dp,
+                    modifier =
+                        Modifier.windowInsetsPadding(
+                            WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
+                        ),
+                ) {
+                    Column {
+                        BrushOptionsRow(
+                            tool = input.tool,
+                            size = input.brushParams.size,
+                            opacity = input.brushParams.opacity,
+                            eraserSize = input.eraserSize,
+                            tolerance = input.fillTolerance,
+                            onSizeChanged = viewModel::setBrushSize,
+                            onOpacityChanged = viewModel::setBrushOpacity,
+                            onEraserSizeChanged = viewModel::setEraserSize,
+                            onToleranceChanged = { viewModel.setFillSettings(it, input.fillContiguous) },
+                        )
                         if (input.strokeDestination.isMask) {
                             TextButton(onClick = { viewModel.setTool(ToolType.BRUSH) }) {
                                 Text(
@@ -250,20 +296,16 @@ fun CanvasScreen(
                                 )
                             }
                         }
-                        TextButton(onClick = { showBrushEditor = true }) { Text("Brush") }
-                        TextButton(onClick = { panel = EditorPanel.LAYERS }) {
-                            Text("Layers (${layers.size})")
-                        }
-                        TextButton(onClick = { panel = EditorPanel.SELECTION }) {
-                            Text(if (selectionCount > 0) "Select ($selectionCount)" else "Select")
-                        }
-                        TextButton(onClick = { panel = EditorPanel.TOOLS }) { Text("Options") }
-                        TextButton(onClick = { panel = EditorPanel.EXPORT }) { Text("Export") }
+                        StudioDock(
+                            activeTool = input.tool,
+                            color = input.brushColor,
+                            layerCount = layers.size,
+                            onTool = viewModel::setTool,
+                            onColor = { panel = EditorPanel.COLOUR },
+                            onLayers = { panel = EditorPanel.LAYERS },
+                            onPalette = { panel = EditorPanel.PALETTE },
+                        )
                     }
-                    ToolStrip(
-                        activeTool = input.tool,
-                        onToolSelected = { viewModel.setTool(it) },
-                    )
                 }
             }
         },
@@ -344,12 +386,18 @@ fun CanvasScreen(
                     }
                 }
             }
+            if (focusCanvas) {
+                RestoreStudioButton(
+                    onRestore = { focusCanvas = false },
+                    modifier = Modifier.align(Alignment.TopEnd).padding(12.dp),
+                )
+            }
         }
     }
 
     if (panel != EditorPanel.NONE) {
         ModalBottomSheet(
-            onDismissRequest = { panel = EditorPanel.NONE },
+            onDismissRequest = { dismissPanel() },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false),
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -359,6 +407,42 @@ fun CanvasScreen(
                     modifier = Modifier.padding(start = 16.dp, top = 4.dp),
                 )
                 when (panel) {
+                    EditorPanel.PALETTE ->
+                        StudioToolPalette(
+                            activeTool = input.tool,
+                            onTool = { tool ->
+                                canvasView?.cancelActiveGesture()
+                                viewModel.setTool(tool)
+                                panel = if (tool == ToolType.TRANSFORM) EditorPanel.TRANSFORM else EditorPanel.NONE
+                            },
+                            onAction = { action ->
+                                panel =
+                                    when (action) {
+                                        StudioAction.BRUSH_STUDIO -> {
+                                            showBrushEditor = true
+                                            EditorPanel.NONE
+                                        }
+                                        StudioAction.TOOL_OPTIONS -> EditorPanel.TOOLS
+                                        StudioAction.SELECTION -> EditorPanel.SELECTION
+                                        StudioAction.TRANSFORM -> EditorPanel.TRANSFORM
+                                        StudioAction.GUIDES -> EditorPanel.GUIDES
+                                        StudioAction.ANIMATION -> EditorPanel.ANIMATION
+                                        StudioAction.CANVAS -> EditorPanel.CANVAS
+                                        StudioAction.TEXT -> {
+                                            viewModel.setTool(ToolType.TEXT)
+                                            EditorPanel.TEXT
+                                        }
+                                        StudioAction.EXPORT -> EditorPanel.EXPORT
+                                    }
+                            },
+                        )
+                    EditorPanel.TRANSFORM ->
+                        TransformSheet(
+                            layerName = layers.firstOrNull { it.id == transformTarget.first }?.name ?: "Layer",
+                            hasSelection = selection != null,
+                            onApply = { viewModel.transformLayer(transformTarget.first, transformTarget.second, it) },
+                            onClose = { panel = EditorPanel.NONE },
+                        )
                     EditorPanel.TOOLS -> ToolOptionsPanel(viewModel, input)
                     EditorPanel.COLOUR ->
                         ColorPanel(
@@ -479,20 +563,19 @@ fun CanvasScreen(
                             onTextChange = { viewModel.setText(it, input.textStyle) },
                             onStyleChange = { viewModel.setText(input.text, it) },
                             onColorChange = { viewModel.setColor(it) },
+                            hasPosition = pendingText != null,
                             onPlace = {
-                                val pending = pendingText
-                                val view = canvasView
-                                if (pending != null && view != null) {
-                                    view.placeText(
-                                        pending.x,
-                                        pending.y,
-                                        input.text,
-                                        input.textStyle,
-                                        input.brushColor,
-                                    )
-                                    viewModel.cancelText()
+                                if (pendingText == null) {
+                                    viewModel.setTool(ToolType.TEXT)
+                                    panel = EditorPanel.NONE
+                                    viewModel.notify("Tap inside the artwork to position text")
                                 } else {
-                                    viewModel.notify("Tap the canvas to choose where the text goes")
+                                    val pending = viewModel.takePendingText()
+                                    val view = canvasView
+                                    if (pending != null && view != null) {
+                                        view.placeText(pending.x, pending.y, input.text, input.textStyle, input.brushColor)
+                                    }
+                                    dismissPanel()
                                 }
                             },
                         )
@@ -620,13 +703,14 @@ private fun ToolOptionsPanel(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(input.tool.displayName, style = MaterialTheme.typography.titleMedium)
         Text(
             when (input.tool) {
-                ToolType.BRUSH -> "Pressure controls size and opacity; tap Brush for the full dynamics panel."
+                ToolType.BRUSH -> "Pressure controls size and opacity. Open Tools → Brush Studio for the full dynamics panel."
                 ToolType.ERASER -> "Erases to transparency on the active layer. Two fingers to navigate; the stylus keeps painting."
                 ToolType.SMUDGE -> "Pull colour along the stroke. Lower strength gives a softer blend."
                 ToolType.CLONE_STAMP -> "Tap once to set the source, then drag to stamp."
@@ -638,7 +722,8 @@ private fun ToolOptionsPanel(
                 ToolType.SHAPE -> "Drag to draw the selected shape."
                 ToolType.SELECT_MAGIC_WAND -> "Tap to select a colour region."
                 ToolType.EYEDROPPER -> "Tap to pick a colour from the artwork."
-                ToolType.MOVE, ToolType.TRANSFORM -> "Drag to move the active layer's pixels."
+                ToolType.MOVE -> "Drag to move an unmasked layer. Deselect first; use Layer transform for editable masks."
+                ToolType.TRANSFORM -> "Open Tools → Layer transform for numerical scale, rotation, skew, flips and movement."
                 else -> "Drag on the canvas to use this tool."
             },
             style = MaterialTheme.typography.bodySmall,
@@ -647,7 +732,7 @@ private fun ToolOptionsPanel(
 
         if (input.tool == ToolType.GRADIENT) {
             Text("Gradient direction", style = MaterialTheme.typography.labelMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 com.artflow.studio.core.tool.GradientTool.GradientType.entries.forEach { type ->
                     FilterChip(
                         selected = input.gradientType == type,
@@ -657,7 +742,7 @@ private fun ToolOptionsPanel(
                 }
             }
             Text("Ramp", style = MaterialTheme.typography.labelMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 com.artflow.studio.core.tool.GradientTool.Presets.ALL.forEach { preset ->
                     AssistChip(
                         onClick = { viewModel.setGradient(preset, input.gradientType) },
@@ -680,7 +765,7 @@ private fun ToolOptionsPanel(
 
         if (input.tool == ToolType.SHAPE) {
             Text("Shape", style = MaterialTheme.typography.labelMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 com.artflow.studio.presentation.ui.components.canvas.ShapeKind.entries.forEach { kind ->
                     FilterChip(
                         selected = input.shapeKind == kind,
@@ -707,7 +792,7 @@ private fun ToolOptionsPanel(
         }
         if (input.tool == ToolType.LIQUIFY) {
             Text("Liquify mode: ${input.liquify.mode.displayName}", style = MaterialTheme.typography.bodySmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 com.artflow.studio.core.tool.LiquifyTool.Mode.entries.forEach { mode ->
                     FilterChip(
                         selected = input.liquify.mode == mode,
