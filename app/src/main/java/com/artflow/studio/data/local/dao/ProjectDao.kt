@@ -21,7 +21,7 @@ interface ProjectDao {
     @Query("SELECT * FROM projects WHERE name LIKE :query ORDER BY modifiedAt DESC")
     fun searchProjects(query: String): Flow<List<ProjectEntity>>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertProject(project: ProjectEntity): Long
 
     @Update

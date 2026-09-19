@@ -226,7 +226,7 @@ class SettingsRepositoryTest {
                 runCatching {
                     repository.update {
                         (it.recentColors as MutableList<Int>).clear()
-                        throw IllegalStateException("Aborted transform")
+                        error("Aborted transform")
                     }
                 }.isFailure,
             )

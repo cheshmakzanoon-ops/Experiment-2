@@ -14,6 +14,8 @@ import com.artflow.studio.data.repository.ProjectRepositoryImpl
 import com.artflow.studio.data.repository.canvas.CanvasRepositoryImpl
 import com.artflow.studio.domain.model.Project
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -125,19 +127,107 @@ class ProjectDuplicationTest {
             assertTrue(projects.getAllProjects().first().isEmpty())
         }
 
-    private suspend fun create(): Long =
-        projects.saveProject(
-            Project(
-                name = "Original",
-                filePath = "",
-                thumbnailPath = null,
-                width = SIZE,
-                height = SIZE,
-                dpi = 144,
-                createdAt = 1,
-                modifiedAt = 1,
-            ),
+    @Test
+    fun newProjectsSkipOrphanedStorageEvenWithAnEmptyDatabase() =
+        runBlocking(Dispatchers.Main) {
+            val orphan = File(storage.projectDir(1), "do-not-delete.bin")
+            orphan.writeText("preserve")
+            val created = create()
+            assertTrue(created > 1)
+            assertEquals("preserve", orphan.readText())
+            assertFalse(storage.projectDirectoryExists(created))
+            canvas.loadOrCreate(created, SIZE, SIZE, 144)
+            assertEquals(SIZE, canvas.compositeBuffer()!!.width)
+            assertEquals("preserve", orphan.readText())
+        }
+
+    @Test
+    fun newProjectsSkipOrphansAboveExistingRows() =
+        runBlocking {
+            val original = create()
+            val orphan = File(storage.projectDir(original + 10), "preserve.bin")
+            orphan.writeText("saved artwork")
+            val created = create()
+            assertTrue(created > original + 10)
+            assertEquals("saved artwork", orphan.readText())
+            assertEquals(2, projects.getAllProjects().first().size)
+        }
+
+    @Test
+    fun concurrentCreatesNeverReplaceOneAnother() =
+        runBlocking {
+            val ids = (1..16).map { async { create() } }.awaitAll()
+            assertEquals(16, ids.distinct().size)
+            assertEquals(16, projects.getAllProjects().first().size)
+        }
+
+    @Test
+    fun deletedProjectIdentifiersAreNeverReused() =
+        runBlocking {
+            val id = create()
+            projects.deleteProjectById(id)
+            assertFalse(storage.projectDirectoryExists(id))
+            assertTrue(create() > id)
+        }
+
+    @Test
+    fun explicitUnknownIdCannotClaimOrphanedArtwork() =
+        runBlocking {
+            val orphan = File(storage.projectDir(17), "preserve.bin")
+            orphan.writeText("saved artwork")
+            assertTrue(runCatching { projects.saveProject(fixture().copy(id = 17)) }.isFailure)
+            assertEquals("saved artwork", orphan.readText())
+            assertTrue(projects.getAllProjects().first().isEmpty())
+        }
+
+    @Test
+    fun savingKnownIdUpdatesMetadataWithoutReplacingItsIdentity() =
+        runBlocking {
+            val id = create()
+            val before = projects.getProjectById(id)!!
+            val file = File(storage.projectDir(id), "preserve.bin").apply { writeText("saved artwork") }
+            assertEquals(id, projects.saveProject(before.copy(name = "Renamed")))
+            assertEquals("Renamed", projects.getProjectById(id)!!.name)
+            assertEquals("saved artwork", file.readText())
+            assertEquals(1, projects.getAllProjects().first().size)
+        }
+
+    @Test
+    fun invalidCreationInputsDoNotLeaveGalleryRows() =
+        runBlocking {
+            val invalid =
+                listOf(
+                    fixture().copy(id = -1),
+                    fixture().copy(width = 0),
+                    fixture().copy(height = Int.MAX_VALUE),
+                    fixture().copy(dpi = 0),
+                )
+            invalid.forEach { assertTrue(runCatching { projects.saveProject(it) }.isFailure) }
+            assertTrue(projects.getAllProjects().first().isEmpty())
+        }
+
+    @Test
+    fun exhaustedIdentifiersFailWithoutWrappingOrDeletingFiles() =
+        runBlocking {
+            val orphan = File(storage.projectDir(Long.MAX_VALUE), "preserve.bin").apply { writeText("saved artwork") }
+            assertTrue(runCatching { create() }.isFailure)
+            assertTrue(projects.getAllProjects().first().isEmpty())
+            assertEquals("saved artwork", orphan.readText())
+        }
+
+    private fun fixture(): Project =
+        Project(
+            name = "Original",
+            filePath = "",
+            thumbnailPath = null,
+            width = SIZE,
+            height = SIZE,
+            dpi = 144,
+            createdAt = 1,
+            modifiedAt = 1,
         )
+
+    private suspend fun create(): Long = projects.saveProject(fixture())
 
     private suspend fun paint(color: Int) {
         assertTrue(canvas.setLayerPixels(canvas.getActiveLayerId(), PixelBuffer.filled(SIZE, SIZE, color), "Fixture"))

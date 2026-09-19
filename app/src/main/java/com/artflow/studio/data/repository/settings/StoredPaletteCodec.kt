@@ -24,7 +24,8 @@ internal object StoredPaletteCodec {
         var index = 0
         while (index < text.length) {
             val char = text[index]
-            if (!quoted && depth == 0 && char == ';' && text.getOrNull(index + 1) == ';') {
+            val betweenObjects = !quoted && depth == 0
+            if (betweenObjects && char == ';' && text.getOrNull(index + 1) == ';') {
                 result.append(',')
                 index += 2
                 continue

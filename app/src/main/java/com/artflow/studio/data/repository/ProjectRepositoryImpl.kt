@@ -1,9 +1,11 @@
 package com.artflow.studio.data.repository
 
 import androidx.room.withTransaction
+import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.local.dao.ProjectDao
 import com.artflow.studio.data.local.database.ArtFlowDatabase
+import com.artflow.studio.data.local.entity.ProjectEntity
 import com.artflow.studio.data.local.entity.toDomain
 import com.artflow.studio.data.local.entity.toEntity
 import com.artflow.studio.domain.model.Project
@@ -44,7 +46,33 @@ class ProjectRepositoryImpl
                 entities.map { it.toDomain() }
             }
 
-        override suspend fun saveProject(project: Project): Long = projectDao.insertProject(project.toEntity())
+        override suspend fun saveProject(project: Project): Long {
+            require(project.id >= 0) { "Invalid project identifier" }
+            require(CanvasOperations.isSizeSafe(project.width, project.height)) { "This canvas is too large or has invalid dimensions" }
+            require(project.dpi in CanvasOperations.MIN_DPI..CanvasOperations.MAX_DPI) { "Invalid canvas DPI" }
+            return database.withTransaction {
+                if (project.id == 0L) {
+                    // A restored database may lag behind artwork files. Never reuse their IDs.
+                    insertNewProject(project.toEntity())
+                } else {
+                    requireNotNull(projectDao.getProjectById(project.id)) { "This artwork no longer exists" }
+                    projectDao.updateProject(project.toEntity())
+                    project.id
+                }
+            }
+        }
+
+        /** Called in the database transaction shared by creation and duplication. */
+        private suspend fun insertNewProject(project: ProjectEntity): Long {
+            val highestStoredId = withContext(Dispatchers.IO) { storage.maximumStoredProjectId() }
+            check(highestStoredId < Long.MAX_VALUE) { "Project identifiers are exhausted" }
+            // Let AUTOINCREMENT preserve its high-water mark even after every row was deleted.
+            val reservedId = projectDao.insertProject(project.copy(id = 0))
+            if (reservedId > highestStoredId) return reservedId
+            // The provisional row is invisible outside this transaction. No artwork files are touched.
+            projectDao.deleteProjectById(reservedId)
+            return projectDao.insertProject(project.copy(id = highestStoredId + 1))
+        }
 
         override suspend fun duplicateProject(projectId: Long): Long {
             var copiedId: Long? = null
@@ -54,19 +82,16 @@ class ProjectRepositoryImpl
                     database.withTransaction {
                         val source = requireNotNull(projectDao.getProjectById(projectId)) { "This artwork no longer exists" }
                         val now = System.currentTimeMillis()
-                        val highestId =
-                            maxOf(projectDao.maximumProjectId(), withContext(Dispatchers.IO) { storage.maximumStoredProjectId() })
-                        check(highestId < Long.MAX_VALUE) { "Project identifiers are exhausted" }
                         val copy =
                             source.copy(
-                                id = highestId + 1,
+                                id = 0,
                                 name = "${source.name} copy",
                                 filePath = "",
                                 thumbnailPath = null,
                                 createdAt = now,
                                 modifiedAt = now,
                             )
-                        val destinationId = projectDao.insertProject(copy)
+                        val destinationId = insertNewProject(copy)
                         // Never remove a pre-existing directory if copying refuses to overwrite it.
                         check(!withContext(Dispatchers.IO) { storage.projectDirectoryExists(destinationId) }) {
                             "The destination already contains project data"
