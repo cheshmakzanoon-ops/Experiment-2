@@ -126,7 +126,8 @@ class ReferenceCompanionTest {
                 MaterialTheme { ReferenceCompanion(7L, uri.toString(), {}, {}, { samples.add(it) }) }
             }
             compose.waitUntil(15_000) { compose.onAllNodesWithTag("reference-image").fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithTag("reference-image")
+            compose
+                .onNodeWithTag("reference-image")
                 .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "1024 × 512 pixel preview"))
             compose.onNodeWithContentDescription("Pick reference colour").performClick()
             compose.onNodeWithTag("reference-image").performTouchInput { click(Offset(width * 0.25f, height * 0.5f)) }
@@ -165,8 +166,9 @@ class ReferenceCompanionTest {
     private fun fixtureBitmap(
         width: Int,
         height: Int,
-    ): Bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply {
-        val pixels = IntArray(width * height) { if (it % width < width / 2) Color.RED else Color.BLUE }
-        setPixels(pixels, 0, width, 0, 0, width, height)
-    }
+    ): Bitmap =
+        Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply {
+            val pixels = IntArray(width * height) { if (it % width < width / 2) Color.RED else Color.BLUE }
+            setPixels(pixels, 0, width, 0, 0, width, height)
+        }
 }

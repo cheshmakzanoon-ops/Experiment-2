@@ -1,7 +1,6 @@
 package com.artflow.studio.presentation.ui.components.brush
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -18,15 +17,10 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PointMode
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.artflow.studio.core.render.BrushPreview
 import com.artflow.studio.core.render.BrushTexture
-import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.PressureResponse
 
@@ -78,10 +72,27 @@ fun AdvancedBrushSettingsPanel(
             }
         }
 
+        BrushSettingsSection(title = "Brush Properties") {
+            BrushParameterSlider(
+                label = "Brush size",
+                value = brushParams.size,
+                onValueChange = { onBrushParamsChanged(brushParams.copy(size = it)) },
+                valueRange = 1f..512f,
+                valueDisplay = "%.1f px".format(brushParams.size),
+            )
+            BrushParameterSlider(
+                label = "Brush opacity",
+                value = brushParams.opacity,
+                onValueChange = { onBrushParamsChanged(brushParams.copy(opacity = it)) },
+                valueRange = 0.01f..1f,
+                valueDisplay = "%.0f%%".format(brushParams.opacity * 100),
+            )
+        }
+
         // Stroke Dynamics Section
         BrushSettingsSection(title = "Stroke Dynamics") {
             // Spacing Control
-            LabeledSlider(
+            BrushParameterSlider(
                 label = "Spacing",
                 value = brushParams.spacing,
                 onValueChange = { onBrushParamsChanged(brushParams.copy(spacing = it)) },
@@ -90,7 +101,7 @@ fun AdvancedBrushSettingsPanel(
             )
 
             // Smoothing Control
-            LabeledSlider(
+            BrushParameterSlider(
                 label = "Smoothing",
                 value = brushParams.smoothing,
                 onValueChange = { onBrushParamsChanged(brushParams.copy(smoothing = it)) },
@@ -99,7 +110,7 @@ fun AdvancedBrushSettingsPanel(
             )
 
             // Flow Control
-            LabeledSlider(
+            BrushParameterSlider(
                 label = "Flow",
                 value = brushParams.flow,
                 onValueChange = { onBrushParamsChanged(brushParams.copy(flow = it)) },
@@ -111,7 +122,7 @@ fun AdvancedBrushSettingsPanel(
         // Tapering Section
         BrushSettingsSection(title = "Tapering") {
             // Start Taper
-            LabeledSlider(
+            BrushParameterSlider(
                 label = "Start Taper",
                 value = brushParams.taperStart,
                 onValueChange = { onBrushParamsChanged(brushParams.copy(taperStart = it)) },
@@ -120,7 +131,7 @@ fun AdvancedBrushSettingsPanel(
             )
 
             // End Taper
-            LabeledSlider(
+            BrushParameterSlider(
                 label = "End Taper",
                 value = brushParams.taperEnd,
                 onValueChange = { onBrushParamsChanged(brushParams.copy(taperEnd = it)) },
@@ -132,7 +143,7 @@ fun AdvancedBrushSettingsPanel(
         // Pressure Dynamics Section
         BrushSettingsSection(title = "Pressure Dynamics") {
             // Pressure to Size
-            LabeledSlider(
+            BrushParameterSlider(
                 label = "Pressure → Size",
                 value = brushParams.pressureToSize,
                 onValueChange = { onBrushParamsChanged(brushParams.copy(pressureToSize = it)) },
@@ -141,7 +152,7 @@ fun AdvancedBrushSettingsPanel(
             )
 
             // Pressure to Opacity
-            LabeledSlider(
+            BrushParameterSlider(
                 label = "Pressure → Opacity",
                 value = brushParams.pressureToOpacity,
                 onValueChange = { onBrushParamsChanged(brushParams.copy(pressureToOpacity = it)) },
@@ -175,14 +186,14 @@ fun AdvancedBrushSettingsPanel(
                 }
             }
             if (brushParams.blendTexture && brushParams.textureId != null) {
-                LabeledSlider(
+                BrushParameterSlider(
                     label = "Grain scale",
                     value = brushParams.textureScale.coerceIn(0.25f, 8f),
                     onValueChange = { onBrushParamsChanged(brushParams.copy(textureScale = it)) },
                     valueRange = 0.25f..8f,
                     valueDisplay = "%.2f×".format(brushParams.textureScale),
                 )
-                LabeledSlider(
+                BrushParameterSlider(
                     label = "Grain rotation",
                     value = brushParams.textureRotation.coerceIn(0f, 360f),
                     onValueChange = { onBrushParamsChanged(brushParams.copy(textureRotation = it)) },
@@ -195,7 +206,7 @@ fun AdvancedBrushSettingsPanel(
         // Scatter & Count Section
         BrushSettingsSection(title = "Scatter & Count") {
             // Scatter
-            LabeledSlider(
+            BrushParameterSlider(
                 label = "Scatter",
                 value = brushParams.scatter,
                 onValueChange = { onBrushParamsChanged(brushParams.copy(scatter = it)) },
@@ -204,7 +215,7 @@ fun AdvancedBrushSettingsPanel(
             )
 
             // Count
-            LabeledSlider(
+            BrushParameterSlider(
                 label = "Count",
                 value = brushParams.count.toFloat(),
                 onValueChange = { onBrushParamsChanged(brushParams.copy(count = it.toInt())) },
@@ -217,7 +228,7 @@ fun AdvancedBrushSettingsPanel(
         // Jitter Section - Phase 9: Advanced Brush Parameters
         BrushSettingsSection(title = "Jitter & Randomization") {
             // Size Jitter
-            LabeledSlider(
+            BrushParameterSlider(
                 label = "Size Jitter",
                 value = brushParams.sizeJitter,
                 onValueChange = { onBrushParamsChanged(brushParams.copy(sizeJitter = it)) },
@@ -226,7 +237,7 @@ fun AdvancedBrushSettingsPanel(
             )
 
             // Opacity Jitter
-            LabeledSlider(
+            BrushParameterSlider(
                 label = "Opacity Jitter",
                 value = brushParams.opacityJitter,
                 onValueChange = { onBrushParamsChanged(brushParams.copy(opacityJitter = it)) },
@@ -235,7 +246,7 @@ fun AdvancedBrushSettingsPanel(
             )
 
             // Hue Jitter
-            LabeledSlider(
+            BrushParameterSlider(
                 label = "Hue Jitter",
                 value = brushParams.hueJitter,
                 onValueChange = { onBrushParamsChanged(brushParams.copy(hueJitter = it)) },
@@ -244,7 +255,7 @@ fun AdvancedBrushSettingsPanel(
             )
 
             // Saturation Jitter
-            LabeledSlider(
+            BrushParameterSlider(
                 label = "Saturation Jitter",
                 value = brushParams.saturationJitter,
                 onValueChange = { onBrushParamsChanged(brushParams.copy(saturationJitter = it)) },
@@ -253,7 +264,7 @@ fun AdvancedBrushSettingsPanel(
             )
 
             // Brightness Jitter
-            LabeledSlider(
+            BrushParameterSlider(
                 label = "Brightness Jitter",
                 value = brushParams.brightnessJitter,
                 onValueChange = { onBrushParamsChanged(brushParams.copy(brightnessJitter = it)) },
@@ -265,7 +276,7 @@ fun AdvancedBrushSettingsPanel(
         // Rotation Section
         BrushSettingsSection(title = "Rotation") {
             // Brush Rotation
-            LabeledSlider(
+            BrushParameterSlider(
                 label = "Rotation",
                 value = brushParams.rotation,
                 onValueChange = { onBrushParamsChanged(brushParams.copy(rotation = it)) },
@@ -278,7 +289,7 @@ fun AdvancedBrushSettingsPanel(
         // Wet Mix Section (for watercolor/oil brushes)
         BrushSettingsSection(title = "Wet Paint") {
             // Wet Mix
-            LabeledSlider(
+            BrushParameterSlider(
                 label = "Wet Mix",
                 value = brushParams.wetMix,
                 onValueChange = { onBrushParamsChanged(brushParams.copy(wetMix = it)) },
@@ -297,13 +308,8 @@ private fun BrushPreviewWidget(
     brushParams: BrushParams,
     modifier: Modifier = Modifier,
 ) {
-    val image = remember(brushParams) { BitmapPixelBridge.toBitmap(BrushPreview.render(brushParams)).asImageBitmap() }
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
-        Image(
-            bitmap = image,
-            contentDescription = "Real brush preview with pressure increasing and decreasing; large brush sizes fitted to the preview",
-            modifier = Modifier.fillMaxSize().padding(8.dp),
-        )
+        BrushSample(brushParams, Modifier.fillMaxSize().padding(8.dp))
     }
 }
 
@@ -358,46 +364,6 @@ private fun BrushSettingsSection(
                 content()
             }
         }
-    }
-}
-
-/**
- * Slider with label and value display
- */
-@Composable
-private fun LabeledSlider(
-    label: String,
-    value: Float,
-    onValueChange: (Float) -> Unit,
-    valueRange: ClosedFloatingPointRange<Float>,
-    valueDisplay: String,
-    isInteger: Boolean = false,
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = valueDisplay,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-        Slider(
-            value = value,
-            onValueChange = onValueChange,
-            valueRange = valueRange,
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = label },
-        )
     }
 }
 
@@ -525,7 +491,7 @@ private fun CustomPressureControls(
     onBrushParamsChanged: (BrushParams) -> Unit,
 ) {
     val response = brushParams.customPressure
-    LabeledSlider(
+    BrushParameterSlider(
         label = "Output at 25% pressure",
         value = response.low,
         onValueChange = { value ->
@@ -535,7 +501,7 @@ private fun CustomPressureControls(
         valueRange = 0f..1f,
         valueDisplay = "%.0f%%".format(response.low * 100),
     )
-    LabeledSlider(
+    BrushParameterSlider(
         label = "Output at 50% pressure",
         value = response.middle,
         onValueChange = { value ->
@@ -545,7 +511,7 @@ private fun CustomPressureControls(
         valueRange = 0f..1f,
         valueDisplay = "%.0f%%".format(response.middle * 100),
     )
-    LabeledSlider(
+    BrushParameterSlider(
         label = "Output at 75% pressure",
         value = response.high,
         onValueChange = { value ->

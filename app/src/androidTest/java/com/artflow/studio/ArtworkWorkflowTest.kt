@@ -71,6 +71,7 @@ class ArtworkWorkflowTest {
             inspectReachablePanels(scenario, painted)
             inspectLayerOrdering(painted)
             inspectTextPlacement(scenario, painted)
+            inspectBrushStudio(painted)
             inspectFocusMode(scenario, painted)
 
             // Exercise the save-before-navigation callback, not a direct repository save.
@@ -117,6 +118,30 @@ class ArtworkWorkflowTest {
                 settings.update { originalSettings }
             }
         }
+    }
+
+    private fun inspectBrushStudio(expectedPixels: IntArray) {
+        val depth = runBlocking(Dispatchers.Main) { canvas.undoDepth }
+        compose.onNodeWithContentDescription("Smudge").performClick().assertIsOn()
+        compose.onNodeWithText("Brush").performClick()
+        compose.onNodeWithText("Brush studio").assertIsDisplayed()
+        compose.onNodeWithText("Search brushes").performTextInput("fine liner")
+        compose.onNodeWithText("Fine liner").performClick()
+        compose.onNodeWithText("Drawing pad").performClick()
+        compose.onNodeWithTag("brush-practice-pad").performTouchInput { swipeLeft() }
+        assertArrayEquals("Practice must never paint the real document", expectedPixels, pixels())
+        assertEquals(depth, runBlocking(Dispatchers.Main) { canvas.undoDepth })
+        compose.onNodeWithContentDescription("Cancel brush changes").performClick()
+        compose.onNodeWithContentDescription("Smudge").assertIsOn()
+        assertArrayEquals(expectedPixels, pixels())
+        assertEquals(depth, runBlocking(Dispatchers.Main) { canvas.undoDepth })
+        compose.onNodeWithText("Brush").performClick()
+        compose.onNodeWithText("Search brushes").performTextInput("fine liner")
+        compose.onNodeWithText("Fine liner").performClick()
+        compose.onNodeWithText("Use brush").performClick()
+        compose.onNodeWithContentDescription("Brush").assertIsOn()
+        assertArrayEquals(expectedPixels, pixels())
+        assertEquals(depth, runBlocking(Dispatchers.Main) { canvas.undoDepth })
     }
 
     private fun inspectReachablePanels(

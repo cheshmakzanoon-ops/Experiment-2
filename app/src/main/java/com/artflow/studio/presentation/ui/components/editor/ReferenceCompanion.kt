@@ -40,7 +40,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import coil.imageLoader
 import coil.request.CachePolicy
-import coil.request.ImageRequest
+import coil.request.ImageRequest.Builder
 import coil.request.SuccessResult
 import coil.size.Precision
 import coil.size.Scale
@@ -71,7 +71,7 @@ fun ReferenceCompanion(
                 }
                 value = ReferenceImageState.Loading
                 val request =
-                    ImageRequest.Builder(context)
+                    Builder(context)
                         .data(source)
                         .size(1024, 1024)
                         .scale(Scale.FIT)
@@ -240,14 +240,12 @@ private fun ReferenceImageViewer(
                                     true
                                 },
                             )
-                    }
-                    .pointerInput(bitmap) {
+                    }.pointerInput(bitmap) {
                         detectTapGestures(
                             onTap = { if (picking) pick(it) },
                             onLongPress = { pick(it) },
                         )
-                    }
-                    .pointerInput(bitmap) {
+                    }.pointerInput(bitmap) {
                         detectTransformGestures { centroid, pan, factor, _ ->
                             update(viewport().zoomBy(factor, centroid.x, centroid.y).panBy(pan.x, pan.y))
                         }

@@ -21,7 +21,7 @@ by tasks and user testing rather than claimed from screenshots.
 | Workflow | Procreate reference | ArtFlow assessment / required work |
 | --- | --- | --- |
 | Canvas-first workspace | Minimal painting controls, sidebar controls, hide-interface mode [1] | This milestone adds a compact primary dock, expandable secondary tools and focus mode. A movable/handedness-aware sidebar, anchored tablet panels and measured ergonomic validation remain absent. |
-| Brush creation and feel | Brush Studio, custom shape/grain sources, dual brushes [2] | Pressure curves, taper, jitter and three procedural grains exist. Imported/dual textures, a comparably curated brush library and physical-stylus response evidence are missing. Parameter count is not brush quality. |
+| Brush creation and feel | Brush Studio, custom shape/grain sources, dual brushes [2] | Pressure curves, taper, jitter and three procedural grains exist. A searchable eight-preset library, staged settings, exact numerical entry and an isolated drawing pad are now connected. Persistent custom presets, imported/dual textures, a comparably curated library and physical-stylus evidence remain missing. Parameter count is not brush quality. |
 | Transform | Uniform/freeform scale and rotate, distort, warp, snapping and interpolation choices [3] | Reachable MOVE/TRANSFORM gestures translate only. An unused helper with scale/rotation is not a professional transform workflow. Require preview/apply/cancel, handles, pivot, selection/mask alignment and no cumulative preview resampling. |
 | Layer organization | Multi-selection, drag reordering and nested groups [4] | Masks, adjustments, opacity and blending exist; up/down reorder controls are now reachable and topmost-first. No usable layer groups or linking UI. Require atomic group mutations, group compositing, retained children and undo/save/reload tests. |
 | Reference companion | Floating canvas/image reference, pan/zoom, sampling [5] | A bounded, movable image companion now supports pan/zoom/fit and preview colour sampling. Missing: live canvas view, manual resize and document-embedded references. The separate `isReference` layer flag is excluded from export, unlike Procreate's fill-reference concept; do not conflate them. |
@@ -114,6 +114,45 @@ model into its own file, uses an explicit locale for hex formatting, and simplif
 without removing validation. No assertions, lint rules, baselines or device lanes were weakened.
 It must receive its own completed build and device results before it is called verified.
 
+## Milestone 4 — searchable Brush Studio, staged edits and isolated practice
+
+The previous brush-settings dialog is replaced by a bounded studio with Library, Settings and
+Drawing pad tabs. Eight original presets provide distinct real-engine starting points, with
+case-insensitive multi-word search and category filtering. Library samples and parameter previews
+run on worker dispatchers, using the same production rasterizer as the painting engine.
+
+Brush changes remain a local draft until Use brush. Close/Back/outside dismissal discards changes;
+Restore initial returns to the opening parameters. Size and opacity join the dynamics controls.
+Every parameter value opens validated numeric entry; percentages map to engine values and integer
+controls reject fractions. No invalid input is silently clamped into a different accepted value.
+
+The drawing pad stores immutable test paths and re-renders them as the draft changes. It never
+calls the document repository. Bounds are explicit: 320×180 pixels, eight retained strokes,
+128 samples per stroke and a 48-pixel preview size cap. Multi-pointer/cancelled gestures are not
+committed. Tests do not establish latency, realistic media fidelity or physical-stylus parity.
+There is still no custom preset persistence/import, dual-brush workflow or imported shape/grain.
+
+Verification additions: seven shared core/JUnit checks cover preset search/identity, distinct and
+deterministic real previews, numeric validation, independent practice buffers, renderer equality
+and work caps. Compose tests cover draft cancellation/reset/apply, exact values, tab retention,
+clearing and cancellation. The actual artwork workflow checks that practice preserves document
+pixels and undo depth. Local standalone compilation of the production renderer/math passed all
+seven groups; only unused platform/serialization types were adapted for compilation. Thirty Python
+verifier tests passed. Full Android/JUnit/static execution requires the published revision's CI.
+
+The reference behavior for staged editing, numerical settings and a re-rendering drawing pad is
+Procreate's Brush Studio [2]; searchable libraries are documented separately [13]. These sources
+specify workflows, not proof that ArtFlow matches their artistic quality.
+
+### Follow-through on failed candidates
+
+Candidate `e8c4032`, run `35446449113`, passed all five device configurations. Its JVM test for
+background-colour undo/redo assumed a virtual test clock had drained real worker notifications.
+Commit `68d29a3` instead waits for the expected observable state with a five-second real deadline,
+retaining exact assertions. That run's JVM step passed. Its next static step exposed remaining
+chain-formatting findings in reference/evidence code, corrected in this milestone with no rule,
+baseline, assertion or device-lane removal. Earlier failed runs are not relabelled as passes.
+
 ## Acceptance gates before any parity claim
 
 1. **Functional:** every gap above is implemented or explicitly excluded from an agreed scope;
@@ -144,3 +183,5 @@ These links document the comparison product; they do not validate ArtFlow.
 [10]: https://help.procreate.com/procreate/handbook/actions/actions-video
 [11]: https://help.procreate.com/procreate/handbook/gallery/gallery-import-share
 [12]: https://procreate.com/procreate
+
+[13]: https://help.procreate.com/procreate/handbook/brushes/brush-library

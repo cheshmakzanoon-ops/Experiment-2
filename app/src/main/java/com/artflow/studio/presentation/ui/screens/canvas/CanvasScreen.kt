@@ -34,7 +34,7 @@ import com.artflow.studio.domain.model.brush.StrokeDestination
 import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.FilterType
-import com.artflow.studio.presentation.ui.components.brush.AdvancedBrushSettingsPanel
+import com.artflow.studio.presentation.ui.components.brush.BrushStudioDialog
 import com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView
 import com.artflow.studio.presentation.ui.components.canvas.DragPreview
 import com.artflow.studio.presentation.ui.components.canvas.EditorInput
@@ -357,7 +357,10 @@ fun CanvasScreen(
                                     )
                                 }
                             }
-                            TextButton(onClick = { showBrushEditor = true }) { Text("Brush") }
+                            TextButton(onClick = {
+                                canvasView?.cancelActiveGesture()
+                                showBrushEditor = true
+                            }) { Text("Brush") }
                             TextButton(onClick = { panel = EditorPanel.LAYERS }) {
                                 Text("Layers (${layers.size})")
                             }
@@ -687,27 +690,13 @@ fun CanvasScreen(
     }
 
     if (showBrushEditor) {
-        AlertDialog(
-            onDismissRequest = { showBrushEditor = false },
-            title = { Text("Brush settings") },
-            text = {
-                AdvancedBrushSettingsPanel(
-                    brushParams = input.brushParams,
-                    onBrushParamsChanged = { viewModel.setBrushParams(it) },
-                    modifier = Modifier.heightIn(max = 440.dp),
-                )
+        BrushStudioDialog(
+            initial = input.brushParams,
+            onApply = {
+                viewModel.setBrushParams(it)
+                if (input.tool != ToolType.BRUSH) viewModel.setTool(ToolType.BRUSH)
             },
-            confirmButton = { TextButton(onClick = { showBrushEditor = false }) { Text("Done") } },
-            dismissButton = {
-                TextButton(onClick = {
-                    viewModel.setBrushParams(
-                        com.artflow.studio.domain.model.brush
-                            .BrushParams(),
-                    )
-                }) {
-                    Text("Reset")
-                }
-            },
+            onDismiss = { showBrushEditor = false },
         )
     }
 
