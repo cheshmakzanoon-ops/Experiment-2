@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
@@ -23,6 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.artflow.studio.core.render.BrushPractice
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.model.brush.StudioBrushes
@@ -40,6 +42,7 @@ fun BrushStudioContent(
     var tab by remember { mutableIntStateOf(0) }
     var applying by remember { mutableStateOf(false) }
     var strokes by remember { mutableStateOf<List<Stroke>>(emptyList()) }
+    var practiceInk by rememberSaveable { mutableIntStateOf(BrushPractice.INK) }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         val focusManager = LocalFocusManager.current
         Surface(
@@ -79,8 +82,14 @@ fun BrushStudioContent(
                                 focusManager.clearFocus()
                                 tab = index
                             },
-                            text = { Text(title, maxLines = 2, textAlign = TextAlign.Center) },
-                        )
+                            modifier = Modifier.heightIn(min = 48.dp),
+                        ) {
+                            Text(
+                                title,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+                                textAlign = TextAlign.Center,
+                            )
+                        }
                     }
                 }
                 BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
@@ -95,13 +104,28 @@ fun BrushStudioContent(
                                 }
                             }
                             VerticalDivider(Modifier.fillMaxHeight())
-                            BrushPracticePad(draft, strokes, { strokes = it }, Modifier.weight(0.45f).fillMaxHeight())
+                            BrushPracticePad(
+                                draft,
+                                strokes,
+                                { strokes = it },
+                                Modifier.weight(0.45f).fillMaxHeight(),
+                                practiceInk,
+                                { practiceInk = it },
+                            )
                         }
                     } else {
                         when (tab) {
                             0 -> StudioBrushLibrary(draft, { draft = it }, Modifier.fillMaxSize(), library)
                             1 -> AdvancedBrushSettingsPanel(draft, { draft = it }, Modifier.fillMaxSize())
-                            else -> BrushPracticePad(draft, strokes, { strokes = it }, Modifier.fillMaxSize())
+                            else ->
+                                BrushPracticePad(
+                                    draft,
+                                    strokes,
+                                    { strokes = it },
+                                    Modifier.fillMaxSize(),
+                                    practiceInk,
+                                    { practiceInk = it },
+                                )
                         }
                     }
                 }

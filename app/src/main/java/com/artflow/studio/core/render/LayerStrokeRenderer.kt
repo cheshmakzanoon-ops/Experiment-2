@@ -24,7 +24,9 @@ object LayerStrokeRenderer {
         val renderer = StrokeRasterizer()
         try {
             historicalStrokes.forEach { renderer.draw(result, it, alphaLock = alphaLock) }
-            incomingStrokes.forEach { renderer.draw(result, it, alphaLock = alphaLock, mask = selection) }
+            // Old saved vectors retain dry replay. New paint is baked into pixels, so later
+            // load/export never reinterprets its wet-mix amount using different semantics.
+            incomingStrokes.forEach { renderer.draw(result, it, alphaLock = alphaLock, mask = selection, enableWetMix = true) }
         } finally {
             renderer.release()
         }

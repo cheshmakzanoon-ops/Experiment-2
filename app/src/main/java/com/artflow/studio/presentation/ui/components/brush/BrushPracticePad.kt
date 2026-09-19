@@ -39,7 +39,10 @@ fun BrushPracticePad(
     strokes: List<Stroke>,
     onStrokesChange: (List<Stroke>) -> Unit,
     modifier: Modifier = Modifier,
+    ink: Int = BrushPractice.INK,
+    onInkChange: ((Int) -> Unit)? = null,
 ) {
+    val latestInk by rememberUpdatedState(ink)
     val latestParameters by rememberUpdatedState(parameters)
     val latestStrokes by rememberUpdatedState(strokes)
     val onChange by rememberUpdatedState(onStrokesChange)
@@ -79,6 +82,13 @@ fun BrushPracticePad(
     Column(modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Try your brush", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            onInkChange?.let { change ->
+                PracticeInkMenu(ink) {
+                    active = null
+                    suppress = true
+                    change(it)
+                }
+            }
             TextButton(onClick = {
                 active = null
                 suppress = true
@@ -111,7 +121,7 @@ fun BrushPracticePad(
                                             points = listOf(it),
                                             brushParams = latestParameters,
                                             layerId = 0L,
-                                            color = BrushPractice.INK,
+                                            color = latestInk,
                                             timestamp = 0L,
                                         )
                                 }
