@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -78,14 +79,15 @@ class ReferenceCompanionTest {
         val samples = mutableListOf<Int>()
         compose.setContent {
             MaterialTheme {
-                ReferenceWindow(ReferenceImageState.Ready(fixtureBitmap(1000, 10).apply { eraseColor(Color.BLUE) }), {}, {}, { samples.add(it) })
+                val bitmap = fixtureBitmap(1000, 10).apply { eraseColor(Color.BLUE) }
+                ReferenceWindow(ReferenceImageState.Ready(bitmap), {}, {}, { samples.add(it) })
             }
         }
         val image = compose.onNodeWithTag("reference-image")
         compose.onNodeWithContentDescription("Pick reference colour").performClick()
         image.performTouchInput { click(Offset(width * 0.5f, 1f)) }
         compose.runOnIdle { assertTrue(samples.isEmpty()) }
-        val actions = image.fetchSemanticsNode().config[SemanticsProperties.CustomActions]
+        val actions = image.fetchSemanticsNode().config[SemanticsActions.CustomActions]
         compose.runOnIdle { assertTrue(actions.single { it.label == "Sample centre colour" }.action()) }
         compose.runOnIdle { assertEquals(listOf(Color.BLUE), samples) }
     }

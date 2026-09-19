@@ -38,10 +38,11 @@ data class ReferenceViewport(
         x: Float,
         y: Float,
     ): Pair<Int, Int>? {
-        if (!x.isFinite() || !y.isFinite() || x < 0f || y < 0f || x >= viewWidth || y >= viewHeight) return null
+        if (!x.isFinite() || !y.isFinite()) return null
+        if (x !in 0f..<viewWidth || y !in 0f..<viewHeight) return null
         val imageX = (x - left) / scale
         val imageY = (y - top) / scale
-        if (imageX < 0f || imageY < 0f || imageX >= imageWidth || imageY >= imageHeight) return null
+        if (imageX !in 0f..<imageWidth.toFloat() || imageY !in 0f..<imageHeight.toFloat()) return null
         return floor(imageX).toInt() to floor(imageY).toInt()
     }
 
@@ -62,7 +63,8 @@ data class ReferenceViewport(
         focusX: Float = viewWidth / 2f,
         focusY: Float = viewHeight / 2f,
     ): ReferenceViewport {
-        if (!factor.isFinite() || factor <= 0f || !focusX.isFinite() || !focusY.isFinite()) return this
+        if (!factor.isFinite() || factor <= 0f) return this
+        if (!focusX.isFinite() || !focusY.isFinite()) return this
         val nextZoom = (zoom * factor).coerceIn(1f, MAX_ZOOM)
         val ratio = nextZoom / zoom
         val x = focusX.coerceIn(0f, viewWidth) - viewWidth / 2f

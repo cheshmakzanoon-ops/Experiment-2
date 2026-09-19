@@ -95,6 +95,25 @@ written in an app-owned directory removed at uninstall. `TestEvidence` now uses 
 `additionalTestOutputDir` argument, and CI archives the corresponding host output. This repairs
 the evidence path rather than inventing screenshots or calling the old visual inspection complete.
 
+## Milestone 3 — reachable advanced brush controls
+
+The previously unscrollable advanced-brush column is now scrollable within the editor's bounded
+brush dialog. Named slider semantics expose all parameters to accessibility actions. Section
+headers truncate rather than crowding the collapse control, and each collapse/expand action names
+its section. Two Android tests edit parameters from the first to last section in a 260-dp-high
+viewport and confirm collapse/reopen does not reset them. This fixes control reachability; it does
+not add imported textures, a curated brush library or prove physical drawing-feel equivalence.
+
+### Milestone 2 verification corrections
+
+Run `35445726893` executed 402 JVM tests (zero failures/errors/skips). Android lint had no errors,
+but ktlint/detekt blocked the build job; the device lanes could not compile a test using
+`SemanticsProperties.CustomActions` instead of `SemanticsActions.CustomActions`. The next revision
+corrects that API reference, follows expression/argument formatting, separates the reference state
+model into its own file, uses an explicit locale for hex formatting, and simplifies range guards
+without removing validation. No assertions, lint rules, baselines or device lanes were weakened.
+It must receive its own completed build and device results before it is called verified.
+
 ## Acceptance gates before any parity claim
 
 1. **Functional:** every gap above is implemented or explicitly excluded from an agreed scope;

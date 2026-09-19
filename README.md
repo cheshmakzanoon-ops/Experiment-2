@@ -36,6 +36,15 @@ Layers display topmost-first and expose **move active layer up/down**. Only the 
 its opacity slider; visibility/menu controls honour larger touch targets. These are real repository
 operations, not a separately maintained UI order. Nested groups are still absent.
 
+### Reachable advanced brush controls
+
+The advanced brush dialog now scrolls through its full settings rather than clipping everything
+below its fixed viewport. Every parameter slider has a spoken label, and collapse controls identify
+their section. Section headings keep room for the toggle on narrow screens.
+`BrushSettingsAccessibilityTest` exercises pressure curves, grains, jitter, rotation and wet mix
+in a 260-dp-high panel, including collapse/reopen without losing settings. Device execution remains
+subject to the exact-commit CI result; this is not a brush-library or painting-feel parity claim.
+
 ### Compact workspace and focus
 
 The dock keeps **Brush, Smudge and Eraser** available. **All tools** expands the collection; the
@@ -51,6 +60,11 @@ cases within six tests. `ReferenceCompanionTest` covers provider decoding, sampl
 letterboxing, callback replacement, recovery, bounds and gesture isolation. `ArtworkWorkflowTest`
 uses the actual app to open panels, reorder layers, place/cancel/undo text, restore focus, and
 save/reopen/discard artwork. Background-colour state has a real-repository ViewModel regression.
+
+Run `35445726893` executed **402 JVM tests with no failures, errors or skips**, but found
+formatting/static-analysis findings and an incorrect accessibility-test key that prevented
+Android test compilation. Those findings are corrected without suppressions in the brush-controls
+milestone. Device results for that earlier candidate are **not** passing evidence.
 
 Instrumentation captures real UI images into UTP's **additional-test-output** directory. An earlier
 capture used app-owned external files that UTP removed during uninstall; that collection failure is

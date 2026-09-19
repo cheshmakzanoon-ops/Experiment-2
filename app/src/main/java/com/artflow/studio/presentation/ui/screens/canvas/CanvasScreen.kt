@@ -130,17 +130,18 @@ fun CanvasScreen(
     var showReference by rememberSaveable(projectId) { mutableStateOf(false) }
     var referenceUri by rememberSaveable(projectId) { mutableStateOf<String?>(null) }
     var referenceImportProject by rememberSaveable(projectId) { mutableStateOf<Long?>(null) }
-    val referencePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (referenceImportProject == projectId && uri != null) {
-            if (uri.scheme == "content") {
-                referenceUri = uri.toString()
-                showReference = true
-            } else {
-                viewModel.notify("Choose a reference image from an Android document provider")
+    val referencePicker =
+        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            if (referenceImportProject == projectId && uri != null) {
+                if (uri.scheme == "content") {
+                    referenceUri = uri.toString()
+                    showReference = true
+                } else {
+                    viewModel.notify("Choose a reference image from an Android document provider")
+                }
             }
+            referenceImportProject = null
         }
-        referenceImportProject = null
-    }
     val importReference = {
         canvasView?.cancelActiveGesture()
         referenceImportProject = projectId

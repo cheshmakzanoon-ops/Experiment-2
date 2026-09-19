@@ -47,19 +47,8 @@ import coil.size.Scale
 import com.artflow.studio.core.canvas.ReferenceViewport
 import com.artflow.studio.presentation.ui.theme.LocalArtFlowFlags
 import kotlinx.coroutines.ensureActive
+import java.util.Locale
 import kotlin.math.roundToInt
-
-sealed interface ReferenceImageState {
-    data object Empty : ReferenceImageState
-
-    data object Loading : ReferenceImageState
-
-    data object Failed : ReferenceImageState
-
-    data class Ready(
-        val bitmap: Bitmap,
-    ) : ReferenceImageState
-}
 
 /** Decode only a picker-granted content URI. References are not layers, exports or network requests. */
 @Composable
@@ -72,37 +61,38 @@ fun ReferenceCompanion(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val state = key(projectId, uri) {
-        val imageState by produceState<ReferenceImageState>(ReferenceImageState.Empty, context) {
-            val source = uri?.let(Uri::parse) ?: return@produceState
-            if (source.scheme != "content") {
-                value = ReferenceImageState.Failed
-                return@produceState
-            }
-            value = ReferenceImageState.Loading
-            val request =
-                ImageRequest.Builder(context)
-                    .data(source)
-                    .size(1024, 1024)
-                    .scale(Scale.FIT)
-                    .precision(Precision.EXACT)
-                    .allowHardware(false)
-                    .bitmapConfig(Bitmap.Config.ARGB_8888)
-                    .memoryCachePolicy(CachePolicy.DISABLED)
-                    .diskCachePolicy(CachePolicy.DISABLED)
-                    .build()
-            val result = context.imageLoader.execute(request)
-            ensureActive()
-            val bitmap = ((result as? SuccessResult)?.drawable as? BitmapDrawable)?.bitmap
-            value =
-                if (bitmap != null && bitmap.width <= 1024 && bitmap.height <= 1024) {
-                    ReferenceImageState.Ready(bitmap)
-                } else {
-                    ReferenceImageState.Failed
+    val state =
+        key(projectId, uri) {
+            val imageState by produceState<ReferenceImageState>(ReferenceImageState.Empty, context) {
+                val source = uri?.let(Uri::parse) ?: return@produceState
+                if (source.scheme != "content") {
+                    value = ReferenceImageState.Failed
+                    return@produceState
                 }
+                value = ReferenceImageState.Loading
+                val request =
+                    ImageRequest.Builder(context)
+                        .data(source)
+                        .size(1024, 1024)
+                        .scale(Scale.FIT)
+                        .precision(Precision.EXACT)
+                        .allowHardware(false)
+                        .bitmapConfig(Bitmap.Config.ARGB_8888)
+                        .memoryCachePolicy(CachePolicy.DISABLED)
+                        .diskCachePolicy(CachePolicy.DISABLED)
+                        .build()
+                val result = context.imageLoader.execute(request)
+                ensureActive()
+                val bitmap = ((result as? SuccessResult)?.drawable as? BitmapDrawable)?.bitmap
+                value =
+                    if (bitmap != null && bitmap.width <= 1024 && bitmap.height <= 1024) {
+                        ReferenceImageState.Ready(bitmap)
+                    } else {
+                        ReferenceImageState.Failed
+                    }
+            }
+            imageState
         }
-        imageState
-    }
     ReferenceWindow(state, onImport, onClose, onColorPicked, modifier)
 }
 
@@ -264,10 +254,12 @@ private fun ReferenceImageViewer(
                     },
         ) {
             val mapping = viewport()
-            withTransform({
-                translate(mapping.left, mapping.top)
-                scale(mapping.scale, mapping.scale, pivot = Offset.Zero)
-            }) {
+            withTransform(
+                transformBlock = {
+                    translate(mapping.left, mapping.top)
+                    scale(mapping.scale, mapping.scale, pivot = Offset.Zero)
+                },
+            ) {
                 drawImage(image)
             }
         }
@@ -294,7 +286,9 @@ private fun ReferenceImageViewer(
             }
         }
         Text(
-            text = sample?.let { String.format("#%08X", it) } ?: if (picking) "Tap image to sample" else "Pinch to zoom · Drag to pan",
+            text =
+                sample?.let { String.format(Locale.ROOT, "#%08X", it) }
+                    ?: if (picking) "Tap image to sample" else "Pinch to zoom · Drag to pan",
             style = MaterialTheme.typography.labelSmall,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
