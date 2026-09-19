@@ -505,3 +505,15 @@ comparisons/boundary assertions in a 96 MB JVM. It is **not** an Android, Gradle
 result. `LayerTransformTest`, `LayerTransformTransactionTest`, `TransformUiRegressionTest` and a
 real persistence regression are included for the ordinary CI suites. Their exact-commit execution
 evidence must be checked separately. This feature milestone does not close the parity ledger.
+
+### Workspace access and interaction checks
+
+`StudioWorkspaceUiTest` opens the real `CanvasScreen`, checks focus restoration by both button and
+Back, visits all nine workspace panels, selects every `ToolType`, and exercises large text plus
+light/dark layouts. It captures actual Android screenshots to the existing `test-evidence` path.
+The new tool palette restores missing opening routes for guides, animation, canvas setup and text.
+No save/project operations are removed by focus mode. The selection outline respects reduce-motion
+and does not continuously animate with no selection. The obsolete permanent tool strip was removed.
+
+CI execution and screenshot inspection must still be recorded for the exact final source; compiling
+a UI or listing tests is not equivalent to running them. This does not certify artist-rated parity.

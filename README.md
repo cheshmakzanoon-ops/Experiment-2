@@ -26,9 +26,15 @@ The standalone kernel probe passed **39,714 comparisons and boundary checks in s
 are not 39,714 JUnit tests. New repository, persistence and Compose regressions require the exact
 candidate's normal Android CI; old green runs do not validate this milestone.
 
-Open **Transform**, set scale/rotation/skew/movement and resampling, then press **Apply transform**.
+Open **Tools → Layer transform**, set scale/rotation/skew/movement and resampling, then press **Apply transform**.
 The panel explains whole-layer scope and clipping. Deselect before use. Cancelling a draft leaves
 both the artwork and history untouched. Existing animation frames and unrelated layers are retained.
+
+The second milestone makes the editor canvas-first: a compact painting dock, a complete Tools
+palette, reachable guides/animation/text/canvas workflows and focus mode with an explicit restore
+control. `StudioWorkspaceUiTest` exercises real navigation, every tool, large text, light/dark
+workspaces and screenshot capture. Screenshots and test outcomes are evidence only after CI runs;
+the redesign alone is not proof of aesthetic or usability parity.
 
 ---
 
@@ -140,8 +146,17 @@ Backdrop-dependent baking may be refused rather than silently changing the artwo
 - Export publishing to the correct image/video gallery collection, Android document-picker save, and read-granted share/view intents. Editable project files are excluded from FileProvider access
 
 ### App shell
+- Canvas-first studio dock with Brush, Smudge, Eraser, Colour, Layers and Tools; size/opacity
+  remain immediately available. All **19 tools** and nine workspace routes are reachable from a
+  scrollable, wrapping palette rather than three permanent tool rows.
+- **Workspace menu → Focus canvas** hides the chrome; **Show controls** or Android Back restores
+  it without leaving the artwork. The focus choice survives recreation; saving/recovery still run.
+- Tools opens Brush Studio, per-tool settings, selection options, numerical layer transforms,
+  guides, animation, canvas setup, text and export. These routes now actually open their panels.
+- Large touch targets, selected-tool accessibility semantics, dark/light themes and reduced-motion
+  selection outlines. Idle canvases no longer run an unnecessary marching-ants animation.
 - Project gallery: list, create, rename, delete, thumbnails, search, sort and favourites
-- Full-screen editor with tool strip, brush options, quick menu and sheet-based panels for layers,
+- Full-screen editor with a compact studio dock, brush options, quick menu and sheet-based panels for layers,
   selection, canvas ops, guides, text and animation
 - Settings screen backed by a Room-stored preferences repository, plus a help centre and
   first-run onboarding

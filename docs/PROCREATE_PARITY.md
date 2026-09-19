@@ -24,7 +24,7 @@ Official product and handbook references, consulted for this comparison:
 | --- | --- | --- |
 | Painting feel | Pressure-sensitive painting, stabilization, expressive brushes and an interaction-focused canvas | Pressure curves, smoothing, dynamics and grains exist. No measured physical-pen latency, pressure/tilt accuracy, long-stroke consistency or artist comparison demonstrates equivalent feel. |
 | Brush authoring | Extensive Brush Studio, custom shape/grain inputs and dual brushes | Many parameters and three procedural grains exist. Imported texture library, custom brush shape/dual brushes, curation and complete brush interchange remain gaps. |
-| Canvas interface | Compact painting controls, size/opacity access, gestures and full-screen interaction | The original editor has a crowded app bar plus three permanent bottom rows. Workspace refinement is a separate milestone, not proven by new transform controls. |
+| Canvas interface | Compact painting controls, size/opacity access, gestures and full-screen interaction | New: compact painting dock, full tool/workflow palette, focus/restore, large targets, selected-tool semantics and reduced-motion outlines. Physical-phone/tablet review and artist usability comparison still required. |
 | Transform | Freeform/uniform transform, distortion, warp, snapping, interpolation and handles | New: numerical move, uniform/free scale, rotation, horizontal skew and flips, with smooth/pixel-art sampling and one undo. Still missing: live handles/preview, selected-content transforms, movable pivot, perspective/warp and snapping. |
 | Layer organization | Layer groups, masks and efficient organization | Layers, clipping, editable masks, blending, adjustments and filters exist. Groups/collapse and linked-layer user workflows remain missing. |
 | Drawing assists | QuickShape, Drawing Assist, perspective/isometric/symmetry tools | Symmetry and perspective guides exist. Editable QuickShape recognition and fully comparable assisted drawing are not established. |
@@ -65,3 +65,16 @@ Implemented the inverse-mapped affine kernel, exact controls, one-step pixel/mas
 transaction, input guards and honest scope messages. Source-level and offline kernel verification
 are recorded in the README; normal Android execution evidence must name the candidate revision.
 A numerical transform panel is **not** equivalent to Procreate's interactive transform workflow.
+
+### 2 — Canvas-first workspace and workflow access
+
+Replaced three permanent tool rows with immediate size/opacity controls plus a six-action painting
+dock. A wrapping palette exposes all 19 tools and nine workspace routes; the previously unopenable
+guides, animation, canvas and text panels are wired. Text placement opens its editor. Focus mode
+retains the canvas, with a persistent Show controls button and Back-to-restore behavior. Save uses
+a local-saved icon rather than implying cloud sync. Selection animation respects reduced motion
+and does not run on idle, unselected canvases.
+
+Real Compose regressions cover routes, selected semantics, focus restoration and large text; named
+screenshot artifacts are captured only by actual Android execution. Tablet/phone artist testing
+and measured aesthetics remain open, not replaced by the existence of these tests.
