@@ -25,6 +25,8 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.*
 import org.junit.Test
 import org.mockito.Mockito.mock
@@ -216,16 +218,28 @@ class CanvasMetadataViewModelTest {
                 runCurrent()
                 assertEquals(colour, (fixture.viewModel.uiState.value as CanvasUiState.Ready).backgroundColor)
                 fixture.viewModel.undo()
-                runCurrent()
+                awaitBackground(fixture.viewModel, original)
                 assertEquals(original, (fixture.viewModel.uiState.value as CanvasUiState.Ready).backgroundColor)
                 fixture.viewModel.redo()
-                runCurrent()
+                awaitBackground(fixture.viewModel, colour)
                 assertEquals(colour, (fixture.viewModel.uiState.value as CanvasUiState.Ready).backgroundColor)
             } finally {
                 fixture.close()
                 Dispatchers.resetMain()
             }
         }
+
+    /** Repository invalidations use a real worker dispatcher, outside runTest's virtual clock. */
+    private suspend fun awaitBackground(
+        viewModel: CanvasViewModel,
+        expected: Int,
+    ) {
+        withContext(Dispatchers.Default) {
+            withTimeout(5_000L) {
+                viewModel.uiState.first { (it as? CanvasUiState.Ready)?.backgroundColor == expected }
+            }
+        }
+    }
 
     private class Fixture {
         private val storage =

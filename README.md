@@ -9,6 +9,15 @@ Passing tests, a large feature list and a similar colour scheme are not proof of
 feel, visual polish or reliability. [Procreate comparison and acceptance gates](docs/PROCREATE_PARITY.md)
 record the remaining product gaps. [Release readiness](docs/RELEASE_READINESS.md) records release work.
 
+## Latest verification correction
+
+The `e8c4032` candidate passed all five device configurations, including the new reference and
+brush-panel regressions. Its build job caught a timing race in the background-colour ViewModel
+test: repository undo/redo notifications run outside the test's virtual dispatcher. The test now
+awaits the actual expected state with a five-second deadline, retaining both colour assertions.
+This changes test synchronization, not production history behavior. The next revision still
+requires its own complete CI result; the earlier build failure remains part of the record.
+
 ## Latest improvements — usable studio workflows
 
 ### Reference image companion
