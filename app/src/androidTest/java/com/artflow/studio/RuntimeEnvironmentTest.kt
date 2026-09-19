@@ -22,10 +22,7 @@ class RuntimeEnvironmentTest {
             "sysconf must return a positive power of two",
             pageSize > 0 && (pageSize and (pageSize - 1)) == 0L,
         )
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val context = instrumentation.targetContext
-        val directory = File(requireNotNull(context.getExternalFilesDir(null)), "test-evidence")
-        check(directory.isDirectory || directory.mkdirs()) { "Cannot create runtime evidence directory" }
+        val directory = TestEvidence.directory()
         val evidence =
             "sdk=${Build.VERSION.SDK_INT}\nabis=${Build.SUPPORTED_ABIS.joinToString()}\n" +
                 "pageSize=$pageSize\nfingerprint=${Build.FINGERPRINT}\n"

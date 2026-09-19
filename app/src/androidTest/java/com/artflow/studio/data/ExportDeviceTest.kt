@@ -322,7 +322,7 @@ class ExportDeviceTest {
         result: ExportResult,
         name: String,
     ) {
-        val directory = File(context.getExternalFilesDir(null), "test-evidence").apply { check(isDirectory || mkdirs()) }
+        val directory = com.artflow.studio.TestEvidence.directory()
         File(result.filePath).copyTo(File(directory, name), overwrite = true)
     }
 }

@@ -23,12 +23,12 @@ by tasks and user testing rather than claimed from screenshots.
 | Canvas-first workspace | Minimal painting controls, sidebar controls, hide-interface mode [1] | This milestone adds a compact primary dock, expandable secondary tools and focus mode. A movable/handedness-aware sidebar, anchored tablet panels and measured ergonomic validation remain absent. |
 | Brush creation and feel | Brush Studio, custom shape/grain sources, dual brushes [2] | Pressure curves, taper, jitter and three procedural grains exist. Imported/dual textures, a comparably curated brush library and physical-stylus response evidence are missing. Parameter count is not brush quality. |
 | Transform | Uniform/freeform scale and rotate, distort, warp, snapping and interpolation choices [3] | Reachable MOVE/TRANSFORM gestures translate only. An unused helper with scale/rotation is not a professional transform workflow. Require preview/apply/cancel, handles, pivot, selection/mask alignment and no cumulative preview resampling. |
-| Layer organization | Multi-selection, drag reordering and nested groups [4] | Masks, adjustments, opacity and blending exist. No usable layer groups or linking UI. Require atomic group mutations, group compositing, retained children and undo/save/reload tests. |
-| Reference companion | Floating canvas/image reference, pan/zoom, sampling [5] | At baseline there is no reference window or image-reference workflow. The stored `isReference` flag is hidden from export, unlike Procreate's fill-reference concept; do not conflate them. |
+| Layer organization | Multi-selection, drag reordering and nested groups [4] | Masks, adjustments, opacity and blending exist; up/down reorder controls are now reachable and topmost-first. No usable layer groups or linking UI. Require atomic group mutations, group compositing, retained children and undo/save/reload tests. |
+| Reference companion | Floating canvas/image reference, pan/zoom, sampling [5] | A bounded, movable image companion now supports pan/zoom/fit and preview colour sampling. Missing: live canvas view, manual resize and document-embedded references. The separate `isReference` layer flag is excluded from export, unlike Procreate's fill-reference concept; do not conflate them. |
 | Selections and filling | Automatic/freehand/rectangle/ellipse selection and ColorDrop [6] | Core selection masks and bucket filling exist. Missing or unverified: drag-from-colour fill, interactive threshold feedback, reusable selection workflow and equivalent gesture ergonomics. |
 | Drawing assistance | QuickShape, grids, perspective and symmetry [7] | Symmetry/perspective exist. Shape tools are not press-and-hold QuickShape recognition. Recognition, editable shapes and assisted-line feel need distinct implementation and testing. |
 | Colour management | RGB/CMYK profiles and imported ICC profiles [8] | RGB/HSV/CMYK controls do not establish ICC-managed painting or print colour fidelity. Profile-aware working spaces and tagged import/export remain unverified/missing. |
-| Animation | Animation Assist with timeline and onion skin [9] | Basic frame editing, playback and animated exports exist. Need artist-tested navigation/timing, long-session memory tests and cross-tool rendering fidelity. |
+| Animation | Animation Assist with timeline and onion skin [9] | Basic frame editing, playback and animated exports exist; the previously disconnected timeline panel is now reachable. Need artist-tested navigation/timing, long-session memory tests and cross-tool rendering fidelity. |
 | Timelapse | Automatic recording and video export [10] | Animation export is not recording the drawing process. Timelapse capture/replay is absent. |
 | File interchange | Image and layered document import/share [11] | Several export formats work; PSD import does not. Require layered round-trips and external-application compatibility fixtures, not only self-decoding exports. |
 | Page and 3D workflows | Page Assist and 3D painting [12] | Not implemented. These remain scope gaps for a full product-equivalence claim. |
@@ -55,6 +55,46 @@ Added verification: `StudioToolDockTest`; focus assertions and screenshots in
 `studio-focus.png`. Tests being present is not evidence they have passed. No benchmark or
 physical-artist assessment has been completed by this milestone.
 
+## Milestone 2 — reference companion and connected editor workflows
+
+The menu now exposes Guides, Animation, Canvas and Text; pending text anchors open the text panel.
+Place closes the panel so the user can choose a canvas position, then confirms actual rasterisation.
+Close cancels an uncommitted anchor. Wrapping options and named slider semantics improve compact
+screen/accessibility use. Layer ordering now has real up/down actions and correct topmost-first
+presentation, with normal-size/large-size row buttons and only one expanded opacity control.
+Canvas background state follows the repository through edits and undo/redo.
+
+The reference companion accepts picker-granted content URIs, decodes a maximum 1024×1024 preview
+with the existing Coil dependency, and has pan/zoom/fit, header dragging, long-press/pick-mode
+sampling and an accessible centre-sample action. Window position remains inside available space;
+image movement and sampling share `ReferenceViewport`. Changing the source cancels the previous
+load, and stale content is not shown as the new source. No reference pixel enters document history,
+layers or export; the chosen colour changes brush state. No new permissions or dependencies.
+
+Limits: source embedding/persistent URI grants, live canvas reference, manual window resizing and
+ICC-aware full-source sampling remain missing. A denied or expired URI requires choosing again.
+This is not a claim of complete equivalence to Procreate's reference workflow.
+
+Added checks: six JVM geometry tests (including 10,000 generated mappings), one real-repository
+background-colour ViewModel test, five reference UI/decoder tests and expanded real-app workflow
+assertions for menu routes, layer reordering, text placement/cancellation/undo and reference closing.
+Local dependency-free execution of the actual geometry code passed all six groups; 30 Python
+verifier tests passed. Gradle/JUnit and device execution require the exact-commit CI run.
+
+### Evidence collection repair and retained failure
+
+Run `35443960450` for milestone 1 built the APK/AAB, passed JVM/static/artifact checks and four
+device configurations. Its first API 35 lane stopped after 62 of 146 cases with a native SIGSEGV.
+The retained stack names generated `GraphicsLayer.getShadowElevation` and
+`GraphicsLayer.configureOutlineAndClip` code. This is not a proven application or emulator
+root-cause diagnosis. The independent API 35 repeat passed, and an unchanged retry was requested;
+its result must not erase the failed attempt. Failed artifact: `10585181281`.
+
+The successful lane's UTP log also showed why prior workspace screenshots were missing: files were
+written in an app-owned directory removed at uninstall. `TestEvidence` now uses the actual
+`additionalTestOutputDir` argument, and CI archives the corresponding host output. This repairs
+the evidence path rather than inventing screenshots or calling the old visual inspection complete.
+
 ## Acceptance gates before any parity claim
 
 1. **Functional:** every gap above is implemented or explicitly excluded from an agreed scope;
@@ -79,7 +119,7 @@ These links document the comparison product; they do not validate ArtFlow.
 [4]: https://help.procreate.com/procreate/handbook/layers/layers-organize
 [5]: https://help.procreate.com/procreate/handbook/actions/actions-canvas
 [6]: https://help.procreate.com/procreate/handbook/selections
-[7]: https://help.procreate.com/procreate/handbook/drawing-guides-and-assistance
+[7]: https://help.procreate.com/procreate/handbook/guides
 [8]: https://help.procreate.com/procreate/handbook/colors/colors-profiles
 [9]: https://help.procreate.com/procreate/handbook/animation
 [10]: https://help.procreate.com/procreate/handbook/actions/actions-video

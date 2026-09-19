@@ -1,9 +1,15 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.foundation.layout.ExperimentalLayoutApi::class,
+)
 
 package com.artflow.studio.presentation.ui.screens.canvas
 
+import android.content.ActivityNotFoundException
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -44,6 +50,7 @@ import com.artflow.studio.presentation.ui.components.editor.LayerRowActions
 import com.artflow.studio.presentation.ui.components.editor.LayerStackActions
 import com.artflow.studio.presentation.ui.components.editor.LayersSheet
 import com.artflow.studio.presentation.ui.components.editor.QuickMenuSheet
+import com.artflow.studio.presentation.ui.components.editor.ReferenceCompanion
 import com.artflow.studio.presentation.ui.components.editor.SelectionSheet
 import com.artflow.studio.presentation.ui.components.editor.StudioToolDock
 import com.artflow.studio.presentation.ui.components.editor.TextSheet
@@ -120,6 +127,30 @@ fun CanvasScreen(
     var focusMode by rememberSaveable(projectId) { mutableStateOf(false) }
     var toolsExpanded by rememberSaveable(projectId) { mutableStateOf(false) }
     var showWorkspaceMenu by remember { mutableStateOf(false) }
+    var showReference by rememberSaveable(projectId) { mutableStateOf(false) }
+    var referenceUri by rememberSaveable(projectId) { mutableStateOf<String?>(null) }
+    var referenceImportProject by rememberSaveable(projectId) { mutableStateOf<Long?>(null) }
+    val referencePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (referenceImportProject == projectId && uri != null) {
+            if (uri.scheme == "content") {
+                referenceUri = uri.toString()
+                showReference = true
+            } else {
+                viewModel.notify("Choose a reference image from an Android document provider")
+            }
+        }
+        referenceImportProject = null
+    }
+    val importReference = {
+        canvasView?.cancelActiveGesture()
+        referenceImportProject = projectId
+        try {
+            referencePicker.launch("image/*")
+        } catch (missing: ActivityNotFoundException) {
+            referenceImportProject = null
+            viewModel.notify("No image picker is available on this device")
+        }
+    }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, canvasView) {
@@ -156,12 +187,26 @@ fun CanvasScreen(
         if (panel == EditorPanel.EXPORT) previewBytes = null
     }
 
-    BackHandler(enabled = panel != EditorPanel.NONE) { panel = EditorPanel.NONE }
+    val dismissPanel = {
+        if (panel == EditorPanel.TEXT) viewModel.cancelText()
+        panel = EditorPanel.NONE
+    }
+    LaunchedEffect(pendingText) {
+        if (pendingText != null) {
+            canvasView?.cancelActiveGesture()
+            showWorkspaceMenu = false
+            panel = EditorPanel.TEXT
+        }
+    }
+
+    BackHandler(enabled = panel != EditorPanel.NONE, onBack = dismissPanel)
     BackHandler(enabled = panel == EditorPanel.NONE && dirty && !focusMode) { showExitConfirm = true }
     BackHandler(enabled = panel == EditorPanel.NONE && focusMode) {
         canvasView?.cancelActiveGesture()
         focusMode = false
     }
+
+    BackHandler(enabled = panel == EditorPanel.NONE && showReference) { showReference = false }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -230,6 +275,27 @@ fun CanvasScreen(
                                         panel = EditorPanel.QUICK
                                     },
                                 )
+                                DropdownMenuItem(
+                                    text = { Text("Reference image") },
+                                    enabled = ready != null,
+                                    onClick = {
+                                        canvasView?.cancelActiveGesture()
+                                        showWorkspaceMenu = false
+                                        showReference = true
+                                    },
+                                )
+                                listOf(EditorPanel.GUIDES, EditorPanel.ANIMATION, EditorPanel.CANVAS, EditorPanel.TEXT).forEach { target ->
+                                    DropdownMenuItem(
+                                        text = { Text(target.title) },
+                                        enabled = ready != null,
+                                        onClick = {
+                                            canvasView?.cancelActiveGesture()
+                                            showWorkspaceMenu = false
+                                            if (target == EditorPanel.TEXT) viewModel.setTool(ToolType.TEXT)
+                                            panel = target
+                                        },
+                                    )
+                                }
                                 DropdownMenuItem(
                                     text = { Text("Settings") },
                                     onClick = {
@@ -333,7 +399,7 @@ fun CanvasScreen(
                                         ViewGroup.LayoutParams.MATCH_PARENT,
                                         ViewGroup.LayoutParams.MATCH_PARENT,
                                     )
-                                attachToCanvas(state.width, state.height, state.dpi, 0xFFFFFFFF.toInt())
+                                attachToCanvas(state.width, state.height, state.dpi, state.backgroundColor)
 
                                 onColorPicked = { viewModel.onColorPicked(it) }
                                 onSelectionChanged = { mask, count -> viewModel.selectionChanged(mask, count) }
@@ -390,6 +456,15 @@ fun CanvasScreen(
                     }
                 }
             }
+            if (showReference && ready != null) {
+                ReferenceCompanion(
+                    projectId = projectId,
+                    uri = referenceUri,
+                    onImport = importReference,
+                    onClose = { showReference = false },
+                    onColorPicked = viewModel::onColorPicked,
+                )
+            }
             if (focusMode) {
                 FilledTonalIconButton(
                     onClick = {
@@ -410,15 +485,25 @@ fun CanvasScreen(
 
     if (panel != EditorPanel.NONE) {
         ModalBottomSheet(
-            onDismissRequest = { panel = EditorPanel.NONE },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false),
+            onDismissRequest = dismissPanel,
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    panel.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(start = 16.dp, top = 4.dp),
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        panel.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = dismissPanel) {
+                        Icon(Icons.Default.Close, contentDescription = "Close ${panel.title}")
+                    }
+                }
                 when (panel) {
                     EditorPanel.TOOLS -> ToolOptionsPanel(viewModel, input)
                     EditorPanel.COLOUR ->
@@ -453,6 +538,7 @@ fun CanvasScreen(
                             stackActions =
                                 LayerStackActions(
                                     onAddLayer = { viewModel.addLayer() },
+                                    onReorder = viewModel::reorderLayer,
                                     onFlatten = { viewModel.flattenAllLayers() },
                                     onMergeVisible = { viewModel.mergeVisibleLayers() },
                                     onAddAdjustment = { type: AdjustmentType -> viewModel.addAdjustmentLayer(type) },
@@ -523,7 +609,7 @@ fun CanvasScreen(
                             width = ready?.width ?: 0,
                             height = ready?.height ?: 0,
                             dpi = ready?.dpi ?: 72,
-                            backgroundColor = 0xFFFFFFFF.toInt(),
+                            backgroundColor = ready?.backgroundColor ?: 0xFFFFFFFF.toInt(),
                             onResize = { w, h, resample, anchor -> viewModel.resizeCanvas(w, h, resample, anchor) },
                             onRotate = { viewModel.rotateCanvas(it) },
                             onFlip = { viewModel.flipCanvas(it) },
@@ -552,9 +638,12 @@ fun CanvasScreen(
                                         input.brushColor,
                                     )
                                     viewModel.cancelText()
+                                    viewModel.setTool(ToolType.BRUSH)
                                 } else {
+                                    viewModel.setTool(ToolType.TEXT)
                                     viewModel.notify("Tap the canvas to choose where the text goes")
                                 }
+                                panel = EditorPanel.NONE
                             },
                         )
                     EditorPanel.EXPORT ->
@@ -708,7 +797,10 @@ private fun ToolOptionsPanel(
 
         if (input.tool == ToolType.GRADIENT) {
             Text("Gradient direction", style = MaterialTheme.typography.labelMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
                 com.artflow.studio.core.tool.GradientTool.GradientType.entries.forEach { type ->
                     FilterChip(
                         selected = input.gradientType == type,
@@ -718,7 +810,10 @@ private fun ToolOptionsPanel(
                 }
             }
             Text("Ramp", style = MaterialTheme.typography.labelMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
                 com.artflow.studio.core.tool.GradientTool.Presets.ALL.forEach { preset ->
                     AssistChip(
                         onClick = { viewModel.setGradient(preset, input.gradientType) },
@@ -741,7 +836,10 @@ private fun ToolOptionsPanel(
 
         if (input.tool == ToolType.SHAPE) {
             Text("Shape", style = MaterialTheme.typography.labelMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
                 com.artflow.studio.presentation.ui.components.canvas.ShapeKind.entries.forEach { kind ->
                     FilterChip(
                         selected = input.shapeKind == kind,
@@ -768,7 +866,10 @@ private fun ToolOptionsPanel(
         }
         if (input.tool == ToolType.LIQUIFY) {
             Text("Liquify mode: ${input.liquify.mode.displayName}", style = MaterialTheme.typography.bodySmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
                 com.artflow.studio.core.tool.LiquifyTool.Mode.entries.forEach { mode ->
                     FilterChip(
                         selected = input.liquify.mode == mode,

@@ -1,4 +1,7 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.foundation.layout.ExperimentalLayoutApi::class,
+)
 
 package com.artflow.studio.presentation.ui.components.editor
 
@@ -16,6 +19,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -31,6 +36,7 @@ import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.FilterType
 import com.artflow.studio.domain.model.layer.Layer
 import com.artflow.studio.presentation.ui.components.canvas.SelectionCombineMode
+import com.artflow.studio.presentation.ui.theme.LocalArtFlowFlags
 
 // ---------------------------------------------------------------------------------------------
 // Layers
@@ -58,6 +64,7 @@ data class LayerRowActions(
 
 data class LayerStackActions(
     val onAddLayer: () -> Unit,
+    val onReorder: (Long, Int) -> Unit,
     val onFlatten: () -> Unit,
     val onMergeVisible: () -> Unit,
     val onAddAdjustment: (AdjustmentType) -> Unit,
@@ -120,6 +127,18 @@ fun LayersSheet(
         ) {
             Text("Layers", style = MaterialTheme.typography.titleMedium)
             Row {
+                IconButton(
+                    enabled = active != null && active.index < layers.lastIndex,
+                    onClick = { active?.let { stackActions.onReorder(it.id, it.index + 1) } },
+                ) {
+                    Icon(Icons.Default.ArrowUpward, contentDescription = "Move active layer up")
+                }
+                IconButton(
+                    enabled = active != null && active.index > 0,
+                    onClick = { active?.let { stackActions.onReorder(it.id, it.index - 1) } },
+                ) {
+                    Icon(Icons.Default.ArrowDownward, contentDescription = "Move active layer down")
+                }
                 IconButton(onClick = onAddLayer) {
                     Icon(Icons.Default.Add, contentDescription = "Add layer")
                 }
@@ -182,7 +201,6 @@ fun LayersSheet(
                 Modifier
                     .fillMaxWidth()
                     .heightIn(max = 320.dp),
-            reverseLayout = true,
         ) {
             items(layers.sortedByDescending { it.index }, key = { it.id }) { layer ->
                 LayerRow(
@@ -351,6 +369,7 @@ private fun LayerRow(
     onRename: () -> Unit,
 ) {
     var menuVisible by remember { mutableStateOf(false) }
+    val touchSize = if (LocalArtFlowFlags.current.largeTouchTargets) 56.dp else 48.dp
     Card(
         modifier =
             Modifier
@@ -369,7 +388,7 @@ private fun LayerRow(
     ) {
         Column(modifier = Modifier.padding(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onVisibility, modifier = Modifier.size(28.dp)) {
+                IconButton(onClick = onVisibility, modifier = Modifier.size(touchSize)) {
                     Icon(
                         imageVector = if (layer.isVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
                         contentDescription = "Visibility",
@@ -406,7 +425,7 @@ private fun LayerRow(
                     )
                 }
                 Box {
-                    IconButton(onClick = { menuVisible = true }, modifier = Modifier.size(28.dp)) {
+                    IconButton(onClick = { menuVisible = true }, modifier = Modifier.size(touchSize)) {
                         Icon(Icons.Default.MoreVert, contentDescription = "Layer menu", modifier = Modifier.size(18.dp))
                     }
                     DropdownMenu(expanded = menuVisible, onDismissRequest = { menuVisible = false }) {
@@ -470,12 +489,14 @@ private fun LayerRow(
                     }
                 }
             }
-            Slider(
-                value = layer.opacity,
-                onValueChange = onOpacity,
-                valueRange = 0f..1f,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            if (isActive) {
+                Slider(
+                    value = layer.opacity,
+                    onValueChange = onOpacity,
+                    valueRange = 0f..1f,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
     }
 }
@@ -652,7 +673,10 @@ fun CanvasOpsSheet(
         }
 
         Text("Anchor", style = MaterialTheme.typography.labelMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
             CanvasOperations.Anchor.entries.forEach { entry ->
                 FilterChip(
                     selected = anchor == entry,
@@ -669,12 +693,18 @@ fun CanvasOpsSheet(
 
         Divider()
         Text("Transform", style = MaterialTheme.typography.titleSmall)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
             AssistChip(onClick = { onRotate(90) }, label = { Text("Rotate 90°") })
             AssistChip(onClick = { onRotate(-90) }, label = { Text("Rotate -90°") })
             AssistChip(onClick = { onRotate(180) }, label = { Text("Rotate 180°") })
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
             AssistChip(onClick = { onFlip(false) }, label = { Text("Flip horizontal") })
             AssistChip(onClick = { onFlip(true) }, label = { Text("Flip vertical") })
             AssistChip(onClick = onTrim, label = { Text("Trim transparency") })
@@ -689,7 +719,10 @@ fun CanvasOpsSheet(
         )
 
         Text("Background", style = MaterialTheme.typography.titleSmall)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
             ColorChip(0xFFFFFFFF.toInt(), onClick = { onBackgroundColor(0xFFFFFFFF.toInt()) })
             ColorChip(0xFF111111.toInt(), onClick = { onBackgroundColor(0xFF111111.toInt()) })
             ColorChip(0xFFF5EFE6.toInt(), onClick = { onBackgroundColor(0xFFF5EFE6.toInt()) })
@@ -701,7 +734,10 @@ fun CanvasOpsSheet(
             )
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
             OutlinedButton(onClick = { onClear(0) }) { Text("Clear to transparency") }
             OutlinedButton(onClick = { onClear(backgroundColor) }) { Text("Fill with background") }
         }
@@ -878,7 +914,10 @@ fun GuidesSheet(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("Symmetry", style = MaterialTheme.typography.titleMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
             SymmetryEngine.SymmetryType.entries.forEach { type ->
                 FilterChip(
                     selected = symmetry.type == type,
@@ -924,7 +963,10 @@ fun GuidesSheet(
 
         Divider()
         Text("Perspective", style = MaterialTheme.typography.titleMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
             PerspectiveGuide.GuideType.entries.forEach { type ->
                 FilterChip(
                     selected = perspective.type == type,
@@ -1075,7 +1117,10 @@ fun TextSheet(
             onChange = { onStyleChange(style.copy(maxWidth = if (it <= 0f) null else it)) },
         )
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
             FilterChip(
                 selected = style.bold,
                 onClick = { onStyleChange(style.copy(bold = !style.bold)) },
@@ -1099,7 +1144,10 @@ fun TextSheet(
         }
 
         Text("Alignment", style = MaterialTheme.typography.labelMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
             TextLayout.Alignment.entries.forEach { alignment ->
                 FilterChip(
                     selected = style.alignment == alignment,
@@ -1110,7 +1158,10 @@ fun TextSheet(
         }
 
         Text("Colour", style = MaterialTheme.typography.labelMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
             ColorChip(0xFF111111.toInt(), onClick = { onColorChange(0xFF111111.toInt()) })
             ColorChip(0xFFFFFFFF.toInt(), onClick = { onColorChange(0xFFFFFFFF.toInt()) })
             ColorChip(color, onClick = { })
@@ -1146,7 +1197,7 @@ private fun LabeledSlider(
             value = value.coerceIn(range.start, range.endInclusive),
             onValueChange = onChange,
             valueRange = range,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = label },
         )
     }
 }

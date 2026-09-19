@@ -1,15 +1,14 @@
 package com.artflow.studio
 
-import android.graphics.Bitmap
 import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.domain.repository.ProjectRepository
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
@@ -26,7 +25,6 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.io.File
 import javax.inject.Inject
 
 /** Real navigation, ViewModels, input, Room and document storage in the unmodified app shell. */
@@ -70,6 +68,9 @@ class ArtworkWorkflowTest {
             compose.waitUntil(15_000) { runBlocking(Dispatchers.Main) { canvas.hasUnsavedChanges() } }
             val painted = pixels()
             assertFalse("Input through the editor must change real artwork", blank.contentEquals(painted))
+            inspectReachablePanels(scenario, painted)
+            inspectLayerOrdering(painted)
+            inspectTextPlacement(scenario, painted)
             inspectFocusMode(scenario, painted)
 
             // Exercise the save-before-navigation callback, not a direct repository save.
@@ -118,6 +119,96 @@ class ArtworkWorkflowTest {
         }
     }
 
+    private fun inspectReachablePanels(
+        scenario: ActivityScenario<MainActivity>,
+        expectedPixels: IntArray,
+    ) {
+        val depth = runBlocking(Dispatchers.Main) { canvas.undoDepth }
+        listOf("Guides", "Animation", "Canvas", "Text").forEach { title ->
+            openWorkspace(title)
+            compose.onNodeWithContentDescription("Close $title").assertIsDisplayed()
+            if (title == "Guides") TestEvidence.screenshot("studio-guides.png")
+            compose.onNodeWithContentDescription("Close $title").performClick()
+            assertArrayEquals("Opening $title must not edit pixels", expectedPixels, pixels())
+        }
+        openWorkspace("Reference image")
+        compose.onNodeWithContentDescription("Close reference").assertIsDisplayed()
+        TestEvidence.screenshot("studio-reference-empty.png")
+        scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        compose.onNodeWithContentDescription("Close reference").assertDoesNotExist()
+        compose.onNodeWithText("Save changes?").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Brush").performClick()
+        assertArrayEquals(expectedPixels, pixels())
+        assertEquals(depth, runBlocking(Dispatchers.Main) { canvas.undoDepth })
+    }
+
+    private fun inspectLayerOrdering(expectedPixels: IntArray) {
+        val before = runBlocking(Dispatchers.Main) { canvas.getAllLayers().map { it.id } }
+        val depth = runBlocking(Dispatchers.Main) { canvas.undoDepth }
+        compose.onNodeWithText("Layers (${before.size})").performClick()
+        compose.onNodeWithContentDescription("Add layer").performClick()
+        compose.waitUntil(15_000) { runBlocking(Dispatchers.Main) { canvas.getAllLayers().size == before.size + 1 } }
+        val added = runBlocking(Dispatchers.Main) { canvas.getActiveLayerId() }
+        compose.onNodeWithContentDescription("Move active layer down").performClick()
+        compose.waitUntil(15_000) { runBlocking(Dispatchers.Main) { canvas.getAllLayers().first().id == added } }
+        compose.onNodeWithContentDescription("Move active layer down").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("Move active layer up").performClick()
+        compose.waitUntil(15_000) { runBlocking(Dispatchers.Main) { canvas.getAllLayers().last().id == added } }
+        compose.onNodeWithContentDescription("Move active layer up").assertIsNotEnabled()
+        TestEvidence.screenshot("studio-layers.png")
+        compose.onNodeWithContentDescription("Close Layers").performClick()
+        repeat(3) { compose.onNodeWithContentDescription("Undo").performClick() }
+        compose.waitUntil(15_000) { runBlocking(Dispatchers.Main) { canvas.undoDepth == depth } }
+        assertEquals(before, runBlocking(Dispatchers.Main) { canvas.getAllLayers().map { it.id } })
+        assertArrayEquals(expectedPixels, pixels())
+    }
+
+    private fun inspectTextPlacement(
+        scenario: ActivityScenario<MainActivity>,
+        expectedPixels: IntArray,
+    ) {
+        val depth = runBlocking(Dispatchers.Main) { canvas.undoDepth }
+        openWorkspace("Text")
+        compose.onNodeWithText("Content").performTextReplacement("A")
+        compose.onNodeWithContentDescription("Size").performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { it(16f) }
+        compose.onNodeWithText("Place on canvas").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Close Text").assertDoesNotExist()
+        tapCanvas(scenario)
+        compose.onNodeWithContentDescription("Close Text").assertIsDisplayed()
+        assertArrayEquals("Choosing an anchor must not paint before confirmation", expectedPixels, pixels())
+        compose.onNodeWithText("Place on canvas").performScrollTo().performClick()
+        compose.waitUntil(15_000) { runBlocking(Dispatchers.Main) { canvas.undoDepth == depth + 1 } }
+        assertFalse("The reachable text workflow must rasterise real glyphs", expectedPixels.contentEquals(pixels()))
+        compose.onNodeWithContentDescription("Undo").performClick()
+        compose.waitUntil(15_000) { runBlocking(Dispatchers.Main) { canvas.undoDepth == depth } }
+        assertArrayEquals(expectedPixels, pixels())
+
+        // Closing an anchored text panel cancels placement without another history entry.
+        openWorkspace("Text")
+        compose.onNodeWithText("Place on canvas").performScrollTo().performClick()
+        tapCanvas(scenario)
+        compose.onNodeWithContentDescription("Close Text").performClick()
+        compose.onNodeWithContentDescription("Brush").performClick()
+        assertEquals(depth, runBlocking(Dispatchers.Main) { canvas.undoDepth })
+        assertArrayEquals(expectedPixels, pixels())
+    }
+
+    private fun openWorkspace(title: String) {
+        compose.onNodeWithContentDescription("Workspace menu").performClick()
+        compose.onNodeWithText(title).performScrollTo().performClick()
+        compose.waitForIdle()
+    }
+
+    private fun tapCanvas(scenario: ActivityScenario<MainActivity>) {
+        scenario.onActivity { activity ->
+            val view = requireNotNull(findCanvas(activity.window.decorView))
+            val time = SystemClock.uptimeMillis()
+            dispatch(view, time, time, MotionEvent.ACTION_DOWN, view.width * 0.5f, view.height * 0.5f)
+            dispatch(view, time, time + 40, MotionEvent.ACTION_UP, view.width * 0.5f, view.height * 0.5f)
+        }
+        compose.waitForIdle()
+    }
+
     private fun inspectFocusMode(
         scenario: ActivityScenario<MainActivity>,
         expectedPixels: IntArray,
@@ -154,16 +245,7 @@ class ArtworkWorkflowTest {
         assertTrue(runBlocking(Dispatchers.Main) { canvas.hasUnsavedChanges() })
     }
 
-    private fun captureWorkspace(name: String) {
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val image = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
-        try {
-            val directory = File(instrumentation.targetContext.getExternalFilesDir(null), "test-evidence").apply { mkdirs() }
-            File(directory, name).outputStream().use { assertTrue(image.compress(Bitmap.CompressFormat.PNG, 100, it)) }
-        } finally {
-            image.recycle()
-        }
-    }
+    private fun captureWorkspace(name: String) = TestEvidence.screenshot(name)
 
     private fun createArtwork(name: String) {
         awaitGallery()

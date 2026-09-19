@@ -201,6 +201,32 @@ class CanvasMetadataViewModelTest {
             }
         }
 
+    @Test
+    fun backgroundColourTracksTheDocumentThroughUndoAndRedo() =
+        runTest {
+            Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+            val fixture = Fixture()
+            try {
+                fixture.viewModel.open(1L)
+                runCurrent()
+                val original = fixture.repository.getBackgroundColor()
+                assertEquals(original, (fixture.viewModel.uiState.value as CanvasUiState.Ready).backgroundColor)
+                val colour = 0xFF172A3B.toInt()
+                fixture.viewModel.setCanvasBackgroundColor(colour)
+                runCurrent()
+                assertEquals(colour, (fixture.viewModel.uiState.value as CanvasUiState.Ready).backgroundColor)
+                fixture.viewModel.undo()
+                runCurrent()
+                assertEquals(original, (fixture.viewModel.uiState.value as CanvasUiState.Ready).backgroundColor)
+                fixture.viewModel.redo()
+                runCurrent()
+                assertEquals(colour, (fixture.viewModel.uiState.value as CanvasUiState.Ready).backgroundColor)
+            } finally {
+                fixture.close()
+                Dispatchers.resetMain()
+            }
+        }
+
     private class Fixture {
         private val storage =
             mock(ProjectStorage::class.java) { call ->

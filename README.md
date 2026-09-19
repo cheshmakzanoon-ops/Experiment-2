@@ -9,33 +9,64 @@ Passing tests, a large feature list and a similar colour scheme are not proof of
 feel, visual polish or reliability. [Procreate comparison and acceptance gates](docs/PROCREATE_PARITY.md)
 record the remaining product gaps. [Release readiness](docs/RELEASE_READINESS.md) records release work.
 
-## Latest improvement — canvas-first workspace
+## Latest improvements — usable studio workflows
 
-The painting dock now keeps **Brush, Smudge and Eraser** immediately available. **All tools** expands
-the existing collection; selecting another tool keeps it visible after the collection collapses.
-Tool buttons expose their toggle state to accessibility services and honour larger touch targets.
+### Reference image companion
 
-**Workspace menu → Focus mode** hides the editor bars without recreating the drawing surface.
-The visible exit button or Android Back restores the workspace before any unsaved-document exit
-prompt. Active input is cancelled before layout changes so a gesture cannot bridge changed canvas
-geometry. Project titles truncate instead of wrapping into controls. The saved-state icon no longer
-suggests nonexistent cloud storage.
+**Workspace menu → Reference image → Choose image** opens an Android image picker. The floating
+companion stays beside the canvas: drag its header, pinch/drag the image, use zoom/fit controls,
+and tap **Pick reference colour** or long-press the image to sample it into the brush. Screen-reader
+users also have a **Sample centre colour** action. Letterboxing never samples a false pixel.
 
-`StudioToolDockTest` exercises primary/secondary tool navigation. `ArtworkWorkflowTest` additionally
-checks focus entry/exit, the same GL view instance, increased drawing area, unchanged pixels and
-unchanged undo history. Device CI collects normal/focus screenshots for inspection. The presence
-of these tests is not a recorded pass: consult the completed run for the exact commit.
+Decoding is bounded to a **1024-pixel preview** in each dimension. Sampling reads that preview, not
+a colour-managed full-resolution source. References do not become layers, undo steps or exports.
+No broad storage or internet permission was added. Only granted `content://` images are accepted;
+unreadable images have a recovery action. This is a session companion: it does not embed the source
+in `.artflow`, preserve grants indefinitely, resize manually or show a live second canvas view.
+
+### Reachable tools, text and layers
+
+The workspace menu now actually opens **Guides, Animation, Canvas and Text**. Previously their
+panels existed but had no editor route. Every panel has an explicit close control; tool/guide/text
+choices wrap on narrow screens. Text placement now follows **edit text → Place on canvas → tap
+position → confirm**. Cancelling an anchored panel does not stamp text. Canvas background controls
+read the document's actual colour, including after undo/redo, instead of always showing white.
+
+Layers display topmost-first and expose **move active layer up/down**. Only the active layer shows
+its opacity slider; visibility/menu controls honour larger touch targets. These are real repository
+operations, not a separately maintained UI order. Nested groups are still absent.
+
+### Compact workspace and focus
+
+The dock keeps **Brush, Smudge and Eraser** available. **All tools** expands the collection; the
+selected secondary tool remains visible after it collapses. **Workspace menu → Focus mode** hides
+bars without replacing the drawing surface. The exit button or Android Back restores the workspace
+before a dirty-document exit prompt. Layout changes cancel active input rather than bridging a
+stroke across changed geometry. Titles truncate, and the saved icon no longer implies cloud sync.
+
+### Regression evidence
+
+`ReferenceViewportTest` exercises shared drawing/picking maths, including 10,000 generated mapping
+cases within six tests. `ReferenceCompanionTest` covers provider decoding, sampling, zoom/fit,
+letterboxing, callback replacement, recovery, bounds and gesture isolation. `ArtworkWorkflowTest`
+uses the actual app to open panels, reorder layers, place/cancel/undo text, restore focus, and
+save/reopen/discard artwork. Background-colour state has a real-repository ViewModel regression.
+
+Instrumentation captures real UI images into UTP's **additional-test-output** directory. An earlier
+capture used app-owned external files that UTP removed during uninstall; that collection failure is
+fixed here, not presented as a successful visual review. Added tests must still pass on the exact
+published revision. See the [comparison register](docs/PROCREATE_PARITY.md) for evidence and gaps.
 
 ## What works, and where it stops
 
 | Area | Implemented | Important limits |
 | --- | --- | --- |
-| Workspace | Compact painting dock, expandable tools, focus mode, brush options, quick menu, sheet panels, gallery and settings | No movable/handedness-aware sidebar or artist-validated tablet panel layout |
+| Workspace | Compact dock, expandable tools, focus mode, reachable workspace panels, reference companion, gallery and settings | No movable/handedness-aware sidebar or artist-validated tablet panel layout |
 | Painting | Pressure-sensitive strokes, smoothing, taper, scatter/jitter, flow, wet mix, tilt/velocity dynamics, editable monotone pressure curve | Three procedural grains only; no imported/dual textures or measured Procreate-level stylus response |
 | Pixel tools | Brush, eraser, smudge, clone, healing, liquify, bucket, gradients, text and shapes | A shape tool is not QuickShape recognition |
 | Selections | Rectangle, ellipse, freehand/lasso, magic wand, boolean combining, invert and feather | No claim of equivalent selection gesture ergonomics |
 | Transform | MOVE/TRANSFORM drag translation | No reachable rotate/scale/skew/perspective/warp/snapping workflow |
-| Layers | Add, remove, reorder, duplicate, visibility, opacity, blend modes, alpha lock, clipping, masks, adjustments and filters | No layer groups or linking UI; the reference flag has no user control |
+| Layers | Add/remove/duplicate, reachable up/down reordering, visibility, opacity, blending, alpha lock, clipping, masks, adjustments and filters | No layer groups or linking UI; the reference flag has no user control |
 | Colour and guides | Wheel, RGB/HSV/CMYK controls, hex, harmonies, saved palettes, symmetry and perspective guides | CMYK sliders are not an ICC-managed print workflow |
 | Canvas operations | Resize, crop, rotate, flip, trim/expand, DPI and presets | Large-document/device performance still needs measurement |
 | Animation | Frames, duplication, ordering, duration/FPS, onion skin and playback | Drawing-process timelapse is absent |
@@ -63,7 +94,7 @@ below; layers with their own pixels retain per-layer effects. Masks/opacity cont
 
 ### Explicitly unfinished
 
-Layer groups; transforms beyond translation; custom/dual brush textures; a reference companion;
+Layer groups; transforms beyond translation; custom/dual brush textures; live canvas references;
 layer-linking controls; PSD import; QuickShape-style recognition; ICC-managed colour; drawing
 timelapse; Page Assist and 3D painting; measured physical-stylus/performance parity.
 Cloud sync, collaboration and smart objects are separate roadmap ideas, not asserted Procreate
@@ -129,8 +160,9 @@ Android lint warnings likewise must be reviewed, not described as fixed merely b
 The artifact verifier checks archive integrity, native inventory and alignment. It does not replace
 16 KB runtime tests, Play-generated split checks, signing verification or Play Console review.
 
-Workspace screenshots from instrumentation are collected under `test-evidence` by the existing
-CI diagnostic script. They are evidence of the running build, not substitute design mockups.
+Workspace screenshots use `TestEvidence` and the instrumentation `additionalTestOutputDir`. CI
+archives `app/build/outputs/connected_android_test_additional_output/` before reports expire.
+These are captures of the running build, not substitute design mockups.
 
 ## Private-key release build
 

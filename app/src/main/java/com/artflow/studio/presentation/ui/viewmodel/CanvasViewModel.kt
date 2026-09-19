@@ -73,6 +73,7 @@ sealed class CanvasUiState {
         val dpi: Int,
         val frameCount: Int,
         val recoveryAvailable: Boolean = false,
+        val backgroundColor: Int = 0xFFFFFFFF.toInt(),
     ) : CanvasUiState()
 
     data class Error(
@@ -257,6 +258,7 @@ class CanvasViewModel
                                 dpi = state.dpi,
                                 frameCount = state.frameCount,
                                 recoveryAvailable = recoveryAvailable,
+                                backgroundColor = state.backgroundColor,
                             )
                         refreshLayers()
                         refreshHistory()
@@ -373,7 +375,14 @@ class CanvasViewModel
             if (state is CanvasUiState.Ready) {
                 val frames = canvasRepository.frames().size
                 val size = canvasRepository.getCanvasSize()
-                _uiState.value = state.copy(frameCount = frames, width = size.width, height = size.height, dpi = size.dpi)
+                _uiState.value =
+                    state.copy(
+                        frameCount = frames,
+                        width = size.width,
+                        height = size.height,
+                        dpi = size.dpi,
+                        backgroundColor = canvasRepository.getBackgroundColor(),
+                    )
             }
         }
 
@@ -1121,6 +1130,7 @@ class CanvasViewModel
                             height = state.height,
                             dpi = state.dpi,
                             frameCount = state.frameCount,
+                            backgroundColor = state.backgroundColor,
                         )
                     _dirty.value = true
                     refreshLayers()
