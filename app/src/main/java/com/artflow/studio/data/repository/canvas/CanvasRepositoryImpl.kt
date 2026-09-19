@@ -1550,11 +1550,13 @@ class CanvasRepositoryImpl
                 pushUndo()
                 canvasDpi = clamped
                 dirty = true
+                emit(CanvasInvalidationEvent.Full)
                 true
             }
 
         override suspend fun setCanvasBackgroundColor(color: Int): Boolean =
             withState {
+                if (color == backgroundColor) return@withState true
                 pushUndo()
                 backgroundColor = color
                 dirty = true
@@ -1731,28 +1733,30 @@ class CanvasRepositoryImpl
         ): Boolean =
             withState {
                 val frame = frameList.getOrNull(index) ?: return@withState false
+                val clamped = durationMs.coerceIn(AnimationFrame.MIN_DURATION_MS, AnimationFrame.MAX_DURATION_MS)
+                if (clamped == frame.durationMs) return@withState true
                 pushUndo()
-                frame.durationMs =
-                    durationMs.coerceIn(
-                        AnimationFrame.MIN_DURATION_MS,
-                        AnimationFrame.MAX_DURATION_MS,
-                    )
+                frame.durationMs = clamped
                 dirty = true
                 syncTimeline()
+                emit(CanvasInvalidationEvent.Full)
                 true
             }
 
         override suspend fun updateAnimationSettings(settings: AnimationSettings) =
             withState {
-                pushUndo()
-                val oldDuration = animationSettings.frameDurationMs
-                val fpsChanged = settings.fps != animationSettings.fps
-                animationSettings =
+                require(settings.onionSkinOpacity.isFinite()) { "Onion-skin opacity must be finite" }
+                val normalized =
                     settings.copy(
                         fps = settings.fps.coerceIn(AnimationSettings.MIN_FPS, AnimationSettings.MAX_FPS),
                         onionSkinFrames = settings.onionSkinFrames.coerceIn(0, AnimationSettings.MAX_ONION_SKIN_FRAMES),
                         onionSkinOpacity = settings.onionSkinOpacity.coerceIn(0.05f, 1f),
                     )
+                if (normalized == animationSettings) return@withState
+                pushUndo()
+                val oldDuration = animationSettings.frameDurationMs
+                val fpsChanged = normalized.fps != animationSettings.fps
+                animationSettings = normalized
                 if (fpsChanged) {
                     frameList.filter { it.durationMs == oldDuration }.forEach {
                         it.durationMs =

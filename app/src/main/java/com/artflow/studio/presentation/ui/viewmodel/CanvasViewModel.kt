@@ -845,9 +845,9 @@ class CanvasViewModel
             toAllLayers: Boolean,
         ) {
             viewModelScope.launch(editorErrors) {
-                canvasRepository.applyAdjustmentToCanvas(type, parameters, toAllLayers)
+                val applied = canvasRepository.applyAdjustmentToCanvas(type, parameters, toAllLayers)
                 refreshLayers()
-                notify("Adjustment applied")
+                notify(if (applied) "Adjustment applied" else "Adjustment not applied. Select an editable layer and finish active edits.")
             }
         }
 
@@ -873,26 +873,34 @@ class CanvasViewModel
 
         fun cropCanvas(bounds: IntBounds) {
             viewModelScope.launch(editorErrors) {
-                canvasRepository.cropCanvas(bounds)
-                refreshUiStateSize(bounds.width, bounds.height, canvasSize().third)
+                if (canvasRepository.cropCanvas(bounds)) {
+                    val (width, height, dpi) = canvasSize()
+                    refreshUiStateSize(width, height, dpi)
+                } else {
+                    notify("Crop not applied. Select an area inside the canvas and finish active edits.")
+                }
             }
         }
 
         fun rotateCanvas(degrees: Int) {
             viewModelScope.launch(editorErrors) {
-                canvasRepository.rotateCanvas(degrees)
-                if (degrees % 180 != 0) {
+                if (canvasRepository.rotateCanvas(degrees)) {
                     val (width, height, dpi) = canvasSize()
-                    refreshUiStateSize(height, width, dpi)
+                    refreshUiStateSize(width, height, dpi)
+                    notify("Canvas rotated $degrees°")
+                } else {
+                    notify("Rotation not applied. Choose a quarter turn and finish active edits.")
                 }
-                notify("Canvas rotated $degrees°")
             }
         }
 
         fun flipCanvas(vertical: Boolean) {
             viewModelScope.launch(editorErrors) {
-                canvasRepository.flipCanvas(vertical)
-                notify(if (vertical) "Canvas flipped vertically" else "Canvas flipped horizontally")
+                if (canvasRepository.flipCanvas(vertical)) {
+                    notify(if (vertical) "Canvas flipped vertically" else "Canvas flipped horizontally")
+                } else {
+                    notify("Flip not applied. Finish active edits first.")
+                }
             }
         }
 
@@ -925,7 +933,8 @@ class CanvasViewModel
         fun setCanvasDpi(dpi: Int) {
             viewModelScope.launch(editorErrors) {
                 canvasRepository.setCanvasDpi(dpi)
-                refreshUiStateSize(canvasSize().first, canvasSize().second, dpi)
+                val size = canvasSize()
+                refreshUiStateSize(size.first, size.second, size.third)
             }
         }
 
