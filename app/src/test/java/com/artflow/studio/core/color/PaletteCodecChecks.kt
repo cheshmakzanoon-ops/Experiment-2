@@ -126,11 +126,19 @@ object PaletteCodecChecks {
 
     fun nonFiniteChannelsNeverBecomeInventedColorsOrExceptions() {
         for ((model, count) in listOf("RGB " to 3, "Gray" to 1, "CMYK" to 4, "LAB " to 3)) {
-            for (index in 0 until count) {
-                for (bad in listOf(Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY)) {
-                    val values = FloatArray(count) { 0.5f }.apply { this[index] = bad }
-                    check(PaletteCodec.importAse(ase(color(model, *values))) == null)
-                }
+            assertNonFiniteChannelsRejected(model, count)
+        }
+    }
+
+    private fun assertNonFiniteChannelsRejected(
+        model: String,
+        count: Int,
+    ) {
+        for (index in 0 until count) {
+            for (bad in listOf(Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY)) {
+                val values = FloatArray(count) { 0.5f }
+                values[index] = bad
+                check(PaletteCodec.importAse(ase(color(model, *values))) == null)
             }
         }
     }
