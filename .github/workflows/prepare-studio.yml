@@ -24,14 +24,14 @@ jobs:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@v4
-      - name: Apply inspected fixes with exact tree guards
+      - name: Apply inspected colour and validation fixes with exact tree guards
         run: |
           python - <<'PY'
           import base64, hashlib, json, lzma, pathlib, subprocess
-          encoded = pathlib.Path('.github/studio-review.b64').read_bytes()
-          assert hashlib.sha256(encoded).hexdigest() == '42207af8ba00b0a9ce865e60c0184c789d8e1bf6e60bb31731854c156b7afd2f'
+          encoded = b''.join(pathlib.Path(f'.github/studio-final-{i}.b64').read_bytes() for i in range(2))
+          assert hashlib.sha256(encoded).hexdigest() == '3d4af43a6b1e8cc1571bdf5bb76ece18ca5e4f677ff660ecc157f7cae6587f04'
           payload = json.loads(lzma.decompress(base64.b64decode(encoded, validate=True)))
-          assert payload['base'] == 'ec118b48dd165178509d447dabc858bd85b8f6e9'
+          assert payload['base'] == '2e939a3b954d677a818f90f7bd163e84d1a34d2d'
           def git(*args, **kwargs):
               return subprocess.run(['git', *args], check=True, **kwargs)
           git('config', 'user.name', 'cheshmakzanoon-ops')
@@ -58,7 +58,7 @@ jobs:
           PY
           git add -u
           if ! git diff --cached --quiet; then
-            git commit -m "style(studio): format inspected workspace regressions"
+            git commit -m "style(studio): format colour-role and draft validation regressions"
           fi
           git push origin HEAD:refs/heads/studio-next-20260919
       - name: Archive exact candidate and diagnostic diff
