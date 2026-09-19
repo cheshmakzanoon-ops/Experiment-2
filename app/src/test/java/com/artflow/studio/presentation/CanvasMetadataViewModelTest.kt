@@ -66,7 +66,8 @@ class CanvasMetadataViewModelTest {
                 runCurrent()
                 assertTrue(fixture.viewModel.dirty.value)
                 assertEquals(1, fixture.viewModel.history.value.undoDepth)
-                val changedFrame = fixture.viewModel.timeline.value.frames.single()
+                val changedFrames = fixture.viewModel.timeline.value.frames
+                val changedFrame = changedFrames.single()
                 assertEquals(500, changedFrame.durationMs)
             } finally {
                 fixture.close()

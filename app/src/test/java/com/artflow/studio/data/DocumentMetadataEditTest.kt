@@ -73,7 +73,8 @@ class DocumentMetadataEditTest {
             assertSame(CanvasInvalidationEvent.Full, events.last())
             assertTrue(repository.hasUnsavedChanges())
             assertEquals(1, repository.undoDepth)
-            val changedFrame = repository.timeline.value.frames.single()
+            val changedFrames = repository.timeline.value.frames
+            val changedFrame = changedFrames.single()
             assertEquals(500, changedFrame.durationMs)
             assertTrue(repository.undo())
             assertEquals(original, repository.frames().single().durationMs)
