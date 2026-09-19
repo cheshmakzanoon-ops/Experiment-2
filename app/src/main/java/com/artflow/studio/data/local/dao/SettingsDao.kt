@@ -21,6 +21,10 @@ interface SettingsDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSetting(setting: SettingsEntity)
 
+    /** Room wraps a collection insert in one transaction: no partially saved preference sets. */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSettings(settings: List<SettingsEntity>)
+
     @Update
     suspend fun updateSetting(setting: SettingsEntity)
 

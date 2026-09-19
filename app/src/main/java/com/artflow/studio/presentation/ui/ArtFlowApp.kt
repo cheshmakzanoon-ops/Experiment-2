@@ -38,10 +38,11 @@ object Routes {
 fun ArtFlowApp(viewModel: MainViewModel = hiltViewModel()) {
     val navController = rememberNavController()
     val settings by viewModel.settings.collectAsState()
+    val settingsLoaded by viewModel.settingsLoaded.collectAsState()
     var showOnboarding by remember { mutableStateOf(false) }
 
-    LaunchedEffect(settings.seenOnboarding) {
-        if (!settings.seenOnboarding) showOnboarding = true
+    LaunchedEffect(settingsLoaded, settings.seenOnboarding) {
+        showOnboarding = settingsLoaded && !settings.seenOnboarding
     }
 
     NavHost(

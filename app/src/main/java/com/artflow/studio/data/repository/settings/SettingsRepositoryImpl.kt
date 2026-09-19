@@ -9,15 +9,18 @@ import com.artflow.studio.domain.model.settings.AppSettings
 import com.artflow.studio.domain.model.settings.GallerySort
 import com.artflow.studio.domain.model.settings.ThemeMode
 import com.artflow.studio.domain.repository.settings.SettingsRepository
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
-import timber.log.Timber
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -34,20 +37,47 @@ class SettingsRepositoryImpl
     constructor(
         private val dao: SettingsDao,
     ) : SettingsRepository {
-        private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        private val mutex = Mutex()
         private val state = MutableStateFlow(AppSettings())
         private var loaded = false
 
-        override val settings: StateFlow<AppSettings> = state.asStateFlow()
+        // Do not emit defaults before Room has been read. Every collector gets an owned snapshot.
+        override val settings: Flow<AppSettings> =
+            flow {
+                mutex.withLock { ensureLoaded() }
+                emitAll(state.map { it.ownedCopy() })
+            }
 
-        override fun current(): AppSettings = state.value
+        override fun current(): AppSettings = state.value.ownedCopy()
 
         override suspend fun update(transform: (AppSettings) -> AppSettings) {
-            ensureLoaded()
-            val updated = transform(state.value)
-            state.value = updated
-            persist(updated)
+            mutex.withLock {
+                ensureLoaded()
+                val candidate = transform(state.value.ownedCopy())
+                require(candidate.uiScale.isFinite()) { "UI scale must be finite" }
+                val updated =
+                    candidate.copy(
+                        uiScale = candidate.uiScale.coerceIn(MIN_UI_SCALE, MAX_UI_SCALE),
+                        autosaveIntervalMs = candidate.autosaveIntervalMs.coerceIn(MIN_AUTOSAVE, MAX_AUTOSAVE),
+                        recentColors = candidate.recentColors.distinct().take(MAX_RECENT_COLORS),
+                    ).ownedCopy()
+                if (updated == state.value) return@withLock
+                currentCoroutineContext().ensureActive()
+                // Once this small transaction begins, finish both durability and publication.
+                // Cancellation while waiting/loading remains cancellable; failed writes publish nothing.
+                withContext(NonCancellable) {
+                    persist(updated)
+                    state.value = updated
+                }
+            }
         }
+
+        private fun AppSettings.ownedCopy(): AppSettings =
+            copy(
+                dismissedTips = dismissedTips.toSet(),
+                recentColors = recentColors.toList(),
+                customPalettes = customPalettes.map { it.copy(colors = it.colors.toList()) },
+            )
 
         override suspend fun setThemeMode(mode: ThemeMode) = update { it.copy(themeMode = mode) }
 
@@ -57,7 +87,7 @@ class SettingsRepositoryImpl
 
         override suspend fun setReduceMotion(enabled: Boolean) = update { it.copy(reduceMotion = enabled) }
 
-        override suspend fun setUiScale(scale: Float) = update { it.copy(uiScale = scale.coerceIn(MIN_UI_SCALE, MAX_UI_SCALE)) }
+        override suspend fun setUiScale(scale: Float) = update { it.copy(uiScale = scale) }
 
         override suspend fun setLargeTouchTargets(enabled: Boolean) = update { it.copy(largeTouchTargets = enabled) }
 
@@ -127,23 +157,20 @@ class SettingsRepositoryImpl
         // Persistence
         // -----------------------------------------------------------------------------------------
 
+        /** Called only with [mutex] held; failed or cancelled reads may be retried safely. */
         private suspend fun ensureLoaded() {
             if (loaded) return
+            val rows = dao.getAllSettings().first()
+            state.value = decode(rows.associate { it.key to it.value }).ownedCopy()
             loaded = true
-            try {
-                // The DAO exposes a Flow; the first emission is the full table.
-                val rows = dao.getAllSettings().first()
-                state.value = decode(rows.associate { it.key to it.value })
-            } catch (error: Throwable) {
-                Timber.e(error, "Could not read settings; using defaults")
-            }
         }
 
         private suspend fun persist(settings: AppSettings) {
-            val rows = encode(settings)
-            rows.forEach { (key, value) ->
-                dao.insertSetting(SettingsEntity(key = key, value = value, category = categoryOf(key)))
-            }
+            dao.insertSettings(
+                encode(settings).map { (key, value) ->
+                    SettingsEntity(key = key, value = value, category = categoryOf(key))
+                },
+            )
         }
 
         private fun encode(settings: AppSettings): Map<String, String> =
@@ -169,7 +196,7 @@ class SettingsRepositoryImpl
                 KEY_ONBOARDING to settings.seenOnboarding.toString(),
                 KEY_TIPS to settings.dismissedTips.joinToString("|"),
                 KEY_RECENT_COLORS to settings.recentColors.joinToString(","),
-                KEY_PALETTES to settings.customPalettes.joinToString(";;") { PaletteCodec.exportJson(it) },
+                KEY_PALETTES to PaletteCodec.exportJson(settings.customPalettes),
             )
 
         private fun decode(stored: Map<String, String>): AppSettings {
@@ -178,11 +205,12 @@ class SettingsRepositoryImpl
                 stored[KEY_RECENT_COLORS]
                     ?.split(',')
                     ?.mapNotNull { it.trim().toIntOrNull() }
+                    ?.distinct()
+                    ?.take(MAX_RECENT_COLORS)
                     ?: defaults.recentColors
             val palettes =
                 stored[KEY_PALETTES]
-                    ?.split(";;")
-                    ?.mapNotNull { entry -> if (entry.isBlank()) null else PaletteCodec.importJson(entry) }
+                    ?.let(StoredPaletteCodec::decode)
                     ?: defaults.customPalettes
             return AppSettings(
                 themeMode =
@@ -192,7 +220,7 @@ class SettingsRepositoryImpl
                 highContrast = stored[KEY_HIGH_CONTRAST]?.toBooleanStrictOrNull() ?: defaults.highContrast,
                 reduceMotion = stored[KEY_REDUCE_MOTION]?.toBooleanStrictOrNull() ?: defaults.reduceMotion,
                 uiScale =
-                    stored[KEY_UI_SCALE]?.toFloatOrNull()?.coerceIn(MIN_UI_SCALE, MAX_UI_SCALE)
+                    stored[KEY_UI_SCALE]?.toFloatOrNull()?.takeIf { it.isFinite() }?.coerceIn(MIN_UI_SCALE, MAX_UI_SCALE)
                         ?: defaults.uiScale,
                 largeTouchTargets = stored[KEY_LARGE_TOUCH]?.toBooleanStrictOrNull() ?: defaults.largeTouchTargets,
                 checkerboard = stored[KEY_CHECKERBOARD]?.toBooleanStrictOrNull() ?: defaults.checkerboard,
@@ -233,11 +261,6 @@ class SettingsRepositoryImpl
                 key.startsWith("input.") -> "input"
                 else -> "general"
             }
-
-        /** Warms the cache in the background; safe to call from `Application.onCreate`. */
-        fun preload() {
-            scope.launch { ensureLoaded() }
-        }
 
         companion object {
             private const val MIN_UI_SCALE = 0.85f

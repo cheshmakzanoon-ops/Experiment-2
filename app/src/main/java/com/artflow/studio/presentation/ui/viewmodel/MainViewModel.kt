@@ -60,6 +60,9 @@ class MainViewModel
         private val _settings = MutableStateFlow(AppSettings())
         val settings: StateFlow<AppSettings> = _settings.asStateFlow()
 
+        private val _settingsLoaded = MutableStateFlow(false)
+        val settingsLoaded: StateFlow<Boolean> = _settingsLoaded.asStateFlow()
+
         private val _query = MutableStateFlow("")
         val query: StateFlow<String> = _query.asStateFlow()
 
@@ -68,6 +71,7 @@ class MainViewModel
 
         private var allProjects: List<Project> = emptyList()
         private var storageBytes = 0L
+        private var projectsLoaded = false
         private val galleryErrors =
             CoroutineExceptionHandler { _, error ->
                 Timber.e(error, "Gallery operation failed")
@@ -79,6 +83,7 @@ class MainViewModel
             viewModelScope.launch(galleryErrors) {
                 settingsRepository.settings.collect { stored ->
                     _settings.value = stored
+                    _settingsLoaded.value = true
                     publish()
                 }
             }
@@ -86,12 +91,14 @@ class MainViewModel
                 projectRepository.getAllProjects().collect { projects ->
                     allProjects = projects
                     storageBytes = withContext(Dispatchers.IO) { storage.totalStorageBytes() }
+                    projectsLoaded = true
                     publish()
                 }
             }
         }
 
         private fun publish() {
+            if (!projectsLoaded || !_settingsLoaded.value) return
             val settings = _settings.value
             val query = _query.value.trim()
             val filtered =
