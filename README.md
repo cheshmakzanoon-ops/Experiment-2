@@ -7,15 +7,39 @@ Paint with pressure-sensitive brushes, compose layers and masks, animate frames,
 The [Procreate comparison](docs/PROCREATE_PARITY.md) separates implemented workflows from missing capabilities.
 [Release readiness](docs/RELEASE_READINESS.md) tracks the separate distribution requirements.
 
-## Latest improvement: Brush Studio follow-through
+## Latest improvement: saved custom brushes
 
-Brush Studio now clears search focus when a preset or another tab is chosen, gives the complete
-**Drawing pad** label room to wrap, and preserves the practice surface's aspect ratio instead of
-stretching test marks. The pending fixes from the previous work session are included, not abandoned.
-The API 26 drawing-pad regression now checks actual whole-screen pixels using accessibility bounds:
-Compose's dialog-only capture API does not support API 26. It checks blank → painted → cleared pixels
-without skipping that device or dropping the assertion. Formatting and complexity findings are fixed
-without changing analysis rules or baselines. This revision requires its own complete CI run.
+Brush Studio now has **Save a copy** and a **Saved** library category. Give a tuned brush a name,
+reopen the studio or restart the app, and select that saved copy again. The row menu supports
+rename and **confirmed deletion**. Built-in presets cannot be renamed or deleted by these controls.
+Saved brushes participate in search; copies have independent identities even when names match.
+
+A saved copy preserves the **entire brush parameter model**, including custom pressure response,
+procedural grain, colour/velocity/tilt dynamics and wet mix. Saving a copy is an explicit library
+operation independent of **Use brush**: it does not apply the draft or edit artwork. Closing the
+studio still discards unapplied draft changes but does not undo a confirmed library save.
+
+Storage uses a versioned, bounded JSON document in one existing Room settings row, separate from
+artwork and older partial brush records. Mutations serialize; state is published only after the
+Room write succeeds. A failed write leaves the prior library intact. Corrupt, oversized, invalid
+or newer-format data produces a visible error and retry action, never a silent reset/overwrite.
+The library currently supports **128 saved copies**, with names up to **80 characters**. Sharing,
+import/export, custom texture assets, favorites and user-defined brush sets remain unfinished.
+
+Nine JVM regressions exercise full round-trips, Unicode names, malformed/future data, failed writes,
+concurrent saves, cancellation, owned snapshots and limits. A device test closes/reopens a real Room
+database; three UI tests cover save/rename/delete/cancel and failure feedback. The earlier aspect-ratio
+test's missing DpRect extensions are corrected using its actual edge coordinates. All new checks
+require the completed CI result for this exact revision; their existence is not a passing result.
+
+### Follow-through on the preceding candidate
+
+Commit `b27de13` / run `35451246630` passed **409 JVM tests**, ktlint, detekt, debug/release lint,
+APK/AAB builds and packaged-artifact verification. Device lanes stopped during test compilation,
+before running any tests, on the aspect-ratio assertion corrected above. Earlier pending fixes
+include clearing search focus on preset/tab changes, a wrapping Drawing pad label, a correctly
+proportioned practice surface and API 26-compatible whole-screen pixel assertions. No test lane,
+assertion or analysis rule has been disabled to obtain a pass.
 
 ## Brush Studio
 
@@ -34,8 +58,7 @@ Numeric entry accepts decimal points/commas, maps percentages to engine values, 
 values, and rejects fractions for integer controls. The practice buffer is **320×180**, retains the
 last **8 strokes**, caps each at **128 points**, and limits preview brush sizes to **48 pixels**.
 These are preview limits, not document limits. Presets are original starting points, not Procreate
-assets or a professionally validated equivalent library. Custom preset persistence, imported
-shape/grain textures and dual brushes remain unfinished.
+assets or a professionally validated equivalent library. Imported shape/grain textures, dual brushes and custom preset interchange remain unfinished.
 
 ## Studio workflows
 
@@ -59,7 +82,7 @@ Canvas background state follows the document through edits and undo/redo.
 
 | Area | Available | Important gaps |
 | --- | --- | --- |
-| Painting | Pressure/dynamics, smoothing, taper, flow, wet mix, jitter, three procedural grains, staged Brush Studio | Persistent custom presets, imported/dual textures, curated-library and stylus-feel parity |
+| Painting | Pressure/dynamics, smoothing, taper, flow, wet mix, jitter, three procedural grains, staged Brush Studio | Preset interchange, imported/dual textures, curated-library and stylus-feel parity |
 | Tools | Brush, eraser, smudge, clone, healing, liquify, bucket, gradients, text and shapes | QuickShape recognition and ColorDrop-style interaction |
 | Selections | Rectangle/ellipse/lasso/wand, combine/invert/feather | Saved selections and equivalent gesture ergonomics |
 | Transform | MOVE/TRANSFORM translation | Interactive scale/rotate/distort/warp/snapping with preview/apply/cancel |

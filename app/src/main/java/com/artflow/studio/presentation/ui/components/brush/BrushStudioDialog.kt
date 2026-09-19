@@ -28,10 +28,11 @@ import com.artflow.studio.domain.model.brush.StudioBrushes
 
 /** Draft settings stay local. Dismiss/Back never publishes a half-edited brush to the canvas. */
 @Composable
-fun BrushStudioDialog(
+fun BrushStudioContent(
     initial: BrushParams,
     onApply: (BrushParams) -> Unit,
     onDismiss: () -> Unit,
+    library: BrushLibraryControls? = null,
 ) {
     val original = remember { initial }
     var draft by remember { mutableStateOf(original) }
@@ -68,6 +69,7 @@ fun BrushStudioDialog(
                     }
                     IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Cancel brush changes") }
                 }
+                library?.let { SavedBrushToolbar(draft, it) }
                 TabRow(selectedTabIndex = tab) {
                     listOf("Library", "Settings", "Drawing pad").forEachIndexed { index, title ->
                         Tab(
@@ -82,7 +84,7 @@ fun BrushStudioDialog(
                 }
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     when (tab) {
-                        0 -> StudioBrushLibrary(draft, { draft = it }, Modifier.fillMaxSize())
+                        0 -> StudioBrushLibrary(draft, { draft = it }, Modifier.fillMaxSize(), library)
                         1 -> AdvancedBrushSettingsPanel(draft, { draft = it }, Modifier.fillMaxSize())
                         else -> BrushPracticePad(draft, strokes, { strokes = it }, Modifier.fillMaxSize())
                     }
@@ -110,11 +112,24 @@ fun StudioBrushLibrary(
     current: BrushParams,
     onSelect: (BrushParams) -> Unit,
     modifier: Modifier = Modifier,
+    library: BrushLibraryControls? = null,
 ) {
     var query by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("All") }
     val focusManager = LocalFocusManager.current
-    val matches = remember(query, category) { StudioBrushes.search(query, category) }
+    val saved = library?.state?.brushes.orEmpty()
+    val matches =
+        remember(query, category, saved) {
+            val originals = StudioBrushes.search(query, category)
+            val words = query.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+            val own =
+                saved
+                    .filter { brush ->
+                        (category == "All" || category == "Saved") && words.all { brush.name.contains(it, ignoreCase = true) }
+                    }.map { StudioBrushes.Preset("saved-${it.id}", it.name, "Saved", "Your saved brush", it.parameters) }
+            own + originals
+        }
+    val categories = if (library == null) StudioBrushes.categories else listOf("All", "Saved") + StudioBrushes.categories.drop(1)
     Column(modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
             value = query,
@@ -130,7 +145,7 @@ fun StudioBrushLibrary(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         )
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StudioBrushes.categories.forEach { title ->
+            categories.forEach { title ->
                 FilterChip(selected = category == title, onClick = { category = title }, label = { Text(title) })
             }
         }
@@ -154,7 +169,11 @@ fun StudioBrushLibrary(
                         },
                 ) {
                     Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                        Text(preset.name, style = MaterialTheme.typography.titleSmall)
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(preset.name, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                            val owned = saved.firstOrNull { "saved-${it.id}" == preset.id }
+                            if (owned != null && library != null) SavedBrushMenu(owned, library)
+                        }
                         BrushSample(preset.parameters, Modifier.fillMaxWidth().height(42.dp))
                         Text(
                             preset.description,

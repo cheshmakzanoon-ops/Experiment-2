@@ -19,7 +19,7 @@ import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.model.brush.StudioBrushes
 import com.artflow.studio.presentation.ui.components.brush.BrushParameterSlider
 import com.artflow.studio.presentation.ui.components.brush.BrushPracticePad
-import com.artflow.studio.presentation.ui.components.brush.BrushStudioDialog
+import com.artflow.studio.presentation.ui.components.brush.BrushStudioContent
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -35,7 +35,7 @@ class BrushStudioUiTest {
         var open by mutableStateOf(true)
         compose.setContent {
             MaterialTheme {
-                if (open) BrushStudioDialog(BrushParams(), { applied = it }, { open = false })
+                if (open) BrushStudioContent(BrushParams(), { applied = it }, { open = false })
             }
         }
         compose.onNodeWithText("Search brushes").performTextInput("fine liner")
@@ -51,7 +51,7 @@ class BrushStudioUiTest {
     @Test
     fun categorySearchAndEmptyResultsCanBeRecovered() {
         compose.setContent {
-            MaterialTheme { BrushStudioDialog(BrushParams(), {}, {}) }
+            MaterialTheme { BrushStudioContent(BrushParams(), {}, {}) }
         }
         compose.onNodeWithText("Ink").performClick().assertIsSelected()
         compose.onNodeWithText("Search brushes").performTextInput("charcoal")
@@ -68,7 +68,7 @@ class BrushStudioUiTest {
         var open by mutableStateOf(true)
         compose.setContent {
             MaterialTheme {
-                if (open) BrushStudioDialog(original, { applied.add(it) }, { open = false })
+                if (open) BrushStudioContent(original, { applied.add(it) }, { open = false })
             }
         }
         compose.onNodeWithText("Restore initial").assertIsNotEnabled()
@@ -86,7 +86,7 @@ class BrushStudioUiTest {
         var open by mutableStateOf(true)
         compose.setContent {
             MaterialTheme {
-                if (open) BrushStudioDialog(BrushParams(), { applied.add(it) }, { open = false })
+                if (open) BrushStudioContent(BrushParams(), { applied.add(it) }, { open = false })
             }
         }
         val layouts = mutableListOf<TextLayoutResult>()
@@ -137,7 +137,7 @@ class BrushStudioUiTest {
     fun practiceStrokesSurviveTabChangesButNeverApplyBrushSettingsByThemselves() {
         var applied: BrushParams? = null
         compose.setContent {
-            MaterialTheme { BrushStudioDialog(BrushParams(), { applied = it }, {}) }
+            MaterialTheme { BrushStudioContent(BrushParams(), { applied = it }, {}) }
         }
         compose.onNodeWithText("Drawing pad").performClick()
         awaitPracticePixels(blank = true)
@@ -170,7 +170,8 @@ class BrushStudioUiTest {
         }
         val pad = compose.onNodeWithTag("brush-practice-pad")
         val bounds = pad.getUnclippedBoundsInRoot()
-        assertEquals(320f / 180f, bounds.width.value / bounds.height.value, 0.02f)
+        val ratio = (bounds.right - bounds.left).value / (bounds.bottom - bounds.top).value
+        assertEquals(320f / 180f, ratio, 0.02f)
         pad.performTouchInput {
             down(center)
             moveTo(Offset(width * 0.8f, height * 0.5f))
