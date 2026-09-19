@@ -1,5 +1,5 @@
 # ArtFlow Privacy Policy
-Last updated: September 17, 2026
+Last updated: September 19, 2026
 Developer/project: cheshmakzanoon-ops / Experiment-2
 
 ## Developer collection
@@ -10,8 +10,9 @@ request access to contacts, location, microphone or camera and does not scan the
 ## Local storage
 Artwork, brushes, palettes and preferences are stored in the private app storage. Export creates a
 separate copy. Sharing, saving to a chosen document location or publishing to the gallery transfers
-only the export you selected. A receiving app or a cloud document provider may upload that copy
-under its own privacy policy.
+only the export you selected. Settings also offers a recovery backup of unreadable custom-palette
+text to a file you choose, before resetting that palette list. A receiving app or a cloud document
+provider may upload the copy you selected under its own privacy policy.
 
 ## Android backup and device transfer
 The app allows Android to back up its project files and database and transfer them to another

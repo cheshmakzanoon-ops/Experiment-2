@@ -80,7 +80,8 @@ class PaletteRecoveryViewModelTest {
                 fixture.viewModel.paletteRecoveryRunning.first { !it }
                 assertEquals(0, fixture.writes)
                 assertTrue(fixture.repository.current().paletteRecoveryRequired)
-                assertEquals(fixture.original, fixture.rows.value.single().value)
+                val retained = fixture.rows.value.single()
+                assertEquals(fixture.original, retained.value)
             } finally {
                 fixture.viewModel.viewModelScope.cancel()
                 Dispatchers.resetMain()

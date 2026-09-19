@@ -60,7 +60,8 @@ class ArtworkWorkflowTest {
         try {
             createArtwork(name)
             awaitCanvas(scenario)
-            val projectId = runBlocking { projects.getAllProjects().first().single { it.name == name }.id }
+            val createdProjects = runBlocking { projects.getAllProjects().first() }
+            val projectId = createdProjects.single { it.name == name }.id
             val blank = pixels()
             paint(scenario, 0.45f)
             compose.waitUntil(15_000) { runBlocking(Dispatchers.Main) { canvas.hasUnsavedChanges() } }
@@ -99,7 +100,7 @@ class ArtworkWorkflowTest {
             compose.onNodeWithText(name).performClick()
             awaitCanvas(scenario)
             assertArrayEquals("Discarding must not replace the last saved artwork", painted, pixels())
-            assertFalse(storage.hasUnsavedRecovery(projectId))
+            assertFalse(runBlocking { storage.hasUnsavedRecovery(projectId) })
         } finally {
             scenario.close()
             runBlocking {
