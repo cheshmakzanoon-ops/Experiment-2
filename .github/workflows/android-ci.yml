@@ -69,7 +69,7 @@ jobs:
         run: ./gradlew testDebugUnitTest --stacktrace
 
       - name: Static analysis
-        run: ./gradlew ktlintCheck detekt lintDebug lintRelease --stacktrace
+        run: ./gradlew ktlintCheck detekt lintDebug lintRelease --continue --stacktrace
 
       - name: Assemble debug APK
         run: ./gradlew assembleDebug --stacktrace

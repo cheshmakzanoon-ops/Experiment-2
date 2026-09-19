@@ -176,7 +176,8 @@ object PaletteCodecChecks {
             Locale.setDefault(Locale.forLanguageTag("ar-EG"))
             val source = palette()
             val encoded = PaletteCodec.exportGpl(source)
-            check(encoded.lineSequence().last { it.isNotBlank() }.trimStart().startsWith("255"))
+            val colorLine = encoded.lineSequence().last { it.isNotBlank() }
+            check(colorLine.trimStart().startsWith("255"))
             check(PaletteCodec.importGpl(encoded)?.colors == source.colors)
         } finally {
             Locale.setDefault(previous)
