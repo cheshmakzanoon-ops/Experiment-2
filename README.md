@@ -54,6 +54,14 @@ seed cases), and all 30 Python verifier tests passed. Gradle bootstrap is blocke
 for `services.gradle.org`; Android/JUnit/static-analysis execution for this candidate is pending.
 See [verification follow-through](docs/STUDIO_VERIFICATION.md) for exact artifacts and promotion gates.
 
+### Candidate inspection pass
+
+A final source inspection also found and split a 141-character overflow-diagnostic line to respect
+the existing 140-character Kotlin limit, without changing the assertion. The source-integrity audit
+checks that every original test file and test-case count is retained and that the previous brush
+slider labels remain available. Local candidate verification is not a replacement for ktlint,
+Detekt, Android compilation or device testing.
+
 ## Latest improvement: neutral, readable and adaptive studio
 
 ArtFlow now defines every Material surface/container role rather than mixing its own dark palette

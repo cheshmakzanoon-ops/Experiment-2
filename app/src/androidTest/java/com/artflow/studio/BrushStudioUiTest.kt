@@ -94,7 +94,8 @@ class BrushStudioUiTest {
             compose.onNodeWithText(label).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
             val layout = layouts.single()
             assertFalse(
-                "$label must fit: size=${layout.size}, widthOverflow=${layout.didOverflowWidth}, heightOverflow=${layout.didOverflowHeight}",
+                "$label must fit: size=${layout.size}, widthOverflow=${layout.didOverflowWidth}, " +
+                    "heightOverflow=${layout.didOverflowHeight}",
                 layout.hasVisualOverflow,
             )
         }
