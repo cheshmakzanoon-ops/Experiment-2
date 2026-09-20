@@ -7,7 +7,22 @@ Paint with pressure-sensitive brushes, compose layers and masks, animate frames,
 The [Procreate comparison](docs/PROCREATE_PARITY.md) separates implemented workflows from missing capabilities.
 [Release readiness](docs/RELEASE_READINESS.md) tracks the separate distribution requirements.
 
-## Local candidate: brush attribute navigation and connected dynamics
+## Current CI follow-through
+
+The `34b0269` / run **77** build passed JVM, static analysis, APK/AAB and artifact checks, but
+**all six device jobs failed**. Earlier statements that the remaining failures were fixed were
+premature. The [failure ledger and repair record](docs/CI_REPAIR_FOLLOW_THROUGH.md) preserves the
+exact baseline, failed cases, artifact IDs and verification boundaries.
+
+This repair sizes the actual tab text using measured labels instead of widening only its parent,
+restores the selection-race test's interception of the newly added no-argument compositing overload,
+and replaces ineffective emulator `-prop` flags with verified AOSP runtime setup. The API 35 setup
+is an explicitly documented **CI environment mitigation**, not a production native-crash fix.
+All original tests, six device lanes and page-size checks remain; three scaled/RTL tab tests and
+eight runtime/harness checks are added. Locally, **38 Python checks** and a Kotlin delegation probe
+passed. Android acceptance requires the completed CI run for this exact revision, not a queued job.
+
+## Brush attribute navigation and connected dynamics
 
 The candidate following `019648e` adds **ten named setting groups** plus **All settings** to
 Brush Studio. Wide settings panes use a scrollable attribute sidebar; compact panes use a
@@ -32,8 +47,7 @@ source-alpha preservation, custom pressure response and determinism. Their share
 checks passed locally, alongside the seven existing Brush Studio check groups. Five new Compose
 tests cover group navigation, draft preservation, matching parameter updates, staged application,
 cancellation and large targets. They are **written but not executed locally**. All previous slider
-labels and existing regression tests are retained. This candidate is not yet published or Android
-verified; [verification follow-through](docs/STUDIO_VERIFICATION.md) records the boundaries.
+labels and existing regression tests are retained. This work is published, but the remaining device failures block complete verification; [verification follow-through](docs/STUDIO_VERIFICATION.md) records the boundaries.
 
 ## Candidate follow-through: tablet labels and verification
 
@@ -106,17 +120,14 @@ menu during a transient interval with no registered Compose semantics root. The 
 waits, within its existing 15-second bound, for that real production node before interacting.
 A permanently missing UI still times out and fails; no assertion is skipped or weakened.
 
-### Run 74 root-cause stabilization
+### Earlier CI repair attempts (superseded)
 
-Run `35478935168` confirmed two deterministic failures in the recent Brush Studio work: one remaining ktlint multiline-expression violation and tab labels whose text layout was still constrained tightly enough to report width overflow on API 26 and API 35. This revision fixes the production layout rather than weakening the tests. Each Brush Studio tab now has an explicit minimum width inside a scrollable row, and labels are single-line/non-wrapping so fractional glyph measurement cannot clip them. The dynamics toggle modifier is formatted to the exact ktlint chain rule reported by CI. No device lane, assertion, selection test or static-analysis rule is disabled.
-
-## CI root-cause repair
-
-Recent CI artifacts exposed three recurring failure classes: Brush Studio tab text clipping under large font scales, one remaining ktlint chain-format violation, and an API 35/16 KB native SIGSEGV inside Kotlin's generated `CanvasRepository.compositeBuffer$default` helper. This revision gives the tabs more intrinsic width, corrects the formatter issue, and replaces default parameters on `compositeBuffer` with an explicit no-argument overload plus an explicit-policy overload. Tests and device lanes remain enabled.
-
-### API 35/16 KB emulator JIT stabilization
-
-Historical CI artifacts show two unrelated tests dying in the same Android 15 x86_64 16 KB emulator with native SIGSEGVs inside ART JIT-compiled code: one in Compose animation internals and one in Kotlin's generated default-argument helper. The two API 35/16 KB lanes therefore boot with ART JIT disabled, while still asserting the real 16 KB process page size and running the complete instrumentation suite. API 36/16 KB remains JIT-enabled, so the matrix still exercises 16 KB + JIT on the newer runtime instead of hiding application failures.
+Commits through `34b0269` corrected static-analysis findings and replaced generated default-argument
+compositing with explicit overloads. However, the parent-tab minimum-width changes did not resolve
+text overflow, and the new overload bypassed a delegated selection-test hook. The emulator `-prop`
+JIT flags also did not prevent JIT-cache execution in the failing API 35 repeat. These changes must
+not be described as verified root-cause fixes. The current follow-through above records the precise
+remaining failures and repairs; API 35 with its normal JIT remains a separate acceptance requirement.
 
 ## Latest improvement: neutral, readable and adaptive studio
 

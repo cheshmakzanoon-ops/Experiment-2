@@ -14,6 +14,8 @@ case "${EXPECTED_PAGE_SIZE:-}" in
   4096|16384) ;;
   *) echo 'EXPECTED_PAGE_SIZE must explicitly be 4096 or 16384' >&2; exit 2 ;;
 esac
+# Record default runtime settings, or explicitly configure and verify the debug-emulator mitigation.
+bash "$(dirname "${BASH_SOURCE[0]}")/configure-emulator-runtime.sh" || exit $?
 ./gradlew connectedDebugAndroidTest \
   "-Pandroid.testInstrumentationRunnerArguments.expectedPageSize=${EXPECTED_PAGE_SIZE}" \
   --stacktrace || exit $?

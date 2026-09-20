@@ -19,7 +19,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -73,28 +72,10 @@ fun BrushStudioContent(
                     IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Cancel brush changes") }
                 }
                 library?.let { SavedBrushToolbar(draft, it) }
-                ScrollableTabRow(selectedTabIndex = tab, edgePadding = 0.dp) {
-                    listOf("Library", "Settings", "Drawing pad").forEachIndexed { index, title ->
-                        Tab(
-                            selected = tab == index,
-                            onClick = {
-                                focusManager.clearFocus()
-                                tab = index
-                            },
-                            modifier = Modifier.widthIn(min = 144.dp).heightIn(min = 48.dp),
-                        ) {
-                            Text(
-                                title,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
-                                style = MaterialTheme.typography.labelLarge,
-                                maxLines = 1,
-                                softWrap = false,
-                                overflow = TextOverflow.Clip,
-                                textAlign = TextAlign.Center,
-                            )
-                        }
-                    }
-                }
+                BrushStudioTabs(selectedTab = tab, onSelect = {
+                    focusManager.clearFocus()
+                    tab = it
+                })
                 BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                     val split = maxWidth >= 720.dp && maxHeight >= 320.dp && tab != 2
                     if (split) {

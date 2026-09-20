@@ -216,6 +216,10 @@ class SelectionGestureDeviceTest {
         var first = true
         canvas.canvasRepository =
             object : CanvasRepository by delegate {
+                // Kotlin delegation forwards each overload independently. Without this override,
+                // the no-argument call goes straight to the delegate and never reaches this hook.
+                override suspend fun compositeBuffer(): PixelBuffer? = compositeBuffer(false, true)
+
                 override suspend fun compositeBuffer(
                     includeHidden: Boolean,
                     applyAdjustments: Boolean,
@@ -236,6 +240,7 @@ class SelectionGestureDeviceTest {
         try {
             start()
             withTimeout(10_000) { reachedSample.await() }
+            check(!exitedSample.isCompleted) { "The first snapshot must still be paused before the competing edit" }
             whilePaused()
             releaseSample.complete(Unit)
             awaitSelection(canvas)

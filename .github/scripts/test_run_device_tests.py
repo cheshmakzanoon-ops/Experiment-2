@@ -9,7 +9,7 @@ SCRIPT = Path(__file__).with_name('run-device-tests.sh').resolve()
 
 
 class DeviceHarnessTest(unittest.TestCase):
-    def run_harness(self, expected, gradle_status=0):
+    def run_harness(self, expected, gradle_status=0, runtime_mode="default"):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             commands = root / 'commands'
@@ -37,13 +37,20 @@ exit 0
             gradle.chmod(0o755)
             log = root / 'calls.txt'
             env = dict(os.environ, PATH=f'{commands}:{os.environ["PATH"]}',
-                       RUNNER_TEMP=str(root), CALLS=str(log), GRADLE_STATUS=str(gradle_status))
+                       RUNNER_TEMP=str(root), CALLS=str(log), GRADLE_STATUS=str(gradle_status),
+                       ART_JIT_MODE=runtime_mode)
             env.pop('EXPECTED_PAGE_SIZE', None)
             if expected is not None:
                 env['EXPECTED_PAGE_SIZE'] = expected
             result = subprocess.run(['bash', str(SCRIPT)], cwd=root, env=env,
                                     capture_output=True, text=True, timeout=10)
             return result, log.read_text() if log.exists() else ''
+
+    def test_failed_runtime_configuration_prevents_instrumentation(self):
+        result, calls = self.run_harness('16384', runtime_mode='invalid')
+        self.assertEqual(2, result.returncode)
+        self.assertNotIn('connectedDebugAndroidTest', calls)
+        self.assertIn('logcat', calls)
 
     def test_api26_needs_no_getconf(self):
         result, calls = self.run_harness('4096')
