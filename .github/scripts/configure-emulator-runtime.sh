@@ -31,7 +31,10 @@ if [[ "$mode" == disabled ]]; then
     echo 'JIT configuration requires a disposable, debuggable Android emulator' >&2
     exit 1
   fi
-  run_adb root
+  # "adb root" commonly restarts adbd and may return a transient non-zero/closed
+  # transport status even though the restart succeeds. The authoritative check is
+  # the post-reconnect uid, so tolerate only this command's transient disconnect.
+  run_adb root || true
   timeout 60 adb wait-for-device
   if [[ "$(run_adb shell id -u | tr -d '\r')" != 0 ]]; then
     echo 'The emulator did not grant adb root; runtime configuration was not applied' >&2

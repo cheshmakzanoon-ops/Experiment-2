@@ -125,6 +125,14 @@ class EmulatorRuntimeTest(unittest.TestCase):
         self.assertNotIn("shell stop", self.calls())
         self.assertNotIn("configurationStatus=PASS", self.record())
 
+    def test_transient_adb_root_disconnect_is_accepted_only_after_root_readback(self):
+        result = self.run_script(FAIL_COMMAND="root")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("root", self.calls())
+        self.assertIn("wait-for-device", self.calls())
+        self.assertIn("shell id -u", self.calls())
+        self.assertIn("configurationStatus=PASS", self.record())
+
     def test_property_write_failure_is_not_reported_as_success_and_restarts_services(self):
         result = self.run_script(FAIL_COMMAND="shell setprop dalvik.vm.usejit false")
         self.assertNotEqual(0, result.returncode)

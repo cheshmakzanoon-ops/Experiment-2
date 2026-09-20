@@ -6,7 +6,6 @@ import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.ViewGroup
-import android.widget.FrameLayout
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artflow.studio.core.pixels.PixelBuffer
@@ -18,7 +17,6 @@ import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
-import com.artflow.studio.presentation.ui.MainActivity
 import com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView
 import com.artflow.studio.presentation.ui.components.canvas.EditorInput
 import com.artflow.studio.presentation.ui.components.canvas.ShapeKind
@@ -736,7 +734,7 @@ class CanvasInputDeviceTest {
     ) {
         val projectId = 9_100_000L + id
         storage.deleteProjectFiles(projectId)
-        val scenario = ActivityScenario.launch(MainActivity::class.java)
+        val scenario = ActivityScenario.launch(SelectionCanvasTestActivity::class.java)
         try {
             runBlocking(Dispatchers.Main) {
                 repository.loadOrCreate(projectId, 64, 64, 72)
@@ -744,7 +742,7 @@ class CanvasInputDeviceTest {
             }
             var view: ArtFlowCanvasView? = null
             scenario.onActivity { activity ->
-                val container = activity.findViewById<FrameLayout>(android.R.id.content)
+                val container = activity.canvasContainer
                 container.removeAllViews()
                 view =
                     ArtFlowCanvasView(activity).apply {

@@ -1,3 +1,7 @@
+### Run 80 current-tip repair
+
+Run `35499537275` left two current failures. The primary API 35/16 KB process died inside ART while the low-level canvas test was unnecessarily launching the full Compose gallery; `CanvasInputDeviceTest` now uses the existing debug-only `SelectionCanvasTestActivity`, which hosts the real production canvas and Hilt repository without starting unrelated gallery composition. The independent API 35 repeat failed earlier because `adb root` restarted adbd and returned a transient closed transport; the runtime configurator now waits for reconnection and treats the verified post-reconnect root UID as authoritative. The configurator still fails closed if root was not actually granted.
+
 ### Run 79 framework-crash containment
 
 Run `35485945078` reduced current CI to one red job: build/static analysis and five other device jobs passed, including the second API 35/16 KB lane. The remaining primary API 35 failure was not an ArtFlow assertion: Android 15's own `ReferenceQueueDaemon` threw a framework `NullPointerException` in `ReferenceQueue.enqueuePending`; Google Play Services showed the same runtime failure in that emulator session. The harness now retries once only when the preserved crash report and every JUnit failure element match that exact framework signature. Any ArtFlow assertion, different crash, malformed evidence, or second-attempt failure remains red. The first failed attempt is retained in the uploaded device artifact.
