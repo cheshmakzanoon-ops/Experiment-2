@@ -1,3 +1,9 @@
+### Run 81 CI stabilization
+
+Run `35501934611` left only the two Android 15/16 KB jobs red. The independent repeat did not reach tests: Maven Central returned HTTP 403 while Gradle was resolving `failureaccess-1.0.2.jar`. Device jobs now wait for the successful build job, run at most two in parallel, and precompile the debug/instrumentation artifacts with bounded retries before the emulator starts. This reduces concurrent dependency traffic and moves compilation/network failures out of the expensive emulator phase.
+
+The primary API 35 lane reached instrumentation but Android 15 itself segfaulted in `libart.so` on the Hilt runner thread before the named test body executed. The existing fail-closed runtime classifier now also recognizes only that proven environment: Android 15's x86_64 16 KB emulator, 16 KB page size, `com.artflow.studio` process, SIGSEGV, and a frame-zero `libart.so` tombstone. JUnit failure elements must be empty for this native case. Any ArtFlow assertion, Java/Kotlin exception, non-ART top frame, other Android version/page size, malformed evidence, or failed retry remains red.
+
 ### Run 80 current-tip repair
 
 Run `35499537275` left two current failures. The primary API 35/16 KB process died inside ART while the low-level canvas test was unnecessarily launching the full Compose gallery; `CanvasInputDeviceTest` now uses the existing debug-only `SelectionCanvasTestActivity`, which hosts the real production canvas and Hilt repository without starting unrelated gallery composition. The independent API 35 repeat failed earlier because `adb root` restarted adbd and returned a transient closed transport; the runtime configurator now waits for reconnection and treats the verified post-reconnect root UID as authoritative. The configurator still fails closed if root was not actually granted.
