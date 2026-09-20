@@ -152,7 +152,11 @@ class BrushAttributeUiTest {
     }
 
     private fun choose(label: String) {
-        compose.onNodeWithText(label).performScrollTo().performClick().assertIsSelected()
+        compose
+            .onNodeWithText(label)
+            .performScrollTo()
+            .performClick()
+            .assertIsSelected()
     }
 
     private fun change(

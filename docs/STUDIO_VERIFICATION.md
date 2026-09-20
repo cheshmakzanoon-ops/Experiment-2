@@ -23,6 +23,22 @@ MotionEvents, commit-boundary checks, concurrency checks and all assertions rema
 setting, test, assertion or failure path is disabled. A new exact-commit run must determine what
 remains.
 
+### Run 69 evidence
+
+`86d96bddf1a4f4c0acb37126d9966bc026fb8c02` passed the JVM-test step with 425 tests.
+The generated Detekt report contains zero findings. Ktlint reported exactly eight
+`chain-method-continuation` findings: three in `BrushDynamicsChecks.kt`, four in the
+`BrushAttributeUiTest.choose` helper and one in the pressure-brightness switch modifier.
+All are formatting-only and are corrected without changing test logic.
+
+The primary API 35/16 KB job completed all 172 instrumentation cases with one Java test failure and
+no ArtFlow native crash. Brush Studio tab-fit passed, Saved Brush UI passed, and all
+`SelectionGestureDeviceTest` cases passed under the plain debug host. The sole failure was
+`ArtworkWorkflowTest.createPaintSaveReopenRecreateAndDiscardPreserveTheSavedPixels`: its second
+Text-workspace opening queried `Workspace menu` while Compose temporarily reported no semantics
+hierarchy. The helper now waits up to the existing 15-second test bound for that specific production
+node; permanent loss of the hierarchy remains a hard failure.
+
 Base: `019648ea501c8de5f3d0af04fc16bc97b05d8923`.
 Source artifact: `10587885892`, run `35453272406`.
 The extracted and locally indexed tree is `88bf0c2d3b76b65ca160c1512359e395839dc351`,

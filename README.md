@@ -92,6 +92,20 @@ GLSurfaceView to a window, sends real `MotionEvent` input and retains every sele
 The host is excluded from release builds. No API lane, JIT behavior, assertion or test is disabled;
 exact-commit device CI remains the acceptance gate.
 
+### Run 69 follow-through
+
+Commit `86d96bdd` reached **425 passing JVM tests**. Detekt reported **0 findings**. Static
+analysis then stopped only on eight ktlint chain-continuation findings across
+`BrushDynamicsChecks.kt`, `BrushAttributeUiTest.kt` and `AdvancedBrushSettingsPanel.kt`.
+Those chains are now formatted without changing behavior or assertions.
+
+The primary API 35/16 KB lane executed all **172 instrumentation tests**: 171 passed, including the
+Brush Studio overflow regression and every `SelectionGestureDeviceTest`; the previous ArtFlow
+native SIGSEGV did not recur. The one failure was `ArtworkWorkflowTest` querying the Workspace
+menu during a transient interval with no registered Compose semantics root. The workflow test now
+waits, within its existing 15-second bound, for that real production node before interacting.
+A permanently missing UI still times out and fails; no assertion is skipped or weakened.
+
 ## Latest improvement: neutral, readable and adaptive studio
 
 ArtFlow now defines every Material surface/container role rather than mixing its own dark palette

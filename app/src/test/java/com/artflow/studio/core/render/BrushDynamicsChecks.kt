@@ -13,7 +13,12 @@ object BrushDynamicsChecks {
     fun attributeRoutesAreCompleteAndDisjoint() {
         val attributes = BrushAttribute.entries.filter { it != BrushAttribute.ALL }
         check(attributes.size == 10)
-        check(BrushAttribute.entries.map { it.label }.distinct().size == BrushAttribute.entries.size)
+        check(
+            BrushAttribute.entries
+                .map { it.label }
+                .distinct()
+                .size == BrushAttribute.entries.size,
+        )
         check(BrushAttribute.visible(BrushAttribute.ALL) == attributes)
         attributes.forEach { check(BrushAttribute.visible(it) == listOf(it)) }
     }

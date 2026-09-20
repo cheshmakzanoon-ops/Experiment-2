@@ -370,7 +370,8 @@ private fun BrushSpeedSettings(
                 checked = brushParams.colorPressure,
                 onCheckedChange = { onBrushParamsChanged(brushParams.copy(colorPressure = it)) },
                 modifier =
-                    Modifier.sizeIn(minWidth = touchSize, minHeight = touchSize)
+                    Modifier
+                        .sizeIn(minWidth = touchSize, minHeight = touchSize)
                         .semantics { contentDescription = "Pressure changes brightness" },
             )
         }

@@ -219,6 +219,16 @@ class ArtworkWorkflowTest {
     }
 
     private fun openWorkspace(title: String) {
+        compose.waitUntil(15_000) {
+            try {
+                compose
+                    .onAllNodesWithContentDescription("Workspace menu")
+                    .fetchSemanticsNodes()
+                    .isNotEmpty()
+            } catch (_: IllegalStateException) {
+                false
+            }
+        }
         compose.onNodeWithContentDescription("Workspace menu").performClick()
         compose.onNodeWithText(title).performScrollTo().performClick()
         compose.waitForIdle()
