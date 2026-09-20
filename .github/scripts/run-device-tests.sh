@@ -16,9 +16,30 @@ case "${EXPECTED_PAGE_SIZE:-}" in
 esac
 # Record default runtime settings, or explicitly configure and verify the debug-emulator mitigation.
 bash "$(dirname "${BASH_SOURCE[0]}")/configure-emulator-runtime.sh" || exit $?
-./gradlew connectedDebugAndroidTest \
-  "-Pandroid.testInstrumentationRunnerArguments.expectedPageSize=${EXPECTED_PAGE_SIZE}" \
-  --stacktrace || exit $?
+run_instrumentation() {
+  ./gradlew connectedDebugAndroidTest \
+    "-Pandroid.testInstrumentationRunnerArguments.expectedPageSize=${EXPECTED_PAGE_SIZE}" \
+    --stacktrace
+}
+instrumentation_status=0
+run_instrumentation || instrumentation_status=$?
+if ((instrumentation_status != 0)); then
+  results_root="app/build/outputs/androidTest-results/connected/debug"
+  classifier=".github/scripts/classify_android15_reference_queue_crash.py"
+  if [[ "${ART_JIT_MODE:-default}" == disabled ]] && python "$classifier" "$results_root"; then
+    retry_root="$root/android15-framework-retry"
+    mkdir -p "$retry_root"
+    cp -R "$results_root" "$retry_root/first-attempt-results" || true
+    timeout 15 adb logcat -b all -d > "$retry_root/first-attempt-logcat.txt" || true
+    adb shell am force-stop com.artflow.studio || true
+    adb shell am force-stop com.artflow.studio.test || true
+    adb shell pm clear com.artflow.studio || true
+    echo "Retrying instrumentation once after verified Android 15 ReferenceQueueDaemon crash"
+    run_instrumentation || exit $?
+  else
+    exit "$instrumentation_status"
+  fi
+fi
 
 # Capture evidence before the release-equivalent install replaces instrumentation state.
 # RuntimeEnvironmentTest also logs measured values into UTP's preserved per-test logcat.

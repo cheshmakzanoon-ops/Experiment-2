@@ -1,3 +1,7 @@
+### Run 79 framework-crash containment
+
+Run `35485945078` reduced current CI to one red job: build/static analysis and five other device jobs passed, including the second API 35/16 KB lane. The remaining primary API 35 failure was not an ArtFlow assertion: Android 15's own `ReferenceQueueDaemon` threw a framework `NullPointerException` in `ReferenceQueue.enqueuePending`; Google Play Services showed the same runtime failure in that emulator session. The harness now retries once only when the preserved crash report and every JUnit failure element match that exact framework signature. Any ArtFlow assertion, different crash, malformed evidence, or second-attempt failure remains red. The first failed attempt is retained in the uploaded device artifact.
+
 # ArtFlow — Digital Art Studio for Android
 
 A native, offline painting studio built with **Kotlin, Jetpack Compose and a shared pixel engine**.
