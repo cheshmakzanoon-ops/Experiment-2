@@ -73,7 +73,7 @@ fun BrushStudioContent(
                     IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Cancel brush changes") }
                 }
                 library?.let { SavedBrushToolbar(draft, it) }
-                TabRow(selectedTabIndex = tab) {
+                ScrollableTabRow(selectedTabIndex = tab, edgePadding = 0.dp) {
                     listOf("Library", "Settings", "Drawing pad").forEachIndexed { index, title ->
                         Tab(
                             selected = tab == index,
