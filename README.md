@@ -1,7 +1,3 @@
-### Android 15 emulator stabilization
-
-Run `35499537275` showed that the remaining API 35 failure was another native Android Runtime crash, not an ArtFlow assertion: the process died in `libart.so` interpreter frames while executing normal Kotlin/Compose code. The second Android 15 16 KB emulator also failed before instrumentation because the emulator device disappeared during boot. To remove this system-image instability without reducing meaningful product coverage, CI now runs Android 15 on the standard `google_apis` image and retains Android 16 16 KB runtime testing plus APK/AAB native-alignment verification. The duplicate Android 15 16 KB repeat lane is removed; application assertions remain unchanged.
-
 ### Run 81 CI stabilization
 
 Run `35501934611` left only the two Android 15/16 KB jobs red. The independent repeat did not reach tests: Maven Central returned HTTP 403 while Gradle was resolving `failureaccess-1.0.2.jar`. Device jobs now wait for the successful build job, run at most two in parallel, and precompile the debug/instrumentation artifacts with bounded retries before the emulator starts. This reduces concurrent dependency traffic and moves compilation/network failures out of the expensive emulator phase.

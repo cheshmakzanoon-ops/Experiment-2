@@ -135,13 +135,18 @@ jobs:
           - api: 35
             label: API 35
             artifact: '35'
-            target: google_apis
-            page_size: 4096
+            target: google_apis_ps16k
+            page_size: 16384
           - api: 36
             label: API 36
             artifact: '36'
             target: google_apis
             page_size: 4096
+          - api: 35
+            label: API 35 independent 16 KB repeat
+            artifact: 35-16k-repeat
+            target: google_apis_ps16k
+            page_size: 16384
           - api: 36
             label: API 36 16 KB
             artifact: 36-16k
@@ -186,7 +191,7 @@ jobs:
       - name: Run instrumentation tests
         env:
           EXPECTED_PAGE_SIZE: ${{ matrix.page_size }}
-          ART_JIT_MODE: default
+          ART_JIT_MODE: ${{ matrix.api == 35 && 'disabled' || 'default' }}
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api }}
