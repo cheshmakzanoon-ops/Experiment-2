@@ -114,6 +114,10 @@ Run `35478935168` confirmed two deterministic failures in the recent Brush Studi
 
 Recent CI artifacts exposed three recurring failure classes: Brush Studio tab text clipping under large font scales, one remaining ktlint chain-format violation, and an API 35/16 KB native SIGSEGV inside Kotlin's generated `CanvasRepository.compositeBuffer$default` helper. This revision gives the tabs more intrinsic width, corrects the formatter issue, and replaces default parameters on `compositeBuffer` with an explicit no-argument overload plus an explicit-policy overload. Tests and device lanes remain enabled.
 
+### API 35/16 KB emulator JIT stabilization
+
+Historical CI artifacts show two unrelated tests dying in the same Android 15 x86_64 16 KB emulator with native SIGSEGVs inside ART JIT-compiled code: one in Compose animation internals and one in Kotlin's generated default-argument helper. The two API 35/16 KB lanes therefore boot with ART JIT disabled, while still asserting the real 16 KB process page size and running the complete instrumentation suite. API 36/16 KB remains JIT-enabled, so the matrix still exercises 16 KB + JIT on the newer runtime instead of hiding application failures.
+
 ## Latest improvement: neutral, readable and adaptive studio
 
 ArtFlow now defines every Material surface/container role rather than mixing its own dark palette
