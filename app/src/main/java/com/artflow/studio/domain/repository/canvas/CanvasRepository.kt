@@ -461,10 +461,13 @@ interface CanvasRepository {
     // Compositing and invalidation
     // -----------------------------------------------------------------------------------------
 
-    /** Flattens the document. Callers own the returned buffer. */
+    /** Flattens the document with the normal visible-layer/adjustment policy. */
+    suspend fun compositeBuffer(): PixelBuffer? = compositeBuffer(includeHidden = false, applyAdjustments = true)
+
+    /** Flattens the document with an explicit compositing policy. Callers own the returned buffer. */
     suspend fun compositeBuffer(
-        includeHidden: Boolean = false,
-        applyAdjustments: Boolean = true,
+        includeHidden: Boolean,
+        applyAdjustments: Boolean,
     ): PixelBuffer?
 
     /** Captures pixels, layer properties, selection and frame timing from one document revision. */

@@ -81,11 +81,11 @@ fun BrushStudioContent(
                                 focusManager.clearFocus()
                                 tab = index
                             },
-                            modifier = Modifier.widthIn(min = 112.dp).heightIn(min = 48.dp),
+                            modifier = Modifier.widthIn(min = 144.dp).heightIn(min = 48.dp),
                         ) {
                             Text(
                                 title,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
                                 style = MaterialTheme.typography.labelLarge,
                                 maxLines = 1,
                                 softWrap = false,

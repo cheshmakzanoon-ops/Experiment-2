@@ -110,6 +110,10 @@ A permanently missing UI still times out and fails; no assertion is skipped or w
 
 Run `35478935168` confirmed two deterministic failures in the recent Brush Studio work: one remaining ktlint multiline-expression violation and tab labels whose text layout was still constrained tightly enough to report width overflow on API 26 and API 35. This revision fixes the production layout rather than weakening the tests. Each Brush Studio tab now has an explicit minimum width inside a scrollable row, and labels are single-line/non-wrapping so fractional glyph measurement cannot clip them. The dynamics toggle modifier is formatted to the exact ktlint chain rule reported by CI. No device lane, assertion, selection test or static-analysis rule is disabled.
 
+## CI root-cause repair
+
+Recent CI artifacts exposed three recurring failure classes: Brush Studio tab text clipping under large font scales, one remaining ktlint chain-format violation, and an API 35/16 KB native SIGSEGV inside Kotlin's generated `CanvasRepository.compositeBuffer$default` helper. This revision gives the tabs more intrinsic width, corrects the formatter issue, and replaces default parameters on `compositeBuffer` with an explicit no-argument overload plus an explicit-policy overload. Tests and device lanes remain enabled.
+
 ## Latest improvement: neutral, readable and adaptive studio
 
 ArtFlow now defines every Material surface/container role rather than mixing its own dark palette
