@@ -77,6 +77,21 @@ test chains are formatted without changing their assertions. The two API 35 jobs
 separate selection-gesture failures/process termination; those are preserved as independent
 evidence and are not suppressed by this repair. Exact-commit CI is required before a pass claim.
 
+### API 35 selection-harness isolation
+
+Both independent API 35/16 KB jobs in run `35476665563` died while
+`SelectionGestureDeviceTest` was running, but in **different test methods**. The preserved
+tombstones point into unrelated JIT-compiled Compose startup paths (`Recomposer.addRunning` in one
+run and `SubcomposeLayout` / `Scaffold` / `GalleryScreen` in the other), not into the selection
+worker, mask operations or canvas commit path. The suite had been launching the full Compose
+`MainActivity` for each case and immediately replacing its content with the raw canvas.
+
+The suite now launches a **debug-only Hilt test host with no Compose content**. It still instantiates
+the production `ArtFlowCanvasView`, uses the real injected `CanvasRepository`, attaches the real
+GLSurfaceView to a window, sends real `MotionEvent` input and retains every selection assertion.
+The host is excluded from release builds. No API lane, JIT behavior, assertion or test is disabled;
+exact-commit device CI remains the acceptance gate.
+
 ## Latest improvement: neutral, readable and adaptive studio
 
 ArtFlow now defines every Material surface/container role rather than mixing its own dark palette

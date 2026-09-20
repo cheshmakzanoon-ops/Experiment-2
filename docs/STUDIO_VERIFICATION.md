@@ -3,10 +3,26 @@
 ## Published run 67 — corrective follow-through
 
 `db596080afc8869537df7488550cbba44059197b` triggered run `35476665563`.
-The JVM-test step passed. Static analysis failed only on ktlint formatting in
-`BrushAttributeUiTest.kt` (the new pressure-brightness chains). Every device lane reached
-instrumentation and reported the same `BrushStudioUiTest.selectingAndUsingAPresetPublishesExactlyOnce`
-NaNNaNNaNNaNNaNNaN
+The JVM-test step passed. Static analysis failed on ktlint formatting in
+`BrushAttributeUiTest.kt`. Every device lane reached instrumentation and reported the same
+`BrushStudioUiTest.selectingAndUsingAPresetPublishesExactlyOnce` failure: `Library` reported
+`didOverflowWidth=true` at a measured 46–89 px width. Commit `9a0e3455` makes each tab label fill
+the width already allocated by `TabRow` and reformats the rejected test chains without changing
+their assertions.
+
+The two API 35/16 KB jobs also failed in different `SelectionGestureDeviceTest` methods and then
+terminated natively. Their preserved tombstones enter JIT-compiled Compose startup code rather than
+selection code: one includes `Recomposer.addRunning`; the independent repeat includes
+`SubcomposeLayout`, `Scaffold` and `GalleryScreen`. The selection suite was unnecessarily
+launching the production Compose `MainActivity` before replacing its hierarchy with
+`ArtFlowCanvasView`.
+
+The corrective harness uses a debug-only `@AndroidEntryPoint` `ComponentActivity` with a plain
+`FrameLayout`. The production Hilt-injected `ArtFlowCanvasView`, repository, GL attachment, real
+MotionEvents, commit-boundary checks, concurrency checks and all assertions remain. No lane, JIT
+setting, test, assertion or failure path is disabled. A new exact-commit run must determine what
+remains.
+
 Base: `019648ea501c8de5f3d0af04fc16bc97b05d8923`.
 Source artifact: `10587885892`, run `35453272406`.
 The extracted and locally indexed tree is `88bf0c2d3b76b65ca160c1512359e395839dc351`,
