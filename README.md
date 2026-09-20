@@ -106,6 +106,10 @@ menu during a transient interval with no registered Compose semantics root. The 
 waits, within its existing 15-second bound, for that real production node before interacting.
 A permanently missing UI still times out and fails; no assertion is skipped or weakened.
 
+### Run 74 root-cause stabilization
+
+Run `35478935168` confirmed two deterministic failures in the recent Brush Studio work: one remaining ktlint multiline-expression violation and tab labels whose text layout was still constrained tightly enough to report width overflow on API 26 and API 35. This revision fixes the production layout rather than weakening the tests. Each Brush Studio tab now has an explicit minimum width inside a scrollable row, and labels are single-line/non-wrapping so fractional glyph measurement cannot clip them. The dynamics toggle modifier is formatted to the exact ktlint chain rule reported by CI. No device lane, assertion, selection test or static-analysis rule is disabled.
+
 ## Latest improvement: neutral, readable and adaptive studio
 
 ArtFlow now defines every Material surface/container role rather than mixing its own dark palette
