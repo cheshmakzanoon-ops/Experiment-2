@@ -1,3 +1,7 @@
+### Run 84 Android-system recovery
+
+Run `35509598187` proved that an app-only restart is insufficient after a classifier-proven Android 15/16 KB runtime crash: the first instrumentation attempt matched the known framework crash, then the retry aborted immediately with `INSTRUMENTATION_ABORTED: System has crashed`. The harness now preserves the first attempt, performs a real emulator reboot, proves the boot ID changed and Android reached `sys.boot_completed=1`, reapplies and verifies the Android 15 runtime configuration, clears only disposable test-package state, and then performs the single retry. Recovery itself is fail-closed and covered by standalone tests; application assertions and unrelated crashes are still never retried.
+
 ### Run 81 CI stabilization
 
 Run `35501934611` left only the two Android 15/16 KB jobs red. The independent repeat did not reach tests: Maven Central returned HTTP 403 while Gradle was resolving `failureaccess-1.0.2.jar`. Device jobs now wait for the successful build job, run at most two in parallel, and precompile the debug/instrumentation artifacts with bounded retries before the emulator starts. This reduces concurrent dependency traffic and moves compilation/network failures out of the expensive emulator phase.

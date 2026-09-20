@@ -31,10 +31,9 @@ if ((instrumentation_status != 0)); then
     mkdir -p "$retry_root"
     cp -R "$results_root" "$retry_root/first-attempt-results" || true
     timeout 15 adb logcat -b all -d > "$retry_root/first-attempt-logcat.txt" || true
-    adb shell am force-stop com.artflow.studio || true
-    adb shell am force-stop com.artflow.studio.test || true
-    adb shell pm clear com.artflow.studio || true
-    echo "Retrying instrumentation once after verified Android 15 ReferenceQueueDaemon crash"
+    echo "Recovering Android before the single framework-crash retry"
+    bash ".github/scripts/recover-android15-emulator.sh" || exit $?
+    echo "Retrying instrumentation once after verified Android 15/16 KB runtime crash"
     run_instrumentation || exit $?
   else
     exit "$instrumentation_status"
