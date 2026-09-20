@@ -18,15 +18,24 @@ import com.artflow.studio.presentation.ui.viewmodel.CanvasUiState
 import com.artflow.studio.presentation.ui.viewmodel.CanvasViewModel
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 /** The actual sheet must reflect the real playback session, not a manually supplied playing flag. */
@@ -91,7 +100,7 @@ class AnimationPlaybackUiTest {
     fun cleanup() {
         if (::viewModel.isInitialized) {
             runBlocking(Dispatchers.Main) {
-                viewModel.viewModelScope.cancel()
+                awaitViewModelShutdown()
                 canvas.dispose()
             }
         }
@@ -99,6 +108,44 @@ class AnimationPlaybackUiTest {
             runBlocking {
                 projects.deleteProjectById(projectId)
                 storage.deleteProjectFiles(projectId)
+            }
+        }
+    }
+
+    /** Cancellation requests shutdown; joining also waits for a blocking atomic write to leave I/O. */
+    private suspend fun awaitViewModelShutdown() {
+        val owner = requireNotNull(viewModel.viewModelScope.coroutineContext[Job])
+        withTimeout(15_000) { owner.cancelAndJoin() }
+    }
+
+    @Test
+    fun teardownWaitsForAnAtomicWriteAlreadyInFlight() {
+        val enteredWrite = CompletableDeferred<Unit>()
+        val releaseWrite = CountDownLatch(1)
+        val target = File(storage.projectDir(projectId), "cleanup-probe.txt")
+        runBlocking(Dispatchers.Main) {
+            val writer =
+                viewModel.viewModelScope.async(Dispatchers.IO) {
+                    storage.writeAtomically(target) { output ->
+                        enteredWrite.complete(Unit)
+                        check(releaseWrite.await(10, TimeUnit.SECONDS)) { "The test did not release its atomic writer" }
+                        output.write("owned write".toByteArray())
+                    }
+                }
+            try {
+                withTimeout(10_000) { enteredWrite.await() }
+                val shutdown = launch(start = CoroutineStart.UNDISPATCHED) { awaitViewModelShutdown() }
+                assertFalse("Teardown cannot finish while its writer still owns the temporary file", shutdown.isCompleted)
+                assertFalse(writer.isCompleted)
+                assertTrue(storage.projectDirectoryExists(projectId))
+                assertFalse(target.exists())
+                releaseWrite.countDown()
+                withTimeout(15_000) { shutdown.join() }
+                assertTrue(writer.isCompleted)
+                assertEquals("owned write", target.readText())
+            } finally {
+                releaseWrite.countDown()
+                awaitViewModelShutdown()
             }
         }
     }

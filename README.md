@@ -9,155 +9,52 @@ The [Procreate comparison](docs/PROCREATE_PARITY.md) separates implemented workf
 
 ## Current CI follow-through
 
-The `34b0269` / run **77** build passed JVM, static analysis, APK/AAB and artifact checks, but
-**all six device jobs failed**. Earlier statements that the remaining failures were fixed were
-premature. The [failure ledger and repair record](docs/CI_REPAIR_FOLLOW_THROUGH.md) preserves the
-exact baseline, failed cases, artifact IDs and verification boundaries.
+Run **78** (`27b4c6cf`) passed all build/static/artifact checks and five of six device jobs.
+All prior tab and selection regressions passed on every device. The tablet completed 175 cases,
+with one failure in `AnimationPlaybackUiTest` **teardown**: a background atomic autosave was still
+renaming its temporary file while the test deleted the directory. Cancelling the ViewModel scope
+requests cancellation but does not wait for a blocking write to leave I/O.
 
-This repair sizes the actual tab text using measured labels instead of widening only its parent,
-restores the selection-race test's interception of the newly added no-argument compositing overload,
-and replaces ineffective emulator `-prop` flags with verified AOSP runtime setup. The API 35 setup
-is an explicitly documented **CI environment mitigation**, not a production native-crash fix.
-All original tests, six device lanes and page-size checks remain; three scaled/RTL tab tests and
-eight runtime/harness checks are added. Locally, **38 Python checks** and a Kotlin delegation probe
-passed. Android acceptance requires the completed CI run for this exact revision, not a queued job.
+The follow-through now **cancels and joins the test-owned ViewModel jobs before disposing the
+repository or deleting project files**. A deterministic device regression holds a real atomic write
+open, verifies teardown cannot finish prematurely, then releases it and checks completion. The two
+original playback tests and production storage error propagation are unchanged. A local Kotlin/JVM
+probe reproduced the old cancel-only race and verified joining across 20 atomic-write schedules;
+all 38 Python checks passed. This next revision still needs its own completed Android CI result.
+
+The preceding repair sizes actual tab text from measured labels, restores the delegated selection
+pause hook, and configures/verifies the intended API 35 runtime mitigation. Both API 35 lanes in run
+78 completed 175 tests without failures and passed minified launch, with 16 KB pages and verified
+JIT-disabled settings. API 36/16 KB passed with its normal JIT enabled. This is a **CI environment
+mitigation**, not proof of production API 35 + JIT readiness or a permanent native-crash fix.
+
+The [failure ledger and repair record](docs/CI_REPAIR_FOLLOW_THROUGH.md) retains exact baseline runs,
+failed cases, artifact IDs and verification boundaries. Earlier red runs are not erased. All six
+device lanes, original test cases, page-size checks and minified launches remain required.
 
 ## Brush attribute navigation and connected dynamics
 
-The candidate following `019648e` adds **ten named setting groups** plus **All settings** to
-Brush Studio. Wide settings panes use a scrollable attribute sidebar; compact panes use a
-horizontal selector. Choose Pressure, Grain or Wet paint directly instead of scrolling past every
-other group. Returning from Library or Drawing pad retains the selected group and the same draft.
-Changing groups starts the new panel at the top without resetting brush values. Navigation and the
-new pressure toggle honour the larger-touch-target preference.
+Brush Studio provides **ten named setting groups** plus **All settings**. Wide panes use a scrollable
+sidebar; compact panes use a horizontal selector. Returning from Library or Drawing pad retains the
+selected group and draft. Changing groups starts the new panel at the top without resetting values.
+Navigation and the pressure toggle honour the larger-touch-target preference.
 
-**Speed & colour** now exposes the existing engine's speed-to-size, speed-to-opacity and
-speed-to-hue parameters, plus pressure-dependent brightness. These controls were missing from
-the editor despite the parameters already affecting the rasterizer. They use the same exact-value
-entry and staged Use brush/Cancel workflow as the other settings, and complete-parameter saved
-copies already preserve them. No new document format, permission or dependency is required.
+**Speed & colour** exposes speed-controlled size, opacity and hue, plus pressure-dependent
+brightness, using the same exact-value entry and staged Use brush/Cancel workflow. Saved copies
+preserve the complete parameter model. The active renderer still uses round tips: stored tilt and
+general tip rotation are not implemented rendering features. Procedural **grain rotation** works.
 
-The active engine still uses round brush tips: its stored tilt settings and general tip rotation
-are **not** implemented rendering features. The Rotation group states that limitation; procedural
-**grain rotation** does affect the texture. There is no claim of imported tips, realistic media or
-physical-stylus parity here.
+## Neutral, adaptive workspace
 
-Seven new core/JUnit cases exercise group routing and actual rendered size/alpha/colour changes,
-source-alpha preservation, custom pressure response and determinism. Their shared production-core
-checks passed locally, alongside the seven existing Brush Studio check groups. Five new Compose
-tests cover group navigation, draft preservation, matching parameter updates, staged application,
-cancellation and large targets. They are **written but not executed locally**. All previous slider
-labels and existing regression tests are retained. This work is published, but the remaining device failures block complete verification; [verification follow-through](docs/STUDIO_VERIFICATION.md) records the boundaries.
+Neutral Material surfaces keep artwork visually dominant. The UI palette adjusts accent colours
+for readable foreground/background pairs; tested normal-text pairs meet 4.5:1 and high-contrast
+pairs meet 7:1. These are palette contracts, not whole-app accessibility certification. Artwork
+pixels and working colours are not changed by UI contrast adjustment.
 
-## Candidate follow-through: tablet labels and verification
-
-The candidate based on `019648e` preserves the existing neutral theme and tablet layout while
-addressing the three static-analysis findings from run `35453272406`. Palette tests retain every
-accent/mode combination and every contrast assertion; their nested bodies are factored into helpers.
-Brush Studio tabs use content-measured height rather than the text-baseline layout. The device
-regression now checks **all three labels**, with width/height overflow diagnostics, instead of only
-Drawing pad. This is a proposed fix pending a new Android run, not a recorded device pass.
-
-The prior run passed its JVM step and four of six device jobs. API 36 tablet reported label
-overflow. API 35/16 KB terminated with a native main-thread SIGSEGV in JIT-compiled Compose animation
-code during saved-brush renaming. That stack is **not** the prior ART Profile Saver abort signature;
-its root cause remains unresolved. Neither the failed run nor its assertions are waived.
-
-Local checks: all six production palette groups passed (24 theme/accent combinations and 1,000
-seed cases), and all 30 Python verifier tests passed. Gradle bootstrap is blocked by DNS resolution
-for `services.gradle.org`; Android/JUnit/static-analysis execution for this candidate is pending.
-See [verification follow-through](docs/STUDIO_VERIFICATION.md) for exact artifacts and promotion gates.
-
-### Candidate inspection pass
-
-A final source inspection also found and split a 141-character overflow-diagnostic line to respect
-the existing 140-character Kotlin limit, without changing the assertion. The source-integrity audit
-checks that every original test file and test-case count is retained and that the previous brush
-slider labels remain available. Local candidate verification is not a replacement for ktlint,
-Detekt, Android compilation or device testing.
-
-### Published run 67 corrective pass
-
-Published commit `db596080` / run `35476665563` passed the JVM-test step, then exposed two
-problems introduced by the latest candidate. Ktlint rejected two compact method chains in
-`BrushAttributeUiTest.kt`. All six device configurations reached instrumentation and failed the
-same Brush Studio label check: `Library` reported `didOverflowWidth=true` even though its measured
-text width was only 46–89 px. The tab text was being content-sized, leaving Compose's fractional
-text measurement at the layout edge.
-
-This follow-through makes each tab label consume the width already allocated by `TabRow`, while
-retaining centered text, two-line wrapping and the existing overflow assertion. The two rejected
-test chains are formatted without changing their assertions. The two API 35 jobs also recorded
-separate selection-gesture failures/process termination; those are preserved as independent
-evidence and are not suppressed by this repair. Exact-commit CI is required before a pass claim.
-
-### API 35 selection-harness isolation
-
-Both independent API 35/16 KB jobs in run `35476665563` died while
-`SelectionGestureDeviceTest` was running, but in **different test methods**. The preserved
-tombstones point into unrelated JIT-compiled Compose startup paths (`Recomposer.addRunning` in one
-run and `SubcomposeLayout` / `Scaffold` / `GalleryScreen` in the other), not into the selection
-worker, mask operations or canvas commit path. The suite had been launching the full Compose
-`MainActivity` for each case and immediately replacing its content with the raw canvas.
-
-The suite now launches a **debug-only Hilt test host with no Compose content**. It still instantiates
-the production `ArtFlowCanvasView`, uses the real injected `CanvasRepository`, attaches the real
-GLSurfaceView to a window, sends real `MotionEvent` input and retains every selection assertion.
-The host is excluded from release builds. No API lane, JIT behavior, assertion or test is disabled;
-exact-commit device CI remains the acceptance gate.
-
-### Run 69 follow-through
-
-Commit `86d96bdd` reached **425 passing JVM tests**. Detekt reported **0 findings**. Static
-analysis then stopped only on eight ktlint chain-continuation findings across
-`BrushDynamicsChecks.kt`, `BrushAttributeUiTest.kt` and `AdvancedBrushSettingsPanel.kt`.
-Those chains are now formatted without changing behavior or assertions.
-
-The primary API 35/16 KB lane executed all **172 instrumentation tests**: 171 passed, including the
-Brush Studio overflow regression and every `SelectionGestureDeviceTest`; the previous ArtFlow
-native SIGSEGV did not recur. The one failure was `ArtworkWorkflowTest` querying the Workspace
-menu during a transient interval with no registered Compose semantics root. The workflow test now
-waits, within its existing 15-second bound, for that real production node before interacting.
-A permanently missing UI still times out and fails; no assertion is skipped or weakened.
-
-### Earlier CI repair attempts (superseded)
-
-Commits through `34b0269` corrected static-analysis findings and replaced generated default-argument
-compositing with explicit overloads. However, the parent-tab minimum-width changes did not resolve
-text overflow, and the new overload bypassed a delegated selection-test hook. The emulator `-prop`
-JIT flags also did not prevent JIT-cache execution in the failing API 35 repeat. These changes must
-not be described as verified root-cause fixes. The current follow-through above records the precise
-remaining failures and repairs; API 35 with its normal JIT remains a separate acceptance requirement.
-
-## Latest improvement: neutral, readable and adaptive studio
-
-ArtFlow now defines every Material surface/container role rather than mixing its own dark palette
-with the default tinted containers. Neutral grey surfaces keep the artwork visually dominant;
-accent colours remain on selected controls and actions. The default Ink accent previously measured
-only **1.21:1** on the old dark surface. The new opaque UI palette adjusts each accent for readable
-foreground/background combinations: tested normal text pairs meet **4.5:1**, with **7:1** for the
-high-contrast mode. These are measured palette contracts, not a claim of whole-app WCAG compliance.
-Artwork pixels and working colours are not modified by this UI colour adjustment.
-
-Interface scale now applies once to both controls and text while preserving Android's independent
-font-size preference. Previously multiplying density and font scale applied the interface factor
-twice to text. Invalid scale values fall back safely and valid settings retain their supported range.
-
-On sufficiently wide and tall windows, **Brush Studio shows Library or Settings beside the drawing
-pad**. Change parameters while the same practice marks remain visible. Compact windows retain the
-three-tab layout; Drawing pad can still occupy its own page. The practice surface fits both width
-and height without stretching strokes. Draft settings and retained practice paths survive switching
-between the layout modes and light/dark themes.
-
-Six pure-Kotlin palette checks executed locally, including all **24 accent/theme combinations** and
-**1,000 generated accent seeds**. Seven JUnit checks connect the math to the actual Material colour
-roles. New device checks cover scaling and theme/draft/practice retention, with a new **API 36 tablet**
-CI lane alongside all five existing configurations. Exact-commit Android execution is still required.
-
-The previous `925550d` revision passed **418 JVM tests** and **all five device configurations**.
-Its remaining ktlint findings are corrected here without changing rules, baselines or assertions.
-The API 36 report contains 165 instrumentation cases with zero failures/errors/skips, including
-saved brush UI/storage and the repaired whole-screen drawing-pad checks.
+Interface scale applies once to controls/text while retaining Android's independent font-size
+preference. On sufficiently wide and tall windows, Brush Studio shows Library or Settings beside
+the drawing pad; compact windows retain the three-tab layout. Practice marks preserve their aspect
+ratio. Draft settings and retained paths survive layout and light/dark theme changes.
 
 ## Saved custom brushes
 
@@ -179,27 +76,12 @@ or newer-format data produces a visible error and retry action, never a silent r
 The library currently supports **128 saved copies**, with names up to **80 characters**. Sharing,
 import/export, custom texture assets, favorites and user-defined brush sets remain unfinished.
 
-Nine JVM regressions exercise full round-trips, Unicode names, malformed/future data, failed writes,
-concurrent saves, cancellation, owned snapshots and limits. A device test closes/reopens a real Room
-database; three UI tests cover save/rename/delete/cancel and failure feedback. The earlier aspect-ratio
-test's missing DpRect extensions are corrected using its actual edge coordinates. All new checks
-require the completed CI result for this exact revision; their existence is not a passing result.
-
-### Follow-through on the preceding candidate
-
-Commit `b27de13` / run `35451246630` passed **409 JVM tests**, ktlint, detekt, debug/release lint,
-APK/AAB builds and packaged-artifact verification. Device lanes stopped during test compilation,
-before running any tests, on the aspect-ratio assertion corrected above. Earlier pending fixes
-include clearing search focus on preset/tab changes, a wrapping Drawing pad label, a correctly
-proportioned practice surface and API 26-compatible whole-screen pixel assertions. No test lane,
-assertion or analysis rule has been disabled to obtain a pass.
-
 ## Brush Studio
 
 Open **Brush** in the editor. **Library** searches eight original starter presets and filters
 Sketch, Ink, Texture and Paint, with samples rendered by the painting engine. **Settings** edits
 size, opacity, spacing, smoothing, pressure curves, taper, procedural grain, scatter, jitter and wet
-mix. The local candidate adds attribute navigation and speed/colour controls. General tip rotation
+mix. Attribute navigation and speed/colour controls are connected. General tip rotation
 is reserved metadata; grain rotation is active. Tap a displayed value for exact numeric entry. **Drawing pad** tests your own
 marks without touching the artwork; return after changing settings to see those marks re-rendered.
 

@@ -72,3 +72,46 @@ The published revision must have its own completed full CI result. Old failed ru
 
 - [Kotlin delegation and overridden members](https://kotlinlang.org/docs/delegation.html).
 - [AOSP: turn off JIT](https://source.android.com/docs/core/runtime/jit-compiler#turn-off-jit).
+
+## Run 78: follow-through after the full matrix
+
+Revision: `27b4c6cf897abab719f7311274536886f54cc07a`.
+Run: [35485069670](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/35485069670).
+
+The build passed **432 JVM cases**, ktlint, Detekt, debug/release Android lint, APK/AAB assembly,
+and artifact integrity/alignment. Five device jobs passed, each reporting 175 cases (API 26 retained
+its two existing API-gated skips); the tablet completed 175 cases with **one teardown failure**. The
+original tab-overflow and both selection-race assertions passed in all six lanes. All original
+172 device cases remain, plus three new tab tests.
+
+Both API 35 artifacts contain before/after runtime property readbacks, 16384-byte process-page
+results, all 175 successful cases and the passing minified-launch record. API 36/16 KB retains
+`dalvik.vm.usejit=true`. API 35 logs still contain unrelated system-app crashes; a passing test
+matrix is not evidence that the whole emulator image or production API 35 + JIT is repaired.
+
+### Remaining teardown race and its repair
+
+Tablet artifact `10597239438` records `AnimationPlaybackUiTest.backgroundCallbackClearsTheVisiblePauseState`
+failing in its `@After` cleanup. `StorageFileTree.delete` encountered a vanished
+`.autosave.artflow-*.tmp` while walking the project directory. The test had called
+`viewModel.viewModelScope.cancel()` and immediately deleted files. Cancellation had not waited
+for the blocking atomic write running on `Dispatchers.IO` to finish its rename/finalization.
+
+The test now awaits the owned scope Job's `cancelAndJoin()` under a 15-second bound before
+repository disposal or project deletion. If shutdown cannot complete, teardown fails rather than
+silently deleting a directory still owned by a writer. Production storage, atomic publication,
+error propagation and both original playback UI assertions are unchanged.
+
+A new device regression deliberately holds the production `ProjectStorage.writeAtomically`
+operation open inside a test-owned ViewModel child. It asserts that shutdown and the writer are
+not complete, releases the writer, then requires completion and the exact published bytes.
+Cleanup releases its gate even if an assertion fails. The local standalone Kotlin/JVM probe
+reproduced cancel-only returning before a blocked atomic write and verified joined shutdown across
+20 schedules. This probe uses real JVM files/coroutines, not Android or Compose; exact-commit
+Android execution of the new regression is still required. All 38 Python checks passed again.
+
+Preserved run 78 artifacts: build reports `10597199114`; API 26 `10596229650`; API 35 `10597204293`;
+API 35 repeat `10597124433`; API 36 `10596829952`; API 36/16 KB `10596244605`; tablet `10597239438`.
+The downloaded archive SHA-256 values matched GitHub's reported digests for the inspected artifacts.
+
+Reference: [Kotlin cancelAndJoin API](https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines/cancel-and-join.html).
