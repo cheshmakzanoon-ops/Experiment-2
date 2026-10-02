@@ -106,3 +106,14 @@ autosave recovery, and image, document and video exports with Android save/share
 - Android backup: https://developer.android.com/identity/data/autobackup
 
 Recheck these policies at submission; this document does not guarantee Play approval.
+
+## Store graphics
+
+Generated from the launcher icon's vector paths (`app/src/main/res/drawable/ic_launcher_foreground.xml`):
+
+| Asset | File | Play requirement |
+|---|---|---|
+| Hi-res icon | [`docs/store/icon-512.png`](store/icon-512.png) | 512 × 512, 32-bit PNG |
+| Feature graphic | [`docs/store/feature-graphic-1024x500.png`](store/feature-graphic-1024x500.png) | 1024 × 500, no alpha |
+
+Phone and tablet screenshots must be captured from the signed release build on real devices.
