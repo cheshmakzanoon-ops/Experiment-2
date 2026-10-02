@@ -14,6 +14,7 @@ import com.artflow.studio.core.canvas.PointerGestureRouter
 import com.artflow.studio.core.canvas.PointerPressure
 import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.Channels
+import com.artflow.studio.core.pixels.LayerTransform
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.RasterOverlay
 import com.artflow.studio.core.pixels.SelectionMask
@@ -105,6 +106,8 @@ data class EditorInput(
     val text: String = "ArtFlow",
     val textStyle: TextLayout.TextStyle = TextLayout.TextStyle(),
     val selectionMode: SelectionCombineMode = SelectionCombineMode.REPLACE,
+    /** How a one-finger drag edits the active layer while the transform tool is selected. */
+    val transformMode: LayerTransform.Mode = LayerTransform.Mode.MOVE,
     /** Whether a finger (rather than a stylus) may paint. */
     val fingerPainting: Boolean = true,
 )
@@ -571,45 +574,36 @@ class ArtFlowCanvasView
         }
 
         /**
-         * Bakes the active layer through a free transform about ([pivotX], [pivotY]).
-         *
-         * Scaling and rotation follow the canvas centre because the layer buffer is canvas sized; the
-         * pivot only decides where the transformed result is placed.
+         * Bakes the active layer (or its selected pixels) through a free transform about the centre
+         * of the affected content. Used by the transform tool's flip, rotate and fit buttons.
          */
         fun transformActiveLayer(
-            pivotX: Float,
-            pivotY: Float,
-            scaleFactor: Float,
-            rotation: Float,
-            flipHorizontal: Boolean,
-            flipVertical: Boolean,
+            scaleFactor: Float = 1f,
+            rotation: Float = 0f,
+            flipHorizontal: Boolean = false,
+            flipVertical: Boolean = false,
         ) {
             val layerId = activeLayerId
+            val selection = canvasRepository.selection()
             coroutineScope.launch {
                 val base = canvasRepository.layerPixels(layerId) ?: return@launch
                 val transformed =
                     withContext(Dispatchers.Default) {
-                        var buffer = base
-                        if (flipHorizontal) buffer = buffer.flippedHorizontally()
-                        if (flipVertical) buffer = buffer.flippedVertically()
-                        val degrees = rotation.roundToInt()
-                        if (degrees % 360 != 0) buffer = buffer.rotated(degrees)
-                        if (abs(scaleFactor - 1f) > 0.001f) {
-                            val targetWidth = (buffer.width * scaleFactor).roundToInt().coerceAtLeast(1)
-                            val targetHeight = (buffer.height * scaleFactor).roundToInt().coerceAtLeast(1)
-                            buffer = buffer.scaled(targetWidth, targetHeight)
-                        }
-                        buffer
+                        val (pivotX, pivotY) = LayerTransform.pivotOf(base, selection)
+                        val params =
+                            LayerTransform.Params(
+                                pivotX = pivotX,
+                                pivotY = pivotY,
+                                scaleX = scaleFactor,
+                                scaleY = scaleFactor,
+                                rotationDegrees = rotation,
+                                flipHorizontal = flipHorizontal,
+                                flipVertical = flipVertical,
+                            )
+                        PixelBuffer(base.width, base.height).also { LayerTransform.render(base, it, params, selection) }
                     }
                 canvasRepository.applyRasterEdit(layerId, "Transform layer") { target ->
-                    target.clear()
-                    val dx =
-                        (pivotX - transformed.width / 2f).roundToInt() +
-                            (canvasWidth - transformed.width) / 2
-                    val dy =
-                        (pivotY - transformed.height / 2f).roundToInt() +
-                            (canvasHeight - transformed.height) / 2
-                    drawShifted(target, transformed, dx, dy)
+                    transformed.pixels.copyInto(target.pixels)
                 }
                 reportHistory()
             }
@@ -852,7 +846,8 @@ class ArtFlowCanvasView
                 }
                 ToolType.HEALING -> startPixelGesture(tool, canvasX, canvasY, pressure, "Healing")
                 ToolType.LIQUIFY -> startPixelGesture(tool, canvasX, canvasY, pressure, "Liquify")
-                ToolType.MOVE, ToolType.TRANSFORM -> startPixelGesture(tool, canvasX, canvasY, pressure, "Move")
+                ToolType.MOVE -> startPixelGesture(tool, canvasX, canvasY, pressure, "Move")
+                ToolType.TRANSFORM -> startPixelGesture(tool, canvasX, canvasY, pressure, "Transform")
                 ToolType.GRADIENT -> {
                     gradientOrigin = canvasX to canvasY
                     previewPoints = mutableListOf(canvasX to canvasY)
@@ -1124,10 +1119,13 @@ class ArtFlowCanvasView
             healingSession = null
             liquifySession = null
             moveStart = x to y
+            transformParams = null
 
             val layerId = activeLayerId
             val gestureInput = input
             val gestureSelection = canvasRepository.selection()
+            transformSelection = gestureSelection
+            transformMode = gestureInput.transformMode
             pixelOpenJob =
                 coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
                     val session = canvasRepository.beginRasterEdit(layerId)
@@ -1138,6 +1136,10 @@ class ArtFlowCanvasView
                     }
                     rasterSession = session
                     rasterBase = session.buffer.copy()
+                    if (tool == ToolType.TRANSFORM) {
+                        val pivotSource = session.buffer
+                        transformPivot = withContext(Dispatchers.Default) { LayerTransform.pivotOf(pivotSource, gestureSelection) }
+                    }
                     if (tool == ToolType.LIQUIFY && !prepareLiquifyReference(session, gestureInput)) {
                         canvasRepository.cancelRasterEdit(session)
                         rasterSession = null
@@ -1292,7 +1294,14 @@ class ArtFlowCanvasView
                     liquifySession?.dragTo(x, y, pressure)
                     previewLiquify(buffer)
                 }
-                ToolType.MOVE, ToolType.TRANSFORM -> {
+                ToolType.TRANSFORM -> {
+                    val base = rasterBase ?: return
+                    val (pivotX, pivotY) = transformPivot
+                    val params = LayerTransform.fromDrag(transformMode, pivotX, pivotY, moveOriginX(), moveOriginY(), x, y)
+                    transformParams = params
+                    LayerTransform.render(base, buffer, params, transformSelection, highQuality = false)
+                }
+                ToolType.MOVE -> {
                     val base = rasterBase ?: return
                     buffer.clear()
                     drawShifted(
@@ -1324,6 +1333,10 @@ class ArtFlowCanvasView
         private fun moveOriginY(): Float = moveStart.second
 
         private var moveStart: Pair<Float, Float> = 0f to 0f
+        private var transformPivot: Pair<Float, Float> = 0f to 0f
+        private var transformParams: LayerTransform.Params? = null
+        private var transformSelection: SelectionMask? = null
+        private var transformMode: LayerTransform.Mode = LayerTransform.Mode.MOVE
 
         private fun endPixelGesture(cancelled: Boolean) {
             if (pixelTool == null) return
@@ -1343,6 +1356,10 @@ class ArtFlowCanvasView
             val finalLiquify = liquifySession
             val reference = gestureLiquifyReference
             val original = rasterBase
+            val finalTransform = transformParams
+            val finalTransformSelection = transformSelection
+            transformParams = null
+            transformSelection = null
             rasterSession = null
             rasterBuffer = null
             rasterSource = null
@@ -1360,6 +1377,12 @@ class ArtFlowCanvasView
                     if (!cancelled) {
                         // The preview is throttled and may omit the final drag sample or a large canvas.
                         // Commit the complete map off the UI thread, never the last partial preview.
+                        if (finalTransform != null && original != null) {
+                            // Previews sample nearest-neighbour; the committed result is bilinear.
+                            withContext(Dispatchers.Default) {
+                                LayerTransform.render(original, session.buffer, finalTransform, finalTransformSelection, highQuality = true)
+                            }
+                        }
                         if (finalLiquify != null && original != null) {
                             withContext(Dispatchers.Default) {
                                 finalLiquify

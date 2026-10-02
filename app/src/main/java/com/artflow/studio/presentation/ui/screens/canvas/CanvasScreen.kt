@@ -509,7 +509,7 @@ fun CanvasScreen(
                     }
                 }
                 when (panel) {
-                    EditorPanel.TOOLS -> ToolOptionsPanel(viewModel, input)
+                    EditorPanel.TOOLS -> ToolOptionsPanel(viewModel, input, canvasView)
                     EditorPanel.COLOUR ->
                         ColorPanel(
                             color = input.brushColor,
@@ -755,6 +755,7 @@ fun CanvasScreen(
 private fun ToolOptionsPanel(
     viewModel: CanvasViewModel,
     input: EditorInput,
+    canvasView: ArtFlowCanvasView?,
 ) {
     Column(
         modifier =
@@ -778,7 +779,10 @@ private fun ToolOptionsPanel(
                 ToolType.SHAPE -> "Drag to draw the selected shape."
                 ToolType.SELECT_MAGIC_WAND -> "Tap to select a colour region."
                 ToolType.EYEDROPPER -> "Tap to pick a colour from the artwork."
-                ToolType.MOVE, ToolType.TRANSFORM -> "Drag to move the active layer's pixels."
+                ToolType.MOVE -> "Drag to move the active layer's pixels."
+                ToolType.TRANSFORM ->
+                    "Drag to move, scale or rotate the active layer — or only the selection when one is active."
+
                 else -> "Drag on the canvas to use this tool."
             },
             style = MaterialTheme.typography.bodySmall,
@@ -867,6 +871,32 @@ private fun ToolOptionsPanel(
                         label = { Text(mode.displayName, style = MaterialTheme.typography.labelSmall) },
                     )
                 }
+            }
+        }
+        if (input.tool == ToolType.TRANSFORM) {
+            Text("Drag mode", style = MaterialTheme.typography.labelMedium)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                com.artflow.studio.core.pixels.LayerTransform.Mode.entries.forEach { mode ->
+                    FilterChip(
+                        selected = input.transformMode == mode,
+                        onClick = { viewModel.setTransformMode(mode) },
+                        label = { Text(mode.displayName, style = MaterialTheme.typography.labelSmall) },
+                    )
+                }
+            }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                AssistChip(onClick = { canvasView?.transformActiveLayer(flipHorizontal = true) }, label = { Text("Flip H") })
+                AssistChip(onClick = { canvasView?.transformActiveLayer(flipVertical = true) }, label = { Text("Flip V") })
+                AssistChip(onClick = { canvasView?.transformActiveLayer(rotation = 45f) }, label = { Text("Rotate 45°") })
+                AssistChip(onClick = { canvasView?.transformActiveLayer(rotation = 90f) }, label = { Text("Rotate 90°") })
+                AssistChip(onClick = { canvasView?.transformActiveLayer(scaleFactor = 0.5f) }, label = { Text("Half size") })
+                AssistChip(onClick = { canvasView?.transformActiveLayer(scaleFactor = 2f) }, label = { Text("Double size") })
             }
         }
         if (input.tool == ToolType.CLONE_STAMP) {

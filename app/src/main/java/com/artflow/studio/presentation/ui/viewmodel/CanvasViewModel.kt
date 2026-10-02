@@ -480,6 +480,8 @@ class CanvasViewModel
 
         fun setLiquifySettings(settings: LiquifyTool.Settings) = updateInput { it.copy(liquify = settings) }
 
+        fun setTransformMode(mode: com.artflow.studio.core.pixels.LayerTransform.Mode) = updateInput { it.copy(transformMode = mode) }
+
         private fun updateInput(transform: (EditorInput) -> EditorInput) {
             _input.value = transform(_input.value)
         }
