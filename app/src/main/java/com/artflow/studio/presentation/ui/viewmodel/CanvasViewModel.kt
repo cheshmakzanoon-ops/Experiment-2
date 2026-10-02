@@ -470,7 +470,22 @@ class CanvasViewModel
             viewModelScope.launch(editorErrors) { settingsRepository.pushRecentColor(color) }
         }
 
-        fun onColorPicked(color: Int) = setColor(color)
+        private var toolBeforeEyedropper: ToolType? = null
+
+        /** The sidebar's modify button: sample one colour, then return to the tool in use. */
+        fun startEyedropper() {
+            val current = _input.value.tool
+            if (current != ToolType.EYEDROPPER) toolBeforeEyedropper = current
+            setTool(ToolType.EYEDROPPER)
+        }
+
+        fun onColorPicked(color: Int) {
+            setColor(color)
+            toolBeforeEyedropper?.let {
+                toolBeforeEyedropper = null
+                setTool(it)
+            }
+        }
 
         fun setSymmetry(
             type: SymmetryEngine.SymmetryType,
@@ -675,23 +690,31 @@ class CanvasViewModel
         val hasClipboard: StateFlow<Boolean> = _hasClipboard.asStateFlow()
 
         /** Copies the selected pixels of the active layer (the whole layer without a selection); [cut] also erases them. */
-        fun copySelection(cut: Boolean) =
+        fun copySelection(cut: Boolean) = layerOp { copyToClipboard(cut) }
+
+        fun pasteAsLayer() = layerOp { pasteClipboard() }
+
+        /** Procreate's Copy & Paste: the selection lands on a new layer above, ready to transform. */
+        fun copyAndPasteSelection() =
             layerOp {
-                val layerId = canvasRepository.getActiveLayerId()
-                val pixels = checkNotNull(canvasRepository.layerPixels(layerId)) { "This layer has no pixels to copy" }
-                val selection = canvasRepository.selection()
-                clipboard = withContext(Dispatchers.Default) { SelectionClipboard.extract(pixels, selection) }
-                _hasClipboard.value = true
-                if (cut) canvasRepository.applyRasterEdit(layerId, "Cut") { SelectionClipboard.erase(it, selection) }
-                notify(if (cut) "Cut to the clipboard" else "Copied to the clipboard")
+                copyToClipboard(cut = false)
+                pasteClipboard()
             }
 
-        fun pasteAsLayer() =
-            layerOp {
-                val image = clipboard ?: error("Nothing has been copied yet")
-                val layer = canvasRepository.addLayer(name = "Pasted")
-                canvasRepository.applyRasterEdit(layer.id, "Paste") { target -> target.drawInto(image, 0, 0) }
-            }
+        private suspend fun copyToClipboard(cut: Boolean) {
+            val layerId = canvasRepository.getActiveLayerId()
+            val pixels = checkNotNull(canvasRepository.layerPixels(layerId)) { "This layer has no pixels to copy" }
+            val selection = canvasRepository.selection()
+            clipboard = withContext(Dispatchers.Default) { SelectionClipboard.extract(pixels, selection) }
+            _hasClipboard.value = true
+            if (cut) canvasRepository.applyRasterEdit(layerId, "Cut") { SelectionClipboard.erase(it, selection) }
+        }
+
+        private suspend fun pasteClipboard() {
+            val image = clipboard ?: error("Nothing has been copied yet")
+            val layer = canvasRepository.addLayer(name = "Pasted")
+            canvasRepository.applyRasterEdit(layer.id, "Paste") { target -> target.drawInto(image, 0, 0) }
+        }
 
         /** Adds every layer of a Photoshop document as new layers, centred on the canvas. */
         fun importPsd(bytes: ByteArray) =

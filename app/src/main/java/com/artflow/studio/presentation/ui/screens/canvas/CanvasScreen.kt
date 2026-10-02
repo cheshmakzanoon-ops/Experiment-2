@@ -12,9 +12,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -36,6 +34,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.artflow.studio.core.tool.ToolGroup
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.domain.model.brush.StrokeDestination
 import com.artflow.studio.domain.model.layer.AdjustmentType
@@ -59,8 +58,21 @@ import com.artflow.studio.presentation.ui.components.editor.LayersSheet
 import com.artflow.studio.presentation.ui.components.editor.QuickMenuSheet
 import com.artflow.studio.presentation.ui.components.editor.ReferenceCompanion
 import com.artflow.studio.presentation.ui.components.editor.SelectionSheet
+import com.artflow.studio.presentation.ui.components.editor.SelectionToolbar
+import com.artflow.studio.presentation.ui.components.editor.SelectionToolbarActions
+import com.artflow.studio.presentation.ui.components.editor.StudioButton
+import com.artflow.studio.presentation.ui.components.editor.StudioPopover
+import com.artflow.studio.presentation.ui.components.editor.StudioSidebar
+import com.artflow.studio.presentation.ui.components.editor.StudioSidebarActions
+import com.artflow.studio.presentation.ui.components.editor.StudioSidebarState
 import com.artflow.studio.presentation.ui.components.editor.StudioToolDock
+import com.artflow.studio.presentation.ui.components.editor.StudioTopBar
 import com.artflow.studio.presentation.ui.components.editor.TextSheet
+import com.artflow.studio.presentation.ui.components.editor.TransformToolbar
+import com.artflow.studio.presentation.ui.components.editor.TransformToolbarActions
+import com.artflow.studio.presentation.ui.components.editor.icon
+import com.artflow.studio.presentation.ui.components.editor.isWideLayout
+import com.artflow.studio.presentation.ui.components.editor.studioButton
 import com.artflow.studio.presentation.ui.components.export.ExportSheet
 import com.artflow.studio.presentation.ui.components.export.rememberExportActions
 import com.artflow.studio.presentation.ui.viewmodel.CanvasUiState
@@ -133,7 +145,8 @@ fun CanvasScreen(
     var showExitConfirm by remember { mutableStateOf(false) }
     var focusMode by rememberSaveable(projectId) { mutableStateOf(false) }
     var toolsExpanded by rememberSaveable(projectId) { mutableStateOf(false) }
-    var showWorkspaceMenu by remember { mutableStateOf(false) }
+    var openMenu by remember { mutableStateOf<StudioButton?>(null) }
+    val wide = isWideLayout()
     var colorDropPosition by remember { mutableStateOf<androidx.compose.ui.geometry.Offset?>(null) }
     var colorChipOrigin by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
     var contentOrigin by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
@@ -252,7 +265,7 @@ fun CanvasScreen(
     LaunchedEffect(pendingText) {
         if (pendingText != null) {
             canvasView?.cancelActiveGesture()
-            showWorkspaceMenu = false
+            openMenu = null
             panel = EditorPanel.TEXT
         }
     }
@@ -266,201 +279,351 @@ fun CanvasScreen(
 
     BackHandler(enabled = panel == EditorPanel.NONE && showReference) { showReference = false }
 
+    val panelContent: @Composable ColumnScope.() -> Unit = {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                panel.title,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(onClick = dismissPanel) {
+                Icon(Icons.Default.Close, contentDescription = "Close ${panel.title}")
+            }
+        }
+        when (panel) {
+            EditorPanel.TOOLS -> {
+                StudioToolDock(
+                    activeTool = input.tool,
+                    expanded = toolsExpanded,
+                    onToolSelected = { viewModel.setTool(it) },
+                    onExpandedChange = { toolsExpanded = it },
+                )
+                BrushOptionsRow(
+                    tool = input.tool,
+                    size = input.brushParams.size,
+                    opacity = input.brushParams.opacity,
+                    eraserSize = input.eraserSize,
+                    tolerance = input.fillTolerance,
+                    onSizeChanged = viewModel::setBrushSize,
+                    onOpacityChanged = viewModel::setBrushOpacity,
+                    onEraserSizeChanged = viewModel::setEraserSize,
+                    onToleranceChanged = { viewModel.setFillSettings(it, input.fillContiguous) },
+                )
+                ToolOptionsPanel(viewModel, input, canvasView)
+            }
+            EditorPanel.COLOUR ->
+                ColorPanel(
+                    color = input.brushColor,
+                    recentColors = recentColors,
+                    palettes = palettes,
+                    onColorSelected = { viewModel.setColor(it) },
+                    onClearRecents = { scope.launch { viewModel.clearRecentColors() } },
+                    onSavePalette = { name, colors -> viewModel.addPaletteFromColors(name, colors) },
+                    onRemovePalette = { viewModel.removePalette(it) },
+                )
+            EditorPanel.LAYERS ->
+                LayersSheet(
+                    layers = layers,
+                    activeLayerId = activeLayerId,
+                    hasSelection = selection != null,
+                    rowActions =
+                        LayerRowActions(
+                            onSelect = { viewModel.setActiveLayer(it) },
+                            onVisibility = { id, visible -> viewModel.setLayerVisibility(id, visible) },
+                            onOpacity = { id, opacity -> viewModel.setLayerOpacity(id, opacity) },
+                            onName = { id, name -> viewModel.setLayerName(id, name) },
+                            onLock = { id, locked -> viewModel.setLayerLock(id, locked) },
+                            onAlphaLock = { id, locked -> viewModel.setLayerAlphaLock(id, locked) },
+                            onClipping = { id, clipping -> viewModel.setLayerClippingMask(id, clipping) },
+                            onBlendMode = { id, mode: BlendMode -> viewModel.setLayerBlendMode(id, mode) },
+                            onDuplicate = { viewModel.duplicateLayer(it) },
+                            onDelete = { viewModel.removeLayer(it) },
+                            onMergeDown = { viewModel.mergeLayerDown(it) },
+                        ),
+                    stackActions =
+                        LayerStackActions(
+                            onAddLayer = { viewModel.addLayer() },
+                            onReorder = viewModel::reorderLayer,
+                            onFlatten = { viewModel.flattenAllLayers() },
+                            onMergeVisible = { viewModel.mergeVisibleLayers() },
+                            onAddAdjustment = { type: AdjustmentType -> viewModel.addAdjustmentLayer(type) },
+                            onAddFilter = { type: FilterType -> viewModel.addFilterLayer(type) },
+                            onAdjustmentParameter = { id, key, value -> viewModel.setAdjustmentParameter(id, key, value) },
+                            onFilterAmount = { id, amount -> viewModel.setFilterAmount(id, amount) },
+                            onInsertPhoto = insertPhoto,
+                            onImportPsd = importPsd,
+                            onGroupWithBelow = viewModel::groupWithLayerBelow,
+                            onUngroup = viewModel::ungroup,
+                        ),
+                    maskActions =
+                        LayerMaskActions(
+                            onAddMask = { viewModel.createLayerMask(it) },
+                            onPaintMask = { reveal ->
+                                viewModel.paintMask(reveal)
+                                panel = EditorPanel.NONE
+                            },
+                            onRemoveMask = { viewModel.removeLayerMask() },
+                            onInvertMask = { viewModel.invertLayerMask() },
+                            onMaskEnabled = { viewModel.setLayerMaskEnabled(it) },
+                            onMaskDensity = { viewModel.setLayerMaskDensity(it) },
+                            onMaskFeather = { viewModel.setLayerMaskFeather(it) },
+                        ),
+                )
+            EditorPanel.SELECTION ->
+                Column {
+                    ClipboardActions(viewModel, selectionCount > 0)
+                    SelectionSheet(
+                        mode = input.selectionMode,
+                        selectionCount = selectionCount,
+                        tolerance = input.fillTolerance,
+                        featherRadius = featherRadius,
+                        hasSelection = selectionCount > 0,
+                        onModeChange = { viewModel.setSelectionMode(it) },
+                        onToleranceChange = { viewModel.setFillSettings(it, input.fillContiguous) },
+                        onFeatherChange = { featherRadius = it },
+                        onSelectAll = { viewModel.selectAll() },
+                        onClearSelection = { viewModel.clearSelection() },
+                        onInvertSelection = { viewModel.invertSelection() },
+                        onApplyFeather = { viewModel.featherSelection(featherRadius) },
+                        onSelectionFromLayer = { viewModel.selectionFromAlphaOfActiveLayer() },
+                        onTrimToSelection = { viewModel.trimToSelection() },
+                        onColorRange = { viewModel.selectionFromColorRange(it, input.fillTolerance) },
+                    )
+                }
+            EditorPanel.GUIDES ->
+                GuidesSheet(
+                    symmetry = input.symmetry,
+                    perspective = input.perspective,
+                    snapToGuides = input.snapToGuides,
+                    showSymmetryGuides = settings.showSymmetryGuides,
+                    showPerspectiveGuides = settings.showPerspectiveGuides,
+                    onSymmetry = { viewModel.setSymmetrySettings(it) },
+                    onPerspective = { viewModel.setPerspectiveSettings(it) },
+                    onSnap = { viewModel.setSnapToGuides(it) },
+                    onShowSymmetry = { scope.launch { viewModel.setSymmetryGuidesVisible(it) } },
+                    onShowPerspective = { scope.launch { viewModel.setPerspectiveGuidesVisible(it) } },
+                )
+            EditorPanel.ANIMATION ->
+                AnimationSheet(
+                    timeline = timeline,
+                    onionEnabled = settings.onionSkin,
+                    onSelectFrame = { viewModel.selectFrame(it) },
+                    onAddFrame = { viewModel.addFrame(it) },
+                    onDeleteFrame = { viewModel.deleteFrame(it) },
+                    onMoveFrame = { from, to -> viewModel.moveFrame(from, to) },
+                    onFrameDuration = { index, duration -> viewModel.setFrameDuration(index, duration) },
+                    onSettings = { viewModel.updateAnimationSettings(it) },
+                    onToggleOnion = { viewModel.toggleOnionSkin(it) },
+                    onTogglePlayback = { viewModel.togglePlayback() },
+                )
+            EditorPanel.CANVAS ->
+                CanvasOpsSheet(
+                    width = ready?.width ?: 0,
+                    height = ready?.height ?: 0,
+                    dpi = ready?.dpi ?: 72,
+                    backgroundColor = ready?.backgroundColor ?: 0xFFFFFFFF.toInt(),
+                    onResize = { w, h, resample, anchor -> viewModel.resizeCanvas(w, h, resample, anchor) },
+                    onRotate = { viewModel.rotateCanvas(it) },
+                    onFlip = { viewModel.flipCanvas(it) },
+                    onTrim = { viewModel.trimTransparent() },
+                    onDpi = { viewModel.setCanvasDpi(it) },
+                    onBackgroundColor = { viewModel.setCanvasBackgroundColor(it) },
+                    onClear = { viewModel.clearCanvas(it) },
+                )
+            EditorPanel.TEXT ->
+                TextSheet(
+                    text = input.text,
+                    style = input.textStyle,
+                    color = input.brushColor,
+                    onTextChange = { viewModel.setText(it, input.textStyle) },
+                    onStyleChange = { viewModel.setText(input.text, it) },
+                    onColorChange = { viewModel.setColor(it) },
+                    onPlace = {
+                        val pending = pendingText
+                        val view = canvasView
+                        if (pending != null && view != null) {
+                            view.placeText(
+                                pending.x,
+                                pending.y,
+                                input.text,
+                                input.textStyle,
+                                input.brushColor,
+                            )
+                            viewModel.cancelText()
+                            viewModel.setTool(ToolType.BRUSH)
+                        } else {
+                            viewModel.setTool(ToolType.TEXT)
+                            viewModel.notify("Tap the canvas to choose where the text goes")
+                        }
+                        panel = EditorPanel.NONE
+                    },
+                )
+            EditorPanel.EXPORT ->
+                ExportSheet(
+                    availableFormats = viewModel.availableFormats(),
+                    frameCount = ready?.frameCount ?: 1,
+                    canvasWidth = ready?.width ?: 0,
+                    canvasHeight = ready?.height ?: 0,
+                    canvasDpi = ready?.dpi ?: 72,
+                    previewBytes = previewBytes,
+                    exportState = exportState,
+                    onExport = { viewModel.export(it) },
+                    actions = exportActions,
+                    onDismissResult = { viewModel.resetExportState() },
+                )
+            EditorPanel.QUICK ->
+                QuickMenuSheet(
+                    scalePercent = (viewScale * 100).toInt(),
+                    rotation = viewRotation.toInt(),
+                    onZoomIn = { canvasView?.zoomBy(1.25f) },
+                    onZoomOut = { canvasView?.zoomBy(0.8f) },
+                    onFit = { canvasView?.fitToView() },
+                    onResetView = { canvasView?.resetView() },
+                    onRotate = { canvasView?.rotateView(it) },
+                    onFlipCanvas = { viewModel.flipCanvas(it) },
+                    onRotateCanvas = { viewModel.rotateCanvas(it) },
+                    onSelectAll = { viewModel.selectAll() },
+                    onClearSelection = { viewModel.clearSelection() },
+                    onInvertSelection = { viewModel.invertSelection() },
+                    onUndo = { viewModel.undo() },
+                    onRedo = { viewModel.redo() },
+                    canUndo = history.canUndo,
+                    canRedo = history.canRedo,
+                )
+            EditorPanel.NONE -> Unit
+        }
+        Spacer(Modifier.height(24.dp))
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             if (!focusMode) {
-                TopAppBar(
-                    title = {
-                        Column {
-                            Text(
-                                text = ready?.projectName ?: "Loading…",
-                                style = MaterialTheme.typography.titleMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            ready?.let {
-                                Text(
-                                    text =
-                                        "${it.width}×${it.height} px · ${it.dpi} dpi" +
-                                            if (it.frameCount > 1) " · ${it.frameCount} frames" else "",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
+                StudioTopBar(
+                    highlighted = setOfNotNull(input.tool.studioButton(), StudioButton.LAYERS.takeIf { panel == EditorPanel.LAYERS }),
+                    openMenu = openMenu,
+                    onButton = { button ->
+                        canvasView?.cancelActiveGesture()
+                        when (button) {
+                            StudioButton.GALLERY -> if (dirty) showExitConfirm = true else onNavigateBack()
+                            StudioButton.ACTIONS, StudioButton.ADJUSTMENTS -> openMenu = button
+                            StudioButton.SELECTION ->
+                                viewModel.setTool(if (input.tool.group == ToolGroup.SELECTION) ToolType.BRUSH else ToolType.SELECT_FREEHAND)
+                            StudioButton.TRANSFORM ->
+                                viewModel.setTool(if (input.tool == ToolType.TRANSFORM) ToolType.BRUSH else ToolType.TRANSFORM)
+                            StudioButton.PAINT ->
+                                if (input.tool == ToolType.BRUSH) showBrushEditor = true else viewModel.setTool(ToolType.BRUSH)
+                            StudioButton.SMUDGE ->
+                                if (input.tool == ToolType.SMUDGE) showBrushEditor = true else viewModel.setTool(ToolType.SMUDGE)
+                            StudioButton.ERASE ->
+                                if (input.tool == ToolType.ERASER) panel = EditorPanel.TOOLS else viewModel.setTool(ToolType.ERASER)
+                            StudioButton.LAYERS -> panel = if (panel == EditorPanel.LAYERS) EditorPanel.NONE else EditorPanel.LAYERS
                         }
                     },
-                    navigationIcon = {
-                        IconButton(onClick = {
-                            if (dirty) showExitConfirm = true else onNavigateBack()
-                        }) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = viewModel::undo, enabled = history.canUndo) {
-                            Icon(Icons.Default.Undo, contentDescription = "Undo")
-                        }
-                        IconButton(onClick = viewModel::redo, enabled = history.canRedo) {
-                            Icon(Icons.Default.Redo, contentDescription = "Redo")
-                        }
-                        IconButton(onClick = { viewModel.save() }, enabled = !saving && ready != null) {
-                            Icon(
-                                imageVector = if (dirty) Icons.Default.Save else Icons.Default.Check,
-                                contentDescription = "Save",
-                            )
-                        }
-                        Box {
-                            IconButton(onClick = { showWorkspaceMenu = true }) {
-                                Icon(Icons.Default.MoreVert, contentDescription = "Workspace menu")
+                    onDismissMenu = { openMenu = null },
+                    menuFor = { button ->
+                        val choose: (() -> Unit) -> () -> Unit = { action ->
+                            {
+                                openMenu = null
+                                action()
                             }
-                            DropdownMenu(expanded = showWorkspaceMenu, onDismissRequest = { showWorkspaceMenu = false }) {
-                                DropdownMenuItem(
-                                    text = { Text("Focus mode") },
-                                    leadingIcon = { Icon(Icons.Default.Fullscreen, contentDescription = null) },
-                                    onClick = {
-                                        canvasView?.cancelActiveGesture()
+                        }
+                        if (button == StudioButton.ACTIONS) {
+                            DropdownMenuItem(text = { Text("Insert a photo") }, onClick = choose(insertPhoto))
+                            DropdownMenuItem(text = { Text("Import PSD layers") }, onClick = choose(importPsd))
+                            DropdownMenuItem(
+                                text = { Text("Add text") },
+                                onClick =
+                                    choose {
+                                        viewModel.setTool(ToolType.TEXT)
+                                        panel = EditorPanel.TEXT
+                                    },
+                            )
+                            DropdownMenuItem(text = { Text("Reference") }, onClick = choose { showReference = true })
+                            listOf(
+                                EditorPanel.CANVAS,
+                                EditorPanel.GUIDES,
+                                EditorPanel.ANIMATION,
+                                EditorPanel.EXPORT,
+                                EditorPanel.TOOLS,
+                                EditorPanel.QUICK,
+                            ).forEach { target ->
+                                DropdownMenuItem(text = { Text(target.title) }, onClick = choose { panel = target })
+                            }
+                            DropdownMenuItem(text = { Text("Time-lapse replay (MP4)") }, onClick = choose { viewModel.exportTimelapse() })
+                            DropdownMenuItem(
+                                text = { Text("Full screen") },
+                                onClick =
+                                    choose {
                                         panel = EditorPanel.NONE
-                                        showWorkspaceMenu = false
                                         focusMode = true
                                     },
-                                )
+                            )
+                            DropdownMenuItem(text = { Text("Save now") }, onClick = choose { viewModel.save() })
+                            DropdownMenuItem(text = { Text("Preferences") }, onClick = choose(onOpenSettings))
+                        } else {
+                            listOf(ToolType.LIQUIFY, ToolType.CLONE_STAMP, ToolType.HEALING, ToolType.GRADIENT).forEach { tool ->
                                 DropdownMenuItem(
-                                    text = { Text("Quick menu") },
-                                    onClick = {
-                                        showWorkspaceMenu = false
-                                        panel = EditorPanel.QUICK
-                                    },
+                                    text = { Text(tool.displayName) },
+                                    leadingIcon = { Icon(tool.icon(), contentDescription = null) },
+                                    onClick = choose { viewModel.setTool(tool) },
                                 )
+                            }
+                            HorizontalDivider()
+                            AdjustmentType.entries.forEach { type ->
                                 DropdownMenuItem(
-                                    text = { Text("Reference image") },
-                                    enabled = ready != null,
-                                    onClick = {
-                                        canvasView?.cancelActiveGesture()
-                                        showWorkspaceMenu = false
-                                        showReference = true
-                                    },
-                                )
-                                listOf(EditorPanel.GUIDES, EditorPanel.ANIMATION, EditorPanel.CANVAS, EditorPanel.TEXT).forEach { target ->
-                                    DropdownMenuItem(
-                                        text = { Text(target.title) },
-                                        enabled = ready != null,
-                                        onClick = {
-                                            canvasView?.cancelActiveGesture()
-                                            showWorkspaceMenu = false
-                                            if (target == EditorPanel.TEXT) viewModel.setTool(ToolType.TEXT)
-                                            panel = target
+                                    text = { Text(type.displayName) },
+                                    onClick =
+                                        choose {
+                                            viewModel.addAdjustmentLayer(type)
+                                            panel = EditorPanel.LAYERS
                                         },
-                                    )
-                                }
+                                )
+                            }
+                            FilterType.entries.forEach { type ->
                                 DropdownMenuItem(
-                                    text = { Text("Settings") },
-                                    onClick = {
-                                        showWorkspaceMenu = false
-                                        onOpenSettings()
-                                    },
+                                    text = { Text(type.displayName) },
+                                    onClick =
+                                        choose {
+                                            viewModel.addFilterLayer(type)
+                                            panel = EditorPanel.LAYERS
+                                        },
                                 )
                             }
                         }
                     },
-                )
-            }
-        },
-        bottomBar = {
-            // The app is edge-to-edge from API 35, and the opt-out attribute is ignored from API 36,
-            // so the tool strip has to inset itself: without this the navigation bar covers the
-            // tool row. Scaffold only insets *content* when a bottomBar is present, not the bar.
-            if (!focusMode) {
-                Surface(
-                    tonalElevation = 2.dp,
-                    modifier =
-                        Modifier.windowInsetsPadding(
-                            WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
-                        ),
-                ) {
-                    Column {
-                        BrushOptionsRow(
-                            tool = input.tool,
-                            size = input.brushParams.size,
-                            opacity = input.brushParams.opacity,
-                            eraserSize = input.eraserSize,
-                            tolerance = input.fillTolerance,
-                            onSizeChanged = viewModel::setBrushSize,
-                            onOpacityChanged = viewModel::setBrushOpacity,
-                            onEraserSizeChanged = viewModel::setEraserSize,
-                            onToleranceChanged = { viewModel.setFillSettings(it, input.fillContiguous) },
-                        )
-                        Row(
+                    colorSwatch = {
+                        ColorChip(
+                            color = input.brushColor,
+                            onClick = { panel = if (panel == EditorPanel.COLOUR) EditorPanel.NONE else EditorPanel.COLOUR },
                             modifier =
                                 Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState())
-                                    .padding(horizontal = 12.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            ColorChip(
-                                color = input.brushColor,
-                                onClick = { panel = EditorPanel.COLOUR },
-                                modifier =
-                                    Modifier
-                                        .onGloballyPositioned { colorChipOrigin = it.positionInWindow() }
-                                        .pointerInput(Unit) {
-                                            detectDragGestures(
-                                                onDragStart = { colorDropPosition = colorChipOrigin + it },
-                                                onDrag = { change, delta ->
-                                                    change.consume()
-                                                    colorDropPosition = colorDropPosition?.plus(delta)
-                                                },
-                                                onDragEnd = {
-                                                    val drop = colorDropPosition
-                                                    colorDropPosition = null
-                                                    if (drop != null && canvasView?.colorDrop(drop.x, drop.y) == true) {
-                                                        viewModel.notify("ColorDrop filled the area")
-                                                    }
-                                                },
-                                                onDragCancel = { colorDropPosition = null },
-                                            )
-                                        },
-                            )
-                            if (input.strokeDestination.isMask) {
-                                TextButton(onClick = { viewModel.setTool(ToolType.BRUSH) }) {
-                                    Text(
-                                        if (input.strokeDestination ==
-                                            StrokeDestination.MASK_REVEAL
-                                        ) {
-                                            "Mask: reveal • Done"
-                                        } else {
-                                            "Mask: hide • Done"
-                                        },
-                                    )
-                                }
-                            }
-                            TextButton(onClick = {
-                                canvasView?.cancelActiveGesture()
-                                showBrushEditor = true
-                            }) { Text("Brush") }
-                            TextButton(onClick = { panel = EditorPanel.LAYERS }) {
-                                Text("Layers (${layers.size})")
-                            }
-                            TextButton(onClick = { panel = EditorPanel.SELECTION }) {
-                                Text(if (selectionCount > 0) "Select ($selectionCount)" else "Select")
-                            }
-                            TextButton(onClick = { panel = EditorPanel.TOOLS }) { Text("Options") }
-                            TextButton(onClick = { panel = EditorPanel.EXPORT }) { Text("Export") }
-                        }
-                        StudioToolDock(
-                            activeTool = input.tool,
-                            expanded = toolsExpanded,
-                            onToolSelected = { viewModel.setTool(it) },
-                            onExpandedChange = {
-                                canvasView?.cancelActiveGesture()
-                                toolsExpanded = it
-                            },
+                                    .onGloballyPositioned { colorChipOrigin = it.positionInWindow() }
+                                    .pointerInput(Unit) {
+                                        detectDragGestures(
+                                            onDragStart = { colorDropPosition = colorChipOrigin + it },
+                                            onDrag = { change, delta ->
+                                                change.consume()
+                                                colorDropPosition = colorDropPosition?.plus(delta)
+                                            },
+                                            onDragEnd = {
+                                                val drop = colorDropPosition
+                                                colorDropPosition = null
+                                                if (drop != null && canvasView?.colorDrop(drop.x, drop.y) == true) {
+                                                    viewModel.notify("ColorDrop filled the area")
+                                                }
+                                            },
+                                            onDragCancel = { colorDropPosition = null },
+                                        )
+                                    },
                         )
-                    }
-                }
+                    },
+                )
             }
         },
     ) { padding ->
@@ -565,6 +728,35 @@ fun CanvasScreen(
                     onColorPicked = viewModel::onColorPicked,
                 )
             }
+            if (ready != null && !focusMode) {
+                StudioSidebar(
+                    state =
+                        StudioSidebarState(
+                            size = if (input.tool == ToolType.ERASER) input.eraserSize else input.brushParams.size,
+                            opacity = input.brushParams.opacity,
+                            canUndo = history.canUndo,
+                            canRedo = history.canRedo,
+                            eyedropperActive = input.tool == ToolType.EYEDROPPER,
+                        ),
+                    actions =
+                        StudioSidebarActions(
+                            onSize = if (input.tool == ToolType.ERASER) viewModel::setEraserSize else viewModel::setBrushSize,
+                            onOpacity = viewModel::setBrushOpacity,
+                            onModify = viewModel::startEyedropper,
+                            onUndo = viewModel::undo,
+                            onRedo = viewModel::redo,
+                        ),
+                    modifier = Modifier.align(Alignment.CenterStart).padding(start = 8.dp),
+                )
+                ContextToolbar(viewModel, input, canvasView, Modifier.align(Alignment.BottomCenter)) { panel = it }
+            }
+            if (panel != EditorPanel.NONE && wide) {
+                StudioPopover(
+                    alignEnd = panel == EditorPanel.COLOUR || panel == EditorPanel.LAYERS,
+                    onDismiss = dismissPanel,
+                    content = panelContent,
+                )
+            }
             if (focusMode) {
                 FilledTonalIconButton(
                     onClick = {
@@ -583,212 +775,12 @@ fun CanvasScreen(
         }
     }
 
-    if (panel != EditorPanel.NONE) {
+    if (panel != EditorPanel.NONE && !wide) {
         ModalBottomSheet(
             onDismissRequest = dismissPanel,
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         ) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        panel.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                    IconButton(onClick = dismissPanel) {
-                        Icon(Icons.Default.Close, contentDescription = "Close ${panel.title}")
-                    }
-                }
-                when (panel) {
-                    EditorPanel.TOOLS -> ToolOptionsPanel(viewModel, input, canvasView)
-                    EditorPanel.COLOUR ->
-                        ColorPanel(
-                            color = input.brushColor,
-                            recentColors = recentColors,
-                            palettes = palettes,
-                            onColorSelected = { viewModel.setColor(it) },
-                            onClearRecents = { scope.launch { viewModel.clearRecentColors() } },
-                            onSavePalette = { name, colors -> viewModel.addPaletteFromColors(name, colors) },
-                            onRemovePalette = { viewModel.removePalette(it) },
-                        )
-                    EditorPanel.LAYERS ->
-                        LayersSheet(
-                            layers = layers,
-                            activeLayerId = activeLayerId,
-                            hasSelection = selection != null,
-                            rowActions =
-                                LayerRowActions(
-                                    onSelect = { viewModel.setActiveLayer(it) },
-                                    onVisibility = { id, visible -> viewModel.setLayerVisibility(id, visible) },
-                                    onOpacity = { id, opacity -> viewModel.setLayerOpacity(id, opacity) },
-                                    onName = { id, name -> viewModel.setLayerName(id, name) },
-                                    onLock = { id, locked -> viewModel.setLayerLock(id, locked) },
-                                    onAlphaLock = { id, locked -> viewModel.setLayerAlphaLock(id, locked) },
-                                    onClipping = { id, clipping -> viewModel.setLayerClippingMask(id, clipping) },
-                                    onBlendMode = { id, mode: BlendMode -> viewModel.setLayerBlendMode(id, mode) },
-                                    onDuplicate = { viewModel.duplicateLayer(it) },
-                                    onDelete = { viewModel.removeLayer(it) },
-                                    onMergeDown = { viewModel.mergeLayerDown(it) },
-                                ),
-                            stackActions =
-                                LayerStackActions(
-                                    onAddLayer = { viewModel.addLayer() },
-                                    onReorder = viewModel::reorderLayer,
-                                    onFlatten = { viewModel.flattenAllLayers() },
-                                    onMergeVisible = { viewModel.mergeVisibleLayers() },
-                                    onAddAdjustment = { type: AdjustmentType -> viewModel.addAdjustmentLayer(type) },
-                                    onAddFilter = { type: FilterType -> viewModel.addFilterLayer(type) },
-                                    onAdjustmentParameter = { id, key, value -> viewModel.setAdjustmentParameter(id, key, value) },
-                                    onFilterAmount = { id, amount -> viewModel.setFilterAmount(id, amount) },
-                                    onInsertPhoto = insertPhoto,
-                                    onImportPsd = importPsd,
-                                    onGroupWithBelow = viewModel::groupWithLayerBelow,
-                                    onUngroup = viewModel::ungroup,
-                                ),
-                            maskActions =
-                                LayerMaskActions(
-                                    onAddMask = { viewModel.createLayerMask(it) },
-                                    onPaintMask = { reveal ->
-                                        viewModel.paintMask(reveal)
-                                        panel = EditorPanel.NONE
-                                    },
-                                    onRemoveMask = { viewModel.removeLayerMask() },
-                                    onInvertMask = { viewModel.invertLayerMask() },
-                                    onMaskEnabled = { viewModel.setLayerMaskEnabled(it) },
-                                    onMaskDensity = { viewModel.setLayerMaskDensity(it) },
-                                    onMaskFeather = { viewModel.setLayerMaskFeather(it) },
-                                ),
-                        )
-                    EditorPanel.SELECTION ->
-                        Column {
-                            ClipboardActions(viewModel, selectionCount > 0)
-                            SelectionSheet(
-                                mode = input.selectionMode,
-                                selectionCount = selectionCount,
-                                tolerance = input.fillTolerance,
-                                featherRadius = featherRadius,
-                                hasSelection = selectionCount > 0,
-                                onModeChange = { viewModel.setSelectionMode(it) },
-                                onToleranceChange = { viewModel.setFillSettings(it, input.fillContiguous) },
-                                onFeatherChange = { featherRadius = it },
-                                onSelectAll = { viewModel.selectAll() },
-                                onClearSelection = { viewModel.clearSelection() },
-                                onInvertSelection = { viewModel.invertSelection() },
-                                onApplyFeather = { viewModel.featherSelection(featherRadius) },
-                                onSelectionFromLayer = { viewModel.selectionFromAlphaOfActiveLayer() },
-                                onTrimToSelection = { viewModel.trimToSelection() },
-                                onColorRange = { viewModel.selectionFromColorRange(it, input.fillTolerance) },
-                            )
-                        }
-                    EditorPanel.GUIDES ->
-                        GuidesSheet(
-                            symmetry = input.symmetry,
-                            perspective = input.perspective,
-                            snapToGuides = input.snapToGuides,
-                            showSymmetryGuides = settings.showSymmetryGuides,
-                            showPerspectiveGuides = settings.showPerspectiveGuides,
-                            onSymmetry = { viewModel.setSymmetrySettings(it) },
-                            onPerspective = { viewModel.setPerspectiveSettings(it) },
-                            onSnap = { viewModel.setSnapToGuides(it) },
-                            onShowSymmetry = { scope.launch { viewModel.setSymmetryGuidesVisible(it) } },
-                            onShowPerspective = { scope.launch { viewModel.setPerspectiveGuidesVisible(it) } },
-                        )
-                    EditorPanel.ANIMATION ->
-                        AnimationSheet(
-                            timeline = timeline,
-                            onionEnabled = settings.onionSkin,
-                            onSelectFrame = { viewModel.selectFrame(it) },
-                            onAddFrame = { viewModel.addFrame(it) },
-                            onDeleteFrame = { viewModel.deleteFrame(it) },
-                            onMoveFrame = { from, to -> viewModel.moveFrame(from, to) },
-                            onFrameDuration = { index, duration -> viewModel.setFrameDuration(index, duration) },
-                            onSettings = { viewModel.updateAnimationSettings(it) },
-                            onToggleOnion = { viewModel.toggleOnionSkin(it) },
-                            onTogglePlayback = { viewModel.togglePlayback() },
-                        )
-                    EditorPanel.CANVAS ->
-                        CanvasOpsSheet(
-                            width = ready?.width ?: 0,
-                            height = ready?.height ?: 0,
-                            dpi = ready?.dpi ?: 72,
-                            backgroundColor = ready?.backgroundColor ?: 0xFFFFFFFF.toInt(),
-                            onResize = { w, h, resample, anchor -> viewModel.resizeCanvas(w, h, resample, anchor) },
-                            onRotate = { viewModel.rotateCanvas(it) },
-                            onFlip = { viewModel.flipCanvas(it) },
-                            onTrim = { viewModel.trimTransparent() },
-                            onDpi = { viewModel.setCanvasDpi(it) },
-                            onBackgroundColor = { viewModel.setCanvasBackgroundColor(it) },
-                            onClear = { viewModel.clearCanvas(it) },
-                        )
-                    EditorPanel.TEXT ->
-                        TextSheet(
-                            text = input.text,
-                            style = input.textStyle,
-                            color = input.brushColor,
-                            onTextChange = { viewModel.setText(it, input.textStyle) },
-                            onStyleChange = { viewModel.setText(input.text, it) },
-                            onColorChange = { viewModel.setColor(it) },
-                            onPlace = {
-                                val pending = pendingText
-                                val view = canvasView
-                                if (pending != null && view != null) {
-                                    view.placeText(
-                                        pending.x,
-                                        pending.y,
-                                        input.text,
-                                        input.textStyle,
-                                        input.brushColor,
-                                    )
-                                    viewModel.cancelText()
-                                    viewModel.setTool(ToolType.BRUSH)
-                                } else {
-                                    viewModel.setTool(ToolType.TEXT)
-                                    viewModel.notify("Tap the canvas to choose where the text goes")
-                                }
-                                panel = EditorPanel.NONE
-                            },
-                        )
-                    EditorPanel.EXPORT ->
-                        ExportSheet(
-                            availableFormats = viewModel.availableFormats(),
-                            frameCount = ready?.frameCount ?: 1,
-                            canvasWidth = ready?.width ?: 0,
-                            canvasHeight = ready?.height ?: 0,
-                            canvasDpi = ready?.dpi ?: 72,
-                            previewBytes = previewBytes,
-                            exportState = exportState,
-                            onExport = { viewModel.export(it) },
-                            actions = exportActions,
-                            onDismissResult = { viewModel.resetExportState() },
-                        )
-                    EditorPanel.QUICK ->
-                        QuickMenuSheet(
-                            scalePercent = (viewScale * 100).toInt(),
-                            rotation = viewRotation.toInt(),
-                            onZoomIn = { canvasView?.zoomBy(1.25f) },
-                            onZoomOut = { canvasView?.zoomBy(0.8f) },
-                            onFit = { canvasView?.fitToView() },
-                            onResetView = { canvasView?.resetView() },
-                            onRotate = { canvasView?.rotateView(it) },
-                            onFlipCanvas = { viewModel.flipCanvas(it) },
-                            onRotateCanvas = { viewModel.rotateCanvas(it) },
-                            onSelectAll = { viewModel.selectAll() },
-                            onClearSelection = { viewModel.clearSelection() },
-                            onInvertSelection = { viewModel.invertSelection() },
-                            onUndo = { viewModel.undo() },
-                            onRedo = { viewModel.redo() },
-                            canUndo = history.canUndo,
-                            canRedo = history.canRedo,
-                        )
-                    EditorPanel.NONE -> Unit
-                }
-                Spacer(Modifier.height(24.dp))
-            }
+            Column(modifier = Modifier.fillMaxWidth(), content = panelContent)
         }
     }
 
@@ -988,6 +980,56 @@ private fun ToolOptionsPanel(
 }
 
 private const val MAX_PSD_IMPORT_BYTES = 256 * 1024 * 1024
+
+/** Non-modal bar for the active tool: selection kinds, transform modes or the mask-painting exit. */
+@Composable
+private fun ContextToolbar(
+    viewModel: CanvasViewModel,
+    input: EditorInput,
+    canvasView: ArtFlowCanvasView?,
+    modifier: Modifier,
+    openPanel: (EditorPanel) -> Unit,
+) {
+    when {
+        input.tool.group == ToolGroup.SELECTION ->
+            SelectionToolbar(
+                tool = input.tool,
+                mode = input.selectionMode,
+                actions =
+                    SelectionToolbarActions(
+                        onTool = viewModel::setTool,
+                        onMode = viewModel::setSelectionMode,
+                        onInvert = viewModel::invertSelection,
+                        onCopyPaste = viewModel::copyAndPasteSelection,
+                        onMore = { openPanel(EditorPanel.SELECTION) },
+                        onClear = viewModel::clearSelection,
+                    ),
+                modifier = modifier,
+            )
+        input.tool == ToolType.TRANSFORM ->
+            TransformToolbar(
+                mode = input.transformMode,
+                actions =
+                    TransformToolbarActions(
+                        onMode = viewModel::setTransformMode,
+                        onFlip = { horizontal ->
+                            canvasView?.transformActiveLayer(flipHorizontal = horizontal, flipVertical = !horizontal)
+                        },
+                        onRotate = { canvasView?.transformActiveLayer(rotation = it) },
+                        onScale = { canvasView?.transformActiveLayer(scaleFactor = it) },
+                    ),
+                modifier = modifier,
+            )
+        input.strokeDestination.isMask ->
+            AssistChip(
+                onClick = { viewModel.setTool(ToolType.BRUSH) },
+                label = {
+                    Text(if (input.strokeDestination == StrokeDestination.MASK_REVEAL) "Mask: reveal · Done" else "Mask: hide · Done")
+                },
+                modifier = modifier.padding(16.dp),
+            )
+    }
+}
 
 @Composable
 private fun ClipboardActions(

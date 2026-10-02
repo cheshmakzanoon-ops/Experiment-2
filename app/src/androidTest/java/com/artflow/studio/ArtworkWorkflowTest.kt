@@ -75,7 +75,7 @@ class ArtworkWorkflowTest {
             inspectFocusMode(scenario, painted)
 
             // Exercise the save-before-navigation callback, not a direct repository save.
-            compose.onNodeWithContentDescription("Back").performClick()
+            compose.onNodeWithText("Gallery").performClick()
             compose.onNodeWithText("Save changes?").assertIsDisplayed()
             compose.onNodeWithText("Save and leave").performClick()
             awaitGallery()
@@ -97,10 +97,10 @@ class ArtworkWorkflowTest {
             paint(scenario, 0.7f)
             compose.waitUntil(15_000) { runBlocking(Dispatchers.Main) { canvas.hasUnsavedChanges() } }
             assertFalse(painted.contentEquals(pixels()))
-            compose.onNodeWithContentDescription("Back").performClick()
+            compose.onNodeWithText("Gallery").performClick()
             compose.onNodeWithText("Stay").performClick()
             compose.onNodeWithText("Save changes?").assertDoesNotExist()
-            compose.onNodeWithContentDescription("Back").performClick()
+            compose.onNodeWithText("Gallery").performClick()
             compose.onNodeWithText("Discard and leave").performClick()
             awaitGallery()
             compose.onNodeWithText(name).performClick()
@@ -123,7 +123,8 @@ class ArtworkWorkflowTest {
     private fun inspectBrushStudio(expectedPixels: IntArray) {
         val depth = runBlocking(Dispatchers.Main) { canvas.undoDepth }
         compose.onNodeWithContentDescription("Smudge").performClick().assertIsOn()
-        compose.onNodeWithText("Brush").performClick()
+        // As in Procreate, tapping the active Smudge tool again opens the brush library.
+        compose.onNodeWithContentDescription("Smudge").performClick()
         compose.onNodeWithText("Brush studio").assertIsDisplayed()
         compose.onNodeWithText("Search brushes").performTextInput("fine liner")
         compose.onNodeWithText("Fine liner").performClick()
@@ -135,11 +136,11 @@ class ArtworkWorkflowTest {
         compose.onNodeWithContentDescription("Smudge").assertIsOn()
         assertArrayEquals(expectedPixels, pixels())
         assertEquals(depth, runBlocking(Dispatchers.Main) { canvas.undoDepth })
-        compose.onNodeWithText("Brush").performClick()
+        compose.onNodeWithContentDescription("Smudge").performClick()
         compose.onNodeWithText("Search brushes").performTextInput("fine liner")
         compose.onNodeWithText("Fine liner").performClick()
         compose.onNodeWithText("Use brush").performClick()
-        compose.onNodeWithContentDescription("Brush").assertIsOn()
+        compose.onNodeWithContentDescription("Paint").assertIsOn()
         assertArrayEquals(expectedPixels, pixels())
         assertEquals(depth, runBlocking(Dispatchers.Main) { canvas.undoDepth })
     }
@@ -150,19 +151,19 @@ class ArtworkWorkflowTest {
     ) {
         val depth = runBlocking(Dispatchers.Main) { canvas.undoDepth }
         listOf("Guides", "Animation", "Canvas", "Text").forEach { title ->
-            openWorkspace(title)
+            openWorkspace(if (title == "Text") "Add text" else title)
             compose.onNodeWithContentDescription("Close $title").assertIsDisplayed()
             if (title == "Guides") TestEvidence.screenshot("studio-guides.png")
             compose.onNodeWithContentDescription("Close $title").performClick()
             assertArrayEquals("Opening $title must not edit pixels", expectedPixels, pixels())
         }
-        openWorkspace("Reference image")
+        openWorkspace("Reference")
         compose.onNodeWithContentDescription("Close reference").assertIsDisplayed()
         TestEvidence.screenshot("studio-reference-empty.png")
         scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         compose.onNodeWithContentDescription("Close reference").assertDoesNotExist()
         compose.onNodeWithText("Save changes?").assertDoesNotExist()
-        compose.onNodeWithContentDescription("Brush").performClick()
+        compose.onNodeWithContentDescription("Paint").performClick()
         assertArrayEquals(expectedPixels, pixels())
         assertEquals(depth, runBlocking(Dispatchers.Main) { canvas.undoDepth })
     }
@@ -170,7 +171,7 @@ class ArtworkWorkflowTest {
     private fun inspectLayerOrdering(expectedPixels: IntArray) {
         val before = runBlocking(Dispatchers.Main) { canvas.getAllLayers().map { it.id } }
         val depth = runBlocking(Dispatchers.Main) { canvas.undoDepth }
-        compose.onNodeWithText("Layers (${before.size})").performClick()
+        compose.onNodeWithContentDescription("Layers").performClick()
         compose.onNodeWithContentDescription("Add layer").performClick()
         compose.waitUntil(15_000) { runBlocking(Dispatchers.Main) { canvas.getAllLayers().size == before.size + 1 } }
         val added = runBlocking(Dispatchers.Main) { canvas.getActiveLayerId() }
@@ -193,7 +194,7 @@ class ArtworkWorkflowTest {
         expectedPixels: IntArray,
     ) {
         val depth = runBlocking(Dispatchers.Main) { canvas.undoDepth }
-        openWorkspace("Text")
+        openWorkspace("Add text")
         compose.onNodeWithText("Content").performTextReplacement("A")
         compose.onNodeWithContentDescription("Size").performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { it(16f) }
         compose.onNodeWithText("Place on canvas").performScrollTo().performClick()
@@ -209,11 +210,11 @@ class ArtworkWorkflowTest {
         assertArrayEquals(expectedPixels, pixels())
 
         // Closing an anchored text panel cancels placement without another history entry.
-        openWorkspace("Text")
+        openWorkspace("Add text")
         compose.onNodeWithText("Place on canvas").performScrollTo().performClick()
         tapCanvas(scenario)
         compose.onNodeWithContentDescription("Close Text").performClick()
-        compose.onNodeWithContentDescription("Brush").performClick()
+        compose.onNodeWithContentDescription("Paint").performClick()
         assertEquals(depth, runBlocking(Dispatchers.Main) { canvas.undoDepth })
         assertArrayEquals(expectedPixels, pixels())
     }
@@ -222,14 +223,14 @@ class ArtworkWorkflowTest {
         compose.waitUntil(15_000) {
             try {
                 compose
-                    .onAllNodesWithContentDescription("Workspace menu")
+                    .onAllNodesWithContentDescription("Actions")
                     .fetchSemanticsNodes()
                     .isNotEmpty()
             } catch (_: IllegalStateException) {
                 false
             }
         }
-        compose.onNodeWithContentDescription("Workspace menu").performClick()
+        compose.onNodeWithContentDescription("Actions").performClick()
         compose.onNodeWithText(title).performScrollTo().performClick()
         compose.waitForIdle()
     }
@@ -256,10 +257,10 @@ class ArtworkWorkflowTest {
         }
         val undoDepth = runBlocking(Dispatchers.Main) { canvas.undoDepth }
         captureWorkspace("studio-workspace.png")
-        compose.onNodeWithContentDescription("Workspace menu").performClick()
-        compose.onNodeWithText("Focus mode").performClick()
+        compose.onNodeWithContentDescription("Actions").performClick()
+        compose.onNodeWithText("Full screen").performScrollTo().performClick()
         compose.onNodeWithContentDescription("Exit focus mode").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Save").assertDoesNotExist()
+        compose.onNodeWithText("Gallery").assertDoesNotExist()
         compose.waitForIdle()
         scenario.onActivity {
             val focusedView = findCanvas(it.window.decorView)
@@ -269,12 +270,12 @@ class ArtworkWorkflowTest {
         captureWorkspace("studio-focus.png")
         assertArrayEquals(expectedPixels, pixels())
         scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
-        compose.onNodeWithContentDescription("Save").assertIsDisplayed()
+        compose.onNodeWithText("Gallery").assertIsDisplayed()
         compose.onNodeWithText("Save changes?").assertDoesNotExist()
-        compose.onNodeWithContentDescription("Workspace menu").performClick()
-        compose.onNodeWithText("Focus mode").performClick()
+        compose.onNodeWithContentDescription("Actions").performClick()
+        compose.onNodeWithText("Full screen").performScrollTo().performClick()
         compose.onNodeWithContentDescription("Exit focus mode").performClick()
-        compose.onNodeWithContentDescription("Save").assertIsDisplayed()
+        compose.onNodeWithText("Gallery").assertIsDisplayed()
         assertArrayEquals(expectedPixels, pixels())
         assertEquals(undoDepth, runBlocking(Dispatchers.Main) { canvas.undoDepth })
         assertTrue(runBlocking(Dispatchers.Main) { canvas.hasUnsavedChanges() })
