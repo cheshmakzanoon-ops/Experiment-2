@@ -55,11 +55,16 @@ class LiveAdjustmentsTest {
         val red = 0xFFFF0000.toInt()
         val darkRed = 0xFF800000.toInt()
         val blue = 0xFF0000FF.toInt()
-        val source = PixelBuffer(4, 1)
-        source.pixels[0] = red
-        source.pixels[1] = darkRed
-        source.pixels[2] = blue
-        source.pixels[3] = red
+        // Red, then dark red, then a wide run of blue that the flood must not reach.
+        val source = PixelBuffer(16, 1)
+        for (x in 0 until 16) {
+            source.pixels[x] =
+                when {
+                    x < 4 -> red
+                    x < 6 -> darkRed
+                    else -> blue
+                }
+        }
         val settings =
             LiveAdjustments.Settings(
                 amount = 0.6f,
@@ -74,7 +79,7 @@ class LiveAdjustmentsTest {
         val touched = out.pixels[0]
         assertTrue("Touched red turns green", ((touched shr 8) and 0xFF) > 200 && ((touched shr 16) and 0xFF) < 60)
         // The darker red stays darker after recolouring.
-        assertTrue(((out.pixels[1] shr 8) and 0xFF) in 1 until 200)
-        assertTrue("Blue is not within the flood", (out.pixels[2] and 0xFF) > 200)
+        assertTrue(((out.pixels[4] shr 8) and 0xFF) in 1 until 200)
+        assertEquals("Blue is not within the flood", blue, out.pixels[12])
     }
 }

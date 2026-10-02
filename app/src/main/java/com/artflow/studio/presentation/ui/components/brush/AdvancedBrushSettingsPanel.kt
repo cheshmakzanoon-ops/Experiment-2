@@ -32,6 +32,7 @@ import com.artflow.studio.data.local.GrainStorage
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.PressureResponse
+import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.presentation.ui.theme.LocalArtFlowFlags
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -408,7 +409,7 @@ private fun BrushWetSettings(
     brushParams: BrushParams,
     onBrushParamsChanged: (BrushParams) -> Unit,
 ) {
-    BrushSettingsSection(title = "Wet Paint") {
+    BrushSettingsSection(title = "Wet Paint and Rendering") {
         // Wet Mix
         BrushParameterSlider(
             label = "Wet Mix",
@@ -417,6 +418,26 @@ private fun BrushWetSettings(
             valueRange = 0f..1f,
             valueDisplay = "%.0f%%".format(brushParams.wetMix * 100),
         )
+        BrushParameterSlider(
+            label = "Wet edges",
+            value = brushParams.wetEdges,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(wetEdges = it.coerceIn(0f, 1f))) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.wetEdges * 100),
+        )
+        Text("Blend mode", style = MaterialTheme.typography.labelLarge)
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag("brush-blend-modes"),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            BlendMode.getLayerBlendModes().forEach { mode ->
+                FilterChip(
+                    selected = brushParams.blendMode == mode,
+                    onClick = { onBrushParamsChanged(brushParams.copy(blendMode = mode)) },
+                    label = { Text(mode.displayName) },
+                )
+            }
+        }
     }
 }
 

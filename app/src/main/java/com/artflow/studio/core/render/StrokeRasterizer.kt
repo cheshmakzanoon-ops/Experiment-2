@@ -9,8 +9,10 @@ import com.artflow.studio.core.pixels.Stamping
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.model.brush.StrokePoint
+import com.artflow.studio.domain.model.layer.BlendMode
 import java.util.Random
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -88,24 +90,49 @@ class StrokeRasterizer(
 
         val buffer = scratchFor(target.width, target.height)
         buffer.clear()
-        drawStrokeInto(buffer, stroke, params, points, alphaLock = false, mask = null, random = random)
+        drawStrokeInto(buffer, stroke, params, points, alphaLock = false, mask = null, random = random, canvas = target)
         val texture = BrushTexture.from(params)
+        val wetEdges = params.wetEdges.coerceIn(0f, 1f)
         for (i in target.pixels.indices) {
             val source = buffer.pixels[i]
             if ((source ushr 24) == 0) continue
             val coverage = selectionCoverage(mask, target, i)
             val grain = texture?.coverage(originX + i % target.width, originY + i / target.width) ?: 1f
-            val effective = strokeAlpha * coverage * grain
+            val effective = strokeAlpha * coverage * grain * wetEdgeFactor(source, wetEdges)
             if (effective <= 0f) continue
             val paint = Channels.scaleAlpha(source, effective)
-            target.pixels[i] =
-                if (alphaLock) {
-                    BlendModes.sourceAtop(target.pixels[i], paint)
-                } else {
-                    BlendModes.sourceOver(target.pixels[i], paint)
-                }
+            target.pixels[i] = deposit(target.pixels[i], paint, params, alphaLock)
         }
         lastDabCount = dabCount.get()
+    }
+
+    /** Merges [paint] into [backdrop] with the brush's blend mode; alpha lock keeps the backdrop's alpha. */
+    private fun deposit(
+        backdrop: Int,
+        paint: Int,
+        params: BrushParams,
+        alphaLock: Boolean,
+    ): Int {
+        val mode = params.blendMode
+        if (mode == BlendMode.NORMAL || mode == BlendMode.PASS_THROUGH) {
+            return if (alphaLock) BlendModes.sourceAtop(backdrop, paint) else BlendModes.sourceOver(backdrop, paint)
+        }
+        val blended = BlendModes.blend(backdrop, paint, mode)
+        return if (alphaLock) Channels.withAlpha(blended, backdrop ushr 24) else blended
+    }
+
+    /**
+     * Wet edges thin the middle of a stroke and pool paint where its coverage falls off, like
+     * watercolour drying at its rim. Returns the factor applied to the stroke's alpha there.
+     */
+    private fun wetEdgeFactor(
+        source: Int,
+        wetEdges: Float,
+    ): Float {
+        if (wetEdges <= 0f) return 1f
+        val a = (source ushr 24) / 255f
+        val rim = 4f * a * (1f - a)
+        return ((1f - 0.5f * wetEdges) + wetEdges * rim * 0.75f / a.coerceAtLeast(0.01f)).coerceIn(0f, 1f / a.coerceAtLeast(0.01f))
     }
 
     /**
@@ -158,6 +185,7 @@ class StrokeRasterizer(
         alphaLock: Boolean,
         mask: SelectionMask?,
         random: Random,
+        canvas: PixelBuffer? = null,
     ) {
         if (canUseCapsule(params, points)) {
             drawSegment(target, stroke, params, points.first(), points.last(), alphaLock, mask, random)
@@ -172,7 +200,7 @@ class StrokeRasterizer(
         // keeps single-point taps visible.
         val shape = CustomGrains.get(params.shapeId)
         val tip = Stamping.TipShape(params.roundness, params.rotation, shape?.let { tile -> { u, v -> tile.sample(u, v) } })
-        val context = DabContext(target, stroke, params, totalLength, alphaLock, mask, random, tip)
+        val context = DabContext(target, stroke, params, totalLength, alphaLock, mask, random, tip, canvas)
         val spacingPx = max(1f, params.size * params.spacing.coerceIn(0.01f, 4f))
         var carry = 0f
         var accumulatedDistance = 0f
@@ -249,6 +277,8 @@ class StrokeRasterizer(
         val mask: SelectionMask?,
         val random: Random,
         val tip: Stamping.TipShape,
+        /** The layer being painted, sampled by wet mix; null when there is nothing to pick up. */
+        val canvas: PixelBuffer?,
     )
 
     private fun drawDabAt(
@@ -282,7 +312,7 @@ class StrokeRasterizer(
         val taper = taperFactor(params, accumulatedDistance, totalLength)
         val radius = max(0.35f, size * taper / 2f)
 
-        val color = params.applyColorJitter(stroke.color, pressure, velocity, random)
+        val color = wetColor(params.applyColorJitter(stroke.color, pressure, velocity, random), context.canvas, x, y, params.wetMix)
 
         // Scatter offsets each dab; count repeats it along a random perpendicular offset.
         val dabs = params.count.coerceIn(1, 32)
@@ -312,12 +342,29 @@ class StrokeRasterizer(
         }
     }
 
+    /** Wet mix: the dab picks up some of the paint already on the layer under it. */
+    private fun wetColor(
+        color: Int,
+        canvas: PixelBuffer?,
+        x: Float,
+        y: Float,
+        wetMix: Float,
+    ): Int {
+        if (canvas == null || wetMix <= 0f) return color
+        val under = canvas.getSafe(floor(x).toInt(), floor(y).toInt())
+        val pickup = wetMix.coerceIn(0f, 1f) * WET_PICKUP * ((under ushr 24) / 255f)
+        if (pickup <= 0f) return color
+        val mixed = ImageFilters.lerpArgb(color or 0xFF000000.toInt(), under or 0xFF000000.toInt(), pickup)
+        return (color and 0xFF000000.toInt()) or (mixed and 0x00FFFFFF)
+    }
+
     private fun canUseCapsule(
         params: BrushParams,
         points: List<StrokePoint>,
     ): Boolean =
         params.spacing <= 0f &&
             params.roundness >= 1f &&
+            params.wetMix <= 0f &&
             CustomGrains.get(params.shapeId) == null &&
             points.size <= 2 &&
             params.count == 1 &&
@@ -475,3 +522,6 @@ class StrokeRasterizer(
         }
     }
 }
+
+/** How much of the paint under a dab a fully wet brush picks up. */
+private const val WET_PICKUP = 0.6f

@@ -1,5 +1,6 @@
 package com.artflow.studio.domain.model.brush
 
+import com.artflow.studio.domain.model.layer.BlendMode
 import kotlinx.serialization.Serializable
 import java.util.Random
 
@@ -48,6 +49,8 @@ data class BrushParams(
     val velocityToHue: Float = 0f, // Speed affects hue shift (0.0 - 1.0)
     val roundness: Float = 1f, // Tip shape: 1 is round, lower values flatten it along [rotation]
     val shapeId: String? = null, // Imported tip image ("custom-…"); null stamps the round/flat tip
+    val blendMode: BlendMode = BlendMode.NORMAL, // How each stroke combines with the layer's existing paint
+    val wetEdges: Float = 0f, // 0..1: paint pools toward the stroke's edges like watercolour
 ) {
     /**
      * Pressure curve types for mapping stylus pressure
