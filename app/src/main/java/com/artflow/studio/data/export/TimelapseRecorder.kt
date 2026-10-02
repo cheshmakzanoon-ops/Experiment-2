@@ -47,29 +47,32 @@ class TimelapseRecorder
         suspend fun capture(
             projectId: Long,
             composite: PixelBuffer,
-        ) = withContext(Dispatchers.Default) {
-            val frame = downscale(composite)
-            val hash = frame.pixels.contentHashCode()
-            mutex.withLock {
-                if (projectId == lastProjectId && hash == lastHash) return@withLock
-                val bytes = BitmapPixelBridge.toJpegBytes(frame, JPEG_QUALITY, 0xFFFFFFFF.toInt())
-                withContext(Dispatchers.IO) {
-                    var existing = frames(projectId)
-                    if (existing.size >= MAX_FRAMES) existing = decimate(existing)
-                    val next = (existing.lastOrNull()?.nameWithoutExtension?.toIntOrNull() ?: -1) + 1
-                    val file = File(dir(projectId), "%06d%s".format(next, EXTENSION))
-                    storage.writeAtomically(file) { it.write(bytes) }
+        ) {
+            withContext(Dispatchers.Default) {
+                val frame = downscale(composite)
+                val hash = frame.pixels.contentHashCode()
+                mutex.withLock {
+                    if (projectId == lastProjectId && hash == lastHash) return@withLock
+                    val bytes = BitmapPixelBridge.toJpegBytes(frame, JPEG_QUALITY, 0xFFFFFFFF.toInt())
+                    withContext(Dispatchers.IO) {
+                        var existing = frames(projectId)
+                        if (existing.size >= MAX_FRAMES) existing = decimate(existing)
+                        val next = (existing.lastOrNull()?.nameWithoutExtension?.toIntOrNull() ?: -1) + 1
+                        val file = File(dir(projectId), "%06d%s".format(next, EXTENSION))
+                        storage.writeAtomically(file) { it.write(bytes) }
+                    }
+                    lastProjectId = projectId
+                    lastHash = hash
                 }
-                lastProjectId = projectId
-                lastHash = hash
             }
         }
 
-        suspend fun clear(projectId: Long) =
+        suspend fun clear(projectId: Long) {
             mutex.withLock {
                 withContext(Dispatchers.IO) { dir(projectId).deleteRecursively() }
                 if (projectId == lastProjectId) lastHash = 0
             }
+        }
 
         /** Encodes the recording as an MP4 replay that lasts at most about [TARGET_DURATION_MS]. */
         suspend fun export(
