@@ -15,11 +15,10 @@ import com.artflow.studio.core.export.ExportFormat
 import com.artflow.studio.core.export.ExportOptions
 import com.artflow.studio.core.export.ExportRegion
 import com.artflow.studio.core.export.ExportResult
-import com.artflow.studio.core.export.PsdCodec
 import com.artflow.studio.core.perspective.PerspectiveGuide
-import com.artflow.studio.core.pixels.Channels
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.pixels.SelectionClipboard
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.symmetry.SymmetryEngine
 import com.artflow.studio.core.text.TextLayout
@@ -29,6 +28,7 @@ import com.artflow.studio.core.tool.LiquifyTool
 import com.artflow.studio.core.tool.PixelBrushes
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.data.export.ArtworkExporter
+import com.artflow.studio.data.export.LayerImports
 import com.artflow.studio.data.export.LayerRaster
 import com.artflow.studio.data.export.TimelapseRecorder
 import com.artflow.studio.domain.model.Project
@@ -666,28 +666,7 @@ class CanvasViewModel
         }
 
         /** Adds [image] as a new layer, centred and scaled down to fit the canvas if needed. */
-        fun insertImageLayer(image: com.artflow.studio.core.pixels.PixelBuffer) =
-            layerOp {
-                val size = canvasRepository.getCanvasSize()
-                val fit = minOf(1f, size.width.toFloat() / image.width, size.height.toFloat() / image.height)
-                val placed =
-                    if (fit < 1f) {
-                        withContext(Dispatchers.Default) {
-                            image.scaled(
-                                (image.width * fit).toInt().coerceAtLeast(1),
-                                (image.height * fit).toInt().coerceAtLeast(1),
-                            )
-                        }
-                    } else {
-                        image
-                    }
-                val layer = canvasRepository.addLayer(name = "Photo")
-                val drawn =
-                    canvasRepository.applyRasterEdit(layer.id, "Insert photo") { target ->
-                        target.drawInto(placed, (size.width - placed.width) / 2, (size.height - placed.height) / 2)
-                    }
-                check(drawn) { "The photo could not be placed on the new layer" }
-            }
+        fun insertImageLayer(image: PixelBuffer) = layerOp { LayerImports.insertImage(canvasRepository, image) }
 
         private var clipboard: PixelBuffer? = null
         private val _hasClipboard = MutableStateFlow(false)
@@ -698,26 +677,10 @@ class CanvasViewModel
             layerOp {
                 val layerId = canvasRepository.getActiveLayerId()
                 val pixels = checkNotNull(canvasRepository.layerPixels(layerId)) { "This layer has no pixels to copy" }
-                val mask =
-                    canvasRepository.selection()?.takeIf {
-                        it.isActive() && it.width == pixels.width && it.height == pixels.height
-                    }
-                clipboard =
-                    withContext(Dispatchers.Default) {
-                        PixelBuffer(pixels.width, pixels.height).also { out ->
-                            for (i in out.pixels.indices) {
-                                out.pixels[i] = mask?.let { Channels.scaleAlpha(pixels.pixels[i], it.alphaAt(i)) } ?: pixels.pixels[i]
-                            }
-                        }
-                    }
+                val selection = canvasRepository.selection()
+                clipboard = withContext(Dispatchers.Default) { SelectionClipboard.extract(pixels, selection) }
                 _hasClipboard.value = true
-                if (cut) {
-                    canvasRepository.applyRasterEdit(layerId, "Cut") { target ->
-                        for (i in target.pixels.indices) {
-                            target.pixels[i] = mask?.let { Channels.scaleAlpha(target.pixels[i], 1f - it.alphaAt(i)) } ?: 0
-                        }
-                    }
-                }
+                if (cut) canvasRepository.applyRasterEdit(layerId, "Cut") { SelectionClipboard.erase(it, selection) }
                 notify(if (cut) "Cut to the clipboard" else "Copied to the clipboard")
             }
 
@@ -730,29 +693,7 @@ class CanvasViewModel
 
         /** Adds every layer of a Photoshop document as new layers, centred on the canvas. */
         fun importPsd(bytes: ByteArray) =
-            layerOp {
-                val document =
-                    withContext(Dispatchers.Default) { PsdCodec.read(bytes) }
-                        ?: error("This file is not a supported PSD document")
-                val size = canvasRepository.getCanvasSize()
-                val dx = (size.width - document.width) / 2
-                val dy = (size.height - document.height) / 2
-                val sources =
-                    document.layers.ifEmpty {
-                        listOfNotNull(document.composite?.let { PsdCodec.PsdLayer("Background", it) })
-                    }
-                check(sources.isNotEmpty()) { "The PSD document has no readable layers" }
-                sources.forEach { source ->
-                    val layer = canvasRepository.addLayer(name = source.name.ifBlank { "PSD layer" })
-                    canvasRepository.applyRasterEdit(layer.id, "Import PSD layer") { target ->
-                        target.drawInto(source.pixels, dx + source.left, dy + source.top)
-                    }
-                    if (source.opacity < 255) canvasRepository.setLayerOpacity(layer.id, source.opacity / 255f)
-                    if (source.blendMode != BlendMode.NORMAL) canvasRepository.setLayerBlendMode(layer.id, source.blendMode)
-                    if (!source.isVisible) canvasRepository.setLayerVisibility(layer.id, false)
-                }
-                notify("Imported ${sources.size} layer(s) from PSD")
-            }
+            layerOp { notify("Imported ${LayerImports.importPsd(canvasRepository, bytes)} layer(s) from PSD") }
 
         /** Groups [layerId] with the layer directly beneath it (or groups it alone at the bottom). */
         fun groupWithLayerBelow(layerId: Long) =
