@@ -17,7 +17,9 @@ import com.artflow.studio.core.export.ExportRegion
 import com.artflow.studio.core.export.ExportResult
 import com.artflow.studio.core.export.PsdCodec
 import com.artflow.studio.core.perspective.PerspectiveGuide
+import com.artflow.studio.core.pixels.Channels
 import com.artflow.studio.core.pixels.IntBounds
+import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.symmetry.SymmetryEngine
 import com.artflow.studio.core.text.TextLayout
@@ -685,6 +687,45 @@ class CanvasViewModel
                         target.drawInto(placed, (size.width - placed.width) / 2, (size.height - placed.height) / 2)
                     }
                 check(drawn) { "The photo could not be placed on the new layer" }
+            }
+
+        private var clipboard: PixelBuffer? = null
+        private val _hasClipboard = MutableStateFlow(false)
+        val hasClipboard: StateFlow<Boolean> = _hasClipboard.asStateFlow()
+
+        /** Copies the selected pixels of the active layer (the whole layer without a selection); [cut] also erases them. */
+        fun copySelection(cut: Boolean) =
+            layerOp {
+                val layerId = canvasRepository.getActiveLayerId()
+                val pixels = checkNotNull(canvasRepository.layerPixels(layerId)) { "This layer has no pixels to copy" }
+                val mask =
+                    canvasRepository.selection()?.takeIf {
+                        it.isActive() && it.width == pixels.width && it.height == pixels.height
+                    }
+                clipboard =
+                    withContext(Dispatchers.Default) {
+                        PixelBuffer(pixels.width, pixels.height).also { out ->
+                            for (i in out.pixels.indices) {
+                                out.pixels[i] = mask?.let { Channels.scaleAlpha(pixels.pixels[i], it.alphaAt(i)) } ?: pixels.pixels[i]
+                            }
+                        }
+                    }
+                _hasClipboard.value = true
+                if (cut) {
+                    canvasRepository.applyRasterEdit(layerId, "Cut") { target ->
+                        for (i in target.pixels.indices) {
+                            target.pixels[i] = mask?.let { Channels.scaleAlpha(target.pixels[i], 1f - it.alphaAt(i)) } ?: 0
+                        }
+                    }
+                }
+                notify(if (cut) "Cut to the clipboard" else "Copied to the clipboard")
+            }
+
+        fun pasteAsLayer() =
+            layerOp {
+                val image = clipboard ?: error("Nothing has been copied yet")
+                val layer = canvasRepository.addLayer(name = "Pasted")
+                canvasRepository.applyRasterEdit(layer.id, "Paste") { target -> target.drawInto(image, 0, 0) }
             }
 
         /** Adds every layer of a Photoshop document as new layers, centred on the canvas. */

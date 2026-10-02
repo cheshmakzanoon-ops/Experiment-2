@@ -665,23 +665,26 @@ fun CanvasScreen(
                                 ),
                         )
                     EditorPanel.SELECTION ->
-                        SelectionSheet(
-                            mode = input.selectionMode,
-                            selectionCount = selectionCount,
-                            tolerance = input.fillTolerance,
-                            featherRadius = featherRadius,
-                            hasSelection = selectionCount > 0,
-                            onModeChange = { viewModel.setSelectionMode(it) },
-                            onToleranceChange = { viewModel.setFillSettings(it, input.fillContiguous) },
-                            onFeatherChange = { featherRadius = it },
-                            onSelectAll = { viewModel.selectAll() },
-                            onClearSelection = { viewModel.clearSelection() },
-                            onInvertSelection = { viewModel.invertSelection() },
-                            onApplyFeather = { viewModel.featherSelection(featherRadius) },
-                            onSelectionFromLayer = { viewModel.selectionFromAlphaOfActiveLayer() },
-                            onTrimToSelection = { viewModel.trimToSelection() },
-                            onColorRange = { viewModel.selectionFromColorRange(it, input.fillTolerance) },
-                        )
+                        Column {
+                            ClipboardActions(viewModel, selectionCount > 0)
+                            SelectionSheet(
+                                mode = input.selectionMode,
+                                selectionCount = selectionCount,
+                                tolerance = input.fillTolerance,
+                                featherRadius = featherRadius,
+                                hasSelection = selectionCount > 0,
+                                onModeChange = { viewModel.setSelectionMode(it) },
+                                onToleranceChange = { viewModel.setFillSettings(it, input.fillContiguous) },
+                                onFeatherChange = { featherRadius = it },
+                                onSelectAll = { viewModel.selectAll() },
+                                onClearSelection = { viewModel.clearSelection() },
+                                onInvertSelection = { viewModel.invertSelection() },
+                                onApplyFeather = { viewModel.featherSelection(featherRadius) },
+                                onSelectionFromLayer = { viewModel.selectionFromAlphaOfActiveLayer() },
+                                onTrimToSelection = { viewModel.trimToSelection() },
+                                onColorRange = { viewModel.selectionFromColorRange(it, input.fillTolerance) },
+                            )
+                        }
                     EditorPanel.GUIDES ->
                         GuidesSheet(
                             symmetry = input.symmetry,
@@ -985,6 +988,22 @@ private fun ToolOptionsPanel(
 }
 
 private const val MAX_PSD_IMPORT_BYTES = 256 * 1024 * 1024
+
+@Composable
+private fun ClipboardActions(
+    viewModel: CanvasViewModel,
+    hasSelection: Boolean,
+) {
+    val hasClipboard by viewModel.hasClipboard.collectAsState()
+    Row(
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        AssistChip(onClick = { viewModel.copySelection(cut = true) }, label = { Text(if (hasSelection) "Cut" else "Cut layer") })
+        AssistChip(onClick = { viewModel.copySelection(cut = false) }, label = { Text(if (hasSelection) "Copy" else "Copy layer") })
+        AssistChip(onClick = viewModel::pasteAsLayer, enabled = hasClipboard, label = { Text("Paste as layer") })
+    }
+}
 
 @Composable
 private fun BrushAssistOptions(
