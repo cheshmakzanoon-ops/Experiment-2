@@ -180,6 +180,22 @@ class MainViewModel
             }
         }
 
+        /** The artwork's last saved full image, or its thumbnail, for the gallery preview. */
+        fun previewImage(project: Project): java.io.File? =
+            storage.flattenedFile(project.id).takeIf { it.isFile } ?: project.thumbnailPath?.let(java.io.File::new)?.takeIf { it.isFile }
+
+        /** Copies the artwork's last saved image into the shareable exports folder; null if it was never saved. */
+        suspend fun shareablePng(project: Project): java.io.File? {
+            val bytes = storage.loadFlattenedBytes(project.id) ?: return null
+            val name =
+                project.name
+                    .filter { it.isLetterOrDigit() || it in " -_" }
+                    .trim()
+                    .ifEmpty { "Artwork" }
+                    .take(MAX_STACK_NAME)
+            return storage.saveExport(project.id, "$name.png", bytes)
+        }
+
         /** Puts an artwork in a gallery stack; a blank name returns it to the main gallery. */
         fun moveToStack(
             projectId: Long,

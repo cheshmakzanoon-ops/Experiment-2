@@ -65,6 +65,7 @@ fun GalleryScreen(
     var searchVisible by remember { mutableStateOf(false) }
     var openStack by rememberSaveable { mutableStateOf<String?>(null) }
     var stackTarget by remember { mutableStateOf<Project?>(null) }
+    var preview by remember { mutableStateOf<Pair<List<Project>, Int>?>(null) }
     BackHandler(enabled = openStack != null) { openStack = null }
     LaunchedEffect(uiState, openStack) {
         val stack = openStack ?: return@LaunchedEffect
@@ -212,6 +213,17 @@ fun GalleryScreen(
                                     onDuplicate = { viewModel.duplicate(project) },
                                     onDelete = { deleteTarget = project },
                                     onStack = { stackTarget = project },
+                                    onPreview = { preview = layout.projects to layout.projects.indexOf(project) },
+                                    onShare = {
+                                        scope.launch {
+                                            val file = viewModel.shareablePng(project)
+                                            if (file == null) {
+                                                snackbarHostState.showSnackbar("Open the artwork once so it can be shared")
+                                            } else {
+                                                runCatching { sharePng(context, file) }
+                                            }
+                                        }
+                                    },
                                 )
                             }
                         }
@@ -234,6 +246,10 @@ fun GalleryScreen(
                 }
             },
         )
+    }
+
+    preview?.let { (projects, index) ->
+        GalleryPreview(projects, index, viewModel::previewImage) { preview = null }
     }
 
     stackTarget?.let { project ->
@@ -333,6 +349,8 @@ private fun ProjectCard(
     onDuplicate: () -> Unit,
     onDelete: () -> Unit,
     onStack: () -> Unit,
+    onPreview: () -> Unit,
+    onShare: () -> Unit,
 ) {
     var menuVisible by remember { mutableStateOf(false) }
     Card(
@@ -427,6 +445,20 @@ private fun ProjectCard(
                             text = { Text("Duplicate") },
                             onClick = {
                                 onDuplicate()
+                                menuVisible = false
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Preview") },
+                            onClick = {
+                                onPreview()
+                                menuVisible = false
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Share") },
+                            onClick = {
+                                onShare()
                                 menuVisible = false
                             },
                         )
