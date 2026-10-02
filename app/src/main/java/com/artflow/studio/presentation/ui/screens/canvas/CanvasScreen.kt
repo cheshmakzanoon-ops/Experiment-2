@@ -11,9 +11,11 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -21,6 +23,11 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.zIndex
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -127,6 +134,9 @@ fun CanvasScreen(
     var focusMode by rememberSaveable(projectId) { mutableStateOf(false) }
     var toolsExpanded by rememberSaveable(projectId) { mutableStateOf(false) }
     var showWorkspaceMenu by remember { mutableStateOf(false) }
+    var colorDropPosition by remember { mutableStateOf<androidx.compose.ui.geometry.Offset?>(null) }
+    var colorChipOrigin by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    var contentOrigin by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
     var showReference by rememberSaveable(projectId) { mutableStateOf(false) }
     var referenceUri by rememberSaveable(projectId) { mutableStateOf<String?>(null) }
     var referenceImportProject by rememberSaveable(projectId) { mutableStateOf<Long?>(null) }
@@ -366,7 +376,30 @@ fun CanvasScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            ColorChip(color = input.brushColor, onClick = { panel = EditorPanel.COLOUR })
+                            ColorChip(
+                                color = input.brushColor,
+                                onClick = { panel = EditorPanel.COLOUR },
+                                modifier =
+                                    Modifier
+                                        .onGloballyPositioned { colorChipOrigin = it.positionInWindow() }
+                                        .pointerInput(Unit) {
+                                            detectDragGestures(
+                                                onDragStart = { colorDropPosition = colorChipOrigin + it },
+                                                onDrag = { change, delta ->
+                                                    change.consume()
+                                                    colorDropPosition = colorDropPosition?.plus(delta)
+                                                },
+                                                onDragEnd = {
+                                                    val drop = colorDropPosition
+                                                    colorDropPosition = null
+                                                    if (drop != null && canvasView?.colorDrop(drop.x, drop.y) == true) {
+                                                        viewModel.notify("ColorDrop filled the area")
+                                                    }
+                                                },
+                                                onDragCancel = { colorDropPosition = null },
+                                            )
+                                        },
+                            )
                             if (input.strokeDestination.isMask) {
                                 TextButton(onClick = { viewModel.setTool(ToolType.BRUSH) }) {
                                     Text(
@@ -412,8 +445,24 @@ fun CanvasScreen(
                 Modifier
                     .fillMaxSize()
                     .padding(padding)
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                    .onGloballyPositioned { contentOrigin = it.positionInWindow() },
         ) {
+            colorDropPosition?.let { drop ->
+                val half = with(LocalDensity.current) { 20.dp.toPx() }
+                val dropOffset =
+                    androidx.compose.ui.unit.IntOffset(
+                        (drop.x - contentOrigin.x - half).toInt(),
+                        (drop.y - contentOrigin.y - half).toInt(),
+                    )
+                Box(
+                    Modifier
+                        .zIndex(10f)
+                        .offset { dropOffset }
+                        .size(40.dp)
+                        .background(Color(input.brushColor), CircleShape),
+                )
+            }
             when (val state = uiState) {
                 is CanvasUiState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
                 is CanvasUiState.Error -> ErrorState(state.message, onRetry = { viewModel.open(projectId) })

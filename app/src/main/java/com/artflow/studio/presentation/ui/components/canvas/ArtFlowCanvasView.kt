@@ -569,6 +569,26 @@ class ArtFlowCanvasView
             }
         }
 
+        /**
+         * ColorDrop: flood-fills the region under a window-space drop point with the current
+         * colour. Returns false when the point is outside the artwork.
+         */
+        fun colorDrop(
+            windowX: Float,
+            windowY: Float,
+        ): Boolean {
+            val origin = IntArray(2)
+            getLocationInWindow(origin)
+            val localX = windowX - origin[0]
+            val localY = windowY - origin[1]
+            if (localX < 0f || localY < 0f || localX > width || localY > height) return false
+            val (x, y) = viewToCanvas(localX, localY)
+            if (x < 0f || y < 0f || x >= canvasWidth || y >= canvasHeight) return false
+            cancelActiveGesture()
+            bucketFill(x, y)
+            return true
+        }
+
         /** Moves the active layer's pixels by a canvas-space offset. */
         fun moveActiveLayer(
             dx: Float,
