@@ -99,9 +99,21 @@ class Compositor(
         options: Options,
     ) {
         if ((backgroundColor ushr 24) != 0) result.fill(backgroundColor)
+        compositeEntries(result, LayerGroups.plan(inputs), options)
+        options.selection?.let { selection -> applySelection(result, selection) }
+    }
 
-        // Isolate each clipping group, then composite it once. Applying clipped layers directly
-        // to the full stack would increase base alpha and expose children of a hidden base.
+    /**
+     * Composites stack entries (bottom first) into [target]. Each clipping group is isolated, then
+     * composited once: applying clipped layers directly to the full stack would increase base
+     * alpha and expose children of a hidden base. An isolated layer group is merged first and then
+     * acts as one layer, so layers can clip to it.
+     */
+    private fun compositeEntries(
+        target: PixelBuffer,
+        entries: List<LayerGroups.Entry>,
+        options: Options,
+    ) {
         var clipBase: PixelBuffer? = null
         var baseLayer: Layer? = null
 
@@ -110,23 +122,21 @@ class Compositor(
             val layer = checkNotNull(baseLayer)
             clipBase = null
             baseLayer = null
-            blendAndRelease(result, content, layer, clipped = false)
+            blendAndRelease(target, content, layer, clipped = false)
         }
 
         try {
-            for (input in LayerGroups.resolve(inputs).sortedBy { it.layer.index }) {
-                val layer = input.layer
+            for (entry in entries) {
+                val layer = entry.layer
                 // Even a hidden/empty base starts a new group: it cannot inherit an older base.
                 if (!layer.isClippingMask) flushGroup()
-                if (layer.isReference && !options.includeReferenceLayers) continue
-                if (!layer.isVisible && !options.includeHiddenLayers) continue
-                if (layer.opacity <= 0f) continue
-                if (layer.isClippingMask && clipBase == null) continue
-
-                val stackEffect = isStackEffect(input)
-                if (stackEffect && options.applyAdjustments) applyStackEffect(clipBase ?: result, input)
-                if (stackEffect) continue
-                val content = renderLayerContent(input, result.width, result.height, bufferPool) ?: continue
+                if (!isIncluded(layer, options) || (layer.isClippingMask && clipBase == null)) continue
+                val input = entry.input
+                if (input != null && isStackEffect(input)) {
+                    if (options.applyAdjustments) applyStackEffect(clipBase ?: target, input)
+                    continue
+                }
+                val content = renderEntry(entry, target.width, target.height, options) ?: continue
                 if (layer.isClippingMask) {
                     blendAndRelease(checkNotNull(clipBase), content, layer, clipped = true)
                 } else {
@@ -138,8 +148,34 @@ class Compositor(
         } finally {
             clipBase?.let { bufferPool.release(it) }
         }
+    }
 
-        options.selection?.let { selection -> applySelection(result, selection) }
+    private fun isIncluded(
+        layer: Layer,
+        options: Options,
+    ): Boolean =
+        (!layer.isReference || options.includeReferenceLayers) &&
+            (layer.isVisible || options.includeHiddenLayers) &&
+            layer.opacity > 0f
+
+    /** A layer's own pixels, or an isolated group's merged members. */
+    private fun renderEntry(
+        entry: LayerGroups.Entry,
+        width: Int,
+        height: Int,
+        options: Options,
+    ): PixelBuffer? {
+        entry.input?.let { return renderLayerContent(it, width, height, bufferPool) }
+        if (entry.members.isEmpty()) return null
+        val merged = bufferPool.obtain(width, height)
+        var completed = false
+        try {
+            compositeEntries(merged, entry.members.map { LayerGroups.Entry(it.layer, it) }, options)
+            completed = true
+            return merged
+        } finally {
+            if (!completed) bufferPool.release(merged)
+        }
     }
 
     private fun isStackEffect(input: LayerInput): Boolean {
