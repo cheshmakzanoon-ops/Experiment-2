@@ -50,4 +50,40 @@ class QuickShapeTest {
         assertEquals(100f to 0f, none.add(100f, 0f))
         assertTrue(none.finish(100f, 0f).isEmpty())
     }
+
+    @Test fun roughRectangleSnapsToExactRectangle() {
+        val corners = listOf(0f to 0f, 120f to 3f, 118f to 80f, -2f to 78f, 1f to 1f)
+        val points =
+            corners.zipWithNext().flatMap { (a, b) ->
+                List(20) { i ->
+                    val t = i / 20f
+                    (a.first + (b.first - a.first) * t) to (a.second + (b.second - a.second) * t)
+                }
+            }
+        val result = QuickShape.recognize(points)!!
+        assertEquals(QuickShape.Kind.POLYGON, result.kind)
+        val xs = result.points.map { it.first }
+        val ys = result.points.map { it.second }
+        assertTrue("about 120 wide", (xs.max() - xs.min()) in 110f..130f)
+        assertTrue("about 80 tall", (ys.max() - ys.min()) in 70f..90f)
+    }
+
+    @Test fun gentleArcIsNotForcedIntoCorners() {
+        val points =
+            List(60) { i ->
+                val t = PI * i / 59
+                (200 + 150 * cos(t)).toFloat() to (200 - 40 * sin(t)).toFloat()
+            }
+        val result = QuickShape.recognize(points)
+        assertTrue(result == null || result.kind != QuickShape.Kind.POLYLINE)
+    }
+
+    @Test fun snappedLineFollowsThePenAndSnapsToRightAngles() {
+        val line = QuickShape.recognize(List(30) { i -> i * 5f to 50f })!!
+        // Dragging nearly straight down from the start snaps the line to vertical.
+        val adjusted = QuickShape.adjust(line, line.points.last(), 3f to 148f)
+        assertEquals(0f to 50f, adjusted.points.first())
+        val end = adjusted.points.last()
+        assertEquals(0f, end.first, 0.5f)
+    }
 }

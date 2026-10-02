@@ -228,6 +228,9 @@ class ArtFlowCanvasView
         private var strokePressureSum = 0f
         private var strokeLastPressure = 1f
         private var quickShapeApplied = false
+        private var quickShapeResult: QuickShape.Result? = null
+        private var quickShapeAnchor = 0f to 0f
+        private var quickShapePressure = 1f
         private var holdAnchorX = 0f
         private var holdAnchorY = 0f
         private val quickShapeCheck = Runnable { applyQuickShape() }
@@ -1201,7 +1204,9 @@ class ArtFlowCanvasView
 
             when (tool) {
                 ToolType.BRUSH, ToolType.ERASER ->
-                    if (drawing && !quickShapeApplied) {
+                    if (drawing && quickShapeApplied) {
+                        adjustQuickShape(canvasX, canvasY)
+                    } else if (drawing) {
                         trackQuickShapeHold(x, y, canvasX, canvasY, pressure)
                         val (smoothX, smoothY) = stabilizer?.add(canvasX, canvasY) ?: (canvasX to canvasY)
                         canvasRepository.continueStroke(
@@ -1508,16 +1513,37 @@ class ArtFlowCanvasView
             if (!drawing || quickShapeApplied || !input.quickShape) return
             val shape = QuickShape.recognize(strokeRawPoints.toList()) ?: return
             val tool = gestureTool ?: return
+            val lastRaw = strokeRawPoints.last()
             val pressure = (strokePressureSum / strokeRawPoints.size).coerceIn(0.05f, 1f)
             canvasRepository.cancelStroke(currentStrokeId)
             val (startX, startY) = shape.points.first()
             startStroke(startX, startY, pressure, tool)
             if (!drawing) return
             quickShapeApplied = true
+            quickShapeResult = shape
+            quickShapeAnchor = lastRaw
+            quickShapePressure = pressure
             shape.points.drop(1).forEach { (px, py) -> canvasRepository.continueStroke(currentStrokeId, px, py, pressure) }
             updateLiveStroke()
             performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
-            onStatusMessage?.invoke(if (shape.kind == QuickShape.Kind.LINE) "QuickShape: line" else "QuickShape: ellipse")
+            onStatusMessage?.invoke("QuickShape: ${shape.kind.label} — keep holding and drag to adjust")
+        }
+
+        /** After QuickShape snaps, keeping the pen down reshapes it, as in Procreate. */
+        private fun adjustQuickShape(
+            x: Float,
+            y: Float,
+        ) {
+            val shape = quickShapeResult ?: return
+            val tool = gestureTool ?: return
+            val adjusted = QuickShape.adjust(shape, quickShapeAnchor, x to y)
+            canvasRepository.cancelStroke(currentStrokeId)
+            val (startX, startY) = adjusted.points.first()
+            startStroke(startX, startY, quickShapePressure, tool)
+            if (!drawing) return
+            quickShapeApplied = true
+            adjusted.points.drop(1).forEach { (px, py) -> canvasRepository.continueStroke(currentStrokeId, px, py, quickShapePressure) }
+            updateLiveStroke()
         }
 
         private fun updateLiveStroke() {
