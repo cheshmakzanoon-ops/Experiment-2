@@ -898,11 +898,34 @@ private fun ToolOptionsPanel(
             }
         }
         if (input.tool == ToolType.TRANSFORM) TransformOptions(viewModel, input, canvasView)
+        if (input.tool == ToolType.BRUSH) BrushAssistOptions(viewModel, input)
         if (input.tool == ToolType.CLONE_STAMP) {
             Text(
                 "Tap to set the clone source, then drag. Blend mode: aligned.",
                 style = MaterialTheme.typography.bodySmall,
             )
+        }
+    }
+}
+
+@Composable
+private fun BrushAssistOptions(
+    viewModel: CanvasViewModel,
+    input: EditorInput,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            "StreamLine ${(input.brushParams.smoothing * 100).toInt()}%",
+            style = MaterialTheme.typography.labelMedium,
+        )
+        Slider(
+            value = input.brushParams.smoothing,
+            onValueChange = { viewModel.setBrushParams(input.brushParams.copy(smoothing = it)) },
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(checked = input.quickShape, onCheckedChange = viewModel::setQuickShape)
+            Spacer(Modifier.width(8.dp))
+            Text("QuickShape — hold at the end of a stroke to snap a line or ellipse", style = MaterialTheme.typography.bodySmall)
         }
     }
 }

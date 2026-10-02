@@ -12,6 +12,8 @@ import android.view.MotionEvent
 import androidx.core.math.MathUtils
 import com.artflow.studio.core.canvas.PointerGestureRouter
 import com.artflow.studio.core.canvas.PointerPressure
+import com.artflow.studio.core.canvas.QuickShape
+import com.artflow.studio.core.canvas.StrokeStabilizer
 import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.Channels
 import com.artflow.studio.core.pixels.LayerTransform
@@ -108,6 +110,8 @@ data class EditorInput(
     val selectionMode: SelectionCombineMode = SelectionCombineMode.REPLACE,
     /** How a one-finger drag edits the active layer while the transform tool is selected. */
     val transformMode: LayerTransform.Mode = LayerTransform.Mode.MOVE,
+    /** Holding the pen still at the end of a stroke snaps it to a line or ellipse. */
+    val quickShape: Boolean = true,
     /** Whether a finger (rather than a stylus) may paint. */
     val fingerPainting: Boolean = true,
 )
@@ -177,6 +181,14 @@ class ArtFlowCanvasView
 
         private var drawing = false
         private var currentStrokeId = 0L
+        private var stabilizer: StrokeStabilizer? = null
+        private val strokeRawPoints = mutableListOf<Pair<Float, Float>>()
+        private var strokePressureSum = 0f
+        private var strokeLastPressure = 1f
+        private var quickShapeApplied = false
+        private var holdAnchorX = 0f
+        private var holdAnchorY = 0f
+        private val quickShapeCheck = Runnable { applyQuickShape() }
 
         // Navigation baseline
         private var navPrevDistance = 0f
@@ -319,6 +331,7 @@ class ArtFlowCanvasView
             gradientOrigin = null
             if (drawing) canvasRepository.cancelStroke(currentStrokeId)
             drawing = false
+            removeCallbacks(quickShapeCheck)
             cancelPixelInteraction()
             selectionJob?.cancel()
             onDragPreview?.invoke(null)
@@ -884,11 +897,13 @@ class ArtFlowCanvasView
 
             when (tool) {
                 ToolType.BRUSH, ToolType.ERASER ->
-                    if (drawing) {
+                    if (drawing && !quickShapeApplied) {
+                        trackQuickShapeHold(x, y, canvasX, canvasY, pressure)
+                        val (smoothX, smoothY) = stabilizer?.add(canvasX, canvasY) ?: (canvasX to canvasY)
                         canvasRepository.continueStroke(
                             strokeId = currentStrokeId,
-                            x = canvasX,
-                            y = canvasY,
+                            x = smoothX,
+                            y = smoothY,
                             pressure = pressure,
                             tiltX = axisOf(event, index, MotionEvent.AXIS_TILT, history),
                             tiltY = axisOf(event, index, MotionEvent.AXIS_ORIENTATION, history),
@@ -945,7 +960,13 @@ class ArtFlowCanvasView
 
             when (tool) {
                 ToolType.BRUSH, ToolType.ERASER -> {
+                    removeCallbacks(quickShapeCheck)
                     if (drawing) {
+                        if (!cancelled && !quickShapeApplied) {
+                            stabilizer?.finish(canvasX, canvasY)?.forEach { (px, py) ->
+                                canvasRepository.continueStroke(currentStrokeId, px, py, strokeLastPressure)
+                            }
+                        }
                         if (cancelled) canvasRepository.cancelStroke(currentStrokeId) else canvasRepository.endStroke(currentStrokeId)
                     }
                     drawing = false
@@ -1077,7 +1098,51 @@ class ArtFlowCanvasView
                 )
             drawing = currentStrokeId != 0L
             if (!drawing) onStatusMessage?.invoke("Choose an unlocked, visible layer with an editable destination")
+            stabilizer = StrokeStabilizer(params.smoothing).takeIf { it.isActive }?.also { it.start(x, y) }
+            strokeRawPoints.clear()
+            strokeRawPoints.add(x to y)
+            strokePressureSum = pressure
+            strokeLastPressure = pressure
+            quickShapeApplied = false
+            removeCallbacks(quickShapeCheck)
             updateLiveStroke()
+        }
+
+        /** Restarts the QuickShape hold timer whenever the pen moves beyond a small radius. */
+        private fun trackQuickShapeHold(
+            viewX: Float,
+            viewY: Float,
+            canvasX: Float,
+            canvasY: Float,
+            pressure: Float,
+        ) {
+            strokeRawPoints.add(canvasX to canvasY)
+            strokePressureSum += pressure
+            strokeLastPressure = pressure
+            if (!input.quickShape) return
+            if (strokeRawPoints.size == 2 || kotlin.math.hypot(viewX - holdAnchorX, viewY - holdAnchorY) > QUICKSHAPE_HOLD_SLOP) {
+                holdAnchorX = viewX
+                holdAnchorY = viewY
+                removeCallbacks(quickShapeCheck)
+                postDelayed(quickShapeCheck, QUICKSHAPE_HOLD_MS)
+            }
+        }
+
+        /** Replaces the live stroke with the recognised clean shape. */
+        private fun applyQuickShape() {
+            if (!drawing || quickShapeApplied || !input.quickShape) return
+            val shape = QuickShape.recognize(strokeRawPoints.toList()) ?: return
+            val tool = gestureTool ?: return
+            val pressure = (strokePressureSum / strokeRawPoints.size).coerceIn(0.05f, 1f)
+            canvasRepository.cancelStroke(currentStrokeId)
+            val (startX, startY) = shape.points.first()
+            startStroke(startX, startY, pressure, tool)
+            if (!drawing) return
+            quickShapeApplied = true
+            shape.points.drop(1).forEach { (px, py) -> canvasRepository.continueStroke(currentStrokeId, px, py, pressure) }
+            updateLiveStroke()
+            performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+            onStatusMessage?.invoke(if (shape.kind == QuickShape.Kind.LINE) "QuickShape: line" else "QuickShape: ellipse")
         }
 
         private fun updateLiveStroke() {
@@ -1904,6 +1969,8 @@ class ArtFlowCanvasView
             private const val MIN_SCALE = 0.05f
             private const val MAX_SCALE = 32f
             private const val TAP_SLOP = 24f
+            private const val QUICKSHAPE_HOLD_SLOP = 10f
+            private const val QUICKSHAPE_HOLD_MS = 650L
             private const val TAP_TIMEOUT_MS = 320L
             private const val SNAP_TOLERANCE = 12f
             private const val PREVIEW_INTERVAL_MS = 66L
