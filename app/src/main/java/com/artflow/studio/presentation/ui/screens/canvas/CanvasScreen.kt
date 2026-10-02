@@ -859,6 +859,15 @@ fun CanvasScreen(
                             onParameter = viewModel.adjustments::setParameter,
                             onCancel = viewModel.adjustments::cancel,
                             onApply = viewModel.adjustments::apply,
+                            onPencil = viewModel.adjustments::setPencil,
+                            onPaint = { point, width, height ->
+                                val size = ready
+                                if (size != null) {
+                                    val view = ViewTransform(viewScale, viewOffsetX, viewOffsetY, viewRotation)
+                                    val at = view.toCanvas(point, width, height, size.width, size.height)
+                                    viewModel.adjustments.paintAt(at.x, at.y, input.brushParams.size / 2f)
+                                }
+                            },
                         ),
                     modifier = Modifier.zIndex(5f),
                 )

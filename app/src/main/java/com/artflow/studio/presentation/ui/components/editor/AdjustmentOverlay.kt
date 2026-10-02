@@ -29,7 +29,20 @@ fun AdjustmentOverlay(
     val latest by rememberUpdatedState(state)
     val latestActions by rememberUpdatedState(actions)
     Box(modifier.fillMaxSize()) {
-        if (state.kind.slidesAmount) {
+        if (state.pencil) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectDragGestures(
+                            onDragStart = { latestActions.onPaint(it, size.width.toFloat(), size.height.toFloat()) },
+                        ) { change, _ ->
+                            change.consume()
+                            latestActions.onPaint(change.position, size.width.toFloat(), size.height.toFloat())
+                        }
+                    },
+            )
+        } else if (state.kind.slidesAmount) {
             Box(
                 Modifier
                     .fillMaxSize()
@@ -60,7 +73,9 @@ fun AdjustmentOverlay(
             modifier = Modifier.align(Alignment.TopCenter).padding(12.dp),
         ) {
             val text =
-                if (state.kind.slidesAmount) {
+                if (state.pencil) {
+                    "${state.kind.displayName} — paint where it applies"
+                } else if (state.kind.slidesAmount) {
                     "${state.kind.displayName} ${(state.settings.amount * 100).toInt()}% — slide across the canvas"
                 } else {
                     state.kind.displayName
@@ -74,7 +89,14 @@ fun AdjustmentOverlay(
         ) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (!state.kind.slidesAmount) ParameterSliders(state, actions.onParameter)
+                if (state.kind.slidesAmount && state.pencil) {
+                    Text("Amount ${(state.settings.amount * 100).toInt()}%", style = MaterialTheme.typography.labelMedium)
+                    Slider(value = state.settings.amount, onValueChange = actions.onAmount)
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.align(Alignment.End)) {
+                    FilterChip(selected = !state.pencil, onClick = { actions.onPencil(false) }, label = { Text("Layer") })
+                    FilterChip(selected = state.pencil, onClick = { actions.onPencil(true) }, label = { Text("Pencil") })
+                    Spacer(Modifier.width(8.dp))
                     TextButton(onClick = actions.onCancel) { Text("Cancel") }
                     Button(onClick = actions.onApply) { Text("Apply") }
                 }

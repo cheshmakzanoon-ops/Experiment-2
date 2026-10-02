@@ -37,6 +37,8 @@ import com.artflow.studio.core.pixels.TransformQuad
 import com.artflow.studio.core.pixels.WarpMesh
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.presentation.ui.components.canvas.SelectionCombineMode
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlin.math.sqrt
 
 /** Buttons of the studio top bar, in Procreate's order: workspace menus left, painting tools right. */
@@ -469,6 +471,9 @@ data class AdjustmentOverlayActions(
     val onParameter: (String, Float) -> Unit,
     val onCancel: () -> Unit,
     val onApply: () -> Unit,
+    val onPencil: (Boolean) -> Unit = {},
+    /** A Pencil-mode touch at a point of the overlay, with the overlay's width and height. */
+    val onPaint: (Offset, Float, Float) -> Unit = { _, _, _ -> },
 )
 
 /** The canvas view's pan, zoom and rotation, as reported to the compose layer. */
@@ -477,7 +482,24 @@ data class ViewTransform(
     val offsetX: Float,
     val offsetY: Float,
     val rotationDegrees: Float,
-)
+) {
+    /** Canvas pixel under [point] of a view [viewWidth] × [viewHeight] showing a canvas of the given size. */
+    fun toCanvas(
+        point: Offset,
+        viewWidth: Float,
+        viewHeight: Float,
+        canvasWidth: Int,
+        canvasHeight: Int,
+    ): Offset {
+        val dx = point.x - (viewWidth / 2f + offsetX)
+        val dy = point.y - (viewHeight / 2f + offsetY)
+        val radians = Math.toRadians(-rotationDegrees.toDouble())
+        val c = cos(radians).toFloat()
+        val s = sin(radians).toFloat()
+        val factor = scale.coerceAtLeast(0.01f)
+        return Offset((dx * c - dy * s) / factor + canvasWidth / 2f, (dx * s + dy * c) / factor + canvasHeight / 2f)
+    }
+}
 
 /** Must match the canvas view's rotation-knob distance, in screen pixels. */
 private const val KNOB_DISTANCE_PX = 48f

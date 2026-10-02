@@ -28,6 +28,8 @@ class AdjustmentSessionController(
     data class State(
         val kind: LiveAdjustments.Kind,
         val settings: LiveAdjustments.Settings,
+        /** Pencil mode: the effect shows only where it has been painted on, as in Procreate. */
+        val pencil: Boolean = false,
     )
 
     private val _state = MutableStateFlow<State?>(null)
@@ -37,6 +39,10 @@ class AdjustmentSessionController(
     private var original: PixelBuffer? = null
     private var selection: SelectionMask? = null
     private var previewJob: Job? = null
+
+    /** The whole-layer effect and the settings it was made for; Pencil mode blends it in where painted. */
+    @Volatile private var filtered: Pair<State, PixelBuffer>? = null
+    private var painted: SelectionMask? = null
 
     fun start(kind: LiveAdjustments.Kind) {
         scope.launch {
@@ -70,19 +76,47 @@ class AdjustmentSessionController(
         render()
     }
 
+    /** Switches between adjusting the whole layer and painting the adjustment on with the brush. */
+    fun setPencil(enabled: Boolean) {
+        val current = _state.value ?: return
+        val source = original ?: return
+        painted = if (enabled) SelectionMask(source.width, source.height) else null
+        _state.value = current.copy(pencil = enabled)
+        render()
+    }
+
+    /** Paints the adjustment on around canvas point ([x], [y]) with a soft dab of [radius]. */
+    fun paintAt(
+        x: Float,
+        y: Float,
+        radius: Float,
+    ) {
+        val mask = painted ?: return
+        AdjustmentPaint.dab(mask, x, y, radius.coerceAtLeast(1f))
+        render()
+    }
+
     private fun render() {
         val current = _state.value ?: return
         val target = session ?: return
-        val source = original ?: return
-        val mask = selection
         previewJob?.cancel()
         previewJob =
             scope.launch {
-                val result = withContext(Dispatchers.Default) { LiveAdjustments.apply(current.kind, source, current.settings, mask) }
+                val result = withContext(Dispatchers.Default) { result(current) } ?: return@launch
                 ensureActive()
                 result.pixels.copyInto(target.buffer.pixels)
                 repository.requestPreviewRefresh()
             }
+    }
+
+    /** The layer as it would be applied: the effect, limited to the selection and any painted area. */
+    private fun result(current: State): PixelBuffer? {
+        val source = original ?: return null
+        val settingsState = current.copy(pencil = false)
+        val effect =
+            filtered?.takeIf { it.first == settingsState }?.second
+                ?: LiveAdjustments.apply(current.kind, source, current.settings, null).also { filtered = settingsState to it }
+        return AdjustmentPaint.mix(source, effect, selection, painted.takeIf { current.pencil })
     }
 
     /** Records the adjustment as one undoable step; an untouched preview is simply closed. */
@@ -90,11 +124,10 @@ class AdjustmentSessionController(
         val current = _state.value ?: return
         val target = session ?: return
         val source = original ?: return
-        val mask = selection
         previewJob?.cancel()
         scope.launch {
             try {
-                val result = withContext(Dispatchers.Default) { LiveAdjustments.apply(current.kind, source, current.settings, mask) }
+                val result = withContext(Dispatchers.Default) { result(current) } ?: return@launch
                 if (!result.pixels.contentEquals(source.pixels)) {
                     result.pixels.copyInto(target.buffer.pixels)
                     if (repository.commitRasterEdit(target, current.kind.displayName)) {
@@ -120,6 +153,8 @@ class AdjustmentSessionController(
         session = null
         original = null
         selection = null
+        filtered = null
+        painted = null
         _state.value = null
         repository.requestPreviewRefresh()
     }
