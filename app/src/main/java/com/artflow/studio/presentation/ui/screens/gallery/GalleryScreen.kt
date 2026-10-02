@@ -2,6 +2,8 @@
 
 package com.artflow.studio.presentation.ui.screens.gallery
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -18,16 +20,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.artflow.studio.core.canvas.CanvasOperations
+import com.artflow.studio.data.export.PendingImports
+import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.Project
 import com.artflow.studio.domain.model.settings.GallerySort
 import com.artflow.studio.presentation.ui.viewmodel.MainUiState
 import com.artflow.studio.presentation.ui.viewmodel.MainViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -54,6 +61,25 @@ fun GalleryScreen(
     var deleteTarget by remember { mutableStateOf<Project?>(null) }
     var sortMenu by remember { mutableStateOf(false) }
     var searchVisible by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val photoImport =
+        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            scope.launch {
+                val image =
+                    withContext(Dispatchers.IO) {
+                        runCatching { BitmapPixelBridge.decodeUri(context.contentResolver, uri) }.getOrNull()
+                    }
+                if (image == null) {
+                    snackbarHostState.showSnackbar("That image could not be opened")
+                    return@launch
+                }
+                viewModel.createProject("Imported photo", null, image.width, image.height, 72) { id ->
+                    PendingImports.put(id, image)
+                    scope.launch { onNavigateToCanvas(id) }
+                }
+            }
+        }
 
     LaunchedEffect(Unit) {
         viewModel.messageFlow.collect { snackbarHostState.showSnackbar(it) }
@@ -109,6 +135,9 @@ fun GalleryScreen(
                                 )
                             }
                         }
+                    }
+                    IconButton(onClick = { runCatching { photoImport.launch("image/*") } }) {
+                        Icon(Icons.Default.AddPhotoAlternate, contentDescription = "Import photo as a new canvas")
                     }
                     IconButton(onClick = onOpenHelp) {
                         Icon(Icons.Default.HelpOutline, contentDescription = "Help")

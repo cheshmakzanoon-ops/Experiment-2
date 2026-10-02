@@ -30,6 +30,7 @@ import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.data.export.ArtworkExporter
 import com.artflow.studio.data.export.LayerImports
 import com.artflow.studio.data.export.LayerRaster
+import com.artflow.studio.data.export.PendingImports
 import com.artflow.studio.data.export.TimelapseRecorder
 import com.artflow.studio.domain.model.Project
 import com.artflow.studio.domain.model.animation.AnimationSettings
@@ -275,6 +276,7 @@ class CanvasViewModel
                         refreshSelection()
                         startObserving()
                         startAutosave()
+                        PendingImports.take(projectId)?.let(::insertImageLayer)
                         Timber.d("Opened project $projectId (${state.width}x${state.height})")
                     } catch (cancelled: CancellationException) {
                         throw cancelled
