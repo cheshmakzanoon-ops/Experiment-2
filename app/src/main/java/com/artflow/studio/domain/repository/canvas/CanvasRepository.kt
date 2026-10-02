@@ -463,6 +463,18 @@ interface CanvasRepository {
     /** Provisional pixel-tool preview; never used by persistence or exports. */
     suspend fun compositePreview(): PixelBuffer?
 
+    /** A preview composite and the area that changed since the previous frame (null: all of it). */
+    class PreviewFrame(
+        val buffer: PixelBuffer,
+        val dirty: IntBounds?,
+    )
+
+    /**
+     * Like [compositePreview], but while only strokes in progress change, recomposites just the
+     * area they touched. The buffer may be reused by the next call, so copy what you need first.
+     */
+    suspend fun compositePreviewFrame(): PreviewFrame? = compositePreview()?.let { PreviewFrame(it, null) }
+
     // -----------------------------------------------------------------------------------------
     // Compositing and invalidation
     // -----------------------------------------------------------------------------------------

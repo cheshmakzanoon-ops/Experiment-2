@@ -903,8 +903,13 @@ class ArtFlowCanvasView
             val size = canvasRepository.getCanvasSize()
             attachToCanvas(size.width, size.height, size.dpi, canvasRepository.getBackgroundColor())
             try {
-                val buffer = canvasRepository.compositePreview()
-                if (buffer != null) renderer.setComposite(buffer)
+                val frame = canvasRepository.compositePreviewFrame()
+                val dirty = frame?.dirty
+                when {
+                    frame == null -> Unit
+                    dirty == null -> renderer.setComposite(frame.buffer)
+                    else -> renderer.setCompositeRegion(frame.buffer, dirty)
+                }
                 requestRender()
             } catch (cancelled: CancellationException) {
                 throw cancelled

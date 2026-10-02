@@ -18,10 +18,12 @@ object LayerStrokeRenderer {
         height: Int,
         alphaLock: Boolean,
         selection: SelectionMask?,
+        originX: Int = 0,
+        originY: Int = 0,
     ): PixelBuffer {
         val result = PixelBuffer(width, height)
         if (base != null) result.drawInto(base, 0, 0)
-        val renderer = StrokeRasterizer()
+        val renderer = StrokeRasterizer(originX, originY)
         try {
             historicalStrokes.forEach { renderer.draw(result, it, alphaLock = alphaLock) }
             incomingStrokes.forEach { renderer.draw(result, it, alphaLock = alphaLock, mask = selection) }

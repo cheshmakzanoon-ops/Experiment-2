@@ -33,7 +33,11 @@ import kotlin.math.sqrt
  *   accumulated along the path instead of rescanning the point list, and the path end receives at
  *   most one closing dab.
  */
-class StrokeRasterizer {
+class StrokeRasterizer(
+    /** Canvas position of the target's top-left pixel, so grain stays anchored when rendering a crop. */
+    private val originX: Int = 0,
+    private val originY: Int = 0,
+) {
     /**
      * Scratch buffer reused across strokes (transparent; allocated on demand).
      *
@@ -90,7 +94,7 @@ class StrokeRasterizer {
             val source = buffer.pixels[i]
             if ((source ushr 24) == 0) continue
             val coverage = selectionCoverage(mask, target, i)
-            val grain = texture?.coverage(i % target.width, i / target.width) ?: 1f
+            val grain = texture?.coverage(originX + i % target.width, originY + i / target.width) ?: 1f
             val effective = strokeAlpha * coverage * grain
             if (effective <= 0f) continue
             val paint = Channels.scaleAlpha(source, effective)
@@ -129,7 +133,7 @@ class StrokeRasterizer {
             if (sourceCoverage <= 0f) continue
             val selectionCoverage = selectionCoverage(mask, target, i)
             if (selectionCoverage <= 0f) continue
-            val grain = texture?.coverage(i % target.width, i / target.width) ?: 1f
+            val grain = texture?.coverage(originX + i % target.width, originY + i / target.width) ?: 1f
             val erase = (strokeAlpha * sourceCoverage * selectionCoverage * grain).coerceIn(0f, 1f)
             val destination = target.pixels[i]
             val destinationAlpha = (destination ushr 24) and 0xFF

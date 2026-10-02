@@ -1,9 +1,14 @@
 package com.artflow.studio.data.renderer.opengl
 
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
 import android.opengl.GLUtils
+import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import java.nio.ByteBuffer
@@ -75,6 +80,16 @@ class OpenGLCanvasRenderer
         // Ownership is transferred atomically. A producer may recycle only a superseded, unclaimed
         // bitmap; it must never recycle one that the GL thread is uploading.
         private val pendingComposite = AtomicReference<Bitmap?>(null)
+
+        /** Changed areas published after the pending composite, applied in order; guarded by itself. */
+        private val pendingRegions = mutableListOf<RegionUpdate>()
+
+        private class RegionUpdate(
+            val left: Int,
+            val top: Int,
+            val bitmap: Bitmap,
+        )
+
         private val pendingOnionSkins = AtomicReference<List<Pair<Bitmap, Float>>?>(null)
 
         // GL-thread-owned images survive EGL context loss and can be reuploaded into the new context.
@@ -178,15 +193,21 @@ class OpenGLCanvasRenderer
             GLES20.glUniform1f(quadAlphaHandle, 1f)
 
             // 3. Upload changed artwork, but draw the retained texture on EVERY frame.
-            val incoming = pendingComposite.getAndSet(null)
+            val (incoming, regions) =
+                synchronized(pendingRegions) {
+                    val taken = pendingRegions.toList()
+                    pendingRegions.clear()
+                    pendingComposite.getAndSet(null) to taken
+                }
             if (incoming != null) {
                 retainedComposite?.recycle()
                 retainedComposite = incoming
             }
             retainedComposite?.let { bitmap ->
+                val partial = applyRegions(bitmap, regions)
                 if (compositeTexture == 0) {
                     compositeTexture = uploadBitmap(bitmap)
-                } else if (incoming != null) {
+                } else if (incoming != null || !partial) {
                     updateBitmap(compositeTexture, bitmap)
                 }
                 GLES20.glUniform4f(quadTintHandle, 1f, 1f, 1f, 1f)
@@ -222,7 +243,51 @@ class OpenGLCanvasRenderer
          * immediately so a fast-painting session cannot leak.
          */
         fun setComposite(buffer: PixelBuffer) {
-            pendingComposite.getAndSet(BitmapPixelBridge.toBitmap(buffer))?.recycle()
+            val bitmap = BitmapPixelBridge.toBitmap(buffer)
+            synchronized(pendingRegions) {
+                // The full image already contains every earlier region.
+                pendingRegions.forEach { it.bitmap.recycle() }
+                pendingRegions.clear()
+                pendingComposite.getAndSet(bitmap)
+            }?.recycle()
+        }
+
+        /**
+         * Publishes only [region] of [buffer] (canvas pixels, inclusive bounds); an empty region is
+         * ignored. Painting a stroke then uploads a small rectangle per frame, not the whole canvas.
+         */
+        fun setCompositeRegion(
+            buffer: PixelBuffer,
+            region: IntBounds,
+        ) {
+            if (region.isEmpty) return
+            val bitmap =
+                Bitmap.createBitmap(region.width, region.height, Bitmap.Config.ARGB_8888).apply {
+                    setPremultiplied(true)
+                    setPixels(buffer.pixels, region.top * buffer.width + region.left, buffer.width, 0, 0, region.width, region.height)
+                }
+            synchronized(pendingRegions) { pendingRegions += RegionUpdate(region.left, region.top, bitmap) }
+        }
+
+        /**
+         * Copies [regions] into the retained image and, when the texture holds it at full size, into
+         * the texture. Returns false when the texture must be reuploaded instead.
+         */
+        private fun applyRegions(
+            retained: Bitmap,
+            regions: List<RegionUpdate>,
+        ): Boolean {
+            if (regions.isEmpty()) return true
+            val canvas = Canvas(retained)
+            val copy = Paint().apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC) }
+            val direct = compositeTexture != 0 && max(retained.width, retained.height) <= maxTextureSize
+            if (direct) GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, compositeTexture)
+            regions.forEach { region ->
+                canvas.drawBitmap(region.bitmap, region.left.toFloat(), region.top.toFloat(), copy)
+                if (direct) GLUtils.texSubImage2D(GLES20.GL_TEXTURE_2D, 0, region.left, region.top, region.bitmap)
+                region.bitmap.recycle()
+            }
+            return direct
         }
 
         fun setOnionSkins(frames: List<Pair<PixelBuffer, Float>>) {
@@ -287,6 +352,10 @@ class OpenGLCanvasRenderer
             onionTextures.clear()
             onionAlphas.clear()
             pendingComposite.getAndSet(null)?.recycle()
+            synchronized(pendingRegions) {
+                pendingRegions.forEach { it.bitmap.recycle() }
+                pendingRegions.clear()
+            }
             pendingOnionSkins.getAndSet(null)?.forEach { it.first.recycle() }
             retainedComposite?.recycle()
             retainedComposite = null

@@ -1844,6 +1844,7 @@ class CanvasRepositoryImpl
             return withContext(Dispatchers.Default) { renderFrozen(snapshot.first, snapshot.second, includeHidden, applyAdjustments) }
         }
 
+        /** [region] limits rendering to part of the canvas; its layers then hold cropped pixels. */
         private data class PreviewSnapshot(
             val layers: List<LayerData>,
             val document: CanvasDocument,
@@ -1851,38 +1852,123 @@ class CanvasRepositoryImpl
             val destinations: Map<Long, StrokeDestination>,
             val selection: SelectionMask?,
             val symmetry: SymmetryEngine.Settings,
+            val region: IntBounds? = null,
         )
 
-        override suspend fun compositePreview(): PixelBuffer? {
-            val snapshot =
-                withState {
-                    markRastersShared()
-                    val layers =
-                        currentLayers().map { layer ->
-                            layer.snapshotCopy().also { copy ->
-                                pendingEdits.values.firstOrNull { it.layer === layer }?.let { pending ->
-                                    copy.raster = pending.session.buffer.copy()
-                                }
-                            }
+        private val previewCache = PreviewCache()
+        private val previewMutex = Mutex()
+
+        private fun takePreviewSnapshot(): PreviewSnapshot {
+            markRastersShared()
+            val layers =
+                currentLayers().map { layer ->
+                    layer.snapshotCopy().also { copy ->
+                        pendingEdits.values.firstOrNull { it.layer === layer }?.let { pending ->
+                            copy.raster = pending.session.buffer.copy()
                         }
-                    PreviewSnapshot(
-                        layers,
-                        canvasSnapshot(),
-                        activeStrokes.keys.mapNotNull { activeStroke(it) },
-                        strokeDestinations.toMap(),
-                        activeSelection?.copy(),
-                        symmetrySettings,
-                    )
+                    }
                 }
-            return withContext(Dispatchers.Default) {
-                val strokesByLayer = snapshot.strokes.groupBy { it.layerId }
-                for (layer in snapshot.layers) {
-                    coroutineContext.ensureActive()
-                    val active = strokesByLayer[layer.id] ?: continue
-                    paintPreviewStrokes(layer, active, snapshot)
+            return PreviewSnapshot(
+                layers,
+                canvasSnapshot(),
+                activeStrokes.keys.mapNotNull { activeStroke(it) },
+                strokeDestinations.toMap(),
+                activeSelection?.copy(),
+                symmetrySettings,
+            )
+        }
+
+        /**
+         * Identifies everything a preview shows except strokes in progress, or null when only a full
+         * composite is exact: pixel sessions in progress, filter layers and feathered masks reach
+         * beyond the pixels they cover.
+         */
+        private fun previewKey(): Any? {
+            val layers = currentLayers()
+            val selection = activeSelection
+            val local =
+                pendingEdits.isEmpty() &&
+                    (selection == null || (selection.width == canvasWidth && selection.height == canvasHeight)) &&
+                    layers.none { it.filterType != null || it.maskFeather > 0f } &&
+                    layers.all { canvasSized(it.raster) && canvasSized(it.mask) }
+            if (!local) return null
+            return listOf(
+                editRevision,
+                undoStack.size,
+                redoStack.size,
+                System.identityHashCode(layers),
+                canvasWidth,
+                canvasHeight,
+                System.identityHashCode(activeSelection),
+                symmetrySettings,
+                layers.map { listOf(System.identityHashCode(it), System.identityHashCode(it.raster), System.identityHashCode(it.mask)) },
+            )
+        }
+
+        private fun canvasSized(buffer: PixelBuffer?): Boolean =
+            buffer == null || (buffer.width == canvasWidth && buffer.height == canvasHeight)
+
+        override suspend fun compositePreview(): PixelBuffer? {
+            val snapshot = withState { takePreviewSnapshot() }
+            return withContext(Dispatchers.Default) { renderPreview(snapshot) }
+        }
+
+        override suspend fun compositePreviewFrame(): CanvasRepository.PreviewFrame? =
+            previewMutex.withLock {
+                val (snapshot, key) = withState { takePreviewSnapshot() to previewKey() }
+                withContext(Dispatchers.Default) {
+                    val drawn =
+                        snapshot.strokes.flatMap {
+                            SymmetryEngine.mirrorStroke(it, snapshot.document.width, snapshot.document.height, snapshot.symmetry)
+                        }
+                    previewCache.frame(key, drawn, snapshot.document.width, snapshot.document.height) { region ->
+                        renderPreview(if (region == null) snapshot else cropPreview(snapshot, region))
+                    }
                 }
-                renderFrozen(snapshot.layers, snapshot.document, transparentBackground = true)
             }
+
+        private suspend fun renderPreview(snapshot: PreviewSnapshot): PixelBuffer {
+            val strokesByLayer = snapshot.strokes.groupBy { it.layerId }
+            for (layer in snapshot.layers) {
+                coroutineContext.ensureActive()
+                val active = strokesByLayer[layer.id] ?: continue
+                paintPreviewStrokes(layer, active, snapshot)
+            }
+            val region = snapshot.region ?: return renderFrozen(snapshot.layers, snapshot.document, transparentBackground = true)
+            return renderFrozen(
+                snapshot.layers,
+                snapshot.document.copy(width = region.width, height = region.height),
+                transparentBackground = true,
+                origin = region,
+            )
+        }
+
+        /** The same preview limited to [region]: layers hold cropped pixels and shifted strokes. */
+        private fun cropPreview(
+            snapshot: PreviewSnapshot,
+            region: IntBounds,
+        ): PreviewSnapshot {
+            val dx = -region.left.toFloat()
+            val dy = -region.top.toFloat()
+            val layers =
+                snapshot.layers.map { layer ->
+                    layer.snapshotCopy().also { copy ->
+                        copy.raster = layer.raster?.crop(region)
+                        copy.mask = layer.mask?.crop(region)
+                        copy.strokes.clear()
+                        layer.strokes.mapTo(copy.strokes) { PreviewCache.translate(it, dx, dy) }
+                    }
+                }
+            val selection =
+                snapshot.selection?.let { mask ->
+                    SelectionMask(region.width, region.height).also { cropped ->
+                        for (y in 0 until region.height) {
+                            val from = (region.top + y) * mask.width + region.left
+                            System.arraycopy(mask.coverage, from, cropped.coverage, y * region.width, region.width)
+                        }
+                    }
+                }
+            return snapshot.copy(layers = layers, selection = selection, region = region)
         }
 
         private fun paintPreviewStrokes(
@@ -1890,19 +1976,26 @@ class CanvasRepositoryImpl
             active: List<Stroke>,
             snapshot: PreviewSnapshot,
         ) {
+            val region = snapshot.region
             for (stroke in active) {
                 val destination = snapshot.destinations[stroke.id] ?: StrokeDestination.LAYER
                 if (!canReceiveStroke(layer, destination)) continue
-                val incoming = SymmetryEngine.mirrorStroke(stroke, snapshot.document.width, snapshot.document.height, snapshot.symmetry)
+                // Mirror in canvas coordinates, then shift into the region being rendered.
+                val incoming =
+                    SymmetryEngine
+                        .mirrorStroke(stroke, snapshot.document.width, snapshot.document.height, snapshot.symmetry)
+                        .map { if (region == null) it else PreviewCache.translate(it, -region.left.toFloat(), -region.top.toFloat()) }
                 val pixels =
                     LayerStrokeRenderer.render(
                         if (destination.isMask) layer.mask else layer.raster,
                         if (destination.isMask) emptyList() else layer.strokes.toList(),
                         incoming,
-                        snapshot.document.width,
-                        snapshot.document.height,
+                        region?.width ?: snapshot.document.width,
+                        region?.height ?: snapshot.document.height,
                         !destination.isMask && layer.isAlphaLocked,
                         snapshot.selection,
+                        originX = region?.left ?: 0,
+                        originY = region?.top ?: 0,
                     )
                 if (destination.isMask) {
                     layer.mask = pixels
@@ -1973,8 +2066,9 @@ class CanvasRepositoryImpl
             includeHidden: Boolean = false,
             applyAdjustments: Boolean = true,
             transparentBackground: Boolean = false,
+            origin: IntBounds? = null,
         ): PixelBuffer {
-            val localCompositor = Compositor(StrokeRasterizer())
+            val localCompositor = Compositor(StrokeRasterizer(origin?.left ?: 0, origin?.top ?: 0))
             return try {
                 localCompositor.composite(
                     layers.mapIndexed {
