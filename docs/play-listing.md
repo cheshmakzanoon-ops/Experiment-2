@@ -18,7 +18,7 @@ app name, icon and store artwork. This repository cannot establish those account
 
 ## Short description
 
-Paint, layer, mask and animate offline. Export images, documents and video.
+Paint, layer, transform and animate offline. Time-lapse replays, PSD and video export.
 
 ## Full description
 
@@ -26,19 +26,22 @@ ArtFlow is an offline digital painting studio for Android. Create a canvas, pain
 or your finger, build up layers, and export a separate copy to share or keep.
 
 PAINT AND EDIT
-Use brushes with pressure-sensitive size and opacity on supported styluses, plus smoothing,
-colour dynamics, smudge, clone, healing and liquify tools. Fill areas, add gradients, draw shapes
+Use brushes with pressure-sensitive size and opacity on supported styluses, plus StreamLine
+stroke stabilisation and QuickShape (hold at the end of a stroke to snap a clean line, ellipse or
+circle), colour dynamics, smudge, clone, healing and liquify tools. Fill areas, add gradients, draw shapes
 and rasterise text. Choose colours with the picker, harmonies and saved palettes.
 
 WORK WITH LAYERS
-Reorder, duplicate and merge layers. Adjust opacity and blend modes, protect alpha, and use
+Reorder, duplicate, group and merge layers, and insert photos as new layers. Adjust opacity and
+blend modes, protect alpha, and use
 clipping masks, layer masks, adjustments and filters. The layer count and undo history depend on
 canvas size and available memory; they are not unlimited.
 
 DRAW WITH GUIDES
 Use symmetry and perspective guides. Select areas with geometric, lasso and magic-wand tools,
-and combine or feather selections. Move selected pixels. General scale, perspective and skew
-transforms are not included in this release.
+and combine or feather selections. Transform a layer or just the selected pixels: move, uniform
+or freeform scale, rotate and flip. Perspective and warp transforms are not included in this
+release.
 
 ANIMATE
 Arrange frames in a timeline, use onion skinning and preview playback. Export GIF animation,
@@ -46,6 +49,7 @@ MP4 video or a ZIP of PNG frames. MP4 needs a compatible device encoder and uses
 background; unsupported dimensions or encoder failures are reported rather than silently saved.
 
 SAVE AND EXPORT
+Every edit is recorded automatically; export a time-lapse replay of the artwork as an MP4 video.
 Projects are stored privately with autosave and recovery. Duplicate creates independent project
 files. Export PNG, JPEG, WebP, PDF, PSD, GIF, MP4 or PNG sequences. Save an export using the Android
 file picker, share it with another app, or publish an image or video to the gallery.

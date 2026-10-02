@@ -49,14 +49,19 @@ this document listed as dead code — `core/layer`, `core/selection`, `core/tran
 `domain/model/layer/LayerMask.kt` model — has been deleted. What remains missing is missing
 **functionality**, not orphaned code:
 
-- **Layer groups** — `Layer.parentGroupId` exists, but no repository operation or screen sets it.
+- **Layer groups** — ✅ organisational groups (`Layer.isGroup`): group visibility/opacity cascade
+  to members via `LayerGroups`; groups do not yet isolate blending (no Procreate "Normal" group mode).
 - **Layer-linking UI** — `CanvasRepositoryImpl` can set and clear `linkGroupId`; nothing calls it.
-- **Transform beyond translation** — no rotate, scale, skew, perspective, distortion or snapping.
+- **Transform** — ✅ move, uniform/freeform scale, rotate and flip of a layer or selection
+  (`LayerTransform`); ⬜ perspective, distort, warp and snapping.
 - **Imported and dual textures** — three procedural grains are wired, but custom texture import,
   a user texture library and dual-texture mixing remain absent. Mask sources and custom pressure
   controls are implemented; their earlier “not implemented” status was stale.
 - **Native engine** — the C++ prototype remains unintegrated and is excluded from the app build.
-- **PSD import, cloud sync, smart objects, timelapse recording, analytics/crash reporting.**
+- **Timelapse** — ✅ `TimelapseRecorder` captures a frame per settled edit and exports an MP4 replay.
+- **StreamLine / QuickShape** — ✅ `StrokeStabilizer` applies the brush smoothing setting; `QuickShape`
+  snaps held strokes to lines and ellipses.
+- **PSD import, cloud sync, smart objects, analytics/crash reporting.**
 - **Benchmark module** and a comprehensive physical-device, stylus, GPU and low-memory test campaign.
   Automated coverage now also includes rendering, filling, selections, storage, recovery,
   duplication, exports and selected Compose UI flows.
