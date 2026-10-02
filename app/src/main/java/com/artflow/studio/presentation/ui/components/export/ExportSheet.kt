@@ -40,9 +40,9 @@ fun ExportSheet(
     actions: ExportActions,
     onDismissResult: () -> Unit,
     modifier: Modifier = Modifier,
-    onExportTimelapse: (() -> Unit)? = null,
-    onClearTimelapse: (() -> Unit)? = null,
 ) {
+    val onExportTimelapse = actions.exportTimelapse
+    val onClearTimelapse = actions.clearTimelapse
     var options by remember {
         mutableStateOf(ExportOptions(format = availableFormats.firstOrNull() ?: ExportFormat.PNG, dpi = canvasDpi))
     }

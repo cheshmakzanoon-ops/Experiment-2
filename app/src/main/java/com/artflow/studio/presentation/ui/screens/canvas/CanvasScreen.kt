@@ -142,6 +142,29 @@ fun CanvasScreen(
             }
             referenceImportProject = null
         }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val photoPicker =
+        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            scope.launch {
+                val image =
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        runCatching {
+                            com.artflow.studio.data.renderer.BitmapPixelBridge
+                                .decodeUri(context.contentResolver, uri)
+                        }.getOrNull()
+                    }
+                if (image == null) viewModel.notify("That image could not be opened") else viewModel.insertImageLayer(image)
+            }
+        }
+    val insertPhoto = {
+        canvasView?.cancelActiveGesture()
+        try {
+            photoPicker.launch("image/*")
+        } catch (missing: ActivityNotFoundException) {
+            viewModel.notify("No image picker is available on this device")
+        }
+    }
     val importReference = {
         canvasView?.cancelActiveGesture()
         referenceImportProject = projectId
@@ -549,6 +572,7 @@ fun CanvasScreen(
                                     onAddFilter = { type: FilterType -> viewModel.addFilterLayer(type) },
                                     onAdjustmentParameter = { id, key, value -> viewModel.setAdjustmentParameter(id, key, value) },
                                     onFilterAmount = { id, amount -> viewModel.setFilterAmount(id, amount) },
+                                    onInsertPhoto = insertPhoto,
                                 ),
                             maskActions =
                                 LayerMaskActions(
@@ -662,8 +686,6 @@ fun CanvasScreen(
                             onExport = { viewModel.export(it) },
                             actions = exportActions,
                             onDismissResult = { viewModel.resetExportState() },
-                            onExportTimelapse = { viewModel.exportTimelapse() },
-                            onClearTimelapse = { viewModel.clearTimelapse() },
                         )
                     EditorPanel.QUICK ->
                         QuickMenuSheet(
@@ -875,37 +897,46 @@ private fun ToolOptionsPanel(
                 }
             }
         }
-        if (input.tool == ToolType.TRANSFORM) {
-            Text("Drag mode", style = MaterialTheme.typography.labelMedium)
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                com.artflow.studio.core.pixels.LayerTransform.Mode.entries.forEach { mode ->
-                    FilterChip(
-                        selected = input.transformMode == mode,
-                        onClick = { viewModel.setTransformMode(mode) },
-                        label = { Text(mode.displayName, style = MaterialTheme.typography.labelSmall) },
-                    )
-                }
-            }
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                AssistChip(onClick = { canvasView?.transformActiveLayer(flipHorizontal = true) }, label = { Text("Flip H") })
-                AssistChip(onClick = { canvasView?.transformActiveLayer(flipVertical = true) }, label = { Text("Flip V") })
-                AssistChip(onClick = { canvasView?.transformActiveLayer(rotation = 45f) }, label = { Text("Rotate 45°") })
-                AssistChip(onClick = { canvasView?.transformActiveLayer(rotation = 90f) }, label = { Text("Rotate 90°") })
-                AssistChip(onClick = { canvasView?.transformActiveLayer(scaleFactor = 0.5f) }, label = { Text("Half size") })
-                AssistChip(onClick = { canvasView?.transformActiveLayer(scaleFactor = 2f) }, label = { Text("Double size") })
-            }
-        }
+        if (input.tool == ToolType.TRANSFORM) TransformOptions(viewModel, input, canvasView)
         if (input.tool == ToolType.CLONE_STAMP) {
             Text(
                 "Tap to set the clone source, then drag. Blend mode: aligned.",
                 style = MaterialTheme.typography.bodySmall,
             )
+        }
+    }
+}
+
+@Composable
+private fun TransformOptions(
+    viewModel: CanvasViewModel,
+    input: EditorInput,
+    canvasView: ArtFlowCanvasView?,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Drag mode", style = MaterialTheme.typography.labelMedium)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            com.artflow.studio.core.pixels.LayerTransform.Mode.entries.forEach { mode ->
+                FilterChip(
+                    selected = input.transformMode == mode,
+                    onClick = { viewModel.setTransformMode(mode) },
+                    label = { Text(mode.displayName, style = MaterialTheme.typography.labelSmall) },
+                )
+            }
+        }
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            AssistChip(onClick = { canvasView?.transformActiveLayer(flipHorizontal = true) }, label = { Text("Flip H") })
+            AssistChip(onClick = { canvasView?.transformActiveLayer(flipVertical = true) }, label = { Text("Flip V") })
+            AssistChip(onClick = { canvasView?.transformActiveLayer(rotation = 45f) }, label = { Text("Rotate 45°") })
+            AssistChip(onClick = { canvasView?.transformActiveLayer(rotation = 90f) }, label = { Text("Rotate 90°") })
+            AssistChip(onClick = { canvasView?.transformActiveLayer(scaleFactor = 0.5f) }, label = { Text("Half size") })
+            AssistChip(onClick = { canvasView?.transformActiveLayer(scaleFactor = 2f) }, label = { Text("Double size") })
         }
     }
 }

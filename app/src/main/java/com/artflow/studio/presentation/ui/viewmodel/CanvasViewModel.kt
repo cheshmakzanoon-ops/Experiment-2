@@ -657,6 +657,30 @@ class CanvasViewModel
             }
         }
 
+        /** Adds [image] as a new layer, centred and scaled down to fit the canvas if needed. */
+        fun insertImageLayer(image: com.artflow.studio.core.pixels.PixelBuffer) =
+            layerOp {
+                val size = canvasRepository.getCanvasSize()
+                val fit = minOf(1f, size.width.toFloat() / image.width, size.height.toFloat() / image.height)
+                val placed =
+                    if (fit < 1f) {
+                        withContext(Dispatchers.Default) {
+                            image.scaled(
+                                (image.width * fit).toInt().coerceAtLeast(1),
+                                (image.height * fit).toInt().coerceAtLeast(1),
+                            )
+                        }
+                    } else {
+                        image
+                    }
+                val layer = canvasRepository.addLayer(name = "Photo")
+                val drawn =
+                    canvasRepository.applyRasterEdit(layer.id, "Insert photo") { target ->
+                        target.drawInto(placed, (size.width - placed.width) / 2, (size.height - placed.height) / 2)
+                    }
+                check(drawn) { "The photo could not be placed on the new layer" }
+            }
+
         fun removeLayer(layerId: Long) {
             viewModelScope.launch(editorErrors) {
                 if (!canvasRepository.removeLayer(layerId)) notify("The last layer cannot be deleted")

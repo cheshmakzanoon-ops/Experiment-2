@@ -71,6 +71,7 @@ data class LayerStackActions(
     val onAddFilter: (FilterType) -> Unit,
     val onAdjustmentParameter: (Long, String, Float) -> Unit,
     val onFilterAmount: (Long, Float) -> Unit,
+    val onInsertPhoto: (() -> Unit)? = null,
 )
 
 data class LayerMaskActions(
@@ -147,6 +148,15 @@ fun LayersSheet(
                         Icon(Icons.Default.MoreVert, contentDescription = "Layer actions")
                     }
                     DropdownMenu(expanded = addMenuVisible, onDismissRequest = { addMenuVisible = false }) {
+                        stackActions.onInsertPhoto?.let { insert ->
+                            DropdownMenuItem(
+                                text = { Text("Insert photo") },
+                                onClick = {
+                                    insert()
+                                    addMenuVisible = false
+                                },
+                            )
+                        }
                         DropdownMenuItem(
                             text = { Text("Merge visible") },
                             onClick = {

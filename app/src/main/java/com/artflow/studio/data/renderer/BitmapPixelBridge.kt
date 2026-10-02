@@ -1,8 +1,12 @@
 package com.artflow.studio.data.renderer
 
+import android.content.ContentResolver
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.ImageDecoder
+import android.net.Uri
+import android.os.Build
 import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Region
@@ -142,6 +146,44 @@ object BitmapPixelBridge {
                 (decoded.width * scale).toInt().coerceAtLeast(1),
                 (decoded.height * scale).toInt().coerceAtLeast(1),
             )
+        } else {
+            decoded
+        }
+    }
+
+    /**
+     * Decodes a picked image (honouring EXIF rotation on Android 9+), downsampled so its longest
+     * side stays within [maxDimension].
+     */
+    fun decodeUri(
+        resolver: ContentResolver,
+        uri: Uri,
+        maxDimension: Int = 4096,
+    ): PixelBuffer? {
+        val bitmap =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                ImageDecoder.decodeBitmap(ImageDecoder.createSource(resolver, uri)) { decoder, info, _ ->
+                    decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                    decoder.setTargetSampleSize(calculateSampleSize(info.size.width, info.size.height, maxDimension))
+                }
+            } else {
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+                if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+                val options =
+                    BitmapFactory.Options().apply {
+                        inSampleSize = calculateSampleSize(bounds.outWidth, bounds.outHeight, maxDimension)
+                        inPreferredConfig = Bitmap.Config.ARGB_8888
+                    }
+                resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
+            } ?: return null
+        val software = if (bitmap.config == Bitmap.Config.ARGB_8888) bitmap else bitmap.copy(Bitmap.Config.ARGB_8888, false)
+        val decoded = fromBitmap(software)
+        if (software !== bitmap) software.recycle()
+        bitmap.recycle()
+        return if (decoded.width > maxDimension || decoded.height > maxDimension) {
+            val scale = maxDimension.toFloat() / maxOf(decoded.width, decoded.height)
+            decoded.scaled((decoded.width * scale).toInt().coerceAtLeast(1), (decoded.height * scale).toInt().coerceAtLeast(1))
         } else {
             decoded
         }

@@ -25,6 +25,8 @@ data class ExportActions(
     val open: (ExportResult) -> Unit,
     val saveFile: (ExportResult) -> Unit,
     val gallery: (ExportResult) -> Unit,
+    val exportTimelapse: (() -> Unit)? = null,
+    val clearTimelapse: (() -> Unit)? = null,
 )
 
 @Composable
@@ -53,6 +55,8 @@ fun rememberExportActions(viewModel: CanvasViewModel): ExportActions {
             }
         }
     return ExportActions(
+        exportTimelapse = viewModel::exportTimelapse,
+        clearTimelapse = viewModel::clearTimelapse,
         share = { result -> openSafely(viewModel::notify) { context.startActivity(viewModel.shareIntent(result)) } },
         open = { result -> openSafely(viewModel::notify) { context.startActivity(viewModel.viewIntent(result)) } },
         saveFile = { result ->
