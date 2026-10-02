@@ -4,6 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -14,7 +15,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -48,13 +51,34 @@ internal fun LayerRow(
     onRename: () -> Unit,
 ) {
     var menuVisible by remember { mutableStateOf(false) }
+    // Swiping a layer left reveals Lock, Duplicate and Delete, as in Procreate.
+    var swipeActions by remember { mutableStateOf(false) }
+    val swipeDistance = with(LocalDensity.current) { SWIPE_REVEAL.toPx() }
     val touchSize = if (LocalArtFlowFlags.current.largeTouchTargets) 56.dp else 48.dp
     Card(
         modifier =
             Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 2.dp)
-                .clickable { if (isActive) menuVisible = true else actions.onSelect(layer.id) },
+                .pointerInput(layer.id) {
+                    var travel = 0f
+                    detectHorizontalDragGestures(
+                        onDragStart = { travel = 0f },
+                        onDragEnd = {
+                            if (travel < -swipeDistance) swipeActions = true
+                            if (travel > swipeDistance) swipeActions = false
+                        },
+                    ) { change, amount ->
+                        change.consume()
+                        travel += amount
+                    }
+                }.clickable {
+                    when {
+                        swipeActions -> swipeActions = false
+                        isActive -> menuVisible = true
+                        else -> actions.onSelect(layer.id)
+                    }
+                },
         colors =
             CardDefaults.cardColors(
                 containerColor =
@@ -81,19 +105,23 @@ internal fun LayerRow(
                         tint = MaterialTheme.colorScheme.error,
                     )
                 }
-                TextButton(onClick = onBlendMode, contentPadding = PaddingValues(horizontal = 6.dp)) {
-                    Text(layer.blendMode.shortCode(), style = MaterialTheme.typography.titleSmall)
-                }
-                Checkbox(
-                    checked = layer.isVisible,
-                    onCheckedChange = { actions.onVisibility(layer.id, it) },
-                    modifier = Modifier.size(touchSize).semantics { contentDescription = "Visibility" },
-                )
-                Box {
-                    IconButton(onClick = { menuVisible = true }, modifier = Modifier.size(touchSize)) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Layer menu", modifier = Modifier.size(18.dp))
+                if (swipeActions) {
+                    SwipeActions(layer, actions) { swipeActions = false }
+                } else {
+                    TextButton(onClick = onBlendMode, contentPadding = PaddingValues(horizontal = 6.dp)) {
+                        Text(layer.blendMode.shortCode(), style = MaterialTheme.typography.titleSmall)
                     }
-                    LayerMenu(layer, menuVisible, actions, options, onBlendMode, onRename) { menuVisible = false }
+                    Checkbox(
+                        checked = layer.isVisible,
+                        onCheckedChange = { actions.onVisibility(layer.id, it) },
+                        modifier = Modifier.size(touchSize).semantics { contentDescription = "Visibility" },
+                    )
+                    Box {
+                        IconButton(onClick = { menuVisible = true }, modifier = Modifier.size(touchSize)) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "Layer menu", modifier = Modifier.size(18.dp))
+                        }
+                        LayerMenu(layer, menuVisible, actions, options, onBlendMode, onRename) { menuVisible = false }
+                    }
                 }
             }
             if (isActive) {
@@ -102,6 +130,24 @@ internal fun LayerRow(
         }
     }
 }
+
+@Composable
+private fun SwipeActions(
+    layer: Layer,
+    actions: LayerRowActions,
+    done: () -> Unit,
+) {
+    fun run(action: () -> Unit): () -> Unit =
+        {
+            action()
+            done()
+        }
+    TextButton(onClick = run { actions.onLock(layer.id, !layer.isLocked) }) { Text(if (layer.isLocked) "Unlock" else "Lock") }
+    TextButton(onClick = run { actions.onDuplicate(layer.id) }) { Text("Duplicate") }
+    TextButton(onClick = run { actions.onDelete(layer.id) }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+}
+
+private val SWIPE_REVEAL = 56.dp
 
 @Composable
 private fun LayerThumbnail(
