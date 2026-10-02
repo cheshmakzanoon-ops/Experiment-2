@@ -262,7 +262,14 @@ class CanvasMetadataViewModelTest {
             mock(SettingsRepository::class.java).also {
                 `when`(it.settings).thenReturn(flowOf(AppSettings(autosaveEnabled = false)))
             }
-        val viewModel = CanvasViewModel(repository, projects, settings, mock(ArtworkExporter::class.java), mock(TimelapseRecorder::class.java))
+        val viewModel =
+            CanvasViewModel(
+                repository,
+                projects,
+                settings,
+                mock(ArtworkExporter::class.java),
+                mock(TimelapseRecorder::class.java),
+            )
 
         fun close() {
             viewModel.viewModelScope.cancel()

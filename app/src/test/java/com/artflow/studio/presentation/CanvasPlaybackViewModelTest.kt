@@ -260,7 +260,14 @@ class CanvasPlaybackViewModelTest {
             mock(SettingsRepository::class.java).also {
                 `when`(it.settings).thenReturn(flowOf(AppSettings(autosaveEnabled = false, onionSkin = false)))
             }
-        val viewModel = CanvasViewModel(repository, projects, settings, mock(ArtworkExporter::class.java), mock(TimelapseRecorder::class.java))
+        val viewModel =
+            CanvasViewModel(
+                repository,
+                projects,
+                settings,
+                mock(ArtworkExporter::class.java),
+                mock(TimelapseRecorder::class.java),
+            )
 
         fun animationSettings() = repository.timeline.value.settings
 
