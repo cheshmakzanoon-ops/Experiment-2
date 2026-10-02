@@ -41,6 +41,18 @@ import com.artflow.studio.presentation.ui.components.canvas.SelectionCombineMode
 // Layers
 // ---------------------------------------------------------------------------------------------
 
+/** Procreate's layer options, shown when the already-selected layer is tapped. They act on that layer. */
+data class LayerOptionActions(
+    val onSelectContents: () -> Unit,
+    val onCopy: () -> Unit,
+    val onFill: () -> Unit,
+    val onClear: () -> Unit,
+    val onInvert: () -> Unit,
+    val onReference: (Long, Boolean) -> Unit,
+    val onMask: () -> Unit,
+    val onCombineDown: (Long) -> Unit,
+)
+
 /**
  * Layer stack editor.
  *

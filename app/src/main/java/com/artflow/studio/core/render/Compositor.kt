@@ -133,7 +133,7 @@ class Compositor(
                 if (!isIncluded(layer, options) || (layer.isClippingMask && clipBase == null)) continue
                 val input = entry.input
                 if (input != null && isStackEffect(input)) {
-                    if (options.applyAdjustments) applyStackEffect(clipBase ?: target, input)
+                    applyStackEffectIfEnabled(clipBase ?: target, input, options)
                     continue
                 }
                 val content = renderEntry(entry, target.width, target.height, options) ?: continue
@@ -148,6 +148,14 @@ class Compositor(
         } finally {
             clipBase?.let { bufferPool.release(it) }
         }
+    }
+
+    private fun applyStackEffectIfEnabled(
+        buffer: PixelBuffer,
+        input: LayerInput,
+        options: Options,
+    ) {
+        if (options.applyAdjustments) applyStackEffect(buffer, input)
     }
 
     private fun isIncluded(

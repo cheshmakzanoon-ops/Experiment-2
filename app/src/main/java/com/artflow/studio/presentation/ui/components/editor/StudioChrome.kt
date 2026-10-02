@@ -429,6 +429,15 @@ fun WarpOverlay(
 
 private const val WARP_CURVE_STEPS = 24
 
+/** What the adjustment overlay reports while an adjustment is open. */
+data class AdjustmentOverlayActions(
+    val onAmount: (Float) -> Unit,
+    val onAngle: (Float) -> Unit,
+    val onParameter: (String, Float) -> Unit,
+    val onCancel: () -> Unit,
+    val onApply: () -> Unit,
+)
+
 /** The canvas view's pan, zoom and rotation, as reported to the compose layer. */
 data class ViewTransform(
     val scale: Float,

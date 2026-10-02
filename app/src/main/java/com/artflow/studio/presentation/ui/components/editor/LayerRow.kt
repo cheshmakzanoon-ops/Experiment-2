@@ -25,18 +25,6 @@ import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.Layer
 import com.artflow.studio.presentation.ui.theme.LocalArtFlowFlags
 
-/** Procreate's layer options, shown when the already-selected layer is tapped. They act on that layer. */
-data class LayerOptionActions(
-    val onSelectContents: () -> Unit,
-    val onCopy: () -> Unit,
-    val onFill: () -> Unit,
-    val onClear: () -> Unit,
-    val onInvert: () -> Unit,
-    val onReference: (Long, Boolean) -> Unit,
-    val onMask: () -> Unit,
-    val onCombineDown: (Long) -> Unit,
-)
-
 /** Short blend-mode code shown on each layer, like Procreate's "N" for Normal. */
 fun BlendMode.shortCode(): String =
     displayName

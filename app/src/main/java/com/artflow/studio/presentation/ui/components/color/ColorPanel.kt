@@ -16,10 +16,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -31,10 +34,10 @@ import kotlin.math.roundToInt
 /**
  * Colour picker (Phases 31-32).
  *
- * Wheel, channel sliders, hex entry, harmonies, recents and palettes all write through a single
- * `onColorSelected` callback, so the editor has exactly one place that reacts to a colour change.
+ * Procreate's Disc, Classic, Harmony, Value and Palettes modes as tabs, with the colour history
+ * below. Everything writes through a single `onColorSelected` callback, so the editor has exactly
+ * one place that reacts to a colour change.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ColorPanel(
     color: Int,
@@ -48,7 +51,9 @@ fun ColorPanel(
 ) {
     var mode by remember { mutableStateOf(ColorHarmony.ColorMode.HSV) }
     var harmony by remember { mutableStateOf(ColorHarmony.Harmony.COMPLEMENTARY) }
-    var palettePickerVisible by remember { mutableStateOf(false) }
+    var tab by rememberSaveable { mutableStateOf(ColorTab.DISC) }
+    // The colour when the panel opened, like Procreate's secondary swatch: tap to go back to it.
+    val previous = remember { color }
 
     Column(
         modifier =
@@ -59,70 +64,36 @@ fun ColorPanel(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(
-                modifier =
-                    Modifier
-                        .size(52.dp)
-                        .clip(CircleShape)
-                        .background(Color(color))
-                        .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
-            )
             Column(modifier = Modifier.weight(1f)) {
-                Text("Colour", style = MaterialTheme.typography.titleMedium)
+                Text("Colours", style = MaterialTheme.typography.titleMedium)
                 Text(
                     text = "${ColorHarmony.nameOf(color)} · ${ColorHarmony.toHex(color)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            TextButton(onClick = { palettePickerVisible = true }) { Text("Palettes") }
-        }
-
-        ColorWheel(color = color, onColorSelected = onColorSelected)
-
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            ColorHarmony.ColorMode.entries.forEach { entry ->
-                FilterChip(
-                    selected = mode == entry,
-                    onClick = { mode = entry },
-                    label = { Text(entry.displayName, style = MaterialTheme.typography.labelSmall) },
-                )
-            }
-        }
-
-        val channels = ColorHarmony.formatChannels(color, mode)
-        channels.forEachIndexed { index, (label, value) ->
-            val range = ColorHarmony.channelRange(mode, index)
-            ChannelSlider(
-                label = label,
-                value = value,
-                range = range,
-                onChange = { newValue ->
-                    onColorSelected(ColorHarmony.withChannel(color, mode, index, newValue))
-                },
+            Swatch(color = previous, onClick = { onColorSelected(previous) }, description = "Previous colour")
+            Box(
+                modifier =
+                    Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(Color(color))
+                        .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
             )
         }
 
-        HexField(color = color, onColorSelected = onColorSelected)
+        when (tab) {
+            ColorTab.DISC -> ColorWheel(color = color, onColorSelected = onColorSelected)
+            ColorTab.CLASSIC -> ClassicPicker(color = color, onColorSelected = onColorSelected)
+            ColorTab.HARMONY -> HarmonyTab(color, harmony, { harmony = it }, onColorSelected)
+            ColorTab.VALUE -> ValueTab(color, mode, { mode = it }, onColorSelected)
+            ColorTab.PALETTES -> PaletteList(palettes, color, onColorSelected, onRemovePalette)
+        }
 
-        SectionLabel("Harmony")
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(ColorHarmony.Harmony.entries.toList()) { entry ->
-                FilterChip(
-                    selected = harmony == entry,
-                    onClick = { harmony = entry },
-                    label = { Text(entry.displayName, style = MaterialTheme.typography.labelSmall) },
-                )
-            }
-        }
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(ColorHarmony.harmony(color, harmony).drop(1)) { swatch ->
-                Swatch(color = swatch, onClick = { onColorSelected(swatch) })
-            }
-        }
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(ColorHarmony.tintsAndShades(color)) { swatch ->
-                Swatch(color = swatch, onClick = { onColorSelected(swatch) })
+        TabRow(selectedTabIndex = tab.ordinal) {
+            ColorTab.entries.forEach { entry ->
+                Tab(selected = tab == entry, onClick = { tab = entry }, text = { Text(entry.label, maxLines = 1) })
             }
         }
 
@@ -131,7 +102,7 @@ fun ColorPanel(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SectionLabel("Recent")
+            SectionLabel("History")
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = {
                     val name = "My palette"
@@ -155,29 +126,78 @@ fun ColorPanel(
                 }
             }
         }
+    }
+}
 
-        SectionLabel("Named colours")
+/** Procreate's colour modes, as tabs. */
+private enum class ColorTab(
+    val label: String,
+) {
+    DISC("Disc"),
+    CLASSIC("Classic"),
+    HARMONY("Harmony"),
+    VALUE("Value"),
+    PALETTES("Palettes"),
+}
+
+@Composable
+private fun HarmonyTab(
+    color: Int,
+    harmony: ColorHarmony.Harmony,
+    onHarmony: (ColorHarmony.Harmony) -> Unit,
+    onColorSelected: (Int) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        ColorWheel(color = color, onColorSelected = onColorSelected)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(ColorHarmony.NAMED_COLORS) { (name, value) ->
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Swatch(color = value, onClick = { onColorSelected(value) })
-                    Text(name, style = MaterialTheme.typography.labelSmall, maxLines = 1)
-                }
+            items(ColorHarmony.Harmony.entries.toList()) { entry ->
+                FilterChip(
+                    selected = harmony == entry,
+                    onClick = { onHarmony(entry) },
+                    label = { Text(entry.displayName, style = MaterialTheme.typography.labelSmall) },
+                )
             }
         }
+        Text(harmony.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(ColorHarmony.harmony(color, harmony)) { swatch ->
+                Swatch(color = swatch, onClick = { onColorSelected(swatch) })
+            }
+        }
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(ColorHarmony.tintsAndShades(color)) { swatch ->
+                Swatch(color = swatch, onClick = { onColorSelected(swatch) })
+            }
+        }
+    }
+}
 
-        if (palettePickerVisible) {
-            PalettePickerDialog(
-                palettes = palettes,
-                currentColor = color,
-                onDismiss = { palettePickerVisible = false },
-                onColorSelected = {
-                    onColorSelected(it)
-                    palettePickerVisible = false
-                },
-                onRemovePalette = onRemovePalette,
+@Composable
+private fun ValueTab(
+    color: Int,
+    mode: ColorHarmony.ColorMode,
+    onMode: (ColorHarmony.ColorMode) -> Unit,
+    onColorSelected: (Int) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            ColorHarmony.ColorMode.entries.forEach { entry ->
+                FilterChip(
+                    selected = mode == entry,
+                    onClick = { onMode(entry) },
+                    label = { Text(entry.displayName, style = MaterialTheme.typography.labelSmall) },
+                )
+            }
+        }
+        ColorHarmony.formatChannels(color, mode).forEachIndexed { index, (label, value) ->
+            ChannelSlider(
+                label = label,
+                value = value,
+                range = ColorHarmony.channelRange(mode, index),
+                onChange = { newValue -> onColorSelected(ColorHarmony.withChannel(color, mode, index, newValue)) },
             )
         }
+        HexField(color = color, onColorSelected = onColorSelected)
     }
 }
 
@@ -240,6 +260,7 @@ private fun HexField(
 private fun Swatch(
     color: Int,
     onClick: () -> Unit,
+    description: String? = null,
 ) {
     Box(
         modifier =
@@ -248,74 +269,62 @@ private fun Swatch(
                 .clip(RoundedCornerShape(8.dp))
                 .background(Color(color))
                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                .clickable(onClick = onClick),
+                .clickable(onClick = onClick)
+                .then(if (description != null) Modifier.semantics { contentDescription = description } else Modifier),
     )
 }
 
 @Composable
-private fun PalettePickerDialog(
+private fun PaletteList(
     palettes: List<Palette>,
     currentColor: Int,
-    onDismiss: () -> Unit,
     onColorSelected: (Int) -> Unit,
     onRemovePalette: (Long) -> Unit,
 ) {
     val grouped = remember(palettes) { palettes.groupBy { it.category } }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Palettes") },
-        text = {
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 420.dp)
-                        .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                grouped.forEach { (category, entries) ->
-                    Text(
-                        category.uppercase(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    entries.forEach { palette ->
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(palette.name, style = MaterialTheme.typography.bodyMedium)
-                                if (palette.category == "Custom") {
-                                    IconButton(onClick = { onRemovePalette(palette.id) }) {
-                                        Icon(
-                                            Icons.Default.Delete,
-                                            contentDescription = "Remove ${palette.name}",
-                                        )
-                                    }
-                                }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        grouped.forEach { (category, entries) ->
+            SectionLabel(category)
+            entries.forEach { palette ->
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(palette.name, style = MaterialTheme.typography.bodyMedium)
+                        if (palette.category == "Custom") {
+                            IconButton(onClick = { onRemovePalette(palette.id) }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Remove ${palette.name}")
                             }
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                items(palette.colors) { entry ->
-                                    val closest = ColorHarmony.distance(entry, currentColor) < 24f
-                                    Box(
-                                        modifier =
-                                            Modifier
-                                                .size(if (closest) 40.dp else 32.dp)
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(Color(entry))
-                                                .clickable { onColorSelected(entry) },
-                                    )
-                                }
-                            }
+                        }
+                    }
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(palette.colors) { entry ->
+                            val closest = ColorHarmony.distance(entry, currentColor) < 24f
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .size(if (closest) 40.dp else 32.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color(entry))
+                                        .clickable { onColorSelected(entry) },
+                            )
                         }
                     }
                 }
             }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
-    )
+        }
+        SectionLabel("Named colours")
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(ColorHarmony.NAMED_COLORS) { (name, value) ->
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Swatch(color = value, onClick = { onColorSelected(value) })
+                    Text(name, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                }
+            }
+        }
+    }
 }
 
 /** Small helper used by the brush sheet: a row of the built-in palettes. */

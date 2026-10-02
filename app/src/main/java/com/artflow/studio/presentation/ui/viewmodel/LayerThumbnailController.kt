@@ -29,8 +29,7 @@ class LayerThumbnailController(
             scope.launch {
                 delay(SETTLE_MS)
                 val previews = mutableMapOf<Long, PixelBuffer>()
-                for (layer in repository.getAllLayers()) {
-                    if (layer.isGroup) continue
+                for (layer in repository.getAllLayers().filterNot { it.isGroup }) {
                     val pixels = repository.layerPixels(layer.id) ?: continue
                     previews[layer.id] = withContext(Dispatchers.Default) { shrink(pixels) }
                 }

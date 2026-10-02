@@ -15,14 +15,6 @@ import com.artflow.studio.presentation.ui.viewmodel.AdjustmentSessionController
 import kotlin.math.atan2
 import kotlin.math.hypot
 
-data class AdjustmentOverlayActions(
-    val onAmount: (Float) -> Unit,
-    val onAngle: (Float) -> Unit,
-    val onParameter: (String, Float) -> Unit,
-    val onCancel: () -> Unit,
-    val onApply: () -> Unit,
-)
-
 /**
  * Covers the canvas while an adjustment is open. Amount effects follow Procreate: slide a finger
  * left or right anywhere on the canvas (Motion Blur also takes the slide's direction). Colour
