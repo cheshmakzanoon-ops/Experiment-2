@@ -10,6 +10,7 @@ import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
@@ -21,7 +22,9 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
@@ -46,6 +49,7 @@ import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.FilterType
 import com.artflow.studio.presentation.ui.components.brush.BrushStudioDialog
 import com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView
+import com.artflow.studio.presentation.ui.components.canvas.BrushCursor
 import com.artflow.studio.presentation.ui.components.canvas.DragPreview
 import com.artflow.studio.presentation.ui.components.canvas.EditorInput
 import com.artflow.studio.presentation.ui.components.color.ColorPanel
@@ -170,6 +174,7 @@ fun CanvasScreen(
     var showCopyPaste by remember { mutableStateOf(false) }
     var transformQuad by remember { mutableStateOf<Quad?>(null) }
     var warpMesh by remember { mutableStateOf<WarpMesh?>(null) }
+    var brushCursor by remember { mutableStateOf<BrushCursor?>(null) }
     val adjustment by viewModel.adjustments.state.collectAsState()
     val layerThumbnails by viewModel.layerThumbnails.thumbnails.collectAsState()
     LaunchedEffect(panel, layers, history) {
@@ -729,6 +734,7 @@ fun CanvasScreen(
                                 onClearLayerRequested = { viewModel.clipboard.clear() }
                                 onTransformQuadChanged = { transformQuad = it }
                                 onWarpMeshChanged = { warpMesh = it }
+                                onBrushCursorChanged = { brushCursor = it }
                                 onViewChanged = { s, ox, oy, r -> viewModel.onViewChanged(s, ox, oy, r) }
                                 onTextPlacementRequested = { x, y -> viewModel.requestTextAt(x, y) }
                                 onCloneSourceChanged = { viewModel.onCloneSourceChanged(it) }
@@ -824,6 +830,14 @@ fun CanvasScreen(
                     view = ViewTransform(viewScale, viewOffsetX, viewOffsetY, viewRotation),
                     modifier = Modifier.fillMaxSize(),
                 )
+            }
+            brushCursor?.let { cursor ->
+                Canvas(Modifier.fillMaxSize()) {
+                    val center = Offset(cursor.x, cursor.y)
+                    val radius = cursor.radius.coerceAtLeast(2f)
+                    drawCircle(Color.White, radius = radius + 1f, center = center, style = Stroke(1.5f))
+                    drawCircle(Color.Black.copy(alpha = 0.7f), radius = radius, center = center, style = Stroke(1f))
+                }
             }
             val mesh = warpMesh
             if (mesh != null && ready != null && input.tool == ToolType.TRANSFORM) {

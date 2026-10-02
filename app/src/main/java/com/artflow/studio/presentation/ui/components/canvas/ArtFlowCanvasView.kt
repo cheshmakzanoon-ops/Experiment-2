@@ -129,6 +129,15 @@ data class EditorInput(
     val pressureCurve: Float = 1f,
     /** Global stabilization from Prefs > Pressure and Smoothing (0..1). */
     val stabilization: Float = 0f,
+    /** Outline the brush under a hovering stylus. */
+    val brushCursor: Boolean = true,
+)
+
+/** Brush outline under a hovering stylus, in view pixels. */
+data class BrushCursor(
+    val x: Float,
+    val y: Float,
+    val radius: Float,
 )
 
 /** Rubber-band geometry reported while a selection, shape or gradient drag is in progress. */
@@ -196,6 +205,20 @@ class ArtFlowCanvasView
 
         /** Reports a new Automatic-selection threshold chosen by sliding (0-255). */
         var onFillToleranceChanged: ((Int) -> Unit)? = null
+
+        /** Reports the brush outline under a hovering stylus, or null when it leaves. */
+        var onBrushCursorChanged: ((BrushCursor?) -> Unit)? = null
+
+        override fun onHoverEvent(event: MotionEvent): Boolean {
+            val type = event.getToolType(0)
+            if (type != MotionEvent.TOOL_TYPE_STYLUS && type != MotionEvent.TOOL_TYPE_ERASER) return super.onHoverEvent(event)
+            val tool = if (type == MotionEvent.TOOL_TYPE_ERASER) ToolType.ERASER else input.tool
+            val showing = input.brushCursor && tool in CURSOR_TOOLS && event.actionMasked != MotionEvent.ACTION_HOVER_EXIT
+            val size = if (tool == ToolType.ERASER) input.eraserSize else input.brushParams.size
+            onBrushCursorChanged?.invoke(if (showing) BrushCursor(event.x, event.y, size / 2f * scale) else null)
+            return true
+        }
+
         private var gestureTool: ToolType? = null
 
         private var drawing = false
@@ -1101,6 +1124,14 @@ class ArtFlowCanvasView
             gestureMoved = 0f
             gestureStartView = x to y
 
+            onBrushCursorChanged?.invoke(null)
+            // The stylus side button samples colour, the usual Android pen shortcut.
+            if (isStylus && (event.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY) != 0) {
+                val (canvasX, canvasY) = viewToCanvas(x, y)
+                pickColor(canvasX, canvasY)
+                gestureTool = null
+                return true
+            }
             val tool = if (event.getToolType(index) == MotionEvent.TOOL_TYPE_ERASER) ToolType.ERASER else input.tool
             armHoldEyedropper(isStylus, x, y)
             // Palm rejection: a stylus always paints, fingers only when finger painting is on.
@@ -2341,6 +2372,8 @@ class ArtFlowCanvasView
 
         companion object {
             private const val MIN_SCALE = 0.05f
+            private val CURSOR_TOOLS =
+                setOf(ToolType.BRUSH, ToolType.ERASER, ToolType.SMUDGE, ToolType.CLONE_STAMP, ToolType.HEALING, ToolType.LIQUIFY)
             private const val FIT_ANIMATION_MS = 260L
             private const val MAX_SCALE = 32f
             private const val TAP_SLOP = 24f

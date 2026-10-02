@@ -230,6 +230,7 @@ class CanvasViewModel
                             fingerPainting = stored.fingerPainting,
                             pressureCurve = stored.pressureCurve,
                             stabilization = stored.stabilization,
+                            brushCursor = stored.brushCursor,
                         )
                 }
             }
