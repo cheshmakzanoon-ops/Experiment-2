@@ -1,5 +1,6 @@
 package com.artflow.studio.core.pixels
 
+import com.artflow.studio.domain.model.Color
 import com.artflow.studio.domain.model.layer.AdjustmentType
 import kotlin.math.max
 import kotlin.math.min
@@ -17,6 +18,8 @@ object LiveAdjustments {
         /** True when the effect is a single amount set by sliding across the canvas. */
         val slidesAmount: Boolean,
         val adjustmentType: AdjustmentType? = null,
+        /** True when a touch on the canvas places the effect's target point (Recolor's crosshair). */
+        val usesPoint: Boolean = false,
     ) {
         HUE_SATURATION_BRIGHTNESS("Hue, Saturation, Brightness", false, AdjustmentType.HUE_SATURATION),
         COLOR_BALANCE("Color Balance", false, AdjustmentType.COLOR_BALANCE),
@@ -30,6 +33,7 @@ object LiveAdjustments {
         GLITCH("Glitch", true),
         HALFTONE("Halftone", true),
         CHROMATIC_ABERRATION("Chromatic Aberration", true),
+        RECOLOR("Recolor", false, usesPoint = true),
     }
 
     /** Settings for one preview or commit. [angleDegrees] orients Motion Blur. */
@@ -50,6 +54,7 @@ object LiveAdjustments {
         val filtered =
             when {
                 type != null -> AdjustmentProcessor.apply(source, type, settings.parameters)
+                kind == Kind.RECOLOR -> recolor(source, settings)
                 amount <= 0f -> source.copy()
                 else -> filter(kind, source, amount, settings.angleDegrees)
             }
@@ -78,6 +83,39 @@ object LiveAdjustments {
             Kind.HALFTONE -> halftone(source, amount)
             else -> source.copy()
         }
+
+    /**
+     * Procreate's Recolor: the area around the crosshair (`x`, `y` parameters) whose colour is within
+     * the flood threshold [Settings.amount] takes the new colour (`rgb`), keeping its light and shade.
+     */
+    fun recolor(
+        source: PixelBuffer,
+        settings: Settings,
+    ): PixelBuffer {
+        val out = source.copy()
+        val x = settings.parameters[RECOLOR_X]?.toInt() ?: return out
+        val y = settings.parameters[RECOLOR_Y]?.toInt() ?: return out
+        if (x !in 0 until source.width || y !in 0 until source.height) return out
+        val rgb = settings.parameters[RECOLOR_RGB]?.toInt() ?: return out
+        val seed = source.pixels[y * source.width + x]
+        if ((seed ushr 24) == 0) return out
+        val area = SelectionMask.magicWand(source, x, y, tolerance = (settings.amount.coerceIn(0f, 1f) * 255f).roundToInt())
+        val target = Color.rgbToHsv(0xFF000000.toInt() or rgb)
+        val seedValue = Color.rgbToHsv(seed)[2]
+        for (i in out.pixels.indices) {
+            val coverage = area.alphaAt(i)
+            if (coverage <= 0f) continue
+            val pixel = source.pixels[i]
+            val value = (target[2] + Color.rgbToHsv(pixel)[2] - seedValue).coerceIn(0f, 1f)
+            val replaced = (pixel and 0xFF000000.toInt()) or (Color.hsvToRgb(target[0], target[1], value) and 0x00FFFFFF)
+            out.pixels[i] = ImageFilters.lerpArgb(pixel, replaced, coverage)
+        }
+        return out
+    }
+
+    const val RECOLOR_X = "x"
+    const val RECOLOR_Y = "y"
+    const val RECOLOR_RGB = "rgb"
 
     /** Bright areas glow: a blurred bright pass is screened back over the image. */
     fun bloom(

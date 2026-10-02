@@ -29,7 +29,7 @@ fun AdjustmentOverlay(
     val latest by rememberUpdatedState(state)
     val latestActions by rememberUpdatedState(actions)
     Box(modifier.fillMaxSize()) {
-        if (state.pencil) {
+        if (state.pencil || state.kind.usesPoint) {
             Box(
                 Modifier
                     .fillMaxSize()
@@ -73,7 +73,9 @@ fun AdjustmentOverlay(
             modifier = Modifier.align(Alignment.TopCenter).padding(12.dp),
         ) {
             val text =
-                if (state.pencil) {
+                if (state.kind.usesPoint) {
+                    "${state.kind.displayName} — touch the colour to replace"
+                } else if (state.pencil) {
                     "${state.kind.displayName} — paint where it applies"
                 } else if (state.kind.slidesAmount) {
                     "${state.kind.displayName} ${(state.settings.amount * 100).toInt()}% — slide across the canvas"
@@ -88,9 +90,10 @@ fun AdjustmentOverlay(
             modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp).widthIn(max = 560.dp),
         ) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (!state.kind.slidesAmount) ParameterSliders(state, actions.onParameter)
-                if (state.kind.slidesAmount && state.pencil) {
-                    Text("Amount ${(state.settings.amount * 100).toInt()}%", style = MaterialTheme.typography.labelMedium)
+                if (state.kind.adjustmentType != null) ParameterSliders(state, actions.onParameter)
+                if ((state.kind.slidesAmount && state.pencil) || state.kind.usesPoint) {
+                    val label = if (state.kind.usesPoint) "Flood" else "Amount"
+                    Text("$label ${(state.settings.amount * 100).toInt()}%", style = MaterialTheme.typography.labelMedium)
                     Slider(value = state.settings.amount, onValueChange = actions.onAmount)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.align(Alignment.End)) {

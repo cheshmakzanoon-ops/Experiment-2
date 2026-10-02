@@ -50,4 +50,31 @@ class LiveAdjustmentsTest {
         val out = LiveAdjustments.bloom(source, 0.8f)
         for (i in source.pixels.indices) assertTrue(Channels.luminance(out.pixels[i]) >= Channels.luminance(source.pixels[i]) - 1e-3f)
     }
+
+    @Test fun recolorReplacesTheTouchedColourAndKeepsShading() {
+        val red = 0xFFFF0000.toInt()
+        val darkRed = 0xFF800000.toInt()
+        val blue = 0xFF0000FF.toInt()
+        val source = PixelBuffer(4, 1)
+        source.pixels[0] = red
+        source.pixels[1] = darkRed
+        source.pixels[2] = blue
+        source.pixels[3] = red
+        val settings =
+            LiveAdjustments.Settings(
+                amount = 0.6f,
+                parameters =
+                    mapOf(
+                        LiveAdjustments.RECOLOR_X to 0f,
+                        LiveAdjustments.RECOLOR_Y to 0f,
+                        LiveAdjustments.RECOLOR_RGB to 0x00FF00.toFloat(),
+                    ),
+            )
+        val out = LiveAdjustments.apply(LiveAdjustments.Kind.RECOLOR, source, settings)
+        val touched = out.pixels[0]
+        assertTrue("Touched red turns green", ((touched shr 8) and 0xFF) > 200 && ((touched shr 16) and 0xFF) < 60)
+        // The darker red stays darker after recolouring.
+        assertTrue(((out.pixels[1] shr 8) and 0xFF) in 1 until 200)
+        assertTrue("Blue is not within the flood", (out.pixels[2] and 0xFF) > 200)
+    }
 }

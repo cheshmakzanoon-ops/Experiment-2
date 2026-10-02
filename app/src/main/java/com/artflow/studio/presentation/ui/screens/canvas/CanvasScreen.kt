@@ -653,7 +653,10 @@ fun CanvasScreen(
                         }
                         HorizontalDivider()
                         LiveAdjustments.Kind.entries.forEach { kind ->
-                            DropdownMenuItem(text = { Text(kind.displayName) }, onClick = choose { viewModel.adjustments.start(kind) })
+                            DropdownMenuItem(
+                                text = { Text(kind.displayName) },
+                                onClick = choose { viewModel.adjustments.start(kind, input.brushColor) },
+                            )
                         }
                     },
                     colorSwatch = {
@@ -865,7 +868,11 @@ fun CanvasScreen(
                                 if (size != null) {
                                     val view = ViewTransform(viewScale, viewOffsetX, viewOffsetY, viewRotation)
                                     val at = view.toCanvas(point, width, height, size.width, size.height)
-                                    viewModel.adjustments.paintAt(at.x, at.y, input.brushParams.size / 2f)
+                                    if (active.kind.usesPoint) {
+                                        viewModel.adjustments.setPoint(at.x, at.y)
+                                    } else {
+                                        viewModel.adjustments.paintAt(at.x, at.y, input.brushParams.size / 2f)
+                                    }
                                 }
                             },
                         ),

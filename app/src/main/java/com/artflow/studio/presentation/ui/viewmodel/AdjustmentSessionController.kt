@@ -44,7 +44,11 @@ class AdjustmentSessionController(
     @Volatile private var filtered: Pair<State, PixelBuffer>? = null
     private var painted: SelectionMask? = null
 
-    fun start(kind: LiveAdjustments.Kind) {
+    /** Opens [kind] on the active layer; [color] is what Recolor paints with. */
+    fun start(
+        kind: LiveAdjustments.Kind,
+        color: Int = 0,
+    ) {
         scope.launch {
             closeSession()
             val opened = repository.beginRasterEdit(repository.getActiveLayerId())
@@ -55,8 +59,19 @@ class AdjustmentSessionController(
             session = opened
             original = opened.buffer.copy()
             selection = repository.selection()
-            val parameters = kind.adjustmentType?.defaultParameters.orEmpty()
-            _state.value = State(kind, LiveAdjustments.Settings(amount = if (kind.slidesAmount) 0f else 1f, parameters = parameters))
+            val parameters =
+                if (kind == LiveAdjustments.Kind.RECOLOR) {
+                    mapOf(LiveAdjustments.RECOLOR_RGB to (color and 0xFFFFFF).toFloat())
+                } else {
+                    kind.adjustmentType?.defaultParameters.orEmpty()
+                }
+            val amount =
+                when {
+                    kind.usesPoint -> RECOLOR_THRESHOLD
+                    kind.slidesAmount -> 0f
+                    else -> 1f
+                }
+            _state.value = State(kind, LiveAdjustments.Settings(amount = amount, parameters = parameters))
             render()
         }
     }
@@ -75,6 +90,12 @@ class AdjustmentSessionController(
         _state.value = current.copy(settings = change(current.settings))
         render()
     }
+
+    /** Places Recolor's crosshair at canvas point ([x], [y]). */
+    fun setPoint(
+        x: Float,
+        y: Float,
+    ) = update { it.copy(parameters = it.parameters + (LiveAdjustments.RECOLOR_X to x) + (LiveAdjustments.RECOLOR_Y to y)) }
 
     /** Switches between adjusting the whole layer and painting the adjustment on with the brush. */
     fun setPencil(enabled: Boolean) {
@@ -159,3 +180,5 @@ class AdjustmentSessionController(
         repository.requestPreviewRefresh()
     }
 }
+
+private const val RECOLOR_THRESHOLD = 0.25f
