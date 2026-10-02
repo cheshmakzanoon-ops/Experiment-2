@@ -308,13 +308,15 @@ class CanvasViewModel
             }
         }
 
-        /** Captures one time-lapse frame per settled edit, at most every [TIMELAPSE_INTERVAL_MS]. */
+        /** Captures one time-lapse frame per settled edit, [TIMELAPSE_INTERVAL_MS] after it lands. */
         private fun startTimelapse() {
             timelapseJob?.cancel()
             timelapseRevision = canvasRepository.contentRevision
             timelapseJob =
                 viewModelScope.launch {
                     timelapseRequests.collect {
+                        // Let the edit settle so a burst of changes yields one frame.
+                        delay(TIMELAPSE_INTERVAL_MS)
                         val projectId = currentProjectId
                         val revision = canvasRepository.contentRevision
                         if (projectId == 0L || revision == timelapseRevision) return@collect
@@ -327,7 +329,6 @@ class CanvasViewModel
                         } catch (error: Exception) {
                             Timber.w(error, "Time-lapse capture failed")
                         }
-                        delay(TIMELAPSE_INTERVAL_MS)
                     }
                 }
         }
