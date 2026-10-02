@@ -40,6 +40,16 @@ class SelectionMask(
 
     fun copy(): SelectionMask = SelectionMask(width, height, coverage.copyOf())
 
+    /** The part of the mask inside [bounds] (inclusive, within the mask). */
+    fun crop(bounds: IntBounds): SelectionMask {
+        require(bounds.left >= 0 && bounds.top >= 0 && bounds.right < width && bounds.bottom < height) { "Crop outside the mask" }
+        val out = SelectionMask(bounds.width, bounds.height)
+        for (y in 0 until bounds.height) {
+            System.arraycopy(coverage, (bounds.top + y) * width + bounds.left, out.coverage, y * bounds.width, bounds.width)
+        }
+        return out
+    }
+
     fun invert() {
         for (i in coverage.indices) {
             coverage[i] = (255 - (coverage[i].toInt() and 0xFF)).toByte()

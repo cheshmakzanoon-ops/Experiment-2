@@ -18,12 +18,19 @@ class PreviewCacheTest {
     private fun stroke(vararg xs: Float): Stroke =
         Stroke(id = 7, points = xs.map { StrokePoint(it, 50f, 1f, timestamp = 0L) }, brushParams = params, layerId = 1, color = -1)
 
+    private fun key(
+        name: String?,
+        raster: Int = 0,
+    ) = name?.let { PreviewCache.Key(listOf(it), mapOf(1L to listOf(raster))) }
+
     private fun frame(
         cache: PreviewCache,
-        key: Any?,
+        name: String?,
         strokes: List<Stroke>,
+        damage: PreviewCache.Damage? = PreviewCache.Damage.NONE,
+        raster: Int = 0,
     ) = runBlocking {
-        cache.frame(key, strokes, 200, 100) { region ->
+        cache.frame(key(name, raster), damage, strokes, 200, 100) { region ->
             requests += region
             PixelBuffer(region?.width ?: 200, region?.height ?: 100)
         }
@@ -63,5 +70,17 @@ class PreviewCacheTest {
         // QuickShape replaced the points: the old extent must be cleared too.
         val dirty = requireNotNull(frame(cache, "doc", listOf(stroke(60f, 70f))).dirty)
         assertTrue(dirty.left <= 10 && dirty.right >= 70)
+    }
+
+    @Test fun committedStrokeOnlyRedrawsItsDamage() {
+        val cache = PreviewCache()
+        frame(cache, "doc", listOf(stroke(10f, 20f)))
+        // The stroke was committed: its layer's pixels changed, inside the reported area only.
+        val area = IntBounds(2, 42, 28, 58)
+        val committed = frame(cache, "doc", emptyList(), PreviewCache.Damage.NONE.plus(area, 1L), raster = 1)
+        assertEquals(area, committed.dirty)
+        // A pixel change on a layer the damage does not name forces a full composite.
+        assertNull(frame(cache, "doc", emptyList(), PreviewCache.Damage.NONE, raster = 2).dirty)
+        assertNull("Unknown damage forces a full composite", frame(cache, "doc", emptyList(), null, raster = 2).dirty)
     }
 }

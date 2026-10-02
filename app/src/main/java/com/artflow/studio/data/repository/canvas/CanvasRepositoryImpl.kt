@@ -51,6 +51,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.coroutineContext
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
@@ -128,9 +129,16 @@ class CanvasRepositoryImpl
         override val contentRevision: Long get() = editRevision
         private var dirty = false
             set(value) {
-                if (value) editRevision++
+                if (value) {
+                    editRevision++
+                    // Anything may have changed; a stroke commit narrows this right after.
+                    previewDamage = null
+                }
                 field = value
             }
+
+        /** Document edits since the last preview frame; null when the whole canvas must be redrawn. */
+        private var previewDamage: PreviewCache.Damage? = null
 
         /** Layer ids whose pixels changed since the last write to disk. */
         private val dirtyRasters = mutableSetOf<Long>()
@@ -588,6 +596,9 @@ class CanvasRepositoryImpl
             // Preview and commit share this exact raw-pixel operation. Compute first so a failed
             // allocation or render cannot add an undo entry or modify the committed document.
             val incoming = SymmetryEngine.mirrorStroke(stroke, canvasWidth, canvasHeight, symmetrySettings)
+            val reach = incoming.map { PreviewCache.boundsOf(it, 0) }.reduce { a, b -> PreviewCache.union(a, b) }
+            val area =
+                IntBounds(max(0, reach.left), max(0, reach.top), min(canvasWidth - 1, reach.right), min(canvasHeight - 1, reach.bottom))
             val base =
                 LayerStrokeRenderer.render(
                     if (destination.isMask) layer.mask else layer.raster,
@@ -597,7 +608,9 @@ class CanvasRepositoryImpl
                     canvasHeight,
                     !destination.isMask && layer.isAlphaLocked,
                     activeSelection,
+                    region = area,
                 )
+            val damageBefore = previewDamage
             pushUndo()
             if (destination.isMask) {
                 layer.mask = base
@@ -610,6 +623,8 @@ class CanvasRepositoryImpl
             }
             dirtyRasters += layer.id
             dirty = true
+            // The commit only changed this layer, inside the stroke's reach.
+            previewDamage = damageBefore?.plus(area, layer.id)
             emitAsync(CanvasInvalidationEvent.Full)
         }
 
@@ -1883,7 +1898,7 @@ class CanvasRepositoryImpl
          * composite is exact: pixel sessions in progress, filter layers and feathered masks reach
          * beyond the pixels they cover.
          */
-        private fun previewKey(): Any? {
+        private fun previewKey(): PreviewCache.Key? {
             val layers = currentLayers()
             val selection = activeSelection
             val local =
@@ -1892,17 +1907,11 @@ class CanvasRepositoryImpl
                     layers.none { it.filterType != null || it.maskFeather > 0f } &&
                     layers.all { canvasSized(it.raster) && canvasSized(it.mask) }
             if (!local) return null
-            return listOf(
-                editRevision,
-                undoStack.size,
-                redoStack.size,
-                System.identityHashCode(layers),
-                canvasWidth,
-                canvasHeight,
-                System.identityHashCode(activeSelection),
-                symmetrySettings,
-                layers.map { listOf(System.identityHashCode(it), System.identityHashCode(it.raster), System.identityHashCode(it.mask)) },
-            )
+
+            fun id(value: Any?) = System.identityHashCode(value)
+
+            val document = listOf(id(layers), canvasWidth, canvasHeight, id(selection), symmetrySettings)
+            return PreviewCache.Key(document, layers.associate { it.id to listOf(id(it), id(it.raster), id(it.mask)) })
         }
 
         private fun canvasSized(buffer: PixelBuffer?): Boolean =
@@ -1915,13 +1924,18 @@ class CanvasRepositoryImpl
 
         override suspend fun compositePreviewFrame(): CanvasRepository.PreviewFrame? =
             previewMutex.withLock {
-                val (snapshot, key) = withState { takePreviewSnapshot() to previewKey() }
+                val (snapshot, key, damage) =
+                    withState {
+                        val damage = previewDamage
+                        previewDamage = PreviewCache.Damage.NONE
+                        Triple(takePreviewSnapshot(), previewKey(), damage)
+                    }
                 withContext(Dispatchers.Default) {
                     val drawn =
                         snapshot.strokes.flatMap {
                             SymmetryEngine.mirrorStroke(it, snapshot.document.width, snapshot.document.height, snapshot.symmetry)
                         }
-                    previewCache.frame(key, drawn, snapshot.document.width, snapshot.document.height) { region ->
+                    previewCache.frame(key, damage, drawn, snapshot.document.width, snapshot.document.height) { region ->
                         renderPreview(if (region == null) snapshot else cropPreview(snapshot, region))
                     }
                 }

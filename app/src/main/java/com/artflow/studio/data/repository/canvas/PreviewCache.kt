@@ -15,12 +15,36 @@ import kotlin.math.min
  * (and re-uploads only that area), instead of the whole canvas.
  */
 internal class PreviewCache {
+    /**
+     * What a preview shows apart from strokes in progress: [document] must match exactly, and each
+     * layer's pixel identities in [layers] must match unless the layer is listed in the [Damage].
+     */
+    data class Key(
+        val document: List<Any?>,
+        val layers: Map<Long, List<Any?>>,
+    )
+
+    /** Document edits since the previous frame that stayed inside [region], on [layers] only. */
+    data class Damage(
+        val region: IntBounds,
+        val layers: Set<Long>,
+    ) {
+        fun plus(
+            area: IntBounds,
+            layer: Long,
+        ): Damage = Damage(union(region, area), layers + layer)
+
+        companion object {
+            val NONE = Damage(IntBounds(0, 0, -1, -1), emptySet())
+        }
+    }
+
     private class Extent(
         val stroke: Stroke,
         val bounds: IntBounds,
     )
 
-    private var key: Any? = null
+    private var key: Key? = null
     private var composite: PixelBuffer? = null
     private var extents: Map<String, Extent> = emptyMap()
 
@@ -32,19 +56,21 @@ internal class PreviewCache {
 
     /**
      * Produces the next frame. [key] identifies everything except the strokes in progress (null
-     * forces a full composite); [strokes] are those strokes as drawn, in canvas coordinates.
+     * forces a full composite); [damage] lists document edits since the last frame (null: anything
+     * may have changed); [strokes] are the strokes in progress as drawn, in canvas coordinates.
      * [render] composites the whole canvas for null, or just the given area.
      */
     suspend fun frame(
-        key: Any?,
+        key: Key?,
+        damage: Damage?,
         strokes: List<Stroke>,
         width: Int,
         height: Int,
         render: suspend (IntBounds?) -> PixelBuffer,
     ): CanvasRepository.PreviewFrame {
         val current = extentsOf(strokes)
-        val cached = composite?.takeIf { key != null && key == this.key && it.width == width && it.height == height }
-        val dirty = cached?.let { dirtyRegion(current, width, height) }
+        val cached = composite?.takeIf { it.width == width && it.height == height && reusable(key, damage) }
+        val dirty = cached?.let { damage?.region?.let { area -> clip(union(dirtyRegion(current, width, height), area), width, height) } }
         this.key = key
         extents = current
         if (cached == null || dirty == null || dirty.width.toLong() * dirty.height * 2 > width.toLong() * height) {
@@ -81,7 +107,25 @@ internal class PreviewCache {
             dirty = union(dirty, area)
         }
         extents.forEach { (id, before) -> if (id !in current) dirty = union(dirty, before.bounds) }
-        val region = dirty ?: return EMPTY
+        return clip(dirty ?: EMPTY, width, height)
+    }
+
+    private fun reusable(
+        key: Key?,
+        damage: Damage?,
+    ): Boolean {
+        val before = this.key
+        if (key == null || before == null || damage == null) return false
+        if (key.document != before.document || key.layers.keys != before.layers.keys) return false
+        return key.layers.all { (id, identity) -> identity == before.layers[id] || id in damage.layers }
+    }
+
+    private fun clip(
+        region: IntBounds,
+        width: Int,
+        height: Int,
+    ): IntBounds {
+        if (region.isEmpty) return EMPTY
         val clipped = IntBounds(max(0, region.left), max(0, region.top), min(width - 1, region.right), min(height - 1, region.bottom))
         return if (clipped.isEmpty) EMPTY else clipped
     }
