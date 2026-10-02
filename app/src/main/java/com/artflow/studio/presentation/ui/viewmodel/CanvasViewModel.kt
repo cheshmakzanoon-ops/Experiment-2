@@ -1369,6 +1369,12 @@ class CanvasViewModel
             }
         }
 
+        /** Frames for the in-app time-lapse replay (empty before anything was drawn). */
+        suspend fun timelapseFrames(): List<java.io.File> {
+            val projectId = currentProjectId
+            return if (projectId == 0L) emptyList() else timelapse.frameFiles(projectId)
+        }
+
         fun clearTimelapse() {
             val projectId = currentProjectId
             if (projectId == 0L) return

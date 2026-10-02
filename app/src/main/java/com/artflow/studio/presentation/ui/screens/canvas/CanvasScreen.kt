@@ -74,6 +74,7 @@ import com.artflow.studio.presentation.ui.components.editor.StudioSidebarState
 import com.artflow.studio.presentation.ui.components.editor.StudioToolDock
 import com.artflow.studio.presentation.ui.components.editor.StudioTopBar
 import com.artflow.studio.presentation.ui.components.editor.TextSheet
+import com.artflow.studio.presentation.ui.components.editor.TimelapseReplay
 import com.artflow.studio.presentation.ui.components.editor.TransformOverlay
 import com.artflow.studio.presentation.ui.components.editor.TransformToolbar
 import com.artflow.studio.presentation.ui.components.editor.TransformToolbarActions
@@ -157,6 +158,7 @@ fun CanvasScreen(
     var showCopyPaste by remember { mutableStateOf(false) }
     var transformQuad by remember { mutableStateOf<Quad?>(null) }
     val adjustment by viewModel.adjustments.state.collectAsState()
+    var replayFrames by remember { mutableStateOf<List<java.io.File>?>(null) }
     val hasClipboard by viewModel.hasClipboard.collectAsState()
     val wide = isWideLayout()
     var colorDropPosition by remember { mutableStateOf<androidx.compose.ui.geometry.Offset?>(null) }
@@ -568,7 +570,10 @@ fun CanvasScreen(
                             ).forEach { target ->
                                 DropdownMenuItem(text = { Text(target.title) }, onClick = choose { panel = target })
                             }
-                            DropdownMenuItem(text = { Text("Time-lapse replay (MP4)") }, onClick = choose { viewModel.exportTimelapse() })
+                            DropdownMenuItem(
+                                text = { Text("Time-lapse Replay") },
+                                onClick = choose { scope.launch { replayFrames = viewModel.timelapseFrames() } },
+                            )
                             DropdownMenuItem(
                                 text = { Text("Full screen") },
                                 onClick =
@@ -823,6 +828,18 @@ fun CanvasScreen(
         ) {
             Column(modifier = Modifier.fillMaxWidth(), content = panelContent)
         }
+    }
+
+    replayFrames?.let { frames ->
+        TimelapseReplay(
+            frames = frames,
+            onExport = {
+                replayFrames = null
+                panel = EditorPanel.EXPORT
+                viewModel.exportTimelapse()
+            },
+            onDismiss = { replayFrames = null },
+        )
     }
 
     if (showBrushEditor) {

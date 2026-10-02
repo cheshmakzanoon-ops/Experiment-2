@@ -47,6 +47,9 @@ class TimelapseRecorder
 
         suspend fun frameCount(projectId: Long): Int = withContext(Dispatchers.IO) { frames(projectId).size }
 
+        /** Recorded frames in order, for the in-app replay. */
+        suspend fun frameFiles(projectId: Long): List<File> = mutex.withLock { withContext(Dispatchers.IO) { frames(projectId) } }
+
         /** Appends [composite] to the recording unless it is identical to the previous frame. */
         suspend fun capture(
             projectId: Long,
