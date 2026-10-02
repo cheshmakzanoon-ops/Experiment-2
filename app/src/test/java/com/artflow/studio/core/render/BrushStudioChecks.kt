@@ -11,15 +11,31 @@ import com.artflow.studio.domain.model.brush.StudioBrushes
 object BrushStudioChecks {
     fun originalPresetsAreDistinctAndSearchable() {
         val presets = StudioBrushes.presets
-        check(presets.size == 8)
+        check(presets.size >= 36)
         check(presets.map { it.id }.distinct().size == presets.size)
         check(presets.map { it.parameters }.distinct().size == presets.size)
         check(StudioBrushes.search("  FINE   INK  ").single().id == "fine-liner")
-        check(StudioBrushes.search("", "Ink").size == 2)
-        check(StudioBrushes.search("paper", "Ink").isEmpty())
+        check(StudioBrushes.search("", "Inking").size == 6)
+        check(StudioBrushes.search("charcoal", "Inking").isEmpty())
         check(StudioBrushes.search("does-not-exist").isEmpty())
         check(StudioBrushes.search("") == presets)
-        check(StudioBrushes.categories.toSet() == setOf("All", "Sketch", "Ink", "Texture", "Paint"))
+        check(
+            StudioBrushes.categories ==
+                listOf(
+                    "All",
+                    "Sketching",
+                    "Inking",
+                    "Drawing",
+                    "Painting",
+                    "Artistic",
+                    "Calligraphy",
+                    "Airbrushing",
+                    "Textures",
+                    "Charcoals",
+                    "Spraypaints",
+                    "Elements",
+                ),
+        )
     }
 
     fun presetsRenderRealDistinctDeterministicMarks() {

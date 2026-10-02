@@ -371,21 +371,14 @@ object TransformQuad {
         require(source.width == target.width && source.height == target.height) { "Buffer sizes differ" }
         val (floating, blend) = LayerTransform.split(source, target, selection)
         val inverse = inverseMapping(quad) ?: return
-        val srcW = bounds.width.toFloat()
-        val srcH = bounds.height.toFloat()
         val x0 = max(0, floor(min(min(quad.x0, quad.x1), min(quad.x2, quad.x3))).toInt() - 1)
         val x1 = min(target.width - 1, ceil(max(max(quad.x0, quad.x1), max(quad.x2, quad.x3))).toInt() + 1)
         val y0 = max(0, floor(min(min(quad.y0, quad.y1), min(quad.y2, quad.y3))).toInt() - 1)
         val y1 = min(target.height - 1, ceil(max(max(quad.y0, quad.y1), max(quad.y2, quad.y3))).toInt() + 1)
-        val margin = 1f / max(srcW, srcH)
+        val sampler = Sampler(floating, inverse, bounds, highQuality)
         for (y in y0..y1) {
             for (x in x0..x1) {
-                val sample =
-                    project(inverse, x + 0.5f, y + 0.5f, margin) { u, v ->
-                        val sx = bounds.left + u * srcW
-                        val sy = bounds.top + v * srcH
-                        if (highQuality) floating.sampleBilinear(sx, sy) else floating.sampleNearest(sx, sy)
-                    }
+                val sample = sampler.sample(x + 0.5f, y + 0.5f)
                 if ((sample ushr 24) != 0) {
                     val i = y * target.width + x
                     target.pixels[i] = if (blend) BlendModes.sourceOver(target.pixels[i], sample) else sample
@@ -394,20 +387,30 @@ object TransformQuad {
         }
     }
 
-    /** Maps a destination point back into the source box; 0 (transparent) when it falls outside. */
-    private inline fun project(
-        inverse: FloatArray,
-        px: Float,
-        py: Float,
-        margin: Float,
-        sample: (Float, Float) -> Int,
-    ): Int {
-        val w = inverse[6] * px + inverse[7] * py + inverse[8]
-        if (abs(w) < 1e-9f) return 0
-        val u = (inverse[0] * px + inverse[1] * py + inverse[2]) / w
-        val v = (inverse[3] * px + inverse[4] * py + inverse[5]) / w
-        val inside = u >= -margin && u <= 1f + margin && v >= -margin && v <= 1f + margin
-        return if (inside) sample(u, v) else 0
+    /** Maps destination points back into the source box; outside it, samples are transparent. */
+    private class Sampler(
+        private val floating: PixelBuffer,
+        private val inverse: FloatArray,
+        private val bounds: IntBounds,
+        private val highQuality: Boolean,
+    ) {
+        private val srcW = bounds.width.toFloat()
+        private val srcH = bounds.height.toFloat()
+        private val inside = -1f / max(srcW, srcH)..1f + 1f / max(srcW, srcH)
+
+        fun sample(
+            px: Float,
+            py: Float,
+        ): Int {
+            val w = inverse[6] * px + inverse[7] * py + inverse[8]
+            if (abs(w) < 1e-9f) return 0
+            val u = (inverse[0] * px + inverse[1] * py + inverse[2]) / w
+            val v = (inverse[3] * px + inverse[4] * py + inverse[5]) / w
+            if (u !in inside || v !in inside) return 0
+            val sx = bounds.left + u * srcW
+            val sy = bounds.top + v * srcH
+            return if (highQuality) floating.sampleBilinear(sx, sy) else floating.sampleNearest(sx, sy)
+        }
     }
 
     private const val MIN_FACTOR = 0.02f

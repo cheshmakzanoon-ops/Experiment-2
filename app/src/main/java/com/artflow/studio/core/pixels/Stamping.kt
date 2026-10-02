@@ -1,9 +1,11 @@
 package com.artflow.studio.core.pixels
 
 import kotlin.math.ceil
+import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
@@ -35,8 +37,13 @@ object Stamping {
         mode: Mode = Mode.SOURCE_OVER,
         alphaLock: Boolean = false,
         mask: SelectionMask? = null,
+        tip: TipShape = TipShape.ROUND,
     ) {
         if (radius <= 0f || strength <= 0f) return
+        if (!tip.isRound) {
+            ellipticalDab(target, x, y, radius, color, strength, hardness, mode, alphaLock, mask, tip)
+            return
+        }
         val x0 = max(0, floor(x - radius).toInt())
         val x1 = min(target.width - 1, ceil(x + radius).toInt())
         val y0 = max(0, floor(y - radius).toInt())
@@ -55,6 +62,63 @@ object Stamping {
                 val falloff = if (distance <= inner) 1f else ((radius - distance) / edge).coerceIn(0f, 1f)
                 val index = py * target.width + px
                 applyPixel(target, index, color, falloff * strength, mode, alphaLock, mask)
+            }
+        }
+    }
+
+    /** Dab outline: [roundness] 1 is a circle; lower values flatten it across [angleDegrees]. */
+    data class TipShape(
+        val roundness: Float,
+        val angleDegrees: Float,
+    ) {
+        val isRound: Boolean get() = roundness >= 0.999f
+
+        companion object {
+            val ROUND = TipShape(1f, 0f)
+        }
+    }
+
+    /**
+     * A flattened tip: the dab is an ellipse whose short axis is the tip's roundness × [radius],
+     * rotated by its angle. Distances are measured in the ellipse's own units so hardness behaves the
+     * same as for round dabs.
+     */
+    private fun ellipticalDab(
+        target: PixelBuffer,
+        x: Float,
+        y: Float,
+        radius: Float,
+        color: Int,
+        strength: Float,
+        hardness: Float,
+        mode: Mode,
+        alphaLock: Boolean,
+        mask: SelectionMask?,
+        tip: TipShape,
+    ) {
+        val minor = tip.roundness.coerceIn(0.05f, 1f)
+        val radians = Math.toRadians(tip.angleDegrees.toDouble())
+        val cosA = cos(radians).toFloat()
+        val sinA = sin(radians).toFloat()
+        val x0 = max(0, floor(x - radius).toInt())
+        val x1 = min(target.width - 1, ceil(x + radius).toInt())
+        val y0 = max(0, floor(y - radius).toInt())
+        val y1 = min(target.height - 1, ceil(y + radius).toInt())
+        if (x1 < x0 || y1 < y0) return
+        val inner = radius * hardness.coerceIn(0f, 1f)
+        // Thin tips need a pixel-wide edge along the short axis to stay anti-aliased.
+        val edge = max(radius - inner, 0.75f / minor)
+        for (py in y0..y1) {
+            for (px in x0..x1) {
+                val dx = px + 0.5f - x
+                val dy = py + 0.5f - y
+                val along = dx * cosA + dy * sinA
+                val across = (-dx * sinA + dy * cosA) / minor
+                val distance = sqrt(along * along + across * across)
+                if (distance <= radius) {
+                    val falloff = if (distance <= inner) 1f else ((radius - distance) / edge).coerceIn(0f, 1f)
+                    applyPixel(target, py * target.width + px, color, falloff * strength, mode, alphaLock, mask)
+                }
             }
         }
     }

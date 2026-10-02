@@ -46,6 +46,7 @@ data class BrushParams(
     val velocityToSize: Float = 0f, // Speed affects size (0.0 - 1.0)
     val velocityToOpacity: Float = 0f, // Speed affects opacity (0.0 - 1.0)
     val velocityToHue: Float = 0f, // Speed affects hue shift (0.0 - 1.0)
+    val roundness: Float = 1f, // Tip shape: 1 is round, lower values flatten it along [rotation]
 ) {
     /**
      * Pressure curve types for mapping stylus pressure

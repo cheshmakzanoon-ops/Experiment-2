@@ -296,11 +296,18 @@ private fun BrushRotationSettings(
     brushParams: BrushParams,
     onBrushParamsChanged: (BrushParams) -> Unit,
 ) {
-    BrushSettingsSection(title = "Rotation") {
+    BrushSettingsSection(title = "Shape") {
         Text(
-            "Rotation does not change the current round brush tip. Grain rotation changes texture orientation.",
+            "Lower roundness flattens the tip into a chisel; rotation sets the angle of a flattened tip.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        BrushParameterSlider(
+            label = "Roundness",
+            value = brushParams.roundness,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(roundness = it.coerceIn(0.05f, 1f))) },
+            valueRange = 0.05f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.roundness * 100),
         )
         // Brush Rotation
         BrushParameterSlider(

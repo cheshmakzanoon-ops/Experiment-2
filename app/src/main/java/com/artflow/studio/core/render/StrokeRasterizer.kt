@@ -299,6 +299,7 @@ class StrokeRasterizer {
                 mode = Stamping.Mode.MAX_COVERAGE,
                 alphaLock = alphaLock,
                 mask = mask,
+                tip = Stamping.TipShape(params.roundness, params.rotation),
             )
             dabCount.incrementAndGet()
         }
@@ -309,6 +310,7 @@ class StrokeRasterizer {
         points: List<StrokePoint>,
     ): Boolean =
         params.spacing <= 0f &&
+            params.roundness >= 1f &&
             points.size <= 2 &&
             params.count == 1 &&
             points.first().pressure == points.last().pressure &&

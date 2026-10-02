@@ -53,7 +53,7 @@ class BrushStudioUiTest {
         compose.setContent {
             MaterialTheme { BrushStudioContent(BrushParams(), {}, {}) }
         }
-        compose.onNodeWithText("Ink").performClick().assertIsSelected()
+        compose.onNodeWithText("Inking").performClick().assertIsSelected()
         compose.onNodeWithText("Search brushes").performTextInput("charcoal")
         compose.onNodeWithText("No matching brushes. Clear the search or choose another category.").assertIsDisplayed()
         compose.onNodeWithContentDescription("Clear brush search").performClick()
