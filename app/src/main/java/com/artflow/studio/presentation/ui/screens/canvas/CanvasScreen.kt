@@ -34,6 +34,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.LiveAdjustments
 import com.artflow.studio.core.pixels.Quad
 import com.artflow.studio.core.tool.ToolGroup
@@ -58,6 +59,7 @@ import com.artflow.studio.presentation.ui.components.editor.CopyPasteMenu
 import com.artflow.studio.presentation.ui.components.editor.GuidesOverlay
 import com.artflow.studio.presentation.ui.components.editor.GuidesSheet
 import com.artflow.studio.presentation.ui.components.editor.LayerMaskActions
+import com.artflow.studio.presentation.ui.components.editor.LayerOptionActions
 import com.artflow.studio.presentation.ui.components.editor.LayerRowActions
 import com.artflow.studio.presentation.ui.components.editor.LayerStackActions
 import com.artflow.studio.presentation.ui.components.editor.LayersSheet
@@ -158,8 +160,12 @@ fun CanvasScreen(
     var showCopyPaste by remember { mutableStateOf(false) }
     var transformQuad by remember { mutableStateOf<Quad?>(null) }
     val adjustment by viewModel.adjustments.state.collectAsState()
+    val layerThumbnails by viewModel.layerThumbnails.thumbnails.collectAsState()
+    LaunchedEffect(panel, layers, history) {
+        if (panel == EditorPanel.LAYERS) viewModel.layerThumbnails.refresh()
+    }
     var replayFrames by remember { mutableStateOf<List<java.io.File>?>(null) }
-    val hasClipboard by viewModel.hasClipboard.collectAsState()
+    val hasClipboard by viewModel.clipboard.hasContent.collectAsState()
     val wide = isWideLayout()
     var colorDropPosition by remember { mutableStateOf<androidx.compose.ui.geometry.Offset?>(null) }
     var colorChipOrigin by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
@@ -386,6 +392,18 @@ fun CanvasScreen(
                             onMaskEnabled = { viewModel.setLayerMaskEnabled(it) },
                             onMaskDensity = { viewModel.setLayerMaskDensity(it) },
                             onMaskFeather = { viewModel.setLayerMaskFeather(it) },
+                        ),
+                    thumbnails = layerThumbnails,
+                    optionActions =
+                        LayerOptionActions(
+                            onSelectContents = viewModel::selectionFromAlphaOfActiveLayer,
+                            onCopy = { viewModel.clipboard.copy() },
+                            onFill = { viewModel.clipboard.fill(input.brushColor) },
+                            onClear = { viewModel.clipboard.clear() },
+                            onInvert = { viewModel.applyAdjustmentToCanvas(AdjustmentType.INVERT, emptyMap(), toAllLayers = false) },
+                            onReference = viewModel::setLayerReference,
+                            onMask = { viewModel.createLayerMask(LayerMaskSource.REVEAL_ALL) },
+                            onCombineDown = viewModel::groupWithLayerBelow,
                         ),
                 )
             EditorPanel.SELECTION ->
@@ -673,7 +691,7 @@ fun CanvasScreen(
                                 onRedoRequested = { viewModel.redo() }
                                 onFullscreenRequested = { focusMode = !focusMode }
                                 onCopyPasteMenuRequested = { showCopyPaste = true }
-                                onClearLayerRequested = { viewModel.clearLayer() }
+                                onClearLayerRequested = { viewModel.clipboard.clear() }
                                 onTransformQuadChanged = { transformQuad = it }
                                 onViewChanged = { s, ox, oy, r -> viewModel.onViewChanged(s, ox, oy, r) }
                                 onTextPlacementRequested = { x, y -> viewModel.requestTextAt(x, y) }
@@ -784,13 +802,13 @@ fun CanvasScreen(
                     canPaste = hasClipboard,
                     actions =
                         CopyPasteActions(
-                            onCut = { viewModel.copySelection(cut = true) },
-                            onCopy = { viewModel.copySelection(cut = false) },
-                            onCopyAll = viewModel::copyMerged,
+                            onCut = { viewModel.clipboard.copy(cut = true) },
+                            onCopy = { viewModel.clipboard.copy() },
+                            onCopyAll = viewModel.clipboard::copyMerged,
                             onDuplicate = viewModel::duplicateActiveLayer,
-                            onCutAndPaste = viewModel::cutAndPasteSelection,
-                            onCopyAndPaste = viewModel::copyAndPasteSelection,
-                            onPaste = viewModel::pasteAsLayer,
+                            onCutAndPaste = viewModel.clipboard::cutAndPaste,
+                            onCopyAndPaste = viewModel.clipboard::copyAndPaste,
+                            onPaste = viewModel.clipboard::paste,
                             onDismiss = { showCopyPaste = false },
                         ),
                     modifier = Modifier.align(Alignment.TopCenter),
@@ -1058,7 +1076,7 @@ private fun ContextToolbar(
                         onTool = viewModel::setTool,
                         onMode = viewModel::setSelectionMode,
                         onInvert = viewModel::invertSelection,
-                        onCopyPaste = viewModel::copyAndPasteSelection,
+                        onCopyPaste = viewModel.clipboard::copyAndPaste,
                         onMore = { openPanel(EditorPanel.SELECTION) },
                         onClear = viewModel::clearSelection,
                     ),
@@ -1097,14 +1115,14 @@ private fun ClipboardActions(
     viewModel: CanvasViewModel,
     hasSelection: Boolean,
 ) {
-    val hasClipboard by viewModel.hasClipboard.collectAsState()
+    val hasClipboard by viewModel.clipboard.hasContent.collectAsState()
     Row(
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        AssistChip(onClick = { viewModel.copySelection(cut = true) }, label = { Text(if (hasSelection) "Cut" else "Cut layer") })
-        AssistChip(onClick = { viewModel.copySelection(cut = false) }, label = { Text(if (hasSelection) "Copy" else "Copy layer") })
-        AssistChip(onClick = viewModel::pasteAsLayer, enabled = hasClipboard, label = { Text("Paste as layer") })
+        AssistChip(onClick = { viewModel.clipboard.copy(cut = true) }, label = { Text(if (hasSelection) "Cut" else "Cut layer") })
+        AssistChip(onClick = { viewModel.clipboard.copy() }, label = { Text(if (hasSelection) "Copy" else "Copy layer") })
+        AssistChip(onClick = viewModel.clipboard::paste, enabled = hasClipboard, label = { Text("Paste as layer") })
     }
 }
 

@@ -18,7 +18,6 @@ import com.artflow.studio.core.export.ExportResult
 import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.PixelBuffer
-import com.artflow.studio.core.pixels.SelectionClipboard
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.pixels.TransformQuad
 import com.artflow.studio.core.symmetry.SymmetryEngine
@@ -692,62 +691,12 @@ class CanvasViewModel
         /** Adds [image] as a new layer, centred and scaled down to fit the canvas if needed. */
         fun insertImageLayer(image: PixelBuffer) = layerOp { LayerImports.insertImage(canvasRepository, image) }
 
-        private var clipboard: PixelBuffer? = null
-        private val _hasClipboard = MutableStateFlow(false)
-        val hasClipboard: StateFlow<Boolean> = _hasClipboard.asStateFlow()
+        /** Cut, copy, paste, clear and fill (Copy & Paste menu and layer options). */
+        val clipboard = ClipboardController(canvasRepository, ::layerOp)
 
-        /** Copies the selected pixels of the active layer (the whole layer without a selection); [cut] also erases them. */
-        fun copySelection(cut: Boolean) = layerOp { copyToClipboard(cut) }
-
-        fun pasteAsLayer() = layerOp { pasteClipboard() }
-
-        fun cutAndPasteSelection() =
-            layerOp {
-                copyToClipboard(cut = true)
-                pasteClipboard()
-            }
-
-        /** Copy All: the visible artwork (all layers merged) inside the selection. */
-        fun copyMerged() =
-            layerOp {
-                val composite = checkNotNull(canvasRepository.compositeBuffer()) { "Nothing to copy" }
-                val selection = canvasRepository.selection()
-                clipboard = withContext(Dispatchers.Default) { SelectionClipboard.extract(composite, selection) }
-                _hasClipboard.value = true
-            }
+        val layerThumbnails = LayerThumbnailController(canvasRepository, viewModelScope)
 
         fun duplicateActiveLayer() = duplicateLayer(canvasRepository.getActiveLayerId())
-
-        /** Procreate's three-finger scrub: clears the active layer, or only its selected pixels. */
-        fun clearLayer() =
-            layerOp {
-                val selection = canvasRepository.selection()
-                canvasRepository.applyRasterEdit(canvasRepository.getActiveLayerId(), "Clear layer") {
-                    SelectionClipboard.erase(it, selection)
-                }
-            }
-
-        /** Procreate's Copy & Paste: the selection lands on a new layer above, ready to transform. */
-        fun copyAndPasteSelection() =
-            layerOp {
-                copyToClipboard(cut = false)
-                pasteClipboard()
-            }
-
-        private suspend fun copyToClipboard(cut: Boolean) {
-            val layerId = canvasRepository.getActiveLayerId()
-            val pixels = checkNotNull(canvasRepository.layerPixels(layerId)) { "This layer has no pixels to copy" }
-            val selection = canvasRepository.selection()
-            clipboard = withContext(Dispatchers.Default) { SelectionClipboard.extract(pixels, selection) }
-            _hasClipboard.value = true
-            if (cut) canvasRepository.applyRasterEdit(layerId, "Cut") { SelectionClipboard.erase(it, selection) }
-        }
-
-        private suspend fun pasteClipboard() {
-            val image = clipboard ?: error("Nothing has been copied yet")
-            val layer = canvasRepository.addLayer(name = "Pasted")
-            canvasRepository.applyRasterEdit(layer.id, "Paste") { target -> target.drawInto(image, 0, 0) }
-        }
 
         /** Adds every layer of a Photoshop document as new layers, centred on the canvas. */
         fun importPsd(bytes: ByteArray) =

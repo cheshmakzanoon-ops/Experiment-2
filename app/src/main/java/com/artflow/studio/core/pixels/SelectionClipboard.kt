@@ -18,6 +18,16 @@ object SelectionClipboard {
         }
     }
 
+    /** Paints [color] over [target], blended by the selection's coverage. */
+    fun fill(
+        target: PixelBuffer,
+        selection: SelectionMask?,
+        color: Int,
+    ) {
+        val mask = usable(selection, target) ?: return target.fill(color)
+        for (i in target.pixels.indices) target.pixels[i] = ImageFilters.lerpArgb(target.pixels[i], color, mask.alphaAt(i))
+    }
+
     /** Removes the selected coverage from [target] in place. */
     fun erase(
         target: PixelBuffer,

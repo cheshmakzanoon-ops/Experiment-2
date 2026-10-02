@@ -22,12 +22,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.artflow.studio.core.animation.AnimationTimeline
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.LayerMaskSource
+import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.symmetry.SymmetryEngine
 import com.artflow.studio.core.text.TextLayout
 import com.artflow.studio.domain.model.animation.AnimationSettings
@@ -36,7 +36,6 @@ import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.FilterType
 import com.artflow.studio.domain.model.layer.Layer
 import com.artflow.studio.presentation.ui.components.canvas.SelectionCombineMode
-import com.artflow.studio.presentation.ui.theme.LocalArtFlowFlags
 
 // ---------------------------------------------------------------------------------------------
 // Layers
@@ -96,18 +95,11 @@ fun LayersSheet(
     maskActions: LayerMaskActions,
     hasSelection: Boolean,
     modifier: Modifier = Modifier,
+    thumbnails: Map<Long, PixelBuffer> = emptyMap(),
+    optionActions: LayerOptionActions? = null,
 ) {
-    val onSelect = rowActions.onSelect
-    val onVisibility = rowActions.onVisibility
-    val onOpacity = rowActions.onOpacity
     val onName = rowActions.onName
-    val onLock = rowActions.onLock
-    val onAlphaLock = rowActions.onAlphaLock
-    val onClipping = rowActions.onClipping
     val onBlendMode = rowActions.onBlendMode
-    val onDuplicate = rowActions.onDuplicate
-    val onDelete = rowActions.onDelete
-    val onMergeDown = rowActions.onMergeDown
     val onAddLayer = stackActions.onAddLayer
     val onFlatten = stackActions.onFlatten
     val onMergeVisible = stackActions.onMergeVisible
@@ -209,16 +201,10 @@ fun LayersSheet(
                     LayerRow(
                         layer = layer,
                         isActive = layer.id == activeLayerId,
-                        onSelect = { onSelect(layer.id) },
-                        onVisibility = { onVisibility(layer.id, !layer.isVisible) },
-                        onOpacity = { onOpacity(layer.id, it) },
+                        thumbnail = thumbnails[layer.id],
+                        actions = rowActions,
+                        options = optionActions,
                         onBlendMode = { blendTarget = layer },
-                        onLock = { onLock(layer.id, !layer.isLocked) },
-                        onAlphaLock = { onAlphaLock(layer.id, !layer.isAlphaLocked) },
-                        onClipping = { onClipping(layer.id, !layer.isClippingMask) },
-                        onDuplicate = { onDuplicate(layer.id) },
-                        onDelete = { onDelete(layer.id) },
-                        onMergeDown = { onMergeDown(layer.id) },
                         onRename = { renameTarget = layer },
                     )
                 }
@@ -434,155 +420,6 @@ private fun EffectLayerMenuItems(
                 dismiss()
             },
         )
-    }
-}
-
-@Composable
-private fun LayerRow(
-    layer: Layer,
-    isActive: Boolean,
-    onSelect: () -> Unit,
-    onVisibility: () -> Unit,
-    onOpacity: (Float) -> Unit,
-    onBlendMode: () -> Unit,
-    onLock: () -> Unit,
-    onAlphaLock: () -> Unit,
-    onClipping: () -> Unit,
-    onDuplicate: () -> Unit,
-    onDelete: () -> Unit,
-    onMergeDown: () -> Unit,
-    onRename: () -> Unit,
-) {
-    var menuVisible by remember { mutableStateOf(false) }
-    val touchSize = if (LocalArtFlowFlags.current.largeTouchTargets) 56.dp else 48.dp
-    Card(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 2.dp)
-                .clickable(onClick = onSelect),
-        colors =
-            CardDefaults.cardColors(
-                containerColor =
-                    if (isActive) {
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-                    },
-            ),
-    ) {
-        Column(modifier = Modifier.padding(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onVisibility, modifier = Modifier.size(touchSize)) {
-                    Icon(
-                        imageVector = if (layer.isVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                        contentDescription = "Visibility",
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = layer.name,
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text =
-                            buildString {
-                                append(layer.blendMode.displayName)
-                                append(" · ")
-                                append("${(layer.opacity * 100).toInt()}%")
-                                if (layer.isClippingMask) append(" · clipping")
-                                if (layer.isAlphaLocked) append(" · alpha locked")
-                                if (layer.isReference) append(" · reference")
-                            },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (layer.isLocked) {
-                    Icon(
-                        Icons.Default.Lock,
-                        contentDescription = "Locked",
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.error,
-                    )
-                }
-                Box {
-                    IconButton(onClick = { menuVisible = true }, modifier = Modifier.size(touchSize)) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Layer menu", modifier = Modifier.size(18.dp))
-                    }
-                    DropdownMenu(expanded = menuVisible, onDismissRequest = { menuVisible = false }) {
-                        DropdownMenuItem(
-                            text = { Text("Rename") },
-                            onClick = {
-                                onRename()
-                                menuVisible = false
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Blend mode") },
-                            onClick = {
-                                onBlendMode()
-                                menuVisible = false
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Duplicate") },
-                            onClick = {
-                                onDuplicate()
-                                menuVisible = false
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Merge down") },
-                            onClick = {
-                                onMergeDown()
-                                menuVisible = false
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(if (layer.isAlphaLocked) "Unlock alpha" else "Lock alpha") },
-                            onClick = {
-                                onAlphaLock()
-                                menuVisible = false
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(if (layer.isClippingMask) "Release clipping" else "Clip to layer below") },
-                            onClick = {
-                                onClipping()
-                                menuVisible = false
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(if (layer.isLocked) "Unlock" else "Lock") },
-                            onClick = {
-                                onLock()
-                                menuVisible = false
-                            },
-                        )
-                        Divider()
-                        DropdownMenuItem(
-                            text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
-                            onClick = {
-                                onDelete()
-                                menuVisible = false
-                            },
-                        )
-                    }
-                }
-            }
-            if (isActive) {
-                Slider(
-                    value = layer.opacity,
-                    onValueChange = onOpacity,
-                    valueRange = 0f..1f,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
     }
 }
 
