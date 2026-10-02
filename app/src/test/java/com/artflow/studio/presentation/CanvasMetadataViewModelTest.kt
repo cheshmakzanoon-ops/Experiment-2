@@ -4,6 +4,7 @@ import androidx.lifecycle.viewModelScope
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.data.export.ArtworkExporter
+import com.artflow.studio.data.export.TimelapseRecorder
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.repository.canvas.CanvasRepositoryImpl
 import com.artflow.studio.domain.model.Project
@@ -261,7 +262,7 @@ class CanvasMetadataViewModelTest {
             mock(SettingsRepository::class.java).also {
                 `when`(it.settings).thenReturn(flowOf(AppSettings(autosaveEnabled = false)))
             }
-        val viewModel = CanvasViewModel(repository, projects, settings, mock(ArtworkExporter::class.java))
+        val viewModel = CanvasViewModel(repository, projects, settings, mock(ArtworkExporter::class.java), mock(TimelapseRecorder::class.java))
 
         fun close() {
             viewModel.viewModelScope.cancel()

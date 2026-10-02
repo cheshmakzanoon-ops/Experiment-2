@@ -40,6 +40,8 @@ fun ExportSheet(
     actions: ExportActions,
     onDismissResult: () -> Unit,
     modifier: Modifier = Modifier,
+    onExportTimelapse: (() -> Unit)? = null,
+    onClearTimelapse: (() -> Unit)? = null,
 ) {
     var options by remember {
         mutableStateOf(ExportOptions(format = availableFormats.firstOrNull() ?: ExportFormat.PNG, dpi = canvasDpi))
@@ -143,6 +145,20 @@ fun ExportSheet(
                         "Export ${options.format.displayName}"
                     }
                 Text(label)
+            }
+        }
+        if (onExportTimelapse != null) {
+            Text("Time-lapse replay", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Every edit is recorded automatically. Export a short MP4 replay of how this artwork was made.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onExportTimelapse, enabled = !running) { Text("Export time-lapse") }
+                if (onClearTimelapse != null) {
+                    TextButton(onClick = onClearTimelapse, enabled = !running) { Text("Clear recording") }
+                }
             }
         }
         ExportResultPanel(exportState, actions, onDismissResult)

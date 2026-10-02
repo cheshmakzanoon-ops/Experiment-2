@@ -27,6 +27,7 @@ import com.artflow.studio.core.tool.PixelBrushes
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.data.export.ArtworkExporter
 import com.artflow.studio.data.export.LayerRaster
+import com.artflow.studio.data.export.TimelapseRecorder
 import com.artflow.studio.domain.model.Project
 import com.artflow.studio.domain.model.animation.AnimationSettings
 import com.artflow.studio.domain.model.brush.StrokeDestination
@@ -48,10 +49,12 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -127,6 +130,7 @@ class CanvasViewModel
         private val projectRepository: ProjectRepository,
         private val settingsRepository: SettingsRepository,
         private val exporter: ArtworkExporter,
+        private val timelapse: TimelapseRecorder,
     ) : ViewModel() {
         private val _uiState = MutableStateFlow<CanvasUiState>(CanvasUiState.Loading)
         val uiState: StateFlow<CanvasUiState> = _uiState.asStateFlow()
@@ -196,6 +200,9 @@ class CanvasViewModel
         private var playbackActive = false
         private var autosaveJob: Job? = null
         private var observationJob: Job? = null
+        private var timelapseJob: Job? = null
+        private var timelapseRevision = -1L
+        private val timelapseRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
         private var currentProjectId: Long = 0L
         private var loadJob: Job? = null
         private var allowAutosave = true
@@ -300,8 +307,33 @@ class CanvasViewModel
             }
         }
 
+        /** Captures one time-lapse frame per settled edit, at most every [TIMELAPSE_INTERVAL_MS]. */
+        private fun startTimelapse() {
+            timelapseJob?.cancel()
+            timelapseRevision = canvasRepository.contentRevision
+            timelapseJob =
+                viewModelScope.launch {
+                    timelapseRequests.collect {
+                        val projectId = currentProjectId
+                        val revision = canvasRepository.contentRevision
+                        if (projectId == 0L || revision == timelapseRevision) return@collect
+                        try {
+                            val composite = canvasRepository.compositeBuffer() ?: return@collect
+                            timelapse.capture(projectId, composite)
+                            timelapseRevision = revision
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            Timber.w(error, "Time-lapse capture failed")
+                        }
+                        delay(TIMELAPSE_INTERVAL_MS)
+                    }
+                }
+        }
+
         private fun startObserving() {
             observationJob?.cancel()
+            startTimelapse()
             observationJob =
                 viewModelScope.launch(editorErrors) {
                     canvasRepository.observeCanvasInvalidation().collect { event ->
@@ -315,6 +347,7 @@ class CanvasViewModel
                         }
                         refreshHistory()
                         _dirty.value = canvasRepository.hasUnsavedChanges()
+                        if (canvasRepository.contentRevision != timelapseRevision) timelapseRequests.tryEmit(Unit)
                         refreshSelection()
                         refreshUiStateFrames()
                     }
@@ -1210,6 +1243,34 @@ class CanvasViewModel
             }
         }
 
+        /** Encodes the recorded time-lapse as an MP4 replay and shows it in the export dialog. */
+        fun exportTimelapse() {
+            val projectId = currentProjectId
+            if (projectId == 0L || _exportState.value is ExportUiState.Running) return
+            _exportState.value = ExportUiState.Running
+            viewModelScope.launch(editorErrors) {
+                try {
+                    _exportState.value =
+                        timelapse.export(projectId, project?.name ?: "Artwork").fold(
+                            onSuccess = { ExportUiState.Done(it) },
+                            onFailure = { ExportUiState.Failed(it.message ?: "Time-lapse export failed") },
+                        )
+                } catch (cancelled: CancellationException) {
+                    _exportState.value = ExportUiState.Idle
+                    throw cancelled
+                }
+            }
+        }
+
+        fun clearTimelapse() {
+            val projectId = currentProjectId
+            if (projectId == 0L) return
+            viewModelScope.launch(editorErrors) {
+                timelapse.clear(projectId)
+                notify("Time-lapse recording cleared")
+            }
+        }
+
         fun exportToGallery(result: ExportResult) {
             viewModelScope.launch(editorErrors) {
                 val path = exporter.publishToGallery(result, project?.name ?: "Artwork")
@@ -1369,5 +1430,6 @@ class CanvasViewModel
             const val DEFAULT_WIDTH = 1920
             const val DEFAULT_HEIGHT = 1080
             const val DEFAULT_DPI = 72
+            private const val TIMELAPSE_INTERVAL_MS = 750L
         }
     }

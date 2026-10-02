@@ -662,6 +662,8 @@ fun CanvasScreen(
                             onExport = { viewModel.export(it) },
                             actions = exportActions,
                             onDismissResult = { viewModel.resetExportState() },
+                            onExportTimelapse = { viewModel.exportTimelapse() },
+                            onClearTimelapse = { viewModel.clearTimelapse() },
                         )
                     EditorPanel.QUICK ->
                         QuickMenuSheet(

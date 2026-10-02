@@ -8,6 +8,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.lifecycle.viewModelScope
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artflow.studio.data.export.ArtworkExporter
+import com.artflow.studio.data.export.TimelapseRecorder
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.domain.model.Project
 import com.artflow.studio.domain.repository.ProjectRepository
@@ -56,6 +57,8 @@ class AnimationPlaybackUiTest {
 
     @Inject lateinit var exporter: ArtworkExporter
 
+    @Inject lateinit var timelapse: TimelapseRecorder
+
     @Inject lateinit var storage: ProjectStorage
 
     private lateinit var viewModel: CanvasViewModel
@@ -66,7 +69,7 @@ class AnimationPlaybackUiTest {
         hilt.inject()
         projectId = runBlocking { projects.saveProject(Project(0L, "Playback test", "", null, 8, 6, 72, 1L, 1L)) }
         runBlocking(Dispatchers.Main) {
-            viewModel = CanvasViewModel(canvas, projects, settings, exporter)
+            viewModel = CanvasViewModel(canvas, projects, settings, exporter, timelapse)
             viewModel.open(projectId)
         }
         compose.waitUntil(15_000) { viewModel.uiState.value is CanvasUiState.Ready }

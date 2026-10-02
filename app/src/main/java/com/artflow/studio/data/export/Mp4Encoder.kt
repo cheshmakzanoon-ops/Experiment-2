@@ -27,8 +27,25 @@ internal object Mp4Encoder {
         require(frames.isNotEmpty()) { "There are no frames to encode" }
         val width = (frames.first().width + 1) and -2
         val height = (frames.first().height + 1) and -2
-        require(width >= 16 && height >= 16) { "Video export needs at least 16 by 16 pixels" }
         require(frames.all { it.width <= width && it.height <= height }) { "Video frame sizes do not match" }
+        encode(output, width, height, frames.size, delaysMs, options) { frames[it] }
+    }
+
+    /**
+     * Streams [frameCount] frames from [frameAt] so long recordings (such as time-lapse replays)
+     * never hold every decoded frame in memory at once.
+     */
+    suspend fun encode(
+        output: File,
+        width: Int,
+        height: Int,
+        frameCount: Int,
+        delaysMs: List<Int>,
+        options: ExportOptions,
+        frameAt: suspend (Int) -> PixelBuffer,
+    ) {
+        require(frameCount > 0) { "There are no frames to encode" }
+        require(width >= 16 && height >= 16 && width % 2 == 0 && height % 2 == 0) { "Video export needs even sizes of at least 16 pixels" }
         val fps = options.animationFpsOverride?.coerceIn(1, 60) ?: 30
         val format =
             MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
@@ -66,8 +83,10 @@ internal object Mp4Encoder {
                 codec.start()
                 val session = EncodingSession(codec, muxer)
                 var presentationUs = 0L
-                frames.forEachIndexed { index, frame ->
+                for (index in 0 until frameCount) {
                     currentCoroutineContext().ensureActive()
+                    val frame = frameAt(index)
+                    require(frame.width <= width && frame.height <= height) { "Video frame sizes do not match" }
                     val inputIndex = session.inputIndex()
                     val image = requireNotNull(codec.getInputImage(inputIndex)) { "The encoder did not provide a writable YUV image" }
                     fillImage(image, frame, width, height, options.backgroundColor)
@@ -82,7 +101,7 @@ internal object Mp4Encoder {
                 val endIndex = session.inputIndex()
                 codec.queueInputBuffer(endIndex, 0, 0, presentationUs, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
                 session.drain(waitForEnd = true)
-                session.finish(presentationUs, frames.size)
+                session.finish(presentationUs, frameCount)
                 codec.stop()
             } finally {
                 muxer.release()

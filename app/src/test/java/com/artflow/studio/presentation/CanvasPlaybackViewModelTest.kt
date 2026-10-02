@@ -2,6 +2,7 @@ package com.artflow.studio.presentation
 
 import androidx.lifecycle.viewModelScope
 import com.artflow.studio.data.export.ArtworkExporter
+import com.artflow.studio.data.export.TimelapseRecorder
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.repository.canvas.CanvasRepositoryImpl
 import com.artflow.studio.domain.model.Project
@@ -259,7 +260,7 @@ class CanvasPlaybackViewModelTest {
             mock(SettingsRepository::class.java).also {
                 `when`(it.settings).thenReturn(flowOf(AppSettings(autosaveEnabled = false, onionSkin = false)))
             }
-        val viewModel = CanvasViewModel(repository, projects, settings, mock(ArtworkExporter::class.java))
+        val viewModel = CanvasViewModel(repository, projects, settings, mock(ArtworkExporter::class.java), mock(TimelapseRecorder::class.java))
 
         fun animationSettings() = repository.timeline.value.settings
 
