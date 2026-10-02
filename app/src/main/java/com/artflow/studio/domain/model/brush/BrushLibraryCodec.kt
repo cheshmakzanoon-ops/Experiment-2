@@ -9,6 +9,9 @@ object BrushLibraryCodec {
     const val MAX_NAME = 80
     private const val MAX_CHARACTERS = 524_288
     private val GRAIN_IDS = setOf(null, "paper", "charcoal", "canvas", "fine", "blotch", "bristle", "halftone", "hatch", "speckle")
+
+    /** Grains imported from photos; their tiles live beside the library. */
+    private val IMPORTED_GRAIN = Regex("custom-[0-9a-f]{1,32}")
     private val json = Json { encodeDefaults = true }
 
     @Serializable
@@ -47,7 +50,7 @@ object BrushLibraryCodec {
         require(params.count in 1..5 && params.scatter in 0f..2f) { "Unsupported brush scatter or dab count" }
         require(params.rotation in 0f..360f && params.textureRotation in 0f..360f) { "Unsupported brush rotation" }
         require(params.textureScale in 0.25f..8f) { "Unsupported grain scale" }
-        require(params.textureId in GRAIN_IDS) { "Unsupported grain source" }
+        require(params.textureId in GRAIN_IDS || params.textureId?.matches(IMPORTED_GRAIN) == true) { "Unsupported grain source" }
         require(params.roundness in 0.05f..1f) { "Unsupported tip roundness" }
         val unitValues =
             listOf(

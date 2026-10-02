@@ -1,5 +1,8 @@
 package com.artflow.studio.presentation.ui.components.brush
 
+import android.content.ActivityNotFoundException
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -17,15 +20,22 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PointMode
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.artflow.studio.core.render.BrushTexture
+import com.artflow.studio.core.render.CustomGrains
+import com.artflow.studio.data.local.GrainStorage
+import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.PressureResponse
 import com.artflow.studio.presentation.ui.theme.LocalArtFlowFlags
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** All settings remain available; the studio can also show one named attribute at a time. */
 @Composable
@@ -174,6 +184,31 @@ private fun BrushGrainSettings(
     brushParams: BrushParams,
     onBrushParamsChanged: (BrushParams) -> Unit,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val latestParams by rememberUpdatedState(brushParams)
+    val latestChange by rememberUpdatedState(onBrushParamsChanged)
+    var imported by remember { mutableStateOf(CustomGrains.ids()) }
+    var importFailed by remember { mutableStateOf(false) }
+    val picker =
+        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            scope.launch {
+                val id =
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            BitmapPixelBridge.decodeUri(context.contentResolver, uri, maxDimension = GRAIN_DECODE_SIZE)?.let { image ->
+                                GrainStorage.save(GrainStorage.directory(context.filesDir), CustomGrains.tileFrom(image))
+                            }
+                        }.getOrNull()
+                    }
+                importFailed = id == null
+                if (id != null) {
+                    imported = CustomGrains.ids()
+                    latestChange(latestParams.copy(textureId = id, blendTexture = true))
+                }
+            }
+        }
     BrushSettingsSection(title = "Brush Grain") {
         Row(
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag("brush-grain-options"),
@@ -191,6 +226,37 @@ private fun BrushGrainSettings(
                     label = { Text(texture.label) },
                 )
             }
+            imported.forEachIndexed { index, id ->
+                FilterChip(
+                    selected = brushParams.blendTexture && brushParams.textureId == id,
+                    onClick = { onBrushParamsChanged(brushParams.copy(textureId = id, blendTexture = true)) },
+                    label = { Text("Photo ${index + 1}") },
+                )
+            }
+            AssistChip(
+                onClick = {
+                    try {
+                        picker.launch("image/*")
+                    } catch (missing: ActivityNotFoundException) {
+                        importFailed = true
+                    }
+                },
+                label = { Text("Import photo…") },
+            )
+        }
+        if (importFailed) {
+            Text(
+                "That image could not be used as a grain",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        if (brushParams.blendTexture && CustomGrains.isCustom(brushParams.textureId) && CustomGrains.get(brushParams.textureId) == null) {
+            Text(
+                "This brush's imported grain is not on this device; it paints without grain",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         if (brushParams.blendTexture && brushParams.textureId != null) {
             BrushParameterSlider(
@@ -635,3 +701,5 @@ private fun BrushProperties(
         )
     }
 }
+
+private const val GRAIN_DECODE_SIZE = 1024

@@ -9,9 +9,11 @@ import kotlin.math.sin
  * Original procedural brush grains. Sampling is anchored to canvas pixels, not dab order, time,
  * device RNG or thread: overlapping dabs cannot fill the grain and saved strokes replay exactly.
  * Unrecognized legacy texture IDs remain neutral rather than silently changing old documents.
+ * Grains imported from photos come from [CustomGrains].
  */
 class BrushTexture private constructor(
-    private val kind: Kind,
+    private val kind: Kind?,
+    private val tile: CustomGrains.Tile?,
     scale: Float,
     rotation: Float,
 ) {
@@ -42,7 +44,8 @@ class BrushTexture private constructor(
         val v = -(x + 0.5f) * sine + (y + 0.5f) * cosine
         val column = floor(u).toInt()
         val row = floor(v).toInt()
-        return when (kind) {
+        if (tile != null) return tile.at(column, row)
+        return when (checkNotNull(kind)) {
             Kind.PAPER -> 0.35f + 0.65f * noise(column, row)
             Kind.CANVAS -> {
                 val horizontal = Math.floorMod(row, 6) < 2
@@ -111,9 +114,10 @@ class BrushTexture private constructor(
 
         fun from(params: BrushParams): BrushTexture? {
             if (!params.blendTexture) return null
-            val kind = Kind.entries.firstOrNull { it.id == params.textureId } ?: return null
+            val kind = Kind.entries.firstOrNull { it.id == params.textureId }
+            val tile = if (kind == null) CustomGrains.get(params.textureId) ?: return null else null
             require(params.textureScale.isFinite() && params.textureRotation.isFinite()) { "Texture settings must be finite" }
-            return BrushTexture(kind, params.textureScale.coerceIn(0.25f, 8f), params.textureRotation % 360f)
+            return BrushTexture(kind, tile, params.textureScale.coerceIn(0.25f, 8f), params.textureRotation % 360f)
         }
     }
 }
