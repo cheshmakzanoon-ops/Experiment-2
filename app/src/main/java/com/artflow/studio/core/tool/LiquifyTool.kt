@@ -31,6 +31,12 @@ object LiquifyTool {
         TWIRL_COUNTER_CLOCKWISE("Twirl Left"),
         PINCH("Pinch"),
         BLOAT("Bloat"),
+
+        /** Shatters the area into scattered shards, like Procreate's Crystals. */
+        CRYSTALS("Crystals"),
+
+        /** Draws content in toward the stroke's path, creasing it into a line. */
+        EDGE("Edge"),
         RECONSTRUCT("Reconstruct"),
     }
 
@@ -175,6 +181,8 @@ object LiquifyTool {
                     Mode.TWIRL_COUNTER_CLOCKWISE -> applyTwirl(centerX, centerY, stepDistance, clockwise = false)
                     Mode.PINCH -> applyRadialScale(centerX, centerY, stepDistance, pinch = true)
                     Mode.BLOAT -> applyRadialScale(centerX, centerY, stepDistance, pinch = false)
+                    Mode.CRYSTALS -> applyCrystals(centerX, centerY, stepDistance)
+                    Mode.EDGE -> applyEdge(centerX, centerY, dx / distance, dy / distance, stepDistance)
                     Mode.RECONSTRUCT -> applyReconstruction(centerX, centerY, stepDistance)
                 }
             }
@@ -243,6 +251,50 @@ object LiquifyTool {
                 val scale = base * smoothstep(falloff) * effectiveStrength() * coverage(pixelX, pixelY)
                 map.add(pixelX, pixelY, offsetX * scale, offsetY * scale)
             }
+        }
+
+        private fun applyCrystals(
+            centerX: Float,
+            centerY: Float,
+            distance: Float,
+        ) {
+            val reach = (distance / settings.radius).coerceAtMost(1f) * settings.radius * 0.25f
+            forEachPixelInBrush(centerX, centerY, settings.radius) { px, py, falloff ->
+                // Each shard (a small block) slides its own way, so the area breaks up rather than blurs.
+                val shard = shardHash(px / CRYSTAL_CELL, py / CRYSTAL_CELL)
+                val angle = (shard and 0xFFFF) / 65535f * 2f * Math.PI.toFloat()
+                val amount = reach * smoothstep(falloff) * effectiveStrength() * coverage(px, py)
+                map.add(px, py, kotlin.math.cos(angle) * amount, kotlin.math.sin(angle) * amount)
+            }
+        }
+
+        private fun applyEdge(
+            centerX: Float,
+            centerY: Float,
+            directionX: Float,
+            directionY: Float,
+            distance: Float,
+        ) {
+            val base = (distance / settings.radius).coerceAtMost(1f) * 0.5f
+            forEachPixelInBrush(centerX, centerY, settings.radius) { px, py, falloff ->
+                val offsetX = px + 0.5f - centerX
+                val offsetY = py + 0.5f - centerY
+                // Only the part across the stroke moves: reading from farther out draws content inward.
+                val along = offsetX * directionX + offsetY * directionY
+                val acrossX = offsetX - along * directionX
+                val acrossY = offsetY - along * directionY
+                val scale = base * smoothstep(falloff) * effectiveStrength() * coverage(px, py)
+                map.add(px, py, acrossX * scale, acrossY * scale)
+            }
+        }
+
+        private fun shardHash(
+            x: Int,
+            y: Int,
+        ): Int {
+            var hash = x * 374761393 + y * 668265263 + 1442695041
+            hash = (hash xor (hash ushr 13)) * 1274126177
+            return hash xor (hash ushr 16)
         }
 
         /** Iterates the brush footprint, skipping frozen and unselected pixels. */
@@ -499,3 +551,6 @@ object LiquifyTool {
         return if (bounds.isEmpty) null else bounds
     }
 }
+
+/** Size of a Crystals shard, in pixels. */
+private const val CRYSTAL_CELL = 6

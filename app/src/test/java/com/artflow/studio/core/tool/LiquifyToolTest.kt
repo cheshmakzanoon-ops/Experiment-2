@@ -232,6 +232,15 @@ class LiquifyToolTest {
         assertTrue(result.pixels.all { (it ushr 24) == 255 })
     }
 
+    @Test
+    fun crystalsAndEdgeReshapeTheImage() {
+        val source = ramp(horizontal = true)
+        for (mode in listOf(LiquifyTool.Mode.CRYSTALS, LiquifyTool.Mode.EDGE)) {
+            val moved = session(mode).apply { dragTo(center, center + 8f) }
+            assertFalse("$mode must move pixels", source.pixels.contentEquals(moved.render(source).pixels))
+        }
+    }
+
     private fun session(
         mode: LiquifyTool.Mode,
         strength: Float = 1f,
