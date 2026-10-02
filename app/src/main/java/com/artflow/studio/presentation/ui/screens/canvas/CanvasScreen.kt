@@ -48,10 +48,14 @@ import com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView
 import com.artflow.studio.presentation.ui.components.canvas.DragPreview
 import com.artflow.studio.presentation.ui.components.canvas.EditorInput
 import com.artflow.studio.presentation.ui.components.color.ColorPanel
+import com.artflow.studio.presentation.ui.components.editor.ActionsPanel
+import com.artflow.studio.presentation.ui.components.editor.AddActions
 import com.artflow.studio.presentation.ui.components.editor.AdjustmentOverlay
 import com.artflow.studio.presentation.ui.components.editor.AdjustmentOverlayActions
 import com.artflow.studio.presentation.ui.components.editor.AnimationSheet
 import com.artflow.studio.presentation.ui.components.editor.BrushOptionsRow
+import com.artflow.studio.presentation.ui.components.editor.CanvasActions
+import com.artflow.studio.presentation.ui.components.editor.CanvasInfo
 import com.artflow.studio.presentation.ui.components.editor.CanvasOpsSheet
 import com.artflow.studio.presentation.ui.components.editor.ColorChip
 import com.artflow.studio.presentation.ui.components.editor.CopyPasteActions
@@ -63,6 +67,7 @@ import com.artflow.studio.presentation.ui.components.editor.LayerOptionActions
 import com.artflow.studio.presentation.ui.components.editor.LayerRowActions
 import com.artflow.studio.presentation.ui.components.editor.LayerStackActions
 import com.artflow.studio.presentation.ui.components.editor.LayersSheet
+import com.artflow.studio.presentation.ui.components.editor.PrefActions
 import com.artflow.studio.presentation.ui.components.editor.QuickMenuSheet
 import com.artflow.studio.presentation.ui.components.editor.ReferenceCompanion
 import com.artflow.studio.presentation.ui.components.editor.SelectionSheet
@@ -70,6 +75,7 @@ import com.artflow.studio.presentation.ui.components.editor.SelectionToolbar
 import com.artflow.studio.presentation.ui.components.editor.SelectionToolbarActions
 import com.artflow.studio.presentation.ui.components.editor.StudioButton
 import com.artflow.studio.presentation.ui.components.editor.StudioPopover
+import com.artflow.studio.presentation.ui.components.editor.StudioPrefs
 import com.artflow.studio.presentation.ui.components.editor.StudioSidebar
 import com.artflow.studio.presentation.ui.components.editor.StudioSidebarActions
 import com.artflow.studio.presentation.ui.components.editor.StudioSidebarState
@@ -80,6 +86,7 @@ import com.artflow.studio.presentation.ui.components.editor.TimelapseReplay
 import com.artflow.studio.presentation.ui.components.editor.TransformOverlay
 import com.artflow.studio.presentation.ui.components.editor.TransformToolbar
 import com.artflow.studio.presentation.ui.components.editor.TransformToolbarActions
+import com.artflow.studio.presentation.ui.components.editor.VideoActions
 import com.artflow.studio.presentation.ui.components.editor.ViewTransform
 import com.artflow.studio.presentation.ui.components.editor.icon
 import com.artflow.studio.presentation.ui.components.editor.isWideLayout
@@ -105,6 +112,7 @@ private enum class EditorPanel(
     TEXT("Text"),
     EXPORT("Export"),
     QUICK("Quick menu"),
+    ACTIONS("Actions"),
 }
 
 /**
@@ -527,6 +535,58 @@ fun CanvasScreen(
                     canUndo = history.canUndo,
                     canRedo = history.canRedo,
                 )
+            EditorPanel.ACTIONS ->
+                ActionsPanel(
+                    info = CanvasInfo(ready?.width ?: 0, ready?.height ?: 0, ready?.dpi ?: 72, layers.size, ready?.frameCount ?: 1),
+                    prefs = StudioPrefs(settings.rightHandedInterface, input.quickShape, input.touchHoldEyedropper, input.fingerPainting),
+                    add =
+                        AddActions(
+                            onInsertFile = importPsd,
+                            onInsertPhoto = insertPhoto,
+                            onAddText = {
+                                viewModel.setTool(ToolType.TEXT)
+                                panel = EditorPanel.TEXT
+                            },
+                            onCut = { viewModel.clipboard.copy(cut = true) },
+                            onCopy = { viewModel.clipboard.copy() },
+                            onCopyCanvas = viewModel.clipboard::copyMerged,
+                            onPaste = viewModel.clipboard::paste,
+                        ),
+                    canvas =
+                        CanvasActions(
+                            onCropResize = { panel = EditorPanel.CANVAS },
+                            onAnimationAssist = { panel = EditorPanel.ANIMATION },
+                            onDrawingGuide = { panel = EditorPanel.GUIDES },
+                            onReference = {
+                                panel = EditorPanel.NONE
+                                showReference = true
+                            },
+                            onFlip = { viewModel.flipCanvas(it) },
+                        ),
+                    video =
+                        VideoActions(
+                            onReplay = { scope.launch { replayFrames = viewModel.timelapseFrames() } },
+                            onExport = {
+                                viewModel.exportTimelapse()
+                                panel = EditorPanel.EXPORT
+                            },
+                            onClear = viewModel::clearTimelapse,
+                        ),
+                    prefActions =
+                        PrefActions(
+                            onRightHanded = viewModel::setRightHandedInterface,
+                            onQuickShape = viewModel::setQuickShape,
+                            onHoldEyedropper = viewModel::setTouchHoldEyedropper,
+                            onFingerPainting = viewModel::setFingerPainting,
+                            onFullScreen = {
+                                panel = EditorPanel.NONE
+                                focusMode = true
+                            },
+                            onMoreSettings = onOpenSettings,
+                        ),
+                    onShare = { panel = EditorPanel.EXPORT },
+                    canPaste = hasClipboard,
+                )
             EditorPanel.NONE -> Unit
         }
         Spacer(Modifier.height(24.dp))
@@ -544,7 +604,8 @@ fun CanvasScreen(
                         if (adjustment != null) viewModel.adjustments.apply()
                         when (button) {
                             StudioButton.GALLERY -> if (dirty) showExitConfirm = true else onNavigateBack()
-                            StudioButton.ACTIONS, StudioButton.ADJUSTMENTS -> openMenu = button
+                            StudioButton.ACTIONS -> panel = if (panel == EditorPanel.ACTIONS) EditorPanel.NONE else EditorPanel.ACTIONS
+                            StudioButton.ADJUSTMENTS -> openMenu = button
                             StudioButton.SELECTION ->
                                 viewModel.setTool(if (input.tool.group == ToolGroup.SELECTION) ToolType.BRUSH else ToolType.SELECT_FREEHAND)
                             StudioButton.TRANSFORM ->
@@ -566,54 +627,16 @@ fun CanvasScreen(
                                 action()
                             }
                         }
-                        if (button == StudioButton.ACTIONS) {
-                            DropdownMenuItem(text = { Text("Insert a photo") }, onClick = choose(insertPhoto))
-                            DropdownMenuItem(text = { Text("Import PSD layers") }, onClick = choose(importPsd))
+                        listOf(ToolType.LIQUIFY, ToolType.CLONE_STAMP, ToolType.HEALING, ToolType.GRADIENT).forEach { tool ->
                             DropdownMenuItem(
-                                text = { Text("Add text") },
-                                onClick =
-                                    choose {
-                                        viewModel.setTool(ToolType.TEXT)
-                                        panel = EditorPanel.TEXT
-                                    },
+                                text = { Text(tool.displayName) },
+                                leadingIcon = { Icon(tool.icon(), contentDescription = null) },
+                                onClick = choose { viewModel.setTool(tool) },
                             )
-                            DropdownMenuItem(text = { Text("Reference") }, onClick = choose { showReference = true })
-                            listOf(
-                                EditorPanel.CANVAS,
-                                EditorPanel.GUIDES,
-                                EditorPanel.ANIMATION,
-                                EditorPanel.EXPORT,
-                                EditorPanel.TOOLS,
-                                EditorPanel.QUICK,
-                            ).forEach { target ->
-                                DropdownMenuItem(text = { Text(target.title) }, onClick = choose { panel = target })
-                            }
-                            DropdownMenuItem(
-                                text = { Text("Time-lapse Replay") },
-                                onClick = choose { scope.launch { replayFrames = viewModel.timelapseFrames() } },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Full screen") },
-                                onClick =
-                                    choose {
-                                        panel = EditorPanel.NONE
-                                        focusMode = true
-                                    },
-                            )
-                            DropdownMenuItem(text = { Text("Save now") }, onClick = choose { viewModel.save() })
-                            DropdownMenuItem(text = { Text("Preferences") }, onClick = choose(onOpenSettings))
-                        } else {
-                            listOf(ToolType.LIQUIFY, ToolType.CLONE_STAMP, ToolType.HEALING, ToolType.GRADIENT).forEach { tool ->
-                                DropdownMenuItem(
-                                    text = { Text(tool.displayName) },
-                                    leadingIcon = { Icon(tool.icon(), contentDescription = null) },
-                                    onClick = choose { viewModel.setTool(tool) },
-                                )
-                            }
-                            HorizontalDivider()
-                            LiveAdjustments.Kind.entries.forEach { kind ->
-                                DropdownMenuItem(text = { Text(kind.displayName) }, onClick = choose { viewModel.adjustments.start(kind) })
-                            }
+                        }
+                        HorizontalDivider()
+                        LiveAdjustments.Kind.entries.forEach { kind ->
+                            DropdownMenuItem(text = { Text(kind.displayName) }, onClick = choose { viewModel.adjustments.start(kind) })
                         }
                     },
                     colorSwatch = {
@@ -769,7 +792,12 @@ fun CanvasScreen(
                             onUndo = viewModel::undo,
                             onRedo = viewModel::redo,
                         ),
-                    modifier = Modifier.align(Alignment.CenterStart).padding(start = 8.dp),
+                    modifier =
+                        if (settings.rightHandedInterface) {
+                            Modifier.align(Alignment.CenterEnd).padding(end = 8.dp)
+                        } else {
+                            Modifier.align(Alignment.CenterStart).padding(start = 8.dp)
+                        },
                 )
                 ContextToolbar(viewModel, input, canvasView, Modifier.align(Alignment.BottomCenter)) { panel = it }
             }

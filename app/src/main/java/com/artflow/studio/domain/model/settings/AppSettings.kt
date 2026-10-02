@@ -67,6 +67,8 @@ data class AppSettings(
     /** When true only a stylus paints; fingers are reserved for navigation (palm rejection). */
     val stylusOnly: Boolean = false,
     val haptics: Boolean = true,
+    /** Procreate's right-hand interface: the size/opacity sidebar sits on the right edge. */
+    val rightHandedInterface: Boolean = false,
     // Saving
     val autosaveIntervalMs: Long = 20_000L,
     val autosaveEnabled: Boolean = true,

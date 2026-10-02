@@ -379,10 +379,9 @@ object TransformQuad {
         for (y in y0..y1) {
             for (x in x0..x1) {
                 val sample = sampler.sample(x + 0.5f, y + 0.5f)
-                if ((sample ushr 24) != 0) {
-                    val i = y * target.width + x
-                    target.pixels[i] = if (blend) BlendModes.sourceOver(target.pixels[i], sample) else sample
-                }
+                if ((sample ushr 24) == 0) continue
+                val i = y * target.width + x
+                target.pixels[i] = if (blend) BlendModes.sourceOver(target.pixels[i], sample) else sample
             }
         }
     }

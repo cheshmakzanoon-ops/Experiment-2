@@ -230,8 +230,10 @@ class ArtworkWorkflowTest {
                 false
             }
         }
+        val (tab, item) = ACTIONS_LOCATIONS[title] ?: ("Add" to title)
         compose.onNodeWithContentDescription("Actions").performClick()
-        compose.onNodeWithText(title).performScrollTo().performClick()
+        compose.onNodeWithText(tab).performClick()
+        compose.onNodeWithText(item).performScrollTo().performClick()
         compose.waitForIdle()
     }
 
@@ -257,8 +259,7 @@ class ArtworkWorkflowTest {
         }
         val undoDepth = runBlocking(Dispatchers.Main) { canvas.undoDepth }
         captureWorkspace("studio-workspace.png")
-        compose.onNodeWithContentDescription("Actions").performClick()
-        compose.onNodeWithText("Full screen").performScrollTo().performClick()
+        openWorkspace("Full screen")
         compose.onNodeWithContentDescription("Exit focus mode").assertIsDisplayed()
         compose.onNodeWithText("Gallery").assertDoesNotExist()
         compose.waitForIdle()
@@ -272,8 +273,7 @@ class ArtworkWorkflowTest {
         scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         compose.onNodeWithText("Gallery").assertIsDisplayed()
         compose.onNodeWithText("Save changes?").assertDoesNotExist()
-        compose.onNodeWithContentDescription("Actions").performClick()
-        compose.onNodeWithText("Full screen").performScrollTo().performClick()
+        openWorkspace("Full screen")
         compose.onNodeWithContentDescription("Exit focus mode").performClick()
         compose.onNodeWithText("Gallery").assertIsDisplayed()
         assertArrayEquals(expectedPixels, pixels())
@@ -354,3 +354,14 @@ class ArtworkWorkflowTest {
         return null
     }
 }
+
+/** Where each workspace lives in the tabbed Actions panel: tab title to item label. */
+private val ACTIONS_LOCATIONS =
+    mapOf(
+        "Guides" to ("Canvas" to "Drawing Guide"),
+        "Animation" to ("Canvas" to "Animation Assist"),
+        "Canvas" to ("Canvas" to "Crop & Resize"),
+        "Reference" to ("Canvas" to "Reference"),
+        "Add text" to ("Add" to "Add text"),
+        "Full screen" to ("Prefs" to "Full screen"),
+    )

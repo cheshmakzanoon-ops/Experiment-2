@@ -115,10 +115,9 @@ object Stamping {
                 val along = dx * cosA + dy * sinA
                 val across = (-dx * sinA + dy * cosA) / minor
                 val distance = sqrt(along * along + across * across)
-                if (distance <= radius) {
-                    val falloff = if (distance <= inner) 1f else ((radius - distance) / edge).coerceIn(0f, 1f)
-                    applyPixel(target, py * target.width + px, color, falloff * strength, mode, alphaLock, mask)
-                }
+                if (distance > radius) continue
+                val falloff = if (distance <= inner) 1f else ((radius - distance) / edge).coerceIn(0f, 1f)
+                applyPixel(target, py * target.width + px, color, falloff * strength, mode, alphaLock, mask)
             }
         }
     }

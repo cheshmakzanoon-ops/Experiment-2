@@ -541,6 +541,12 @@ class CanvasViewModel
 
         fun setQuickShape(enabled: Boolean) = updateInput { it.copy(quickShape = enabled) }
 
+        fun setTouchHoldEyedropper(enabled: Boolean) = updateInput { it.copy(touchHoldEyedropper = enabled) }
+
+        fun setRightHandedInterface(enabled: Boolean) {
+            viewModelScope.launch(editorErrors) { settingsRepository.update { it.copy(rightHandedInterface = enabled) } }
+        }
+
         fun setTransformMode(mode: TransformQuad.Mode) = updateInput { it.copy(transformMode = mode) }
 
         fun setTransformInterpolation(interpolation: TransformQuad.Interpolation) =

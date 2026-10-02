@@ -222,6 +222,7 @@ class SettingsRepositoryImpl
                 KEY_BRUSH_CURSOR to settings.brushCursor.toString(),
                 KEY_STYLUS_ONLY to settings.stylusOnly.toString(),
                 KEY_HAPTICS to settings.haptics.toString(),
+                KEY_RIGHT_HANDED to settings.rightHandedInterface.toString(),
                 KEY_AUTOSAVE to settings.autosaveEnabled.toString(),
                 KEY_AUTOSAVE_INTERVAL to settings.autosaveIntervalMs.toString(),
                 KEY_DEFAULT_PRESET to settings.defaultPresetName,
@@ -265,6 +266,7 @@ class SettingsRepositoryImpl
                 brushCursor = stored[KEY_BRUSH_CURSOR]?.toBooleanStrictOrNull() ?: defaults.brushCursor,
                 stylusOnly = stored[KEY_STYLUS_ONLY]?.toBooleanStrictOrNull() ?: defaults.stylusOnly,
                 haptics = stored[KEY_HAPTICS]?.toBooleanStrictOrNull() ?: defaults.haptics,
+                rightHandedInterface = stored[KEY_RIGHT_HANDED]?.toBooleanStrictOrNull() ?: defaults.rightHandedInterface,
                 autosaveEnabled = stored[KEY_AUTOSAVE]?.toBooleanStrictOrNull() ?: defaults.autosaveEnabled,
                 autosaveIntervalMs =
                     stored[KEY_AUTOSAVE_INTERVAL]
@@ -326,6 +328,7 @@ class SettingsRepositoryImpl
             private const val KEY_BRUSH_CURSOR = "canvas.brushCursor"
             private const val KEY_STYLUS_ONLY = "input.stylusOnly"
             private const val KEY_HAPTICS = "input.haptics"
+            private const val KEY_RIGHT_HANDED = "interface.rightHanded"
             private const val KEY_AUTOSAVE = "general.autosave"
             private const val KEY_AUTOSAVE_INTERVAL = "general.autosaveInterval"
             private const val KEY_DEFAULT_PRESET = "general.defaultPreset"
