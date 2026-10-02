@@ -72,6 +72,7 @@ data class LayerStackActions(
     val onAdjustmentParameter: (Long, String, Float) -> Unit,
     val onFilterAmount: (Long, Float) -> Unit,
     val onInsertPhoto: (() -> Unit)? = null,
+    val onImportPsd: (() -> Unit)? = null,
     val onGroupWithBelow: ((Long) -> Unit)? = null,
     val onUngroup: ((Long) -> Unit)? = null,
 )
@@ -151,6 +152,15 @@ fun LayersSheet(
                         Icon(Icons.Default.MoreVert, contentDescription = "Layer actions")
                     }
                     DropdownMenu(expanded = addMenuVisible, onDismissRequest = { addMenuVisible = false }) {
+                        stackActions.onImportPsd?.let { importPsd ->
+                            DropdownMenuItem(
+                                text = { Text("Import PSD layers") },
+                                onClick = {
+                                    importPsd()
+                                    addMenuVisible = false
+                                },
+                            )
+                        }
                         stackActions.onInsertPhoto?.let { insert ->
                             DropdownMenuItem(
                                 text = { Text("Insert photo") },

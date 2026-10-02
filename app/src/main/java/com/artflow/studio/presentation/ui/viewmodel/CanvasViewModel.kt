@@ -15,6 +15,7 @@ import com.artflow.studio.core.export.ExportFormat
 import com.artflow.studio.core.export.ExportOptions
 import com.artflow.studio.core.export.ExportRegion
 import com.artflow.studio.core.export.ExportResult
+import com.artflow.studio.core.export.PsdCodec
 import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.SelectionMask
@@ -681,6 +682,32 @@ class CanvasViewModel
                         target.drawInto(placed, (size.width - placed.width) / 2, (size.height - placed.height) / 2)
                     }
                 check(drawn) { "The photo could not be placed on the new layer" }
+            }
+
+        /** Adds every layer of a Photoshop document as new layers, centred on the canvas. */
+        fun importPsd(bytes: ByteArray) =
+            layerOp {
+                val document =
+                    withContext(Dispatchers.Default) { PsdCodec.read(bytes) }
+                        ?: error("This file is not a supported PSD document")
+                val size = canvasRepository.getCanvasSize()
+                val dx = (size.width - document.width) / 2
+                val dy = (size.height - document.height) / 2
+                val sources =
+                    document.layers.ifEmpty {
+                        listOfNotNull(document.composite?.let { PsdCodec.PsdLayer("Background", it) })
+                    }
+                check(sources.isNotEmpty()) { "The PSD document has no readable layers" }
+                sources.forEach { source ->
+                    val layer = canvasRepository.addLayer(name = source.name.ifBlank { "PSD layer" })
+                    canvasRepository.applyRasterEdit(layer.id, "Import PSD layer") { target ->
+                        target.drawInto(source.pixels, dx + source.left, dy + source.top)
+                    }
+                    if (source.opacity < 255) canvasRepository.setLayerOpacity(layer.id, source.opacity / 255f)
+                    if (source.blendMode != BlendMode.NORMAL) canvasRepository.setLayerBlendMode(layer.id, source.blendMode)
+                    if (!source.isVisible) canvasRepository.setLayerVisibility(layer.id, false)
+                }
+                notify("Imported ${sources.size} layer(s) from PSD")
             }
 
         /** Groups [layerId] with the layer directly beneath it (or groups it alone at the bottom). */

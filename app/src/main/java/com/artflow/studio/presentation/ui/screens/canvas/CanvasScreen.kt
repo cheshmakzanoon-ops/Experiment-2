@@ -167,6 +167,30 @@ fun CanvasScreen(
                 if (image == null) viewModel.notify("That image could not be opened") else viewModel.insertImageLayer(image)
             }
         }
+    val psdPicker =
+        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            scope.launch {
+                val bytes =
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        runCatching {
+                            context.contentResolver.openInputStream(uri)?.use { stream ->
+                                val data = stream.readBytes()
+                                data.takeIf { it.size <= MAX_PSD_IMPORT_BYTES }
+                            }
+                        }.getOrNull()
+                    }
+                if (bytes == null) viewModel.notify("That PSD could not be opened (maximum 256 MB)") else viewModel.importPsd(bytes)
+            }
+        }
+    val importPsd = {
+        canvasView?.cancelActiveGesture()
+        try {
+            psdPicker.launch("*/*")
+        } catch (missing: ActivityNotFoundException) {
+            viewModel.notify("No file picker is available on this device")
+        }
+    }
     val insertPhoto = {
         canvasView?.cancelActiveGesture()
         try {
@@ -622,6 +646,7 @@ fun CanvasScreen(
                                     onAdjustmentParameter = { id, key, value -> viewModel.setAdjustmentParameter(id, key, value) },
                                     onFilterAmount = { id, amount -> viewModel.setFilterAmount(id, amount) },
                                     onInsertPhoto = insertPhoto,
+                                    onImportPsd = importPsd,
                                     onGroupWithBelow = viewModel::groupWithLayerBelow,
                                     onUngroup = viewModel::ungroup,
                                 ),
@@ -958,6 +983,8 @@ private fun ToolOptionsPanel(
         }
     }
 }
+
+private const val MAX_PSD_IMPORT_BYTES = 256 * 1024 * 1024
 
 @Composable
 private fun BrushAssistOptions(
