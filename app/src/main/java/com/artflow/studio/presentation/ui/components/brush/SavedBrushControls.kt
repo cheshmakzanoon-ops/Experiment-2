@@ -21,6 +21,7 @@ fun SavedBrushToolbar(
     controls: BrushLibraryControls,
 ) {
     var naming by remember { mutableStateOf(false) }
+    var fileError by remember { mutableStateOf<String?>(null) }
     val state = controls.state
     val available = !state.loading && !state.busy && state.error == null
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
@@ -34,8 +35,9 @@ fun SavedBrushToolbar(
                 onClick = { naming = true },
                 enabled = available && state.brushes.size < BrushLibraryCodec.MAX_BRUSHES,
             ) { Text("Save a copy") }
+            BrushFileButtons(parameters, controls, available) { fileError = it }
         }
-        state.error?.let { error ->
+        (state.error ?: fileError)?.let { error ->
             Text(
                 error,
                 style = MaterialTheme.typography.bodySmall,

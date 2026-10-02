@@ -69,6 +69,8 @@ class BrushLibraryViewModel
 
         fun delete(id: String) = edit { store.delete(id) }
 
+        fun importAll(brushes: List<SavedBrush>) = edit { store.importAll(brushes) }
+
         private fun edit(operation: suspend () -> Unit) {
             if (mutableState.value.loading || mutableState.value.busy) return
             mutableState.value = mutableState.value.copy(busy = true, error = null)

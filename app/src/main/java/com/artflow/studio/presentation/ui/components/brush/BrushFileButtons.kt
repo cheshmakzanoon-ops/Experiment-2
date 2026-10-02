@@ -1,0 +1,103 @@
+package com.artflow.studio.presentation.ui.components.brush
+
+import android.content.ClipData
+import android.content.Context
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.FileProvider
+import com.artflow.studio.data.local.BrushFiles
+import com.artflow.studio.data.local.GrainStorage
+import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.SavedBrush
+import com.artflow.studio.domain.model.brush.StudioBrushes
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+
+/** Share the brush being edited as an `.artbrush` file, or import brushes someone shared. */
+@Composable
+internal fun BrushFileButtons(
+    parameters: BrushParams,
+    controls: BrushLibraryControls,
+    enabled: Boolean,
+    onFailure: (String) -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val latestControls by rememberUpdatedState(controls)
+    val picker =
+        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            scope.launch {
+                val brushes =
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                            require(bytes != null && bytes.size <= BrushFiles.MAX_BYTES) { "Unreadable brush file" }
+                            importBrushes(context, bytes.toString(Charsets.UTF_8))
+                        }.getOrNull()
+                    }
+                if (brushes == null) onFailure("That file is not a brush ArtFlow can import") else latestControls.importAll(brushes)
+            }
+        }
+    TextButton(onClick = {
+        scope.launch {
+            val name = StudioBrushes.presets.firstOrNull { it.parameters == parameters }?.name ?: "Custom brush"
+            val file =
+                withContext(Dispatchers.IO) {
+                    runCatching {
+                        val directory = File(context.filesDir, "exports/brushes").apply { mkdirs() }
+                        File(directory, BrushFiles.fileName(name)).apply {
+                            writeText(BrushFiles.encode(listOf(SavedBrush("shared", name, parameters))))
+                        }
+                    }.getOrNull()
+                }
+            if (file == null) onFailure("The brush could not be shared") else runCatching { share(context, file) }
+        }
+    }, enabled = enabled) { Text("Share") }
+    TextButton(onClick = { runCatching { picker.launch("*/*") } }, enabled = enabled) { Text("Import") }
+}
+
+/** Stores the file's images under their content identities and points the brushes at them. */
+private fun importBrushes(
+    context: Context,
+    text: String,
+): List<SavedBrush> {
+    val (brushes, images) = BrushFiles.decode(text)
+    val directory = GrainStorage.directory(context.filesDir)
+    val renamed = images.mapValues { (_, tile) -> GrainStorage.save(directory, tile) }
+    return brushes.map { brush ->
+        val params = brush.parameters
+        brush.copy(
+            parameters =
+                params.copy(
+                    textureId = params.textureId?.let { renamed[it] ?: it },
+                    shapeId = params.shapeId?.let { renamed[it] ?: it },
+                ),
+        )
+    }
+}
+
+private fun share(
+    context: Context,
+    file: File,
+) {
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    val send =
+        Intent(Intent.ACTION_SEND).apply {
+            type = "application/octet-stream"
+            clipData = ClipData.newRawUri(file.name, uri)
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+    context.startActivity(Intent.createChooser(send, "Share brush"))
+}

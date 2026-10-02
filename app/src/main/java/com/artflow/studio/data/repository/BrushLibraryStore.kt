@@ -46,6 +46,11 @@ class BrushLibraryStore
             mutate { it + brush }
         }
 
+        /** Adds shared brushes as new copies, keeping their names. */
+        suspend fun importAll(brushes: List<SavedBrush>) {
+            mutate { existing -> existing + brushes.map { it.copy(id = UUID.randomUUID().toString(), name = it.name.trim()) } }
+        }
+
         suspend fun rename(
             id: String,
             name: String,
