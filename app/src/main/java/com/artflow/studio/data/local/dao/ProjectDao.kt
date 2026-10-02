@@ -39,6 +39,12 @@ interface ProjectDao {
         isFavorite: Boolean,
     )
 
+    @Query("UPDATE projects SET stack = :stack WHERE id IN (:projectIds)")
+    suspend fun setStack(
+        projectIds: List<Long>,
+        stack: String?,
+    )
+
     @Query("SELECT COALESCE(MAX(id), 0) FROM projects")
     suspend fun maximumProjectId(): Long
 

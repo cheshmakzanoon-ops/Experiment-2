@@ -21,6 +21,7 @@ data class ProjectEntity(
     val modifiedAt: Long,
     val layerCount: Int = 1,
     val isFavorite: Boolean = false,
+    val stack: String? = null,
 )
 
 /**
@@ -39,6 +40,7 @@ fun ProjectEntity.toDomain(): Project =
         modifiedAt = this.modifiedAt,
         layerCount = this.layerCount,
         isFavorite = this.isFavorite,
+        stack = this.stack,
     )
 
 /**
@@ -57,4 +59,5 @@ fun Project.toEntity(): ProjectEntity =
         modifiedAt = this.modifiedAt,
         layerCount = this.layerCount,
         isFavorite = this.isFavorite,
+        stack = this.stack,
     )

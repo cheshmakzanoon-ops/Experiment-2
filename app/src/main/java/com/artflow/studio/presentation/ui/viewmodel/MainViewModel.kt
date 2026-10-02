@@ -180,6 +180,15 @@ class MainViewModel
             }
         }
 
+        /** Puts an artwork in a gallery stack; a blank name returns it to the main gallery. */
+        fun moveToStack(
+            projectId: Long,
+            stack: String?,
+        ) {
+            val name = stack?.trim()?.take(MAX_STACK_NAME)?.takeIf { it.isNotEmpty() && it.none(Char::isISOControl) }
+            viewModelScope.launch(galleryErrors) { projectRepository.setStack(listOf(projectId), name) }
+        }
+
         fun toggleFavorite(project: Project) {
             viewModelScope.launch(galleryErrors) { projectRepository.toggleFavorite(project.id, !project.isFavorite) }
         }
@@ -331,3 +340,5 @@ class MainViewModel
             }
         }
     }
+
+private const val MAX_STACK_NAME = 60

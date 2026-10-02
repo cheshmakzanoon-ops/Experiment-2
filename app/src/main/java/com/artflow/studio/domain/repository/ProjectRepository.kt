@@ -60,6 +60,12 @@ interface ProjectRepository {
         isFavorite: Boolean,
     )
 
+    /** Moves artworks into the gallery stack [stack], or back to the main gallery for null. */
+    suspend fun setStack(
+        projectIds: List<Long>,
+        stack: String?,
+    )
+
     /**
      * Get total count of projects
      */

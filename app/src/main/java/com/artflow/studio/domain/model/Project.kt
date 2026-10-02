@@ -15,4 +15,6 @@ data class Project(
     val modifiedAt: Long,
     val layerCount: Int = 1,
     val isFavorite: Boolean = false,
+    /** Gallery stack (folder) this artwork belongs to, or null when it sits in the main gallery. */
+    val stack: String? = null,
 )

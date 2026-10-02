@@ -144,5 +144,12 @@ class ProjectRepositoryImpl
             projectDao.toggleFavorite(projectId, isFavorite)
         }
 
+        override suspend fun setStack(
+            projectIds: List<Long>,
+            stack: String?,
+        ) {
+            projectDao.setStack(projectIds, stack)
+        }
+
         override fun getProjectCount(): Flow<Int> = projectDao.getProjectCount()
     }

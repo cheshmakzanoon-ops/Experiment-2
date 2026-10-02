@@ -26,7 +26,8 @@ object DatabaseModule {
                 context,
                 ArtFlowDatabase::class.java,
                 "artflow_database",
-            ).build()
+            ).addMigrations(ArtFlowDatabase.MIGRATION_1_2)
+            .build()
 
     @Provides
     @Singleton

@@ -2,6 +2,7 @@
 
 package com.artflow.studio.presentation.ui.screens.gallery
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -15,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,6 +63,15 @@ fun GalleryScreen(
     var deleteTarget by remember { mutableStateOf<Project?>(null) }
     var sortMenu by remember { mutableStateOf(false) }
     var searchVisible by remember { mutableStateOf(false) }
+    var openStack by rememberSaveable { mutableStateOf<String?>(null) }
+    var stackTarget by remember { mutableStateOf<Project?>(null) }
+    BackHandler(enabled = openStack != null) { openStack = null }
+    LaunchedEffect(uiState, openStack) {
+        val stack = openStack ?: return@LaunchedEffect
+        val projects = (uiState as? MainUiState.Success)?.projects ?: return@LaunchedEffect
+        // Leave a stack once its last artwork has moved out.
+        if (projects.none { it.stack == stack }) openStack = null
+    }
     val context = LocalContext.current
     val photoImport =
         rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -100,11 +111,18 @@ fun GalleryScreen(
                         )
                     } else {
                         Column {
-                            Text("ArtFlow")
+                            Text(openStack ?: "ArtFlow")
                             Text(
                                 text = viewModel.storageSummary(),
                                 style = MaterialTheme.typography.labelSmall,
                             )
+                        }
+                    }
+                },
+                navigationIcon = {
+                    if (openStack != null) {
+                        IconButton(onClick = { openStack = null }) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Back to gallery")
                         }
                     }
                 },
@@ -181,7 +199,11 @@ fun GalleryScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            items(state.projects, key = { it.id }) { project ->
+                            val layout = GalleryLayout.of(state.projects, openStack, searching = query.isNotEmpty())
+                            items(layout.stacks, key = { "stack:${it.first}" }) { (name, members) ->
+                                StackCard(name, members) { openStack = name }
+                            }
+                            items(layout.projects, key = { it.id }) { project ->
                                 ProjectCard(
                                     project = project,
                                     onClick = { onNavigateToCanvas(project.id) },
@@ -189,6 +211,7 @@ fun GalleryScreen(
                                     onRename = { renameTarget = project },
                                     onDuplicate = { viewModel.duplicate(project) },
                                     onDelete = { deleteTarget = project },
+                                    onStack = { stackTarget = project },
                                 )
                             }
                         }
@@ -203,9 +226,31 @@ fun GalleryScreen(
             onDismiss = { showNewProjectDialog = false },
             onCreate = { name, preset, width, height, dpi ->
                 showNewProjectDialog = false
+                val stack = openStack
                 viewModel.createProject(name, preset, width, height, dpi) { id ->
+                    // New artworks made inside a stack belong to it, as in Procreate.
+                    if (stack != null) viewModel.moveToStack(id, stack)
                     scope.launch { onNavigateToCanvas(id) }
                 }
+            },
+        )
+    }
+
+    stackTarget?.let { project ->
+        val existing =
+            (uiState as? MainUiState.Success)
+                ?.projects
+                ?.mapNotNull { it.stack }
+                ?.distinct()
+                ?.sorted()
+                .orEmpty()
+        StackDialog(
+            project = project,
+            stacks = existing,
+            onDismiss = { stackTarget = null },
+            onMove = { stack ->
+                viewModel.moveToStack(project.id, stack)
+                stackTarget = null
             },
         )
     }
@@ -287,6 +332,7 @@ private fun ProjectCard(
     onRename: () -> Unit,
     onDuplicate: () -> Unit,
     onDelete: () -> Unit,
+    onStack: () -> Unit,
 ) {
     var menuVisible by remember { mutableStateOf(false) }
     Card(
@@ -381,6 +427,13 @@ private fun ProjectCard(
                             text = { Text("Duplicate") },
                             onClick = {
                                 onDuplicate()
+                                menuVisible = false
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(if (project.stack == null) "Move to stack…" else "Stack…") },
+                            onClick = {
+                                onStack()
                                 menuVisible = false
                             },
                         )
