@@ -28,17 +28,18 @@ or your finger, build up layers, and export a separate copy to share or keep.
 PAINT AND EDIT
 Use brushes with pressure-sensitive size and opacity on supported styluses, plus StreamLine
 stroke stabilisation and QuickShape (hold at the end of a stroke to snap a clean line, ellipse or
-circle), colour dynamics, smudge, clone, healing and liquify tools. Fill areas, add gradients, draw shapes
+circle), ColorDrop (drag the colour swatch onto the canvas to fill), colour dynamics, smudge, clone, healing and liquify tools. Fill areas, add gradients, draw shapes
 and rasterise text. Choose colours with the picker, harmonies and saved palettes.
 
 WORK WITH LAYERS
-Reorder, duplicate, group and merge layers, and insert photos as new layers. Adjust opacity and
+Reorder, duplicate, group and merge layers, insert photos as new layers, import the layers of a
+PSD file, and cut, copy and paste selections onto new layers. Adjust opacity and
 blend modes, protect alpha, and use
 clipping masks, layer masks, adjustments and filters. The layer count and undo history depend on
 canvas size and available memory; they are not unlimited.
 
 DRAW WITH GUIDES
-Use symmetry and perspective guides. Select areas with geometric, lasso and magic-wand tools,
+Use symmetry, perspective, isometric and 2D grid guides with snapping. Select areas with geometric, lasso and magic-wand tools,
 and combine or feather selections. Transform a layer or just the selected pixels: move, uniform
 or freeform scale, rotate and flip. Perspective and warp transforms are not included in this
 release.
@@ -57,8 +58,8 @@ file picker, share it with another app, or publish an image or video to the gall
 PNG and PSD support transparency; JPEG and MP4 use an opaque background. PDF keeps the artwork's
 aspect ratio on the chosen page. PSD preserves raster layers where possible, with masks and
 filters baked into pixels. Unsupported adjustment stacks use a visible composite plus hidden
-source layers and show a warning; Photoshop adjustment-layer editing and PSD import are not
-included.
+source layers and show a warning. PSD import brings in raster layers with their names, offsets,
+opacity, blend modes and visibility; Photoshop adjustment-layer editing is not included.
 
 Undo and redo are available through buttons and two- and three-finger taps. Settings include
 themes, brush preferences and an offline privacy policy.
