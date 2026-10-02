@@ -349,6 +349,42 @@ private fun FloatingBar(
     }
 }
 
+data class CopyPasteActions(
+    val onCut: () -> Unit,
+    val onCopy: () -> Unit,
+    val onCopyAll: () -> Unit,
+    val onDuplicate: () -> Unit,
+    val onCutAndPaste: () -> Unit,
+    val onCopyAndPaste: () -> Unit,
+    val onPaste: () -> Unit,
+    val onDismiss: () -> Unit,
+)
+
+/** The menu a three-finger swipe down opens. Each choice closes it. */
+@Composable
+fun CopyPasteMenu(
+    canPaste: Boolean,
+    actions: CopyPasteActions,
+    modifier: Modifier = Modifier,
+) {
+    fun run(action: () -> Unit): () -> Unit =
+        {
+            action()
+            actions.onDismiss()
+        }
+    FloatingBar(modifier) {
+        Text("Copy & Paste", style = MaterialTheme.typography.titleSmall)
+        AssistChip(onClick = run(actions.onCut), label = { Text("Cut") })
+        AssistChip(onClick = run(actions.onCopy), label = { Text("Copy") })
+        AssistChip(onClick = run(actions.onCopyAll), label = { Text("Copy All") })
+        AssistChip(onClick = run(actions.onDuplicate), label = { Text("Duplicate") })
+        AssistChip(onClick = run(actions.onCutAndPaste), label = { Text("Cut & Paste") })
+        AssistChip(onClick = run(actions.onCopyAndPaste), label = { Text("Copy & Paste") })
+        AssistChip(onClick = run(actions.onPaste), enabled = canPaste, label = { Text("Paste") })
+        IconButton(onClick = actions.onDismiss) { Icon(Icons.Default.Close, contentDescription = "Close Copy & Paste") }
+    }
+}
+
 /**
  * Tablet panels float as popovers anchored under the top bar, leaving the canvas visible, the way
  * Procreate presents Layers and Colours. Tapping outside the popover closes it.

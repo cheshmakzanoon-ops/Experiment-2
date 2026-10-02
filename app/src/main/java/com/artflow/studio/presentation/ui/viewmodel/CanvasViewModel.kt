@@ -694,6 +694,32 @@ class CanvasViewModel
 
         fun pasteAsLayer() = layerOp { pasteClipboard() }
 
+        fun cutAndPasteSelection() =
+            layerOp {
+                copyToClipboard(cut = true)
+                pasteClipboard()
+            }
+
+        /** Copy All: the visible artwork (all layers merged) inside the selection. */
+        fun copyMerged() =
+            layerOp {
+                val composite = checkNotNull(canvasRepository.compositeBuffer()) { "Nothing to copy" }
+                val selection = canvasRepository.selection()
+                clipboard = withContext(Dispatchers.Default) { SelectionClipboard.extract(composite, selection) }
+                _hasClipboard.value = true
+            }
+
+        fun duplicateActiveLayer() = duplicateLayer(canvasRepository.getActiveLayerId())
+
+        /** Procreate's three-finger scrub: clears the active layer, or only its selected pixels. */
+        fun clearLayer() =
+            layerOp {
+                val selection = canvasRepository.selection()
+                canvasRepository.applyRasterEdit(canvasRepository.getActiveLayerId(), "Clear layer") {
+                    SelectionClipboard.erase(it, selection)
+                }
+            }
+
         /** Procreate's Copy & Paste: the selection lands on a new layer above, ready to transform. */
         fun copyAndPasteSelection() =
             layerOp {

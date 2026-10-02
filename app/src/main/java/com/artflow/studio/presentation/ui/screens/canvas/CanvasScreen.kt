@@ -49,6 +49,8 @@ import com.artflow.studio.presentation.ui.components.editor.AnimationSheet
 import com.artflow.studio.presentation.ui.components.editor.BrushOptionsRow
 import com.artflow.studio.presentation.ui.components.editor.CanvasOpsSheet
 import com.artflow.studio.presentation.ui.components.editor.ColorChip
+import com.artflow.studio.presentation.ui.components.editor.CopyPasteActions
+import com.artflow.studio.presentation.ui.components.editor.CopyPasteMenu
 import com.artflow.studio.presentation.ui.components.editor.GuidesOverlay
 import com.artflow.studio.presentation.ui.components.editor.GuidesSheet
 import com.artflow.studio.presentation.ui.components.editor.LayerMaskActions
@@ -146,6 +148,8 @@ fun CanvasScreen(
     var focusMode by rememberSaveable(projectId) { mutableStateOf(false) }
     var toolsExpanded by rememberSaveable(projectId) { mutableStateOf(false) }
     var openMenu by remember { mutableStateOf<StudioButton?>(null) }
+    var showCopyPaste by remember { mutableStateOf(false) }
+    val hasClipboard by viewModel.hasClipboard.collectAsState()
     val wide = isWideLayout()
     var colorDropPosition by remember { mutableStateOf<androidx.compose.ui.geometry.Offset?>(null) }
     var colorChipOrigin by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
@@ -670,6 +674,9 @@ fun CanvasScreen(
                                 onHistoryChanged = { _, _ -> }
                                 onUndoRequested = { viewModel.undo() }
                                 onRedoRequested = { viewModel.redo() }
+                                onFullscreenRequested = { focusMode = !focusMode }
+                                onCopyPasteMenuRequested = { showCopyPaste = true }
+                                onClearLayerRequested = { viewModel.clearLayer() }
                                 onViewChanged = { s, ox, oy, r -> viewModel.onViewChanged(s, ox, oy, r) }
                                 onTextPlacementRequested = { x, y -> viewModel.requestTextAt(x, y) }
                                 onCloneSourceChanged = { viewModel.onCloneSourceChanged(it) }
@@ -749,6 +756,23 @@ fun CanvasScreen(
                     modifier = Modifier.align(Alignment.CenterStart).padding(start = 8.dp),
                 )
                 ContextToolbar(viewModel, input, canvasView, Modifier.align(Alignment.BottomCenter)) { panel = it }
+            }
+            if (showCopyPaste && ready != null) {
+                CopyPasteMenu(
+                    canPaste = hasClipboard,
+                    actions =
+                        CopyPasteActions(
+                            onCut = { viewModel.copySelection(cut = true) },
+                            onCopy = { viewModel.copySelection(cut = false) },
+                            onCopyAll = viewModel::copyMerged,
+                            onDuplicate = viewModel::duplicateActiveLayer,
+                            onCutAndPaste = viewModel::cutAndPasteSelection,
+                            onCopyAndPaste = viewModel::copyAndPasteSelection,
+                            onPaste = viewModel::pasteAsLayer,
+                            onDismiss = { showCopyPaste = false },
+                        ),
+                    modifier = Modifier.align(Alignment.TopCenter),
+                )
             }
             if (panel != EditorPanel.NONE && wide) {
                 StudioPopover(

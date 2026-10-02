@@ -68,13 +68,13 @@ class PointerGestureRouterTest {
     }
 
     @Test
-    fun exactlyThreeFingerTapRequestsRedoButFourDoesNot() {
+    fun threeFingerTapRequestsRedoAndFourFingerTapIsReported() {
         for (count in 3..4) {
             val pointers = (0 until count).map { Pointer(it, it * 30f, 5f) }
             send(Event.DOWN, pointers.first())
             for (size in 2..count) send(Event.POINTER_DOWN, *pointers.take(size).toTypedArray(), changed = size - 1)
             for (size in count downTo 2) send(Event.POINTER_UP, *pointers.take(size).toTypedArray(), changed = size - 1)
-            assertEquals(if (count == 3) 3 else 0, send(Event.UP, pointers.first()).historyPointers)
+            assertEquals(count, send(Event.UP, pointers.first()).historyPointers)
         }
     }
 
@@ -192,5 +192,29 @@ class PointerGestureRouterTest {
     fun newDownCancelsUnterminatedOwner() {
         send(Event.DOWN, pen)
         assertTrue(send(Event.DOWN, finger).cancelTool)
+    }
+
+    @Test
+    fun threeFingerSwipeDownFiresOnceWithoutPanning() {
+        val fingers = (0 until 3).map { Pointer(it, 100f + it * 40f, 100f) }
+        send(Event.DOWN, fingers[0])
+        send(Event.POINTER_DOWN, *fingers.take(2).toTypedArray(), changed = 1)
+        send(Event.POINTER_DOWN, *fingers.toTypedArray(), changed = 2)
+        val actions = (1..8).map { step -> send(Event.MOVE, *fingers.map { it.copy(y = it.y + step * 20f) }.toTypedArray()).action }
+        assertEquals(1, actions.count { it == Action.THREE_FINGER_SWIPE_DOWN })
+        assertFalse(Action.NAVIGATE in actions)
+        assertEquals(0, send(Event.UP, fingers[0]).historyPointers)
+    }
+
+    @Test
+    fun threeFingerScrubClearsAfterRepeatedReversals() {
+        val fingers = (0 until 3).map { Pointer(it, 300f + it * 40f, 300f) }
+        send(Event.DOWN, fingers[0])
+        send(Event.POINTER_DOWN, *fingers.take(2).toTypedArray(), changed = 1)
+        send(Event.POINTER_DOWN, *fingers.toTypedArray(), changed = 2)
+        val offsets = listOf(0f, 80f, 0f, 80f, 0f, 80f, 0f)
+        val actions = offsets.map { dx -> send(Event.MOVE, *fingers.map { it.copy(x = it.x + dx) }.toTypedArray()).action }
+        assertTrue(Action.THREE_FINGER_SCRUB in actions)
+        assertFalse(Action.THREE_FINGER_SWIPE_DOWN in actions)
     }
 }

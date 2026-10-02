@@ -112,6 +112,8 @@ data class EditorInput(
     val transformMode: LayerTransform.Mode = LayerTransform.Mode.MOVE,
     /** Holding the pen still at the end of a stroke snaps it to a line or ellipse. */
     val quickShape: Boolean = true,
+    /** A finger held still for a moment samples colour, like Procreate's touch-and-hold eyedropper. */
+    val touchHoldEyedropper: Boolean = true,
     /** Whether a finger (rather than a stylus) may paint. */
     val fingerPainting: Boolean = true,
 )
@@ -252,6 +254,9 @@ class ArtFlowCanvasView
         var onHistoryChanged: ((undo: Int, redo: Int) -> Unit)? = null
         var onUndoRequested: (() -> Unit)? = null
         var onRedoRequested: (() -> Unit)? = null
+        var onFullscreenRequested: (() -> Unit)? = null
+        var onCopyPasteMenuRequested: (() -> Unit)? = null
+        var onClearLayerRequested: (() -> Unit)? = null
         var onViewChanged: ((scale: Float, offsetX: Float, offsetY: Float, rotation: Float) -> Unit)? = null
         var onTextPlacementRequested: ((x: Float, y: Float) -> Unit)? = null
 
@@ -332,6 +337,8 @@ class ArtFlowCanvasView
             if (drawing) canvasRepository.cancelStroke(currentStrokeId)
             drawing = false
             removeCallbacks(quickShapeCheck)
+            removeCallbacks(holdEyedropper)
+            holdSampling = false
             cancelPixelInteraction()
             selectionJob?.cancel()
             onDragPreview?.invoke(null)
@@ -822,7 +829,16 @@ class ArtFlowCanvasView
                     when (route.historyPointers) {
                         2 -> onUndoRequested?.invoke()
                         3 -> onRedoRequested?.invoke()
+                        4 -> onFullscreenRequested?.invoke()
                     }
+                }
+                PointerGestureRouter.Action.THREE_FINGER_SWIPE_DOWN -> {
+                    resetNavigation()
+                    onCopyPasteMenuRequested?.invoke()
+                }
+                PointerGestureRouter.Action.THREE_FINGER_SCRUB -> {
+                    resetNavigation()
+                    onClearLayerRequested?.invoke()
                 }
                 PointerGestureRouter.Action.IGNORE -> Unit
             }
@@ -856,6 +872,7 @@ class ArtFlowCanvasView
             gestureMoved = 0f
 
             val tool = if (event.getToolType(index) == MotionEvent.TOOL_TYPE_ERASER) ToolType.ERASER else input.tool
+            armHoldEyedropper(isStylus, x, y)
             // Palm rejection: a stylus always paints, fingers only when finger painting is on.
             if (!isStylus && !input.fingerPainting) {
                 gestureTool = null
@@ -911,6 +928,12 @@ class ArtFlowCanvasView
 
             lastPointerX = x
             lastPointerY = y
+            if (holdSampling) {
+                val (sampleX, sampleY) = viewToCanvas(x, y)
+                pickColor(sampleX, sampleY)
+                return true
+            }
+            if (gestureMoved > TAP_SLOP) removeCallbacks(holdEyedropper)
             val tool = gestureTool ?: return true
             val (canvasX, canvasY) = snapped(event, x, y, index)
             val pressure = pressureOf(event, index, history)
@@ -965,6 +988,12 @@ class ArtFlowCanvasView
             y: Float,
             cancelled: Boolean,
         ) {
+            removeCallbacks(holdEyedropper)
+            if (holdSampling) {
+                holdSampling = false
+                gestureTool = null
+                return
+            }
             val tool = gestureTool ?: return
             val (canvasX, canvasY) = viewToCanvas(x, y)
             val elapsed = event.eventTime - gestureStartTime
@@ -1119,6 +1148,39 @@ class ArtFlowCanvasView
             quickShapeApplied = false
             removeCallbacks(quickShapeCheck)
             updateLiveStroke()
+        }
+
+        private var holdSampling = false
+        private var holdCanvasX = 0f
+        private var holdCanvasY = 0f
+        private val holdEyedropper = Runnable { startHoldEyedropper() }
+
+        /** Fingers (not the stylus) that stay still for a moment switch to colour sampling. */
+        private fun armHoldEyedropper(
+            isStylus: Boolean,
+            x: Float,
+            y: Float,
+        ) {
+            removeCallbacks(holdEyedropper)
+            holdSampling = false
+            if (isStylus || !input.touchHoldEyedropper) return
+            val (canvasX, canvasY) = viewToCanvas(x, y)
+            holdCanvasX = canvasX
+            holdCanvasY = canvasY
+            postDelayed(holdEyedropper, HOLD_EYEDROPPER_MS)
+        }
+
+        private fun startHoldEyedropper() {
+            if (gestureMoved > TAP_SLOP) return
+            if (drawing) canvasRepository.cancelStroke(currentStrokeId)
+            drawing = false
+            removeCallbacks(quickShapeCheck)
+            cancelPixelInteraction()
+            previewPoints.clear()
+            onDragPreview?.invoke(null)
+            holdSampling = true
+            performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+            pickColor(holdCanvasX, holdCanvasY)
         }
 
         /** Lets the stabilised line catch up to the lift point, then commits or cancels the stroke. */
@@ -2002,6 +2064,7 @@ class ArtFlowCanvasView
             private const val TAP_SLOP = 24f
             private const val QUICKSHAPE_HOLD_SLOP = 10f
             private const val QUICKSHAPE_HOLD_MS = 650L
+            private const val HOLD_EYEDROPPER_MS = 500L
             private const val TAP_TIMEOUT_MS = 320L
             private const val SNAP_TOLERANCE = 12f
             private const val PREVIEW_INTERVAL_MS = 66L
