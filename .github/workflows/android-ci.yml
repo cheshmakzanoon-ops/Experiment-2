@@ -234,3 +234,16 @@ jobs:
             ${{ runner.temp }}/artflow-device/
           if-no-files-found: ignore
           retention-days: 14
+
+      - name: Summarise failed device tests
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          import glob, xml.etree.ElementTree as ET
+          for path in glob.glob("app/build/outputs/androidTest-results/**/*.xml", recursive=True):
+              for case in ET.parse(path).getroot().iter("testcase"):
+                  for problem in list(case.findall("failure")) + list(case.findall("error")):
+                      text = (problem.get("message") or problem.text or "").strip().splitlines()
+                      print(f"FAILED {case.get('classname')}.{case.get('name')}: {' | '.join(text[:4])[:600]}")
+          PY
+          grep -rhE 'FAILED|Process crashed|INSTRUMENTATION_FAILED' "${RUNNER_TEMP}/artflow-device" 2>/dev/null | head -20 || true
