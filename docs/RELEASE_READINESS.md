@@ -486,3 +486,24 @@ signing policy, force push or overwritten remote history is used to approve this
 The original roadmap gaps, pending stroke/native-runtime work, real publisher signing, physical
 phone/tablet/stylus testing and Play Console requirements above remain unresolved. Apply this patch
 to its stated base and obtain a successful full Android verification run before promoting it.
+
+## Feature release 1.1.0 verification — October 2, 2026
+
+Commit `5baffc8f6b498c68488ca8fa8ecc1d1381e127ab` on `claude/adoring-wozniak-7oybyj` passed the full workflow in
+[run 37038545830](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/37038545830):
+
+| Check | Result |
+| --- | --- |
+| JVM unit tests, ktlint, detekt, debug/release lint, debug APK, release AAB, artifact integrity | Passed |
+| Device tests API 26, 35, 36, 36 tablet | Passed |
+| Device tests API 36 16 KB and API 35 independent 16 KB repeat | Passed |
+
+The preceding run (37032142951) failed both 16 KB jobs on an earlier head and passed every other
+job. The same suites then passed unchanged here; the API 35 repeat job has also failed once on
+`main` (run 84). Treat the 16 KB emulators as intermittent and keep watching them; this is not a
+waiver for physical-device testing.
+
+New in this release: selection-aware free transform, time-lapse recording and MP4 replay, StreamLine
+and QuickShape, layer groups, photo and PSD layer import, photo-to-canvas import, ColorDrop,
+2D grid guide, and cut/copy/paste to a new layer. The publisher gates above (private signing key,
+physical devices, hosted privacy policy, screenshots and Play Console forms) still apply.
