@@ -24,6 +24,7 @@ object PerspectiveGuide {
         TWO_POINT("2-Point"),
         THREE_POINT("3-Point"),
         ISOMETRIC("Isometric"),
+        GRID("2D Grid"),
     }
 
     /**
@@ -125,6 +126,7 @@ object PerspectiveGuide {
         if (settings.type == GuideType.ISOMETRIC) {
             return isometricLines(settings, width, height) + lines
         }
+        if (settings.type == GuideType.GRID) return squareGridLines(settings, width, height)
 
         val count = settings.activePointCount()
         val density = settings.density.coerceIn(4, 72)
@@ -203,6 +205,7 @@ object PerspectiveGuide {
     ): Pair<Float, Float> {
         if (!settings.isActive() || !settings.snapEnabled) return x to y
         if (settings.type == GuideType.ISOMETRIC) return snapToIsometricGrid(x, y, settings, width, height)
+        if (settings.type == GuideType.GRID) return snapToSquareGrid(x, y, settings)
 
         var bestX = x
         var bestY = y
@@ -236,6 +239,46 @@ object PerspectiveGuide {
             }
         }
         return bestX to bestY
+    }
+
+    /** Square drawing grid centred on the canvas, [Settings.gridSpacing] pixels per cell. */
+    private fun squareGridLines(
+        settings: Settings,
+        width: Int,
+        height: Int,
+    ): List<GuideLine> {
+        val spacing = settings.gridSpacing.coerceIn(8, 512)
+        val lines = mutableListOf<GuideLine>()
+        var x = (width / 2f) % spacing
+        while (x <= width) {
+            lines += GuideLine(x, 0f, x, height.toFloat(), pointIndex = -1)
+            x += spacing
+        }
+        var y = (height / 2f) % spacing
+        while (y <= height) {
+            lines += GuideLine(0f, y, width.toFloat(), y, pointIndex = -1)
+            y += spacing
+        }
+        return lines
+    }
+
+    /** Pulls the pointer onto the nearest grid line (horizontal or vertical) within the snap radius. */
+    fun snapToSquareGrid(
+        x: Float,
+        y: Float,
+        settings: Settings,
+    ): Pair<Float, Float> {
+        val spacing = settings.gridSpacing.coerceIn(8, 512).toFloat()
+        val strength = settings.snapStrength.coerceIn(0f, 1f)
+        val lineX = Math.round(x / spacing) * spacing
+        val lineY = Math.round(y / spacing) * spacing
+        val distanceX = abs(x - lineX)
+        val distanceY = abs(y - lineY)
+        return when {
+            distanceX <= distanceY && distanceX <= settings.snapRadius -> (x + (lineX - x) * strength) to y
+            distanceY <= settings.snapRadius -> x to (y + (lineY - y) * strength)
+            else -> x to y
+        }
     }
 
     /** Snaps onto the nearest isometric grid intersection. */
@@ -303,7 +346,7 @@ object PerspectiveGuide {
         width: Int,
         height: Int,
     ): Float? {
-        if (!settings.isActive() || settings.type == GuideType.ISOMETRIC) return null
+        if (!settings.isActive() || settings.type == GuideType.ISOMETRIC || settings.type == GuideType.GRID) return null
         var bestAngle: Float? = null
         var bestDelta = Float.MAX_VALUE
         for (index in 0 until settings.activePointCount()) {
@@ -338,6 +381,8 @@ object PerspectiveGuide {
             ),
             Preset("Isometric", Settings(type = GuideType.ISOMETRIC)),
             Preset("Isometric Fine", Settings(type = GuideType.ISOMETRIC, gridSpacing = 32)),
+            Preset("2D Grid", Settings(type = GuideType.GRID, gridSpacing = 100)),
+            Preset("2D Grid Fine", Settings(type = GuideType.GRID, gridSpacing = 40)),
         )
 
     /** Default snap radius range exposed to the UI. */
@@ -364,6 +409,7 @@ object PerspectiveGuide {
             GuideType.TWO_POINT -> "2-point perspective"
             GuideType.THREE_POINT -> "3-point perspective"
             GuideType.ISOMETRIC -> "Isometric grid (${settings.gridSpacing}px)"
+            GuideType.GRID -> "2D grid (${settings.gridSpacing}px)"
         }
 
     /** Clips a ray to the canvas rectangle; returns null when it completely misses. */
