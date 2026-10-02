@@ -125,6 +125,10 @@ data class EditorInput(
     val touchHoldEyedropper: Boolean = true,
     /** Whether a finger (rather than a stylus) may paint. */
     val fingerPainting: Boolean = true,
+    /** Global pressure response exponent from Prefs > Pressure and Smoothing. */
+    val pressureCurve: Float = 1f,
+    /** Global stabilization from Prefs > Pressure and Smoothing (0..1). */
+    val stabilization: Float = 0f,
 )
 
 /** Rubber-band geometry reported while a selection, shape or gradient drag is in progress. */
@@ -1387,7 +1391,7 @@ class ArtFlowCanvasView
                 )
             drawing = currentStrokeId != 0L
             if (!drawing) onStatusMessage?.invoke("Choose an unlocked, visible layer with an editable destination")
-            stabilizer = StrokeStabilizer(params.smoothing).takeIf { it.isActive }?.also { it.start(x, y) }
+            stabilizer = StrokeStabilizer(max(params.smoothing, input.stabilization)).takeIf { it.isActive }?.also { it.start(x, y) }
             strokeRawPoints.clear()
             strokeRawPoints.add(x to y)
             strokePressureSum = pressure
@@ -2303,7 +2307,7 @@ class ArtFlowCanvasView
             val pressure = if (history < 0) event.getPressure(index) else event.getHistoricalPressure(index, history)
             val size = if (history < 0) event.getSize(index) else event.getHistoricalSize(index, history)
             val stylus = toolType == MotionEvent.TOOL_TYPE_STYLUS || toolType == MotionEvent.TOOL_TYPE_ERASER
-            return PointerPressure.normalize(stylus, pressure, size)
+            return PointerPressure.curve(PointerPressure.normalize(stylus, pressure, size), input.pressureCurve)
         }
 
         private fun axisOf(

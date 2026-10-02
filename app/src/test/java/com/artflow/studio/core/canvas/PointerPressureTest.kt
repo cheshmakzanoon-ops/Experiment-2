@@ -33,4 +33,13 @@ class PointerPressureTest {
             assertEquals(0.35f, PointerPressure.normalize(false, 1f, size), 0f)
         }
     }
+
+    @Test
+    fun pressureCurveSoftensOrFirmsTheResponse() {
+        assertEquals(0.5f, PointerPressure.curve(0.5f, 1f), 0f)
+        assertEquals(0.25f, PointerPressure.curve(0.5f, 2f), 1e-6f)
+        assertEquals(0.7071f, PointerPressure.curve(0.5f, 0.5f), 1e-4f)
+        assertEquals(1f, PointerPressure.curve(1f, 3f), 0f)
+        assertEquals(0.5f, PointerPressure.curve(0.5f, Float.NaN), 0f)
+    }
 }

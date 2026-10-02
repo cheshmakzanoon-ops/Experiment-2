@@ -9,6 +9,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import kotlin.math.exp
+import kotlin.math.ln
 
 data class AddActions(
     val onInsertFile: () -> Unit,
@@ -39,6 +41,8 @@ data class StudioPrefs(
     val quickShape: Boolean,
     val holdEyedropper: Boolean,
     val fingerPainting: Boolean,
+    val pressureCurve: Float = 1f,
+    val stabilization: Float = 0f,
 )
 
 data class PrefActions(
@@ -48,6 +52,8 @@ data class PrefActions(
     val onFingerPainting: (Boolean) -> Unit,
     val onFullScreen: () -> Unit,
     val onMoreSettings: () -> Unit,
+    /** Pressure curve exponent and stabilization, saved together. */
+    val onPressureAndSmoothing: (Float, Float) -> Unit = { _, _ -> },
 )
 
 /** Canvas facts shown under Canvas > Canvas information. */
@@ -150,6 +156,26 @@ private fun PrefsTab(
     PrefSwitch("Touch and hold for eyedropper", prefs.holdEyedropper, actions.onHoldEyedropper)
     PrefSwitch("Paint with a finger", prefs.fingerPainting, actions.onFingerPainting)
     HorizontalDivider()
+    Text("Pressure and Smoothing", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
+    PrefSlider(
+        label = "Stabilization",
+        value = prefs.stabilization,
+        range = 0f..1f,
+        readout = "${(prefs.stabilization * 100).toInt()}%",
+    ) { actions.onPressureAndSmoothing(prefs.pressureCurve, it) }
+    // The slider reads soft (left) to firm (right) on a logarithmic scale centred on linear.
+    PrefSlider(
+        label = "Pressure",
+        value = ln(prefs.pressureCurve),
+        range = ln(0.3f)..ln(3f),
+        readout =
+            when {
+                prefs.pressureCurve < 0.95f -> "Soft"
+                prefs.pressureCurve > 1.05f -> "Firm"
+                else -> "Linear"
+            },
+    ) { actions.onPressureAndSmoothing(exp(it), prefs.stabilization) }
+    HorizontalDivider()
     ActionRow("Full screen", actions.onFullScreen)
     ActionRow("More preferences…", actions.onMoreSettings)
 }
@@ -178,6 +204,26 @@ private fun ActionRow(
 ) {
     TextButton(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
         Text(label, modifier = Modifier.fillMaxWidth())
+    }
+}
+
+@Composable
+private fun PrefSlider(
+    label: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    readout: String,
+    onChange: (Float) -> Unit,
+) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(96.dp))
+        Slider(
+            value = value.coerceIn(range.start, range.endInclusive),
+            onValueChange = onChange,
+            valueRange = range,
+            modifier = Modifier.weight(1f),
+        )
+        Text(readout, style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(48.dp))
     }
 }
 

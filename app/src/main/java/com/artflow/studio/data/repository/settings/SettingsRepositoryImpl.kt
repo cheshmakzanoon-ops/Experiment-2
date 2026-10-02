@@ -223,6 +223,8 @@ class SettingsRepositoryImpl
                 KEY_STYLUS_ONLY to settings.stylusOnly.toString(),
                 KEY_HAPTICS to settings.haptics.toString(),
                 KEY_RIGHT_HANDED to settings.rightHandedInterface.toString(),
+                KEY_PRESSURE_CURVE to settings.pressureCurve.toString(),
+                KEY_STABILIZATION to settings.stabilization.toString(),
                 KEY_AUTOSAVE to settings.autosaveEnabled.toString(),
                 KEY_AUTOSAVE_INTERVAL to settings.autosaveIntervalMs.toString(),
                 KEY_DEFAULT_PRESET to settings.defaultPresetName,
@@ -267,6 +269,12 @@ class SettingsRepositoryImpl
                 stylusOnly = stored[KEY_STYLUS_ONLY]?.toBooleanStrictOrNull() ?: defaults.stylusOnly,
                 haptics = stored[KEY_HAPTICS]?.toBooleanStrictOrNull() ?: defaults.haptics,
                 rightHandedInterface = stored[KEY_RIGHT_HANDED]?.toBooleanStrictOrNull() ?: defaults.rightHandedInterface,
+                pressureCurve =
+                    stored[KEY_PRESSURE_CURVE]?.toFloatOrNull()?.takeIf { it.isFinite() }?.coerceIn(MIN_CURVE, MAX_CURVE)
+                        ?: defaults.pressureCurve,
+                stabilization =
+                    stored[KEY_STABILIZATION]?.toFloatOrNull()?.takeIf { it.isFinite() }?.coerceIn(0f, 1f)
+                        ?: defaults.stabilization,
                 autosaveEnabled = stored[KEY_AUTOSAVE]?.toBooleanStrictOrNull() ?: defaults.autosaveEnabled,
                 autosaveIntervalMs =
                     stored[KEY_AUTOSAVE_INTERVAL]
@@ -329,6 +337,10 @@ class SettingsRepositoryImpl
             private const val KEY_STYLUS_ONLY = "input.stylusOnly"
             private const val KEY_HAPTICS = "input.haptics"
             private const val KEY_RIGHT_HANDED = "interface.rightHanded"
+            private const val KEY_PRESSURE_CURVE = "input.pressureCurve"
+            private const val KEY_STABILIZATION = "input.stabilization"
+            private const val MIN_CURVE = 0.3f
+            private const val MAX_CURVE = 3f
             private const val KEY_AUTOSAVE = "general.autosave"
             private const val KEY_AUTOSAVE_INTERVAL = "general.autosaveInterval"
             private const val KEY_DEFAULT_PRESET = "general.defaultPreset"

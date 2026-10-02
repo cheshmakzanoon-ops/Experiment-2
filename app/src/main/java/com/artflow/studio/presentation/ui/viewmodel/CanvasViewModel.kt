@@ -228,6 +228,8 @@ class CanvasViewModel
                             symmetry = _input.value.symmetry,
                             snapToGuides = stored.snapToGuides,
                             fingerPainting = stored.fingerPainting,
+                            pressureCurve = stored.pressureCurve,
+                            stabilization = stored.stabilization,
                         )
                 }
             }
@@ -547,6 +549,17 @@ class CanvasViewModel
 
         fun setRightHandedInterface(enabled: Boolean) {
             viewModelScope.launch(editorErrors) { settingsRepository.update { it.copy(rightHandedInterface = enabled) } }
+        }
+
+        fun setPressureAndSmoothing(
+            curve: Float,
+            stabilization: Float,
+        ) {
+            viewModelScope.launch(editorErrors) {
+                settingsRepository.update {
+                    it.copy(pressureCurve = curve.coerceIn(0.3f, 3f), stabilization = stabilization.coerceIn(0f, 1f))
+                }
+            }
         }
 
         fun setTransformMode(mode: TransformQuad.Mode) = updateInput { it.copy(transformMode = mode) }

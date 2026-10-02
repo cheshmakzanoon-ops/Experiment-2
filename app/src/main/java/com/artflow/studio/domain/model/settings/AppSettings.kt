@@ -69,6 +69,10 @@ data class AppSettings(
     val haptics: Boolean = true,
     /** Procreate's right-hand interface: the size/opacity sidebar sits on the right edge. */
     val rightHandedInterface: Boolean = false,
+    /** Pressure response exponent: below 1 lays down more ink at light pressure, above 1 needs a firmer touch. */
+    val pressureCurve: Float = 1f,
+    /** Extra stroke steadying applied on top of every brush's own smoothing (0..1). */
+    val stabilization: Float = 0f,
     // Saving
     val autosaveIntervalMs: Long = 20_000L,
     val autosaveEnabled: Boolean = true,

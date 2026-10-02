@@ -541,7 +541,15 @@ fun CanvasScreen(
             EditorPanel.ACTIONS ->
                 ActionsPanel(
                     info = CanvasInfo(ready?.width ?: 0, ready?.height ?: 0, ready?.dpi ?: 72, layers.size, ready?.frameCount ?: 1),
-                    prefs = StudioPrefs(settings.rightHandedInterface, input.quickShape, input.touchHoldEyedropper, input.fingerPainting),
+                    prefs =
+                        StudioPrefs(
+                            settings.rightHandedInterface,
+                            input.quickShape,
+                            input.touchHoldEyedropper,
+                            input.fingerPainting,
+                            settings.pressureCurve,
+                            settings.stabilization,
+                        ),
                     add =
                         AddActions(
                             onInsertFile = importPsd,
@@ -586,6 +594,7 @@ fun CanvasScreen(
                                 focusMode = true
                             },
                             onMoreSettings = onOpenSettings,
+                            onPressureAndSmoothing = viewModel::setPressureAndSmoothing,
                         ),
                     onShare = { panel = EditorPanel.EXPORT },
                     canPaste = hasClipboard,
