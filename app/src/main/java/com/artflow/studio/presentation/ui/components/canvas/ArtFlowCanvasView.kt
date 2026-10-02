@@ -1,5 +1,6 @@
 package com.artflow.studio.presentation.ui.components.canvas
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -7,11 +8,14 @@ import android.graphics.Path
 import android.graphics.Typeface
 import android.opengl.GLSurfaceView
 import android.os.Build
+import android.os.SystemClock
 import android.util.AttributeSet
 import android.view.MotionEvent
+import android.view.animation.DecelerateInterpolator
 import androidx.core.math.MathUtils
 import com.artflow.studio.core.canvas.PointerGestureRouter
 import com.artflow.studio.core.canvas.PointerPressure
+import com.artflow.studio.core.canvas.QuickPinch
 import com.artflow.studio.core.canvas.QuickShape
 import com.artflow.studio.core.canvas.StrokeStabilizer
 import com.artflow.studio.core.perspective.PerspectiveGuide
@@ -202,6 +206,9 @@ class ArtFlowCanvasView
         private var navPrevMidX = 0f
         private var navPrevMidY = 0f
         private var navAnchor: Pair<Float, Float>? = null
+        private var pinchStartScale = 0f
+        private var pinchStartTime = 0L
+        private var viewAnimator: ValueAnimator? = null
 
         // Drag preview (selection marquee, lasso, shape, gradient)
         private var previewPoints = mutableListOf<Pair<Float, Float>>()
@@ -330,6 +337,7 @@ class ArtFlowCanvasView
         fun cancelActiveGesture() {
             pointerRouter.suppress()
             resetNavigation()
+            pinchStartScale = 0f
             cancelToolInteraction()
         }
 
@@ -370,6 +378,7 @@ class ArtFlowCanvasView
         }
 
         override fun onDetachedFromWindow() {
+            viewAnimator?.cancel()
             resetLiquifyReference()
             cancelActiveGesture()
             coroutineScope.cancel()
@@ -454,11 +463,38 @@ class ArtFlowCanvasView
             refreshOnionSkins()
         }
 
+        private fun fitScale(): Float =
+            (min(width.toFloat() / canvasWidth, height.toFloat() / canvasHeight) * 0.92f).coerceIn(MIN_SCALE, MAX_SCALE)
+
+        /** Eases the view back to fit the screen, unrotated, as after Procreate's quick pinch. */
+        fun animateFitToView() {
+            if (width == 0 || height == 0) return
+            val fromScale = scale
+            val toScale = fitScale()
+            val fromX = offsetX
+            val fromY = offsetY
+            val fromRotation = if (rotationDegrees > 180f) rotationDegrees - 360f else rotationDegrees
+            viewAnimator?.cancel()
+            viewAnimator =
+                ValueAnimator.ofFloat(0f, 1f).apply {
+                    duration = FIT_ANIMATION_MS
+                    interpolator = DecelerateInterpolator()
+                    addUpdateListener { animator ->
+                        val t = animator.animatedValue as Float
+                        scale = fromScale + (toScale - fromScale) * t
+                        offsetX = fromX * (1f - t)
+                        offsetY = fromY * (1f - t)
+                        rotationDegrees = normalizeDegrees(fromRotation * (1f - t))
+                        pushTransform()
+                    }
+                    start()
+                }
+        }
+
         fun fitToView() {
             if (width == 0 || height == 0) return
-            scale =
-                (min(width.toFloat() / canvasWidth, height.toFloat() / canvasHeight) * 0.92f)
-                    .coerceIn(MIN_SCALE, MAX_SCALE)
+            viewAnimator?.cancel()
+            scale = fitScale()
             offsetX = 0f
             offsetY = 0f
             rotationDegrees = 0f
@@ -960,14 +996,7 @@ class ArtFlowCanvasView
                     rebaseNavigation(remaining)
                 }
                 PointerGestureRouter.Action.NAVIGATE -> navigate(samples)
-                PointerGestureRouter.Action.FINISH_NAVIGATION -> {
-                    resetNavigation()
-                    when (route.historyPointers) {
-                        2 -> onUndoRequested?.invoke()
-                        3 -> onRedoRequested?.invoke()
-                        4 -> onFullscreenRequested?.invoke()
-                    }
-                }
+                PointerGestureRouter.Action.FINISH_NAVIGATION -> finishNavigation(route.historyPointers, event.eventTime)
                 PointerGestureRouter.Action.THREE_FINGER_SWIPE_DOWN -> {
                     resetNavigation()
                     onCopyPasteMenuRequested?.invoke()
@@ -1210,12 +1239,33 @@ class ArtFlowCanvasView
         private fun rebaseNavigation(pointers: List<PointerGestureRouter.Pointer>) {
             resetNavigation()
             if (pointers.size < 2) return
+            viewAnimator?.cancel()
+            if (pinchStartScale == 0f) {
+                pinchStartScale = scale
+                pinchStartTime = SystemClock.uptimeMillis()
+            }
             val ordered = pointers.sortedBy { it.id }
             navPrevDistance = spacing(ordered)
             navPrevAngle = angle(ordered)
             navPrevMidX = ordered.map { it.x }.average().toFloat()
             navPrevMidY = ordered.map { it.y }.average().toFloat()
             navAnchor = viewToCanvas(navPrevMidX, navPrevMidY)
+        }
+
+        /** Taps of two, three or four fingers undo, redo or toggle full screen; a quick pinch fits the canvas. */
+        private fun finishNavigation(
+            tapFingers: Int,
+            timeMillis: Long,
+        ) {
+            resetNavigation()
+            val quickPinch = QuickPinch.isQuickPinch(pinchStartScale, scale, timeMillis - pinchStartTime)
+            pinchStartScale = 0f
+            when {
+                tapFingers == 2 -> onUndoRequested?.invoke()
+                tapFingers == 3 -> onRedoRequested?.invoke()
+                tapFingers == 4 -> onFullscreenRequested?.invoke()
+                quickPinch -> animateFitToView()
+            }
         }
 
         private fun navigate(pointers: List<PointerGestureRouter.Pointer>) {
@@ -2203,6 +2253,7 @@ class ArtFlowCanvasView
 
         companion object {
             private const val MIN_SCALE = 0.05f
+            private const val FIT_ANIMATION_MS = 260L
             private const val MAX_SCALE = 32f
             private const val TAP_SLOP = 24f
             private const val QUICKSHAPE_HOLD_SLOP = 10f
