@@ -188,6 +188,10 @@ class ArtFlowCanvasView
         private var lastPointerY = 0f
         private var gestureStartTime = 0L
         private var gestureMoved = 0f
+        private var gestureStartView = 0f to 0f
+
+        /** Reports a new Automatic-selection threshold chosen by sliding (0-255). */
+        var onFillToleranceChanged: ((Int) -> Unit)? = null
         private var gestureTool: ToolType? = null
 
         private var drawing = false
@@ -1091,6 +1095,7 @@ class ArtFlowCanvasView
             lastPointerY = y
             gestureStartTime = event.eventTime
             gestureMoved = 0f
+            gestureStartView = x to y
 
             val tool = if (event.getToolType(index) == MotionEvent.TOOL_TYPE_ERASER) ToolType.ERASER else input.tool
             armHoldEyedropper(isStylus, x, y)
@@ -1271,7 +1276,7 @@ class ArtFlowCanvasView
                 }
                 ToolType.TEXT -> if (!cancelled && wasTap) onTextPlacementRequested?.invoke(canvasX, canvasY)
                 ToolType.EYEDROPPER -> if (!cancelled) pickColor(canvasX, canvasY)
-                ToolType.SELECT_MAGIC_WAND -> if (!cancelled && wasTap) magicWandSelect(canvasX, canvasY)
+                ToolType.SELECT_MAGIC_WAND -> if (!cancelled) automaticSelect(x, wasTap)
                 ToolType.SELECT_RECTANGLE, ToolType.SELECT_ELLIPSE,
                 ToolType.SELECT_FREEHAND, ToolType.SELECT_LASSO,
                 -> {
@@ -1965,14 +1970,33 @@ class ArtFlowCanvasView
             }
         }
 
+        /**
+         * Procreate's Automatic selection: tap to select similar colour, or touch and slide sideways
+         * to raise or lower the threshold before the selection is made.
+         */
+        private fun automaticSelect(
+            endViewX: Float,
+            wasTap: Boolean,
+        ) {
+            val (startX, startY) = gestureStartView
+            val (canvasX, canvasY) = viewToCanvas(startX, startY)
+            var tolerance = input.fillTolerance
+            if (!wasTap && width > 0) {
+                tolerance = (tolerance + ((endViewX - startX) / width * 255f).roundToInt()).coerceIn(0, 255)
+                onFillToleranceChanged?.invoke(tolerance)
+                onStatusMessage?.invoke("Selection threshold ${tolerance * 100 / 255}%")
+            }
+            magicWandSelect(canvasX, canvasY, tolerance)
+        }
+
         private fun magicWandSelect(
             x: Float,
             y: Float,
+            tolerance: Int,
         ) {
             if (!x.isFinite() || !y.isFinite()) return
             val cx = floor(x).toInt()
             val cy = floor(y).toInt()
-            val tolerance = input.fillTolerance
             val contiguous = input.fillContiguous
             val mode = input.selectionMode
             runSelectionEdit(mode) {

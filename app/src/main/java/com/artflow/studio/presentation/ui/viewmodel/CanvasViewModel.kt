@@ -519,6 +519,8 @@ class CanvasViewModel
             contiguous: Boolean,
         ) = updateInput { it.copy(fillTolerance = tolerance.coerceIn(0, 255), fillContiguous = contiguous) }
 
+        fun setFillTolerance(tolerance: Int) = updateInput { it.copy(fillTolerance = tolerance.coerceIn(0, 255)) }
+
         fun setShapeSettings(
             kind: ShapeKind,
             filled: Boolean,
@@ -699,6 +701,7 @@ class CanvasViewModel
 
         /** Cut, copy, paste, clear and fill (Copy & Paste menu and layer options). */
         val clipboard = ClipboardController(canvasRepository, ::layerOp)
+        val savedSelections = SavedSelections(canvasRepository) { refreshSelection() }
 
         val layerThumbnails = LayerThumbnailController(canvasRepository, viewModelScope)
 

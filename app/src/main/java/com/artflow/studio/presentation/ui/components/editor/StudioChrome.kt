@@ -272,6 +272,10 @@ data class SelectionToolbarActions(
     val onCopyPaste: () -> Unit,
     val onMore: () -> Unit,
     val onClear: () -> Unit,
+    val onColorFill: () -> Unit = {},
+    val onSave: () -> Unit = {},
+    val onLoad: (Int) -> Unit = {},
+    val onDelete: (Int) -> Unit = {},
 )
 
 /** Procreate-style selection bar: selection kind, combine mode and the common follow-up actions. */
@@ -281,7 +285,9 @@ fun SelectionToolbar(
     mode: SelectionCombineMode,
     actions: SelectionToolbarActions,
     modifier: Modifier = Modifier,
+    savedCount: Int = 0,
 ) {
+    var savedMenu by remember { mutableStateOf(false) }
     FloatingBar(modifier) {
         listOf(
             ToolType.SELECT_MAGIC_WAND to "Automatic",
@@ -302,6 +308,33 @@ fun SelectionToolbar(
         AssistChip(onClick = actions.onInvert, label = { Text("Invert") })
         AssistChip(onClick = actions.onCopyPaste, label = { Text("Copy & Paste") })
         AssistChip(onClick = actions.onMore, label = { Text("Feather…") })
+        Box {
+            AssistChip(onClick = { savedMenu = true }, label = { Text("Save & Load") })
+            DropdownMenu(expanded = savedMenu, onDismissRequest = { savedMenu = false }) {
+                DropdownMenuItem(
+                    text = { Text("Save selection") },
+                    onClick = {
+                        actions.onSave()
+                        savedMenu = false
+                    },
+                )
+                repeat(savedCount) { index ->
+                    DropdownMenuItem(
+                        text = { Text("Selection ${index + 1}") },
+                        onClick = {
+                            actions.onLoad(index)
+                            savedMenu = false
+                        },
+                        trailingIcon = {
+                            IconButton(onClick = { actions.onDelete(index) }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete selection ${index + 1}")
+                            }
+                        },
+                    )
+                }
+            }
+        }
+        AssistChip(onClick = actions.onColorFill, label = { Text("Colour Fill") })
         AssistChip(onClick = actions.onClear, label = { Text("Clear") })
     }
 }

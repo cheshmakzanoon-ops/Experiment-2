@@ -724,6 +724,7 @@ fun CanvasScreen(
                                 onTextPlacementRequested = { x, y -> viewModel.requestTextAt(x, y) }
                                 onCloneSourceChanged = { viewModel.onCloneSourceChanged(it) }
                                 onStatusMessage = { viewModel.notify(it) }
+                                onFillToleranceChanged = viewModel::setFillTolerance
                                 setEditorInput(input)
                                 setOnionSkinEnabled(settings.onionSkin)
                                 setCheckerboardVisible(settings.checkerboard)
@@ -1108,6 +1109,7 @@ private fun ContextToolbar(
     modifier: Modifier,
     openPanel: (EditorPanel) -> Unit,
 ) {
+    val savedSelections by viewModel.savedSelections.saved.collectAsState()
     when {
         input.tool.group == ToolGroup.SELECTION ->
             SelectionToolbar(
@@ -1121,8 +1123,15 @@ private fun ContextToolbar(
                         onCopyPaste = viewModel.clipboard::copyAndPaste,
                         onMore = { openPanel(EditorPanel.SELECTION) },
                         onClear = viewModel::clearSelection,
+                        onColorFill = { viewModel.clipboard.fill(input.brushColor) },
+                        onSave = {
+                            if (!viewModel.savedSelections.save()) viewModel.notify("Make a selection first")
+                        },
+                        onLoad = viewModel.savedSelections::load,
+                        onDelete = viewModel.savedSelections::delete,
                     ),
                 modifier = modifier,
+                savedCount = savedSelections.size,
             )
         input.tool == ToolType.TRANSFORM ->
             TransformToolbar(
