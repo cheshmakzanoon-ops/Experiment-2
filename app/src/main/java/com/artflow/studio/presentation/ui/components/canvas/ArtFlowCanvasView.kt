@@ -581,9 +581,9 @@ class ArtFlowCanvasView
             getLocationInWindow(origin)
             val localX = windowX - origin[0]
             val localY = windowY - origin[1]
-            if (localX < 0f || localY < 0f || localX > width || localY > height) return false
+            if (localX !in 0f..width.toFloat() || localY !in 0f..height.toFloat()) return false
             val (x, y) = viewToCanvas(localX, localY)
-            if (x < 0f || y < 0f || x >= canvasWidth || y >= canvasHeight) return false
+            if (floor(x).toInt() !in 0 until canvasWidth || floor(y).toInt() !in 0 until canvasHeight) return false
             cancelActiveGesture()
             bucketFill(x, y)
             return true
@@ -981,14 +981,7 @@ class ArtFlowCanvasView
             when (tool) {
                 ToolType.BRUSH, ToolType.ERASER -> {
                     removeCallbacks(quickShapeCheck)
-                    if (drawing) {
-                        if (!cancelled && !quickShapeApplied) {
-                            stabilizer?.finish(canvasX, canvasY)?.forEach { (px, py) ->
-                                canvasRepository.continueStroke(currentStrokeId, px, py, strokeLastPressure)
-                            }
-                        }
-                        if (cancelled) canvasRepository.cancelStroke(currentStrokeId) else canvasRepository.endStroke(currentStrokeId)
-                    }
+                    if (drawing) finishStroke(canvasX, canvasY, cancelled)
                     drawing = false
                     reportHistory()
                 }
@@ -1126,6 +1119,24 @@ class ArtFlowCanvasView
             quickShapeApplied = false
             removeCallbacks(quickShapeCheck)
             updateLiveStroke()
+        }
+
+        /** Lets the stabilised line catch up to the lift point, then commits or cancels the stroke. */
+        private fun finishStroke(
+            x: Float,
+            y: Float,
+            cancelled: Boolean,
+        ) {
+            if (cancelled) {
+                canvasRepository.cancelStroke(currentStrokeId)
+                return
+            }
+            if (!quickShapeApplied) {
+                stabilizer?.finish(x, y)?.forEach { (px, py) ->
+                    canvasRepository.continueStroke(currentStrokeId, px, py, strokeLastPressure)
+                }
+            }
+            canvasRepository.endStroke(currentStrokeId)
         }
 
         /** Restarts the QuickShape hold timer whenever the pen moves beyond a small radius. */

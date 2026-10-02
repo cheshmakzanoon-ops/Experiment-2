@@ -102,7 +102,6 @@ data class Layer(
         isReference: Boolean = this.isReference,
         linkGroupId: Long? = this.linkGroupId,
         isInternal: Boolean = this.isInternal,
-        isGroup: Boolean = this.isGroup,
     ): Layer =
         Layer(
             id = id,
@@ -131,7 +130,7 @@ data class Layer(
             isReference = isReference,
             linkGroupId = linkGroupId,
             isInternal = isInternal,
-            isGroup = isGroup,
+            isGroup = this.isGroup,
             hasInMemoryMask = hasInMemoryMask,
         )
 }

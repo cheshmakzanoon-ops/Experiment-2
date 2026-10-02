@@ -83,7 +83,7 @@ internal object Mp4Encoder {
                 codec.start()
                 val session = EncodingSession(codec, muxer)
                 var presentationUs = 0L
-                for (index in 0 until frameCount) {
+                repeat(frameCount) { index ->
                     currentCoroutineContext().ensureActive()
                     val frame = frameAt(index)
                     require(frame.width <= width && frame.height <= height) { "Video frame sizes do not match" }

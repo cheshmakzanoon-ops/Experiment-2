@@ -30,16 +30,15 @@ object LayerTransform {
         val flipHorizontal: Boolean = false,
         val flipVertical: Boolean = false,
     ) {
+        private val isUnscaledUpright: Boolean
+            get() = scaleX == 1f && scaleY == 1f && rotationDegrees % 360f == 0f && !flipHorizontal && !flipVertical
+
         val isIdentity: Boolean
-            get() =
-                translateX == 0f && translateY == 0f && scaleX == 1f && scaleY == 1f &&
-                    rotationDegrees % 360f == 0f && !flipHorizontal && !flipVertical
+            get() = isUnscaledUpright && translateX == 0f && translateY == 0f
 
         /** True when the transform is an integer translation that needs no resampling. */
         val isPureIntegerTranslation: Boolean
-            get() =
-                scaleX == 1f && scaleY == 1f && rotationDegrees % 360f == 0f && !flipHorizontal &&
-                    !flipVertical && translateX == floor(translateX) && translateY == floor(translateY)
+            get() = isUnscaledUpright && translateX == floor(translateX) && translateY == floor(translateY)
     }
 
     /** One-finger editing modes of the transform tool. */
@@ -198,18 +197,14 @@ object LayerTransform {
         dy: Int,
         blend: Boolean,
     ) {
-        for (y in 0 until target.height) {
-            val sy = y - dy
-            if (sy < 0 || sy >= floating.height) continue
-            val row = y * target.width
-            val srow = sy * floating.width
-            for (x in 0 until target.width) {
-                val sx = x - dx
-                if (sx < 0 || sx >= floating.width) continue
-                val p = floating.pixels[srow + sx]
-                if ((p ushr 24) == 0) continue
-                target.pixels[row + x] = if (blend) BlendModes.sourceOver(target.pixels[row + x], p) else p
-            }
+        val width = target.width
+        for (i in target.pixels.indices) {
+            val sx = i % width - dx
+            val sy = i / width - dy
+            if (sx !in 0 until floating.width || sy !in 0 until floating.height) continue
+            val p = floating.pixels[sy * floating.width + sx]
+            if ((p ushr 24) == 0) continue
+            target.pixels[i] = if (blend) BlendModes.sourceOver(target.pixels[i], p) else p
         }
     }
 
@@ -223,17 +218,14 @@ object LayerTransform {
         var minY = source.height
         var maxX = -1
         var maxY = -1
-        for (y in 0 until source.height) {
-            val row = y * source.width
-            for (x in 0 until source.width) {
-                val i = row + x
-                if ((source.pixels[i] ushr 24) == 0) continue
-                if (mask != null && mask.alphaAt(i) <= 0f) continue
-                if (x < minX) minX = x
-                if (x > maxX) maxX = x
-                if (y < minY) minY = y
-                if (y > maxY) maxY = y
-            }
+        for (i in source.pixels.indices) {
+            if ((source.pixels[i] ushr 24) == 0 || (mask != null && mask.alphaAt(i) <= 0f)) continue
+            val x = i % source.width
+            val y = i / source.width
+            minX = min(minX, x)
+            maxX = max(maxX, x)
+            minY = min(minY, y)
+            maxY = max(maxY, y)
         }
         if (maxX < minX) return source.width / 2f to source.height / 2f
         return (minX + maxX + 1) / 2f to (minY + maxY + 1) / 2f

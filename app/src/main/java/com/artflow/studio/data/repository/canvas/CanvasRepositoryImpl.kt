@@ -357,8 +357,6 @@ class CanvasRepositoryImpl
                     isClippingMask = layer.isClippingMask,
                     isReference = layer.isReference,
                     linkGroupId = layer.linkGroupId,
-                    isGroup = layer.isGroup,
-                    parentGroupId = layer.parentGroupId,
                     maskEnabled = layer.maskEnabled,
                     maskInverted = layer.maskInverted,
                     maskDensity = layer.maskDensity,
@@ -368,7 +366,10 @@ class CanvasRepositoryImpl
                     filterType = layer.filterType,
                     filterAmount = layer.filterAmount,
                     isInternal = layer.isInternal,
-                )
+                ).apply {
+                    isGroup = layer.isGroup
+                    parentGroupId = layer.parentGroupId
+                }
             data.raster = loadRaster(projectId, layer.rasterFile)
             data.mask = loadRaster(projectId, layer.maskFile)
             data.rasterFile = layer.rasterFile
@@ -1133,7 +1134,7 @@ class CanvasRepositoryImpl
                 if (members.isEmpty() || !hasLayerCapacity(1)) return@withState null
                 pushUndo()
                 val groupId = nextLayerId++
-                val group = LayerData(id = groupId, name = "Group ${layers.count { it.isGroup } + 1}", isGroup = true)
+                val group = LayerData(id = groupId, name = "Group ${layers.count { it.isGroup } + 1}").apply { isGroup = true }
                 // Keep members contiguous, in stack order, where the topmost member used to be.
                 val topIndex = layers.indexOf(members.last())
                 layers.removeAll(members)
@@ -2309,9 +2310,9 @@ class CanvasRepositoryImpl
             var filterType: FilterType? = null,
             var filterAmount: Float = 0f,
             var isInternal: Boolean = false,
-            var isGroup: Boolean = false,
-            var parentGroupId: Long? = null,
         ) {
+            var isGroup: Boolean = false
+            var parentGroupId: Long? = null
             var raster: PixelBuffer? = null
             var rasterFile: String? = null
             var mask: PixelBuffer? = null
@@ -2346,8 +2347,6 @@ class CanvasRepositoryImpl
                     isClippingMask = isClippingMask,
                     isReference = isReference,
                     linkGroupId = linkGroupId,
-                    isGroup = isGroup,
-                    parentGroupId = parentGroupId,
                     maskEnabled = maskEnabled,
                     maskInverted = maskInverted,
                     maskDensity = maskDensity,
@@ -2357,7 +2356,10 @@ class CanvasRepositoryImpl
                     filterType = filterType,
                     filterAmount = filterAmount,
                     isInternal = isInternal,
-                ).also {
+                ).apply {
+                    isGroup = this@LayerData.isGroup
+                    parentGroupId = this@LayerData.parentGroupId
+                }.also {
                     it.raster = raster
                     it.rasterFile = rasterFile
                     it.mask = mask
@@ -2392,8 +2394,6 @@ class CanvasRepositoryImpl
                     isClippingMask = isClippingMask,
                     isReference = isReference,
                     linkGroupId = linkGroupId,
-                    isGroup = isGroup,
-                    parentGroupId = parentGroupId,
                     maskEnabled = maskEnabled,
                     maskInverted = maskInverted,
                     maskDensity = maskDensity,
@@ -2403,7 +2403,10 @@ class CanvasRepositoryImpl
                     filterType = filterType,
                     filterAmount = filterAmount,
                     isInternal = isInternal,
-                ).also { fresh ->
+                ).apply {
+                    isGroup = this@LayerData.isGroup
+                    parentGroupId = this@LayerData.parentGroupId
+                }.also { fresh ->
                     fresh.raster = raster
                     fresh.mask = mask
                     fresh.maskOwned = false
