@@ -10,11 +10,13 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
+import com.artflow.studio.core.text.TextLayerContent
 import com.artflow.studio.core.text.TextLayout
 import com.artflow.studio.core.tool.LiquifyTool
 import com.artflow.studio.core.tool.PixelBrushes
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.data.local.ProjectStorage
+import com.artflow.studio.data.renderer.TextRasterizer
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView
@@ -396,7 +398,9 @@ class CanvasInputDeviceTest {
             for (text in listOf(false, true)) {
                 val depth = repository.undoDepth
                 if (text) {
-                    canvas.placeText(8f, 8f, "A", TextLayout.TextStyle(fontSize = 18f), Color.RED)
+                    // Text goes on its own editable layer above the artwork.
+                    val content = TextLayerContent("A", TextLayout.TextStyle(fontSize = 18f), Color.RED, 8f, 8f)
+                    assertTrue(repository.addTextLayer(content, TextRasterizer.render(64, 64, content)) != null)
                 } else {
                     canvas.placeShape(ShapeKind.RECTANGLE, 12f, 12f, 40f, 40f, true, Color.RED, 1f)
                 }
