@@ -166,7 +166,9 @@ class StrokeRasterizer {
 
         // Spacing is expressed as a fraction of the brush size; a minimum of one dab per segment
         // keeps single-point taps visible.
-        val context = DabContext(target, stroke, params, totalLength, alphaLock, mask, random)
+        val shape = CustomGrains.get(params.shapeId)
+        val tip = Stamping.TipShape(params.roundness, params.rotation, shape?.let { tile -> { u, v -> tile.sample(u, v) } })
+        val context = DabContext(target, stroke, params, totalLength, alphaLock, mask, random, tip)
         val spacingPx = max(1f, params.size * params.spacing.coerceIn(0.01f, 4f))
         var carry = 0f
         var accumulatedDistance = 0f
@@ -242,6 +244,7 @@ class StrokeRasterizer {
         val alphaLock: Boolean,
         val mask: SelectionMask?,
         val random: Random,
+        val tip: Stamping.TipShape,
     )
 
     private fun drawDabAt(
@@ -299,7 +302,7 @@ class StrokeRasterizer {
                 mode = Stamping.Mode.MAX_COVERAGE,
                 alphaLock = alphaLock,
                 mask = mask,
-                tip = Stamping.TipShape(params.roundness, params.rotation),
+                tip = context.tip,
             )
             dabCount.incrementAndGet()
         }
@@ -311,6 +314,7 @@ class StrokeRasterizer {
     ): Boolean =
         params.spacing <= 0f &&
             params.roundness >= 1f &&
+            CustomGrains.get(params.shapeId) == null &&
             points.size <= 2 &&
             params.count == 1 &&
             points.first().pressure == points.last().pressure &&

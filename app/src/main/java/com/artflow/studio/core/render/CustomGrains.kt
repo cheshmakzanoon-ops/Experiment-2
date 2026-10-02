@@ -3,6 +3,7 @@ package com.artflow.studio.core.render
 import com.artflow.studio.core.pixels.Channels
 import com.artflow.studio.core.pixels.PixelBuffer
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 
@@ -29,6 +30,27 @@ object CustomGrains {
             x: Int,
             y: Int,
         ): Float = (values[Math.floorMod(y, size) * size + Math.floorMod(x, size)].toInt() and 0xFF) / 255f
+
+        /** Bilinear coverage at (u, v) in 0..1 across the tile, transparent beyond its edges (for tips). */
+        fun sample(
+            u: Float,
+            v: Float,
+        ): Float {
+            val fx = u * size - 0.5f
+            val fy = v * size - 0.5f
+            val x0 = floor(fx).toInt()
+            val y0 = floor(fy).toInt()
+            val tx = fx - x0
+            val ty = fy - y0
+            val top = edged(x0, y0) + (edged(x0 + 1, y0) - edged(x0, y0)) * tx
+            val bottom = edged(x0, y0 + 1) + (edged(x0 + 1, y0 + 1) - edged(x0, y0 + 1)) * tx
+            return top + (bottom - top) * ty
+        }
+
+        private fun edged(
+            x: Int,
+            y: Int,
+        ): Float = if (x in 0 until size && y in 0 until size) (values[y * size + x].toInt() and 0xFF) / 255f else 0f
     }
 
     fun isCustom(id: String?): Boolean = id != null && ID.matches(id)

@@ -1,6 +1,7 @@
 package com.artflow.studio.core.render
 
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.pixels.Stamping
 import com.artflow.studio.domain.model.brush.BrushParams
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -36,5 +37,22 @@ class CustomGrainsTest {
         assertNotNull(texture)
         assertEquals(tile.at(3, 5), texture!!.coverage(3, 5), 0f)
         assertFalse(CustomGrains.isCustom("paper"))
+    }
+
+    @Test fun importedShapeStampsItsImage() {
+        // A tile that is white on its left half only: the dab paints only left of centre.
+        val values = ByteArray(16 * 16) { (if (it % 16 < 8) -1 else 0).toByte() }
+        val tile = CustomGrains.Tile(16, values)
+        val target = PixelBuffer(41, 41)
+        Stamping.dab(
+            target,
+            20.5f,
+            20.5f,
+            radius = 16f,
+            color = 0xFF000000.toInt(),
+            tip = Stamping.TipShape(1f, 0f) { u, v -> tile.sample(u, v) },
+        )
+        assertTrue((target.pixels[20 * 41 + 10] ushr 24) > 200)
+        assertEquals(0, target.pixels[20 * 41 + 30] ushr 24)
     }
 }

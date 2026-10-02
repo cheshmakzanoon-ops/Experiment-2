@@ -184,29 +184,16 @@ private fun BrushGrainSettings(
     brushParams: BrushParams,
     onBrushParamsChanged: (BrushParams) -> Unit,
 ) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val latestParams by rememberUpdatedState(brushParams)
     val latestChange by rememberUpdatedState(onBrushParamsChanged)
     var imported by remember { mutableStateOf(CustomGrains.ids()) }
     var importFailed by remember { mutableStateOf(false) }
-    val picker =
-        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-            if (uri == null) return@rememberLauncherForActivityResult
-            scope.launch {
-                val id =
-                    withContext(Dispatchers.IO) {
-                        runCatching {
-                            BitmapPixelBridge.decodeUri(context.contentResolver, uri, maxDimension = GRAIN_DECODE_SIZE)?.let { image ->
-                                GrainStorage.save(GrainStorage.directory(context.filesDir), CustomGrains.tileFrom(image))
-                            }
-                        }.getOrNull()
-                    }
-                importFailed = id == null
-                if (id != null) {
-                    imported = CustomGrains.ids()
-                    latestChange(latestParams.copy(textureId = id, blendTexture = true))
-                }
+    val importImage =
+        rememberImageImport { id ->
+            importFailed = id == null
+            if (id != null) {
+                imported = CustomGrains.ids()
+                latestChange(latestParams.copy(textureId = id, blendTexture = true))
             }
         }
     BrushSettingsSection(title = "Brush Grain") {
@@ -230,19 +217,10 @@ private fun BrushGrainSettings(
                 FilterChip(
                     selected = brushParams.blendTexture && brushParams.textureId == id,
                     onClick = { onBrushParamsChanged(brushParams.copy(textureId = id, blendTexture = true)) },
-                    label = { Text("Photo ${index + 1}") },
+                    label = { Text("Image ${index + 1}") },
                 )
             }
-            AssistChip(
-                onClick = {
-                    try {
-                        picker.launch("image/*")
-                    } catch (missing: ActivityNotFoundException) {
-                        importFailed = true
-                    }
-                },
-                label = { Text("Import photo…") },
-            )
+            AssistChip(onClick = importImage, label = { Text("Import photo…") })
         }
         if (importFailed) {
             Text(
@@ -362,12 +340,50 @@ private fun BrushRotationSettings(
     brushParams: BrushParams,
     onBrushParamsChanged: (BrushParams) -> Unit,
 ) {
+    val latestParams by rememberUpdatedState(brushParams)
+    val latestChange by rememberUpdatedState(onBrushParamsChanged)
+    var imported by remember { mutableStateOf(CustomGrains.ids()) }
+    var importFailed by remember { mutableStateOf(false) }
+    val importImage =
+        rememberImageImport { id ->
+            importFailed = id == null
+            if (id != null) {
+                imported = CustomGrains.ids()
+                latestChange(latestParams.copy(shapeId = id))
+            }
+        }
     BrushSettingsSection(title = "Shape") {
         Text(
-            "Lower roundness flattens the tip into a chisel; rotation sets the angle of a flattened tip.",
+            "Lower roundness flattens the tip into a chisel; rotation sets the angle of a flattened tip. " +
+                "An imported photo becomes the tip: white paints, black stays clear.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag("brush-shape-options"),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            FilterChip(
+                selected = brushParams.shapeId == null,
+                onClick = { onBrushParamsChanged(brushParams.copy(shapeId = null)) },
+                label = { Text("Round tip") },
+            )
+            imported.forEachIndexed { index, id ->
+                FilterChip(
+                    selected = brushParams.shapeId == id,
+                    onClick = { onBrushParamsChanged(brushParams.copy(shapeId = id)) },
+                    label = { Text("Image ${index + 1}") },
+                )
+            }
+            AssistChip(onClick = importImage, label = { Text("Import shape…") })
+        }
+        if (importFailed) {
+            Text(
+                "That image could not be used as a brush shape",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
         BrushParameterSlider(
             label = "Roundness",
             value = brushParams.roundness,
@@ -703,3 +719,33 @@ private fun BrushProperties(
 }
 
 private const val GRAIN_DECODE_SIZE = 1024
+
+/** Opens the image picker and turns the chosen photo into a stored tile; reports its identity or null. */
+@Composable
+private fun rememberImageImport(onResult: (String?) -> Unit): () -> Unit {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val latest by rememberUpdatedState(onResult)
+    val picker =
+        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            scope.launch {
+                val id =
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            BitmapPixelBridge.decodeUri(context.contentResolver, uri, maxDimension = GRAIN_DECODE_SIZE)?.let { image ->
+                                GrainStorage.save(GrainStorage.directory(context.filesDir), CustomGrains.tileFrom(image))
+                            }
+                        }.getOrNull()
+                    }
+                latest(id)
+            }
+        }
+    return {
+        try {
+            picker.launch("image/*")
+        } catch (missing: ActivityNotFoundException) {
+            latest(null)
+        }
+    }
+}

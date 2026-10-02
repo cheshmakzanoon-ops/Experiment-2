@@ -52,6 +52,7 @@ object BrushLibraryCodec {
         require(params.textureScale in 0.25f..8f) { "Unsupported grain scale" }
         require(params.textureId in GRAIN_IDS || params.textureId?.matches(IMPORTED_GRAIN) == true) { "Unsupported grain source" }
         require(params.roundness in 0.05f..1f) { "Unsupported tip roundness" }
+        require(params.shapeId == null || params.shapeId.matches(IMPORTED_GRAIN)) { "Unsupported shape source" }
         val unitValues =
             listOf(
                 params.opacity,

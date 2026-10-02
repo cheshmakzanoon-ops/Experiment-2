@@ -40,6 +40,10 @@ object Stamping {
         tip: TipShape = TipShape.ROUND,
     ) {
         if (radius <= 0f || strength <= 0f) return
+        if (tip.image != null) {
+            imageDab(target, x, y, radius, color, strength, mode, alphaLock, mask, tip)
+            return
+        }
         if (!tip.isRound) {
             ellipticalDab(target, x, y, radius, color, strength, hardness, mode, alphaLock, mask, tip)
             return
@@ -66,15 +70,57 @@ object Stamping {
         }
     }
 
-    /** Dab outline: [roundness] 1 is a circle; lower values flatten it across [angleDegrees]. */
+    /**
+     * Dab outline: [roundness] 1 is a circle; lower values flatten it across [angleDegrees]. An
+     * [image] tip samples coverage at (u, v) in 0..1 across the dab's square, like Procreate's
+     * imported Shape Source.
+     */
     data class TipShape(
         val roundness: Float,
         val angleDegrees: Float,
+        val image: ((Float, Float) -> Float)? = null,
     ) {
-        val isRound: Boolean get() = roundness >= 0.999f
+        val isRound: Boolean get() = roundness >= 0.999f && image == null
 
         companion object {
             val ROUND = TipShape(1f, 0f)
+        }
+    }
+
+    /** A dab whose coverage comes from the tip image, rotated by the tip angle and squashed by its roundness. */
+    private fun imageDab(
+        target: PixelBuffer,
+        x: Float,
+        y: Float,
+        radius: Float,
+        color: Int,
+        strength: Float,
+        mode: Mode,
+        alphaLock: Boolean,
+        mask: SelectionMask?,
+        tip: TipShape,
+    ) {
+        val image = tip.image ?: return
+        val minor = tip.roundness.coerceIn(0.05f, 1f)
+        val radians = Math.toRadians(tip.angleDegrees.toDouble())
+        val cosA = cos(radians).toFloat()
+        val sinA = sin(radians).toFloat()
+        // The rotated square's corners reach radius × √2 from the centre.
+        val reach = radius * 1.4143f
+        val x0 = max(0, floor(x - reach).toInt())
+        val x1 = min(target.width - 1, ceil(x + reach).toInt())
+        val y0 = max(0, floor(y - reach).toInt())
+        val y1 = min(target.height - 1, ceil(y + reach).toInt())
+        for (py in y0..y1) {
+            for (px in x0..x1) {
+                val dx = px + 0.5f - x
+                val dy = py + 0.5f - y
+                val u = ((dx * cosA + dy * sinA) / radius + 1f) / 2f
+                val v = ((-dx * sinA + dy * cosA) / (radius * minor) + 1f) / 2f
+                val coverage = if (u in 0f..1f && v in 0f..1f) image(u, v) else 0f
+                if (coverage <= 0f) continue
+                applyPixel(target, py * target.width + px, color, coverage * strength, mode, alphaLock, mask)
+            }
         }
     }
 

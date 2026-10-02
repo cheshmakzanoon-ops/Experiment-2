@@ -65,10 +65,13 @@ class WarpMeshTest {
         assertEquals(Target.Body, mesh.hit(300f, 300f, 6f))
     }
 
-    @Test fun draggingAPointBendsTheContent() {
-        val source = block(32, 4, 4, 24)
-        val out = render(source) { it.drag(Target.Point(5), 0f, -6f) }
-        assertTrue(!source.pixels.contentEquals(out.pixels))
+    @Test fun draggingAnEdgePointBulgesTheContent() {
+        val source = block(32, 4, 6, 20)
+        val out = render(source) { it.drag(Target.Point(1), 0f, -6f) }
+        // The top edge bows upward between its corners; the corners stay put.
+        assertEquals(red, out.pixels[4 * 32 + 9])
+        assertEquals(0, out.pixels[4 * 32 + 4])
+        assertTrue(out.opaquePixelCount() > source.opaquePixelCount())
     }
 
     @Test fun flipAndFitKeepTheShapeInsideTheCanvas() {

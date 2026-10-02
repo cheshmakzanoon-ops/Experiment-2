@@ -47,6 +47,7 @@ data class BrushParams(
     val velocityToOpacity: Float = 0f, // Speed affects opacity (0.0 - 1.0)
     val velocityToHue: Float = 0f, // Speed affects hue shift (0.0 - 1.0)
     val roundness: Float = 1f, // Tip shape: 1 is round, lower values flatten it along [rotation]
+    val shapeId: String? = null, // Imported tip image ("custom-…"); null stamps the round/flat tip
 ) {
     /**
      * Pressure curve types for mapping stylus pressure
