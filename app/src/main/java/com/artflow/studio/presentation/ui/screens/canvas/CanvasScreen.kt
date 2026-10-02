@@ -34,6 +34,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.artflow.studio.core.pixels.LiveAdjustments
 import com.artflow.studio.core.pixels.Quad
 import com.artflow.studio.core.tool.ToolGroup
 import com.artflow.studio.core.tool.ToolType
@@ -46,6 +47,8 @@ import com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView
 import com.artflow.studio.presentation.ui.components.canvas.DragPreview
 import com.artflow.studio.presentation.ui.components.canvas.EditorInput
 import com.artflow.studio.presentation.ui.components.color.ColorPanel
+import com.artflow.studio.presentation.ui.components.editor.AdjustmentOverlay
+import com.artflow.studio.presentation.ui.components.editor.AdjustmentOverlayActions
 import com.artflow.studio.presentation.ui.components.editor.AnimationSheet
 import com.artflow.studio.presentation.ui.components.editor.BrushOptionsRow
 import com.artflow.studio.presentation.ui.components.editor.CanvasOpsSheet
@@ -153,6 +156,7 @@ fun CanvasScreen(
     var openMenu by remember { mutableStateOf<StudioButton?>(null) }
     var showCopyPaste by remember { mutableStateOf(false) }
     var transformQuad by remember { mutableStateOf<Quad?>(null) }
+    val adjustment by viewModel.adjustments.state.collectAsState()
     val hasClipboard by viewModel.hasClipboard.collectAsState()
     val wide = isWideLayout()
     var colorDropPosition by remember { mutableStateOf<androidx.compose.ui.geometry.Offset?>(null) }
@@ -517,6 +521,7 @@ fun CanvasScreen(
                     openMenu = openMenu,
                     onButton = { button ->
                         canvasView?.cancelActiveGesture()
+                        if (adjustment != null) viewModel.adjustments.apply()
                         when (button) {
                             StudioButton.GALLERY -> if (dirty) showExitConfirm = true else onNavigateBack()
                             StudioButton.ACTIONS, StudioButton.ADJUSTMENTS -> openMenu = button
@@ -583,25 +588,8 @@ fun CanvasScreen(
                                 )
                             }
                             HorizontalDivider()
-                            AdjustmentType.entries.forEach { type ->
-                                DropdownMenuItem(
-                                    text = { Text(type.displayName) },
-                                    onClick =
-                                        choose {
-                                            viewModel.addAdjustmentLayer(type)
-                                            panel = EditorPanel.LAYERS
-                                        },
-                                )
-                            }
-                            FilterType.entries.forEach { type ->
-                                DropdownMenuItem(
-                                    text = { Text(type.displayName) },
-                                    onClick =
-                                        choose {
-                                            viewModel.addFilterLayer(type)
-                                            panel = EditorPanel.LAYERS
-                                        },
-                                )
+                            LiveAdjustments.Kind.entries.forEach { kind ->
+                                DropdownMenuItem(text = { Text(kind.displayName) }, onClick = choose { viewModel.adjustments.start(kind) })
                             }
                         }
                     },
@@ -770,6 +758,20 @@ fun CanvasScreen(
                     canvasHeight = ready.height,
                     view = ViewTransform(viewScale, viewOffsetX, viewOffsetY, viewRotation),
                     modifier = Modifier.fillMaxSize(),
+                )
+            }
+            adjustment?.let { active ->
+                AdjustmentOverlay(
+                    state = active,
+                    actions =
+                        AdjustmentOverlayActions(
+                            onAmount = viewModel.adjustments::setAmount,
+                            onAngle = viewModel.adjustments::setAngle,
+                            onParameter = viewModel.adjustments::setParameter,
+                            onCancel = viewModel.adjustments::cancel,
+                            onApply = viewModel.adjustments::apply,
+                        ),
+                    modifier = Modifier.zIndex(5f),
                 )
             }
             if (showCopyPaste && ready != null) {

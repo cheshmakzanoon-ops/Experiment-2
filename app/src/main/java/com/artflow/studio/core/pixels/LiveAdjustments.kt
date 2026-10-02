@@ -1,0 +1,204 @@
+package com.artflow.studio.core.pixels
+
+import com.artflow.studio.domain.model.layer.AdjustmentType
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.roundToInt
+import kotlin.math.sqrt
+
+/**
+ * Procreate-style Adjustments: destructive, previewed live and applied to the active layer (or
+ * only its selected pixels). Single-value effects take an [amount] from 0 to 1 that the artist
+ * sets by sliding across the canvas; colour adjustments use [AdjustmentType] parameters.
+ */
+object LiveAdjustments {
+    enum class Kind(
+        val displayName: String,
+        /** True when the effect is a single amount set by sliding across the canvas. */
+        val slidesAmount: Boolean,
+        val adjustmentType: AdjustmentType? = null,
+    ) {
+        HUE_SATURATION_BRIGHTNESS("Hue, Saturation, Brightness", false, AdjustmentType.HUE_SATURATION),
+        COLOR_BALANCE("Color Balance", false, AdjustmentType.COLOR_BALANCE),
+        CURVES("Curves", false, AdjustmentType.CURVES),
+        GRADIENT_MAP("Gradient Map", false, AdjustmentType.GRADIENT_MAP),
+        GAUSSIAN_BLUR("Gaussian Blur", true),
+        MOTION_BLUR("Motion Blur", true),
+        NOISE("Noise", true),
+        SHARPEN("Sharpen", true),
+        BLOOM("Bloom", true),
+        GLITCH("Glitch", true),
+        HALFTONE("Halftone", true),
+        CHROMATIC_ABERRATION("Chromatic Aberration", true),
+    }
+
+    /** Settings for one preview or commit. [angleDegrees] orients Motion Blur. */
+    data class Settings(
+        val amount: Float,
+        val parameters: Map<String, Float> = emptyMap(),
+        val angleDegrees: Float = 0f,
+    )
+
+    fun apply(
+        kind: Kind,
+        source: PixelBuffer,
+        settings: Settings,
+        selection: SelectionMask? = null,
+    ): PixelBuffer {
+        val amount = settings.amount.coerceIn(0f, 1f)
+        val type = kind.adjustmentType
+        val filtered =
+            when {
+                type != null -> AdjustmentProcessor.apply(source, type, settings.parameters)
+                amount <= 0f -> source.copy()
+                else -> filter(kind, source, amount, settings.angleDegrees)
+            }
+        val mask = selection?.takeIf { it.width == source.width && it.height == source.height && it.isActive() } ?: return filtered
+        for (i in filtered.pixels.indices) {
+            filtered.pixels[i] = ImageFilters.lerpArgb(source.pixels[i], filtered.pixels[i], mask.alphaAt(i))
+        }
+        return filtered
+    }
+
+    private fun filter(
+        kind: Kind,
+        source: PixelBuffer,
+        amount: Float,
+        angle: Float,
+    ): PixelBuffer =
+        when (kind) {
+            Kind.GAUSSIAN_BLUR -> ImageFilters.gaussianBlur(source, amount * MAX_BLUR_RADIUS)
+            Kind.MOTION_BLUR -> ImageFilters.motionBlur(source, amount * MAX_MOTION_DISTANCE, angle)
+            Kind.NOISE -> ImageFilters.addNoise(source, amount, monochrome = true)
+            Kind.SHARPEN -> ImageFilters.sharpen(source, amount * 2f)
+            Kind.CHROMATIC_ABERRATION ->
+                ImageFilters.chromaticAberration(source, amount * MAX_ABERRATION, source.width / 2f, source.height / 2f)
+            Kind.BLOOM -> bloom(source, amount)
+            Kind.GLITCH -> glitch(source, amount)
+            Kind.HALFTONE -> halftone(source, amount)
+            else -> source.copy()
+        }
+
+    /** Bright areas glow: a blurred bright pass is screened back over the image. */
+    fun bloom(
+        source: PixelBuffer,
+        amount: Float,
+    ): PixelBuffer {
+        val bright = PixelBuffer(source.width, source.height)
+        for (i in source.pixels.indices) {
+            val p = source.pixels[i]
+            val excess = ((Channels.luminance(p) - BLOOM_THRESHOLD) / (1f - BLOOM_THRESHOLD)).coerceIn(0f, 1f)
+            bright.pixels[i] = Channels.scaleAlpha(p, excess)
+        }
+        val glow = ImageFilters.gaussianBlur(bright, 4f + amount * MAX_BLOOM_RADIUS)
+        val out = source.copy()
+        for (i in out.pixels.indices) {
+            val g = glow.pixels[i]
+            val strength = Channels.alpha(g) / 255f * amount * 1.5f
+            if (strength > 0f) out.pixels[i] = screen(out.pixels[i], g, strength.coerceAtMost(1f))
+        }
+        return out
+    }
+
+    private fun screen(
+        base: Int,
+        light: Int,
+        strength: Float,
+    ): Int {
+        fun channel(shift: Int): Int {
+            val b = (base shr shift) and 0xFF
+            val l = (light shr shift) and 0xFF
+            val screened = 255 - (255 - b) * (255 - l) / 255
+            return (b + (screened - b) * strength).roundToInt().coerceIn(0, 255)
+        }
+        val alpha = max((base ushr 24) and 0xFF, ((light ushr 24) * strength).roundToInt())
+        return Channels.argb(alpha, channel(16), channel(8), channel(0))
+    }
+
+    /** Digital corruption: bands of rows slip sideways and the red channel separates. */
+    fun glitch(
+        source: PixelBuffer,
+        amount: Float,
+    ): PixelBuffer {
+        val out = PixelBuffer(source.width, source.height)
+        val maxShift = (source.width * 0.08f * amount).roundToInt()
+        val split = (8f * amount).roundToInt()
+        for (y in 0 until source.height) {
+            val band = y / GLITCH_BAND
+            val shift = if (hash(band) % 3 == 0) (hash(band * 7 + 1) % (2 * maxShift + 1)) - maxShift else 0
+            for (x in 0 until source.width) {
+                val p = source.getSafe(x - shift, y)
+                val red = source.getSafe(x - shift - split, y)
+                out.pixels[y * source.width + x] = (p and 0xFF00FFFF.toInt()) or (red and 0x00FF0000)
+            }
+        }
+        return out
+    }
+
+    /** Newsprint dots: each cell becomes a dot whose size follows the cell's darkness. */
+    fun halftone(
+        source: PixelBuffer,
+        amount: Float,
+    ): PixelBuffer {
+        val cell = (4 + amount * 16f).roundToInt().coerceAtLeast(2)
+        val out = PixelBuffer(source.width, source.height)
+        for (cy in 0 until source.height step cell) {
+            for (cx in 0 until source.width step cell) {
+                halftoneCell(source, out, cx, cy, cell)
+            }
+        }
+        return out
+    }
+
+    private fun halftoneCell(
+        source: PixelBuffer,
+        out: PixelBuffer,
+        cx: Int,
+        cy: Int,
+        cell: Int,
+    ) {
+        val x1 = min(source.width, cx + cell)
+        val y1 = min(source.height, cy + cell)
+        var a = 0L
+        var r = 0L
+        var g = 0L
+        var b = 0L
+        var count = 0
+        for (y in cy until y1) {
+            for (x in cx until x1) {
+                val p = source.pixels[y * source.width + x]
+                a += (p ushr 24) and 0xFF
+                r += (p shr 16) and 0xFF
+                g += (p shr 8) and 0xFF
+                b += p and 0xFF
+                count++
+            }
+        }
+        if (count == 0 || a == 0L) return
+        val color = Channels.argb((a / count).toInt(), (r / count).toInt(), (g / count).toInt(), (b / count).toInt())
+        val darkness = 1f - Channels.luminance(color)
+        val radius = cell * 0.5f * sqrt(darkness.coerceIn(0.05f, 1f)) * 1.15f
+        val centerX = cx + cell / 2f
+        val centerY = cy + cell / 2f
+        for (y in cy until y1) {
+            for (x in cx until x1) {
+                val dx = x + 0.5f - centerX
+                val dy = y + 0.5f - centerY
+                if (dx * dx + dy * dy <= radius * radius) out.pixels[y * source.width + x] = color
+            }
+        }
+    }
+
+    private fun hash(value: Int): Int {
+        var h = value * 374761393 + 668265263
+        h = (h xor (h ushr 13)) * 1274126177
+        return (h xor (h ushr 16)) and 0x7FFFFFFF
+    }
+
+    private const val MAX_BLUR_RADIUS = 60f
+    private const val MAX_MOTION_DISTANCE = 120f
+    private const val MAX_BLOOM_RADIUS = 40f
+    private const val BLOOM_THRESHOLD = 0.6f
+    private const val GLITCH_BAND = 6
+    private const val MAX_ABERRATION = 0.05f
+}

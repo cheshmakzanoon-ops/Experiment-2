@@ -473,6 +473,9 @@ class CanvasViewModel
 
         private var toolBeforeEyedropper: ToolType? = null
 
+        /** Procreate-style Adjustments (destructive, previewed live, one undo step on Apply). */
+        val adjustments = AdjustmentSessionController(canvasRepository, viewModelScope, ::notify) { refreshLayers() }
+
         /** The sidebar's modify button: sample one colour, then return to the tool in use. */
         fun startEyedropper() {
             val current = _input.value.tool
