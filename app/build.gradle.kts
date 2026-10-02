@@ -66,8 +66,8 @@ android {
         minSdk = 26
         // Google Play requires new apps and updates to target Android 16 (API 36) as of 2026-08-31.
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.0.0"
+        versionCode = 3
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "com.artflow.studio.HiltTestRunner"
     }
