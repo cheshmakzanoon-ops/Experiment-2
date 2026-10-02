@@ -30,6 +30,10 @@ class TimelapseRecorder
         private val storage: ProjectStorage,
     ) {
         private val mutex = Mutex()
+
+        /** Whether edits are recorded; tests and future per-canvas settings can turn it off. */
+        @Volatile
+        var isEnabled: Boolean = true
         private var lastProjectId = 0L
         private var lastHash = 0
 

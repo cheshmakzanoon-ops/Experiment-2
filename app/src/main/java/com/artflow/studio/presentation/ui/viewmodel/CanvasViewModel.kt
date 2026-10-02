@@ -315,11 +315,13 @@ class CanvasViewModel
             timelapseJob =
                 viewModelScope.launch {
                     timelapseRequests.collect {
+                        if (!timelapse.isEnabled) return@collect
                         // Let the edit settle so a burst of changes yields one frame.
                         delay(TIMELAPSE_INTERVAL_MS)
                         val projectId = currentProjectId
                         val revision = canvasRepository.contentRevision
-                        if (projectId == 0L || revision == timelapseRevision) return@collect
+                        // Playback only switches frames; it is not an edit worth recording.
+                        if (projectId == 0L || revision == timelapseRevision || playbackActive) return@collect
                         try {
                             val composite = canvasRepository.compositeBuffer() ?: return@collect
                             timelapse.capture(projectId, composite)
