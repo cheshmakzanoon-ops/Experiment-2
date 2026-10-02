@@ -37,6 +37,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.LiveAdjustments
 import com.artflow.studio.core.pixels.Quad
+import com.artflow.studio.core.pixels.WarpMesh
 import com.artflow.studio.core.tool.ToolGroup
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.domain.model.brush.StrokeDestination
@@ -88,6 +89,7 @@ import com.artflow.studio.presentation.ui.components.editor.TransformToolbar
 import com.artflow.studio.presentation.ui.components.editor.TransformToolbarActions
 import com.artflow.studio.presentation.ui.components.editor.VideoActions
 import com.artflow.studio.presentation.ui.components.editor.ViewTransform
+import com.artflow.studio.presentation.ui.components.editor.WarpOverlay
 import com.artflow.studio.presentation.ui.components.editor.icon
 import com.artflow.studio.presentation.ui.components.editor.isWideLayout
 import com.artflow.studio.presentation.ui.components.editor.studioButton
@@ -167,6 +169,7 @@ fun CanvasScreen(
     var openMenu by remember { mutableStateOf<StudioButton?>(null) }
     var showCopyPaste by remember { mutableStateOf(false) }
     var transformQuad by remember { mutableStateOf<Quad?>(null) }
+    var warpMesh by remember { mutableStateOf<WarpMesh?>(null) }
     val adjustment by viewModel.adjustments.state.collectAsState()
     val layerThumbnails by viewModel.layerThumbnails.thumbnails.collectAsState()
     LaunchedEffect(panel, layers, history) {
@@ -716,6 +719,7 @@ fun CanvasScreen(
                                 onCopyPasteMenuRequested = { showCopyPaste = true }
                                 onClearLayerRequested = { viewModel.clipboard.clear() }
                                 onTransformQuadChanged = { transformQuad = it }
+                                onWarpMeshChanged = { warpMesh = it }
                                 onViewChanged = { s, ox, oy, r -> viewModel.onViewChanged(s, ox, oy, r) }
                                 onTextPlacementRequested = { x, y -> viewModel.requestTextAt(x, y) }
                                 onCloneSourceChanged = { viewModel.onCloneSourceChanged(it) }
@@ -805,6 +809,16 @@ fun CanvasScreen(
             if (quad != null && ready != null && input.tool == ToolType.TRANSFORM) {
                 TransformOverlay(
                     quad = quad,
+                    canvasWidth = ready.width,
+                    canvasHeight = ready.height,
+                    view = ViewTransform(viewScale, viewOffsetX, viewOffsetY, viewRotation),
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            val mesh = warpMesh
+            if (mesh != null && ready != null && input.tool == ToolType.TRANSFORM) {
+                WarpOverlay(
+                    mesh = mesh,
                     canvasWidth = ready.width,
                     canvasHeight = ready.height,
                     view = ViewTransform(viewScale, viewOffsetX, viewOffsetY, viewRotation),

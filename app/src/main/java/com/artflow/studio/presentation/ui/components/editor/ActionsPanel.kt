@@ -128,8 +128,8 @@ private fun CanvasTab(
     ActionRow("Animation Assist", canvas.onAnimationAssist)
     ActionRow("Drawing Guide", canvas.onDrawingGuide)
     ActionRow("Reference", canvas.onReference)
-    ActionRow("Flip canvas horizontally") { canvas.onFlip(false) }
-    ActionRow("Flip canvas vertically") { canvas.onFlip(true) }
+    ActionRow("Flip canvas horizontally", onClick = { canvas.onFlip(false) })
+    ActionRow("Flip canvas vertically", onClick = { canvas.onFlip(true) })
     HorizontalDivider()
     Text("Canvas information", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
     Text(

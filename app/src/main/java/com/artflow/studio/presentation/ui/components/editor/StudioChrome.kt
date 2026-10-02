@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.artflow.studio.core.pixels.Quad
 import com.artflow.studio.core.pixels.TransformQuad
+import com.artflow.studio.core.pixels.WarpMesh
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.presentation.ui.components.canvas.SelectionCombineMode
 import kotlin.math.sqrt
@@ -389,6 +390,44 @@ fun TransformOverlay(
         }
     }
 }
+
+/** Warp's Bézier mesh: grid curves through the patch and its sixteen control points. */
+@Composable
+fun WarpOverlay(
+    mesh: WarpMesh,
+    canvasWidth: Int,
+    canvasHeight: Int,
+    view: ViewTransform,
+    modifier: Modifier = Modifier,
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    Canvas(modifier) {
+        val scale = view.scale.coerceAtLeast(0.01f)
+        withTransform({
+            translate(size.width / 2f + view.offsetX, size.height / 2f + view.offsetY)
+            rotate(view.rotationDegrees, pivot = Offset.Zero)
+            scale(scale, scale, pivot = Offset.Zero)
+            translate(-canvasWidth / 2f, -canvasHeight / 2f)
+        }) {
+            val line = 1.2f / scale
+            for (k in 0 until WarpMesh.SIDE) {
+                val t = k / (WarpMesh.SIDE - 1f)
+                val rows = (0..WARP_CURVE_STEPS).map { mesh.evaluate(it / WARP_CURVE_STEPS.toFloat(), t) }
+                val columns = (0..WARP_CURVE_STEPS).map { mesh.evaluate(t, it / WARP_CURVE_STEPS.toFloat()) }
+                listOf(rows, columns).forEach { curve ->
+                    curve.zipWithNext { a, b -> drawLine(accent, Offset(a.first, a.second), Offset(b.first, b.second), strokeWidth = line) }
+                }
+            }
+            for (i in 0 until WarpMesh.POINTS) {
+                val center = Offset(mesh.x(i), mesh.y(i))
+                drawCircle(Color.White, radius = 6f / scale, center = center)
+                drawCircle(accent, radius = 6f / scale, center = center, style = Stroke(line))
+            }
+        }
+    }
+}
+
+private const val WARP_CURVE_STEPS = 24
 
 /** The canvas view's pan, zoom and rotation, as reported to the compose layer. */
 data class ViewTransform(

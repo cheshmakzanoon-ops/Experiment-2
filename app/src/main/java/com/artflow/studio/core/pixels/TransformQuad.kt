@@ -100,6 +100,7 @@ object TransformQuad {
         FREEFORM("Freeform"),
         UNIFORM("Uniform"),
         DISTORT("Distort"),
+        WARP("Warp"),
     }
 
     enum class Interpolation(
@@ -236,7 +237,7 @@ object TransformQuad {
     ): Quad {
         val opposite = (i + 2) % 4
         return when (mode) {
-            Mode.DISTORT -> q.withCorner(i, q.x(i) + dx, q.y(i) + dy)
+            Mode.DISTORT, Mode.WARP -> q.withCorner(i, q.x(i) + dx, q.y(i) + dy)
             Mode.UNIFORM -> {
                 val ox = q.x(opposite)
                 val oy = q.y(opposite)
@@ -383,6 +384,23 @@ object TransformQuad {
                 val i = y * target.width + x
                 target.pixels[i] = if (blend) BlendModes.sourceOver(target.pixels[i], sample) else sample
             }
+        }
+    }
+
+    /** Renders with [mesh] when the content is warped, otherwise with [quad]. */
+    fun renderShape(
+        source: PixelBuffer,
+        target: PixelBuffer,
+        bounds: IntBounds,
+        quad: Quad,
+        mesh: WarpMesh?,
+        selection: SelectionMask?,
+        highQuality: Boolean,
+    ) {
+        if (mesh != null) {
+            WarpMesh.render(source, target, bounds, mesh, selection, highQuality)
+        } else {
+            render(source, target, bounds, quad, selection, highQuality)
         }
     }
 

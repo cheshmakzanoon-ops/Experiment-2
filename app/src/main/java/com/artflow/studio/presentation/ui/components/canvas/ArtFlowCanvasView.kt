@@ -27,6 +27,7 @@ import com.artflow.studio.core.pixels.Quad
 import com.artflow.studio.core.pixels.RasterOverlay
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.pixels.TransformQuad
+import com.artflow.studio.core.pixels.WarpMesh
 import com.artflow.studio.core.symmetry.SymmetryEngine
 import com.artflow.studio.core.text.TextLayout
 import com.artflow.studio.core.tool.FillTool
@@ -398,9 +399,15 @@ class ArtFlowCanvasView
             if (destinationChanged) resetLiquifyReference()
             val enteringTransform = newInput.tool == ToolType.TRANSFORM && input.tool != ToolType.TRANSFORM
             val leavingTransform = newInput.tool != ToolType.TRANSFORM && input.tool == ToolType.TRANSFORM
+            val warpToggled = (newInput.transformMode == TransformQuad.Mode.WARP) != (input.transformMode == TransformQuad.Mode.WARP)
             input = newInput
             if (enteringTransform) ensureTransformSession()
             if (leavingTransform) clearTransformSession()
+            // Entering or leaving Warp bakes the current placement so each mode edits what is on the layer.
+            if (warpToggled && newInput.tool == ToolType.TRANSFORM && transformSession != null) {
+                clearTransformSession()
+                ensureTransformSession()
+            }
             canvasRepository.setStrokeColor(newInput.brushColor)
             canvasRepository.setSymmetry(newInput.symmetry)
         }
@@ -668,20 +675,31 @@ class ArtFlowCanvasView
             rotation: Float = 0f,
             flipHorizontal: Boolean = false,
             flipVertical: Boolean = false,
-        ) = applyTransformQuad { session ->
-            var quad = session.quad
-            if (flipHorizontal) quad = TransformQuad.flip(quad, horizontal = true)
-            if (flipVertical) quad = TransformQuad.flip(quad, horizontal = false)
-            if (rotation != 0f) quad = TransformQuad.rotate(quad, rotation)
-            if (scaleFactor != 1f) quad = TransformQuad.scale(quad, scaleFactor)
-            quad
-        }
+        ) = applyTransformQuad(
+            { session ->
+                var quad = session.quad
+                if (flipHorizontal) quad = TransformQuad.flip(quad, horizontal = true)
+                if (flipVertical) quad = TransformQuad.flip(quad, horizontal = false)
+                if (rotation != 0f) quad = TransformQuad.rotate(quad, rotation)
+                if (scaleFactor != 1f) quad = TransformQuad.scale(quad, scaleFactor)
+                quad
+            },
+            { start ->
+                var mesh = start
+                if (flipHorizontal) mesh = mesh.flip(horizontal = true)
+                if (flipVertical) mesh = mesh.flip(horizontal = false)
+                if (rotation != 0f) mesh = mesh.rotate(rotation)
+                if (scaleFactor != 1f) mesh = mesh.scale(scaleFactor)
+                mesh
+            },
+        )
 
         /** Fit to Screen: the largest centred placement inside the canvas. */
-        fun fitTransformToCanvas() = applyTransformQuad { TransformQuad.fitTo(it.quad, canvasWidth, canvasHeight) }
+        fun fitTransformToCanvas() =
+            applyTransformQuad({ TransformQuad.fitTo(it.quad, canvasWidth, canvasHeight) }, { it.fitTo(canvasWidth, canvasHeight) })
 
         /** Reset: put the content back where the transform session started. */
-        fun resetTransform() = applyTransformQuad { Quad.fromBounds(it.bounds) }
+        fun resetTransform() = applyTransformQuad({ Quad.fromBounds(it.bounds) }, { null })
 
         /** Pixels and placement for an ongoing transform; every edit resamples from [base]. */
         private class TransformSession(
@@ -691,25 +709,41 @@ class ArtFlowCanvasView
             val bounds: IntBounds,
             var quad: Quad,
             var revision: Long,
-        )
+        ) {
+            /** Control points while warping; null keeps the plain [quad] placement. */
+            var mesh: WarpMesh? = null
+
+            fun meshOrBox(): WarpMesh = mesh ?: WarpMesh.fromBounds(bounds)
+        }
 
         private var transformSession: TransformSession? = null
         private var transformTarget: TransformQuad.Target = TransformQuad.Target.Body
         private var transformStartQuad: Quad? = null
         private var transformPreviewQuad: Quad? = null
+        private var warpTarget: WarpMesh.Target = WarpMesh.Target.Body
+        private var warpStartMesh: WarpMesh? = null
+        private var transformPreviewMesh: WarpMesh? = null
         private var transformCommitting = false
         private var lastTransformPreview = 0L
 
         /** Reports the box to draw (canvas coordinates), or null when no transform is active. */
         var onTransformQuadChanged: ((Quad?) -> Unit)? = null
 
+        /** Reports the warp mesh to draw while Warp is the transform mode, or null. */
+        var onWarpMeshChanged: ((WarpMesh?) -> Unit)? = null
+
+        private val warping: Boolean get() = input.transformMode == TransformQuad.Mode.WARP
+
         private fun publishTransformQuad() {
-            onTransformQuadChanged?.invoke(transformSession?.let { transformPreviewQuad ?: it.quad })
+            val session = transformSession
+            onTransformQuadChanged?.invoke(session?.takeUnless { warping }?.let { transformPreviewQuad ?: it.quad })
+            onWarpMeshChanged?.invoke(session?.takeIf { warping }?.let { transformPreviewMesh ?: it.meshOrBox() })
         }
 
         private fun clearTransformSession() {
             transformSession = null
             transformPreviewQuad = null
+            transformPreviewMesh = null
             publishTransformQuad()
         }
 
@@ -767,7 +801,13 @@ class ArtFlowCanvasView
                 transformSession = current
             }
             transformStartQuad = current.quad
-            transformTarget = TransformQuad.hit(current.quad, x, y, HANDLE_TOUCH_PX / scale, KNOB_DISTANCE_PX / scale)
+            if (warping) {
+                val mesh = current.meshOrBox()
+                warpStartMesh = mesh
+                warpTarget = mesh.hit(x, y, HANDLE_TOUCH_PX / scale)
+            } else {
+                transformTarget = TransformQuad.hit(current.quad, x, y, HANDLE_TOUCH_PX / scale, KNOB_DISTANCE_PX / scale)
+            }
             return true
         }
 
@@ -777,19 +817,28 @@ class ArtFlowCanvasView
             y: Float,
         ) {
             val session = transformSession ?: return
-            val start = transformStartQuad ?: return
-            val quad = TransformQuad.drag(start, transformTarget, input.transformMode, moveOriginX(), moveOriginY(), x, y)
-            transformPreviewQuad = quad
+            if (warping) {
+                transformPreviewMesh = (warpStartMesh ?: return).drag(warpTarget, x - moveOriginX(), y - moveOriginY())
+            } else {
+                val start = transformStartQuad ?: return
+                transformPreviewQuad = TransformQuad.drag(start, transformTarget, input.transformMode, moveOriginX(), moveOriginY(), x, y)
+            }
             publishTransformQuad()
             val now = System.currentTimeMillis()
             if (now - lastTransformPreview < TRANSFORM_PREVIEW_INTERVAL_MS) return
             lastTransformPreview = now
-            TransformQuad.render(session.base, buffer, session.bounds, quad, session.selection, highQuality = false)
+            val quad = transformPreviewQuad ?: session.quad
+            val mesh = transformPreviewMesh
+            TransformQuad.renderShape(session.base, buffer, session.bounds, quad, mesh, session.selection, highQuality = false)
         }
 
-        private fun applyTransformQuad(change: (TransformSession) -> Quad) {
+        private fun applyTransformQuad(
+            change: (TransformSession) -> Quad,
+            changeMesh: (WarpMesh) -> WarpMesh?,
+        ) {
             ensureTransformSession { session ->
-                val quad = change(session)
+                val quad = if (warping) session.quad else change(session)
+                val mesh = if (warping) changeMesh(session.meshOrBox()) else null
                 val interpolation = input.transformInterpolation
                 transformCommitting = true
                 coroutineScope.launch {
@@ -797,11 +846,12 @@ class ArtFlowCanvasView
                         val rendered =
                             withContext(Dispatchers.Default) {
                                 PixelBuffer(session.base.width, session.base.height).also {
-                                    TransformQuad.render(
+                                    TransformQuad.renderShape(
                                         session.base,
                                         it,
                                         session.bounds,
                                         quad,
+                                        mesh,
                                         session.selection,
                                         highQuality = interpolation == TransformQuad.Interpolation.BILINEAR,
                                     )
@@ -809,6 +859,7 @@ class ArtFlowCanvasView
                             }
                         if (canvasRepository.applyRasterEdit(session.layerId, "Transform") { rendered.pixels.copyInto(it.pixels) }) {
                             session.quad = quad
+                            session.mesh = mesh
                             session.revision = canvasRepository.contentRevision
                             reportHistory()
                         }
@@ -1692,10 +1743,12 @@ class ArtFlowCanvasView
             val reference = gestureLiquifyReference
             val original = rasterBase
             val finalQuad = transformPreviewQuad.takeIf { pixelTool == ToolType.TRANSFORM }
-            val transform = transformSession.takeIf { finalQuad != null }
+            val finalMesh = transformPreviewMesh.takeIf { pixelTool == ToolType.TRANSFORM }
+            val transform = transformSession.takeIf { finalQuad != null || finalMesh != null }
             val interpolation = input.transformInterpolation
             transformPreviewQuad = null
-            if (finalQuad != null) transformCommitting = true
+            transformPreviewMesh = null
+            if (transform != null) transformCommitting = true
             rasterSession = null
             rasterBuffer = null
             rasterSource = null
@@ -1713,14 +1766,15 @@ class ArtFlowCanvasView
                     if (!cancelled) {
                         // The preview is throttled and may omit the final drag sample or a large canvas.
                         // Commit the complete map off the UI thread, never the last partial preview.
-                        if (finalQuad != null && transform != null) {
+                        if (transform != null) {
                             // Previews are throttled and nearest-neighbour; commit the exact final placement.
                             withContext(Dispatchers.Default) {
-                                TransformQuad.render(
+                                TransformQuad.renderShape(
                                     transform.base,
                                     session.buffer,
                                     transform.bounds,
-                                    finalQuad,
+                                    finalQuad ?: transform.quad,
+                                    finalMesh,
                                     transform.selection,
                                     highQuality = interpolation == TransformQuad.Interpolation.BILINEAR,
                                 )
@@ -1738,8 +1792,9 @@ class ArtFlowCanvasView
                             original == null || withContext(Dispatchers.Default) { !original.pixels.contentEquals(session.buffer.pixels) }
                         if (changed) {
                             if (canvasRepository.commitRasterEdit(session, description)) {
-                                if (finalQuad != null && transform != null) {
-                                    transform.quad = finalQuad
+                                if (transform != null) {
+                                    transform.quad = finalQuad ?: transform.quad
+                                    transform.mesh = finalMesh
                                     transform.revision = canvasRepository.contentRevision
                                 }
                                 if (finalLiquify != null && reference != null && reference.contextVersion == liquifyContextVersion) {
@@ -1753,7 +1808,7 @@ class ArtFlowCanvasView
                     }
                 } finally {
                     withContext(NonCancellable) { canvasRepository.cancelRasterEdit(session) }
-                    if (finalQuad != null) {
+                    if (transform != null) {
                         transformCommitting = false
                         publishTransformQuad()
                     }
