@@ -16,10 +16,13 @@ import com.artflow.studio.core.canvas.QuickShape
 import com.artflow.studio.core.canvas.StrokeStabilizer
 import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.Channels
+import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.LayerTransform
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.pixels.Quad
 import com.artflow.studio.core.pixels.RasterOverlay
 import com.artflow.studio.core.pixels.SelectionMask
+import com.artflow.studio.core.pixels.TransformQuad
 import com.artflow.studio.core.symmetry.SymmetryEngine
 import com.artflow.studio.core.text.TextLayout
 import com.artflow.studio.core.tool.FillTool
@@ -109,7 +112,8 @@ data class EditorInput(
     val textStyle: TextLayout.TextStyle = TextLayout.TextStyle(),
     val selectionMode: SelectionCombineMode = SelectionCombineMode.REPLACE,
     /** How a one-finger drag edits the active layer while the transform tool is selected. */
-    val transformMode: LayerTransform.Mode = LayerTransform.Mode.MOVE,
+    val transformMode: TransformQuad.Mode = TransformQuad.Mode.FREEFORM,
+    val transformInterpolation: TransformQuad.Interpolation = TransformQuad.Interpolation.BILINEAR,
     /** Holding the pen still at the end of a stroke snaps it to a line or ellipse. */
     val quickShape: Boolean = true,
     /** A finger held still for a moment samples colour, like Procreate's touch-and-hold eyedropper. */
@@ -383,17 +387,26 @@ class ArtFlowCanvasView
             val destinationChanged = newInput.tool != input.tool || newInput.strokeDestination != input.strokeDestination
             if (destinationChanged || newInput.fingerPainting != input.fingerPainting) cancelActiveGesture()
             if (destinationChanged) resetLiquifyReference()
+            val enteringTransform = newInput.tool == ToolType.TRANSFORM && input.tool != ToolType.TRANSFORM
+            val leavingTransform = newInput.tool != ToolType.TRANSFORM && input.tool == ToolType.TRANSFORM
             input = newInput
+            if (enteringTransform) ensureTransformSession()
+            if (leavingTransform) clearTransformSession()
             canvasRepository.setStrokeColor(newInput.brushColor)
             canvasRepository.setSymmetry(newInput.symmetry)
         }
 
         fun setActiveLayerId(layerId: Long) {
-            if (layerId != activeLayerId) {
+            val changed = layerId != activeLayerId
+            if (changed) {
                 resetLiquifyReference()
                 cancelActiveGesture()
             }
             activeLayerId = layerId
+            if (changed && input.tool == ToolType.TRANSFORM) {
+                clearTransformSession()
+                ensureTransformSession()
+            }
         }
 
         /** Called once the document is loaded so the view knows the real canvas size. */
@@ -613,39 +626,161 @@ class ArtFlowCanvasView
             }
         }
 
-        /**
-         * Bakes the active layer (or its selected pixels) through a free transform about the centre
-         * of the affected content. Used by the transform tool's flip, rotate and fit buttons.
-         */
+        /** Flips, rotates and scales the transform box by a fixed amount (toolbar buttons). */
         fun transformActiveLayer(
             scaleFactor: Float = 1f,
             rotation: Float = 0f,
             flipHorizontal: Boolean = false,
             flipVertical: Boolean = false,
-        ) {
+        ) = applyTransformQuad { session ->
+            var quad = session.quad
+            if (flipHorizontal) quad = TransformQuad.flip(quad, horizontal = true)
+            if (flipVertical) quad = TransformQuad.flip(quad, horizontal = false)
+            if (rotation != 0f) quad = TransformQuad.rotate(quad, rotation)
+            if (scaleFactor != 1f) quad = TransformQuad.scale(quad, scaleFactor)
+            quad
+        }
+
+        /** Fit to Screen: the largest centred placement inside the canvas. */
+        fun fitTransformToCanvas() = applyTransformQuad { TransformQuad.fitTo(it.quad, canvasWidth, canvasHeight) }
+
+        /** Reset: put the content back where the transform session started. */
+        fun resetTransform() = applyTransformQuad { Quad.fromBounds(it.bounds) }
+
+        /** Pixels and placement for an ongoing transform; every edit resamples from [base]. */
+        private class TransformSession(
+            val layerId: Long,
+            val base: PixelBuffer,
+            val selection: SelectionMask?,
+            val bounds: IntBounds,
+            var quad: Quad,
+            var revision: Long,
+        )
+
+        private var transformSession: TransformSession? = null
+        private var transformTarget: TransformQuad.Target = TransformQuad.Target.Body
+        private var transformStartQuad: Quad? = null
+        private var transformPreviewQuad: Quad? = null
+        private var transformCommitting = false
+        private var lastTransformPreview = 0L
+
+        /** Reports the box to draw (canvas coordinates), or null when no transform is active. */
+        var onTransformQuadChanged: ((Quad?) -> Unit)? = null
+
+        private fun publishTransformQuad() {
+            onTransformQuadChanged?.invoke(transformSession?.let { transformPreviewQuad ?: it.quad })
+        }
+
+        private fun clearTransformSession() {
+            transformSession = null
+            transformPreviewQuad = null
+            publishTransformQuad()
+        }
+
+        private fun sameSelection(
+            a: SelectionMask?,
+            b: SelectionMask?,
+        ): Boolean = if (a == null || b == null) a == b else a.coverage.contentEquals(b.coverage)
+
+        private fun TransformSession.isCurrent(
+            layerId: Long,
+            selection: SelectionMask?,
+        ): Boolean = this.layerId == layerId && revision == canvasRepository.contentRevision && sameSelection(this.selection, selection)
+
+        /** Shows the box as soon as Transform is chosen, and rebuilds it after undo or other edits. */
+        private fun ensureTransformSession(onReady: ((TransformSession) -> Unit)? = null) {
             val layerId = activeLayerId
             val selection = canvasRepository.selection()
+            val current = transformSession?.takeIf { it.isCurrent(layerId, selection) }
+            if (current != null) {
+                onReady?.invoke(current)
+                return
+            }
             coroutineScope.launch {
-                val base = canvasRepository.layerPixels(layerId) ?: return@launch
-                val transformed =
-                    withContext(Dispatchers.Default) {
-                        val (pivotX, pivotY) = LayerTransform.pivotOf(base, selection)
-                        val params =
-                            LayerTransform.Params(
-                                pivotX = pivotX,
-                                pivotY = pivotY,
-                                scaleX = scaleFactor,
-                                scaleY = scaleFactor,
-                                rotationDegrees = rotation,
-                                flipHorizontal = flipHorizontal,
-                                flipVertical = flipVertical,
-                            )
-                        PixelBuffer(base.width, base.height).also { LayerTransform.render(base, it, params, selection) }
-                    }
-                canvasRepository.applyRasterEdit(layerId, "Transform layer") { target ->
-                    transformed.pixels.copyInto(target.pixels)
+                val pixels = canvasRepository.layerPixels(layerId) ?: return@launch
+                val revision = canvasRepository.contentRevision
+                val bounds = withContext(Dispatchers.Default) { LayerTransform.floatingBounds(pixels, selection) }
+                if (bounds == null) {
+                    clearTransformSession()
+                    onStatusMessage?.invoke("Nothing to transform on this layer")
+                    return@launch
                 }
-                reportHistory()
+                val session = TransformSession(layerId, pixels, selection, bounds, Quad.fromBounds(bounds), revision)
+                transformSession = session
+                publishTransformQuad()
+                onReady?.invoke(session)
+            }
+        }
+
+        /** Chooses what the touch grabbed; false when there is nothing to transform. */
+        private suspend fun beginTransformGesture(
+            layerId: Long,
+            x: Float,
+            y: Float,
+            selection: SelectionMask?,
+        ): Boolean {
+            var current = transformSession?.takeIf { it.isCurrent(layerId, selection) }
+            if (current == null) {
+                val base = rasterBase ?: return false
+                val bounds = withContext(Dispatchers.Default) { LayerTransform.floatingBounds(base, selection) }
+                if (bounds == null) {
+                    onStatusMessage?.invoke("Nothing to transform on this layer")
+                    return false
+                }
+                current = TransformSession(layerId, base, selection, bounds, Quad.fromBounds(bounds), canvasRepository.contentRevision)
+                transformSession = current
+            }
+            transformStartQuad = current.quad
+            transformTarget = TransformQuad.hit(current.quad, x, y, HANDLE_TOUCH_PX / scale, KNOB_DISTANCE_PX / scale)
+            return true
+        }
+
+        private fun previewTransform(
+            buffer: PixelBuffer,
+            x: Float,
+            y: Float,
+        ) {
+            val session = transformSession ?: return
+            val start = transformStartQuad ?: return
+            val quad = TransformQuad.drag(start, transformTarget, input.transformMode, moveOriginX(), moveOriginY(), x, y)
+            transformPreviewQuad = quad
+            publishTransformQuad()
+            val now = System.currentTimeMillis()
+            if (now - lastTransformPreview < TRANSFORM_PREVIEW_INTERVAL_MS) return
+            lastTransformPreview = now
+            TransformQuad.render(session.base, buffer, session.bounds, quad, session.selection, highQuality = false)
+        }
+
+        private fun applyTransformQuad(change: (TransformSession) -> Quad) {
+            ensureTransformSession { session ->
+                val quad = change(session)
+                val interpolation = input.transformInterpolation
+                transformCommitting = true
+                coroutineScope.launch {
+                    try {
+                        val rendered =
+                            withContext(Dispatchers.Default) {
+                                PixelBuffer(session.base.width, session.base.height).also {
+                                    TransformQuad.render(
+                                        session.base,
+                                        it,
+                                        session.bounds,
+                                        quad,
+                                        session.selection,
+                                        highQuality = interpolation == TransformQuad.Interpolation.BILINEAR,
+                                    )
+                                }
+                            }
+                        if (canvasRepository.applyRasterEdit(session.layerId, "Transform") { rendered.pixels.copyInto(it.pixels) }) {
+                            session.quad = quad
+                            session.revision = canvasRepository.contentRevision
+                            reportHistory()
+                        }
+                    } finally {
+                        transformCommitting = false
+                        publishTransformQuad()
+                    }
+                }
             }
         }
 
@@ -672,6 +807,7 @@ class ArtFlowCanvasView
                             // when another pointer sample arrives. Only the latest queued request is kept.
                             refreshComposite()
                             if (onionDirty) refreshOnionSkins()
+                            if (input.tool == ToolType.TRANSFORM && pixelTool == null && !transformCommitting) ensureTransformSession()
                         }
                 }
         }
@@ -1277,13 +1413,11 @@ class ArtFlowCanvasView
             healingSession = null
             liquifySession = null
             moveStart = x to y
-            transformParams = null
+            transformPreviewQuad = null
 
             val layerId = activeLayerId
             val gestureInput = input
             val gestureSelection = canvasRepository.selection()
-            transformSelection = gestureSelection
-            transformMode = gestureInput.transformMode
             pixelOpenJob =
                 coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
                     val session = canvasRepository.beginRasterEdit(layerId)
@@ -1294,9 +1428,12 @@ class ArtFlowCanvasView
                     }
                     rasterSession = session
                     rasterBase = session.buffer.copy()
-                    if (tool == ToolType.TRANSFORM) {
-                        val pivotSource = session.buffer
-                        transformPivot = withContext(Dispatchers.Default) { LayerTransform.pivotOf(pivotSource, gestureSelection) }
+                    if (tool == ToolType.TRANSFORM && !beginTransformGesture(session.layerId, x, y, gestureSelection)) {
+                        canvasRepository.cancelRasterEdit(session)
+                        rasterSession = null
+                        rasterBase = null
+                        pixelTool = null
+                        return@launch
                     }
                     if (tool == ToolType.LIQUIFY && !prepareLiquifyReference(session, gestureInput)) {
                         canvasRepository.cancelRasterEdit(session)
@@ -1452,13 +1589,7 @@ class ArtFlowCanvasView
                     liquifySession?.dragTo(x, y, pressure)
                     previewLiquify(buffer)
                 }
-                ToolType.TRANSFORM -> {
-                    val base = rasterBase ?: return
-                    val (pivotX, pivotY) = transformPivot
-                    val params = LayerTransform.fromDrag(transformMode, pivotX, pivotY, moveOriginX(), moveOriginY(), x, y)
-                    transformParams = params
-                    LayerTransform.render(base, buffer, params, transformSelection, highQuality = false)
-                }
+                ToolType.TRANSFORM -> previewTransform(buffer, x, y)
                 ToolType.MOVE -> {
                     val base = rasterBase ?: return
                     buffer.clear()
@@ -1491,10 +1622,6 @@ class ArtFlowCanvasView
         private fun moveOriginY(): Float = moveStart.second
 
         private var moveStart: Pair<Float, Float> = 0f to 0f
-        private var transformPivot: Pair<Float, Float> = 0f to 0f
-        private var transformParams: LayerTransform.Params? = null
-        private var transformSelection: SelectionMask? = null
-        private var transformMode: LayerTransform.Mode = LayerTransform.Mode.MOVE
 
         private fun endPixelGesture(cancelled: Boolean) {
             if (pixelTool == null) return
@@ -1514,10 +1641,11 @@ class ArtFlowCanvasView
             val finalLiquify = liquifySession
             val reference = gestureLiquifyReference
             val original = rasterBase
-            val finalTransform = transformParams
-            val finalTransformSelection = transformSelection
-            transformParams = null
-            transformSelection = null
+            val finalQuad = transformPreviewQuad.takeIf { pixelTool == ToolType.TRANSFORM }
+            val transform = transformSession.takeIf { finalQuad != null }
+            val interpolation = input.transformInterpolation
+            transformPreviewQuad = null
+            if (finalQuad != null) transformCommitting = true
             rasterSession = null
             rasterBuffer = null
             rasterSource = null
@@ -1535,10 +1663,17 @@ class ArtFlowCanvasView
                     if (!cancelled) {
                         // The preview is throttled and may omit the final drag sample or a large canvas.
                         // Commit the complete map off the UI thread, never the last partial preview.
-                        if (finalTransform != null && original != null) {
-                            // Previews sample nearest-neighbour; the committed result is bilinear.
+                        if (finalQuad != null && transform != null) {
+                            // Previews are throttled and nearest-neighbour; commit the exact final placement.
                             withContext(Dispatchers.Default) {
-                                LayerTransform.render(original, session.buffer, finalTransform, finalTransformSelection, highQuality = true)
+                                TransformQuad.render(
+                                    transform.base,
+                                    session.buffer,
+                                    transform.bounds,
+                                    finalQuad,
+                                    transform.selection,
+                                    highQuality = interpolation == TransformQuad.Interpolation.BILINEAR,
+                                )
                             }
                         }
                         if (finalLiquify != null && original != null) {
@@ -1553,6 +1688,10 @@ class ArtFlowCanvasView
                             original == null || withContext(Dispatchers.Default) { !original.pixels.contentEquals(session.buffer.pixels) }
                         if (changed) {
                             if (canvasRepository.commitRasterEdit(session, description)) {
+                                if (finalQuad != null && transform != null) {
+                                    transform.quad = finalQuad
+                                    transform.revision = canvasRepository.contentRevision
+                                }
                                 if (finalLiquify != null && reference != null && reference.contextVersion == liquifyContextVersion) {
                                     liquifyReference = reference.copy(revision = canvasRepository.contentRevision)
                                 }
@@ -1564,6 +1703,10 @@ class ArtFlowCanvasView
                     }
                 } finally {
                     withContext(NonCancellable) { canvasRepository.cancelRasterEdit(session) }
+                    if (finalQuad != null) {
+                        transformCommitting = false
+                        publishTransformQuad()
+                    }
                 }
             }
         }
@@ -2065,6 +2208,9 @@ class ArtFlowCanvasView
             private const val QUICKSHAPE_HOLD_SLOP = 10f
             private const val QUICKSHAPE_HOLD_MS = 650L
             private const val HOLD_EYEDROPPER_MS = 500L
+            private const val HANDLE_TOUCH_PX = 36f
+            private const val KNOB_DISTANCE_PX = 48f
+            private const val TRANSFORM_PREVIEW_INTERVAL_MS = 33L
             private const val TAP_TIMEOUT_MS = 320L
             private const val SNAP_TOLERANCE = 12f
             private const val PREVIEW_INTERVAL_MS = 66L

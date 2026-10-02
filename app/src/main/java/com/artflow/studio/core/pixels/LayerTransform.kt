@@ -106,28 +106,8 @@ object LayerTransform {
         highQuality: Boolean = true,
     ) {
         require(source.width == target.width && source.height == target.height) { "Buffer sizes differ" }
-        val mask = selection?.takeIf { it.width == source.width && it.height == source.height && it.isActive() }
-        // Split the layer into the floating part and the stationary remainder.
-        val floating: PixelBuffer
-        if (mask == null) {
-            floating = source
-            target.clear()
-        } else {
-            floating = PixelBuffer(source.width, source.height)
-            for (i in source.pixels.indices) {
-                val c = mask.alphaAt(i)
-                val p = source.pixels[i]
-                if (c <= 0f) {
-                    target.pixels[i] = p
-                } else if (c >= 1f) {
-                    target.pixels[i] = 0
-                    floating.pixels[i] = p
-                } else {
-                    target.pixels[i] = Channels.scaleAlpha(p, 1f - c)
-                    floating.pixels[i] = Channels.scaleAlpha(p, c)
-                }
-            }
-        }
+        val (floating, blend) = split(source, target, selection)
+        val mask = if (blend) selection else null
         if (params.isIdentity) {
             composite(target, floating, 0, 0, mask != null)
             return
@@ -206,11 +186,44 @@ object LayerTransform {
         }
     }
 
-    /** Centre of the pixels that would float, used as the default transform pivot. */
-    fun pivotOf(
+    /**
+     * Writes the pixels that stay put into [target] and returns the pixels that float, plus
+     * whether the floating part must blend over a remainder (true when a selection is active).
+     */
+    internal fun split(
+        source: PixelBuffer,
+        target: PixelBuffer,
+        selection: SelectionMask?,
+    ): Pair<PixelBuffer, Boolean> {
+        val mask = selection?.takeIf { it.width == source.width && it.height == source.height && it.isActive() }
+        if (mask == null) {
+            target.clear()
+            return source to false
+        }
+        val floating = PixelBuffer(source.width, source.height)
+        for (i in source.pixels.indices) {
+            val c = mask.alphaAt(i)
+            val p = source.pixels[i]
+            when {
+                c <= 0f -> target.pixels[i] = p
+                c >= 1f -> {
+                    target.pixels[i] = 0
+                    floating.pixels[i] = p
+                }
+                else -> {
+                    target.pixels[i] = Channels.scaleAlpha(p, 1f - c)
+                    floating.pixels[i] = Channels.scaleAlpha(p, c)
+                }
+            }
+        }
+        return floating to true
+    }
+
+    /** Bounding box of the pixels that would float, or null when there is nothing to transform. */
+    fun floatingBounds(
         source: PixelBuffer,
         selection: SelectionMask?,
-    ): Pair<Float, Float> {
+    ): IntBounds? {
         val mask = selection?.takeIf { it.width == source.width && it.height == source.height && it.isActive() }
         var minX = source.width
         var minY = source.height
@@ -225,7 +238,15 @@ object LayerTransform {
             minY = min(minY, y)
             maxY = max(maxY, y)
         }
-        if (maxX < minX) return source.width / 2f to source.height / 2f
-        return (minX + maxX + 1) / 2f to (minY + maxY + 1) / 2f
+        return if (maxX < minX) null else IntBounds(minX, minY, maxX, maxY)
+    }
+
+    /** Centre of the pixels that would float, used as the default transform pivot. */
+    fun pivotOf(
+        source: PixelBuffer,
+        selection: SelectionMask?,
+    ): Pair<Float, Float> {
+        val bounds = floatingBounds(source, selection) ?: return source.width / 2f to source.height / 2f
+        return (bounds.left + bounds.right + 1) / 2f to (bounds.top + bounds.bottom + 1) / 2f
     }
 }

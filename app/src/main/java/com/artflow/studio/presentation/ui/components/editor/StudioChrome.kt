@@ -20,6 +20,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
@@ -30,7 +33,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.artflow.studio.core.pixels.LayerTransform
+import com.artflow.studio.core.pixels.Quad
+import com.artflow.studio.core.pixels.TransformQuad
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.presentation.ui.components.canvas.SelectionCombineMode
 import kotlin.math.sqrt
@@ -303,31 +307,100 @@ fun SelectionToolbar(
 }
 
 data class TransformToolbarActions(
-    val onMode: (LayerTransform.Mode) -> Unit,
+    val onMode: (TransformQuad.Mode) -> Unit,
     val onFlip: (horizontal: Boolean) -> Unit,
     val onRotate: (degrees: Float) -> Unit,
-    val onScale: (factor: Float) -> Unit,
+    val onFit: () -> Unit,
+    val onReset: () -> Unit,
+    val onInterpolation: (TransformQuad.Interpolation) -> Unit,
 )
 
-/** Transform bar: drag mode plus one-tap flips, rotations and scaling. */
+/** Transform bar: how corner handles behave, plus Procreate's one-tap transform buttons. */
 @Composable
 fun TransformToolbar(
-    mode: LayerTransform.Mode,
+    mode: TransformQuad.Mode,
+    interpolation: TransformQuad.Interpolation,
     actions: TransformToolbarActions,
     modifier: Modifier = Modifier,
 ) {
     FloatingBar(modifier) {
-        LayerTransform.Mode.entries.forEach { entry ->
+        TransformQuad.Mode.entries.forEach { entry ->
             FilterChip(selected = mode == entry, onClick = { actions.onMode(entry) }, label = { Text(entry.displayName) })
         }
         VerticalDivider(Modifier.height(24.dp))
         AssistChip(onClick = { actions.onFlip(true) }, label = { Text("Flip Horizontal") })
         AssistChip(onClick = { actions.onFlip(false) }, label = { Text("Flip Vertical") })
         AssistChip(onClick = { actions.onRotate(45f) }, label = { Text("Rotate 45°") })
-        AssistChip(onClick = { actions.onScale(0.5f) }, label = { Text("½ size") })
-        AssistChip(onClick = { actions.onScale(2f) }, label = { Text("2× size") })
+        AssistChip(onClick = actions.onFit, label = { Text("Fit to Screen") })
+        AssistChip(onClick = actions.onReset, label = { Text("Reset") })
+        FilterChip(
+            selected = interpolation == TransformQuad.Interpolation.BILINEAR,
+            onClick = {
+                actions.onInterpolation(
+                    if (interpolation == TransformQuad.Interpolation.BILINEAR) {
+                        TransformQuad.Interpolation.NEAREST
+                    } else {
+                        TransformQuad.Interpolation.BILINEAR
+                    },
+                )
+            },
+            label = { Text("Interpolation: ${interpolation.displayName}") },
+        )
     }
 }
+
+/**
+ * The transform box drawn over the artwork: outline, corner and edge handles and the rotation
+ * knob. Uses the renderer's view matrix so it stays glued to the pixels at any zoom or rotation.
+ */
+@Composable
+fun TransformOverlay(
+    quad: Quad,
+    canvasWidth: Int,
+    canvasHeight: Int,
+    view: ViewTransform,
+    modifier: Modifier = Modifier,
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    Canvas(modifier) {
+        val scale = view.scale.coerceAtLeast(0.01f)
+        withTransform({
+            translate(size.width / 2f + view.offsetX, size.height / 2f + view.offsetY)
+            rotate(view.rotationDegrees, pivot = Offset.Zero)
+            scale(scale, scale, pivot = Offset.Zero)
+            translate(-canvasWidth / 2f, -canvasHeight / 2f)
+        }) {
+            val line = 1.5f / scale
+            val handle = 7f / scale
+            val points = (0 until 4).map { Offset(quad.x(it), quad.y(it)) }
+            for (i in 0 until 4) drawLine(accent, points[i], points[(i + 1) % 4], strokeWidth = line)
+            val (kx, ky) = TransformQuad.rotationKnob(quad, KNOB_DISTANCE_PX / scale)
+            val topMid = Offset((quad.x0 + quad.x1) / 2f, (quad.y0 + quad.y1) / 2f)
+            drawLine(accent, topMid, Offset(kx, ky), strokeWidth = line)
+            drawCircle(Color.White, radius = handle, center = Offset(kx, ky))
+            drawCircle(accent, radius = handle, center = Offset(kx, ky), style = Stroke(line))
+            points.forEach {
+                drawCircle(Color.White, radius = handle, center = it)
+                drawCircle(accent, radius = handle, center = it, style = Stroke(line))
+            }
+            for (i in 0 until 4) {
+                val mid = Offset((points[i].x + points[(i + 1) % 4].x) / 2f, (points[i].y + points[(i + 1) % 4].y) / 2f)
+                drawCircle(accent, radius = handle * 0.6f, center = mid)
+            }
+        }
+    }
+}
+
+/** The canvas view's pan, zoom and rotation, as reported to the compose layer. */
+data class ViewTransform(
+    val scale: Float,
+    val offsetX: Float,
+    val offsetY: Float,
+    val rotationDegrees: Float,
+)
+
+/** Must match the canvas view's rotation-knob distance, in screen pixels. */
+private const val KNOB_DISTANCE_PX = 48f
 
 @Composable
 private fun FloatingBar(

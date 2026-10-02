@@ -34,6 +34,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.artflow.studio.core.pixels.Quad
 import com.artflow.studio.core.tool.ToolGroup
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.domain.model.brush.StrokeDestination
@@ -70,8 +71,10 @@ import com.artflow.studio.presentation.ui.components.editor.StudioSidebarState
 import com.artflow.studio.presentation.ui.components.editor.StudioToolDock
 import com.artflow.studio.presentation.ui.components.editor.StudioTopBar
 import com.artflow.studio.presentation.ui.components.editor.TextSheet
+import com.artflow.studio.presentation.ui.components.editor.TransformOverlay
 import com.artflow.studio.presentation.ui.components.editor.TransformToolbar
 import com.artflow.studio.presentation.ui.components.editor.TransformToolbarActions
+import com.artflow.studio.presentation.ui.components.editor.ViewTransform
 import com.artflow.studio.presentation.ui.components.editor.icon
 import com.artflow.studio.presentation.ui.components.editor.isWideLayout
 import com.artflow.studio.presentation.ui.components.editor.studioButton
@@ -149,6 +152,7 @@ fun CanvasScreen(
     var toolsExpanded by rememberSaveable(projectId) { mutableStateOf(false) }
     var openMenu by remember { mutableStateOf<StudioButton?>(null) }
     var showCopyPaste by remember { mutableStateOf(false) }
+    var transformQuad by remember { mutableStateOf<Quad?>(null) }
     val hasClipboard by viewModel.hasClipboard.collectAsState()
     val wide = isWideLayout()
     var colorDropPosition by remember { mutableStateOf<androidx.compose.ui.geometry.Offset?>(null) }
@@ -677,6 +681,7 @@ fun CanvasScreen(
                                 onFullscreenRequested = { focusMode = !focusMode }
                                 onCopyPasteMenuRequested = { showCopyPaste = true }
                                 onClearLayerRequested = { viewModel.clearLayer() }
+                                onTransformQuadChanged = { transformQuad = it }
                                 onViewChanged = { s, ox, oy, r -> viewModel.onViewChanged(s, ox, oy, r) }
                                 onTextPlacementRequested = { x, y -> viewModel.requestTextAt(x, y) }
                                 onCloneSourceChanged = { viewModel.onCloneSourceChanged(it) }
@@ -756,6 +761,16 @@ fun CanvasScreen(
                     modifier = Modifier.align(Alignment.CenterStart).padding(start = 8.dp),
                 )
                 ContextToolbar(viewModel, input, canvasView, Modifier.align(Alignment.BottomCenter)) { panel = it }
+            }
+            val quad = transformQuad
+            if (quad != null && ready != null && input.tool == ToolType.TRANSFORM) {
+                TransformOverlay(
+                    quad = quad,
+                    canvasWidth = ready.width,
+                    canvasHeight = ready.height,
+                    view = ViewTransform(viewScale, viewOffsetX, viewOffsetY, viewRotation),
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
             if (showCopyPaste && ready != null) {
                 CopyPasteMenu(
@@ -1033,6 +1048,7 @@ private fun ContextToolbar(
         input.tool == ToolType.TRANSFORM ->
             TransformToolbar(
                 mode = input.transformMode,
+                interpolation = input.transformInterpolation,
                 actions =
                     TransformToolbarActions(
                         onMode = viewModel::setTransformMode,
@@ -1040,7 +1056,9 @@ private fun ContextToolbar(
                             canvasView?.transformActiveLayer(flipHorizontal = horizontal, flipVertical = !horizontal)
                         },
                         onRotate = { canvasView?.transformActiveLayer(rotation = it) },
-                        onScale = { canvasView?.transformActiveLayer(scaleFactor = it) },
+                        onFit = { canvasView?.fitTransformToCanvas() },
+                        onReset = { canvasView?.resetTransform() },
+                        onInterpolation = viewModel::setTransformInterpolation,
                     ),
                 modifier = modifier,
             )
@@ -1105,7 +1123,7 @@ private fun TransformOptions(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            com.artflow.studio.core.pixels.LayerTransform.Mode.entries.forEach { mode ->
+            com.artflow.studio.core.pixels.TransformQuad.Mode.entries.forEach { mode ->
                 FilterChip(
                     selected = input.transformMode == mode,
                     onClick = { viewModel.setTransformMode(mode) },

@@ -1,7 +1,6 @@
 package com.artflow.studio.core.pixels
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LayerTransformTest {
@@ -61,18 +60,6 @@ class LayerTransformTest {
         assertEquals(red, out.pixels[7])
         assertEquals(red, out.pixels[2 * 8])
         assertEquals(0, out.pixels[0])
-    }
-
-    @Test fun dragModesProduceExpectedParams() {
-        val scale = LayerTransform.fromDrag(LayerTransform.Mode.UNIFORM, 0f, 0f, 10f, 0f, 20f, 0f)
-        assertEquals(2f, scale.scaleX, 1e-4f)
-        assertEquals(2f, scale.scaleY, 1e-4f)
-        val rotate = LayerTransform.fromDrag(LayerTransform.Mode.ROTATE, 0f, 0f, 10f, 0f, 0f, 10f)
-        assertEquals(90f, rotate.rotationDegrees, 1e-3f)
-        val free = LayerTransform.fromDrag(LayerTransform.Mode.FREEFORM, 0f, 0f, 10f, 10f, 30f, 5f)
-        assertEquals(3f, free.scaleX, 1e-4f)
-        assertEquals(0.5f, free.scaleY, 1e-4f)
-        assertTrue(LayerTransform.fromDrag(LayerTransform.Mode.MOVE, 0f, 0f, 1f, 1f, 1f, 1f).isIdentity)
     }
 
     @Test fun pivotIsCentreOfContent() {

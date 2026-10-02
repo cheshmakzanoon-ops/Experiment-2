@@ -20,6 +20,7 @@ import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionClipboard
 import com.artflow.studio.core.pixels.SelectionMask
+import com.artflow.studio.core.pixels.TransformQuad
 import com.artflow.studio.core.symmetry.SymmetryEngine
 import com.artflow.studio.core.text.TextLayout
 import com.artflow.studio.core.tool.FillTool
@@ -538,7 +539,10 @@ class CanvasViewModel
 
         fun setQuickShape(enabled: Boolean) = updateInput { it.copy(quickShape = enabled) }
 
-        fun setTransformMode(mode: com.artflow.studio.core.pixels.LayerTransform.Mode) = updateInput { it.copy(transformMode = mode) }
+        fun setTransformMode(mode: TransformQuad.Mode) = updateInput { it.copy(transformMode = mode) }
+
+        fun setTransformInterpolation(interpolation: TransformQuad.Interpolation) =
+            updateInput { it.copy(transformInterpolation = interpolation) }
 
         private fun updateInput(transform: (EditorInput) -> EditorInput) {
             _input.value = transform(_input.value)
