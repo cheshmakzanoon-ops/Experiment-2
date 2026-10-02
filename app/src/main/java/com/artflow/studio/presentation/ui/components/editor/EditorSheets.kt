@@ -72,6 +72,8 @@ data class LayerStackActions(
     val onAdjustmentParameter: (Long, String, Float) -> Unit,
     val onFilterAmount: (Long, Float) -> Unit,
     val onInsertPhoto: (() -> Unit)? = null,
+    val onGroupWithBelow: ((Long) -> Unit)? = null,
+    val onUngroup: ((Long) -> Unit)? = null,
 )
 
 data class LayerMaskActions(
@@ -115,6 +117,7 @@ fun LayersSheet(
     var blendTarget by remember { mutableStateOf<Layer?>(null) }
     var renameTarget by remember { mutableStateOf<Layer?>(null) }
     var addMenuVisible by remember { mutableStateOf(false) }
+    var collapsedGroups by remember { mutableStateOf(emptySet<Long>()) }
     val active = layers.firstOrNull { it.id == activeLayerId }
 
     Column(modifier = modifier.fillMaxWidth()) {
@@ -171,36 +174,8 @@ fun LayersSheet(
                                 addMenuVisible = false
                             },
                         )
-                        Divider()
-                        DropdownMenuItem(
-                            text = { Text("Add adjustment layer") },
-                            onClick = { addMenuVisible = false },
-                            trailingIcon = { Icon(Icons.Default.Tune, contentDescription = null) },
-                        )
-                        AdjustmentType.entries.forEach { type ->
-                            DropdownMenuItem(
-                                text = { Text("   ${type.displayName}") },
-                                onClick = {
-                                    onAddAdjustment(type)
-                                    addMenuVisible = false
-                                },
-                            )
-                        }
-                        Divider()
-                        DropdownMenuItem(
-                            text = { Text("Add filter layer") },
-                            onClick = { addMenuVisible = false },
-                            trailingIcon = { Icon(Icons.Default.FilterVintage, contentDescription = null) },
-                        )
-                        FilterType.entries.forEach { type ->
-                            DropdownMenuItem(
-                                text = { Text("   ${type.displayName}") },
-                                onClick = {
-                                    onAddFilter(type)
-                                    addMenuVisible = false
-                                },
-                            )
-                        }
+                        GroupMenuItems(active, stackActions) { addMenuVisible = false }
+                        EffectLayerMenuItems(onAddAdjustment, onAddFilter) { addMenuVisible = false }
                     }
                 }
             }
@@ -212,22 +187,31 @@ fun LayersSheet(
                     .fillMaxWidth()
                     .heightIn(max = 320.dp),
         ) {
-            items(layers.sortedByDescending { it.index }, key = { it.id }) { layer ->
-                LayerRow(
-                    layer = layer,
-                    isActive = layer.id == activeLayerId,
-                    onSelect = { onSelect(layer.id) },
-                    onVisibility = { onVisibility(layer.id, !layer.isVisible) },
-                    onOpacity = { onOpacity(layer.id, it) },
-                    onBlendMode = { blendTarget = layer },
-                    onLock = { onLock(layer.id, !layer.isLocked) },
-                    onAlphaLock = { onAlphaLock(layer.id, !layer.isAlphaLocked) },
-                    onClipping = { onClipping(layer.id, !layer.isClippingMask) },
-                    onDuplicate = { onDuplicate(layer.id) },
-                    onDelete = { onDelete(layer.id) },
-                    onMergeDown = { onMergeDown(layer.id) },
-                    onRename = { renameTarget = layer },
-                )
+            val visibleLayers =
+                layers.sortedByDescending { it.index }.filter { layer ->
+                    layer.parentGroupId == null || layer.parentGroupId !in collapsedGroups
+                }
+            items(visibleLayers, key = { it.id }) { layer ->
+                GroupedRow(layer, layer.id in collapsedGroups) {
+                    collapsedGroups = if (layer.id in collapsedGroups) collapsedGroups - layer.id else collapsedGroups + layer.id
+                }
+                Box(Modifier.padding(start = if (layer.parentGroupId != null) 20.dp else 0.dp)) {
+                    LayerRow(
+                        layer = layer,
+                        isActive = layer.id == activeLayerId,
+                        onSelect = { onSelect(layer.id) },
+                        onVisibility = { onVisibility(layer.id, !layer.isVisible) },
+                        onOpacity = { onOpacity(layer.id, it) },
+                        onBlendMode = { blendTarget = layer },
+                        onLock = { onLock(layer.id, !layer.isLocked) },
+                        onAlphaLock = { onAlphaLock(layer.id, !layer.isAlphaLocked) },
+                        onClipping = { onClipping(layer.id, !layer.isClippingMask) },
+                        onDuplicate = { onDuplicate(layer.id) },
+                        onDelete = { onDelete(layer.id) },
+                        onMergeDown = { onMergeDown(layer.id) },
+                        onRename = { renameTarget = layer },
+                    )
+                }
             }
         }
 
@@ -358,6 +342,87 @@ private fun LayerMaskControls(
             value = layer.maskFeather,
             range = 0f..64f,
             onChange = actions.onMaskFeather,
+        )
+    }
+}
+
+/** Header for a group (collapse toggle) — member rows are indented by [LayerRow]. */
+@Composable
+private fun GroupedRow(
+    layer: Layer,
+    collapsed: Boolean,
+    onToggle: () -> Unit,
+) {
+    if (!layer.isGroup) return
+    TextButton(onClick = onToggle, modifier = Modifier.padding(start = 8.dp)) {
+        Icon(if (collapsed) Icons.Default.ChevronRight else Icons.Default.ExpandMore, contentDescription = null)
+        Text(if (collapsed) "Show ${layer.name}" else "Collapse ${layer.name}", style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+@Composable
+private fun GroupMenuItems(
+    active: Layer?,
+    actions: LayerStackActions,
+    dismiss: () -> Unit,
+) {
+    val group = actions.onGroupWithBelow
+    if (active != null && !active.isGroup && group != null) {
+        DropdownMenuItem(
+            text = { Text("Group with layer below") },
+            onClick = {
+                group(active.id)
+                dismiss()
+            },
+        )
+    }
+    val ungroup = actions.onUngroup
+    val groupId = if (active?.isGroup == true) active.id else active?.parentGroupId
+    if (groupId != null && ungroup != null) {
+        DropdownMenuItem(
+            text = { Text("Ungroup") },
+            onClick = {
+                ungroup(groupId)
+                dismiss()
+            },
+        )
+    }
+}
+
+@Composable
+private fun EffectLayerMenuItems(
+    onAddAdjustment: (AdjustmentType) -> Unit,
+    onAddFilter: (FilterType) -> Unit,
+    dismiss: () -> Unit,
+) {
+    Divider()
+    DropdownMenuItem(
+        text = { Text("Add adjustment layer") },
+        onClick = { dismiss() },
+        trailingIcon = { Icon(Icons.Default.Tune, contentDescription = null) },
+    )
+    AdjustmentType.entries.forEach { type ->
+        DropdownMenuItem(
+            text = { Text("   ${type.displayName}") },
+            onClick = {
+                onAddAdjustment(type)
+                dismiss()
+            },
+        )
+    }
+    Divider()
+    DropdownMenuItem(
+        text = { Text("Add filter layer") },
+        onClick = { dismiss() },
+        trailingIcon = { Icon(Icons.Default.FilterVintage, contentDescription = null) },
+    )
+    FilterType.entries.forEach { type ->
+        DropdownMenuItem(
+            text = { Text("   ${type.displayName}") },
+            onClick = {
+                onAddFilter(type)
+                dismiss()
+            },
         )
     }
 }

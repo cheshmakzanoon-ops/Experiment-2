@@ -49,13 +49,15 @@ data class Layer(
     val linkGroupId: Long? = null,
     /** Hidden from the layer list but still composited (used by text layers before rasterising). */
     val isInternal: Boolean = false,
+    /** A group holds no pixels; its visibility and opacity apply to layers whose [parentGroupId] is its id. */
+    val isGroup: Boolean = false,
     /** Runtime mask presence is independent of whether its immutable PNG has been saved yet. */
     @kotlinx.serialization.Transient val hasInMemoryMask: Boolean = false,
 ) {
     /**
      * Check if this layer can be edited
      */
-    fun canEdit(): Boolean = !isLocked && isVisible
+    fun canEdit(): Boolean = !isLocked && isVisible && !isGroup
 
     /** True when the layer has pixel data that tools can modify. */
     fun hasRaster(): Boolean = rasterFile != null
@@ -100,6 +102,7 @@ data class Layer(
         isReference: Boolean = this.isReference,
         linkGroupId: Long? = this.linkGroupId,
         isInternal: Boolean = this.isInternal,
+        isGroup: Boolean = this.isGroup,
     ): Layer =
         Layer(
             id = id,
@@ -128,6 +131,7 @@ data class Layer(
             isReference = isReference,
             linkGroupId = linkGroupId,
             isInternal = isInternal,
+            isGroup = isGroup,
             hasInMemoryMask = hasInMemoryMask,
         )
 }

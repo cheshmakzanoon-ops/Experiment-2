@@ -683,6 +683,17 @@ class CanvasViewModel
                 check(drawn) { "The photo could not be placed on the new layer" }
             }
 
+        /** Groups [layerId] with the layer directly beneath it (or groups it alone at the bottom). */
+        fun groupWithLayerBelow(layerId: Long) =
+            layerOp {
+                val stack = canvasRepository.getAllLayers().filter { !it.isGroup }.sortedBy { it.index }
+                val position = stack.indexOfFirst { it.id == layerId }
+                val members = listOfNotNull(stack.getOrNull(position - 1), stack.getOrNull(position)).map { it.id }
+                checkNotNull(canvasRepository.groupLayers(members)) { "These layers cannot be grouped" }
+            }
+
+        fun ungroup(groupId: Long) = layerOp { canvasRepository.ungroupLayers(groupId) }
+
         fun removeLayer(layerId: Long) {
             viewModelScope.launch(editorErrors) {
                 if (!canvasRepository.removeLayer(layerId)) notify("The last layer cannot be deleted")

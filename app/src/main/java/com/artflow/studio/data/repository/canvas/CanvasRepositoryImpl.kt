@@ -357,6 +357,8 @@ class CanvasRepositoryImpl
                     isClippingMask = layer.isClippingMask,
                     isReference = layer.isReference,
                     linkGroupId = layer.linkGroupId,
+                    isGroup = layer.isGroup,
+                    parentGroupId = layer.parentGroupId,
                     maskEnabled = layer.maskEnabled,
                     maskInverted = layer.maskInverted,
                     maskDensity = layer.maskDensity,
@@ -835,12 +837,15 @@ class CanvasRepositoryImpl
         override suspend fun removeLayer(layerId: Long): Boolean =
             withState {
                 val layers = currentLayers()
-                if (layers.size <= 1) return@withState false
                 val position = layers.indexOfFirst { it.id == layerId }
                 if (position == -1) return@withState false
+                val removing = layers[position]
+                // A group header is removed by ungrouping; the artwork must keep one paintable layer.
+                if (!removing.isGroup && layers.count { !it.isGroup } <= 1) return@withState false
 
                 pushUndo()
                 layers.removeAt(position)
+                if (removing.isGroup) layers.forEach { if (it.parentGroupId == layerId) it.parentGroupId = null }
                 if (activeLayerId() == layerId) {
                     setActiveLayerId(layers[position.coerceAtMost(layers.lastIndex)].id)
                 }
@@ -1116,6 +1121,40 @@ class CanvasRepositoryImpl
                 pushUndo()
                 val groupId = System.nanoTime()
                 layerIds.forEach { id -> layerById(id)?.linkGroupId = groupId }
+                dirty = true
+                emit(CanvasInvalidationEvent.LayersChanged)
+                true
+            }
+
+        override suspend fun groupLayers(layerIds: List<Long>): Long? =
+            withState {
+                val layers = currentLayers()
+                val members = layers.filter { it.id in layerIds && !it.isGroup && !it.isInternal }
+                if (members.isEmpty() || !hasLayerCapacity(1)) return@withState null
+                pushUndo()
+                val groupId = nextLayerId++
+                val group = LayerData(id = groupId, name = "Group ${layers.count { it.isGroup } + 1}", isGroup = true)
+                // Keep members contiguous, in stack order, where the topmost member used to be.
+                val topIndex = layers.indexOf(members.last())
+                layers.removeAll(members)
+                val insertAt = (topIndex - members.size + 1).coerceIn(0, layers.size)
+                members.forEach { it.parentGroupId = groupId }
+                layers.addAll(insertAt, members)
+                layers.add(insertAt + members.size, group)
+                setActiveLayerId(members.last().id)
+                dirty = true
+                emit(CanvasInvalidationEvent.LayersChanged)
+                groupId
+            }
+
+        override suspend fun ungroupLayers(groupId: Long): Boolean =
+            withState {
+                val layers = currentLayers()
+                val group = layers.firstOrNull { it.id == groupId && it.isGroup } ?: return@withState false
+                pushUndo()
+                layers.forEach { if (it.parentGroupId == groupId) it.parentGroupId = null }
+                layers.remove(group)
+                if (activeLayerId() == groupId) setActiveLayerId(layers.last { !it.isGroup }.id)
                 dirty = true
                 emit(CanvasInvalidationEvent.LayersChanged)
                 true
@@ -2270,6 +2309,8 @@ class CanvasRepositoryImpl
             var filterType: FilterType? = null,
             var filterAmount: Float = 0f,
             var isInternal: Boolean = false,
+            var isGroup: Boolean = false,
+            var parentGroupId: Long? = null,
         ) {
             var raster: PixelBuffer? = null
             var rasterFile: String? = null
@@ -2286,6 +2327,7 @@ class CanvasRepositoryImpl
             fun canPaint(): Boolean =
                 isVisible &&
                     !isLocked &&
+                    !isGroup &&
                     !isReference &&
                     adjustmentType == null &&
                     filterType == null
@@ -2304,6 +2346,8 @@ class CanvasRepositoryImpl
                     isClippingMask = isClippingMask,
                     isReference = isReference,
                     linkGroupId = linkGroupId,
+                    isGroup = isGroup,
+                    parentGroupId = parentGroupId,
                     maskEnabled = maskEnabled,
                     maskInverted = maskInverted,
                     maskDensity = maskDensity,
@@ -2348,6 +2392,8 @@ class CanvasRepositoryImpl
                     isClippingMask = isClippingMask,
                     isReference = isReference,
                     linkGroupId = linkGroupId,
+                    isGroup = isGroup,
+                    parentGroupId = parentGroupId,
                     maskEnabled = maskEnabled,
                     maskInverted = maskInverted,
                     maskDensity = maskDensity,
@@ -2387,6 +2433,8 @@ class CanvasRepositoryImpl
                     filterAmount = filterAmount,
                     isReference = isReference,
                     linkGroupId = linkGroupId,
+                    isGroup = isGroup,
+                    parentGroupId = parentGroupId,
                     isInternal = isInternal,
                     hasInMemoryMask = mask != null,
                 )

@@ -114,7 +114,7 @@ class Compositor(
         }
 
         try {
-            for (input in inputs.sortedBy { it.layer.index }) {
+            for (input in LayerGroups.resolve(inputs).sortedBy { it.layer.index }) {
                 val layer = input.layer
                 // Even a hidden/empty base starts a new group: it cannot inherit an older base.
                 if (!layer.isClippingMask) flushGroup()

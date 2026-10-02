@@ -573,6 +573,8 @@ fun CanvasScreen(
                                     onAdjustmentParameter = { id, key, value -> viewModel.setAdjustmentParameter(id, key, value) },
                                     onFilterAmount = { id, amount -> viewModel.setFilterAmount(id, amount) },
                                     onInsertPhoto = insertPhoto,
+                                    onGroupWithBelow = viewModel::groupWithLayerBelow,
+                                    onUngroup = viewModel::ungroup,
                                 ),
                             maskActions =
                                 LayerMaskActions(

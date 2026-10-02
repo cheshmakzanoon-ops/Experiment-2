@@ -298,6 +298,12 @@ interface CanvasRepository {
 
     suspend fun unlinkLayer(layerId: Long): Boolean
 
+    /** Puts [layerIds] in a new group placed above the active layer; returns the group id. */
+    suspend fun groupLayers(layerIds: List<Long>): Long?
+
+    /** Removes the group header and keeps its layers in place. */
+    suspend fun ungroupLayers(groupId: Long): Boolean
+
     fun getAllLayers(): List<Layer>
 
     fun getActiveLayer(): Layer?
