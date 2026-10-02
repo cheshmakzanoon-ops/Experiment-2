@@ -41,12 +41,14 @@ import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.LiveAdjustments
 import com.artflow.studio.core.pixels.Quad
 import com.artflow.studio.core.pixels.WarpMesh
+import com.artflow.studio.core.text.TextLayerContent
 import com.artflow.studio.core.tool.ToolGroup
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.domain.model.brush.StrokeDestination
 import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.FilterType
+import com.artflow.studio.domain.model.layer.Layer
 import com.artflow.studio.presentation.ui.components.brush.BrushStudioDialog
 import com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView
 import com.artflow.studio.presentation.ui.components.canvas.BrushCursor
@@ -175,6 +177,7 @@ fun CanvasScreen(
     var transformQuad by remember { mutableStateOf<Quad?>(null) }
     var warpMesh by remember { mutableStateOf<WarpMesh?>(null) }
     var brushCursor by remember { mutableStateOf<BrushCursor?>(null) }
+    var editingText by remember { mutableStateOf<Layer?>(null) }
     val adjustment by viewModel.adjustments.state.collectAsState()
     val layerThumbnails by viewModel.layerThumbnails.thumbnails.collectAsState()
     LaunchedEffect(panel, layers, history) {
@@ -295,7 +298,10 @@ fun CanvasScreen(
     }
 
     val dismissPanel = {
-        if (panel == EditorPanel.TEXT) viewModel.cancelText()
+        if (panel == EditorPanel.TEXT) {
+            viewModel.cancelText()
+            editingText = null
+        }
         panel = EditorPanel.NONE
     }
     LaunchedEffect(pendingText) {
@@ -420,6 +426,14 @@ fun CanvasScreen(
                             onReference = viewModel::setLayerReference,
                             onMask = { viewModel.createLayerMask(LayerMaskSource.REVEAL_ALL) },
                             onCombineDown = viewModel::groupWithLayerBelow,
+                            onEditText = { layer ->
+                                layer.textContent?.let { content ->
+                                    viewModel.setText(content.text, content.style)
+                                    viewModel.setColor(content.color)
+                                    editingText = layer
+                                    panel = EditorPanel.TEXT
+                                }
+                            },
                         ),
                 )
             EditorPanel.SELECTION ->
@@ -493,20 +507,25 @@ fun CanvasScreen(
                     onColorChange = { viewModel.setColor(it) },
                     onPlace = {
                         val pending = pendingText
-                        val view = canvasView
-                        if (pending != null && view != null) {
-                            view.placeText(
-                                pending.x,
-                                pending.y,
-                                input.text,
-                                input.textStyle,
-                                input.brushColor,
-                            )
-                            viewModel.cancelText()
-                            viewModel.setTool(ToolType.BRUSH)
-                        } else {
-                            viewModel.setTool(ToolType.TEXT)
-                            viewModel.notify("Tap the canvas to choose where the text goes")
+                        val editing = editingText
+                        val editingContent = editing?.textContent
+                        when {
+                            editing != null && editingContent != null -> {
+                                val updated = editingContent.copy(text = input.text, style = input.textStyle, color = input.brushColor)
+                                viewModel.textLayers.edit(editing.id, updated)
+                                editingText = null
+                            }
+                            pending != null -> {
+                                // Text goes on its own layer and stays editable, as in Procreate.
+                                val content = TextLayerContent(input.text, input.textStyle, input.brushColor, pending.x, pending.y)
+                                viewModel.textLayers.place(content)
+                                viewModel.cancelText()
+                                viewModel.setTool(ToolType.BRUSH)
+                            }
+                            else -> {
+                                viewModel.setTool(ToolType.TEXT)
+                                viewModel.notify("Tap the canvas to choose where the text goes")
+                            }
                         }
                         panel = EditorPanel.NONE
                     },

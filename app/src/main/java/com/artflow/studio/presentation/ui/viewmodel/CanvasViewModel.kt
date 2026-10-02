@@ -716,6 +716,7 @@ class CanvasViewModel
         /** Cut, copy, paste, clear and fill (Copy & Paste menu and layer options). */
         val clipboard = ClipboardController(canvasRepository, ::layerOp)
         val savedSelections = SavedSelections(canvasRepository) { refreshSelection() }
+        val textLayers = TextLayerController(canvasRepository, ::layerOp)
 
         val layerThumbnails = LayerThumbnailController(canvasRepository, viewModelScope)
 

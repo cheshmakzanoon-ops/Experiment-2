@@ -233,6 +233,19 @@ interface CanvasRepository {
 
     suspend fun removeLayer(layerId: Long): Boolean
 
+    /** Adds an editable text layer above the active one showing [pixels]; one undo step. */
+    suspend fun addTextLayer(
+        text: com.artflow.studio.core.text.TextLayerContent,
+        pixels: PixelBuffer,
+    ): Long? = null
+
+    /** Replaces a text layer's words and pixels, keeping it editable; one undo step. */
+    suspend fun setTextLayer(
+        layerId: Long,
+        text: com.artflow.studio.core.text.TextLayerContent,
+        pixels: PixelBuffer,
+    ): Boolean = false
+
     suspend fun reorderLayer(
         layerId: Long,
         newIndex: Int,

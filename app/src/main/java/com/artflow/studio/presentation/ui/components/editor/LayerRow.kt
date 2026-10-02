@@ -179,6 +179,7 @@ private fun LayerStatus(layer: Layer) {
             if (layer.isClippingMask) add("clipping")
             if (layer.isAlphaLocked) add("alpha locked")
             if (layer.isReference) add("reference")
+            if (layer.textContent != null) add("text")
             if (layer.hasMask()) add("mask")
         }
     if (status.isNotEmpty()) {
@@ -207,6 +208,9 @@ private fun LayerMenu(
         }
     DropdownMenu(expanded = expanded, onDismissRequest = dismiss) {
         DropdownMenuItem(text = { Text("Rename") }, onClick = item(onRename))
+        if (options != null && layer.textContent != null) {
+            DropdownMenuItem(text = { Text("Edit Text") }, onClick = item { options.onEditText(layer) })
+        }
         if (options != null) {
             DropdownMenuItem(text = { Text("Select") }, onClick = item(options.onSelectContents))
             DropdownMenuItem(text = { Text("Copy") }, onClick = item(options.onCopy))

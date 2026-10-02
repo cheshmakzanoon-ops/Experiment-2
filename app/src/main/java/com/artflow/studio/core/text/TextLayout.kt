@@ -15,6 +15,7 @@ import kotlin.math.sqrt
  * rasterisation happens in `data/renderer/TextLayerRenderer` on the device.
  */
 object TextLayout {
+    @kotlinx.serialization.Serializable
     enum class Alignment(
         val displayName: String,
     ) {
@@ -28,6 +29,7 @@ object TextLayout {
      * Text styling. Font metrics (ascent/descent) come from the platform font, but everything the
      * layout engine needs is expressed here so the engine stays platform independent.
      */
+    @kotlinx.serialization.Serializable
     data class TextStyle(
         val fontFamily: String = "sans-serif",
         val fontSize: Float = 64f,

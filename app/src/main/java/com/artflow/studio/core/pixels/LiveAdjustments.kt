@@ -99,7 +99,9 @@ object LiveAdjustments {
         val rgb = settings.parameters[RECOLOR_RGB]?.toInt() ?: return out
         val seed = source.pixels[y * source.width + x]
         if ((seed ushr 24) == 0) return out
-        val area = SelectionMask.magicWand(source, x, y, tolerance = (settings.amount.coerceIn(0f, 1f) * 255f).roundToInt())
+        // Full flood reaches about half of the colour space, so even 100% keeps clearly different colours.
+        val tolerance = (settings.amount.coerceIn(0f, 1f) * RECOLOR_MAX_TOLERANCE).roundToInt()
+        val area = SelectionMask.magicWand(source, x, y, tolerance = tolerance)
         val target = Color.rgbToHsv(0xFF000000.toInt() or rgb)
         val seedValue = Color.rgbToHsv(seed)[2]
         for (i in out.pixels.indices) {
@@ -239,4 +241,5 @@ object LiveAdjustments {
     private const val BLOOM_THRESHOLD = 0.6f
     private const val GLITCH_BAND = 6
     private const val MAX_ABERRATION = 0.05f
+    private const val RECOLOR_MAX_TOLERANCE = 128f
 }

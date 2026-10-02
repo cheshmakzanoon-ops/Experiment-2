@@ -12,6 +12,7 @@ import com.artflow.studio.core.render.Compositor
 import com.artflow.studio.core.render.LayerStrokeRenderer
 import com.artflow.studio.core.render.StrokeRasterizer
 import com.artflow.studio.core.symmetry.SymmetryEngine
+import com.artflow.studio.core.text.TextLayerContent
 import com.artflow.studio.data.local.CanvasDocument
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.renderer.BitmapPixelBridge
@@ -379,6 +380,7 @@ class CanvasRepositoryImpl
                     parentGroupId = layer.parentGroupId
                 }
             data.raster = loadRaster(projectId, layer.rasterFile)
+            data.text = layer.textContent
             data.mask = loadRaster(projectId, layer.maskFile)
             data.rasterFile = layer.rasterFile
             data.maskFile = layer.maskFile
@@ -849,6 +851,56 @@ class CanvasRepositoryImpl
                 emit(CanvasInvalidationEvent.LayersChanged)
                 layer.toDomain(insertAt)
             }
+
+        override suspend fun addTextLayer(
+            text: TextLayerContent,
+            pixels: PixelBuffer,
+        ): Long? =
+            withState {
+                if (!hasLayerCapacity(1) || pixels.width != canvasWidth || pixels.height != canvasHeight) return@withState null
+                pushUndo()
+                val layerId = nextLayerId++
+                val layers = currentLayers()
+                val layer = LayerData(id = layerId, name = textLayerName(text))
+                layer.raster = pixels.copy()
+                layer.text = text
+                val activeIndex = layers.indexOfFirst { it.id == activeLayerId() }
+                layers.add((activeIndex + 1).coerceIn(0, layers.size), layer)
+                setActiveLayerId(layerId)
+                dirtyRasters += layerId
+                dirty = true
+                emit(CanvasInvalidationEvent.LayersChanged)
+                layerId
+            }
+
+        override suspend fun setTextLayer(
+            layerId: Long,
+            text: TextLayerContent,
+            pixels: PixelBuffer,
+        ): Boolean =
+            withState {
+                val layer = layerById(layerId) ?: return@withState false
+                if (!layer.canPaint() || pixels.width != canvasWidth || pixels.height != canvasHeight) return@withState false
+                pushUndo()
+                layer.raster = pixels.copy()
+                layer.text = text
+                layer.name = textLayerName(text)
+                layer.strokes.clear()
+                layer.rasterFile = null
+                dirtyRasters += layer.id
+                dirty = true
+                emit(CanvasInvalidationEvent.LayersChanged)
+                true
+            }
+
+        private fun textLayerName(text: TextLayerContent): String =
+            text.text
+                .lineSequence()
+                .firstOrNull()
+                .orEmpty()
+                .trim()
+                .take(TEXT_LAYER_NAME)
+                .ifEmpty { "Text" }
 
         override suspend fun removeLayer(layerId: Long): Boolean =
             withState {
@@ -2421,7 +2473,14 @@ class CanvasRepositoryImpl
         ) {
             var isGroup: Boolean = false
             var parentGroupId: Long? = null
+
+            /** Editable text; set it after [raster], because any new pixels turn the text into pixels. */
+            var text: TextLayerContent? = null
             var raster: PixelBuffer? = null
+                set(value) {
+                    field = value
+                    text = null
+                }
             var rasterFile: String? = null
             var mask: PixelBuffer? = null
             var maskFile: String? = null
@@ -2469,6 +2528,7 @@ class CanvasRepositoryImpl
                     parentGroupId = this@LayerData.parentGroupId
                 }.also {
                     it.raster = raster
+                    it.text = text
                     it.rasterFile = rasterFile
                     it.mask = mask
                     it.maskFile = maskFile
@@ -2516,6 +2576,7 @@ class CanvasRepositoryImpl
                     parentGroupId = this@LayerData.parentGroupId
                 }.also { fresh ->
                     fresh.raster = raster
+                    fresh.text = text
                     fresh.mask = mask
                     fresh.maskOwned = false
                 }
@@ -2547,6 +2608,7 @@ class CanvasRepositoryImpl
                     isGroup = isGroup,
                     parentGroupId = parentGroupId,
                     isInternal = isInternal,
+                    textContent = text,
                     hasInMemoryMask = mask != null,
                 )
         }
@@ -2563,6 +2625,7 @@ class CanvasRepositoryImpl
 
         companion object {
             private const val MAX_HISTORY = 30
+            private const val TEXT_LAYER_NAME = 32
 
             /**
              * Cap on the pixel memory the undo stack may hold (192 MB). Beyond this the oldest steps
