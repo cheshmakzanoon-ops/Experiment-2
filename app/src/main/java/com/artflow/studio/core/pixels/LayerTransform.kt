@@ -201,10 +201,8 @@ object LayerTransform {
         for (i in target.pixels.indices) {
             val sx = i % width - dx
             val sy = i / width - dy
-            if (sx !in 0 until floating.width || sy !in 0 until floating.height) continue
-            val p = floating.pixels[sy * floating.width + sx]
-            if ((p ushr 24) == 0) continue
-            target.pixels[i] = if (blend) BlendModes.sourceOver(target.pixels[i], p) else p
+            val p = if (sx in 0 until floating.width && sy in 0 until floating.height) floating.pixels[sy * floating.width + sx] else 0
+            if ((p ushr 24) != 0) target.pixels[i] = if (blend) BlendModes.sourceOver(target.pixels[i], p) else p
         }
     }
 
