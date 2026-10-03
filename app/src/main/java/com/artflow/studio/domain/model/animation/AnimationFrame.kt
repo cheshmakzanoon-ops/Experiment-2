@@ -53,6 +53,10 @@ data class AnimationSettings(
     val playbackRangeEnd: Int = -1,
     /** Ping-pong playback instead of looping from the start. */
     val pingPong: Boolean = false,
+    /** Animation Assist's Background: the first frame stays behind every other frame. */
+    val backgroundFrame: Boolean = false,
+    /** Animation Assist's Foreground: the last frame stays in front of every other frame. */
+    val foregroundFrame: Boolean = false,
 ) {
     /** Milliseconds a single frame is displayed, derived from [fps]. */
     val frameDurationMs: Int get() = (1000f / fps.coerceIn(1, 60)).toInt().coerceAtLeast(16)

@@ -86,6 +86,17 @@ class CanvasMutationTest {
     }
 
     @Test
+    fun backgroundFrameShowsBehindOtherFrames() =
+        runTest {
+            paint(open(), red)
+            repository.addFrame(duplicateCurrent = false)
+            assertEquals(0, requireNotNull(repository.compositeFrame(1, transparentBackground = true)).pixels.first() ushr 24)
+            repository.updateAnimationSettings(repository.timeline.value.settings.copy(backgroundFrame = true))
+            assertEquals(red, requireNotNull(repository.compositeFrame(1, transparentBackground = true)).pixels.first())
+            assertEquals(red, requireNotNull(repository.compositeFrame(0, transparentBackground = true)).pixels.first())
+        }
+
+    @Test
     fun neighbouringLayersMergeInOneStep() =
         runTest {
             val bottom = open()

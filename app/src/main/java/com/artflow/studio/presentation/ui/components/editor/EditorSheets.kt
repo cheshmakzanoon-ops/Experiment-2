@@ -911,6 +911,16 @@ fun AnimationSheet(
             Text("Ping-pong playback", style = MaterialTheme.typography.bodySmall)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(checked = settings.backgroundFrame, onCheckedChange = { onSettings(settings.copy(backgroundFrame = it)) })
+            Spacer(Modifier.width(8.dp))
+            Text("First frame is the background", style = MaterialTheme.typography.bodySmall)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(checked = settings.foregroundFrame, onCheckedChange = { onSettings(settings.copy(foregroundFrame = it)) })
+            Spacer(Modifier.width(8.dp))
+            Text("Last frame is the foreground", style = MaterialTheme.typography.bodySmall)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(checked = onionEnabled, onCheckedChange = onToggleOnion)
             Spacer(Modifier.width(8.dp))
             Text("Onion skin", style = MaterialTheme.typography.bodySmall)

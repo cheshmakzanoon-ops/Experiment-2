@@ -2010,7 +2010,8 @@ class CanvasRepositoryImpl
                 withState {
                     val frame = frameList.getOrNull(index) ?: return@withState null
                     markRastersShared()
-                    frame.layers.map { it.snapshotCopy() } to canvasSnapshot()
+                    withPinnedFrames(index, frame.layers, frameList.map { it.layers }, animationSettings)
+                        .map { it.snapshotCopy() } to canvasSnapshot()
                 } ?: return null
             return withContext(Dispatchers.Default) {
                 renderFrozen(snapshot.first, snapshot.second, transparentBackground = transparentBackground)
@@ -2024,7 +2025,8 @@ class CanvasRepositoryImpl
             val snapshot =
                 withState {
                     markRastersShared()
-                    currentLayers().map { it.snapshotCopy() } to canvasSnapshot()
+                    withPinnedFrames(activeFrame, currentLayers(), frameList.map { it.layers }, animationSettings)
+                        .map { it.snapshotCopy() } to canvasSnapshot()
                 }
             return withContext(Dispatchers.Default) { renderFrozen(snapshot.first, snapshot.second, includeHidden, applyAdjustments) }
         }
@@ -2045,13 +2047,18 @@ class CanvasRepositoryImpl
 
         private fun takePreviewSnapshot(): PreviewSnapshot {
             markRastersShared()
-            val layers =
+            val current =
                 currentLayers().map { layer ->
                     layer.snapshotCopy().also { copy ->
                         pendingEdits.values.firstOrNull { it.layer === layer }?.let { pending ->
                             copy.raster = pending.session.buffer.copy()
                         }
                     }
+                }
+            // Only the pinned background and foreground frames need copies of their own.
+            val layers =
+                withPinnedFrames(activeFrame, current, frameList.map { it.layers }, animationSettings).map { layer ->
+                    if (current.any { it === layer }) layer else layer.snapshotCopy()
                 }
             return PreviewSnapshot(
                 layers,
@@ -2241,7 +2248,12 @@ class CanvasRepositoryImpl
                             }
                         }
                     CanvasExportSnapshot(
-                        frames = frames.map { renderFrozen(it.layers, frozen.second, includeHidden, transparentBackground = true) },
+                        frames =
+                            frames.mapIndexed { position, frame ->
+                                val index = if (allFrames) position else snapshot.activeFrame
+                                val shown = withPinnedFrames(index, frame.layers, snapshot.frames.map { it.layers }, snapshot.animation)
+                                renderFrozen(shown, frozen.second, includeHidden, transparentBackground = true)
+                            },
                         delaysMs = frames.map { it.durationMs },
                         layers = layerPixels,
                         selection = frozen.third,
@@ -2265,6 +2277,22 @@ class CanvasRepositoryImpl
                     data.toDomain(index) to buffer
                 }
             }
+
+        /**
+         * [layers] of frame [index] with Animation Assist's background frame below and foreground
+         * frame above, as every other frame shows them during playback and in exports.
+         */
+        private fun withPinnedFrames(
+            index: Int,
+            layers: List<LayerData>,
+            frames: List<List<LayerData>>,
+            settings: AnimationSettings,
+        ): List<LayerData> {
+            if (frames.size < 2) return layers
+            val below = if (settings.backgroundFrame && index != 0) frames.first() else emptyList()
+            val above = if (settings.foregroundFrame && index != frames.lastIndex) frames.last() else emptyList()
+            return below + layers + above
+        }
 
         private fun renderFrozen(
             layers: List<LayerData>,
