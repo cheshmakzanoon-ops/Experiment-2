@@ -45,6 +45,7 @@ import com.artflow.studio.core.pixels.WarpMesh
 import com.artflow.studio.core.text.TextLayerContent
 import com.artflow.studio.core.tool.ToolGroup
 import com.artflow.studio.core.tool.ToolType
+import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.brush.StrokeDestination
 import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.layer.BlendMode
@@ -66,6 +67,7 @@ import com.artflow.studio.presentation.ui.components.editor.BrushOptionsRow
 import com.artflow.studio.presentation.ui.components.editor.CanvasActions
 import com.artflow.studio.presentation.ui.components.editor.CanvasInfo
 import com.artflow.studio.presentation.ui.components.editor.CanvasOpsSheet
+import com.artflow.studio.presentation.ui.components.editor.CanvasReference
 import com.artflow.studio.presentation.ui.components.editor.ColorChip
 import com.artflow.studio.presentation.ui.components.editor.CopyPasteActions
 import com.artflow.studio.presentation.ui.components.editor.CopyPasteMenu
@@ -195,6 +197,13 @@ fun CanvasScreen(
     var contentOrigin by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
     var showReference by rememberSaveable(projectId) { mutableStateOf(false) }
     var referenceUri by rememberSaveable(projectId) { mutableStateOf<String?>(null) }
+    var referenceCanvas by rememberSaveable(projectId) { mutableStateOf(false) }
+    val canvasPreview by viewModel.canvasPreview.preview.collectAsState()
+    val canvasPreviewBitmap =
+        remember(canvasPreview) { canvasPreview?.let { BitmapPixelBridge.toBitmap(it) } }
+    LaunchedEffect(showReference, referenceCanvas, history) {
+        if (showReference && referenceCanvas) viewModel.canvasPreview.refresh()
+    }
     var referenceImportProject by rememberSaveable(projectId) { mutableStateOf<Long?>(null) }
     val referencePicker =
         rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -822,6 +831,7 @@ fun CanvasScreen(
                     onImport = importReference,
                     onClose = { showReference = false },
                     onColorPicked = viewModel::onColorPicked,
+                    canvas = CanvasReference(referenceCanvas, canvasPreviewBitmap) { referenceCanvas = it },
                 )
             }
             if (ready != null && !focusMode) {

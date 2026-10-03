@@ -59,6 +59,7 @@ fun ReferenceCompanion(
     onClose: () -> Unit,
     onColorPicked: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    canvas: CanvasReference? = null,
 ) {
     val context = LocalContext.current
     val state =
@@ -93,8 +94,15 @@ fun ReferenceCompanion(
             }
             imageState
         }
-    ReferenceWindow(state, onImport, onClose, onColorPicked, modifier)
+    ReferenceWindow(state, onImport, onClose, onColorPicked, modifier, canvas)
 }
+
+/** The Reference window's live Canvas view: the whole artwork while you work zoomed in. */
+data class CanvasReference(
+    val showing: Boolean,
+    val image: Bitmap?,
+    val onShow: (Boolean) -> Unit,
+)
 
 /** Window layout is bounded to the available canvas, including after rotation or focus changes. */
 @Composable
@@ -104,6 +112,7 @@ fun ReferenceWindow(
     onClose: () -> Unit,
     onColorPicked: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    canvas: CanvasReference? = null,
 ) {
     val density = LocalDensity.current
     var horizontalPosition by rememberSaveable { mutableFloatStateOf(1f) }
@@ -152,8 +161,20 @@ fun ReferenceWindow(
                         Icon(Icons.Default.Close, contentDescription = "Close reference")
                     }
                 }
-                when (state) {
-                    is ReferenceImageState.Ready -> ReferenceImageViewer(state.bitmap, onColorPicked, Modifier.weight(1f))
+                canvas?.let { mode ->
+                    Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(selected = mode.showing, onClick = { mode.onShow(true) }, label = { Text("Canvas") })
+                        FilterChip(selected = !mode.showing, onClick = { mode.onShow(false) }, label = { Text("Image") })
+                    }
+                }
+                val liveCanvas = canvas?.takeIf { it.showing }
+                when {
+                    liveCanvas != null ->
+                        liveCanvas.image?.let { ReferenceImageViewer(it, onColorPicked, Modifier.weight(1f), stateKey = "canvas") }
+                            ?: Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(Modifier.size(32.dp))
+                            }
+                    state is ReferenceImageState.Ready -> ReferenceImageViewer(state.bitmap, onColorPicked, Modifier.weight(1f))
                     else -> {
                         Column(
                             modifier = Modifier.fillMaxWidth().weight(1f).padding(16.dp),
@@ -186,15 +207,17 @@ private fun ReferenceImageViewer(
     bitmap: Bitmap,
     onColorPicked: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    // A live canvas view keeps its zoom while its image refreshes.
+    stateKey: Any = bitmap,
 ) {
     val image = remember(bitmap) { bitmap.asImageBitmap() }
     val onPick by rememberUpdatedState(onColorPicked)
     var viewSize by remember { mutableStateOf(IntSize(1, 1)) }
-    var zoom by remember(bitmap) { mutableFloatStateOf(1f) }
-    var panX by remember(bitmap) { mutableFloatStateOf(0f) }
-    var panY by remember(bitmap) { mutableFloatStateOf(0f) }
-    var picking by remember(bitmap) { mutableStateOf(false) }
-    var sample by remember(bitmap) { mutableStateOf<Int?>(null) }
+    var zoom by remember(stateKey) { mutableFloatStateOf(1f) }
+    var panX by remember(stateKey) { mutableFloatStateOf(0f) }
+    var panY by remember(stateKey) { mutableFloatStateOf(0f) }
+    var picking by remember(stateKey) { mutableStateOf(false) }
+    var sample by remember(stateKey) { mutableStateOf<Int?>(null) }
     val touchSize = if (LocalArtFlowFlags.current.largeTouchTargets) 56.dp else 48.dp
 
     fun viewport() =
