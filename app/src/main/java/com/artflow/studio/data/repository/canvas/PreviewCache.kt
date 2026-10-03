@@ -169,7 +169,8 @@ internal class PreviewCache {
             val points = stroke.points.drop(max(0, from))
             if (points.isEmpty()) return EMPTY
             val params = stroke.brushParams
-            val reach = params.size * (1f + params.sizeJitter) + params.size * params.scatter + REACH_PADDING
+            val tiltGain = 1f + 2f * params.tiltInfluence.coerceIn(0f, 1f)
+            val reach = params.size * (1f + params.sizeJitter) * tiltGain + params.size * params.scatter + REACH_PADDING
             return IntBounds(
                 floor(points.minOf { it.x } - reach).toInt(),
                 floor(points.minOf { it.y } - reach).toInt(),

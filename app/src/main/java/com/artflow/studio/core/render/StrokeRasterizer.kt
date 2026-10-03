@@ -305,8 +305,12 @@ class StrokeRasterizer(
         val elapsedMs = (current.timestamp - previous.timestamp).coerceAtLeast(1L).toFloat()
         val velocity = if (distance <= 0f) 0f else distance / elapsedMs
 
-        val size = params.calculateEffectiveSize(pressure, velocity, random)
-        val opacity = params.calculateEffectiveOpacity(pressure, velocity, random) * params.flow.coerceIn(0f, 1f)
+        // Stylus tilt: 0 upright, 1 lying flat. Shading with the side of the pen widens and softens the mark.
+        val tilt = ((previous.tiltX + (current.tiltX - previous.tiltX) * t) / HALF_PI).coerceIn(0f, 1f)
+        val tiltEffect = params.tiltInfluence.coerceIn(0f, 1f) * tilt
+        val size = params.calculateEffectiveSize(pressure, velocity, random) * (1f + TILT_SIZE_GAIN * tiltEffect)
+        val baseOpacity = params.calculateEffectiveOpacity(pressure, velocity, random) * params.flow.coerceIn(0f, 1f)
+        val opacity = baseOpacity * (1f - TILT_OPACITY_LOSS * tiltEffect)
 
         // Tapering thins the stroke over the first and last portion of its length.
         val taper = taperFactor(params, accumulatedDistance, totalLength)
@@ -336,10 +340,20 @@ class StrokeRasterizer(
                 mode = Stamping.Mode.MAX_COVERAGE,
                 alphaLock = alphaLock,
                 mask = mask,
-                tip = context.tip,
+                tip = tipFor(context.tip, params, current),
             )
             dabCount.incrementAndGet()
         }
+    }
+
+    /** With tilt-to-rotation, flat and image tips turn with the pen's direction (reported in radians). */
+    private fun tipFor(
+        tip: Stamping.TipShape,
+        params: BrushParams,
+        point: StrokePoint,
+    ): Stamping.TipShape {
+        if (!params.tiltToRotation) return tip
+        return tip.copy(angleDegrees = tip.angleDegrees + Math.toDegrees(point.tiltY.toDouble()).toFloat())
     }
 
     /** Wet mix: the dab picks up some of the paint already on the layer under it. */
@@ -365,6 +379,7 @@ class StrokeRasterizer(
         params.spacing <= 0f &&
             params.roundness >= 1f &&
             params.wetMix <= 0f &&
+            params.tiltInfluence <= 0f &&
             CustomGrains.get(params.shapeId) == null &&
             points.size <= 2 &&
             params.count == 1 &&
@@ -525,3 +540,11 @@ class StrokeRasterizer(
 
 /** How much of the paint under a dab a fully wet brush picks up. */
 private const val WET_PICKUP = 0.6f
+
+private const val HALF_PI = (Math.PI / 2).toFloat()
+
+/** A fully tilted pen paints up to this much wider ... */
+private const val TILT_SIZE_GAIN = 2f
+
+/** ... and this much lighter, like shading with the side of a pencil. */
+private const val TILT_OPACITY_LOSS = 0.6f

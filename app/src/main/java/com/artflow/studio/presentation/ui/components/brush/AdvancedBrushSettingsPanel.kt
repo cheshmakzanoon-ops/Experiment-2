@@ -485,8 +485,26 @@ private fun BrushSpeedSettings(
                         .semantics { contentDescription = "Pressure changes brightness" },
             )
         }
+        BrushParameterSlider(
+            label = "Tilt → size and opacity",
+            value = brushParams.tiltInfluence,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(tiltInfluence = it.coerceIn(0f, 1f))) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.tiltInfluence * 100),
+        )
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Tilt turns the tip", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+            Switch(
+                checked = brushParams.tiltToRotation,
+                onCheckedChange = { onBrushParamsChanged(brushParams.copy(tiltToRotation = it)) },
+                modifier =
+                    Modifier
+                        .sizeIn(minWidth = touchSize, minHeight = touchSize)
+                        .semantics { contentDescription = "Tilt turns the tip" },
+            )
+        }
         Text(
-            "Pressure response depends on input hardware. Tilt and shaped brush tips are not implemented in the active renderer.",
+            "Pressure and tilt depend on the stylus. A tilted pen paints wider and lighter, like shading with a pencil's side.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

@@ -59,4 +59,23 @@ class BrushRenderingTest {
         val centre = 10 * 40 + 20
         assertTrue((wet.pixels[centre] ushr 24) < (normal.pixels[centre] ushr 24))
     }
+
+    @Test fun tiltedPenPaintsWiderAndLighter() {
+        val params = BrushParams(size = 6f, spacing = 0.05f, tiltInfluence = 1f)
+
+        fun draw(tilt: Float): PixelBuffer =
+            PixelBuffer(40, 20).also { canvas ->
+                val points =
+                    listOf(
+                        StrokePoint(4f, 10f, 1f, tiltX = tilt, timestamp = 0L),
+                        StrokePoint(36f, 10f, 1f, tiltX = tilt, timestamp = 16L),
+                    )
+                StrokeRasterizer().draw(canvas, Stroke(id = 5, points = points, brushParams = params, layerId = 1, color = -0x1000000))
+            }
+        val upright = draw(0f)
+        val flat = draw((Math.PI / 2).toFloat())
+        val edge = 10 * 40 + 20 + 40 * 5
+        assertTrue("A flat pen reaches farther from the line", (flat.pixels[edge] ushr 24) > (upright.pixels[edge] ushr 24))
+        assertTrue("A flat pen is lighter at the centre", (flat.pixels[10 * 40 + 20] ushr 24) < (upright.pixels[10 * 40 + 20] ushr 24))
+    }
 }
