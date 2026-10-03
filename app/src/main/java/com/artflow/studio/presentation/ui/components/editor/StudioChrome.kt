@@ -1,6 +1,7 @@
 package com.artflow.studio.presentation.ui.components.editor
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -9,6 +10,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -610,6 +612,44 @@ fun StudioPopover(
                     .heightIn(max = screenHeight * 0.78f),
         ) {
             Column(content = content)
+        }
+    }
+}
+
+/** Phones: a panel rising from the bottom over the canvas, with a scrim that dismisses it. */
+@Composable
+fun StudioBottomPanel(
+    onDismiss: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
+    Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.32f))
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
+        )
+        Surface(
+            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            tonalElevation = 6.dp,
+            shadowElevation = 8.dp,
+            modifier =
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .heightIn(max = screenHeight * 0.85f),
+        ) {
+            Column(Modifier.windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))) {
+                Box(
+                    Modifier
+                        .padding(vertical = 8.dp)
+                        .size(width = 32.dp, height = 4.dp)
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), CircleShape)
+                        .align(Alignment.CenterHorizontally),
+                )
+                content()
+            }
         }
     }
 }

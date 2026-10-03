@@ -91,6 +91,7 @@ import com.artflow.studio.presentation.ui.components.editor.ReferenceCompanion
 import com.artflow.studio.presentation.ui.components.editor.SelectionSheet
 import com.artflow.studio.presentation.ui.components.editor.SelectionToolbar
 import com.artflow.studio.presentation.ui.components.editor.SelectionToolbarActions
+import com.artflow.studio.presentation.ui.components.editor.StudioBottomPanel
 import com.artflow.studio.presentation.ui.components.editor.StudioButton
 import com.artflow.studio.presentation.ui.components.editor.StudioPopover
 import com.artflow.studio.presentation.ui.components.editor.StudioPrefs
@@ -1038,6 +1039,10 @@ fun CanvasScreen(
                     content = panelContent,
                 )
             }
+            if (panel != EditorPanel.NONE && !wide) {
+                // Phones: the panel rises over the canvas inside the editor window, below the top bar.
+                StudioBottomPanel(onDismiss = dismissPanel, content = panelContent)
+            }
             if (focusMode) {
                 FilledTonalIconButton(
                     onClick = {
@@ -1053,15 +1058,6 @@ fun CanvasScreen(
                     Icon(Icons.Default.FullscreenExit, contentDescription = "Exit focus mode")
                 }
             }
-        }
-    }
-
-    if (panel != EditorPanel.NONE && !wide) {
-        ModalBottomSheet(
-            onDismissRequest = dismissPanel,
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        ) {
-            Column(modifier = Modifier.fillMaxWidth(), content = panelContent)
         }
     }
 
