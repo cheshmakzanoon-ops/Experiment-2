@@ -282,6 +282,7 @@ class CanvasViewModel
                         startObserving()
                         startAutosave()
                         PendingImports.take(projectId)?.let(::insertImageLayer)
+                        PendingImports.takePsd(projectId)?.let(::importPsd)
                         Timber.d("Opened project $projectId (${state.width}x${state.height})")
                     } catch (cancelled: CancellationException) {
                         throw cancelled

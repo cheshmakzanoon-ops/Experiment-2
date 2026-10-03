@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.artflow.studio.core.canvas.CanvasOperations
+import com.artflow.studio.core.export.PsdCodec
 import com.artflow.studio.data.export.PendingImports
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.Project
@@ -80,6 +81,7 @@ fun GalleryScreen(
     }
     val context = LocalContext.current
     val photoImport = rememberPhotoImport(viewModel, snackbarHostState, onNavigateToCanvas)
+    val psdImport = rememberPsdImport(viewModel, snackbarHostState, onNavigateToCanvas)
 
     LaunchedEffect(Unit) {
         viewModel.messageFlow.collect { snackbarHostState.showSnackbar(it) }
@@ -139,9 +141,7 @@ fun GalleryScreen(
                         }
                         SortMenu(settings.gallerySort, viewModel::setSort)
                         TextButton(onClick = { selection = emptySet() }) { Text("Select") }
-                        IconButton(onClick = photoImport) {
-                            Icon(Icons.Default.AddPhotoAlternate, contentDescription = "Import photo as a new canvas")
-                        }
+                        ImportMenu(onPhoto = photoImport, onPsd = psdImport)
                         IconButton(onClick = onOpenHelp) {
                             Icon(Icons.Default.HelpOutline, contentDescription = "Help")
                         }
@@ -259,6 +259,65 @@ fun GalleryScreen(
         DeleteDialog(project, onDismiss = { deleteTarget = null }) {
             viewModel.delete(project)
             deleteTarget = null
+        }
+    }
+}
+
+/** Opens a layered Photoshop document as a new artwork of the same size, keeping its layers. */
+@Composable
+private fun rememberPsdImport(
+    viewModel: MainViewModel,
+    snackbarHostState: SnackbarHostState,
+    onNavigateToCanvas: (Long) -> Unit,
+): () -> Unit {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val launcher =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            scope.launch {
+                val opened =
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            val bytes = requireNotNull(context.contentResolver.openInputStream(uri)?.use { it.readBytes() })
+                            val document = requireNotNull(PsdCodec.read(bytes))
+                            bytes to document
+                        }.getOrNull()
+                    }
+                if (opened == null) {
+                    snackbarHostState.showSnackbar("That file is not a Photoshop document ArtFlow can read")
+                    return@launch
+                }
+                val (bytes, document) = opened
+                viewModel.createProject("Imported PSD", null, document.width, document.height, document.dpi) { id ->
+                    PendingImports.putPsd(id, bytes)
+                    scope.launch { onNavigateToCanvas(id) }
+                }
+            }
+        }
+    return { runCatching { launcher.launch(arrayOf("image/vnd.adobe.photoshop", "application/octet-stream")) } }
+}
+
+/** The gallery's Import menu: a photo or a layered Photoshop file, each as a new artwork. */
+@Composable
+private fun ImportMenu(
+    onPhoto: () -> Unit,
+    onPsd: () -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) {
+            Icon(Icons.Default.AddPhotoAlternate, contentDescription = "Import as a new artwork")
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(text = { Text("Photo") }, onClick = {
+                open = false
+                onPhoto()
+            })
+            DropdownMenuItem(text = { Text("Photoshop file (PSD)") }, onClick = {
+                open = false
+                onPsd()
+            })
         }
     }
 }
