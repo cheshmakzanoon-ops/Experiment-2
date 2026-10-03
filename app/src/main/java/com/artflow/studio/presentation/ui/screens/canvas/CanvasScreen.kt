@@ -144,6 +144,7 @@ fun CanvasScreen(
     projectId: Long,
     onNavigateBack: () -> Unit,
     onOpenSettings: () -> Unit = {},
+    onOpenHelp: () -> Unit = {},
     viewModel: CanvasViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -666,6 +667,7 @@ fun CanvasScreen(
                         ),
                     onShare = { panel = EditorPanel.EXPORT },
                     canPaste = hasClipboard,
+                    onHelp = onOpenHelp,
                 )
             EditorPanel.NONE -> Unit
         }

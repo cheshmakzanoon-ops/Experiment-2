@@ -62,6 +62,7 @@ fun ArtFlowApp(viewModel: MainViewModel = hiltViewModel()) {
                 projectId = projectId,
                 onNavigateBack = { navController.popBackStack() },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+                onOpenHelp = { navController.navigate(Routes.HELP) },
             )
         }
         composable(Routes.SETTINGS) {

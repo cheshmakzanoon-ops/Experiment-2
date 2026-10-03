@@ -83,6 +83,7 @@ fun ActionsPanel(
     prefActions: PrefActions,
     onShare: () -> Unit,
     canPaste: Boolean,
+    onHelp: () -> Unit = {},
 ) {
     var tab by rememberSaveable { mutableStateOf(ActionsTab.Add) }
     Column(Modifier.fillMaxWidth()) {
@@ -110,7 +111,7 @@ fun ActionsPanel(
                     ActionRow("Clear Time-lapse Recording", video.onClear)
                 }
                 ActionsTab.Prefs -> PrefsTab(prefs, prefActions)
-                ActionsTab.Help -> HelpTab()
+                ActionsTab.Help -> HelpTab(onHelp)
             }
         }
     }
@@ -198,7 +199,9 @@ private fun PrefsTab(
 }
 
 @Composable
-private fun HelpTab() {
+private fun HelpTab(onHandbook: () -> Unit) {
+    ActionRow("Open the ArtFlow handbook", onHandbook)
+    HorizontalDivider()
     listOf(
         "Two-finger tap: undo · Three-finger tap: redo",
         "Four-finger tap: full screen",

@@ -33,25 +33,27 @@ object Tutorials {
             TutorialStep(
                 "Paint with a stylus",
                 "Rest your hand on the screen: while a stylus is down, finger touches are ignored as palms. " +
-                    "Pressure changes size and opacity, tilt drives the brush rotation and orientation.",
+                    "Pressure changes size and opacity; brushes with tilt settings paint wider and lighter as the pen leans. " +
+                    "Hovering a stylus outlines the brush, and its side button samples colour.",
                 "gesture.stylus",
             ),
             TutorialStep(
                 "Navigate with two fingers",
                 "Two fingers pan, pinch to zoom and twist to rotate the canvas. The point between your " +
-                    "fingers stays pinned to the artwork while you zoom.",
+                    "fingers stays pinned to the artwork while you zoom. A quick pinch fits the canvas to the screen.",
                 "gesture.twoFinger",
             ),
             TutorialStep(
                 "Undo with a gesture",
-                "A quick two-finger tap undoes. A three-finger tap redoes. The same gestures work while " +
-                    "a tool other than the brush is active.",
+                "A quick two-finger tap undoes and a three-finger tap redoes. A four-finger tap hides the " +
+                    "interface, a three-finger swipe down opens Copy & Paste and a three-finger scrub clears the layer. " +
+                    "Each of these can be switched off in Actions > Prefs.",
                 "gesture.undo",
             ),
             TutorialStep(
-                "Pan without leaving the brush",
-                "Zoom in and pan with two fingers, then keep painting: the tool never switches because " +
-                    "you navigated.",
+                "Sample and snap",
+                "Touch and hold the canvas to pick a colour. Hold the pen still at the end of a stroke to turn " +
+                    "it into a clean line, ellipse or polygon, and keep holding to adjust it before you lift.",
                 "gesture.keepPainting",
             ),
         )
@@ -59,9 +61,10 @@ object Tutorials {
     val TOOLS =
         listOf(
             TutorialStep(
-                "Brush and eraser",
-                "Both bake straight into the active layer's pixels as soon as the stroke ends, which is " +
-                    "why saving is instant. The eraser removes coverage instead of painting a colour.",
+                "Brushes and Brush Studio",
+                "Tap the brush again to open the library: search, star favourites and save your own copies. " +
+                    "Brush Studio edits every setting on a draft you can try on the drawing pad, including grain and " +
+                    "shape images, wet paint, tilt and a second brush that combines with the first.",
                 "tool.brush",
             ),
             TutorialStep(
@@ -71,23 +74,24 @@ object Tutorials {
                 "tool.pixelBrushes",
             ),
             TutorialStep(
-                "Fill and gradient",
-                "The paint bucket flood-fills using the tolerance you set, respecting the selection. " +
-                    "Gradients use the drag as their axis and honour the selection too.",
+                "Fill, ColorDrop and selections",
+                "Drag the colour swatch onto the canvas to fill an area, then slide along the bar to change " +
+                    "the threshold. Selections can be automatic, freehand, rectangular or elliptical; save them for later, " +
+                    "fill them with colour, or copy and paste them as a new layer.",
                 "tool.fill",
             ),
             TutorialStep(
-                "Liquify",
-                "Liquify builds a displacement map across the gesture so distortion accumulates smoothly. " +
-                    "Push, twirl, pinch or bloat, then release to commit one undo step. " +
-                    "Reconstruct gradually restores the image before your current liquify sequence. " +
-                    "Another edit, undo, reopening, or changing the tool, layer or frame resets that reference.",
+                "Transform and Liquify",
+                "Transform moves, scales and rotates the active layer, or every layer you swiped right in the " +
+                    "Layers panel. Use Freeform, Uniform, Distort or Warp, with Magnetics for straight moves and " +
+                    "Snapping to the canvas edges and centre. Liquify pushes, twirls, pinches, bloats, crystallises or " +
+                    "creases the paint, and Reset puts it back.",
                 "tool.liquify",
             ),
             TutorialStep(
-                "Symmetry and perspective guides",
-                "Symmetry replicates the brush motion — not the pixels — so variable width and texture " +
-                    "stay correct on every mirrored stroke. Perspective guides snap strokes onto rays.",
+                "Drawing guides",
+                "Grid, isometric, perspective and symmetry guides live in Actions > Canvas > Drawing Guide. " +
+                    "Symmetry replicates the brush motion, so width and texture stay correct on every mirrored stroke.",
                 "tool.guides",
             ),
         )
@@ -96,32 +100,34 @@ object Tutorials {
         listOf(
             TutorialStep(
                 "Layers",
-                "Add, reorder, lock, alpha-lock, clip to the layer below, and blend with the full set of " +
-                    "blend modes. Masks hide parts of a layer without erasing them.",
+                "Tap the selected layer for its options. Swipe left for Lock, Duplicate and Delete; swipe right " +
+                    "to select several layers, then group, delete or transform them together. Touch and hold to drag a " +
+                    "layer into a new place, and tap with two fingers to toggle Alpha Lock.",
                 "flow.layers",
             ),
             TutorialStep(
-                "Adjustments and filters",
-                "Adjustment layers affect everything below them; filter layers can be baked into the " +
-                    "layer beneath once you are happy with the result.",
+                "Adjustments",
+                "Each adjustment can change the whole layer or only where you paint with Pencil mode. Drag " +
+                    "across the canvas to set the amount; adjustment layers affect everything below them.",
                 "flow.adjustments",
             ),
             TutorialStep(
-                "Animation",
-                "Add or duplicate frames, set per-frame durations, scrub the timeline and toggle onion " +
-                    "skinning. Playback uses each frame's own duration, exactly like the export.",
+                "Animation and pages",
+                "Animation Assist adds frames with their own durations, onion skins and playback. Page Assist " +
+                    "uses the same frames as pages, with a strip of thumbnails to add, reorder and pick pages.",
                 "flow.animation",
             ),
             TutorialStep(
                 "Export",
-                "PNG, JPEG, WebP, PDF and layered PSD for stills; GIF, MP4 and a zipped PNG sequence for " +
-                    "animations. Exports are written into the project folder and can be shared straight away.",
+                "PNG, JPEG, WebP, PDF and layered PSD for stills; GIF, MP4, a zipped PNG sequence and a " +
+                    "multi-page PDF for animations and pages. Actions > Video replays and exports your drawing's timelapse.",
                 "flow.export",
             ),
             TutorialStep(
-                "Saving and recovery",
-                "You choose how often ArtFlow autosaves. If the app is killed mid-session, reopening the " +
-                    "project offers to recover the autosaved version.",
+                "Gallery and saving",
+                "Touch and hold an artwork and drop it on another to make a stack, or use Select to stack, " +
+                    "duplicate or delete several at once. ArtFlow autosaves as you work; if the app is killed, " +
+                    "reopening the artwork offers to recover the autosaved version.",
                 "flow.saving",
             ),
         )
@@ -179,8 +185,8 @@ fun HelpScreen(
                 style = MaterialTheme.typography.bodyMedium,
             )
             Text(
-                "Anything you cannot find here is in the editor's quick menu (the lightning icon), which " +
-                    "holds view, history, canvas and selection actions in one place.",
+                "In the editor, the Actions panel holds Add, Canvas, Share, Video, Prefs and Help, and the " +
+                    "quick menu holds view, history, canvas and selection actions in one place.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
