@@ -749,6 +749,7 @@ class CanvasViewModel
         val clipboard = ClipboardController(canvasRepository, ::layerOp)
         val savedSelections = SavedSelections(canvasRepository) { refreshSelection() }
         val textLayers = TextLayerController(canvasRepository, ::layerOp)
+        val layerBatch = LayerBatchController(canvasRepository, ::layerOp)
 
         val layerThumbnails = LayerThumbnailController(canvasRepository, viewModelScope)
 

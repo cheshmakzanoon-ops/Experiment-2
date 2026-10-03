@@ -54,9 +54,12 @@ internal fun LayerRow(
     options: LayerOptionActions?,
     onBlendMode: () -> Unit,
     onRename: () -> Unit,
+    picked: Boolean = false,
+    onPick: () -> Unit = {},
 ) {
     var menuVisible by remember { mutableStateOf(false) }
-    // Swiping a layer left reveals Lock, Duplicate and Delete, as in Procreate.
+    // Swiping a layer left reveals Lock, Duplicate and Delete; swiping right adds it to a
+    // multi-selection, as in Procreate.
     var swipeActions by remember { mutableStateOf(false) }
     val swipeDistance = with(LocalDensity.current) { SWIPE_REVEAL.toPx() }
     val touchSize = if (LocalArtFlowFlags.current.largeTouchTargets) 56.dp else 48.dp
@@ -72,7 +75,9 @@ internal fun LayerRow(
                         onDragStart = { travel = 0f },
                         onDragEnd = {
                             if (travel < -swipeDistance) swipeActions = true
-                            if (travel > swipeDistance) swipeActions = false
+                            if (travel > swipeDistance) {
+                                if (swipeActions) swipeActions = false else onPick()
+                            }
                         },
                     ) { change, amount ->
                         change.consume()
@@ -90,6 +95,8 @@ internal fun LayerRow(
                 containerColor =
                     if (isActive) {
                         MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                    } else if (picked) {
+                        MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
                     } else {
                         MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
                     },

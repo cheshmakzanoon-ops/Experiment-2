@@ -405,6 +405,8 @@ fun CanvasScreen(
                             onImportPsd = importPsd,
                             onGroupWithBelow = viewModel::groupWithLayerBelow,
                             onUngroup = viewModel::ungroup,
+                            onGroupLayers = viewModel.layerBatch::group,
+                            onDeleteLayers = viewModel.layerBatch::delete,
                         ),
                     maskActions =
                         LayerMaskActions(

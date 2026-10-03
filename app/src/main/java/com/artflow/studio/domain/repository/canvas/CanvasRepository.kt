@@ -326,6 +326,9 @@ interface CanvasRepository {
     /** Puts [layerIds] in a new group placed above the active layer; returns the group id. */
     suspend fun groupLayers(layerIds: List<Long>): Long?
 
+    /** Deletes several layers as one step, always keeping one paintable layer; returns how many went. */
+    suspend fun removeLayers(layerIds: List<Long>): Int = layerIds.count { removeLayer(it) }
+
     /** Removes the group header and keeps its layers in place. */
     suspend fun ungroupLayers(groupId: Long): Boolean
 

@@ -85,6 +85,24 @@ class CanvasMutationTest {
     }
 
     @Test
+    fun deletingSeveralLayersIsOneStepAndKeepsALayer() =
+        runTest {
+            val bottom = open()
+            val middle = repository.addLayer("Middle").id
+            val top = repository.addLayer("Top").id
+            val depth = repository.undoDepth
+            assertEquals(2, repository.removeLayers(listOf(middle, top)))
+            assertEquals(depth + 1, repository.undoDepth)
+            assertEquals(listOf(bottom), repository.getAllLayers().map { it.id })
+            assertEquals(bottom, repository.getActiveLayerId())
+            assertTrue(repository.undo())
+            assertEquals(3, repository.getAllLayers().size)
+            // Choosing every layer still leaves the lowest one.
+            assertEquals(2, repository.removeLayers(listOf(bottom, middle, top)))
+            assertEquals(listOf(bottom), repository.getAllLayers().map { it.id })
+        }
+
+    @Test
     fun alphaLockChangesInvalidatePendingRasterEdits() =
         runTest {
             repository.createCanvas(16, 16, 72)

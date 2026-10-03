@@ -92,6 +92,8 @@ data class LayerStackActions(
     val onImportPsd: (() -> Unit)? = null,
     val onGroupWithBelow: ((Long) -> Unit)? = null,
     val onUngroup: ((Long) -> Unit)? = null,
+    val onGroupLayers: (List<Long>) -> Unit = {},
+    val onDeleteLayers: (List<Long>) -> Unit = {},
 )
 
 data class LayerMaskActions(
@@ -118,89 +120,34 @@ fun LayersSheet(
 ) {
     val onName = rowActions.onName
     val onBlendMode = rowActions.onBlendMode
-    val onAddLayer = stackActions.onAddLayer
     var dragging by remember { mutableStateOf<Long?>(null) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
-    val onFlatten = stackActions.onFlatten
-    val onMergeVisible = stackActions.onMergeVisible
-    val onAddAdjustment = stackActions.onAddAdjustment
-    val onAddFilter = stackActions.onAddFilter
     val onAdjustmentParameter = stackActions.onAdjustmentParameter
     val onFilterAmount = stackActions.onFilterAmount
     var blendTarget by remember { mutableStateOf<Layer?>(null) }
     var renameTarget by remember { mutableStateOf<Layer?>(null) }
-    var addMenuVisible by remember { mutableStateOf(false) }
     var collapsedGroups by remember { mutableStateOf(emptySet<Long>()) }
+    // Layers swiped right join the active layer in a multi-selection, as in Procreate.
+    var picked by remember { mutableStateOf(emptySet<Long>()) }
+    val pickedIds = picked.filter { id -> id != activeLayerId && layers.any { it.id == id } }.toSet()
     val active = layers.firstOrNull { it.id == activeLayerId }
 
     Column(modifier = modifier.fillMaxWidth()) {
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("Layers", style = MaterialTheme.typography.titleMedium)
-            Row {
-                IconButton(
-                    enabled = active != null && active.index < layers.lastIndex,
-                    onClick = { active?.let { stackActions.onReorder(it.id, it.index + 1) } },
-                ) {
-                    Icon(Icons.Default.ArrowUpward, contentDescription = "Move active layer up")
-                }
-                IconButton(
-                    enabled = active != null && active.index > 0,
-                    onClick = { active?.let { stackActions.onReorder(it.id, it.index - 1) } },
-                ) {
-                    Icon(Icons.Default.ArrowDownward, contentDescription = "Move active layer down")
-                }
-                IconButton(onClick = onAddLayer) {
-                    Icon(Icons.Default.Add, contentDescription = "Add layer")
-                }
-                Box {
-                    IconButton(onClick = { addMenuVisible = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Layer actions")
-                    }
-                    DropdownMenu(expanded = addMenuVisible, onDismissRequest = { addMenuVisible = false }) {
-                        stackActions.onImportPsd?.let { importPsd ->
-                            DropdownMenuItem(
-                                text = { Text("Import PSD layers") },
-                                onClick = {
-                                    importPsd()
-                                    addMenuVisible = false
-                                },
-                            )
-                        }
-                        stackActions.onInsertPhoto?.let { insert ->
-                            DropdownMenuItem(
-                                text = { Text("Insert photo") },
-                                onClick = {
-                                    insert()
-                                    addMenuVisible = false
-                                },
-                            )
-                        }
-                        DropdownMenuItem(
-                            text = { Text("Merge visible") },
-                            onClick = {
-                                onMergeVisible()
-                                addMenuVisible = false
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Flatten image") },
-                            onClick = {
-                                onFlatten()
-                                addMenuVisible = false
-                            },
-                        )
-                        GroupMenuItems(active, stackActions) { addMenuVisible = false }
-                        EffectLayerMenuItems(onAddAdjustment, onAddFilter) { addMenuVisible = false }
-                    }
-                }
-            }
+        LayersHeader(layers, active, stackActions)
+        pickedIds.takeIf { it.isNotEmpty() }?.let { ids ->
+            val chosen = (ids + activeLayerId).toList()
+            MultiLayerBar(
+                count = chosen.size,
+                onGroup = {
+                    stackActions.onGroupLayers(chosen)
+                    picked = emptySet()
+                },
+                onDelete = {
+                    stackActions.onDeleteLayers(chosen)
+                    picked = emptySet()
+                },
+                onClear = { picked = emptySet() },
+            )
         }
 
         LazyColumn(
@@ -239,6 +186,8 @@ fun LayersSheet(
                         options = optionActions,
                         onBlendMode = { blendTarget = layer },
                         onRename = { renameTarget = layer },
+                        picked = layer.id in pickedIds,
+                        onPick = { picked = if (layer.id in picked) picked - layer.id else picked + layer.id },
                     )
                 }
             }
@@ -309,6 +258,103 @@ fun LayersSheet(
             },
             dismissButton = { TextButton(onClick = { renameTarget = null }) { Text("Cancel") } },
         )
+    }
+}
+
+/** The Layers title row: move the active layer, add a layer and the stack's actions menu. */
+@Composable
+private fun LayersHeader(
+    layers: List<Layer>,
+    active: Layer?,
+    stackActions: LayerStackActions,
+) {
+    var addMenuVisible by remember { mutableStateOf(false) }
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("Layers", style = MaterialTheme.typography.titleMedium)
+        Row {
+            IconButton(
+                enabled = active != null && active.index < layers.lastIndex,
+                onClick = { active?.let { stackActions.onReorder(it.id, it.index + 1) } },
+            ) {
+                Icon(Icons.Default.ArrowUpward, contentDescription = "Move active layer up")
+            }
+            IconButton(
+                enabled = active != null && active.index > 0,
+                onClick = { active?.let { stackActions.onReorder(it.id, it.index - 1) } },
+            ) {
+                Icon(Icons.Default.ArrowDownward, contentDescription = "Move active layer down")
+            }
+            IconButton(onClick = stackActions.onAddLayer) {
+                Icon(Icons.Default.Add, contentDescription = "Add layer")
+            }
+            Box {
+                IconButton(onClick = { addMenuVisible = true }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "Layer actions")
+                }
+                DropdownMenu(expanded = addMenuVisible, onDismissRequest = { addMenuVisible = false }) {
+                    stackActions.onImportPsd?.let { importPsd ->
+                        DropdownMenuItem(
+                            text = { Text("Import PSD layers") },
+                            onClick = {
+                                importPsd()
+                                addMenuVisible = false
+                            },
+                        )
+                    }
+                    stackActions.onInsertPhoto?.let { insert ->
+                        DropdownMenuItem(
+                            text = { Text("Insert photo") },
+                            onClick = {
+                                insert()
+                                addMenuVisible = false
+                            },
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = { Text("Merge visible") },
+                        onClick = {
+                            stackActions.onMergeVisible()
+                            addMenuVisible = false
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Flatten image") },
+                        onClick = {
+                            stackActions.onFlatten()
+                            addMenuVisible = false
+                        },
+                    )
+                    GroupMenuItems(active, stackActions) { addMenuVisible = false }
+                    EffectLayerMenuItems(stackActions.onAddAdjustment, stackActions.onAddFilter) { addMenuVisible = false }
+                }
+            }
+        }
+    }
+}
+
+/** Shown while layers are multi-selected: group or delete them together. */
+@Composable
+private fun MultiLayerBar(
+    count: Int,
+    onGroup: () -> Unit,
+    onDelete: () -> Unit,
+    onClear: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("$count layers selected", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+        TextButton(onClick = onGroup) { Text("Group") }
+        TextButton(onClick = onDelete) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+        TextButton(onClick = onClear) { Text("Done") }
     }
 }
 

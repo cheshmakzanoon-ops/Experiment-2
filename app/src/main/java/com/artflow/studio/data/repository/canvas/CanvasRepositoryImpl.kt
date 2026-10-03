@@ -1225,6 +1225,27 @@ class CanvasRepositoryImpl
                 groupId
             }
 
+        override suspend fun removeLayers(layerIds: List<Long>): Int =
+            withState {
+                val layers = currentLayers()
+                val paintable = layers.filter { !it.isGroup && !it.isInternal }
+                // Bottom first, so keeping one layer keeps the lowest of the chosen ones.
+                val chosen = paintable.filter { it.id in layerIds }
+                val removing = if (chosen.size >= paintable.size) chosen.drop(1) else chosen
+                if (removing.isEmpty()) return@withState 0
+                pushUndo()
+                val ids = removing.map { it.id }.toSet()
+                val position = layers.indexOfFirst { it.id == activeLayerId() }
+                layers.removeAll { it.id in ids }
+                if (activeLayerId() in ids) {
+                    val below = layers.take(position.coerceAtMost(layers.size)).lastOrNull { !it.isGroup && !it.isInternal }
+                    setActiveLayerId((below ?: layers.first { !it.isGroup && !it.isInternal }).id)
+                }
+                dirty = true
+                emit(CanvasInvalidationEvent.LayersChanged)
+                removing.size
+            }
+
         override suspend fun ungroupLayers(groupId: Long): Boolean =
             withState {
                 val layers = currentLayers()
