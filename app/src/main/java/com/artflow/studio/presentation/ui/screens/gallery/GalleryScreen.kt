@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.artflow.studio.core.canvas.CanvasOperations
+import com.artflow.studio.core.color.ColorProfile
 import com.artflow.studio.core.export.PsdCodec
 import com.artflow.studio.data.export.PendingImports
 import com.artflow.studio.data.renderer.BitmapPixelBridge
@@ -221,10 +222,11 @@ fun GalleryScreen(
         NewProjectDialog(
             defaultPresetName = settings.defaultPresetName,
             onDismiss = { showNewProjectDialog = false },
-            onCreate = { name, preset, width, height, dpi ->
+            onCreate = { name, preset, width, height, dpi, wideColor ->
                 showNewProjectDialog = false
                 val stack = openStack
                 viewModel.createProject(name, preset, width, height, dpi) { id ->
+                    if (wideColor) PendingImports.putProfile(id, ColorProfile.DISPLAY_P3)
                     // New artworks made inside a stack belong to it, as in Procreate.
                     if (stack != null) viewModel.moveToStack(id, stack)
                     scope.launch { onNavigateToCanvas(id) }
@@ -637,7 +639,7 @@ private fun ProjectCard(
 private fun NewProjectDialog(
     defaultPresetName: String,
     onDismiss: () -> Unit,
-    onCreate: (String, CanvasOperations.Preset?, Int, Int, Int) -> Unit,
+    onCreate: (String, CanvasOperations.Preset?, Int, Int, Int, Boolean) -> Unit,
 ) {
     var name by remember { mutableStateOf("") }
     var selectedPreset by remember {
@@ -647,6 +649,7 @@ private fun NewProjectDialog(
     var customHeight by remember { mutableStateOf("2048") }
     var customDpi by remember { mutableStateOf("132") }
     var useCustom by remember { mutableStateOf(false) }
+    var wideColor by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -733,6 +736,10 @@ private fun NewProjectDialog(
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Display P3 colour profile", modifier = Modifier.weight(1f))
+                    Switch(checked = wideColor, onCheckedChange = { wideColor = it })
+                }
             }
         },
         confirmButton = {
@@ -743,6 +750,7 @@ private fun NewProjectDialog(
                     customWidth.toIntOrNull() ?: 2048,
                     customHeight.toIntOrNull() ?: 2048,
                     customDpi.toIntOrNull() ?: 132,
+                    wideColor,
                 )
             }) { Text("Create") }
         },

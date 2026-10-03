@@ -1,5 +1,6 @@
 package com.artflow.studio.data.export
 
+import com.artflow.studio.core.color.ColorProfile
 import com.artflow.studio.core.pixels.PixelBuffer
 import java.util.concurrent.ConcurrentHashMap
 
@@ -27,4 +28,16 @@ object PendingImports {
     }
 
     fun takePsd(projectId: Long): ByteArray? = documents.remove(projectId)
+
+    private val profiles = ConcurrentHashMap<Long, ColorProfile>()
+
+    /** The colour profile chosen for a new canvas, applied when it first opens. */
+    fun putProfile(
+        projectId: Long,
+        profile: ColorProfile,
+    ) {
+        profiles[projectId] = profile
+    }
+
+    fun takeProfile(projectId: Long): ColorProfile? = profiles.remove(projectId)
 }

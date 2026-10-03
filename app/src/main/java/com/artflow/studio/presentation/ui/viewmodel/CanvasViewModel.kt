@@ -283,6 +283,7 @@ class CanvasViewModel
                         refreshSelection()
                         startObserving()
                         startAutosave()
+                        PendingImports.takeProfile(projectId)?.let { canvasRepository.setColorProfile(it, undoable = false) }
                         PendingImports.take(projectId)?.let(::insertImageLayer)
                         PendingImports.takePsd(projectId)?.let(::importPsd)
                         Timber.d("Opened project $projectId (${state.width}x${state.height})")

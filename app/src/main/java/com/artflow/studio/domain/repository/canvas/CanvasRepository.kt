@@ -485,8 +485,11 @@ interface CanvasRepository {
     /** The colour space pixel values are stored in. */
     fun getColorProfile(): ColorProfile = ColorProfile.SRGB
 
-    /** Assigns [profile]: pixel values stay as they are and are read in the new space. Undoable. */
-    suspend fun setColorProfile(profile: ColorProfile): Boolean = false
+    /** Assigns [profile]: pixel values stay as they are and are read in the new space. */
+    suspend fun setColorProfile(
+        profile: ColorProfile,
+        undoable: Boolean = true,
+    ): Boolean = false
 
     suspend fun setCanvasBackgroundColor(color: Int): Boolean
 

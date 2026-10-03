@@ -1847,10 +1847,13 @@ class CanvasRepositoryImpl
 
         override fun getColorProfile(): ColorProfile = colorProfile
 
-        override suspend fun setColorProfile(profile: ColorProfile): Boolean =
+        override suspend fun setColorProfile(
+            profile: ColorProfile,
+            undoable: Boolean,
+        ): Boolean =
             withState {
                 if (profile == colorProfile) return@withState true
-                pushUndo()
+                if (undoable) pushUndo()
                 colorProfile = profile
                 dirty = true
                 emit(CanvasInvalidationEvent.Full)
