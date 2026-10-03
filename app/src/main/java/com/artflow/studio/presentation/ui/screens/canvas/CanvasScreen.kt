@@ -54,6 +54,7 @@ import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.FilterType
 import com.artflow.studio.domain.model.layer.Layer
+import com.artflow.studio.domain.model.settings.ThemeMode
 import com.artflow.studio.presentation.ui.components.brush.BrushStudioDialog
 import com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView
 import com.artflow.studio.presentation.ui.components.canvas.BrushCursor
@@ -646,6 +647,8 @@ fun CanvasScreen(
                             settings.pressureCurve,
                             settings.stabilization,
                             GestureControls(settings.scrubToClear, settings.swipeCopyPaste, settings.fourFingerFullScreen),
+                            lightInterface = settings.themeMode == ThemeMode.LIGHT,
+                            brushCursor = settings.brushCursor,
                         ),
                     add =
                         AddActions(
@@ -704,6 +707,10 @@ fun CanvasScreen(
                             onMoreSettings = onOpenSettings,
                             onPressureAndSmoothing = viewModel::setPressureAndSmoothing,
                             onGestures = viewModel::setGestureControls,
+                            onLightInterface = { light ->
+                                viewModel.updateSettings { it.copy(themeMode = if (light) ThemeMode.LIGHT else ThemeMode.DARK) }
+                            },
+                            onBrushCursor = { on -> viewModel.updateSettings { it.copy(brushCursor = on) } },
                         ),
                     onShare = { panel = EditorPanel.EXPORT },
                     canPaste = hasClipboard,

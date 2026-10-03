@@ -50,6 +50,8 @@ data class StudioPrefs(
     val pressureCurve: Float = 1f,
     val stabilization: Float = 0f,
     val gestures: GestureControls = GestureControls(),
+    val lightInterface: Boolean = false,
+    val brushCursor: Boolean = true,
 )
 
 data class PrefActions(
@@ -62,6 +64,8 @@ data class PrefActions(
     /** Pressure curve exponent and stabilization, saved together. */
     val onPressureAndSmoothing: (Float, Float) -> Unit = { _, _ -> },
     val onGestures: (GestureControls) -> Unit = {},
+    val onLightInterface: (Boolean) -> Unit = {},
+    val onBrushCursor: (Boolean) -> Unit = {},
 )
 
 /** Canvas facts shown under Canvas > Canvas information. */
@@ -163,7 +167,9 @@ private fun PrefsTab(
     prefs: StudioPrefs,
     actions: PrefActions,
 ) {
+    PrefSwitch("Light interface", prefs.lightInterface, actions.onLightInterface)
     PrefSwitch("Right-hand interface", prefs.rightHanded, actions.onRightHanded)
+    PrefSwitch("Brush cursor", prefs.brushCursor, actions.onBrushCursor)
     PrefSwitch("QuickShape (hold at the end of a stroke)", prefs.quickShape, actions.onQuickShape)
     PrefSwitch("Touch and hold for eyedropper", prefs.holdEyedropper, actions.onHoldEyedropper)
     PrefSwitch("Paint with a finger", prefs.fingerPainting, actions.onFingerPainting)
