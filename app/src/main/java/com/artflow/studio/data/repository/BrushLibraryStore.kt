@@ -38,6 +38,42 @@ class BrushLibraryStore
                 emitAll(snapshot.map { it.toList() })
             }
 
+        private val favouriteIds = MutableStateFlow<Set<String>?>(null)
+
+        /** Brushes starred into the Favourites set: preset ids and "saved-" ids of saved brushes. */
+        val favourites: Flow<Set<String>> =
+            flow {
+                mutex.withLock { loadFavourites() }
+                emitAll(favouriteIds.map { it.orEmpty() })
+            }
+
+        suspend fun setFavourite(
+            id: String,
+            favourite: Boolean,
+        ) {
+            require(id.matches(FAVOURITE_ID)) { "Unsupported brush identity" }
+            mutex.withLock {
+                val current = loadFavourites()
+                val updated = if (favourite) current + id else current - id
+                if (updated == current) return@withLock
+                withContext(NonCancellable) {
+                    dao.insertSetting(SettingsEntity(key = FAVOURITES_KEY, value = updated.sorted().joinToString("\n"), category = "brush"))
+                    favouriteIds.value = updated
+                }
+            }
+        }
+
+        private suspend fun loadFavourites(): Set<String> {
+            favouriteIds.value?.let { return it }
+            val stored = dao.getSettingByKey(FAVOURITES_KEY)?.value.orEmpty()
+            return stored
+                .lines()
+                .filter { it.matches(FAVOURITE_ID) }
+                .take(MAX_FAVOURITES)
+                .toSet()
+                .also { favouriteIds.value = it }
+        }
+
         suspend fun saveCopy(
             name: String,
             parameters: BrushParams,
@@ -95,5 +131,8 @@ class BrushLibraryStore
 
         companion object {
             const val STORAGE_KEY = "brush.savedLibrary.v1"
+            const val FAVOURITES_KEY = "brush.favourites.v1"
+            private const val MAX_FAVOURITES = 256
+            private val FAVOURITE_ID = Regex("[a-zA-Z0-9-]{1,72}")
         }
     }

@@ -11,6 +11,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -127,18 +129,26 @@ fun StudioBrushLibrary(
     var category by remember { mutableStateOf("All") }
     val focusManager = LocalFocusManager.current
     val saved = library?.state?.brushes.orEmpty()
+    val favourites = library?.state?.favourites.orEmpty()
     val matches =
-        remember(query, category, saved) {
-            val originals = StudioBrushes.search(query, category)
+        remember(query, category, saved, favourites) {
+            val favouritesOnly = category == FAVOURITES
+            val originals = StudioBrushes.search(query, if (favouritesOnly) "All" else category)
             val words = query.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
             val own =
                 saved
                     .filter { brush ->
-                        (category == "All" || category == "Saved") && words.all { brush.name.contains(it, ignoreCase = true) }
+                        val shown = category == "All" || category == "Saved" || favouritesOnly
+                        shown && words.all { brush.name.contains(it, ignoreCase = true) }
                     }.map { StudioBrushes.Preset("saved-${it.id}", it.name, "Saved", "Your saved brush", it.parameters) }
-            own + originals
+            (own + originals).filter { !favouritesOnly || it.id in favourites }
         }
-    val categories = if (library == null) StudioBrushes.categories else listOf("All", "Saved") + StudioBrushes.categories.drop(1)
+    val categories =
+        if (library == null) {
+            StudioBrushes.categories
+        } else {
+            listOf("All", FAVOURITES, "Saved") + StudioBrushes.categories.drop(1)
+        }
     Column(modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
             value = query,
@@ -181,6 +191,7 @@ fun StudioBrushLibrary(
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Text(preset.name, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                             val owned = saved.firstOrNull { "saved-${it.id}" == preset.id }
+                            if (library != null) FavouriteButton(preset.id in favourites) { library.toggleFavourite(preset.id) }
                             if (owned != null && library != null) SavedBrushMenu(owned, library)
                         }
                         BrushSample(preset.parameters, Modifier.fillMaxWidth().height(42.dp))
@@ -195,3 +206,19 @@ fun StudioBrushLibrary(
         }
     }
 }
+
+@Composable
+private fun FavouriteButton(
+    favourite: Boolean,
+    onToggle: () -> Unit,
+) {
+    IconButton(onClick = onToggle) {
+        Icon(
+            if (favourite) Icons.Default.Star else Icons.Default.StarBorder,
+            contentDescription = if (favourite) "Remove from Favourites" else "Add to Favourites",
+            tint = if (favourite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+private const val FAVOURITES = "Favourites"

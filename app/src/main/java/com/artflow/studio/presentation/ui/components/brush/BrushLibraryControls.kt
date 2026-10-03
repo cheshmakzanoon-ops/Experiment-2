@@ -16,6 +16,7 @@ data class BrushLibraryControls(
     val delete: (String) -> Unit,
     val retry: () -> Unit,
     val importAll: (List<SavedBrush>) -> Unit = {},
+    val toggleFavourite: (String) -> Unit = {},
 )
 
 /** Production entry point: saved presets share the navigation entry's lifecycle, not a dialog's. */
@@ -39,6 +40,7 @@ fun BrushStudioDialog(
                 viewModel::delete,
                 viewModel::retry,
                 viewModel::importAll,
+                viewModel::toggleFavourite,
             ),
     )
 }

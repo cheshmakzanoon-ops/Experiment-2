@@ -98,6 +98,20 @@ class BrushLibraryTest {
     }
 
     @Test(timeout = 10_000)
+    fun favouritesPersistAndRejectUnknownIdentities() =
+        runBlocking {
+            val dao = MemoryDao()
+            val store = BrushLibraryStore(dao)
+            assertTrue(store.favourites.first().isEmpty())
+            store.setFavourite("fine-liner", true)
+            store.setFavourite("saved-1234", true)
+            store.setFavourite("saved-1234", false)
+            assertEquals(setOf("fine-liner"), store.favourites.first())
+            assertEquals(setOf("fine-liner"), BrushLibraryStore(dao).favourites.first())
+            assertTrue(runCatching { store.setFavourite("../escape", true) }.isFailure)
+        }
+
+    @Test(timeout = 10_000)
     fun saveRenameDeleteAndReopenPreserveFullBrushesAndUnrelatedRows() =
         runBlocking {
             val dao = MemoryDao()

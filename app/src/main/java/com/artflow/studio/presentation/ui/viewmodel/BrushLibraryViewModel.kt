@@ -27,6 +27,7 @@ class BrushLibraryViewModel
             val busy: Boolean = false,
             val error: String? = null,
             val revision: Long = 0L,
+            val favourites: Set<String> = emptySet(),
         )
 
         private val mutableState = MutableStateFlow(State())
@@ -45,6 +46,15 @@ class BrushLibraryViewModel
 
         init {
             retry()
+            viewModelScope.launch(errors) {
+                store.favourites.collect { mutableState.value = mutableState.value.copy(favourites = it) }
+            }
+        }
+
+        /** Stars or unstars a brush in the Favourites set. */
+        fun toggleFavourite(id: String) {
+            val favourite = id !in mutableState.value.favourites
+            viewModelScope.launch(errors) { store.setFavourite(id, favourite) }
         }
 
         fun retry() {
