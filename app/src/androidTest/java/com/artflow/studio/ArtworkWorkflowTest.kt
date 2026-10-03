@@ -232,10 +232,27 @@ class ArtworkWorkflowTest {
         }
         val (tab, item) = ACTIONS_LOCATIONS[title] ?: ("Add" to title)
         compose.onNodeWithContentDescription("Actions").performClick()
+        // A sheet that is still closing can swallow the tap; tap Actions again if the panel is missing.
+        if (!appears(tab, 3_000)) compose.onNodeWithContentDescription("Actions").performClick()
+        compose.waitUntil(15_000) { appears(tab, 0) }
         // The tab row scrolls on narrow phones, so bring the tab into view before tapping it.
         compose.onNodeWithText(tab).performScrollTo().performClick()
         compose.onNodeWithText(item).performScrollTo().performClick()
         compose.waitForIdle()
+    }
+
+    private fun appears(
+        text: String,
+        timeoutMs: Long,
+    ): Boolean {
+        fun present() = compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
+        if (timeoutMs <= 0) return present()
+        return try {
+            compose.waitUntil(timeoutMs) { present() }
+            true
+        } catch (_: ComposeTimeoutException) {
+            false
+        }
     }
 
     private fun tapCanvas(scenario: ActivityScenario<MainActivity>) {
