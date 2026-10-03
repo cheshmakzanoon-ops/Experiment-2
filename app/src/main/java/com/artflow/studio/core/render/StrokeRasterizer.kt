@@ -7,6 +7,7 @@ import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.pixels.Stamping
 import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.DualBrush
 import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.model.brush.StrokePoint
 import com.artflow.studio.domain.model.layer.BlendMode
@@ -49,6 +50,9 @@ class StrokeRasterizer(
      */
     private val scratch: ThreadLocal<PixelBuffer?> = ThreadLocal.withInitial { null }
 
+    /** Second scratch for a dual brush's other brush, also per thread. */
+    private val dualScratch: ThreadLocal<PixelBuffer?> = ThreadLocal.withInitial { null }
+
     /** Statistics from the last rasterisation, for the performance panel. */
     @Volatile
     var lastDabCount: Int = 0
@@ -88,13 +92,14 @@ class StrokeRasterizer(
             return
         }
 
-        val buffer = scratchFor(target.width, target.height)
+        val buffer = scratchFor(scratch, target.width, target.height)
         buffer.clear()
         drawStrokeInto(buffer, stroke, params, points, alphaLock = false, mask = null, random = random, canvas = target)
+        val dual = params.dual?.let { drawDual(target, stroke, it) }
         val texture = BrushTexture.from(params)
         val wetEdges = params.wetEdges.coerceIn(0f, 1f)
         for (i in target.pixels.indices) {
-            val source = buffer.pixels[i]
+            val source = dual?.combine(buffer.pixels[i], i, originX + i % target.width, originY + i / target.width) ?: buffer.pixels[i]
             if ((source ushr 24) == 0) continue
             val coverage = selectionCoverage(mask, target, i)
             val grain = texture?.coverage(originX + i % target.width, originY + i / target.width) ?: 1f
@@ -148,7 +153,7 @@ class StrokeRasterizer(
         mask: SelectionMask?,
         random: Random,
     ) {
-        val buffer = scratchFor(target.width, target.height)
+        val buffer = scratchFor(scratch, target.width, target.height)
         buffer.clear()
         // Erasing depends on brush coverage, never on the selected ink color's alpha.
         val eraseShape = stroke.copy(color = 0xFFFFFFFF.toInt())
@@ -494,19 +499,60 @@ class StrokeRasterizer(
         }
 
     private fun scratchFor(
+        slot: ThreadLocal<PixelBuffer?>,
         width: Int,
         height: Int,
     ): PixelBuffer {
-        val existing = scratch.get()
+        val existing = slot.get()
         if (existing != null && existing.width == width && existing.height == height) return existing
         val created = PixelBuffer(width, height)
-        scratch.set(created)
+        slot.set(created)
         return created
     }
 
-    /** Releases this thread's scratch buffer (called when the canvas is disposed). */
+    /** Draws a dual brush's second brush along the same path, with its own seed, size and grain. */
+    private fun drawDual(
+        target: PixelBuffer,
+        stroke: Stroke,
+        dual: DualBrush,
+    ): DualMarks {
+        val params = dual.params.copy(opacity = 1f, dual = null, wetMix = 0f)
+        val marks = scratchFor(dualScratch, target.width, target.height)
+        marks.clear()
+        drawStrokeInto(marks, stroke, params, stroke.points, alphaLock = false, mask = null, random = Random(stroke.id + DUAL_SEED))
+        return DualMarks(dual.mode, marks, BrushTexture.from(params))
+    }
+
+    /** The second brush's marks, combined with the main brush's coverage pixel by pixel. */
+    private class DualMarks(
+        val mode: DualBrush.Mode,
+        val marks: PixelBuffer,
+        val texture: BrushTexture?,
+    ) {
+        fun combine(
+            primary: Int,
+            index: Int,
+            x: Int,
+            y: Int,
+        ): Int {
+            val second = marks.pixels[index]
+            val own = (primary ushr 24) / 255f
+            val other = (second ushr 24) / 255f * (texture?.coverage(x, y) ?: 1f)
+            val alpha =
+                when (mode) {
+                    DualBrush.Mode.MULTIPLY -> own * other
+                    DualBrush.Mode.SUBTRACT -> own * (1f - other)
+                    DualBrush.Mode.ADD -> own + other - own * other
+                }
+            val colour = if (own > 0f) primary else second
+            return Channels.withAlpha(colour, (alpha * 255f).roundToInt().coerceIn(0, 255))
+        }
+    }
+
+    /** Releases this thread's scratch buffers (called when the canvas is disposed). */
     fun release() {
         scratch.remove()
+        dualScratch.remove()
     }
 
     /**
@@ -537,6 +583,9 @@ class StrokeRasterizer(
         }
     }
 }
+
+/** Offsets a dual brush's random seed so its jitter differs from the main brush's. */
+private const val DUAL_SEED = 7919L
 
 /** How much of the paint under a dab a fully wet brush picks up. */
 private const val WET_PICKUP = 0.6f

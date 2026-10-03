@@ -5,6 +5,7 @@ import com.artflow.studio.data.local.entity.SettingsEntity
 import com.artflow.studio.data.repository.BrushLibraryStore
 import com.artflow.studio.domain.model.brush.BrushLibraryCodec
 import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.DualBrush
 import com.artflow.studio.domain.model.brush.PressureResponse
 import com.artflow.studio.domain.model.brush.SavedBrush
 import kotlinx.coroutines.CompletableDeferred
@@ -56,6 +57,17 @@ class BrushLibraryTest {
             )
         val saved = SavedBrush("brush-1", "Ink ;; \"blue\" / آبی", parameters)
         assertEquals(listOf(saved), BrushLibraryCodec.decode(BrushLibraryCodec.encode(listOf(saved))))
+    }
+
+    @Test
+    fun dualBrushesRoundTripButDoNotNest() {
+        val second = BrushParams(size = 9f, textureId = "charcoal")
+        val brush = SavedBrush("dual", "Dry ink", BrushParams(dual = DualBrush(second, DualBrush.Mode.SUBTRACT)))
+        assertEquals(listOf(brush), BrushLibraryCodec.decode(BrushLibraryCodec.encode(listOf(brush))))
+        val nested = brush.parameters.copy(dual = DualBrush(second.copy(dual = DualBrush(second))))
+        assertTrue(runCatching { BrushLibraryCodec.encode(listOf(brush.copy(parameters = nested))) }.isFailure)
+        val invalid = brush.parameters.copy(dual = DualBrush(second.copy(size = 0f)))
+        assertTrue(runCatching { BrushLibraryCodec.encode(listOf(brush.copy(parameters = invalid))) }.isFailure)
     }
 
     @Test

@@ -27,7 +27,7 @@ object BrushFiles {
     fun encode(brushes: List<SavedBrush>): String {
         val tiles =
             brushes
-                .flatMap { listOfNotNull(it.parameters.textureId, it.parameters.shapeId) }
+                .flatMap { it.parameters.imageIds }
                 .distinct()
                 .mapNotNull { id -> CustomGrains.get(id)?.let { id to Base64.getEncoder().encodeToString(it.values) } }
                 .toMap()

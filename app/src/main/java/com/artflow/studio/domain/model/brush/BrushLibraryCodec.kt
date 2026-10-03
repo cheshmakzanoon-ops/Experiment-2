@@ -54,6 +54,10 @@ object BrushLibraryCodec {
         require(params.roundness in 0.05f..1f) { "Unsupported tip roundness" }
         require(params.wetEdges in 0f..1f) { "Unsupported wet edges" }
         require(params.shapeId == null || params.shapeId.matches(IMPORTED_GRAIN)) { "Unsupported shape source" }
+        params.dual?.let { dual ->
+            require(dual.params.dual == null) { "A dual brush combines exactly two brushes" }
+            validateParameters(dual.params)
+        }
         val unitValues =
             listOf(
                 params.opacity,

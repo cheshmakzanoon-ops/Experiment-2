@@ -2,6 +2,7 @@ package com.artflow.studio.core.render
 
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.DualBrush
 import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.model.brush.StrokePoint
 import com.artflow.studio.domain.model.layer.BlendMode
@@ -58,6 +59,21 @@ class BrushRenderingTest {
         val wet = paint(BrushParams(size = 12f, spacing = 0.05f, wetEdges = 1f), black, clear)
         val centre = 10 * 40 + 20
         assertTrue((wet.pixels[centre] ushr 24) < (normal.pixels[centre] ushr 24))
+    }
+
+    @Test fun dualBrushCombinesWithTheSecondBrush() {
+        val main = BrushParams(size = 12f, spacing = 0.05f)
+        val thin = BrushParams(size = 4f, spacing = 0.05f)
+        val black = 0xFF000000.toInt()
+        val multiply = paint(main.copy(dual = DualBrush(thin, DualBrush.Mode.MULTIPLY)), black, 0)
+        val subtract = paint(main.copy(dual = DualBrush(thin, DualBrush.Mode.SUBTRACT)), black, 0)
+        val line = 10 * 40 + 20
+        // Four pixels off the line: inside the 12 px main brush, outside the 4 px second brush.
+        val side = 14 * 40 + 20
+        assertTrue("Multiply keeps only the overlap", (multiply.pixels[side] ushr 24) == 0)
+        assertTrue((multiply.pixels[line] ushr 24) > 200)
+        assertTrue("Subtract cuts the second brush out", (subtract.pixels[line] ushr 24) < 30)
+        assertTrue((subtract.pixels[side] ushr 24) > 200)
     }
 
     @Test fun tiltedPenPaintsWiderAndLighter() {

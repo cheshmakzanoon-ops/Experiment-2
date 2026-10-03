@@ -31,7 +31,9 @@ import com.artflow.studio.core.render.CustomGrains
 import com.artflow.studio.data.local.GrainStorage
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.DualBrush
 import com.artflow.studio.domain.model.brush.PressureResponse
+import com.artflow.studio.domain.model.brush.StudioBrushes
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.presentation.ui.theme.LocalArtFlowFlags
 import kotlinx.coroutines.Dispatchers
@@ -83,6 +85,7 @@ private fun BrushAttributeSettings(
         BrushAttribute.ROTATION -> BrushRotationSettings(brushParams, onBrushParamsChanged)
         BrushAttribute.WET -> BrushWetSettings(brushParams, onBrushParamsChanged)
         BrushAttribute.DYNAMICS -> BrushSpeedSettings(brushParams, onBrushParamsChanged)
+        BrushAttribute.DUAL -> BrushDualSettings(brushParams, onBrushParamsChanged)
         BrushAttribute.ALL -> Unit
     }
 }
@@ -505,6 +508,74 @@ private fun BrushSpeedSettings(
         }
         Text(
             "Pressure and tilt depend on the stylus. A tilted pen paints wider and lighter, like shading with a pencil's side.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** Dual brush: a second brush drawn along the same path, combined with this one. */
+@Composable
+private fun BrushDualSettings(
+    brushParams: BrushParams,
+    onBrushParamsChanged: (BrushParams) -> Unit,
+) {
+    BrushSettingsSection(title = "Dual Brush") {
+        val dual = brushParams.dual
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Combine with a second brush", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+            Switch(
+                checked = dual != null,
+                onCheckedChange = { on ->
+                    val second = StudioBrushes.presets.firstOrNull { it.parameters.textureId != null } ?: StudioBrushes.presets.first()
+                    onBrushParamsChanged(brushParams.copy(dual = if (on) DualBrush(second.parameters.copy(dual = null)) else null))
+                },
+                modifier = Modifier.semantics { contentDescription = "Combine with a second brush" },
+            )
+        }
+        if (dual != null) DualBrushOptions(dual) { onBrushParamsChanged(brushParams.copy(dual = it)) }
+    }
+}
+
+@Composable
+private fun DualBrushOptions(
+    dual: DualBrush,
+    onChange: (DualBrush) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Second brush", style = MaterialTheme.typography.labelLarge)
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            StudioBrushes.presets.forEach { preset ->
+                val parameters = preset.parameters.copy(size = dual.params.size, dual = null)
+                FilterChip(
+                    selected = dual.params == parameters,
+                    onClick = { onChange(dual.copy(params = parameters)) },
+                    label = { Text(preset.name) },
+                )
+            }
+        }
+        BrushParameterSlider(
+            label = "Second brush size",
+            value = dual.params.size,
+            onValueChange = { onChange(dual.copy(params = dual.params.copy(size = it))) },
+            valueRange = 1f..200f,
+            valueDisplay = "%.0f px".format(dual.params.size),
+        )
+        Text("Combine", style = MaterialTheme.typography.labelLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            DualBrush.Mode.entries.forEach { mode ->
+                FilterChip(
+                    selected = dual.mode == mode,
+                    onClick = { onChange(dual.copy(mode = mode)) },
+                    label = { Text(mode.displayName) },
+                )
+            }
+        }
+        Text(
+            "Multiply paints only where both brushes reach, Subtract cuts the second brush out and Add paints with both.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

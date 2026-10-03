@@ -15,6 +15,7 @@ enum class BrushAttribute(
     ROTATION("Rotation"),
     WET("Wet paint"),
     DYNAMICS("Speed & colour"),
+    DUAL("Dual brush"),
     ;
 
     companion object {

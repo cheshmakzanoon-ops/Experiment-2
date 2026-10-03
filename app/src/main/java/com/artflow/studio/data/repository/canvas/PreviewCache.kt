@@ -2,6 +2,7 @@ package com.artflow.studio.data.repository.canvas
 
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import kotlin.math.ceil
@@ -168,15 +169,20 @@ internal class PreviewCache {
         ): IntBounds {
             val points = stroke.points.drop(max(0, from))
             if (points.isEmpty()) return EMPTY
-            val params = stroke.brushParams
-            val tiltGain = 1f + 2f * params.tiltInfluence.coerceIn(0f, 1f)
-            val reach = params.size * (1f + params.sizeJitter) * tiltGain + params.size * params.scatter + REACH_PADDING
+            val reach = reachOf(stroke.brushParams) + REACH_PADDING
             return IntBounds(
                 floor(points.minOf { it.x } - reach).toInt(),
                 floor(points.minOf { it.y } - reach).toInt(),
                 ceil(points.maxOf { it.x } + reach).toInt(),
                 ceil(points.maxOf { it.y } + reach).toInt(),
             )
+        }
+
+        /** How far from the path a dab of [params], or of its second brush, can paint. */
+        private fun reachOf(params: BrushParams): Float {
+            val tiltGain = 1f + 2f * params.tiltInfluence.coerceIn(0f, 1f)
+            val own = params.size * (1f + params.sizeJitter) * tiltGain + params.size * params.scatter
+            return max(own, params.dual?.let { reachOf(it.params) } ?: 0f)
         }
 
         fun translate(

@@ -51,7 +51,12 @@ data class BrushParams(
     val shapeId: String? = null, // Imported tip image ("custom-…"); null stamps the round/flat tip
     val blendMode: BlendMode = BlendMode.NORMAL, // How each stroke combines with the layer's existing paint
     val wetEdges: Float = 0f, // 0..1: paint pools toward the stroke's edges like watercolour
+    val dual: DualBrush? = null, // Second brush combined with this one along the same path
 ) {
+    /** Imported grain and shape images this brush (and its second brush) paints with. */
+    val imageIds: List<String>
+        get() = listOfNotNull(textureId, shapeId) + (dual?.params?.imageIds ?: emptyList())
+
     /**
      * Pressure curve types for mapping stylus pressure
      */
