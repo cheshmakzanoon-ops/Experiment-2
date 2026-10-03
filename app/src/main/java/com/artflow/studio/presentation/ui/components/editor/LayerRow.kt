@@ -4,6 +4,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,7 +17,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
@@ -27,6 +31,7 @@ import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.Layer
 import com.artflow.studio.presentation.ui.theme.LocalArtFlowFlags
+import kotlin.math.max
 
 /** Short blend-mode code shown on each layer, like Procreate's "N" for Normal. */
 fun BlendMode.shortCode(): String =
@@ -60,6 +65,7 @@ internal fun LayerRow(
             Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 2.dp)
+                .twoFingerTap(layer.id) { actions.onAlphaLock(layer.id, !layer.isAlphaLocked) }
                 .pointerInput(layer.id) {
                     var travel = 0f
                     detectHorizontalDragGestures(
@@ -148,6 +154,34 @@ private fun SwipeActions(
 }
 
 private val SWIPE_REVEAL = 56.dp
+
+/**
+ * A quick tap with two fingers, as Procreate uses on a layer to toggle Alpha Lock. Two-finger
+ * touches are consumed so the row's own tap and swipe handling stays out of the way.
+ */
+private fun Modifier.twoFingerTap(
+    key: Any,
+    onTap: () -> Unit,
+): Modifier =
+    pointerInput(key) {
+        awaitEachGesture {
+            val first = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            var pointers = 1
+            var travel = 0f
+            var last = first.uptimeMillis
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                pointers = max(pointers, event.changes.count { it.pressed })
+                event.changes.forEach { travel += it.positionChange().getDistance() }
+                last = event.changes.maxOf { it.uptimeMillis }
+                if (pointers >= 2) event.changes.forEach { it.consume() }
+                if (event.changes.none { it.pressed }) break
+            }
+            if (pointers == 2 && travel < viewConfiguration.touchSlop * 2 && last - first.uptimeMillis < TWO_FINGER_TAP_MS) onTap()
+        }
+    }
+
+private const val TWO_FINGER_TAP_MS = 400L
 
 @Composable
 private fun LayerThumbnail(
