@@ -103,19 +103,20 @@ internal fun StackCard(
 /** Moves an artwork into an existing or new stack, or back to the main gallery. */
 @Composable
 internal fun StackDialog(
-    project: Project,
+    title: String,
+    current: String?,
     stacks: List<String>,
     onDismiss: () -> Unit,
     onMove: (String?) -> Unit,
 ) {
-    var name by remember(project.id) { mutableStateOf("") }
+    var name by remember(title) { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Stack ${project.name}") },
+        title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 LazyColumn(Modifier.heightIn(max = 220.dp)) {
-                    items(stacks.filter { it != project.stack }) { stack ->
+                    items(stacks.filter { it != current }) { stack ->
                         TextButton(onClick = { onMove(stack) }, modifier = Modifier.fillMaxWidth()) {
                             Text(stack, modifier = Modifier.fillMaxWidth())
                         }
@@ -128,7 +129,7 @@ internal fun StackDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                if (project.stack != null) {
+                if (current != null) {
                     TextButton(onClick = { onMove(null) }) { Text("Remove from stack") }
                 }
             }

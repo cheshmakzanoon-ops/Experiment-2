@@ -65,7 +65,11 @@ fun GalleryScreen(
     var openStack by rememberSaveable { mutableStateOf<String?>(null) }
     var stackTarget by remember { mutableStateOf<Project?>(null) }
     var preview by remember { mutableStateOf<Pair<List<Project>, Int>?>(null) }
-    BackHandler(enabled = openStack != null) { openStack = null }
+    // Select mode: null while browsing, otherwise the chosen artworks.
+    var selection by remember { mutableStateOf<Set<Long>?>(null) }
+    var batch by remember { mutableStateOf<GalleryBatch?>(null) }
+    BackHandler(enabled = selection != null) { selection = null }
+    BackHandler(enabled = openStack != null && selection == null) { openStack = null }
     LaunchedEffect(uiState, openStack) {
         val stack = openStack ?: return@LaunchedEffect
         val projects = (uiState as? MainUiState.Success)?.projects ?: return@LaunchedEffect
@@ -73,24 +77,7 @@ fun GalleryScreen(
         if (projects.none { it.stack == stack }) openStack = null
     }
     val context = LocalContext.current
-    val photoImport =
-        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-            if (uri == null) return@rememberLauncherForActivityResult
-            scope.launch {
-                val image =
-                    withContext(Dispatchers.IO) {
-                        runCatching { BitmapPixelBridge.decodeUri(context.contentResolver, uri) }.getOrNull()
-                    }
-                if (image == null) {
-                    snackbarHostState.showSnackbar("That image could not be opened")
-                    return@launch
-                }
-                viewModel.createProject("Imported photo", null, image.width, image.height, 72) { id ->
-                    PendingImports.put(id, image)
-                    scope.launch { onNavigateToCanvas(id) }
-                }
-            }
-        }
+    val photoImport = rememberPhotoImport(viewModel, snackbarHostState, onNavigateToCanvas)
 
     LaunchedEffect(Unit) {
         viewModel.messageFlow.collect { snackbarHostState.showSnackbar(it) }
@@ -99,52 +86,69 @@ fun GalleryScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
-                title = {
-                    if (searchVisible) {
-                        OutlinedTextField(
-                            value = query,
-                            onValueChange = viewModel::setQuery,
-                            placeholder = { Text("Search artworks") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    } else {
-                        Column {
-                            Text(openStack ?: "ArtFlow")
-                            Text(
-                                text = viewModel.storageSummary(),
-                                style = MaterialTheme.typography.labelSmall,
+            val chosen = selection
+            if (chosen != null) {
+                SelectionTopBar(
+                    chosen.size,
+                    SelectionActions(
+                        onStack = { batch = GalleryBatch.STACK },
+                        onDuplicate = {
+                            selectedProjects(uiState, chosen).forEach(viewModel::duplicate)
+                            selection = null
+                        },
+                        onDelete = { batch = GalleryBatch.DELETE },
+                        onDone = { selection = null },
+                    ),
+                )
+            } else {
+                TopAppBar(
+                    title = {
+                        if (searchVisible) {
+                            OutlinedTextField(
+                                value = query,
+                                onValueChange = viewModel::setQuery,
+                                placeholder = { Text("Search artworks") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        } else {
+                            Column {
+                                Text(openStack ?: "ArtFlow")
+                                Text(
+                                    text = viewModel.storageSummary(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                        }
+                    },
+                    navigationIcon = {
+                        if (openStack != null) {
+                            IconButton(onClick = { openStack = null }) {
+                                Icon(Icons.Default.ArrowBack, contentDescription = "Back to gallery")
+                            }
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { searchVisible = !searchVisible }) {
+                            Icon(
+                                imageVector = if (searchVisible) Icons.Default.Close else Icons.Default.Search,
+                                contentDescription = "Search",
                             )
                         }
-                    }
-                },
-                navigationIcon = {
-                    if (openStack != null) {
-                        IconButton(onClick = { openStack = null }) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Back to gallery")
+                        SortMenu(settings.gallerySort, viewModel::setSort)
+                        TextButton(onClick = { selection = emptySet() }) { Text("Select") }
+                        IconButton(onClick = photoImport) {
+                            Icon(Icons.Default.AddPhotoAlternate, contentDescription = "Import photo as a new canvas")
                         }
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { searchVisible = !searchVisible }) {
-                        Icon(
-                            imageVector = if (searchVisible) Icons.Default.Close else Icons.Default.Search,
-                            contentDescription = "Search",
-                        )
-                    }
-                    SortMenu(settings.gallerySort, viewModel::setSort)
-                    IconButton(onClick = { runCatching { photoImport.launch("image/*") } }) {
-                        Icon(Icons.Default.AddPhotoAlternate, contentDescription = "Import photo as a new canvas")
-                    }
-                    IconButton(onClick = onOpenHelp) {
-                        Icon(Icons.Default.HelpOutline, contentDescription = "Help")
-                    }
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
-                    }
-                },
-            )
+                        IconButton(onClick = onOpenHelp) {
+                            Icon(Icons.Default.HelpOutline, contentDescription = "Help")
+                        }
+                        IconButton(onClick = onOpenSettings) {
+                            Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        }
+                    },
+                )
+            }
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
@@ -184,9 +188,17 @@ fun GalleryScreen(
                                 StackCard(name, members) { openStack = name }
                             }
                             items(layout.projects, key = { it.id }) { project ->
+                                val chosen = selection
                                 ProjectCard(
                                     project = project,
-                                    onClick = { onNavigateToCanvas(project.id) },
+                                    onClick = {
+                                        if (chosen == null) {
+                                            onNavigateToCanvas(project.id)
+                                        } else {
+                                            selection = if (project.id in chosen) chosen - project.id else chosen + project.id
+                                        }
+                                    },
+                                    selected = chosen?.let { project.id in it },
                                     onFavorite = { viewModel.toggleFavorite(project) },
                                     onRename = { renameTarget = project },
                                     onDuplicate = { viewModel.duplicate(project) },
@@ -222,8 +234,14 @@ fun GalleryScreen(
         GalleryPreview(projects, index, viewModel::previewImage) { preview = null }
     }
 
+    batch?.let { action ->
+        BatchDialog(action, selectedProjects(uiState, selection.orEmpty()), existingStacks(uiState), viewModel) { done ->
+            batch = null
+            if (done) selection = null
+        }
+    }
     stackTarget?.let { project ->
-        StackDialog(project, existingStacks(uiState), onDismiss = { stackTarget = null }) { stack ->
+        StackDialog("Stack ${project.name}", project.stack, existingStacks(uiState), onDismiss = { stackTarget = null }) { stack ->
             viewModel.moveToStack(project.id, stack)
             stackTarget = null
         }
@@ -240,6 +258,36 @@ fun GalleryScreen(
             deleteTarget = null
         }
     }
+}
+
+/** Opens a photo from the device as a new canvas of the same size. */
+@Composable
+private fun rememberPhotoImport(
+    viewModel: MainViewModel,
+    snackbarHostState: SnackbarHostState,
+    onNavigateToCanvas: (Long) -> Unit,
+): () -> Unit {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val launcher =
+        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            scope.launch {
+                val image =
+                    withContext(Dispatchers.IO) {
+                        runCatching { BitmapPixelBridge.decodeUri(context.contentResolver, uri) }.getOrNull()
+                    }
+                if (image == null) {
+                    snackbarHostState.showSnackbar("That image could not be opened")
+                    return@launch
+                }
+                viewModel.createProject("Imported photo", null, image.width, image.height, 72) { id ->
+                    PendingImports.put(id, image)
+                    scope.launch { onNavigateToCanvas(id) }
+                }
+            }
+        }
+    return { runCatching { launcher.launch("image/*") } }
 }
 
 @Composable
@@ -278,6 +326,11 @@ private suspend fun shareProject(
         runCatching { sharePng(context, file) }
     }
 }
+
+private fun selectedProjects(
+    state: MainUiState,
+    ids: Set<Long>,
+): List<Project> = (state as? MainUiState.Success)?.projects.orEmpty().filter { it.id in ids }
 
 private fun existingStacks(state: MainUiState): List<String> =
     (state as? MainUiState.Success)
@@ -364,6 +417,7 @@ private fun ProjectCard(
     onStack: () -> Unit,
     onPreview: () -> Unit,
     onShare: () -> Unit,
+    selected: Boolean? = null,
 ) {
     var menuVisible by remember { mutableStateOf(false) }
     Card(
@@ -415,6 +469,7 @@ private fun ProjectCard(
                                 .padding(6.dp),
                     )
                 }
+                selected?.let { SelectionMark(it, Modifier.align(Alignment.TopEnd)) }
             }
 
             Row(
