@@ -87,7 +87,9 @@ import com.artflow.studio.presentation.ui.components.editor.LayersSheet
 import com.artflow.studio.presentation.ui.components.editor.PageAssistActions
 import com.artflow.studio.presentation.ui.components.editor.PageAssistBar
 import com.artflow.studio.presentation.ui.components.editor.PrefActions
+import com.artflow.studio.presentation.ui.components.editor.QuickAction
 import com.artflow.studio.presentation.ui.components.editor.QuickMenuSheet
+import com.artflow.studio.presentation.ui.components.editor.RadialQuickMenu
 import com.artflow.studio.presentation.ui.components.editor.ReferenceCompanion
 import com.artflow.studio.presentation.ui.components.editor.SelectionSheet
 import com.artflow.studio.presentation.ui.components.editor.SelectionToolbar
@@ -215,6 +217,7 @@ fun CanvasScreen(
     var pageAssist by rememberSaveable(projectId) { mutableStateOf(false) }
     var cropBox by remember { mutableStateOf<CropBox.Box?>(null) }
     var opacityLayer by remember { mutableStateOf<Long?>(null) }
+    var quickMenu by remember { mutableStateOf(false) }
     val pageThumbnails by viewModel.pageThumbnails.pages.collectAsState()
     val pageImages =
         remember(pageThumbnails) {
@@ -357,6 +360,7 @@ fun CanvasScreen(
     BackHandler(enabled = panel != EditorPanel.NONE, onBack = dismissPanel)
     BackHandler(enabled = cropBox != null) { cropBox = null }
     BackHandler(enabled = opacityLayer != null) { opacityLayer = null }
+    BackHandler(enabled = quickMenu) { quickMenu = false }
     BackHandler(enabled = panel == EditorPanel.NONE && dirty && !focusMode) { showExitConfirm = true }
     BackHandler(enabled = panel == EditorPanel.NONE && focusMode) {
         canvasView?.cancelActiveGesture()
@@ -916,6 +920,10 @@ fun CanvasScreen(
                             onModify = viewModel::startEyedropper,
                             onUndo = viewModel::undo,
                             onRedo = viewModel::redo,
+                            onQuickMenu = {
+                                canvasView?.cancelActiveGesture()
+                                quickMenu = true
+                            },
                         ),
                     modifier =
                         if (settings.rightHandedInterface) {
@@ -983,6 +991,25 @@ fun CanvasScreen(
                     canvasHeight = ready.height,
                     view = ViewTransform(viewScale, viewOffsetX, viewOffsetY, viewRotation),
                     modifier = Modifier.fillMaxSize(),
+                )
+            }
+            if (quickMenu) {
+                RadialQuickMenu(
+                    actions =
+                        listOf(
+                            QuickAction("New layer", Icons.Default.Add) { viewModel.addLayer() },
+                            QuickAction("Merge down", Icons.Default.MergeType) { viewModel.mergeLayerDown(activeLayerId) },
+                            QuickAction("Flip horizontal", Icons.Default.Flip) { viewModel.canvasOps.flipCanvas(false) },
+                            QuickAction("Clear layer", Icons.Default.LayersClear) { viewModel.clipboard.clear() },
+                            QuickAction("Copy", Icons.Default.ContentCopy) { viewModel.clipboard.copy() },
+                            QuickAction("Paste", Icons.Default.ContentPaste) { viewModel.clipboard.paste() },
+                        ),
+                    onMore = {
+                        quickMenu = false
+                        panel = EditorPanel.QUICK
+                    },
+                    onDismiss = { quickMenu = false },
+                    modifier = Modifier.zIndex(7f),
                 )
             }
             opacityLayer?.let { id ->

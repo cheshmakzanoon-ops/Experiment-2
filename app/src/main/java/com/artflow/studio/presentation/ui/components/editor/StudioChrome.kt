@@ -1,9 +1,12 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+
 package com.artflow.studio.presentation.ui.components.editor
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
@@ -164,6 +167,8 @@ data class StudioSidebarActions(
     val onModify: () -> Unit,
     val onUndo: () -> Unit,
     val onRedo: () -> Unit,
+    /** Touch and hold the modify button: Procreate's QuickMenu. */
+    val onQuickMenu: () -> Unit = {},
 )
 
 /** Brush size slider, modify (eyedropper) button, opacity slider, undo and redo. */
@@ -201,7 +206,7 @@ fun StudioSidebar(
                             color = if (state.eyedropperActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                             shape = RoundedCornerShape(6.dp),
                         ).semantics { contentDescription = "Modify: pick a colour from the canvas" }
-                        .clickable(onClick = actions.onModify),
+                        .combinedClickable(onClick = actions.onModify, onLongClick = actions.onQuickMenu, onLongClickLabel = "QuickMenu"),
             )
             VerticalSlider(
                 value = state.opacity,
