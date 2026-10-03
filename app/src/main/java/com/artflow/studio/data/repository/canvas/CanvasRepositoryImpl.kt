@@ -1119,6 +1119,17 @@ class CanvasRepositoryImpl
                 true
             }
 
+        private data class OpacityRun(
+            val layerId: Long,
+            val pushes: Long,
+            val at: Long,
+        )
+
+        private var opacityRun: OpacityRun? = null
+
+        /** Counts undo entries ever pushed, so an opacity run can tell whether anything came between. */
+        private var undoPushes = 0L
+
         override suspend fun setLayerOpacity(
             layerId: Long,
             opacity: Float,
@@ -1128,7 +1139,11 @@ class CanvasRepositoryImpl
                 if (!opacity.isFinite()) return@withState false
                 val clamped = opacity.coerceIn(0f, 1f)
                 if (layer.opacity == clamped) return@withState true
-                pushUndo()
+                // A slider drag is one undo step: changes to the same layer in quick succession merge.
+                val now = System.currentTimeMillis()
+                val run = opacityRun
+                if (run == null || run.layerId != layerId || run.pushes != undoPushes || now - run.at > OPACITY_MERGE_MS) pushUndo()
+                opacityRun = OpacityRun(layerId, undoPushes, now)
                 layer.opacity = clamped
                 dirty = true
                 emit(CanvasInvalidationEvent.LayersChanged)
@@ -2289,6 +2304,7 @@ class CanvasRepositoryImpl
         // -----------------------------------------------------------------------------------------
 
         override fun undo(): Boolean {
+            opacityRun = null
             val snapshot = undoStack.removeLastOrNull() ?: return false
             redoStack.addLast(currentSnapshot())
             restore(snapshot)
@@ -2298,6 +2314,7 @@ class CanvasRepositoryImpl
         }
 
         override fun redo(): Boolean {
+            opacityRun = null
             val snapshot = redoStack.removeLastOrNull() ?: return false
             undoStack.addLast(currentSnapshot())
             restore(snapshot)
@@ -2307,6 +2324,7 @@ class CanvasRepositoryImpl
         }
 
         private fun pushUndo() {
+            undoPushes++
             undoStack.addLast(currentSnapshot())
             while (undoStack.size > MAX_HISTORY) undoStack.removeFirst()
             // Trim by memory as well: a 4K layer is 32 MB, so 30 raster steps would be ~1 GB.
@@ -2749,6 +2767,7 @@ class CanvasRepositoryImpl
         companion object {
             private const val MAX_HISTORY = 30
             private val NO_SYMMETRY = SymmetryEngine.Settings()
+            private const val OPACITY_MERGE_MS = 1_500L
             private const val TEXT_LAYER_NAME = 32
 
             /**

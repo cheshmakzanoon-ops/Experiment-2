@@ -79,6 +79,7 @@ import com.artflow.studio.presentation.ui.components.editor.CropOverlay
 import com.artflow.studio.presentation.ui.components.editor.GuidesOverlay
 import com.artflow.studio.presentation.ui.components.editor.GuidesSheet
 import com.artflow.studio.presentation.ui.components.editor.LayerMaskActions
+import com.artflow.studio.presentation.ui.components.editor.LayerOpacityOverlay
 import com.artflow.studio.presentation.ui.components.editor.LayerOptionActions
 import com.artflow.studio.presentation.ui.components.editor.LayerRowActions
 import com.artflow.studio.presentation.ui.components.editor.LayerStackActions
@@ -213,6 +214,7 @@ fun CanvasScreen(
     var referenceCanvas by rememberSaveable(projectId) { mutableStateOf(false) }
     var pageAssist by rememberSaveable(projectId) { mutableStateOf(false) }
     var cropBox by remember { mutableStateOf<CropBox.Box?>(null) }
+    var opacityLayer by remember { mutableStateOf<Long?>(null) }
     val pageThumbnails by viewModel.pageThumbnails.pages.collectAsState()
     val pageImages =
         remember(pageThumbnails) {
@@ -354,6 +356,7 @@ fun CanvasScreen(
 
     BackHandler(enabled = panel != EditorPanel.NONE, onBack = dismissPanel)
     BackHandler(enabled = cropBox != null) { cropBox = null }
+    BackHandler(enabled = opacityLayer != null) { opacityLayer = null }
     BackHandler(enabled = panel == EditorPanel.NONE && dirty && !focusMode) { showExitConfirm = true }
     BackHandler(enabled = panel == EditorPanel.NONE && focusMode) {
         canvasView?.cancelActiveGesture()
@@ -427,6 +430,11 @@ fun CanvasScreen(
                             onDuplicate = { viewModel.duplicateLayer(it) },
                             onDelete = { viewModel.removeLayer(it) },
                             onMergeDown = { viewModel.mergeLayerDown(it) },
+                            onOpacityMode = { id ->
+                                viewModel.setActiveLayer(id)
+                                panel = EditorPanel.NONE
+                                opacityLayer = id
+                            },
                         ),
                     stackActions =
                         LayerStackActions(
@@ -972,6 +980,19 @@ fun CanvasScreen(
                     view = ViewTransform(viewScale, viewOffsetX, viewOffsetY, viewRotation),
                     modifier = Modifier.fillMaxSize(),
                 )
+            }
+            opacityLayer?.let { id ->
+                val layer = layers.firstOrNull { it.id == id }
+                if (layer == null) {
+                    opacityLayer = null
+                } else {
+                    LayerOpacityOverlay(
+                        opacity = layer.opacity,
+                        onChange = { viewModel.setLayerOpacity(id, it) },
+                        onDone = { opacityLayer = null },
+                        modifier = Modifier.zIndex(5f),
+                    )
+                }
             }
             val crop = cropBox
             if (crop != null && ready != null) {

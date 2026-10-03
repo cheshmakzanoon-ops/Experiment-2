@@ -68,8 +68,11 @@ internal fun LayerRow(
             Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 2.dp)
-                .twoFingerTap(layer.id) { actions.onAlphaLock(layer.id, !layer.isAlphaLocked) }
-                .pointerInput(layer.id) {
+                .twoFingerGestures(
+                    key = layer.id,
+                    onTap = { actions.onOpacityMode(layer.id) },
+                    onSwipeRight = { actions.onAlphaLock(layer.id, !layer.isAlphaLocked) },
+                ).pointerInput(layer.id) {
                     var travel = 0f
                     detectHorizontalDragGestures(
                         onDragStart = { travel = 0f },
@@ -163,31 +166,40 @@ private fun SwipeActions(
 private val SWIPE_REVEAL = 56.dp
 
 /**
- * A quick tap with two fingers, as Procreate uses on a layer to toggle Alpha Lock. Two-finger
- * touches are consumed so the row's own tap and swipe handling stays out of the way.
+ * Procreate's two-finger layer gestures: a quick tap adjusts opacity, a swipe right toggles Alpha
+ * Lock. Two-finger touches are consumed so the row's own tap and swipe handling stays out of the way.
  */
-private fun Modifier.twoFingerTap(
+private fun Modifier.twoFingerGestures(
     key: Any,
     onTap: () -> Unit,
+    onSwipeRight: () -> Unit,
 ): Modifier =
     pointerInput(key) {
         awaitEachGesture {
             val first = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
             var pointers = 1
             var travel = 0f
+            var sideways = 0f
             var last = first.uptimeMillis
             while (true) {
                 val event = awaitPointerEvent(PointerEventPass.Initial)
                 pointers = max(pointers, event.changes.count { it.pressed })
                 event.changes.forEach { travel += it.positionChange().getDistance() }
+                // The fingers' average sideways movement.
+                sideways += event.changes.sumOf { it.positionChange().x.toDouble() }.toFloat() / event.changes.size.coerceAtLeast(1)
                 last = event.changes.maxOf { it.uptimeMillis }
                 if (pointers >= 2) event.changes.forEach { it.consume() }
                 if (event.changes.none { it.pressed }) break
             }
-            if (pointers == 2 && travel < viewConfiguration.touchSlop * 2 && last - first.uptimeMillis < TWO_FINGER_TAP_MS) onTap()
+            if (pointers != 2) return@awaitEachGesture
+            when {
+                sideways > TWO_FINGER_SWIPE_DP.dp.toPx() -> onSwipeRight()
+                travel < viewConfiguration.touchSlop * 2 && last - first.uptimeMillis < TWO_FINGER_TAP_MS -> onTap()
+            }
         }
     }
 
+private const val TWO_FINGER_SWIPE_DP = 48
 private const val TWO_FINGER_TAP_MS = 400L
 
 @Composable

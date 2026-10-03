@@ -79,6 +79,8 @@ data class LayerRowActions(
     val onDuplicate: (Long) -> Unit,
     val onDelete: (Long) -> Unit,
     val onMergeDown: (Long) -> Unit,
+    /** Two-finger tap: slide across the canvas to set this layer's opacity. */
+    val onOpacityMode: (Long) -> Unit = {},
 )
 
 data class LayerStackActions(

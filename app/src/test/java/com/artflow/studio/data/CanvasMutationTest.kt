@@ -86,6 +86,20 @@ class CanvasMutationTest {
     }
 
     @Test
+    fun oneOpacityDragIsOneUndoStep() =
+        runTest {
+            val layer = open()
+            val depth = repository.undoDepth
+            listOf(0.9f, 0.7f, 0.5f).forEach { assertTrue(repository.setLayerOpacity(layer, it)) }
+            assertEquals(depth + 1, repository.undoDepth)
+            assertTrue(repository.undo())
+            assertEquals(1f, repository.getAllLayers().single().opacity, 0f)
+            // After an undo the next change starts a new step.
+            assertTrue(repository.setLayerOpacity(layer, 0.3f))
+            assertEquals(depth + 1, repository.undoDepth)
+        }
+
+    @Test
     fun symmetryMirrorsOnlyOnAssistedLayers() =
         runTest {
             val layer = open()

@@ -103,7 +103,8 @@ object Tutorials {
                 "Layers",
                 "Tap the selected layer for its options. Swipe left for Lock, Duplicate and Delete; swipe right " +
                     "to select several layers, then group, delete or transform them together. Touch and hold to drag a " +
-                    "layer into a new place, and tap with two fingers to toggle Alpha Lock.",
+                    "layer into a new place. Swipe right with two fingers to toggle Alpha Lock, or tap with two " +
+                    "fingers and slide across the canvas to set the layer's opacity.",
                 "flow.layers",
             ),
             TutorialStep(
