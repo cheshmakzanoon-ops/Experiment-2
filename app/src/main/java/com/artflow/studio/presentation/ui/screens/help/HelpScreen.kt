@@ -45,7 +45,8 @@ object Tutorials {
             ),
             TutorialStep(
                 "Undo with a gesture",
-                "A quick two-finger tap undoes and a three-finger tap redoes. A four-finger tap hides the " +
+                "A quick two-finger tap undoes and a three-finger tap redoes; hold the fingers down to keep " +
+                    "undoing or redoing. A four-finger tap hides the " +
                     "interface, a three-finger swipe down opens Copy & Paste and a three-finger scrub clears the layer. " +
                     "Each of these can be switched off in Actions > Prefs.",
                 "gesture.undo",

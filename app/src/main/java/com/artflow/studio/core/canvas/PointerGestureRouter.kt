@@ -71,6 +71,14 @@ class PointerGestureRouter(
         scrubReversals = 0
     }
 
+    /** Two or three fingers resting still since the touch began, else 0: Procreate's rapid undo and redo. */
+    fun heldFingers(): Int = if (mode == Mode.NAVIGATION && tapEligible && maxPointers in 2..3) maxPointers else 0
+
+    /** A hold that already undid or redid must not also count as a tap when the fingers lift. */
+    fun consumeTap() {
+        tapEligible = false
+    }
+
     /** Include batched movement, including an excursion which returns to its initial position. */
     fun observe(pointers: List<Pointer>) {
         for (pointer in pointers) {

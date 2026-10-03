@@ -205,6 +205,18 @@ class ArtFlowCanvasView
         // --- Gesture state ------------------------------------------------------------------------
 
         private val pointerRouter = PointerGestureRouter(TAP_SLOP, TAP_TIMEOUT_MS)
+
+        /** Holding two fingers still keeps undoing, three keeps redoing, as in Procreate. */
+        private val rapidHistory =
+            object : Runnable {
+                override fun run() {
+                    val fingers = pointerRouter.heldFingers()
+                    if (fingers !in 2..3) return
+                    pointerRouter.consumeTap()
+                    if (fingers == 2) onUndoRequested?.invoke() else onRedoRequested?.invoke()
+                    postDelayed(this, RAPID_HISTORY_REPEAT_MS)
+                }
+            }
         private var lastPointerX = 0f
         private var lastPointerY = 0f
         private var gestureStartTime = 0L
@@ -427,6 +439,7 @@ class ArtFlowCanvasView
         }
 
         override fun onDetachedFromWindow() {
+            removeCallbacks(rapidHistory)
             viewAnimator?.cancel()
             resetLiquifyReference()
             cancelActiveGesture()
@@ -1137,8 +1150,13 @@ class ArtFlowCanvasView
                     if (x != lastPointerX || y != lastPointerY) continueGesture(event, route.index, x, y)
                     endGesture(event, x, y, cancelled = false)
                 }
-                PointerGestureRouter.Action.CANCEL -> cancelActiveGesture()
+                PointerGestureRouter.Action.CANCEL -> {
+                    removeCallbacks(rapidHistory)
+                    cancelActiveGesture()
+                }
                 PointerGestureRouter.Action.REBASE_NAVIGATION -> {
+                    removeCallbacks(rapidHistory)
+                    postDelayed(rapidHistory, RAPID_HISTORY_DELAY_MS)
                     val remaining =
                         if (action ==
                             PointerGestureRouter.Event.POINTER_UP
@@ -1150,7 +1168,10 @@ class ArtFlowCanvasView
                     rebaseNavigation(remaining)
                 }
                 PointerGestureRouter.Action.NAVIGATE -> navigate(samples)
-                PointerGestureRouter.Action.FINISH_NAVIGATION -> finishNavigation(route.historyPointers, event.eventTime)
+                PointerGestureRouter.Action.FINISH_NAVIGATION -> {
+                    removeCallbacks(rapidHistory)
+                    finishNavigation(route.historyPointers, event.eventTime)
+                }
                 PointerGestureRouter.Action.THREE_FINGER_SWIPE_DOWN -> {
                     resetNavigation()
                     if (input.gestures.swipeCopyPaste) onCopyPasteMenuRequested?.invoke()
@@ -2447,6 +2468,8 @@ class ArtFlowCanvasView
             private const val QUICKSHAPE_HOLD_MS = 650L
             private const val HOLD_EYEDROPPER_MS = 500L
             private const val HANDLE_TOUCH_PX = 36f
+            private const val RAPID_HISTORY_DELAY_MS = 650L
+            private const val RAPID_HISTORY_REPEAT_MS = 220L
             private const val KNOB_DISTANCE_PX = 48f
             private const val SNAP_DISTANCE_PX = 12f
             private const val TRANSFORM_PREVIEW_INTERVAL_MS = 33L

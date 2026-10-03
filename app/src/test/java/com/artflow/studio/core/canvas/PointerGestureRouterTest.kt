@@ -217,4 +217,19 @@ class PointerGestureRouterTest {
         assertTrue(Action.THREE_FINGER_SCRUB in actions)
         assertFalse(Action.THREE_FINGER_SWIPE_DOWN in actions)
     }
+
+    @Test
+    fun stillFingersAreAHoldUntilTheyMoveAndAHoldIsNotATap() {
+        send(Event.DOWN, finger)
+        send(Event.POINTER_DOWN, finger, other, changed = 1)
+        assertEquals(2, router.heldFingers())
+        router.consumeTap()
+        send(Event.POINTER_UP, finger, other, changed = 1)
+        assertEquals("A hold that undid must not also tap", 0, send(Event.UP, finger).historyPointers)
+
+        send(Event.DOWN, finger)
+        send(Event.POINTER_DOWN, finger, other, changed = 1)
+        send(Event.MOVE, finger.copy(x = 80f), other)
+        assertEquals("Moving turns the hold into navigation", 0, router.heldFingers())
+    }
 }
