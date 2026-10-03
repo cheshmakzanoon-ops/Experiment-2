@@ -1354,14 +1354,14 @@ class CanvasViewModel
         }
 
         /** Encodes the recorded time-lapse as an MP4 replay and shows it in the export dialog. */
-        fun exportTimelapse() {
+        fun exportTimelapse(fullLength: Boolean = false) {
             val projectId = currentProjectId
             if (projectId == 0L || _exportState.value is ExportUiState.Running) return
             _exportState.value = ExportUiState.Running
             viewModelScope.launch(editorErrors) {
                 try {
                     _exportState.value =
-                        timelapse.export(projectId, project?.name ?: "Artwork").fold(
+                        timelapse.export(projectId, project?.name ?: "Artwork", fullLength).fold(
                             onSuccess = { ExportUiState.Done(it) },
                             onFailure = { ExportUiState.Failed(it.message ?: "Time-lapse export failed") },
                         )

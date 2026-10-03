@@ -606,8 +606,8 @@ fun CanvasScreen(
                     video =
                         VideoActions(
                             onReplay = { scope.launch { replayFrames = viewModel.timelapseFrames() } },
-                            onExport = {
-                                viewModel.exportTimelapse()
+                            onExport = { fullLength ->
+                                viewModel.exportTimelapse(fullLength)
                                 panel = EditorPanel.EXPORT
                             },
                             onClear = viewModel::clearTimelapse,

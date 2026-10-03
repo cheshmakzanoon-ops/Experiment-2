@@ -81,22 +81,27 @@ class TimelapseRecorder
             }
         }
 
-        /** Encodes the recording as an MP4 replay that lasts at most about [TARGET_DURATION_MS]. */
+        /**
+         * Encodes the recording as an MP4: every frame at about 30 fps for [fullLength], otherwise a
+         * replay of about [TARGET_DURATION_MS], like Procreate's 30-second export.
+         */
         suspend fun export(
             projectId: Long,
             projectName: String,
+            fullLength: Boolean = false,
         ): Result<ExportResult> =
             withContext(Dispatchers.Default) {
                 runCatching {
-                    val files = mutex.withLock { withContext(Dispatchers.IO) { frames(projectId) } }
-                    require(files.isNotEmpty()) { "Nothing has been recorded yet — draw something first" }
+                    val recorded = mutex.withLock { withContext(Dispatchers.IO) { frames(projectId) } }
+                    require(recorded.isNotEmpty()) { "Nothing has been recorded yet — draw something first" }
+                    val files = if (fullLength) recorded else sampled(recorded, TARGET_DURATION_MS / MIN_FRAME_MS)
                     val first = decode(files.first())
                     val width = max(16, (first.width + 1) and -2)
                     val height = max(16, (first.height + 1) and -2)
-                    val perFrame = (TARGET_DURATION_MS / files.size).coerceIn(MIN_FRAME_MS, MAX_FRAME_MS)
+                    val perFrame = if (fullLength) MIN_FRAME_MS else (TARGET_DURATION_MS / files.size).coerceIn(MIN_FRAME_MS, MAX_FRAME_MS)
                     val delays = List(files.size) { if (it == files.lastIndex) FINAL_HOLD_MS else perFrame }
                     val safeName = projectName.replace(Regex("[^A-Za-z0-9 _-]"), "").trim().ifEmpty { "Artwork" }
-                    val fileName = "$safeName timelapse.mp4"
+                    val fileName = if (fullLength) "$safeName timelapse.mp4" else "$safeName timelapse 30s.mp4"
                     val temp = File.createTempFile("timelapse", ".mp4", storage.exportsDir(projectId))
                     try {
                         val options = ExportOptions(format = ExportFormat.MP4, backgroundColor = 0xFFFFFFFF.toInt())
@@ -145,6 +150,15 @@ class TimelapseRecorder
         }
 
         companion object {
+            /** At most [count] frames spread evenly from first to last. */
+            internal fun sampled(
+                files: List<File>,
+                count: Int,
+            ): List<File> {
+                if (files.size <= count || count < 2) return files
+                return List(count) { i -> files[(i.toLong() * (files.size - 1) / (count - 1)).toInt()] }
+            }
+
             const val DIR_NAME = "timelapse"
             private const val EXTENSION = ".jpg"
             const val MAX_FRAMES = 3_600

@@ -33,7 +33,8 @@ data class CanvasActions(
 
 data class VideoActions(
     val onReplay: () -> Unit,
-    val onExport: () -> Unit,
+    /** Exports the recording; true for full length, false for a 30-second version. */
+    val onExport: (Boolean) -> Unit,
     val onClear: () -> Unit,
 )
 
@@ -103,7 +104,8 @@ fun ActionsPanel(
                 ActionsTab.Share -> ActionRow("Share or export artwork…", onShare)
                 ActionsTab.Video -> {
                     ActionRow("Time-lapse Replay", video.onReplay)
-                    ActionRow("Export Time-lapse Video", video.onExport)
+                    ActionRow("Export Time-lapse (Full length)", onClick = { video.onExport(true) })
+                    ActionRow("Export Time-lapse (30 seconds)", onClick = { video.onExport(false) })
                     ActionRow("Clear Time-lapse Recording", video.onClear)
                 }
                 ActionsTab.Prefs -> PrefsTab(prefs, prefActions)
