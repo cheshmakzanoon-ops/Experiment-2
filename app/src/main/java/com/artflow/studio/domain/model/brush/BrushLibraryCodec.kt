@@ -63,6 +63,8 @@ object BrushLibraryCodec {
                 params.opacity,
                 params.taperStart,
                 params.taperEnd,
+                params.taperOpacity,
+                params.falloff,
                 params.pressureToSize,
                 params.pressureToOpacity,
                 params.hueJitter,

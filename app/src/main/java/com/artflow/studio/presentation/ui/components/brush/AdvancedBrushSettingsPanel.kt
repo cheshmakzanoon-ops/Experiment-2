@@ -105,6 +105,14 @@ private fun BrushStrokeSettings(
             valueDisplay = "%.0f%%".format(brushParams.spacing * 100),
         )
 
+        BrushParameterSlider(
+            label = "Fall off",
+            value = brushParams.falloff,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(falloff = it)) },
+            valueRange = 0f..1f,
+            valueDisplay = if (brushParams.falloff <= 0f) "None" else "%.0f%%".format(brushParams.falloff * 100),
+        )
+
         // Smoothing Control
         BrushParameterSlider(
             label = "Smoothing",
@@ -147,6 +155,14 @@ private fun BrushTaperSettings(
             onValueChange = { onBrushParamsChanged(brushParams.copy(taperEnd = it)) },
             valueRange = 0f..1f,
             valueDisplay = "%.0f%%".format(brushParams.taperEnd * 100),
+        )
+
+        BrushParameterSlider(
+            label = "Taper opacity",
+            value = brushParams.taperOpacity,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(taperOpacity = it)) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.taperOpacity * 100),
         )
     }
 }

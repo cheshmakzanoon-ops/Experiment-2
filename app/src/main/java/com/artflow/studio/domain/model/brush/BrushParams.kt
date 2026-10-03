@@ -52,6 +52,8 @@ data class BrushParams(
     val blendMode: BlendMode = BlendMode.NORMAL, // How each stroke combines with the layer's existing paint
     val wetEdges: Float = 0f, // 0..1: paint pools toward the stroke's edges like watercolour
     val dual: DualBrush? = null, // Second brush combined with this one along the same path
+    val taperOpacity: Float = 0f, // 0..1: how much the tapered ends also fade
+    val falloff: Float = 0f, // 0..1: the stroke fades out along its path; 1 fades within one brush size
 ) {
     /** Imported grain and shape images this brush (and its second brush) paints with. */
     val imageIds: List<String>

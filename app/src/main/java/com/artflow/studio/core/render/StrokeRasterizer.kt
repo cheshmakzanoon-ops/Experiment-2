@@ -320,6 +320,8 @@ class StrokeRasterizer(
         // Tapering thins the stroke over the first and last portion of its length.
         val taper = taperFactor(params, accumulatedDistance, totalLength)
         val radius = max(0.35f, size * taper / 2f)
+        // Taper opacity fades the tapered ends as well, and fall off fades the stroke along its path.
+        val dabOpacity = opacity * (1f - params.taperOpacity.coerceIn(0f, 1f) * (1f - taper)) * falloffFactor(params, accumulatedDistance)
 
         val color = wetColor(params.applyColorJitter(stroke.color, pressure, velocity, random), context.canvas, x, y, params.wetMix)
 
@@ -338,7 +340,7 @@ class StrokeRasterizer(
                 x = x + offsetX,
                 y = y + offsetY,
                 radius = radius,
-                color = Channels.withAlpha(color, (Channels.alpha(color) * opacity).roundToInt().coerceIn(0, 255)),
+                color = Channels.withAlpha(color, (Channels.alpha(color) * dabOpacity).roundToInt().coerceIn(0, 255)),
                 strength = 1f,
                 // Flow controls deposited coverage; repeated strokes can build it up.
                 hardness = hardnessForFlow(params),
@@ -391,6 +393,7 @@ class StrokeRasterizer(
             points.first().pressure == points.last().pressure &&
             listOf(
                 params.scatter,
+                params.falloff,
                 params.taperStart,
                 params.taperEnd,
                 params.sizeJitter,
@@ -480,6 +483,17 @@ class StrokeRasterizer(
         val remaining = totalLength - travelled
         val endFactor = if (endRamp <= 0f) 1f else (remaining / endRamp).coerceIn(0.05f, 1f)
         return min(startFactor, endFactor)
+    }
+
+    /** Fall off: the stroke fades to nothing over one brush size at 1, and over 40 sizes near 0. */
+    private fun falloffFactor(
+        params: BrushParams,
+        travelled: Float,
+    ): Float {
+        val falloff = params.falloff.coerceIn(0f, 1f)
+        if (falloff <= 0f) return 1f
+        val length = max(1f, params.size * (1f + FALLOFF_RANGE * (1f - falloff)))
+        return (1f - travelled / length).coerceIn(0f, 1f)
     }
 
     /** The user-selected stroke opacity; pressure is evaluated per dab, never averaged. */
@@ -597,3 +611,6 @@ private const val TILT_SIZE_GAIN = 2f
 
 /** ... and this much lighter, like shading with the side of a pencil. */
 private const val TILT_OPACITY_LOSS = 0.6f
+
+/** Fall off at its gentlest spreads the fade over this many extra brush sizes. */
+private const val FALLOFF_RANGE = 39f

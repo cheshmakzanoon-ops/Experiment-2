@@ -94,4 +94,20 @@ class BrushRenderingTest {
         assertTrue("A flat pen reaches farther from the line", (flat.pixels[edge] ushr 24) > (upright.pixels[edge] ushr 24))
         assertTrue("A flat pen is lighter at the centre", (flat.pixels[10 * 40 + 20] ushr 24) < (upright.pixels[10 * 40 + 20] ushr 24))
     }
+
+    @Test fun fallOffAndTaperOpacityFadeTheStroke() {
+        val black = 0xFF000000.toInt()
+
+        fun alphaAt(
+            params: BrushParams,
+            x: Int,
+        ) = paint(params, black, 0).pixels[10 * 40 + x] ushr 24
+        val plain = BrushParams(size = 6f)
+        assertTrue(alphaAt(plain, 30) > 200)
+        val fading = plain.copy(falloff = 1f)
+        assertTrue(alphaAt(fading, 5) > 100)
+        assertTrue(alphaAt(fading, 30) == 0)
+        val tapered = plain.copy(taperEnd = 0.5f)
+        assertTrue(alphaAt(tapered.copy(taperOpacity = 1f), 26) < alphaAt(tapered, 26))
+    }
 }
