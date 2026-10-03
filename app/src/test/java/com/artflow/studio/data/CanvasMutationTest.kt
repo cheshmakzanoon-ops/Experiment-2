@@ -2,6 +2,7 @@ package com.artflow.studio.data
 
 import android.content.Context
 import com.artflow.studio.core.canvas.CanvasOperations
+import com.artflow.studio.core.color.ColorProfile
 import com.artflow.studio.core.pixels.AdjustmentProcessor
 import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.PixelBuffer
@@ -647,5 +648,16 @@ class CanvasMutationTest {
             assertEquals(listOf(middle, top, inner, bottom, outer), repository.getAllLayers().sortedBy { it.index }.map { it.id })
             assertEquals(null, parent(inner))
             assertEquals(inner, parent(middle))
+        }
+
+    @Test
+    fun theColourProfileIsAssignedAndUndone() =
+        runTest {
+            open()
+            assertEquals(ColorProfile.SRGB, repository.getColorProfile())
+            assertTrue(repository.setColorProfile(ColorProfile.DISPLAY_P3))
+            assertEquals(ColorProfile.DISPLAY_P3, repository.getColorProfile())
+            assertTrue(repository.undo())
+            assertEquals(ColorProfile.SRGB, repository.getColorProfile())
         }
 }

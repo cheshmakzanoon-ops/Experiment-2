@@ -1,5 +1,7 @@
 package com.artflow.studio.core.export
 
+import com.artflow.studio.core.color.ColorProfile
+import com.artflow.studio.core.color.IccProfile
 import com.artflow.studio.core.pixels.PixelBuffer
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
@@ -13,6 +15,7 @@ object PngCodec {
     fun encode(
         buffer: PixelBuffer,
         dpi: Int? = null,
+        profile: ColorProfile = ColorProfile.SRGB,
     ): ByteArray {
         require(dpi == null || dpi in 1..32_767) { "Invalid PNG resolution" }
         val bytes = ByteArrayOutputStream()
@@ -25,6 +28,14 @@ object PngCodec {
             it.write(byteArrayOf(8, 6, 0, 0, 0))
         }
         chunk(output, "IHDR", header.toByteArray())
+        IccProfile.forProfile(profile)?.let { icc ->
+            // iCCP: profile name, a NUL, compression method 0, then the zlib-compressed profile.
+            val data = ByteArrayOutputStream()
+            data.write(profile.label.toByteArray(Charsets.ISO_8859_1))
+            data.write(byteArrayOf(0, 0))
+            DeflaterOutputStream(data).use { it.write(icc) }
+            chunk(output, "iCCP", data.toByteArray())
+        }
         if (dpi != null) {
             val density = ByteArrayOutputStream(9)
             DataOutputStream(density).use {

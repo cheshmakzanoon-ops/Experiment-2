@@ -522,6 +522,11 @@ class ArtFlowCanvasView
             requestRender()
         }
 
+        fun setWideColor(enabled: Boolean) {
+            renderer.setWideColor(enabled)
+            requestRender()
+        }
+
         fun setOnionSkinEnabled(enabled: Boolean) {
             if (enabled == onionEnabled) return
             onionEnabled = enabled

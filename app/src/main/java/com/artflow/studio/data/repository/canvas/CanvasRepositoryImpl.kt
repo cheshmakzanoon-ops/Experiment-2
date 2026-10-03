@@ -2,6 +2,7 @@ package com.artflow.studio.data.repository.canvas
 
 import com.artflow.studio.core.animation.AnimationTimeline
 import com.artflow.studio.core.canvas.CanvasOperations
+import com.artflow.studio.core.color.ColorProfile
 import com.artflow.studio.core.pixels.AdjustmentProcessor
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.LayerMaskFactory
@@ -92,6 +93,7 @@ class CanvasRepositoryImpl
         private var canvasWidth = 1920
         private var canvasHeight = 1080
         private var canvasDpi = 72
+        private var colorProfile = ColorProfile.SRGB
         private var backgroundColor = 0xFFFFFFFF.toInt()
 
         private var frameList: MutableList<FrameData> = mutableListOf()
@@ -197,6 +199,7 @@ class CanvasRepositoryImpl
             canvasWidth = width
             canvasHeight = height
             canvasDpi = dpi.coerceIn(CanvasOperations.MIN_DPI, CanvasOperations.MAX_DPI)
+            colorProfile = ColorProfile.SRGB
             backgroundColor = 0xFFFFFFFF.toInt()
             animationSettings = AnimationSettings()
             pendingEdits.clear()
@@ -315,6 +318,7 @@ class CanvasRepositoryImpl
             canvasWidth = document.width
             canvasHeight = document.height
             canvasDpi = document.dpi
+            colorProfile = ColorProfile.from(document.colorProfile)
             backgroundColor = document.backgroundColor
             animationSettings = document.animation
             nextLayerId = max(document.nextLayerId, frames.flatMap { it.layers }.maxOfOrNull { it.id }?.plus(1) ?: 1L)
@@ -453,8 +457,12 @@ class CanvasRepositoryImpl
                     withContext(Dispatchers.Default) {
                         renderFrozen(snapshot.frames[snapshot.document.activeFrameIndex].layers, snapshot.document)
                     }
-                storage.saveFlattened(projectId, withContext(Dispatchers.Default) { BitmapPixelBridge.toPngBytes(composite) })
-                val thumbnail = withContext(Dispatchers.Default) { BitmapPixelBridge.toPngBytes(scaleDown(composite, 512)) }
+                // Tagged with the document's profile so viewers show Display P3 artwork correctly.
+                val profile = ColorProfile.from(snapshot.document.colorProfile)
+                val flattened = withContext(Dispatchers.Default) { BitmapPixelBridge.toPngBytes(composite, profile = profile) }
+                storage.saveFlattened(projectId, flattened)
+                val thumbnail =
+                    withContext(Dispatchers.Default) { BitmapPixelBridge.toPngBytes(scaleDown(composite, 512), profile = profile) }
                 val path = storage.saveThumbnail(projectId, thumbnail)
                 withState {
                     if (currentProjectId == projectId) {
@@ -1837,6 +1845,18 @@ class CanvasRepositoryImpl
                 true
             }
 
+        override fun getColorProfile(): ColorProfile = colorProfile
+
+        override suspend fun setColorProfile(profile: ColorProfile): Boolean =
+            withState {
+                if (profile == colorProfile) return@withState true
+                pushUndo()
+                colorProfile = profile
+                dirty = true
+                emit(CanvasInvalidationEvent.Full)
+                true
+            }
+
         override suspend fun setCanvasBackgroundColor(color: Int): Boolean =
             withState {
                 if (color == backgroundColor) return@withState true
@@ -2470,6 +2490,7 @@ class CanvasRepositoryImpl
             val dpi: Int,
             val backgroundColor: Int,
             val animation: AnimationSettings,
+            val colorProfile: ColorProfile = ColorProfile.SRGB,
         )
 
         /**
@@ -2505,6 +2526,7 @@ class CanvasRepositoryImpl
                 dpi = canvasDpi,
                 backgroundColor = backgroundColor,
                 animation = animationSettings,
+                colorProfile = colorProfile,
             ).also { markRastersShared() }
 
         private fun restore(snapshot: Snapshot) {
@@ -2525,6 +2547,7 @@ class CanvasRepositoryImpl
             canvasWidth = snapshot.width
             canvasHeight = snapshot.height
             canvasDpi = snapshot.dpi
+            colorProfile = snapshot.colorProfile
             backgroundColor = snapshot.backgroundColor
             animationSettings = snapshot.animation
             pendingEdits.clear()
@@ -2644,6 +2667,7 @@ class CanvasRepositoryImpl
                 width = canvasWidth,
                 height = canvasHeight,
                 dpi = canvasDpi,
+                colorProfile = colorProfile.name,
                 backgroundColor = backgroundColor,
                 activeLayerId = activeLayerId(),
                 nextLayerId = nextLayerId,

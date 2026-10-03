@@ -39,6 +39,8 @@ data class CanvasDocument(
     val width: Int,
     val height: Int,
     val dpi: Int,
+    /** A [com.artflow.studio.core.color.ColorProfile] name; documents before profiles are sRGB. */
+    val colorProfile: String = "SRGB",
     val backgroundColor: Int,
     val activeLayerId: Long,
     val nextLayerId: Long,

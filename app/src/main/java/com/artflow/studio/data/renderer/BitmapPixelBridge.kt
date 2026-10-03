@@ -11,6 +11,9 @@ import android.graphics.Region
 import android.net.Uri
 import android.os.Build
 import com.artflow.studio.core.canvas.CanvasOperations
+import com.artflow.studio.core.color.ColorProfile
+import com.artflow.studio.core.color.IccProfile
+import com.artflow.studio.core.export.JpegIcc
 import com.artflow.studio.core.export.PngCodec
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
@@ -48,7 +51,8 @@ object BitmapPixelBridge {
     fun toPngBytes(
         buffer: PixelBuffer,
         dpi: Int? = null,
-    ): ByteArray = PngCodec.encode(buffer, dpi)
+        profile: ColorProfile = ColorProfile.SRGB,
+    ): ByteArray = PngCodec.encode(buffer, dpi, profile)
 
     /**
      * Encodes to JPEG. JPEG has no alpha channel, so transparent pixels are composited over
@@ -59,6 +63,7 @@ object BitmapPixelBridge {
         quality: Int = 92,
         matteColor: Int = 0xFFFFFFFF.toInt(),
         dpi: Int = 72,
+        profile: ColorProfile = ColorProfile.SRGB,
     ): ByteArray {
         val flattened = PixelBuffer(buffer.width, buffer.height)
         for (i in flattened.pixels.indices) {
@@ -72,8 +77,10 @@ object BitmapPixelBridge {
         return try {
             ByteArrayOutputStream().use { out ->
                 check(bitmap.compress(Bitmap.CompressFormat.JPEG, quality.coerceIn(1, 100), out)) { "JPEG encoding failed" }
-                com.artflow.studio.core.export.JpegDensity
-                    .withDpi(out.toByteArray(), dpi)
+                val jpeg =
+                    com.artflow.studio.core.export.JpegDensity
+                        .withDpi(out.toByteArray(), dpi)
+                IccProfile.forProfile(profile)?.let { JpegIcc.withProfile(jpeg, it) } ?: jpeg
             }
         } finally {
             bitmap.recycle()

@@ -14,6 +14,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
 import androidx.core.graphics.createBitmap
+import com.artflow.studio.core.color.ColorProfiles
 import com.artflow.studio.core.export.ApngEncoder
 import com.artflow.studio.core.export.ExportError
 import com.artflow.studio.core.export.ExportFormat
@@ -104,13 +105,14 @@ class ArtworkExporter
 
                     val bytes: ByteArray =
                         when (options.format) {
-                            ExportFormat.PNG -> BitmapPixelBridge.toPngBytes(flatten(prepared, options), options.dpi)
+                            ExportFormat.PNG -> BitmapPixelBridge.toPngBytes(flatten(prepared, options), options.dpi, options.outputProfile)
                             ExportFormat.JPEG ->
                                 BitmapPixelBridge.toJpegBytes(
                                     flatten(prepared, options),
                                     options.quality,
-                                    options.backgroundColor,
+                                    options.outputBackground,
                                     options.dpi,
+                                    options.outputProfile,
                                 )
                             ExportFormat.WEBP ->
                                 BitmapPixelBridge.toWebpBytes(
@@ -202,13 +204,15 @@ class ArtworkExporter
                                     loops = if (options.gifLoop) 0 else 1,
                                 )
                             ExportFormat.FRAME_SEQUENCE -> buildFrameSequenceZip(prepared, projectName, options)
-                            ExportFormat.PNG -> BitmapPixelBridge.toPngBytes(flatten(prepared.first(), options), options.dpi)
+                            ExportFormat.PNG ->
+                                BitmapPixelBridge.toPngBytes(flatten(prepared.first(), options), options.dpi, options.outputProfile)
                             ExportFormat.JPEG ->
                                 BitmapPixelBridge.toJpegBytes(
                                     flatten(prepared.first(), options),
                                     options.quality,
-                                    options.backgroundColor,
+                                    options.outputBackground,
                                     options.dpi,
+                                    options.outputProfile,
                                 )
                             ExportFormat.PDF -> buildPdf(prepared, options)
                             else -> return@withContext Result.failure(
@@ -329,7 +333,7 @@ class ArtworkExporter
                     0,
                     PsdCodec.PsdLayer(
                         "Export background",
-                        PixelBuffer.filled(composite.width, composite.height, options.backgroundColor or 0xFF000000.toInt()),
+                        PixelBuffer.filled(composite.width, composite.height, options.outputBackground or 0xFF000000.toInt()),
                     ),
                 )
             }
@@ -364,7 +368,7 @@ class ArtworkExporter
                 height = height,
                 delaysMs = delaysMs,
                 loop = options.gifLoop,
-                matteColor = options.backgroundColor,
+                matteColor = options.outputBackground,
                 keepTransparency = options.keepGifTransparency && !options.flattenOntoBackground,
             )
         }
@@ -382,11 +386,12 @@ class ArtworkExporter
                 layers.forEachIndexed { index, entry ->
                     val name = ExportNaming.sanitize(entry.name).ifEmpty { "Layer" }
                     zip.putNextEntry(ZipEntry("%s_%02d_%s.png".format(prefix, index + 1, name)))
-                    zip.write(BitmapPixelBridge.toPngBytes(prepare(entry.buffer, composite.width, composite.height, options), options.dpi))
+                    val pixels = prepare(entry.buffer, composite.width, composite.height, options)
+                    zip.write(BitmapPixelBridge.toPngBytes(pixels, options.dpi, options.outputProfile))
                     zip.closeEntry()
                 }
                 zip.putNextEntry(ZipEntry("%s_composite.png".format(prefix)))
-                zip.write(BitmapPixelBridge.toPngBytes(flatten(composite, options), options.dpi))
+                zip.write(BitmapPixelBridge.toPngBytes(flatten(composite, options), options.dpi, options.outputProfile))
                 zip.closeEntry()
             }
             return out.toByteArray()
@@ -425,13 +430,14 @@ class ArtworkExporter
             }
         }
 
-        /** Applies the output scale and fit mode, returning a freshly sized buffer. */
+        /** Converts to the output profile and applies the output scale and fit mode. */
         private fun prepare(
-            source: PixelBuffer,
+            artwork: PixelBuffer,
             targetWidth: Int,
             targetHeight: Int,
             options: ExportOptions,
         ): PixelBuffer {
+            val source = ColorProfiles.convert(artwork, options.colorProfile, options.outputProfile)
             if (source.width == targetWidth && source.height == targetHeight) return source
             return if (options.fitMode == FitMode.STRETCH) {
                 source.scaled(targetWidth, targetHeight)
@@ -446,7 +452,7 @@ class ArtworkExporter
                     )
                 val resized = source.scaled(placement.drawWidth, placement.drawHeight)
                 val canvas = PixelBuffer(placement.outputWidth, placement.outputHeight)
-                if (options.flattenOntoBackground) canvas.fill(options.backgroundColor)
+                if (options.flattenOntoBackground) canvas.fill(options.outputBackground)
                 canvas.drawInto(resized, placement.offsetX, placement.offsetY)
                 canvas
             }
@@ -460,7 +466,7 @@ class ArtworkExporter
             if (!options.flattenOntoBackground) return source
             val out = PixelBuffer(source.width, source.height)
             for (i in out.pixels.indices) {
-                out.pixels[i] = BlendModes.sourceOver(options.backgroundColor or 0xFF000000.toInt(), source.pixels[i])
+                out.pixels[i] = BlendModes.sourceOver(options.outputBackground or 0xFF000000.toInt(), source.pixels[i])
             }
             return out
         }

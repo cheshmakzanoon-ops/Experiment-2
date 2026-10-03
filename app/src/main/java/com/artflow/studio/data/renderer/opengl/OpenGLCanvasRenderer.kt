@@ -54,6 +54,9 @@ class OpenGLCanvasRenderer
         @Volatile
         private var showCheckerboard = true
 
+        @Volatile
+        private var wideColor = false
+
         // --- Programs ------------------------------------------------------------------------------
 
         private var quadProgram = 0
@@ -65,6 +68,7 @@ class OpenGLCanvasRenderer
         private var quadAlphaHandle = 0
         private var quadCanvasSizeHandle = 0
         private var quadUseTextureHandle = 0
+        private var quadWideColorHandle = 0
 
         // --- Textures ------------------------------------------------------------------------------
 
@@ -138,6 +142,7 @@ class OpenGLCanvasRenderer
             quadAlphaHandle = GLES20.glGetUniformLocation(quadProgram, "uAlpha")
             quadCanvasSizeHandle = GLES20.glGetUniformLocation(quadProgram, "uCanvasSize")
             quadUseTextureHandle = GLES20.glGetUniformLocation(quadProgram, "uUseTexture")
+            quadWideColorHandle = GLES20.glGetUniformLocation(quadProgram, "uWideColor")
 
             checkerTexture = createCheckerboardTexture()
             isInitialized = true
@@ -170,6 +175,7 @@ class OpenGLCanvasRenderer
             GLES20.glUniform2f(quadCanvasSizeHandle, canvasWidth.toFloat(), canvasHeight.toFloat())
             GLES20.glUniform1f(quadAlphaHandle, 1f)
             GLES20.glUniform4f(quadTintHandle, 1f, 1f, 1f, 1f)
+            GLES20.glUniform1f(quadWideColorHandle, if (wideColor) 1f else 0f)
 
             if (showCheckerboard) {
                 GLES20.glUniform1f(quadUseTextureHandle, 1f)
@@ -342,6 +348,11 @@ class OpenGLCanvasRenderer
 
         fun setCheckerboardVisible(visible: Boolean) {
             showCheckerboard = visible
+        }
+
+        /** Display P3 artwork: its values are converted to sRGB on screen. */
+        fun setWideColor(enabled: Boolean) {
+            wideColor = enabled
         }
 
         /** Called only AFTER GLSurfaceView has stopped its GL thread and destroyed the surface. */
@@ -579,12 +590,29 @@ class OpenGLCanvasRenderer
             uniform vec4 uTint;
             uniform float uAlpha;
             uniform float uUseTexture;
+            uniform float uWideColor;
             varying vec2 vTexCoord;
+            // Linear Display P3 to linear sRGB (column-major).
+            const mat3 P3_TO_SRGB = mat3(
+                1.2249402, -0.0420570, -0.0196376,
+                -0.2249402, 1.0420570, -0.0786361,
+                0.0, 0.0, 1.0982736);
+            vec3 toLinear(vec3 c) {
+                return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
+            }
+            vec3 toEncoded(vec3 c) {
+                return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
+            }
             void main() {
                 vec4 sampled = texture2D(uTexture, vTexCoord);
                 // uUseTexture = 1 samples the texture, 0 produces a solid tinted quad.
                 vec4 texel = mix(vec4(1.0, 1.0, 1.0, 1.0), sampled, uUseTexture);
-                gl_FragColor = texel * uTint * uAlpha;
+                vec4 color = texel * uTint * uAlpha;
+                if (uWideColor > 0.5 && color.a > 0.0) {
+                    vec3 srgb = clamp(P3_TO_SRGB * toLinear(color.rgb / color.a), 0.0, 1.0);
+                    color.rgb = toEncoded(srgb) * color.a;
+                }
+                gl_FragColor = color;
             }
         """
         }

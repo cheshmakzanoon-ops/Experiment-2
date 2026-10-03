@@ -1,6 +1,7 @@
 package com.artflow.studio.domain.repository.canvas
 
 import com.artflow.studio.core.animation.AnimationTimeline
+import com.artflow.studio.core.color.ColorProfile
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.PixelBuffer
@@ -480,6 +481,12 @@ interface CanvasRepository {
     suspend fun trimTransparent(): Boolean
 
     suspend fun setCanvasDpi(dpi: Int): Boolean
+
+    /** The colour space pixel values are stored in. */
+    fun getColorProfile(): ColorProfile = ColorProfile.SRGB
+
+    /** Assigns [profile]: pixel values stay as they are and are read in the new space. Undoable. */
+    suspend fun setColorProfile(profile: ColorProfile): Boolean = false
 
     suspend fun setCanvasBackgroundColor(color: Int): Boolean
 

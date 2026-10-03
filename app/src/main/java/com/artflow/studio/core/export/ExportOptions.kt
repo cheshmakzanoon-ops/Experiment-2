@@ -1,6 +1,8 @@
 package com.artflow.studio.core.export
 
 import com.artflow.studio.core.canvas.CanvasOperations
+import com.artflow.studio.core.color.ColorProfile
+import com.artflow.studio.core.color.ColorProfiles
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -29,6 +31,9 @@ enum class ExportFormat(
     APNG("Animated PNG", "png", "image/png", requiresAnimation = true),
     FRAME_SEQUENCE("PNG frames (zip)", "zip", "application/zip", requiresAnimation = true),
     ;
+
+    /** Formats that embed an ICC profile, so Display P3 artwork keeps its colours. */
+    val keepsColorProfile: Boolean get() = this == PNG || this == JPEG || this == LAYER_PNGS
 
     /** Formats built from the individual layers as well as the composite. */
     val needsLayers: Boolean get() = this == PSD || this == LAYER_PNGS
@@ -78,6 +83,8 @@ data class ExportOptions(
     val backgroundColor: Int = 0xFFFFFFFF.toInt(),
     /** DPI recorded in PNG/JPEG/PDF metadata. */
     val dpi: Int = 72,
+    /** The document's colour profile; see [outputProfile]. */
+    val colorProfile: ColorProfile = ColorProfile.SRGB,
     /** Fill / fit / stretch when the export size differs from the canvas aspect ratio. */
     val fitMode: FitMode = FitMode.STRETCH,
     val fileName: String? = null,
@@ -93,7 +100,13 @@ data class ExportOptions(
     /** PSD options. */
     val psdUseRle: Boolean = true,
     val psdGroupLayers: Boolean = true,
-)
+) {
+    /** The profile written into the file: formats that cannot carry [colorProfile] get sRGB pixels. */
+    val outputProfile: ColorProfile get() = if (format.keepsColorProfile) colorProfile else ColorProfile.SRGB
+
+    /** [backgroundColor] in [outputProfile]. */
+    val outputBackground: Int get() = ColorProfiles.convert(backgroundColor, colorProfile, outputProfile)
+}
 
 /** How an export is fitted into the requested output size. */
 enum class FitMode(

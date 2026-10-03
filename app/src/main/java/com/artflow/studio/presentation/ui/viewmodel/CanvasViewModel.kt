@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.artflow.studio.core.animation.AnimationTimeline
 import com.artflow.studio.core.animation.PlaybackStepper
 import com.artflow.studio.core.color.ColorHarmony
+import com.artflow.studio.core.color.ColorProfile
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.color.PaletteLibrary
 import com.artflow.studio.core.export.ExportArea
@@ -81,6 +82,7 @@ sealed class CanvasUiState {
         val frameCount: Int,
         val recoveryAvailable: Boolean = false,
         val backgroundColor: Int = 0xFFFFFFFF.toInt(),
+        val colorProfile: ColorProfile = ColorProfile.SRGB,
     ) : CanvasUiState()
 
     data class Error(
@@ -429,6 +431,7 @@ class CanvasViewModel
                         height = size.height,
                         dpi = size.dpi,
                         backgroundColor = canvasRepository.getBackgroundColor(),
+                        colorProfile = canvasRepository.getColorProfile(),
                     )
             }
         }
@@ -1238,9 +1241,9 @@ class CanvasViewModel
                     val name = project?.name ?: "Artwork"
                     val resolved =
                         if (options.area == ExportArea.ALL_FRAMES && options.format == ExportFormat.PNG) {
-                            options.copy(format = ExportFormat.FRAME_SEQUENCE)
+                            options.copy(format = ExportFormat.FRAME_SEQUENCE, colorProfile = canvasRepository.getColorProfile())
                         } else {
-                            options
+                            options.copy(colorProfile = canvasRepository.getColorProfile())
                         }
                     val allFrames =
                         resolved.area == ExportArea.ALL_FRAMES ||

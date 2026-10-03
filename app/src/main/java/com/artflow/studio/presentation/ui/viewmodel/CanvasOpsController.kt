@@ -1,6 +1,7 @@
 package com.artflow.studio.presentation.ui.viewmodel
 
 import com.artflow.studio.core.canvas.CanvasOperations
+import com.artflow.studio.core.color.ColorProfile
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import kotlinx.coroutines.CoroutineScope
@@ -98,6 +99,11 @@ class CanvasOpsController(
 
     fun setCanvasBackgroundColor(color: Int) {
         scope.launch { repository.setCanvasBackgroundColor(color) }
+    }
+
+    /** Assigns the colour profile the canvas's colours are read in; undoable. */
+    fun setColorProfile(profile: ColorProfile) {
+        scope.launch { if (repository.setColorProfile(profile)) notify("Colour profile: ${profile.label}") }
     }
 
     private fun canvasSize(): Triple<Int, Int, Int> {

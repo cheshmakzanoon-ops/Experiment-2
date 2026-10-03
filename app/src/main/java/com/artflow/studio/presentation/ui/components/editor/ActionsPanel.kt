@@ -33,6 +33,9 @@ data class CanvasActions(
     val onReference: () -> Unit,
     val onFlip: (vertical: Boolean) -> Unit,
     val onPageAssist: () -> Unit = {},
+    /** True when the canvas uses the Display P3 profile instead of sRGB. */
+    val wideColor: Boolean = false,
+    val onWideColor: (Boolean) -> Unit = {},
 )
 
 data class VideoActions(
@@ -80,6 +83,7 @@ data class CanvasInfo(
     val dpi: Int,
     val layers: Int,
     val frames: Int,
+    val profile: String = "sRGB IEC61966-2.1",
 )
 
 private enum class ActionsTab { Add, Canvas, Share, Video, Prefs, Help }
@@ -160,10 +164,11 @@ private fun CanvasTab(
     ActionRow("Reference", canvas.onReference)
     ActionRow("Flip canvas horizontally", onClick = { canvas.onFlip(false) })
     ActionRow("Flip canvas vertically", onClick = { canvas.onFlip(true) })
+    PrefSwitch("Display P3 colour profile", canvas.wideColor, canvas.onWideColor)
     HorizontalDivider()
     Text("Canvas information", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
     Text(
-        "${info.width} × ${info.height} px · ${info.dpi} dpi · ${info.layers} layers · ${info.frames} frame(s)",
+        "${info.width} × ${info.height} px · ${info.dpi} dpi · ${info.layers} layers · ${info.frames} frame(s) · ${info.profile}",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = 8.dp),

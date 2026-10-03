@@ -40,6 +40,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.artflow.studio.core.canvas.CropBox
+import com.artflow.studio.core.color.ColorProfile
 import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.LiveAdjustments
 import com.artflow.studio.core.pixels.Quad
@@ -673,7 +674,15 @@ fun CanvasScreen(
                 )
             EditorPanel.ACTIONS ->
                 ActionsPanel(
-                    info = CanvasInfo(ready?.width ?: 0, ready?.height ?: 0, ready?.dpi ?: 72, layers.size, ready?.frameCount ?: 1),
+                    info =
+                        CanvasInfo(
+                            ready?.width ?: 0,
+                            ready?.height ?: 0,
+                            ready?.dpi ?: 72,
+                            layers.size,
+                            ready?.frameCount ?: 1,
+                            (ready?.colorProfile ?: ColorProfile.SRGB).label,
+                        ),
                     prefs =
                         StudioPrefs(
                             settings.rightHandedInterface,
@@ -705,6 +714,10 @@ fun CanvasScreen(
                         ),
                     canvas =
                         CanvasActions(
+                            wideColor = ready?.colorProfile == ColorProfile.DISPLAY_P3,
+                            onWideColor = { wide ->
+                                viewModel.canvasOps.setColorProfile(if (wide) ColorProfile.DISPLAY_P3 else ColorProfile.SRGB)
+                            },
                             onCropResize = {
                                 // Crop & Resize starts with the box on the canvas; Settings has the exact sizes.
                                 panel = EditorPanel.NONE
@@ -907,6 +920,7 @@ fun CanvasScreen(
                             view.setActiveLayerId(activeLayerId)
                             view.setOnionSkinEnabled(settings.onionSkin)
                             view.setCheckerboardVisible(settings.checkerboard)
+                            view.setWideColor(state.colorProfile == ColorProfile.DISPLAY_P3)
                         },
                         modifier = Modifier.fillMaxSize(),
                     )
