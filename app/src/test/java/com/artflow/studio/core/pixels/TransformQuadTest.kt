@@ -84,4 +84,33 @@ class TransformQuadTest {
         assertEquals(100f, fitted.x1, 1e-3f)
         assertEquals(25f, fitted.y0, 1e-3f)
     }
+
+    @Test fun magneticsLockMovesAndRotationSteps() {
+        val box = Quad(10f, 10f, 30f, 10f, 30f, 30f, 10f, 30f)
+        val assist = TransformQuad.Assist(magnetics = true)
+        val area = TransformQuad.SnapArea(100, 100, 0f)
+        val moved = TransformQuad.drag(box, Target.Body, TransformQuad.Mode.FREEFORM, 0f to 0f, 20f to 2f, assist, area)
+        assertEquals("A nearly horizontal move stays level", 10f, moved.y0, 1e-3f)
+        assertEquals(30f, moved.x0, 1e-3f)
+        // Dragging the knob a little under 15° rounds to exactly 15°.
+        val turned = TransformQuad.drag(box, Target.Rotate, TransformQuad.Mode.FREEFORM, 40f to 20f, 40f to 25f, assist, area)
+        val angle = Math.toDegrees(kotlin.math.atan2((turned.y1 - turned.y0).toDouble(), (turned.x1 - turned.x0).toDouble()))
+        assertEquals(15.0, angle, 1e-2)
+        // A Freeform corner keeps the square's proportions.
+        val scaled = TransformQuad.drag(box, Target.Corner(2), TransformQuad.Mode.FREEFORM, 30f to 30f, 40f to 34f, assist, area)
+        assertEquals(scaled.x1 - scaled.x0, scaled.y3 - scaled.y0, 1e-3f)
+    }
+
+    @Test fun snappingAlignsTheBoxWithCanvasLines() {
+        val box = Quad(10f, 10f, 30f, 10f, 30f, 30f, 10f, 30f)
+        val assist = TransformQuad.Assist(snapping = true)
+        val area = TransformQuad.SnapArea(100, 80, 4f)
+        // Centre ends at (48, 61): x snaps to the canvas centre, y is too far from any line.
+        val moved = TransformQuad.drag(box, Target.Body, TransformQuad.Mode.FREEFORM, 0f to 0f, 28f to 41f, assist, area)
+        assertEquals(50f, moved.centerX, 1e-3f)
+        assertEquals(61f, moved.centerY, 1e-3f)
+        val (columns, rows) = TransformQuad.alignedGuides(moved, 100, 80)
+        assertEquals(listOf(50f), columns)
+        assertTrue(rows.isEmpty())
+    }
 }

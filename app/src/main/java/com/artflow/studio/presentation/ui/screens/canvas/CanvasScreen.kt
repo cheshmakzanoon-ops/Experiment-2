@@ -857,6 +857,7 @@ fun CanvasScreen(
                     canvasHeight = ready.height,
                     view = ViewTransform(viewScale, viewOffsetX, viewOffsetY, viewRotation),
                     modifier = Modifier.fillMaxSize(),
+                    snapping = input.transformAssist.snapping,
                 )
             }
             colorDropThreshold?.let { threshold ->
@@ -1257,8 +1258,10 @@ private fun ContextToolbar(
                         onFit = { canvasView?.fitTransformToCanvas() },
                         onReset = { canvasView?.resetTransform() },
                         onInterpolation = viewModel::setTransformInterpolation,
+                        onAssist = viewModel::setTransformAssist,
                     ),
                 modifier = modifier,
+                assist = input.transformAssist,
             )
         input.strokeDestination.isMask ->
             AssistChip(

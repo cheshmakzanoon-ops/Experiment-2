@@ -8,6 +8,7 @@ import kotlin.math.floor
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /**
@@ -228,6 +229,119 @@ object TransformQuad {
             is Target.Edge -> dragEdge(start, target.index, mode, x - sx, y - sy)
         }
 
+    /** Procreate's Magnetics and Snapping toggles for a transform drag. */
+    data class Assist(
+        /** Moves lock to 45° directions, rotation to 15° steps and Freeform corners keep proportions. */
+        val magnetics: Boolean = false,
+        /** The box's edges and centre snap to the canvas edges and centre lines. */
+        val snapping: Boolean = false,
+    )
+
+    /** Canvas size and snap distance (canvas pixels) for [Assist.snapping]. */
+    data class SnapArea(
+        val width: Int,
+        val height: Int,
+        val tolerance: Float,
+    )
+
+    /** [drag] with Magnetics and Snapping applied. */
+    fun drag(
+        start: Quad,
+        target: Target,
+        mode: Mode,
+        from: Pair<Float, Float>,
+        to: Pair<Float, Float>,
+        assist: Assist,
+        area: SnapArea,
+    ): Quad {
+        val (sx, sy) = from
+        val (x, y) = to
+        return when {
+            target == Target.Body -> {
+                val (dx, dy) = if (assist.magnetics) lockToAxis(x - sx, y - sy) else (x - sx) to (y - sy)
+                translate(start, dx, dy).let { if (assist.snapping) snapToCanvas(it, area) else it }
+            }
+            target == Target.Rotate && assist.magnetics -> {
+                val a0 = atan2(sy - start.centerY, sx - start.centerX)
+                val a1 = atan2(y - start.centerY, x - start.centerX)
+                val degrees = Math.toDegrees((a1 - a0).toDouble()).toFloat()
+                rotate(start, (degrees / ROTATION_STEP).roundToInt() * ROTATION_STEP)
+            }
+            target is Target.Corner && assist.magnetics && mode == Mode.FREEFORM ->
+                dragCorner(start, target.index, Mode.UNIFORM, x - sx, y - sy)
+            else -> drag(start, target, mode, sx, sy, x, y)
+        }
+    }
+
+    /** Projects a move onto the nearest horizontal, vertical or diagonal direction. */
+    fun lockToAxis(
+        dx: Float,
+        dy: Float,
+    ): Pair<Float, Float> {
+        if (dx == 0f && dy == 0f) return 0f to 0f
+        val step = Math.PI / 4
+        val angle = (atan2(dy.toDouble(), dx.toDouble()) / step).roundToInt() * step
+        val ux = cos(angle).toFloat()
+        val uy = sin(angle).toFloat()
+        val along = dx * ux + dy * uy
+        return ux * along to uy * along
+    }
+
+    /** Shifts [q] so its nearest edge or centre lands on a canvas edge or centre line within the tolerance. */
+    fun snapToCanvas(
+        q: Quad,
+        area: SnapArea,
+    ): Quad {
+        val minX = min(min(q.x0, q.x1), min(q.x2, q.x3))
+        val maxX = max(max(q.x0, q.x1), max(q.x2, q.x3))
+        val minY = min(min(q.y0, q.y1), min(q.y2, q.y3))
+        val maxY = max(max(q.y0, q.y1), max(q.y2, q.y3))
+        val dx = snapShift(floatArrayOf(minX, (minX + maxX) / 2f, maxX), area.width.toFloat(), area.tolerance)
+        val dy = snapShift(floatArrayOf(minY, (minY + maxY) / 2f, maxY), area.height.toFloat(), area.tolerance)
+        return if (dx == 0f && dy == 0f) q else translate(q, dx, dy)
+    }
+
+    /**
+     * Canvas guide lines the box currently sits on: x positions of vertical lines and y positions of
+     * horizontal lines among the canvas edges and centre lines.
+     */
+    fun alignedGuides(
+        q: Quad,
+        width: Int,
+        height: Int,
+    ): Pair<List<Float>, List<Float>> {
+        val minX = min(min(q.x0, q.x1), min(q.x2, q.x3))
+        val maxX = max(max(q.x0, q.x1), max(q.x2, q.x3))
+        val minY = min(min(q.y0, q.y1), min(q.y2, q.y3))
+        val maxY = max(max(q.y0, q.y1), max(q.y2, q.y3))
+
+        fun touching(
+            edges: List<Float>,
+            size: Float,
+        ) = listOf(0f, size / 2f, size).filter { line -> edges.any { abs(it - line) < GUIDE_EPSILON } }
+        return touching(listOf(minX, (minX + maxX) / 2f, maxX), width.toFloat()) to
+            touching(listOf(minY, (minY + maxY) / 2f, maxY), height.toFloat())
+    }
+
+    private fun snapShift(
+        edges: FloatArray,
+        size: Float,
+        tolerance: Float,
+    ): Float {
+        var best = 0f
+        var bestDistance = tolerance
+        for (line in floatArrayOf(0f, size / 2f, size)) {
+            for (edge in edges) {
+                val distance = abs(line - edge)
+                if (distance <= bestDistance) {
+                    bestDistance = distance
+                    best = line - edge
+                }
+            }
+        }
+        return best
+    }
+
     private fun dragCorner(
         q: Quad,
         i: Int,
@@ -431,4 +545,6 @@ object TransformQuad {
     }
 
     private const val MIN_FACTOR = 0.02f
+    private const val ROTATION_STEP = 15f
+    private const val GUIDE_EPSILON = 0.5f
 }

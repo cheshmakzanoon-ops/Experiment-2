@@ -116,6 +116,8 @@ data class EditorInput(
     /** How a one-finger drag edits the active layer while the transform tool is selected. */
     val transformMode: TransformQuad.Mode = TransformQuad.Mode.FREEFORM,
     val transformInterpolation: TransformQuad.Interpolation = TransformQuad.Interpolation.BILINEAR,
+    /** Transform Magnetics and Snapping. */
+    val transformAssist: TransformQuad.Assist = TransformQuad.Assist(),
     /** Holding the pen still at the end of a stroke snaps it to a line or ellipse. */
     val quickShape: Boolean = true,
     /** A finger held still for a moment samples colour, like Procreate's touch-and-hold eyedropper. */
@@ -874,7 +876,17 @@ class ArtFlowCanvasView
                 transformPreviewMesh = (warpStartMesh ?: return).drag(warpTarget, x - moveOriginX(), y - moveOriginY())
             } else {
                 val start = transformStartQuad ?: return
-                transformPreviewQuad = TransformQuad.drag(start, transformTarget, input.transformMode, moveOriginX(), moveOriginY(), x, y)
+                val area = TransformQuad.SnapArea(session.base.width, session.base.height, SNAP_DISTANCE_PX / scale)
+                transformPreviewQuad =
+                    TransformQuad.drag(
+                        start,
+                        transformTarget,
+                        input.transformMode,
+                        moveOriginX() to moveOriginY(),
+                        x to y,
+                        input.transformAssist,
+                        area,
+                    )
             }
             publishTransformQuad()
             val now = System.currentTimeMillis()
@@ -2383,6 +2395,7 @@ class ArtFlowCanvasView
             private const val HOLD_EYEDROPPER_MS = 500L
             private const val HANDLE_TOUCH_PX = 36f
             private const val KNOB_DISTANCE_PX = 48f
+            private const val SNAP_DISTANCE_PX = 12f
             private const val TRANSFORM_PREVIEW_INTERVAL_MS = 33L
             private const val TAP_TIMEOUT_MS = 320L
             private const val SNAP_TOLERANCE = 12f

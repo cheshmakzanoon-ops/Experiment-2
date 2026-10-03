@@ -595,6 +595,8 @@ class CanvasViewModel
 
         fun setTransformMode(mode: TransformQuad.Mode) = updateInput { it.copy(transformMode = mode) }
 
+        fun setTransformAssist(assist: TransformQuad.Assist) = updateInput { it.copy(transformAssist = assist) }
+
         fun setTransformInterpolation(interpolation: TransformQuad.Interpolation) =
             updateInput { it.copy(transformInterpolation = interpolation) }
 

@@ -348,6 +348,7 @@ data class TransformToolbarActions(
     val onFit: () -> Unit,
     val onReset: () -> Unit,
     val onInterpolation: (TransformQuad.Interpolation) -> Unit,
+    val onAssist: (TransformQuad.Assist) -> Unit = {},
 )
 
 /** Transform bar: how corner handles behave, plus Procreate's one-tap transform buttons. */
@@ -357,11 +358,23 @@ fun TransformToolbar(
     interpolation: TransformQuad.Interpolation,
     actions: TransformToolbarActions,
     modifier: Modifier = Modifier,
+    assist: TransformQuad.Assist = TransformQuad.Assist(),
 ) {
     FloatingBar(modifier) {
         TransformQuad.Mode.entries.forEach { entry ->
             FilterChip(selected = mode == entry, onClick = { actions.onMode(entry) }, label = { Text(entry.displayName) })
         }
+        VerticalDivider(Modifier.height(24.dp))
+        FilterChip(
+            selected = assist.magnetics,
+            onClick = { actions.onAssist(assist.copy(magnetics = !assist.magnetics)) },
+            label = { Text("Magnetics") },
+        )
+        FilterChip(
+            selected = assist.snapping,
+            onClick = { actions.onAssist(assist.copy(snapping = !assist.snapping)) },
+            label = { Text("Snapping") },
+        )
         VerticalDivider(Modifier.height(24.dp))
         AssistChip(onClick = { actions.onFlip(true) }, label = { Text("Flip Horizontal") })
         AssistChip(onClick = { actions.onFlip(false) }, label = { Text("Flip Vertical") })
@@ -395,8 +408,10 @@ fun TransformOverlay(
     canvasHeight: Int,
     view: ViewTransform,
     modifier: Modifier = Modifier,
+    snapping: Boolean = false,
 ) {
     val accent = MaterialTheme.colorScheme.primary
+    val guide = MaterialTheme.colorScheme.tertiary
     Canvas(modifier) {
         val scale = view.scale.coerceAtLeast(0.01f)
         withTransform({
@@ -407,6 +422,12 @@ fun TransformOverlay(
         }) {
             val line = 1.5f / scale
             val handle = 7f / scale
+            if (snapping) {
+                // Snapping guides: the canvas edges and centre lines the box currently sits on.
+                val (columns, rows) = TransformQuad.alignedGuides(quad, canvasWidth, canvasHeight)
+                columns.forEach { drawLine(guide, Offset(it, 0f), Offset(it, canvasHeight.toFloat()), strokeWidth = line) }
+                rows.forEach { drawLine(guide, Offset(0f, it), Offset(canvasWidth.toFloat(), it), strokeWidth = line) }
+            }
             val points = (0 until 4).map { Offset(quad.x(it), quad.y(it)) }
             for (i in 0 until 4) drawLine(accent, points[i], points[(i + 1) % 4], strokeWidth = line)
             val (kx, ky) = TransformQuad.rotationKnob(quad, KNOB_DISTANCE_PX / scale)
