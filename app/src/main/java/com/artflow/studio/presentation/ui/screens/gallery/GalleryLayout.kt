@@ -52,11 +52,12 @@ internal data class GalleryLayout(
 internal fun StackCard(
     name: String,
     members: List<Project>,
+    modifier: Modifier = Modifier,
     onOpen: () -> Unit,
 ) {
     Card(
         modifier =
-            Modifier
+            modifier
                 .fillMaxWidth()
                 .clickable(onClick = onOpen)
                 .semantics { contentDescription = "Stack $name" },

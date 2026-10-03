@@ -26,4 +26,10 @@ class GalleryLayoutTest {
         assertEquals(4, search.projects.size)
         assertEquals(0, search.stacks.size)
     }
+
+    @Test fun newStacksGetTheFirstFreeName() {
+        assertEquals("Stack", newStackName(emptyList()))
+        assertEquals("Stack 2", newStackName(listOf("Stack")))
+        assertEquals("Stack 3", newStackName(listOf("Stack", "Stack 2", "Sketches")))
+    }
 }

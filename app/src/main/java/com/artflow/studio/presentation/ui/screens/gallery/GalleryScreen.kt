@@ -68,6 +68,8 @@ fun GalleryScreen(
     // Select mode: null while browsing, otherwise the chosen artworks.
     var selection by remember { mutableStateOf<Set<Long>?>(null) }
     var batch by remember { mutableStateOf<GalleryBatch?>(null) }
+    val drag = rememberGalleryDrag()
+    val onDrop: (Long, GalleryDrop) -> Unit = { id, target -> dropArtwork(viewModel, uiState, id, target) }
     BackHandler(enabled = selection != null) { selection = null }
     BackHandler(enabled = openStack != null && selection == null) { openStack = null }
     LaunchedEffect(uiState, openStack) {
@@ -185,7 +187,7 @@ fun GalleryScreen(
                         ) {
                             val layout = GalleryLayout.of(state.projects, openStack, searching = query.isNotEmpty())
                             items(layout.stacks, key = { "stack:${it.first}" }) { (name, members) ->
-                                StackCard(name, members) { openStack = name }
+                                StackCard(name, members, Modifier.stackDropTarget(drag, name)) { openStack = name }
                             }
                             items(layout.projects, key = { it.id }) { project ->
                                 val chosen = selection
@@ -206,6 +208,7 @@ fun GalleryScreen(
                                     onStack = { stackTarget = project },
                                     onPreview = { preview = layout.projects to layout.projects.indexOf(project) },
                                     onShare = { scope.launch { shareProject(viewModel, project, context, snackbarHostState) } },
+                                    modifier = if (chosen == null) Modifier.draggableArtwork(drag, project.id, onDrop) else Modifier,
                                 )
                             }
                         }
@@ -327,6 +330,24 @@ private suspend fun shareProject(
     }
 }
 
+/** Drag-to-stack: onto a stack moves the artwork in; onto another artwork makes a new stack of both. */
+private fun dropArtwork(
+    viewModel: MainViewModel,
+    state: MainUiState,
+    projectId: Long,
+    target: GalleryDrop,
+) {
+    when (target) {
+        is GalleryDrop.OnStack -> viewModel.moveToStack(projectId, target.name)
+        is GalleryDrop.OnProject -> {
+            val other = (state as? MainUiState.Success)?.projects?.firstOrNull { it.id == target.projectId } ?: return
+            val name = other.stack ?: newStackName(existingStacks(state))
+            viewModel.moveToStack(other.id, name)
+            viewModel.moveToStack(projectId, name)
+        }
+    }
+}
+
 private fun selectedProjects(
     state: MainUiState,
     ids: Set<Long>,
@@ -418,11 +439,12 @@ private fun ProjectCard(
     onPreview: () -> Unit,
     onShare: () -> Unit,
     selected: Boolean? = null,
+    modifier: Modifier = Modifier,
 ) {
     var menuVisible by remember { mutableStateOf(false) }
     Card(
         modifier =
-            Modifier
+            modifier
                 .fillMaxWidth()
                 .clickable(onClick = onClick),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
