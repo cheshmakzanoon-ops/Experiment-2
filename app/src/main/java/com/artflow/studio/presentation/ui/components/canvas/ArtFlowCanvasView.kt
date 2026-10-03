@@ -132,6 +132,8 @@ data class EditorInput(
     val brushCursor: Boolean = true,
     /** Gesture controls from Prefs; each can be switched off. */
     val gestures: GestureControls = GestureControls(),
+    /** Prefs > Dynamic brush scaling: brush size follows the zoom so it looks the same on screen. */
+    val dynamicBrushScaling: Boolean = false,
 )
 
 /** Which multi-finger shortcuts are active, from Prefs > Gesture controls. */
@@ -1494,11 +1496,18 @@ class ArtFlowCanvasView
             pressure: Float,
             tool: ToolType,
         ) {
-            val params =
+            val chosen =
                 if (tool == ToolType.ERASER) {
                     input.brushParams.copy(size = input.eraserSize)
                 } else {
                     input.brushParams
+                }
+            // Dynamic brush scaling keeps the brush the same size on screen at any zoom, as in Procreate.
+            val params =
+                if (input.dynamicBrushScaling && scale > 0f) {
+                    chosen.copy(size = (chosen.size / scale).coerceIn(MIN_SCALED_BRUSH, MAX_SCALED_BRUSH))
+                } else {
+                    chosen
                 }
             currentStrokeId =
                 canvasRepository.beginStroke(
@@ -2468,6 +2477,8 @@ class ArtFlowCanvasView
             private const val QUICKSHAPE_HOLD_MS = 650L
             private const val HOLD_EYEDROPPER_MS = 500L
             private const val HANDLE_TOUCH_PX = 36f
+            private const val MIN_SCALED_BRUSH = 0.5f
+            private const val MAX_SCALED_BRUSH = 1_000f
             private const val RAPID_HISTORY_DELAY_MS = 650L
             private const val RAPID_HISTORY_REPEAT_MS = 220L
             private const val KNOB_DISTANCE_PX = 48f

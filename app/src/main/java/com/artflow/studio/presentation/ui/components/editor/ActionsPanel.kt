@@ -55,6 +55,7 @@ data class StudioPrefs(
     val gestures: GestureControls = GestureControls(),
     val lightInterface: Boolean = false,
     val brushCursor: Boolean = true,
+    val dynamicBrushScaling: Boolean = false,
 )
 
 data class PrefActions(
@@ -69,6 +70,7 @@ data class PrefActions(
     val onGestures: (GestureControls) -> Unit = {},
     val onLightInterface: (Boolean) -> Unit = {},
     val onBrushCursor: (Boolean) -> Unit = {},
+    val onDynamicBrushScaling: (Boolean) -> Unit = {},
 )
 
 /** Canvas facts shown under Canvas > Canvas information. */
@@ -176,6 +178,7 @@ private fun PrefsTab(
     PrefSwitch("Light interface", prefs.lightInterface, actions.onLightInterface)
     PrefSwitch("Right-hand interface", prefs.rightHanded, actions.onRightHanded)
     PrefSwitch("Brush cursor", prefs.brushCursor, actions.onBrushCursor)
+    PrefSwitch("Dynamic brush scaling", prefs.dynamicBrushScaling, actions.onDynamicBrushScaling)
     PrefSwitch("QuickShape (hold at the end of a stroke)", prefs.quickShape, actions.onQuickShape)
     PrefSwitch("Touch and hold for eyedropper", prefs.holdEyedropper, actions.onHoldEyedropper)
     PrefSwitch("Paint with a finger", prefs.fingerPainting, actions.onFingerPainting)

@@ -232,6 +232,7 @@ class CanvasViewModel
                             stabilization = stored.stabilization,
                             brushCursor = stored.brushCursor,
                             gestures = GestureControls(stored.scrubToClear, stored.swipeCopyPaste, stored.fourFingerFullScreen),
+                            dynamicBrushScaling = stored.dynamicBrushScaling,
                         )
                 }
             }
