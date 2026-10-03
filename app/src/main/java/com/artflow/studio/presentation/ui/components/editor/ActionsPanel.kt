@@ -37,6 +37,9 @@ data class VideoActions(
     /** Exports the recording; true for full length, false for a 30-second version. */
     val onExport: (Boolean) -> Unit,
     val onClear: () -> Unit,
+    /** Longest side of recorded frames, and how to change it. */
+    val quality: Int = 1280,
+    val onQuality: (Int) -> Unit = {},
 )
 
 data class StudioPrefs(
@@ -109,6 +112,7 @@ fun ActionsPanel(
                     ActionRow("Export Time-lapse (Full length)", onClick = { video.onExport(true) })
                     ActionRow("Export Time-lapse (30 seconds)", onClick = { video.onExport(false) })
                     ActionRow("Clear Time-lapse Recording", video.onClear)
+                    TimelapseQuality(video.quality, video.onQuality)
                 }
                 ActionsTab.Prefs -> PrefsTab(prefs, prefActions)
                 ActionsTab.Help -> HelpTab(onHelp)
@@ -213,6 +217,20 @@ private fun HelpTab(onHandbook: () -> Unit) {
         "Tap the selected layer for its options",
     ).forEach { line ->
         Text(line, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp))
+    }
+}
+
+/** Recording size for new time-lapse frames; earlier frames keep their size. */
+@Composable
+private fun TimelapseQuality(
+    quality: Int,
+    onQuality: (Int) -> Unit,
+) {
+    Text("Recording quality", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
+    Row(Modifier.padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(1280 to "720p", 1920 to "1080p", 2560 to "1440p").forEach { (side, label) ->
+            FilterChip(selected = quality == side, onClick = { onQuality(side) }, label = { Text(label) })
+        }
     }
 }
 

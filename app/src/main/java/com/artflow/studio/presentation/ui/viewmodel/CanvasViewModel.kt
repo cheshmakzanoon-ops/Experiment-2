@@ -333,7 +333,7 @@ class CanvasViewModel
                         if (projectId == 0L || revision == timelapseRevision || playbackActive) return@collect
                         try {
                             val composite = canvasRepository.compositeBuffer() ?: return@collect
-                            timelapse.capture(projectId, composite)
+                            timelapse.capture(projectId, composite, _settings.value.timelapseMaxSide)
                             timelapseRevision = revision
                         } catch (cancelled: CancellationException) {
                             throw cancelled
@@ -594,6 +594,8 @@ class CanvasViewModel
         }
 
         fun setTransformMode(mode: TransformQuad.Mode) = updateInput { it.copy(transformMode = mode) }
+
+        fun updateSettings(change: (AppSettings) -> AppSettings) = viewModelScope.launch(editorErrors) { settingsRepository.update(change) }
 
         fun setTransformAssist(assist: TransformQuad.Assist) = updateInput { it.copy(transformAssist = assist) }
 

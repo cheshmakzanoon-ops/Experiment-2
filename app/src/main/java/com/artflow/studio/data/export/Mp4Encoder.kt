@@ -31,6 +31,18 @@ internal object Mp4Encoder {
         encode(output, width, height, frames.size, delaysMs, options) { frames[it] }
     }
 
+    /** True when this device has an H.264 encoder for frames of about this size. */
+    fun supports(
+        width: Int,
+        height: Int,
+    ): Boolean {
+        val format =
+            MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, (width + 1) and -2, (height + 1) and -2).apply {
+                setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)
+            }
+        return runCatching { MediaCodecList(MediaCodecList.REGULAR_CODECS).findEncoderForFormat(format) != null }.getOrDefault(false)
+    }
+
     /**
      * Streams [frameCount] frames from [frameAt] so long recordings (such as time-lapse replays)
      * never hold every decoded frame in memory at once.

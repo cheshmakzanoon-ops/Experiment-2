@@ -55,6 +55,16 @@ class SettingsRepositoryTest {
         }
 
     @Test
+    fun timelapseQualityPersistsAndIgnoresUnknownSizes() =
+        runTest {
+            val dao = MemorySettingsDao(mapOf("timelapse.maxSide" to "999"))
+            val repository = SettingsRepositoryImpl(dao)
+            assertEquals(1280, repository.settings.first().timelapseMaxSide)
+            repository.update { it.copy(timelapseMaxSide = 1920) }
+            assertEquals(1920, SettingsRepositoryImpl(dao).settings.first().timelapseMaxSide)
+        }
+
+    @Test
     fun overlappingEditsAreSerializedAndPublishOnlyAfterPersistence() =
         runTest {
             val dao = MemorySettingsDao()

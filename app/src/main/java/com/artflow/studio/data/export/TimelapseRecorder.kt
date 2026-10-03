@@ -54,9 +54,10 @@ class TimelapseRecorder
         suspend fun capture(
             projectId: Long,
             composite: PixelBuffer,
+            maxSide: Int = MAX_SIDE,
         ) {
             withContext(Dispatchers.Default) {
-                val frame = downscale(composite)
+                val frame = downscale(composite, maxSide)
                 val hash = frame.pixels.contentHashCode()
                 mutex.withLock {
                     if (projectId == lastProjectId && hash == lastHash) return@withLock
@@ -96,8 +97,10 @@ class TimelapseRecorder
                     require(recorded.isNotEmpty()) { "Nothing has been recorded yet — draw something first" }
                     val files = if (fullLength) recorded else sampled(recorded, TARGET_DURATION_MS / MIN_FRAME_MS)
                     val first = decode(files.first())
-                    val width = max(16, (first.width + 1) and -2)
-                    val height = max(16, (first.height + 1) and -2)
+                    // Large recordings fall back to 720p on devices whose encoder cannot take their size.
+                    val fitted = if (Mp4Encoder.supports(first.width, first.height)) first else downscale(first, MAX_SIDE)
+                    val width = max(16, (fitted.width + 1) and -2)
+                    val height = max(16, (fitted.height + 1) and -2)
                     val perFrame = if (fullLength) MIN_FRAME_MS else (TARGET_DURATION_MS / files.size).coerceIn(MIN_FRAME_MS, MAX_FRAME_MS)
                     val delays = List(files.size) { if (it == files.lastIndex) FINAL_HOLD_MS else perFrame }
                     val safeName = projectName.replace(Regex("[^A-Za-z0-9 _-]"), "").trim().ifEmpty { "Artwork" }
@@ -141,9 +144,12 @@ class TimelapseRecorder
             }
         }
 
-        private fun downscale(source: PixelBuffer): PixelBuffer {
+        private fun downscale(
+            source: PixelBuffer,
+            maxSide: Int,
+        ): PixelBuffer {
             val longest = max(source.width, source.height)
-            val factor = if (longest > MAX_SIDE) MAX_SIDE.toFloat() / longest else 1f
+            val factor = if (longest > maxSide) maxSide.toFloat() / longest else 1f
             val width = max(16, ((source.width * factor).roundToInt() + 1) and -2)
             val height = max(16, ((source.height * factor).roundToInt() + 1) and -2)
             return if (width == source.width && height == source.height) source.copy() else source.scaled(width, height)

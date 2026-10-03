@@ -79,6 +79,8 @@ data class AppSettings(
     val swipeCopyPaste: Boolean = true,
     /** Gesture controls: tapping four fingers toggles full screen. */
     val fourFingerFullScreen: Boolean = true,
+    /** Longest side, in pixels, of recorded time-lapse frames (720p, 1080p or 1440p). */
+    val timelapseMaxSide: Int = 1280,
     // Saving
     val autosaveIntervalMs: Long = 20_000L,
     val autosaveEnabled: Boolean = true,

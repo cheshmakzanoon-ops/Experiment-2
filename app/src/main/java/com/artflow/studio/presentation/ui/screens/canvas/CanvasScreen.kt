@@ -650,6 +650,8 @@ fun CanvasScreen(
                                 panel = EditorPanel.EXPORT
                             },
                             onClear = viewModel::clearTimelapse,
+                            quality = settings.timelapseMaxSide,
+                            onQuality = { side -> viewModel.updateSettings { it.copy(timelapseMaxSide = side) } },
                         ),
                     prefActions =
                         PrefActions(

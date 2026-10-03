@@ -228,6 +228,7 @@ class SettingsRepositoryImpl
                 KEY_SCRUB_CLEAR to settings.scrubToClear.toString(),
                 KEY_SWIPE_PASTE to settings.swipeCopyPaste.toString(),
                 KEY_FOUR_FINGER to settings.fourFingerFullScreen.toString(),
+                KEY_TIMELAPSE_SIDE to settings.timelapseMaxSide.toString(),
                 KEY_AUTOSAVE to settings.autosaveEnabled.toString(),
                 KEY_AUTOSAVE_INTERVAL to settings.autosaveIntervalMs.toString(),
                 KEY_DEFAULT_PRESET to settings.defaultPresetName,
@@ -281,6 +282,8 @@ class SettingsRepositoryImpl
                 scrubToClear = stored[KEY_SCRUB_CLEAR]?.toBooleanStrictOrNull() ?: defaults.scrubToClear,
                 swipeCopyPaste = stored[KEY_SWIPE_PASTE]?.toBooleanStrictOrNull() ?: defaults.swipeCopyPaste,
                 fourFingerFullScreen = stored[KEY_FOUR_FINGER]?.toBooleanStrictOrNull() ?: defaults.fourFingerFullScreen,
+                timelapseMaxSide =
+                    stored[KEY_TIMELAPSE_SIDE]?.toIntOrNull()?.takeIf { it in TIMELAPSE_SIDES } ?: defaults.timelapseMaxSide,
                 autosaveEnabled = stored[KEY_AUTOSAVE]?.toBooleanStrictOrNull() ?: defaults.autosaveEnabled,
                 autosaveIntervalMs =
                     stored[KEY_AUTOSAVE_INTERVAL]
@@ -348,6 +351,10 @@ class SettingsRepositoryImpl
             private const val KEY_SCRUB_CLEAR = "gesture.scrubToClear"
             private const val KEY_SWIPE_PASTE = "gesture.swipeCopyPaste"
             private const val KEY_FOUR_FINGER = "gesture.fourFingerFullScreen"
+            private const val KEY_TIMELAPSE_SIDE = "timelapse.maxSide"
+
+            /** Time-lapse recording sizes offered in Prefs: 720p, 1080p and 1440p. */
+            val TIMELAPSE_SIDES = listOf(1280, 1920, 2560)
             private const val MIN_CURVE = 0.3f
             private const val MAX_CURVE = 3f
             private const val KEY_AUTOSAVE = "general.autosave"
