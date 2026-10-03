@@ -46,4 +46,25 @@ class LayerGroupsTest {
         // Two overlapping opaque members fade together to half alpha, not to 75%.
         assertEquals(128f, (out.pixels[0] ushr 24).toFloat(), 1.5f)
     }
+
+    @Test fun nestedGroupsApplyEveryLevel() {
+        val outer = Layer(id = 20, name = "Outer", index = 4, opacity = 0.5f, isGroup = true)
+        val inner = Layer(id = 10, name = "Inner", index = 3, isGroup = true, parentGroupId = 20)
+        val a = Layer(id = 1, name = "A", index = 1, parentGroupId = 10)
+        val b = Layer(id = 2, name = "B", index = 2, parentGroupId = 20)
+        val loose = Layer(id = 3, name = "C", index = 0)
+
+        fun plan(vararg layers: Layer) = LayerGroups.plan(layers.map { Compositor.LayerInput(it) })
+        val flat = plan(loose, a, b, inner, outer)
+        assertEquals(listOf(3L, 20L), flat.map { it.layer.id })
+        assertEquals(listOf(1L, 2L), flat[1].members.map { it.layer.id })
+        val hiddenPlan = plan(loose, a, b, inner.copy(isVisible = false), outer)
+        assertFalse(hiddenPlan[1].members[0].layer.isVisible)
+        val deep = plan(loose, a, b, inner.copy(opacity = 0.5f), outer)
+        assertEquals(listOf(2L, 10L), deep[1].members.map { it.layer.id })
+        assertEquals(listOf(1L), deep[1].members[1].members.map { it.layer.id })
+        val hiddenInner = listOf(a, inner.copy(isVisible = false), outer.copy(opacity = 1f))
+        val resolved = LayerGroups.resolve(hiddenInner.map { Compositor.LayerInput(it) })
+        assertFalse(resolved.single().layer.isVisible)
+    }
 }

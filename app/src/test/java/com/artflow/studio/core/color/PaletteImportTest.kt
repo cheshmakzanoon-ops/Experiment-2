@@ -16,7 +16,7 @@ class PaletteImportTest {
         val body = ByteBuffer.allocate(2 + (name.length + 1) * 2 + 4 + values.size * 4 + 2)
         body.putShort((name.length + 1).toShort())
         name.forEach { body.putChar(it) }
-        body.putChar('\\u0000')
+        body.putChar('\u0000')
         body.put(model.encodeToByteArray())
         values.forEach { body.putFloat(it) }
         body.putShort(0)
@@ -35,7 +35,7 @@ class PaletteImportTest {
         file.putInt(blocks.size)
         blocks.forEach { file.put(it) }
         val palette = PaletteCodec.importAse(file.array(), "Swatches")!!
-        assertEquals(listOf(0xFFFF0000.toInt(), 0xFF7F7F7F.toInt(), 0xFFFF0000.toInt()), palette.colors)
+        assertEquals(listOf(0xFFFF0000.toInt(), 0xFF808080.toInt(), 0xFFFF0000.toInt()), palette.colors)
         assertNull(PaletteCodec.importAse("GIMP Palette".encodeToByteArray()))
     }
 

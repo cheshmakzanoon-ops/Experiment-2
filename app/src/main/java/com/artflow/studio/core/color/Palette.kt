@@ -277,66 +277,6 @@ object PaletteCodec {
         return Palette(name = name, colors = colors, source = "Hex import")
     }
 
-    /**
-     * Adobe Swatch Exchange: RGB, grey and CMYK swatches become colours (CMYK converted simply,
-     * without a colour profile); groups and Lab swatches are skipped.
-     */
-    fun importAse(
-        bytes: ByteArray,
-        name: String = "Imported Palette",
-    ): Palette? {
-        val data = java.nio.ByteBuffer.wrap(bytes)
-        if (bytes.size < ASE_HEADER || data.int != ASE_SIGNATURE) return null
-        data.int // version
-        val blocks = data.int
-        val colors = mutableListOf<Int>()
-        repeat(blocks.coerceAtMost(MAX_ASE_BLOCKS)) {
-            if (data.remaining() < 6) return@repeat
-            val type = data.short.toInt()
-            val length = data.int
-            if (length < 0 || length > data.remaining()) return@repeat
-            val end = data.position() + length
-            if (type == ASE_COLOR) aseColor(data)?.let { colors += it }
-            data.position(end)
-        }
-        if (colors.isEmpty()) return null
-        return Palette(name = name, colors = colors.take(MAX_IMPORTED), source = "ASE import")
-    }
-
-    private fun aseColor(data: java.nio.ByteBuffer): Int? {
-        val nameLength = data.short.toInt()
-        data.position(data.position() + nameLength * 2)
-        val model = ByteArray(4).also { data.get(it) }.decodeToString()
-
-        fun channel() = (data.float.coerceIn(0f, 1f) * 255f).toInt()
-        return when (model) {
-            "RGB " -> argb(channel(), channel(), channel())
-            "Gray" -> channel().let { argb(it, it, it) }
-            "CMYK" -> {
-                val c = data.float
-                val m = data.float
-                val y = data.float
-                val k = data.float
-
-                fun ink(value: Float) = ((1f - value.coerceIn(0f, 1f)) * (1f - k.coerceIn(0f, 1f)) * 255f).toInt()
-                argb(ink(c), ink(m), ink(y))
-            }
-            else -> null
-        }
-    }
-
-    private fun argb(
-        r: Int,
-        g: Int,
-        b: Int,
-    ): Int = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
-
-    private const val ASE_SIGNATURE = 0x41534546 // "ASEF"
-    private const val ASE_HEADER = 12
-    private const val ASE_COLOR = 1
-    private const val MAX_ASE_BLOCKS = 4_096
-    private const val MAX_IMPORTED = 256
-
     /** Accepts anything the user might paste: CSS, GPL, hex lists or a JSON palette. */
     fun importAuto(
         text: String,

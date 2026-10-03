@@ -619,4 +619,33 @@ class CanvasMutationTest {
             paint(layer, red)
             assertFalse(repository.exportSnapshot(false, false, true).hasAdjustmentLayers)
         }
+
+    @Test
+    fun groupsNestAndLayersJoinTheGroupTheyAreDraggedInto() =
+        runTest {
+            val bottom = open()
+            val middle = repository.addLayer("Middle").id
+            val top = repository.addLayer("Top").id
+            val inner = requireNotNull(repository.groupLayers(listOf(middle, top)))
+            val outer = requireNotNull(repository.groupLayers(listOf(bottom, inner)))
+
+            suspend fun parent(id: Long) = repository.getAllLayers().first { it.id == id }.parentGroupId
+            assertEquals(listOf(bottom, middle, top, inner, outer), repository.getAllLayers().sortedBy { it.index }.map { it.id })
+            assertEquals(outer, parent(inner))
+            assertEquals(inner, parent(top))
+            assertEquals(outer, parent(bottom))
+            assertTrue(repository.ungroupLayers(inner))
+            assertEquals(outer, parent(top))
+            assertTrue(repository.undo())
+            // Above the outer header is outside both groups; just under the inner header is inside it.
+            assertTrue(repository.reorderLayer(top, 4))
+            assertEquals(null, parent(top))
+            assertTrue(repository.reorderLayer(top, 2))
+            assertEquals(inner, parent(top))
+            // A group moves with its members.
+            assertTrue(repository.reorderLayer(inner, 0))
+            assertEquals(listOf(middle, top, inner, bottom, outer), repository.getAllLayers().sortedBy { it.index }.map { it.id })
+            assertEquals(null, parent(inner))
+            assertEquals(inner, parent(middle))
+        }
 }

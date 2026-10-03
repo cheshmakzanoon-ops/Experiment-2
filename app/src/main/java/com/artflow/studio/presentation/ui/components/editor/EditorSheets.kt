@@ -32,6 +32,7 @@ import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.render.LayerGroups
 import com.artflow.studio.core.symmetry.SymmetryEngine
 import com.artflow.studio.core.text.TextLayout
 import com.artflow.studio.data.local.FontLibrary
@@ -160,9 +161,10 @@ fun LayersSheet(
                     .fillMaxWidth()
                     .heightIn(max = 320.dp),
         ) {
+            val groupsById = layers.filter { it.isGroup }.associateBy { it.id }
             val visibleLayers =
                 layers.sortedByDescending { it.index }.filter { layer ->
-                    layer.parentGroupId == null || layer.parentGroupId !in collapsedGroups
+                    LayerGroups.ancestors(layer, groupsById).none { it.id in collapsedGroups }
                 }
             items(visibleLayers, key = { it.id }) { layer ->
                 GroupedRow(layer, layer.id in collapsedGroups) {
@@ -170,7 +172,7 @@ fun LayersSheet(
                 }
                 Box(
                     Modifier
-                        .padding(start = if (layer.parentGroupId != null) 20.dp else 0.dp)
+                        .padding(start = 20.dp * LayerGroups.ancestors(layer, groupsById).size)
                         .reorderOnLongPress(
                             layer = layer,
                             lifted = dragging == layer.id,

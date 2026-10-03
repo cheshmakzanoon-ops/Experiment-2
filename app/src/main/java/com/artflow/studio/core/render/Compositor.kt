@@ -178,7 +178,7 @@ class Compositor(
         val merged = bufferPool.obtain(width, height)
         var completed = false
         try {
-            compositeEntries(merged, entry.members.map { LayerGroups.Entry(it.layer, it) }, options)
+            compositeEntries(merged, entry.members, options)
             completed = true
             return merged
         } finally {

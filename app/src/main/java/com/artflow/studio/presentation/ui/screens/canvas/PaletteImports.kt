@@ -38,7 +38,7 @@ fun rememberPaletteImports(
                             val bytes = requireNotNull(context.contentResolver.openInputStream(uri)?.use { it.readBytes() })
                             require(bytes.size <= MAX_PALETTE_BYTES)
                             val name = displayName(context, uri)
-                            PaletteCodec.importAse(bytes, name) ?: PaletteCodec.importAuto(bytes.decodeToString(), name)
+                            PaletteCodec.decode(bytes, name)
                         }.getOrNull()
                     }
                 if (palette == null || palette.colors.isEmpty()) {
@@ -54,7 +54,9 @@ fun rememberPaletteImports(
             scope.launch {
                 val colors =
                     withContext(Dispatchers.Default) {
-                        runCatching { PaletteExtractor.colors(BitmapPixelBridge.decodeUri(context.contentResolver, uri)) }.getOrNull()
+                        runCatching {
+                            PaletteExtractor.colors(requireNotNull(BitmapPixelBridge.decodeUri(context.contentResolver, uri)))
+                        }.getOrNull()
                     }
                 if (colors.isNullOrEmpty()) onError("No colours could be taken from that picture") else onPalette("Photo palette", colors)
             }

@@ -945,7 +945,7 @@ class CanvasRepositoryImpl
 
                 pushUndo()
                 layers.removeAt(position)
-                if (removing.isGroup) layers.forEach { if (it.parentGroupId == layerId) it.parentGroupId = null }
+                if (removing.isGroup) layers.forEach { if (it.parentGroupId == layerId) it.parentGroupId = removing.parentGroupId }
                 if (activeLayerId() == layerId) {
                     setActiveLayerId(layers[position.coerceAtMost(layers.lastIndex)].id)
                 }
@@ -965,8 +965,14 @@ class CanvasRepositoryImpl
                 val to = newIndex.coerceIn(0, layers.lastIndex)
                 if (from == to) return@withState true
                 pushUndo()
-                val layer = layers.removeAt(from)
-                layers.add(to, layer)
+                // A group moves with everything inside it; [newIndex] is where its header lands.
+                val moving = layers[from]
+                val block = if (moving.isGroup) subtreeIds(layers, layerId) else setOf(layerId)
+                val moved = layers.filter { it.id in block }
+                layers.removeAll(moved)
+                val insertAt = (to - moved.size + 1).coerceIn(0, layers.size)
+                layers.addAll(insertAt, moved)
+                moving.parentGroupId = groupAtGap(layers.getOrNull(insertAt - 1), layers.getOrNull(insertAt + moved.size), layers)
                 dirty = true
                 emit(CanvasInvalidationEvent.LayersChanged)
                 true
@@ -1304,19 +1310,31 @@ class CanvasRepositoryImpl
         override suspend fun groupLayers(layerIds: List<Long>): Long? =
             withState {
                 val layers = currentLayers()
-                val members = layers.filter { it.id in layerIds && !it.isGroup && !it.isInternal }
-                if (members.isEmpty() || !hasLayerCapacity(1)) return@withState null
+                // A chosen group comes with everything inside it, so groups nest.
+                val ids =
+                    layers
+                        .filter { it.id in layerIds && !it.isInternal }
+                        .flatMap { if (it.isGroup) subtreeIds(layers, it.id) else setOf(it.id) }
+                        .toSet()
+                val members = layers.filter { it.id in ids }
+                val paintable = members.lastOrNull { !it.isGroup }
+                if (paintable == null || !hasLayerCapacity(1)) return@withState null
                 pushUndo()
                 val groupId = nextLayerId++
-                val group = LayerData(id = groupId, name = "Group ${layers.count { it.isGroup } + 1}").apply { isGroup = true }
+                val roots = members.filter { it.parentGroupId !in ids }
+                val group =
+                    LayerData(id = groupId, name = "Group ${layers.count { it.isGroup } + 1}").apply {
+                        isGroup = true
+                        parentGroupId = roots.last().parentGroupId
+                    }
                 // Keep members contiguous, in stack order, where the topmost member used to be.
                 val topIndex = layers.indexOf(members.last())
                 layers.removeAll(members)
                 val insertAt = (topIndex - members.size + 1).coerceIn(0, layers.size)
-                members.forEach { it.parentGroupId = groupId }
+                roots.forEach { it.parentGroupId = groupId }
                 layers.addAll(insertAt, members)
                 layers.add(insertAt + members.size, group)
-                setActiveLayerId(members.last().id)
+                setActiveLayerId(paintable.id)
                 dirty = true
                 emit(CanvasInvalidationEvent.LayersChanged)
                 groupId
@@ -1343,12 +1361,42 @@ class CanvasRepositoryImpl
                 removing.size
             }
 
+        /** [groupId] and every layer inside it, at any depth. */
+        private fun subtreeIds(
+            layers: List<LayerData>,
+            groupId: Long,
+        ): Set<Long> {
+            val ids = mutableSetOf(groupId)
+            do {
+                val added = layers.filter { it.parentGroupId in ids && it.id !in ids }.map { it.id }
+                ids += added
+            } while (added.isNotEmpty())
+            return ids
+        }
+
+        /**
+         * The group holding the gap between [below] and [above]: the innermost group both sides are
+         * inside, where the gap just beneath a group's header is inside that group.
+         */
+        private fun groupAtGap(
+            below: LayerData?,
+            above: LayerData?,
+            layers: List<LayerData>,
+        ): Long? {
+            val byId = layers.filter { it.isGroup }.associateBy { it.id }
+
+            fun chain(start: Long?): List<Long> = generateSequence(start) { byId[it]?.parentGroupId }.take(byId.size + 1).toList()
+            val belowSide = chain(below?.parentGroupId).toSet()
+            val aboveSide = chain(if (above?.isGroup == true) above.id else above?.parentGroupId)
+            return aboveSide.firstOrNull { it in belowSide }
+        }
+
         override suspend fun ungroupLayers(groupId: Long): Boolean =
             withState {
                 val layers = currentLayers()
                 val group = layers.firstOrNull { it.id == groupId && it.isGroup } ?: return@withState false
                 pushUndo()
-                layers.forEach { if (it.parentGroupId == groupId) it.parentGroupId = null }
+                layers.forEach { if (it.parentGroupId == groupId) it.parentGroupId = group.parentGroupId }
                 layers.remove(group)
                 if (activeLayerId() == groupId) setActiveLayerId(layers.last { !it.isGroup }.id)
                 dirty = true
