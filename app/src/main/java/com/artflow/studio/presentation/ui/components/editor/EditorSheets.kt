@@ -34,6 +34,7 @@ import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.symmetry.SymmetryEngine
 import com.artflow.studio.core.text.TextLayout
+import com.artflow.studio.data.local.FontLibrary
 import com.artflow.studio.domain.model.animation.AnimationSettings
 import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.layer.BlendMode
@@ -1115,6 +1116,8 @@ fun TextSheet(
     onColorChange: (Int) -> Unit,
     onPlace: () -> Unit,
     modifier: Modifier = Modifier,
+    importedFonts: List<String> = emptyList(),
+    onImportFont: (() -> Unit)? = null,
 ) {
     Column(
         modifier =
@@ -1143,11 +1146,20 @@ fun TextSheet(
 
         var fontMenu by remember { mutableStateOf(false) }
         Box {
-            OutlinedButton(onClick = { fontMenu = true }) { Text(style.fontFamily) }
+            OutlinedButton(onClick = { fontMenu = true }) { Text(FontLibrary.label(style.fontFamily)) }
             DropdownMenu(expanded = fontMenu, onDismissRequest = { fontMenu = false }) {
-                TextLayout.FONT_FAMILIES.forEach { family ->
+                onImportFont?.let { import ->
                     DropdownMenuItem(
-                        text = { Text(family) },
+                        text = { Text("Import font…") },
+                        onClick = {
+                            fontMenu = false
+                            import()
+                        },
+                    )
+                }
+                (importedFonts + TextLayout.FONT_FAMILIES).forEach { family ->
+                    DropdownMenuItem(
+                        text = { Text(FontLibrary.label(family)) },
                         onClick = {
                             onStyleChange(style.copy(fontFamily = family))
                             fontMenu = false

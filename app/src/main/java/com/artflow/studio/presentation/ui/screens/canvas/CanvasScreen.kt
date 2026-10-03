@@ -47,6 +47,7 @@ import com.artflow.studio.core.pixels.WarpMesh
 import com.artflow.studio.core.text.TextLayerContent
 import com.artflow.studio.core.tool.ToolGroup
 import com.artflow.studio.core.tool.ToolType
+import com.artflow.studio.data.local.FontLibrary
 import com.artflow.studio.data.local.ReferenceImages
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.brush.StrokeDestination
@@ -267,6 +268,30 @@ fun CanvasScreen(
             }
         }
     val takePhoto = rememberCameraCapture(onImage = viewModel::insertImageLayer, onError = viewModel::notify)
+    var importedFonts by remember { mutableStateOf(FontLibrary.families(context)) }
+    val fontPicker =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            scope.launch {
+                val family =
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        runCatching { FontLibrary.import(context, uri) }.getOrNull()
+                    }
+                if (family == null) {
+                    viewModel.notify("That file is not a TrueType or OpenType font")
+                } else {
+                    importedFonts = FontLibrary.families(context)
+                    viewModel.setText(input.text, input.textStyle.copy(fontFamily = family))
+                }
+            }
+        }
+    val importFont = {
+        try {
+            fontPicker.launch(arrayOf("font/ttf", "font/otf", "font/sfnt", "application/x-font-ttf", "application/octet-stream"))
+        } catch (missing: ActivityNotFoundException) {
+            viewModel.notify("No file picker is available on this device")
+        }
+    }
     val psdPicker =
         rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
             if (uri == null) return@rememberLauncherForActivityResult
@@ -608,6 +633,8 @@ fun CanvasScreen(
                         }
                         panel = EditorPanel.NONE
                     },
+                    importedFonts = importedFonts,
+                    onImportFont = importFont,
                 )
             EditorPanel.EXPORT ->
                 ExportSheet(

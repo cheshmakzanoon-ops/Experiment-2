@@ -6,6 +6,7 @@ import android.graphics.Typeface
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.text.TextLayerContent
 import com.artflow.studio.core.text.TextLayout
+import com.artflow.studio.data.local.FontLibrary
 
 /** Draws a text layer's glyphs with the platform fonts, wrapped and aligned by [TextLayout]. */
 object TextRasterizer {
@@ -22,16 +23,17 @@ object TextRasterizer {
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = content.color
                 textSize = style.fontSize
+                val weight =
+                    when {
+                        style.bold && style.italic -> Typeface.BOLD_ITALIC
+                        style.bold -> Typeface.BOLD
+                        style.italic -> Typeface.ITALIC
+                        else -> Typeface.NORMAL
+                    }
+                // An imported font is used when its file is still there; otherwise a system family.
                 typeface =
-                    Typeface.create(
-                        TextLayout.fallbackFamily(style.fontFamily),
-                        when {
-                            style.bold && style.italic -> Typeface.BOLD_ITALIC
-                            style.bold -> Typeface.BOLD
-                            style.italic -> Typeface.ITALIC
-                            else -> Typeface.NORMAL
-                        },
-                    )
+                    FontLibrary.typeface(style.fontFamily)?.let { Typeface.create(it, weight) }
+                        ?: Typeface.create(TextLayout.fallbackFamily(style.fontFamily), weight)
                 textAlign = Paint.Align.LEFT
                 if (style.letterSpacing != 0f && style.fontSize > 0f) letterSpacing = style.letterSpacing / style.fontSize
                 if (style.underline) isUnderlineText = true
