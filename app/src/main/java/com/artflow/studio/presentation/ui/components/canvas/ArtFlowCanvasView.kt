@@ -1984,21 +1984,31 @@ class ArtFlowCanvasView
             val cx = x.roundToInt()
             val cy = y.roundToInt()
             val captured = input
-            applyFillEdit("Paint bucket", onCommitted) { target, selection, alphaLocked ->
-                FillTool
-                    .floodFill(
-                        target = target,
-                        startX = cx,
-                        startY = cy,
-                        color = captured.brushColor,
-                        settings =
-                            FillTool.Settings(
-                                tolerance = tolerance,
-                                contiguous = captured.fillContiguous,
-                                mask = selection,
-                                alphaLock = alphaLocked,
-                            ),
-                    ).changed
+            // With a Reference layer, the fill stops at its lines instead of the active layer's pixels.
+            val referenceId =
+                canvasRepository
+                    .getAllLayers()
+                    .firstOrNull { it.isFillReference && it.isVisible && it.id != activeLayerId }
+                    ?.id
+            coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                val reference = referenceId?.let { canvasRepository.layerPixels(it) }
+                applyFillEdit("Paint bucket", onCommitted) { target, selection, alphaLocked ->
+                    FillTool
+                        .floodFill(
+                            target = target,
+                            startX = cx,
+                            startY = cy,
+                            color = captured.brushColor,
+                            settings =
+                                FillTool.Settings(
+                                    tolerance = tolerance,
+                                    contiguous = captured.fillContiguous,
+                                    mask = selection,
+                                    alphaLock = alphaLocked,
+                                ),
+                            source = reference ?: target,
+                        ).changed
+                }
             }
         }
 

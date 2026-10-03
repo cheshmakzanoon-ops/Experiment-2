@@ -338,6 +338,12 @@ interface CanvasRepository {
         isClipping: Boolean? = null,
     ): Boolean
 
+    /** Makes a layer the fill reference whose lines bound ColorDrop on other layers (one at a time). */
+    suspend fun setLayerFillReference(
+        layerId: Long,
+        enabled: Boolean,
+    ): Boolean = false
+
     /** Marks a layer as a reference image (visible on the reference panel, never composited). */
     suspend fun setLayerReference(
         layerId: Long,

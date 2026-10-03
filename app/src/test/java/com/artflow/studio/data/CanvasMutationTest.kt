@@ -85,6 +85,19 @@ class CanvasMutationTest {
     }
 
     @Test
+    fun onlyOneLayerIsTheFillReference() =
+        runTest {
+            val lines = open()
+            val colours = repository.addLayer("Colours").id
+            assertTrue(repository.setLayerFillReference(lines, true))
+            assertTrue(repository.setLayerFillReference(colours, true))
+            val flags = repository.getAllLayers().associate { it.id to it.isFillReference }
+            assertEquals(mapOf(lines to false, colours to true), flags)
+            assertTrue(repository.undo())
+            assertTrue(repository.getAllLayers().first { it.id == lines }.isFillReference)
+        }
+
+    @Test
     fun editsToSeveralLayersCommitAsOneStep() =
         runTest {
             val bottom = open()

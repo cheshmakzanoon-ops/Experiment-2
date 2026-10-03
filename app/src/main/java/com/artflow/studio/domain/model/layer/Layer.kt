@@ -51,6 +51,8 @@ data class Layer(
     val isInternal: Boolean = false,
     /** A group holds no pixels; its visibility and opacity apply to layers whose [parentGroupId] is its id. */
     val isGroup: Boolean = false,
+    /** Procreate's Reference: ColorDrop and the paint bucket on other layers stop at this layer's lines. */
+    val isFillReference: Boolean = false,
     /** Set for an editable text layer; null once the text has been turned into pixels. */
     val textContent: com.artflow.studio.core.text.TextLayerContent? = null,
     /** Runtime mask presence is independent of whether its immutable PNG has been saved yet. */
@@ -133,6 +135,7 @@ data class Layer(
             linkGroupId = linkGroupId,
             isInternal = isInternal,
             isGroup = this.isGroup,
+            isFillReference = this.isFillReference,
             hasInMemoryMask = hasInMemoryMask,
         )
 }

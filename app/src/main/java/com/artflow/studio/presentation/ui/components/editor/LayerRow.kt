@@ -219,7 +219,8 @@ private fun LayerStatus(layer: Layer) {
             if (layer.opacity < 1f) add("${(layer.opacity * 100).toInt()}%")
             if (layer.isClippingMask) add("clipping")
             if (layer.isAlphaLocked) add("alpha locked")
-            if (layer.isReference) add("reference")
+            if (layer.isFillReference) add("reference")
+            if (layer.isReference) add("not exported")
             if (layer.textContent != null) add("text")
             if (layer.hasMask()) add("mask")
         }
@@ -270,7 +271,11 @@ private fun LayerMenu(
         if (options != null) {
             DropdownMenuItem(text = { Text("Invert") }, onClick = item(options.onInvert))
             DropdownMenuItem(
-                text = { Text(if (layer.isReference) "Reference ✓" else "Reference") },
+                text = { Text(if (layer.isFillReference) "Reference ✓" else "Reference") },
+                onClick = item { options.onFillReference(layer.id, !layer.isFillReference) },
+            )
+            DropdownMenuItem(
+                text = { Text(if (layer.isReference) "Exclude from export ✓" else "Exclude from export") },
                 onClick = item { options.onReference(layer.id, !layer.isReference) },
             )
         }

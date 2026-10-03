@@ -383,6 +383,7 @@ class CanvasRepositoryImpl
                 ).apply {
                     isGroup = layer.isGroup
                     parentGroupId = layer.parentGroupId
+                    isFillReference = layer.isFillReference
                 }
             data.raster = loadRaster(projectId, layer.rasterFile)
             data.text = layer.textContent
@@ -1195,6 +1196,22 @@ class CanvasRepositoryImpl
                 val layer = layerById(layerId) ?: return@withState false
                 pushUndo()
                 layer.isClippingMask = isClipping ?: !layer.isClippingMask
+                dirty = true
+                emit(CanvasInvalidationEvent.LayersChanged)
+                true
+            }
+
+        override suspend fun setLayerFillReference(
+            layerId: Long,
+            enabled: Boolean,
+        ): Boolean =
+            withState {
+                val layer = layerById(layerId)?.takeIf { !it.isGroup } ?: return@withState false
+                if (layer.isFillReference == enabled) return@withState true
+                pushUndo()
+                // One reference at a time, as in Procreate.
+                if (enabled) currentLayers().forEach { it.isFillReference = false }
+                layer.isFillReference = enabled
                 dirty = true
                 emit(CanvasInvalidationEvent.LayersChanged)
                 true
@@ -2545,6 +2562,7 @@ class CanvasRepositoryImpl
             var isInternal: Boolean = false,
         ) {
             var isGroup: Boolean = false
+            var isFillReference: Boolean = false
             var parentGroupId: Long? = null
 
             /** Editable text; set it after [raster], because any new pixels turn the text into pixels. */
@@ -2599,6 +2617,7 @@ class CanvasRepositoryImpl
                 ).apply {
                     isGroup = this@LayerData.isGroup
                     parentGroupId = this@LayerData.parentGroupId
+                    isFillReference = this@LayerData.isFillReference
                 }.also {
                     it.raster = raster
                     it.text = text
@@ -2647,6 +2666,7 @@ class CanvasRepositoryImpl
                 ).apply {
                     isGroup = this@LayerData.isGroup
                     parentGroupId = this@LayerData.parentGroupId
+                    isFillReference = this@LayerData.isFillReference
                 }.also { fresh ->
                     fresh.raster = raster
                     fresh.text = text
@@ -2679,6 +2699,7 @@ class CanvasRepositoryImpl
                     isReference = isReference,
                     linkGroupId = linkGroupId,
                     isGroup = isGroup,
+                    isFillReference = isFillReference,
                     parentGroupId = parentGroupId,
                     isInternal = isInternal,
                     textContent = text,

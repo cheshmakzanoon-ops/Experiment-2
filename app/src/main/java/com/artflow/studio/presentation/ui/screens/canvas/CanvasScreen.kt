@@ -466,6 +466,7 @@ fun CanvasScreen(
                             onClear = { viewModel.clipboard.clear() },
                             onInvert = { viewModel.applyAdjustmentToCanvas(AdjustmentType.INVERT, emptyMap(), toAllLayers = false) },
                             onReference = viewModel::setLayerReference,
+                            onFillReference = viewModel::setLayerFillReference,
                             onMask = { viewModel.createLayerMask(LayerMaskSource.REVEAL_ALL) },
                             onCombineDown = viewModel::groupWithLayerBelow,
                             onEditText = { layer ->

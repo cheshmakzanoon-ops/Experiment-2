@@ -26,7 +26,7 @@ reachable in the editor; device validation by artists is still outstanding for e
 | Transform | Freeform, Uniform, Distort and Warp with snapping [3] | On-canvas box with corner, edge and rotation handles; Freeform, Uniform, Distort and Warp (4 × 4 Bézier mesh); Magnetics (45° moves, 15° rotation, proportional corners) and Snapping to canvas edges and centre with guides; flip, rotate, fit, reset and interpolation choice | Device validation of large multi-layer moves |
 | Layer organisation | Thumbnails, options, swipe actions, groups [4] | Thumbnails, tap-the-selected-layer options, swipe left for Lock/Duplicate/Delete, swipe right to multi-select then Group, Delete or Transform together, touch-and-hold drag reordering, two-finger tap Alpha Lock, blend-mode codes, groups whose blend mode and opacity apply to the merged group, editable text layers | Nested groups |
 | Reference companion | Floating canvas/image reference [5] | Movable window with a live Canvas view or an imported image, pan/zoom/fit and colour sampling | Artist validation of window placement on phones |
-| Selections and fill | Automatic/freehand/rectangle/ellipse, Save & Load, ColorDrop [6] | Automatic with slide-to-set threshold, freehand, rectangle, ellipse; Add/Remove; invert, feather, Save & Load, Colour Fill, Copy & Paste; ColorDrop with slide-to-set threshold | Selection-mask painting |
+| Selections and fill | Automatic/freehand/rectangle/ellipse, Save & Load, ColorDrop [6] | Automatic with slide-to-set threshold, freehand, rectangle, ellipse; Add/Remove; invert, feather, Save & Load, Colour Fill, Copy & Paste; ColorDrop with slide-to-set threshold, Reference layers that bound ColorDrop | Artist validation of fills over anti-aliased line art |
 | Drawing assistance | QuickShape, grids, perspective and symmetry [7] | QuickShape lines, polylines, ellipses, triangles, rectangles and polygons, adjustable while held with 45° line snapping; symmetry, perspective, isometric and grid guides; stabilization | Assisted drawing per layer and device validation |
 | Colour | Disc, Classic, Harmony, Value, Palettes; ICC profiles [8] | Disc, Classic, Harmony, Value and Palettes tabs with history and previous-colour swatch | ICC-managed working spaces |
 | Animation | Animation Assist timeline and onion skin [9] | Frame editing, duration/FPS, loop and ping-pong, onion skin colours and animated export | Artist-tested navigation and timing |
@@ -41,8 +41,9 @@ features. Telemetry is intentionally absent and is not a parity requirement. Pro
 reference; ArtFlow uses its own assets and identity. No aesthetic superiority is asserted without
 running-app inspection and artist/user evidence.
 
-The stored `isReference` layer flag is excluded from ArtFlow export. It is **not** equivalent to
-Procreate's fill-reference layer concept or the new floating reference-image companion.
+A layer marked **Reference** in its options is Procreate's fill reference: ColorDrop and the paint
+bucket on other layers stop at its lines, and only one layer is the reference at a time. The older
+"Exclude from export" option keeps a layer out of exports and is a separate ArtFlow feature.
 
 ## Implemented milestones and their boundaries
 

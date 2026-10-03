@@ -57,6 +57,7 @@ data class LayerOptionActions(
     val onMask: () -> Unit,
     val onCombineDown: (Long) -> Unit,
     val onEditText: (Layer) -> Unit = {},
+    val onFillReference: (Long, Boolean) -> Unit = { _, _ -> },
 )
 
 /**

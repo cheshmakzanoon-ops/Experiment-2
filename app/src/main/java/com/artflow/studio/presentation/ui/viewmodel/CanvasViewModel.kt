@@ -772,6 +772,11 @@ class CanvasViewModel
                 checkNotNull(canvasRepository.groupLayers(members)) { "These layers cannot be grouped" }
             }
 
+        fun setLayerFillReference(
+            layerId: Long,
+            enabled: Boolean,
+        ) = layerOp { canvasRepository.setLayerFillReference(layerId, enabled) }
+
         fun ungroup(groupId: Long) = layerOp { canvasRepository.ungroupLayers(groupId) }
 
         fun removeLayer(layerId: Long) {
