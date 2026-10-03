@@ -34,6 +34,7 @@ object LiveAdjustments {
         HALFTONE("Halftone", true),
         CHROMATIC_ABERRATION("Chromatic Aberration", true),
         RECOLOR("Recolor", false, usesPoint = true),
+        PERSPECTIVE_BLUR("Perspective Blur", false, usesPoint = true),
     }
 
     /** Settings for one preview or commit. [angleDegrees] orients Motion Blur. */
@@ -55,6 +56,7 @@ object LiveAdjustments {
             when {
                 type != null -> AdjustmentProcessor.apply(source, type, settings.parameters)
                 kind == Kind.RECOLOR -> recolor(source, settings)
+                kind == Kind.PERSPECTIVE_BLUR -> perspectiveBlur(source, settings)
                 amount <= 0f -> source.copy()
                 else -> filter(kind, source, amount, settings.angleDegrees)
             }
@@ -113,6 +115,58 @@ object LiveAdjustments {
             out.pixels[i] = ImageFilters.lerpArgb(pixel, replaced, coverage)
         }
         return out
+    }
+
+    /**
+     * Procreate's positional Perspective Blur: everything streaks toward the focus point (`x`, `y`
+     * parameters, the centre by default), more strongly the farther it is from it.
+     */
+    fun perspectiveBlur(
+        source: PixelBuffer,
+        settings: Settings,
+    ): PixelBuffer {
+        val amount = settings.amount.coerceIn(0f, 1f)
+        if (amount <= 0f) return source.copy()
+        val cx = settings.parameters[RECOLOR_X] ?: (source.width / 2f)
+        val cy = settings.parameters[RECOLOR_Y] ?: (source.height / 2f)
+        val reach = amount * MAX_PERSPECTIVE_PULL
+        val out = PixelBuffer(source.width, source.height)
+        for (y in 0 until source.height) {
+            for (x in 0 until source.width) {
+                out.pixels[y * source.width + x] = streak(source, x + 0.5f, y + 0.5f, (cx - x - 0.5f) * reach, (cy - y - 0.5f) * reach)
+            }
+        }
+        return out
+    }
+
+    /** Average of samples along a line from (px, py) by (dx, dy), weighted by alpha so edges stay clean. */
+    private fun streak(
+        source: PixelBuffer,
+        px: Float,
+        py: Float,
+        dx: Float,
+        dy: Float,
+    ): Int {
+        var a = 0f
+        var r = 0f
+        var g = 0f
+        var b = 0f
+        for (k in 0 until PERSPECTIVE_SAMPLES) {
+            val t = k / PERSPECTIVE_SAMPLES.toFloat()
+            val sample = source.sampleBilinear(px + dx * t, py + dy * t)
+            val alpha = (sample ushr 24) / 255f
+            a += alpha
+            r += ((sample shr 16) and 0xFF) * alpha
+            g += ((sample shr 8) and 0xFF) * alpha
+            b += (sample and 0xFF) * alpha
+        }
+        if (a <= 0f) return 0
+        return Channels.argb(
+            (a / PERSPECTIVE_SAMPLES * 255f).roundToInt().coerceIn(0, 255),
+            (r / a).roundToInt().coerceIn(0, 255),
+            (g / a).roundToInt().coerceIn(0, 255),
+            (b / a).roundToInt().coerceIn(0, 255),
+        )
     }
 
     const val RECOLOR_X = "x"
@@ -242,4 +296,6 @@ object LiveAdjustments {
     private const val GLITCH_BAND = 6
     private const val MAX_ABERRATION = 0.05f
     private const val RECOLOR_MAX_TOLERANCE = 128f
+    private const val MAX_PERSPECTIVE_PULL = 0.35f
+    private const val PERSPECTIVE_SAMPLES = 16
 }

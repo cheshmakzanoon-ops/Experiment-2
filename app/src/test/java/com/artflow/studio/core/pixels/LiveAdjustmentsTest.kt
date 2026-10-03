@@ -82,4 +82,14 @@ class LiveAdjustmentsTest {
         assertTrue(((out.pixels[4] shr 8) and 0xFF) in 1 until 200)
         assertEquals("Blue is not within the flood", blue, out.pixels[12])
     }
+
+    @Test fun perspectiveBlurStreaksTowardTheFocusPoint() {
+        val source = PixelBuffer(40, 40)
+        // A sharp vertical edge away from the centre.
+        for (y in 0 until 40) for (x in 30 until 40) source.pixels[y * 40 + x] = 0xFF000000.toInt()
+        val out = LiveAdjustments.apply(Kind.PERSPECTIVE_BLUR, source, Settings(1f))
+        // Just inside the edge, samples reach back toward the centre and pick up the clear area.
+        assertTrue("The edge streaks along the line to the focus", (out.pixels[20 * 40 + 31] ushr 24) < 255)
+        assertEquals("The focus point stays sharp", source.pixels[20 * 40 + 20], out.pixels[20 * 40 + 20])
+    }
 }

@@ -73,8 +73,10 @@ fun AdjustmentOverlay(
             modifier = Modifier.align(Alignment.TopCenter).padding(12.dp),
         ) {
             val text =
-                if (state.kind.usesPoint) {
+                if (state.kind == LiveAdjustments.Kind.RECOLOR) {
                     "${state.kind.displayName} — touch the colour to replace"
+                } else if (state.kind.usesPoint) {
+                    "${state.kind.displayName} — touch to place the focus point"
                 } else if (state.pencil) {
                     "${state.kind.displayName} — paint where it applies"
                 } else if (state.kind.slidesAmount) {
@@ -92,7 +94,7 @@ fun AdjustmentOverlay(
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (state.kind.adjustmentType != null) ParameterSliders(state, actions.onParameter)
                 if ((state.kind.slidesAmount && state.pencil) || state.kind.usesPoint) {
-                    val label = if (state.kind.usesPoint) "Flood" else "Amount"
+                    val label = if (state.kind == LiveAdjustments.Kind.RECOLOR) "Flood" else "Amount"
                     Text("$label ${(state.settings.amount * 100).toInt()}%", style = MaterialTheme.typography.labelMedium)
                     Slider(value = state.settings.amount, onValueChange = actions.onAmount)
                 }
