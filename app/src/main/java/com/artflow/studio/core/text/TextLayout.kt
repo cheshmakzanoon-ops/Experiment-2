@@ -48,6 +48,11 @@ object TextLayout {
         val maxWidth: Float? = null,
         /** Distance from one line's baseline to the next, in pixels. */
         val curveRadius: Float? = null,
+        val allCaps: Boolean = false,
+        /** Draws the letters' outlines instead of filling them. */
+        val outline: Boolean = false,
+        /** Each paragraph becomes a column read from top to bottom. */
+        val vertical: Boolean = false,
     ) {
         val lineHeightPx: Float get() = fontSize * lineHeight.coerceIn(0.5f, 4f)
     }
@@ -328,6 +333,25 @@ object TextLayout {
         style: TextStyle,
         measureWidth: (String) -> Float,
     ): Boolean = style.maxWidth?.let { measureWidth(text) > it } ?: false
+
+    /** The text as drawn: in capitals when [TextStyle.allCaps] is on. */
+    fun displayText(
+        text: String,
+        style: TextStyle,
+    ): String = if (style.allCaps) text.uppercase() else text
+
+    /** One string per character, keeping surrogate pairs (emoji) whole, for vertical text. */
+    fun glyphs(text: String): List<String> {
+        val glyphs = mutableListOf<String>()
+        var index = 0
+        while (index < text.length) {
+            val codePoint = text.codePointAt(index)
+            val count = Character.charCount(codePoint)
+            glyphs += text.substring(index, index + count)
+            index += count
+        }
+        return glyphs
+    }
 
     /** Word count, shown in the text panel. */
     fun wordCount(text: String): Int = text.trim().split(Regex("\\s+")).count { it.isNotEmpty() }

@@ -1220,6 +1220,21 @@ fun TextSheet(
                 onClick = { onStyleChange(style.copy(strikeThrough = !style.strikeThrough)) },
                 label = { Text("Strike") },
             )
+            FilterChip(
+                selected = style.allCaps,
+                onClick = { onStyleChange(style.copy(allCaps = !style.allCaps)) },
+                label = { Text("All caps") },
+            )
+            FilterChip(
+                selected = style.outline,
+                onClick = { onStyleChange(style.copy(outline = !style.outline)) },
+                label = { Text("Outline") },
+            )
+            FilterChip(
+                selected = style.vertical,
+                onClick = { onStyleChange(style.copy(vertical = !style.vertical)) },
+                label = { Text("Vertical") },
+            )
         }
 
         Text("Alignment", style = MaterialTheme.typography.labelMedium)
