@@ -14,8 +14,11 @@ import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.FilterType
 import com.artflow.studio.domain.model.layer.Layer
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.withContext
 
 /**
  * The editor's document API.
@@ -181,6 +184,29 @@ interface CanvasRepository {
 
     /** Discards only this provisional session without altering committed pixels or history. */
     suspend fun cancelRasterEdit(session: RasterEditSession)
+
+    /** Commits edits to several layers as one undoable step: all of them, or none. */
+    suspend fun commitRasterEdits(
+        sessions: List<RasterEditSession>,
+        description: String,
+    ): Boolean = sessions.all { commitRasterEdit(it, description) }
+
+    /** [applyRasterEdit] for several layers at once, committed as one undoable step. */
+    suspend fun applyRasterEdits(
+        layerIds: List<Long>,
+        description: String,
+        edit: (Long, PixelBuffer) -> Unit,
+    ): Boolean {
+        val sessions = layerIds.map { beginRasterEdit(it) }
+        return try {
+            val open = sessions.filterNotNull()
+            if (open.size != layerIds.size) return false
+            withContext(Dispatchers.Default) { open.forEach { edit(it.layerId, it.buffer) } }
+            commitRasterEdits(open, description)
+        } finally {
+            withContext(NonCancellable) { sessions.filterNotNull().forEach { cancelRasterEdit(it) } }
+        }
+    }
 
     /** One-shot pixel edit: snapshots, applies [edit], persists and invalidates. */
     suspend fun applyRasterEdit(

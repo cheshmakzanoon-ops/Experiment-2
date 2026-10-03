@@ -85,6 +85,30 @@ class CanvasMutationTest {
     }
 
     @Test
+    fun editsToSeveralLayersCommitAsOneStep() =
+        runTest {
+            val bottom = open()
+            val top = repository.addLayer("Top").id
+            val depth = repository.undoDepth
+            val moved =
+                repository.applyRasterEdits(listOf(bottom, top), "Transform") { id, buffer ->
+                    buffer.fill(if (id == bottom) red else blue)
+                }
+            assertTrue(moved)
+            assertEquals(depth + 1, repository.undoDepth)
+            assertEquals(red, repository.layerPixels(bottom)?.pixels?.first())
+            assertEquals(blue, repository.layerPixels(top)?.pixels?.first())
+            assertTrue(repository.undo())
+            assertTrue(repository.layerPixels(top)?.isEmpty() != false)
+            // A stale session discards the whole group.
+            val first = requireNotNull(repository.beginRasterEdit(bottom))
+            val second = requireNotNull(repository.beginRasterEdit(top))
+            paint(top, green)
+            assertFalse(repository.commitRasterEdits(listOf(first, second), "Stale"))
+            assertEquals(green, repository.layerPixels(top)?.pixels?.first())
+        }
+
+    @Test
     fun deletingSeveralLayersIsOneStepAndKeepsALayer() =
         runTest {
             val bottom = open()

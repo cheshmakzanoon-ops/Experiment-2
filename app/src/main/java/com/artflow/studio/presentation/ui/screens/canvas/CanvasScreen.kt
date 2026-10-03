@@ -190,6 +190,8 @@ fun CanvasScreen(
     var editingText by remember { mutableStateOf<Layer?>(null) }
     val adjustment by viewModel.adjustments.state.collectAsState()
     val layerThumbnails by viewModel.layerThumbnails.thumbnails.collectAsState()
+    val pickedLayers by viewModel.layerBatch.picked.collectAsState()
+    LaunchedEffect(canvasView, pickedLayers, activeLayerId) { canvasView?.setTransformCompanions(pickedLayers - activeLayerId) }
     LaunchedEffect(panel, layers, history) {
         if (panel == EditorPanel.LAYERS) viewModel.layerThumbnails.refresh()
     }
@@ -469,6 +471,8 @@ fun CanvasScreen(
                                 }
                             },
                         ),
+                    picked = pickedLayers,
+                    onPicked = viewModel.layerBatch::pick,
                 )
             EditorPanel.SELECTION ->
                 Column {

@@ -117,6 +117,9 @@ fun LayersSheet(
     modifier: Modifier = Modifier,
     thumbnails: Map<Long, PixelBuffer> = emptyMap(),
     optionActions: LayerOptionActions? = null,
+    // Layers swiped right join the active layer in a multi-selection, as in Procreate.
+    picked: Set<Long> = emptySet(),
+    onPicked: (Set<Long>) -> Unit = {},
 ) {
     val onName = rowActions.onName
     val onBlendMode = rowActions.onBlendMode
@@ -127,8 +130,6 @@ fun LayersSheet(
     var blendTarget by remember { mutableStateOf<Layer?>(null) }
     var renameTarget by remember { mutableStateOf<Layer?>(null) }
     var collapsedGroups by remember { mutableStateOf(emptySet<Long>()) }
-    // Layers swiped right join the active layer in a multi-selection, as in Procreate.
-    var picked by remember { mutableStateOf(emptySet<Long>()) }
     val pickedIds = picked.filter { id -> id != activeLayerId && layers.any { it.id == id } }.toSet()
     val active = layers.firstOrNull { it.id == activeLayerId }
 
@@ -138,15 +139,9 @@ fun LayersSheet(
             val chosen = (ids + activeLayerId).toList()
             MultiLayerBar(
                 count = chosen.size,
-                onGroup = {
-                    stackActions.onGroupLayers(chosen)
-                    picked = emptySet()
-                },
-                onDelete = {
-                    stackActions.onDeleteLayers(chosen)
-                    picked = emptySet()
-                },
-                onClear = { picked = emptySet() },
+                onGroup = { stackActions.onGroupLayers(chosen) },
+                onDelete = { stackActions.onDeleteLayers(chosen) },
+                onClear = { onPicked(emptySet()) },
             )
         }
 
@@ -187,7 +182,7 @@ fun LayersSheet(
                         onBlendMode = { blendTarget = layer },
                         onRename = { renameTarget = layer },
                         picked = layer.id in pickedIds,
-                        onPick = { picked = if (layer.id in picked) picked - layer.id else picked + layer.id },
+                        onPick = { onPicked(if (layer.id in pickedIds) pickedIds - layer.id else pickedIds + layer.id) },
                     )
                 }
             }

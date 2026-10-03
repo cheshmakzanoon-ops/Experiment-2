@@ -410,6 +410,7 @@ class ArtFlowCanvasView
             rasterSession?.let { session ->
                 coroutineScope.launch(NonCancellable, start = CoroutineStart.UNDISPATCHED) { canvasRepository.cancelRasterEdit(session) }
             }
+            coroutineScope.launch(NonCancellable, start = CoroutineStart.UNDISPATCHED) { companions.cancel(canvasRepository) }
             rasterSession = null
             rasterBuffer = null
             rasterSource = null
@@ -769,6 +770,8 @@ class ArtFlowCanvasView
             val bounds: IntBounds,
             var quad: Quad,
             var revision: Long,
+            /** Layers multi-selected in the Layers panel, moving with this one. */
+            val companions: List<TransformCompanions.Layer> = emptyList(),
         ) {
             /** Control points while warping; null keeps the plain [quad] placement. */
             var mesh: WarpMesh? = null
@@ -777,6 +780,18 @@ class ArtFlowCanvasView
         }
 
         private var transformSession: TransformSession? = null
+
+        private val companions = TransformCompanions()
+
+        /** Layers multi-selected in the Layers panel transform together with the active layer. */
+        fun setTransformCompanions(ids: Set<Long>) {
+            if (companions.ids == ids) return
+            companions.ids = ids
+            if (pixelTool != null || transformCommitting) return
+            clearTransformSession()
+            if (input.tool == ToolType.TRANSFORM) ensureTransformSession()
+        }
+
         private var transformTarget: TransformQuad.Target = TransformQuad.Target.Body
         private var transformStartQuad: Quad? = null
         private var transformPreviewQuad: Quad? = null
@@ -829,13 +844,17 @@ class ArtFlowCanvasView
             coroutineScope.launch {
                 val pixels = canvasRepository.layerPixels(layerId) ?: return@launch
                 val revision = canvasRepository.contentRevision
-                val bounds = withContext(Dispatchers.Default) { LayerTransform.floatingBounds(pixels, selection) }
+                val extra = companions.load(canvasRepository, layerId, selection)
+                val bounds =
+                    withContext(Dispatchers.Default) {
+                        TransformCompanions.bounds(LayerTransform.floatingBounds(pixels, selection), extra)
+                    }
                 if (bounds == null) {
                     clearTransformSession()
                     onStatusMessage?.invoke("Nothing to transform on this layer")
                     return@launch
                 }
-                val session = TransformSession(layerId, pixels, selection, bounds, Quad.fromBounds(bounds), revision)
+                val session = TransformSession(layerId, pixels, selection, bounds, Quad.fromBounds(bounds), revision, extra)
                 transformSession = session
                 publishTransformQuad()
                 onReady?.invoke(session)
@@ -852,14 +871,20 @@ class ArtFlowCanvasView
             var current = transformSession?.takeIf { it.isCurrent(layerId, selection) }
             if (current == null) {
                 val base = rasterBase ?: return false
-                val bounds = withContext(Dispatchers.Default) { LayerTransform.floatingBounds(base, selection) }
+                val extra = companions.load(canvasRepository, layerId, selection)
+                val bounds =
+                    withContext(Dispatchers.Default) {
+                        TransformCompanions.bounds(LayerTransform.floatingBounds(base, selection), extra)
+                    }
                 if (bounds == null) {
                     onStatusMessage?.invoke("Nothing to transform on this layer")
                     return false
                 }
-                current = TransformSession(layerId, base, selection, bounds, Quad.fromBounds(bounds), canvasRepository.contentRevision)
+                val revision = canvasRepository.contentRevision
+                current = TransformSession(layerId, base, selection, bounds, Quad.fromBounds(bounds), revision, extra)
                 transformSession = current
             }
+            companions.open(canvasRepository, current.companions)
             transformStartQuad = current.quad
             if (warping) {
                 val mesh = current.meshOrBox()
@@ -900,6 +925,7 @@ class ArtFlowCanvasView
             val quad = transformPreviewQuad ?: session.quad
             val mesh = transformPreviewMesh
             TransformQuad.renderShape(session.base, buffer, session.bounds, quad, mesh, session.selection, highQuality = false)
+            companions.render(session.bounds, quad, mesh, highQuality = false)
         }
 
         private fun applyTransformQuad(
@@ -909,25 +935,19 @@ class ArtFlowCanvasView
             ensureTransformSession { session ->
                 val quad = if (warping) session.quad else change(session)
                 val mesh = if (warping) changeMesh(session.meshOrBox()) else null
-                val interpolation = input.transformInterpolation
+                val highQuality = input.transformInterpolation == TransformQuad.Interpolation.BILINEAR
                 transformCommitting = true
                 coroutineScope.launch {
                     try {
-                        val rendered =
-                            withContext(Dispatchers.Default) {
-                                PixelBuffer(session.base.width, session.base.height).also {
-                                    TransformQuad.renderShape(
-                                        session.base,
-                                        it,
-                                        session.bounds,
-                                        quad,
-                                        mesh,
-                                        session.selection,
-                                        highQuality = interpolation == TransformQuad.Interpolation.BILINEAR,
-                                    )
-                                }
+                        val ids = listOf(session.layerId) + session.companions.map { it.layerId }
+                        val placed =
+                            canvasRepository.applyRasterEdits(ids, "Transform") { id, buffer ->
+                                val companion = session.companions.firstOrNull { it.layerId == id }
+                                val source = companion?.base ?: session.base
+                                val selection = if (companion == null) session.selection else null
+                                TransformQuad.renderShape(source, buffer, session.bounds, quad, mesh, selection, highQuality)
                             }
-                        if (canvasRepository.applyRasterEdit(session.layerId, "Transform") { rendered.pixels.copyInto(it.pixels) }) {
+                        if (placed) {
                             session.quad = quad
                             session.mesh = mesh
                             session.revision = canvasRepository.contentRevision
@@ -1892,15 +1912,18 @@ class ArtFlowCanvasView
                         if (transform != null) {
                             // Previews are throttled and nearest-neighbour; commit the exact final placement.
                             withContext(Dispatchers.Default) {
+                                val highQuality = interpolation == TransformQuad.Interpolation.BILINEAR
+                                val quad = finalQuad ?: transform.quad
                                 TransformQuad.renderShape(
                                     transform.base,
                                     session.buffer,
                                     transform.bounds,
-                                    finalQuad ?: transform.quad,
+                                    quad,
                                     finalMesh,
                                     transform.selection,
-                                    highQuality = interpolation == TransformQuad.Interpolation.BILINEAR,
+                                    highQuality,
                                 )
+                                companions.render(transform.bounds, quad, finalMesh, highQuality)
                             }
                         }
                         if (finalLiquify != null && original != null) {
@@ -1911,10 +1934,13 @@ class ArtFlowCanvasView
                                     .copyInto(session.buffer.pixels)
                             }
                         }
+                        val group = listOf(session) + companions.sessions
                         val changed =
-                            original == null || withContext(Dispatchers.Default) { !original.pixels.contentEquals(session.buffer.pixels) }
+                            original == null ||
+                                group.size > 1 ||
+                                withContext(Dispatchers.Default) { !original.pixels.contentEquals(session.buffer.pixels) }
                         if (changed) {
-                            if (canvasRepository.commitRasterEdit(session, description)) {
+                            if (canvasRepository.commitRasterEdits(group, description)) {
                                 if (transform != null) {
                                     transform.quad = finalQuad ?: transform.quad
                                     transform.mesh = finalMesh
@@ -1930,7 +1956,10 @@ class ArtFlowCanvasView
                         }
                     }
                 } finally {
-                    withContext(NonCancellable) { canvasRepository.cancelRasterEdit(session) }
+                    withContext(NonCancellable) {
+                        canvasRepository.cancelRasterEdit(session)
+                        companions.cancel(canvasRepository)
+                    }
                     if (transform != null) {
                         transformCommitting = false
                         publishTransformQuad()

@@ -718,29 +718,49 @@ class CanvasRepositoryImpl
         override suspend fun commitRasterEdit(
             session: CanvasRepository.RasterEditSession,
             description: String,
+        ): Boolean = commitRasterEdits(listOf(session), description)
+
+        override suspend fun commitRasterEdits(
+            sessions: List<CanvasRepository.RasterEditSession>,
+            description: String,
         ): Boolean =
             withState {
-                val pending = pendingEdits.remove(session.snapshotToken) ?: return@withState false
-                damageTrackedSessions -= session.snapshotToken
-                previewDamage = null
-                val layer = layerById(session.layerId) ?: return@withState false
-                if (pending.session !== session || pending.projectId != currentProjectId) return@withState false
-                if (layer !== pending.layer || layer.raster !== pending.original || !layer.canPaint()) return@withState false
-                if (layer.strokes != pending.originalStrokes) return@withState false
-                if (layer.isAlphaLocked != session.alphaLocked) return@withState false
-                if (session.buffer.width != canvasWidth || session.buffer.height != canvasHeight) return@withState false
+                // Every session is consumed; one stale session discards the whole group.
+                val layers = sessions.map { takeCommittable(it) }
+                if (sessions.isEmpty() || layers.any { it == null }) return@withState false
                 // A session is provisional until here: cancellation cannot remove someone else's undo
                 // entry, and autosave/export can never publish half a drag or a failed tool operation.
                 pushUndo()
-                layer.raster = session.buffer.copy()
-                layer.strokes.clear()
-                layer.rasterFile = null
-                dirtyRasters += layer.id
+                sessions.zip(layers.filterNotNull()).forEach { (session, layer) ->
+                    layer.raster = session.buffer.copy()
+                    layer.strokes.clear()
+                    layer.rasterFile = null
+                    dirtyRasters += layer.id
+                }
                 dirty = true
                 emit(CanvasInvalidationEvent.Full)
-                Timber.d("Committed pixel edit ($description) on layer ${session.layerId}")
+                Timber.d("Committed pixel edit ($description) on ${sessions.size} layer(s)")
                 true
             }
+
+        /** Removes [session]'s pending edit and returns its layer when the edit may still be committed. */
+        private fun takeCommittable(session: CanvasRepository.RasterEditSession): LayerData? {
+            val pending = pendingEdits.remove(session.snapshotToken) ?: return null
+            damageTrackedSessions -= session.snapshotToken
+            previewDamage = null
+            val layer = layerById(session.layerId) ?: return null
+            val valid =
+                pending.session === session &&
+                    pending.projectId == currentProjectId &&
+                    layer === pending.layer &&
+                    layer.raster === pending.original &&
+                    layer.canPaint() &&
+                    layer.strokes == pending.originalStrokes &&
+                    layer.isAlphaLocked == session.alphaLocked &&
+                    session.buffer.width == canvasWidth &&
+                    session.buffer.height == canvasHeight
+            return layer.takeIf { valid }
+        }
 
         override suspend fun cancelRasterEdit(session: CanvasRepository.RasterEditSession) =
             withState {
