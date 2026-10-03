@@ -21,6 +21,9 @@ data class AddActions(
     val onCopy: () -> Unit,
     val onCopyCanvas: () -> Unit,
     val onPaste: () -> Unit,
+    val onTakePhoto: () -> Unit = {},
+    val onCutAndPaste: () -> Unit = {},
+    val onDuplicate: () -> Unit = {},
 )
 
 data class CanvasActions(
@@ -132,12 +135,15 @@ private fun AddTab(
 ) {
     ActionRow("Insert a file (PSD)", add.onInsertFile)
     ActionRow("Insert a photo", add.onInsertPhoto)
+    ActionRow("Take a photo", add.onTakePhoto)
     ActionRow("Add text", add.onAddText)
     HorizontalDivider()
     ActionRow("Cut", add.onCut)
     ActionRow("Copy", add.onCopy)
     ActionRow("Copy canvas", add.onCopyCanvas)
     ActionRow("Paste", add.onPaste, enabled = canPaste)
+    ActionRow("Cut & Paste", add.onCutAndPaste)
+    ActionRow("Duplicate", add.onDuplicate)
 }
 
 @Composable

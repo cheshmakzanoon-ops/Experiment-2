@@ -265,6 +265,7 @@ fun CanvasScreen(
                 if (image == null) viewModel.notify("That image could not be opened") else viewModel.insertImageLayer(image)
             }
         }
+    val takePhoto = rememberCameraCapture(onImage = viewModel::insertImageLayer, onError = viewModel::notify)
     val psdPicker =
         rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
             if (uri == null) return@rememberLauncherForActivityResult
@@ -662,6 +663,9 @@ fun CanvasScreen(
                             onCopy = { viewModel.clipboard.copy() },
                             onCopyCanvas = viewModel.clipboard::copyMerged,
                             onPaste = viewModel.clipboard::paste,
+                            onTakePhoto = takePhoto,
+                            onCutAndPaste = viewModel.clipboard::cutAndPaste,
+                            onDuplicate = viewModel.clipboard::copyAndPaste,
                         ),
                     canvas =
                         CanvasActions(

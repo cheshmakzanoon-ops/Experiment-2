@@ -2,4 +2,6 @@
 <paths>
     <!-- No project documents, layer rasters, databases or arbitrary filesystem roots are exposed. -->
     <files-path name="exports" path="exports/" />
+    <!-- Only the transient file a camera app writes for Actions > Add > Take a photo. -->
+    <files-path name="camera" path="camera/" />
 </paths>
