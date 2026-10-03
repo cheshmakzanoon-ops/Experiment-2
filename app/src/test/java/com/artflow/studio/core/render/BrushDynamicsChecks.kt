@@ -12,7 +12,7 @@ import kotlin.math.abs
 object BrushDynamicsChecks {
     fun attributeRoutesAreCompleteAndDisjoint() {
         val attributes = BrushAttribute.entries.filter { it != BrushAttribute.ALL }
-        check(attributes.size == 10)
+        check(attributes.size == 11)
         val labels = BrushAttribute.entries.map { it.label }
         check(labels.distinct().size == labels.size)
         check(BrushAttribute.visible(BrushAttribute.ALL) == attributes)
