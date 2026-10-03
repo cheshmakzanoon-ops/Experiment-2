@@ -204,7 +204,16 @@ class StrokeRasterizer(
         // Spacing is expressed as a fraction of the brush size; a minimum of one dab per segment
         // keeps single-point taps visible.
         val shape = CustomGrains.get(params.shapeId)
-        val tip = Stamping.TipShape(params.roundness, params.rotation, shape?.let { tile -> { u, v -> tile.sample(u, v) } })
+        // Randomized starts each stroke at its own angle; the stroke's seeded random keeps it repeatable.
+        val angle = params.rotation + if (params.tipRandomized) random.nextFloat() * FULL_TURN else 0f
+        val tip =
+            Stamping.TipShape(
+                params.roundness,
+                angle,
+                shape?.let { tile ->
+                    { u, v -> tile.sample(if (params.tipFlipX) 1f - u else u, if (params.tipFlipY) 1f - v else v) }
+                },
+            )
         val context = DabContext(target, stroke, params, totalLength, alphaLock, mask, random, tip, canvas)
         val spacingPx = max(1f, params.size * params.spacing.coerceIn(0.01f, 4f))
         var carry = 0f
@@ -614,3 +623,6 @@ private const val TILT_OPACITY_LOSS = 0.6f
 
 /** Fall off at its gentlest spreads the fade over this many extra brush sizes. */
 private const val FALLOFF_RANGE = 39f
+
+/** Degrees in a full turn, for a randomized tip angle. */
+private const val FULL_TURN = 360f

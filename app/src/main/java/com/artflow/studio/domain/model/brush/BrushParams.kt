@@ -54,6 +54,9 @@ data class BrushParams(
     val dual: DualBrush? = null, // Second brush combined with this one along the same path
     val taperOpacity: Float = 0f, // 0..1: how much the tapered ends also fade
     val falloff: Float = 0f, // 0..1: the stroke fades out along its path; 1 fades within one brush size
+    val tipFlipX: Boolean = false, // Mirror the shape image across its vertical axis
+    val tipFlipY: Boolean = false, // Mirror the shape image across its horizontal axis
+    val tipRandomized: Boolean = false, // Each stroke starts the tip at a random angle
 ) {
     /** Imported grain and shape images this brush (and its second brush) paints with. */
     val imageIds: List<String>

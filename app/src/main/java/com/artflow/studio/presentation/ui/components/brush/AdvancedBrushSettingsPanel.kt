@@ -420,6 +420,29 @@ private fun BrushRotationSettings(
             valueDisplay = "%.0f°".format(brushParams.rotation),
             isInteger = true,
         )
+        ShapeSwitch("Randomized", brushParams.tipRandomized) { onBrushParamsChanged(brushParams.copy(tipRandomized = it)) }
+        ShapeSwitch("Flip X", brushParams.tipFlipX) { onBrushParamsChanged(brushParams.copy(tipFlipX = it)) }
+        ShapeSwitch("Flip Y", brushParams.tipFlipY) { onBrushParamsChanged(brushParams.copy(tipFlipY = it)) }
+    }
+}
+
+@Composable
+private fun ShapeSwitch(
+    label: String,
+    checked: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
+    val touchSize = if (LocalArtFlowFlags.current.largeTouchTargets) 56.dp else 48.dp
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        Switch(
+            checked = checked,
+            onCheckedChange = onChange,
+            modifier =
+                Modifier
+                    .sizeIn(minWidth = touchSize, minHeight = touchSize)
+                    .semantics { contentDescription = label },
+        )
     }
 }
 
