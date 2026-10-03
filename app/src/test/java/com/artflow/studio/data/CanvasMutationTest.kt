@@ -86,6 +86,21 @@ class CanvasMutationTest {
     }
 
     @Test
+    fun neighbouringLayersMergeInOneStep() =
+        runTest {
+            val bottom = open()
+            val middle = repository.addLayer("Middle").id
+            val top = repository.addLayer("Top").id
+            paint(middle, red)
+            assertFalse("Layers with a gap between them do not merge", repository.mergeLayerRange(listOf(bottom, top)))
+            val depth = repository.undoDepth
+            assertTrue(repository.mergeLayerRange(listOf(top, middle, bottom)))
+            assertEquals(depth + 1, repository.undoDepth)
+            assertEquals(listOf(bottom), repository.getAllLayers().map { it.id })
+            assertEquals(red, image().pixels.first())
+        }
+
+    @Test
     fun oneOpacityDragIsOneUndoStep() =
         runTest {
             val layer = open()

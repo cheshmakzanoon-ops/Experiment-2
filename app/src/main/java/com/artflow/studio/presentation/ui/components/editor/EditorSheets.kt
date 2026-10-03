@@ -100,6 +100,7 @@ data class LayerStackActions(
     val onUngroup: ((Long) -> Unit)? = null,
     val onGroupLayers: (List<Long>) -> Unit = {},
     val onDeleteLayers: (List<Long>) -> Unit = {},
+    val onMergeLayers: (List<Long>) -> Unit = {},
 )
 
 data class LayerMaskActions(
@@ -146,6 +147,7 @@ fun LayersSheet(
             MultiLayerBar(
                 count = chosen.size,
                 onGroup = { stackActions.onGroupLayers(chosen) },
+                onMerge = { stackActions.onMergeLayers(chosen) },
                 onDelete = { stackActions.onDeleteLayers(chosen) },
                 onClear = { onPicked(emptySet()) },
             )
@@ -345,6 +347,7 @@ private fun LayersHeader(
 private fun MultiLayerBar(
     count: Int,
     onGroup: () -> Unit,
+    onMerge: () -> Unit,
     onDelete: () -> Unit,
     onClear: () -> Unit,
 ) {
@@ -354,6 +357,7 @@ private fun MultiLayerBar(
     ) {
         Text("$count layers selected", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
         TextButton(onClick = onGroup) { Text("Group") }
+        TextButton(onClick = onMerge) { Text("Merge") }
         TextButton(onClick = onDelete) { Text("Delete", color = MaterialTheme.colorScheme.error) }
         TextButton(onClick = onClear) { Text("Done") }
     }

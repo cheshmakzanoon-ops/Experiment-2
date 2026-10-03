@@ -26,6 +26,12 @@ class LayerBatchController(
             checkNotNull(repository.groupLayers(layerIds)) { "These layers cannot be grouped" }
         }
 
+    fun merge(layerIds: List<Long>) =
+        perform {
+            _picked.value = emptySet()
+            check(repository.mergeLayerRange(layerIds)) { "Only neighbouring, visible and unlocked layers can be merged" }
+        }
+
     fun delete(layerIds: List<Long>) =
         perform {
             _picked.value = emptySet()

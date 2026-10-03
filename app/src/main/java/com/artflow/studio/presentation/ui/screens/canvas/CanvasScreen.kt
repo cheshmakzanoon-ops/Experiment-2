@@ -462,6 +462,7 @@ fun CanvasScreen(
                             onUngroup = viewModel::ungroup,
                             onGroupLayers = viewModel.layerBatch::group,
                             onDeleteLayers = viewModel.layerBatch::delete,
+                            onMergeLayers = viewModel.layerBatch::merge,
                         ),
                     maskActions =
                         LayerMaskActions(

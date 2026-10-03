@@ -296,6 +296,9 @@ interface CanvasRepository {
         targetLayerId: Long,
     ): Boolean
 
+    /** Merges a run of neighbouring layers into the lowest one in one step, as pinching layers does in Procreate. */
+    suspend fun mergeLayerRange(layerIds: List<Long>): Boolean = false
+
     suspend fun mergeVisibleLayers(keepOriginals: Boolean = false): Long?
 
     suspend fun mergeLayerDown(layerId: Long): Boolean
