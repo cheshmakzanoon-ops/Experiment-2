@@ -19,13 +19,6 @@ import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
-/** One action on the QuickMenu ring. */
-data class QuickAction(
-    val label: String,
-    val icon: ImageVector,
-    val onClick: () -> Unit,
-)
-
 /**
  * Procreate's QuickMenu: a ring of actions around the middle of the screen. Tapping an action runs
  * it and closes the menu; tapping the centre opens the full quick menu, and tapping outside closes it.
@@ -87,3 +80,10 @@ fun RadialQuickMenu(
 
 private const val RING_SIZE = 300
 private const val RADIUS = 104
+
+/** One action on the QuickMenu ring. */
+data class QuickAction(
+    val label: String,
+    val icon: ImageVector,
+    val onClick: () -> Unit,
+)

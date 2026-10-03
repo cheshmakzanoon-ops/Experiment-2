@@ -240,6 +240,12 @@ class SettingsRepositoryImpl
                 KEY_PALETTES to PaletteCodec.exportJson(settings.customPalettes),
             )
 
+        /** A stored true/false, or [default] when it is missing or unreadable. */
+        private fun Map<String, String>.flag(
+            key: String,
+            default: Boolean,
+        ): Boolean = this[key]?.toBooleanStrictOrNull() ?: default
+
         private fun decode(stored: Map<String, String>): AppSettings {
             val defaults = AppSettings()
             val recentColors =
@@ -255,38 +261,36 @@ class SettingsRepositoryImpl
                     stored[KEY_THEME]?.let { name -> ThemeMode.entries.firstOrNull { it.name == name } }
                         ?: defaults.themeMode,
                 accent = AccentChoice.byName(stored[KEY_ACCENT]),
-                highContrast = stored[KEY_HIGH_CONTRAST]?.toBooleanStrictOrNull() ?: defaults.highContrast,
-                reduceMotion = stored[KEY_REDUCE_MOTION]?.toBooleanStrictOrNull() ?: defaults.reduceMotion,
+                highContrast = stored.flag(KEY_HIGH_CONTRAST, defaults.highContrast),
+                reduceMotion = stored.flag(KEY_REDUCE_MOTION, defaults.reduceMotion),
                 uiScale =
                     stored[KEY_UI_SCALE]?.toFloatOrNull()?.takeIf { it.isFinite() }?.coerceIn(MIN_UI_SCALE, MAX_UI_SCALE)
                         ?: defaults.uiScale,
-                largeTouchTargets = stored[KEY_LARGE_TOUCH]?.toBooleanStrictOrNull() ?: defaults.largeTouchTargets,
-                checkerboard = stored[KEY_CHECKERBOARD]?.toBooleanStrictOrNull() ?: defaults.checkerboard,
-                onionSkin = stored[KEY_ONION]?.toBooleanStrictOrNull() ?: defaults.onionSkin,
+                largeTouchTargets = stored.flag(KEY_LARGE_TOUCH, defaults.largeTouchTargets),
+                checkerboard = stored.flag(KEY_CHECKERBOARD, defaults.checkerboard),
+                onionSkin = stored.flag(KEY_ONION, defaults.onionSkin),
                 showSymmetryGuides =
-                    stored[KEY_SYMMETRY_GUIDES]?.toBooleanStrictOrNull()
-                        ?: defaults.showSymmetryGuides,
+                    stored.flag(KEY_SYMMETRY_GUIDES, defaults.showSymmetryGuides),
                 showPerspectiveGuides =
-                    stored[KEY_PERSPECTIVE_GUIDES]?.toBooleanStrictOrNull()
-                        ?: defaults.showPerspectiveGuides,
-                snapToGuides = stored[KEY_SNAP]?.toBooleanStrictOrNull() ?: defaults.snapToGuides,
-                brushCursor = stored[KEY_BRUSH_CURSOR]?.toBooleanStrictOrNull() ?: defaults.brushCursor,
-                stylusOnly = stored[KEY_STYLUS_ONLY]?.toBooleanStrictOrNull() ?: defaults.stylusOnly,
-                haptics = stored[KEY_HAPTICS]?.toBooleanStrictOrNull() ?: defaults.haptics,
-                rightHandedInterface = stored[KEY_RIGHT_HANDED]?.toBooleanStrictOrNull() ?: defaults.rightHandedInterface,
+                    stored.flag(KEY_PERSPECTIVE_GUIDES, defaults.showPerspectiveGuides),
+                snapToGuides = stored.flag(KEY_SNAP, defaults.snapToGuides),
+                brushCursor = stored.flag(KEY_BRUSH_CURSOR, defaults.brushCursor),
+                stylusOnly = stored.flag(KEY_STYLUS_ONLY, defaults.stylusOnly),
+                haptics = stored.flag(KEY_HAPTICS, defaults.haptics),
+                rightHandedInterface = stored.flag(KEY_RIGHT_HANDED, defaults.rightHandedInterface),
                 pressureCurve =
                     stored[KEY_PRESSURE_CURVE]?.toFloatOrNull()?.takeIf { it.isFinite() }?.coerceIn(MIN_CURVE, MAX_CURVE)
                         ?: defaults.pressureCurve,
                 stabilization =
                     stored[KEY_STABILIZATION]?.toFloatOrNull()?.takeIf { it.isFinite() }?.coerceIn(0f, 1f)
                         ?: defaults.stabilization,
-                scrubToClear = stored[KEY_SCRUB_CLEAR]?.toBooleanStrictOrNull() ?: defaults.scrubToClear,
-                swipeCopyPaste = stored[KEY_SWIPE_PASTE]?.toBooleanStrictOrNull() ?: defaults.swipeCopyPaste,
-                fourFingerFullScreen = stored[KEY_FOUR_FINGER]?.toBooleanStrictOrNull() ?: defaults.fourFingerFullScreen,
+                scrubToClear = stored.flag(KEY_SCRUB_CLEAR, defaults.scrubToClear),
+                swipeCopyPaste = stored.flag(KEY_SWIPE_PASTE, defaults.swipeCopyPaste),
+                fourFingerFullScreen = stored.flag(KEY_FOUR_FINGER, defaults.fourFingerFullScreen),
                 timelapseMaxSide =
                     stored[KEY_TIMELAPSE_SIDE]?.toIntOrNull()?.takeIf { it in TIMELAPSE_SIDES } ?: defaults.timelapseMaxSide,
-                dynamicBrushScaling = stored[KEY_DYNAMIC_BRUSH]?.toBooleanStrictOrNull() ?: defaults.dynamicBrushScaling,
-                autosaveEnabled = stored[KEY_AUTOSAVE]?.toBooleanStrictOrNull() ?: defaults.autosaveEnabled,
+                dynamicBrushScaling = stored.flag(KEY_DYNAMIC_BRUSH, defaults.dynamicBrushScaling),
+                autosaveEnabled = stored.flag(KEY_AUTOSAVE, defaults.autosaveEnabled),
                 autosaveIntervalMs =
                     stored[KEY_AUTOSAVE_INTERVAL]
                         ?.toLongOrNull()
@@ -296,7 +300,7 @@ class SettingsRepositoryImpl
                     stored[KEY_GALLERY_SORT]
                         ?.let { name -> GallerySort.entries.firstOrNull { it.name == name } }
                         ?: defaults.gallerySort,
-                seenOnboarding = stored[KEY_ONBOARDING]?.toBooleanStrictOrNull() ?: defaults.seenOnboarding,
+                seenOnboarding = stored.flag(KEY_ONBOARDING, defaults.seenOnboarding),
                 dismissedTips =
                     stored[KEY_TIPS]?.split('|')?.filter { it.isNotBlank() }?.toSet()
                         ?: defaults.dismissedTips,

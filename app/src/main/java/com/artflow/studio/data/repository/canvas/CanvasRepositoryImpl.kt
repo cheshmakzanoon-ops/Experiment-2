@@ -1139,6 +1139,15 @@ class CanvasRepositoryImpl
 
         private var opacityRun: OpacityRun? = null
 
+        /** True when the last undo entry is an opacity change to [layerId] made moments ago. */
+        private fun continuesOpacityRun(
+            layerId: Long,
+            now: Long,
+        ): Boolean {
+            val run = opacityRun ?: return false
+            return run.layerId == layerId && run.pushes == undoPushes && now - run.at <= OPACITY_MERGE_MS
+        }
+
         /** Counts undo entries ever pushed, so an opacity run can tell whether anything came between. */
         private var undoPushes = 0L
 
@@ -1153,8 +1162,7 @@ class CanvasRepositoryImpl
                 if (layer.opacity == clamped) return@withState true
                 // A slider drag is one undo step: changes to the same layer in quick succession merge.
                 val now = System.currentTimeMillis()
-                val run = opacityRun
-                if (run == null || run.layerId != layerId || run.pushes != undoPushes || now - run.at > OPACITY_MERGE_MS) pushUndo()
+                if (!continuesOpacityRun(layerId, now)) pushUndo()
                 opacityRun = OpacityRun(layerId, undoPushes, now)
                 layer.opacity = clamped
                 dirty = true

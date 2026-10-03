@@ -28,16 +28,6 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
-/** What Page Assist's page strip can do. Pages are the document's frames. */
-data class PageAssistActions(
-    val onSelect: (Int) -> Unit,
-    val onAdd: () -> Unit,
-    val onDuplicate: () -> Unit,
-    val onDelete: (Int) -> Unit,
-    val onMove: (from: Int, to: Int) -> Unit,
-    val onClose: () -> Unit,
-)
-
 /**
  * Page Assist: a strip of page thumbnails along the bottom of the canvas. Tapping a page shows it
  * on the canvas; the buttons add, duplicate, delete and reorder pages. A PDF of all frames exports
@@ -124,3 +114,13 @@ private fun PageCard(
 
 private val PAGE_WIDTH = 64.dp
 private val PAGE_HEIGHT = 84.dp
+
+/** What Page Assist's page strip can do. Pages are the document's frames. */
+data class PageAssistActions(
+    val onSelect: (Int) -> Unit,
+    val onAdd: () -> Unit,
+    val onDuplicate: () -> Unit,
+    val onDelete: (Int) -> Unit,
+    val onMove: (from: Int, to: Int) -> Unit,
+    val onClose: () -> Unit,
+)

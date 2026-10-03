@@ -77,6 +77,7 @@ import com.artflow.studio.presentation.ui.components.editor.CopyPasteActions
 import com.artflow.studio.presentation.ui.components.editor.CopyPasteMenu
 import com.artflow.studio.presentation.ui.components.editor.CropBar
 import com.artflow.studio.presentation.ui.components.editor.CropOverlay
+import com.artflow.studio.presentation.ui.components.editor.GuideAssist
 import com.artflow.studio.presentation.ui.components.editor.GuidesOverlay
 import com.artflow.studio.presentation.ui.components.editor.GuidesSheet
 import com.artflow.studio.presentation.ui.components.editor.LayerMaskActions
@@ -527,7 +528,6 @@ fun CanvasScreen(
                 GuidesSheet(
                     symmetry = input.symmetry,
                     perspective = input.perspective,
-                    snapToGuides = input.snapToGuides,
                     showSymmetryGuides = settings.showSymmetryGuides,
                     showPerspectiveGuides = settings.showPerspectiveGuides,
                     onSymmetry = {
@@ -539,11 +539,15 @@ fun CanvasScreen(
                         if (it.isActive() && !input.perspective.isActive()) viewModel.setLayerDrawingAssist(activeLayerId, true)
                         viewModel.setPerspectiveSettings(it)
                     },
-                    onSnap = { viewModel.setSnapToGuides(it) },
                     onShowSymmetry = { scope.launch { viewModel.setSymmetryGuidesVisible(it) } },
                     onShowPerspective = { scope.launch { viewModel.setPerspectiveGuidesVisible(it) } },
-                    assisted = layers.firstOrNull { it.id == activeLayerId }?.drawingAssist == true,
-                    onAssisted = { viewModel.setLayerDrawingAssist(activeLayerId, it) },
+                    assist =
+                        GuideAssist(
+                            snapToGuides = input.snapToGuides,
+                            onSnap = { viewModel.setSnapToGuides(it) },
+                            assisted = layers.firstOrNull { it.id == activeLayerId }?.drawingAssist == true,
+                            onAssisted = { viewModel.setLayerDrawingAssist(activeLayerId, it) },
+                        ),
                 )
             EditorPanel.ANIMATION ->
                 AnimationSheet(

@@ -944,21 +944,26 @@ fun AnimationSheet(
 // Guides
 // ---------------------------------------------------------------------------------------------
 
+/** Whether guides pull strokes: globally, and on the current layer through Drawing Assist. */
+data class GuideAssist(
+    val snapToGuides: Boolean,
+    val onSnap: (Boolean) -> Unit,
+    val assisted: Boolean = false,
+    val onAssisted: (Boolean) -> Unit = {},
+)
+
 @Composable
 fun GuidesSheet(
     symmetry: SymmetryEngine.Settings,
     perspective: PerspectiveGuide.Settings,
-    snapToGuides: Boolean,
     showSymmetryGuides: Boolean,
     showPerspectiveGuides: Boolean,
     onSymmetry: (SymmetryEngine.Settings) -> Unit,
     onPerspective: (PerspectiveGuide.Settings) -> Unit,
-    onSnap: (Boolean) -> Unit,
     onShowSymmetry: (Boolean) -> Unit,
     onShowPerspective: (Boolean) -> Unit,
+    assist: GuideAssist,
     modifier: Modifier = Modifier,
-    assisted: Boolean = false,
-    onAssisted: (Boolean) -> Unit = {},
 ) {
     Column(
         modifier =
@@ -1074,12 +1079,12 @@ fun GuidesSheet(
         Divider()
         Text("Display", style = MaterialTheme.typography.titleMedium)
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Switch(checked = assisted, onCheckedChange = onAssisted)
+            Switch(checked = assist.assisted, onCheckedChange = assist.onAssisted)
             Spacer(Modifier.width(8.dp))
             Text("Assisted drawing on this layer", style = MaterialTheme.typography.bodySmall)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Switch(checked = snapToGuides, onCheckedChange = onSnap)
+            Switch(checked = assist.snapToGuides, onCheckedChange = assist.onSnap)
             Spacer(Modifier.width(8.dp))
             Text("Snap strokes to guides", style = MaterialTheme.typography.bodySmall)
         }
