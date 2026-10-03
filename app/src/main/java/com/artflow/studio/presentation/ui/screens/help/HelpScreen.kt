@@ -106,7 +106,8 @@ object Tutorials {
                 "Tap the selected layer for its options. Swipe left for Lock, Duplicate and Delete; swipe right " +
                     "to select several layers, then group, delete or transform them together. Touch and hold to drag a " +
                     "layer into a new place. Swipe right with two fingers to toggle Alpha Lock, or tap with two " +
-                    "fingers and slide across the canvas to set the layer's opacity.",
+                    "fingers and slide across the canvas to set the layer's opacity. Groups can hold groups: " +
+                    "select a group with other layers and group them, or drag a layer or group into another.",
                 "flow.layers",
             ),
             TutorialStep(
@@ -123,8 +124,10 @@ object Tutorials {
             ),
             TutorialStep(
                 "Export",
-                "PNG, JPEG, WebP, PDF and layered PSD for stills; GIF, MP4, a zipped PNG sequence and a " +
-                    "multi-page PDF for animations and pages. Actions > Video replays and exports your drawing's timelapse.",
+                "PNG, JPEG, WebP, TIFF, PDF, layered PSD and layers as PNG files for stills; GIF, animated PNG, " +
+                    "MP4, a zipped PNG sequence and a multi-page PDF for animations and pages. Display P3 canvases " +
+                    "keep their colour profile in PNG and JPEG and are converted to sRGB for other formats. " +
+                    "Actions > Video replays and exports your drawing's timelapse.",
                 "flow.export",
             ),
             TutorialStep(
