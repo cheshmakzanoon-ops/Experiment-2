@@ -772,6 +772,11 @@ class CanvasViewModel
                 checkNotNull(canvasRepository.groupLayers(members)) { "These layers cannot be grouped" }
             }
 
+        fun setLayerDrawingAssist(
+            layerId: Long,
+            enabled: Boolean,
+        ) = layerOp { canvasRepository.setLayerDrawingAssist(layerId, enabled) }
+
         fun setLayerFillReference(
             layerId: Long,
             enabled: Boolean,

@@ -220,6 +220,7 @@ private fun LayerStatus(layer: Layer) {
             if (layer.isClippingMask) add("clipping")
             if (layer.isAlphaLocked) add("alpha locked")
             if (layer.isFillReference) add("reference")
+            if (layer.drawingAssist) add("assisted")
             if (layer.isReference) add("not exported")
             if (layer.textContent != null) add("text")
             if (layer.hasMask()) add("mask")
@@ -273,6 +274,10 @@ private fun LayerMenu(
             DropdownMenuItem(
                 text = { Text(if (layer.isFillReference) "Reference ✓" else "Reference") },
                 onClick = item { options.onFillReference(layer.id, !layer.isFillReference) },
+            )
+            DropdownMenuItem(
+                text = { Text(if (layer.drawingAssist) "Drawing Assist ✓" else "Drawing Assist") },
+                onClick = item { options.onDrawingAssist(layer.id, !layer.drawingAssist) },
             )
             DropdownMenuItem(
                 text = { Text(if (layer.isReference) "Exclude from export ✓" else "Exclude from export") },

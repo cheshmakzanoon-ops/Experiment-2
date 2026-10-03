@@ -6,6 +6,7 @@ import com.artflow.studio.core.pixels.AdjustmentProcessor
 import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
+import com.artflow.studio.core.symmetry.SymmetryEngine
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.repository.canvas.CanvasRepositoryImpl
 import com.artflow.studio.domain.model.brush.BrushParams
@@ -83,6 +84,23 @@ class CanvasMutationTest {
         assertTrue(image().pixels.any { (it ushr 24) != 0 })
         return layer
     }
+
+    @Test
+    fun symmetryMirrorsOnlyOnAssistedLayers() =
+        runTest {
+            val layer = open()
+            repository.setSymmetry(SymmetryEngine.Settings(type = SymmetryEngine.SymmetryType.VERTICAL))
+            val plain = repository.beginStroke(1.5f, 3f, 1f, BrushParams(size = 2f), layer)
+            repository.endStroke(plain)
+            val right = image().pixels.indices.filter { it % 8 >= 4 }
+            assertTrue("Without Drawing Assist nothing is mirrored", right.all { (image().pixels[it] ushr 24) == 0 })
+            assertTrue(repository.setLayerDrawingAssist(layer, true))
+            assertTrue(repository.isDrawingAssisted(layer))
+            val mirrored = repository.beginStroke(1.5f, 3f, 1f, BrushParams(size = 2f), layer)
+            repository.endStroke(mirrored)
+            val pixels = image().pixels
+            assertTrue("With Drawing Assist the stroke is mirrored", right.any { (pixels[it] ushr 24) != 0 })
+        }
 
     @Test
     fun onlyOneLayerIsTheFillReference() =

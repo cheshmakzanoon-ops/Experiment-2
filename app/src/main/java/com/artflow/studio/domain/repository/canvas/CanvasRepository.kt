@@ -338,6 +338,14 @@ interface CanvasRepository {
         isClipping: Boolean? = null,
     ): Boolean
 
+    /** Turns Drawing Assist on or off for a layer: symmetry and guide snapping apply only where it is on. */
+    suspend fun setLayerDrawingAssist(
+        layerId: Long,
+        enabled: Boolean,
+    ): Boolean = false
+
+    fun isDrawingAssisted(layerId: Long): Boolean = true
+
     /** Makes a layer the fill reference whose lines bound ColorDrop on other layers (one at a time). */
     suspend fun setLayerFillReference(
         layerId: Long,

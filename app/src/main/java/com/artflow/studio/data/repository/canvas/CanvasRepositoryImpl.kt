@@ -384,6 +384,7 @@ class CanvasRepositoryImpl
                     isGroup = layer.isGroup
                     parentGroupId = layer.parentGroupId
                     isFillReference = layer.isFillReference
+                    drawingAssist = layer.drawingAssist
                 }
             data.raster = loadRaster(projectId, layer.rasterFile)
             data.text = layer.textContent
@@ -603,7 +604,7 @@ class CanvasRepositoryImpl
                 )
             // Preview and commit share this exact raw-pixel operation. Compute first so a failed
             // allocation or render cannot add an undo entry or modify the committed document.
-            val incoming = SymmetryEngine.mirrorStroke(stroke, canvasWidth, canvasHeight, symmetrySettings)
+            val incoming = SymmetryEngine.mirrorStroke(stroke, canvasWidth, canvasHeight, symmetryFor(layer, symmetrySettings))
             val reach = incoming.map { PreviewCache.boundsOf(it, 0) }.reduce { a, b -> PreviewCache.union(a, b) }
             val area =
                 IntBounds(max(0, reach.left), max(0, reach.top), min(canvasWidth - 1, reach.right), min(canvasHeight - 1, reach.bottom))
@@ -1196,6 +1197,28 @@ class CanvasRepositoryImpl
                 val layer = layerById(layerId) ?: return@withState false
                 pushUndo()
                 layer.isClippingMask = isClipping ?: !layer.isClippingMask
+                dirty = true
+                emit(CanvasInvalidationEvent.LayersChanged)
+                true
+            }
+
+        /** Symmetry mirrors strokes only on layers with Drawing Assist, as in Procreate. */
+        private fun symmetryFor(
+            layer: LayerData?,
+            settings: SymmetryEngine.Settings,
+        ): SymmetryEngine.Settings = if (layer?.drawingAssist == true) settings else NO_SYMMETRY
+
+        override fun isDrawingAssisted(layerId: Long): Boolean = currentLayers().firstOrNull { it.id == layerId }?.drawingAssist == true
+
+        override suspend fun setLayerDrawingAssist(
+            layerId: Long,
+            enabled: Boolean,
+        ): Boolean =
+            withState {
+                val layer = layerById(layerId)?.takeIf { !it.isGroup } ?: return@withState false
+                if (layer.drawingAssist == enabled) return@withState true
+                pushUndo()
+                layer.drawingAssist = enabled
                 dirty = true
                 emit(CanvasInvalidationEvent.LayersChanged)
                 true
@@ -2072,8 +2095,10 @@ class CanvasRepositoryImpl
                     }
                 withContext(Dispatchers.Default) {
                     val drawn =
-                        snapshot.strokes.flatMap {
-                            SymmetryEngine.mirrorStroke(it, snapshot.document.width, snapshot.document.height, snapshot.symmetry)
+                        snapshot.strokes.flatMap { stroke ->
+                            val layer = snapshot.layers.firstOrNull { it.id == stroke.layerId }
+                            val symmetry = symmetryFor(layer, snapshot.symmetry)
+                            SymmetryEngine.mirrorStroke(stroke, snapshot.document.width, snapshot.document.height, symmetry)
                         }
                     previewCache.frame(key, damage, drawn, snapshot.document.width, snapshot.document.height) { region ->
                         renderPreview(if (region == null) snapshot else cropPreview(snapshot, region))
@@ -2137,7 +2162,7 @@ class CanvasRepositoryImpl
                 // Mirror in canvas coordinates, then shift into the region being rendered.
                 val incoming =
                     SymmetryEngine
-                        .mirrorStroke(stroke, snapshot.document.width, snapshot.document.height, snapshot.symmetry)
+                        .mirrorStroke(stroke, snapshot.document.width, snapshot.document.height, symmetryFor(layer, snapshot.symmetry))
                         .map { if (region == null) it else PreviewCache.translate(it, -region.left.toFloat(), -region.top.toFloat()) }
                 val pixels =
                     LayerStrokeRenderer.render(
@@ -2563,6 +2588,7 @@ class CanvasRepositoryImpl
         ) {
             var isGroup: Boolean = false
             var isFillReference: Boolean = false
+            var drawingAssist: Boolean = false
             var parentGroupId: Long? = null
 
             /** Editable text; set it after [raster], because any new pixels turn the text into pixels. */
@@ -2618,6 +2644,7 @@ class CanvasRepositoryImpl
                     isGroup = this@LayerData.isGroup
                     parentGroupId = this@LayerData.parentGroupId
                     isFillReference = this@LayerData.isFillReference
+                    drawingAssist = this@LayerData.drawingAssist
                 }.also {
                     it.raster = raster
                     it.text = text
@@ -2667,6 +2694,7 @@ class CanvasRepositoryImpl
                     isGroup = this@LayerData.isGroup
                     parentGroupId = this@LayerData.parentGroupId
                     isFillReference = this@LayerData.isFillReference
+                    drawingAssist = this@LayerData.drawingAssist
                 }.also { fresh ->
                     fresh.raster = raster
                     fresh.text = text
@@ -2700,6 +2728,7 @@ class CanvasRepositoryImpl
                     linkGroupId = linkGroupId,
                     isGroup = isGroup,
                     isFillReference = isFillReference,
+                    drawingAssist = drawingAssist,
                     parentGroupId = parentGroupId,
                     isInternal = isInternal,
                     textContent = text,
@@ -2719,6 +2748,7 @@ class CanvasRepositoryImpl
 
         companion object {
             private const val MAX_HISTORY = 30
+            private val NO_SYMMETRY = SymmetryEngine.Settings()
             private const val TEXT_LAYER_NAME = 32
 
             /**

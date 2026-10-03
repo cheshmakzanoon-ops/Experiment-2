@@ -2363,7 +2363,8 @@ class ArtFlowCanvasView
             index: Int,
         ): Pair<Float, Float> {
             var (canvasX, canvasY) = viewToCanvas(x, y)
-            if (!input.snapToGuides) return canvasX to canvasY
+            // Guides pull strokes only on layers with Drawing Assist, as in Procreate.
+            if (!input.snapToGuides || !canvasRepository.isDrawingAssisted(activeLayerId)) return canvasX to canvasY
 
             if (input.symmetry.isActive()) {
                 val snappedPoint =

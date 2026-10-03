@@ -468,6 +468,7 @@ fun CanvasScreen(
                             onInvert = { viewModel.applyAdjustmentToCanvas(AdjustmentType.INVERT, emptyMap(), toAllLayers = false) },
                             onReference = viewModel::setLayerReference,
                             onFillReference = viewModel::setLayerFillReference,
+                            onDrawingAssist = viewModel::setLayerDrawingAssist,
                             onMask = { viewModel.createLayerMask(LayerMaskSource.REVEAL_ALL) },
                             onCombineDown = viewModel::groupWithLayerBelow,
                             onEditText = { layer ->
@@ -510,11 +511,20 @@ fun CanvasScreen(
                     snapToGuides = input.snapToGuides,
                     showSymmetryGuides = settings.showSymmetryGuides,
                     showPerspectiveGuides = settings.showPerspectiveGuides,
-                    onSymmetry = { viewModel.setSymmetrySettings(it) },
-                    onPerspective = { viewModel.setPerspectiveSettings(it) },
+                    onSymmetry = {
+                        // Turning a guide on assists the current layer, like Procreate's Assisted Drawing.
+                        if (it.isActive() && !input.symmetry.isActive()) viewModel.setLayerDrawingAssist(activeLayerId, true)
+                        viewModel.setSymmetrySettings(it)
+                    },
+                    onPerspective = {
+                        if (it.isActive() && !input.perspective.isActive()) viewModel.setLayerDrawingAssist(activeLayerId, true)
+                        viewModel.setPerspectiveSettings(it)
+                    },
                     onSnap = { viewModel.setSnapToGuides(it) },
                     onShowSymmetry = { scope.launch { viewModel.setSymmetryGuidesVisible(it) } },
                     onShowPerspective = { scope.launch { viewModel.setPerspectiveGuidesVisible(it) } },
+                    assisted = layers.firstOrNull { it.id == activeLayerId }?.drawingAssist == true,
+                    onAssisted = { viewModel.setLayerDrawingAssist(activeLayerId, it) },
                 )
             EditorPanel.ANIMATION ->
                 AnimationSheet(

@@ -58,6 +58,7 @@ data class LayerOptionActions(
     val onCombineDown: (Long) -> Unit,
     val onEditText: (Layer) -> Unit = {},
     val onFillReference: (Long, Boolean) -> Unit = { _, _ -> },
+    val onDrawingAssist: (Long, Boolean) -> Unit = { _, _ -> },
 )
 
 /**
@@ -938,6 +939,8 @@ fun GuidesSheet(
     onShowSymmetry: (Boolean) -> Unit,
     onShowPerspective: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    assisted: Boolean = false,
+    onAssisted: (Boolean) -> Unit = {},
 ) {
     Column(
         modifier =
@@ -1052,6 +1055,11 @@ fun GuidesSheet(
 
         Divider()
         Text("Display", style = MaterialTheme.typography.titleMedium)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(checked = assisted, onCheckedChange = onAssisted)
+            Spacer(Modifier.width(8.dp))
+            Text("Assisted drawing on this layer", style = MaterialTheme.typography.bodySmall)
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(checked = snapToGuides, onCheckedChange = onSnap)
             Spacer(Modifier.width(8.dp))

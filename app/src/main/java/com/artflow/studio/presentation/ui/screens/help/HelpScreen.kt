@@ -91,7 +91,8 @@ object Tutorials {
             TutorialStep(
                 "Drawing guides",
                 "Grid, isometric, perspective and symmetry guides live in Actions > Canvas > Drawing Guide. " +
-                    "Symmetry replicates the brush motion, so width and texture stay correct on every mirrored stroke.",
+                    "They mirror and snap strokes only on layers with Drawing Assist, which turning a guide on " +
+                    "enables for the current layer. Symmetry replicates the brush motion, so width and texture stay correct.",
                 "tool.guides",
             ),
         )

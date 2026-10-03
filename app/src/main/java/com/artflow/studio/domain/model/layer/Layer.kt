@@ -53,6 +53,8 @@ data class Layer(
     val isGroup: Boolean = false,
     /** Procreate's Reference: ColorDrop and the paint bucket on other layers stop at this layer's lines. */
     val isFillReference: Boolean = false,
+    /** Procreate's Drawing Assist: symmetry and guide snapping apply to strokes on this layer. */
+    val drawingAssist: Boolean = false,
     /** Set for an editable text layer; null once the text has been turned into pixels. */
     val textContent: com.artflow.studio.core.text.TextLayerContent? = null,
     /** Runtime mask presence is independent of whether its immutable PNG has been saved yet. */
@@ -136,6 +138,7 @@ data class Layer(
             isInternal = isInternal,
             isGroup = this.isGroup,
             isFillReference = this.isFillReference,
+            drawingAssist = this.drawingAssist,
             hasInMemoryMask = hasInMemoryMask,
         )
 }
