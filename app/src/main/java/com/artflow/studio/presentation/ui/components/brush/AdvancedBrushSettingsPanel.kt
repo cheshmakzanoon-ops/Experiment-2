@@ -271,6 +271,9 @@ private fun BrushGrainSettings(
                 valueRange = 0f..360f,
                 valueDisplay = "%.0f°".format(brushParams.textureRotation),
             )
+            ShapeSwitch("Moving grain (starts with each stroke)", brushParams.grainMoving) {
+                onBrushParamsChanged(brushParams.copy(grainMoving = it))
+            }
         }
     }
 }

@@ -97,12 +97,13 @@ class StrokeRasterizer(
         drawStrokeInto(buffer, stroke, params, points, alphaLock = false, mask = null, random = random, canvas = target)
         val dual = params.dual?.let { drawDual(target, stroke, it) }
         val texture = BrushTexture.from(params)
+        val (grainX, grainY) = grainOrigin(params, points)
         val wetEdges = params.wetEdges.coerceIn(0f, 1f)
         for (i in target.pixels.indices) {
             val source = dual?.combine(buffer.pixels[i], i, originX + i % target.width, originY + i / target.width) ?: buffer.pixels[i]
             if ((source ushr 24) == 0) continue
             val coverage = selectionCoverage(mask, target, i)
-            val grain = texture?.coverage(originX + i % target.width, originY + i / target.width) ?: 1f
+            val grain = texture?.coverage(originX + i % target.width - grainX, originY + i / target.width - grainY) ?: 1f
             val effective = strokeAlpha * coverage * grain * wetEdgeFactor(source, wetEdges)
             if (effective <= 0f) continue
             val paint = Channels.scaleAlpha(source, effective)
@@ -159,13 +160,14 @@ class StrokeRasterizer(
         val eraseShape = stroke.copy(color = 0xFFFFFFFF.toInt())
         drawStrokeInto(buffer, eraseShape, params, points, alphaLock = false, mask = null, random = random)
         val texture = BrushTexture.from(params)
+        val (grainX, grainY) = grainOrigin(params, points)
         for (i in target.pixels.indices) {
             val source = buffer.pixels[i]
             val sourceCoverage = ((source ushr 24) and 0xFF) / 255f
             if (sourceCoverage <= 0f) continue
             val selectionCoverage = selectionCoverage(mask, target, i)
             if (selectionCoverage <= 0f) continue
-            val grain = texture?.coverage(originX + i % target.width, originY + i / target.width) ?: 1f
+            val grain = texture?.coverage(originX + i % target.width - grainX, originY + i / target.width - grainY) ?: 1f
             val erase = (strokeAlpha * sourceCoverage * selectionCoverage * grain).coerceIn(0f, 1f)
             val destination = target.pixels[i]
             val destinationAlpha = (destination ushr 24) and 0xFF
@@ -493,6 +495,12 @@ class StrokeRasterizer(
         val endFactor = if (endRamp <= 0f) 1f else (remaining / endRamp).coerceIn(0.05f, 1f)
         return min(startFactor, endFactor)
     }
+
+    /** Moving grain is anchored where the stroke starts; texturized grain stays fixed to the canvas. */
+    private fun grainOrigin(
+        params: BrushParams,
+        points: List<StrokePoint>,
+    ): Pair<Int, Int> = if (params.grainMoving) points.first().x.toInt() to points.first().y.toInt() else 0 to 0
 
     /** Fall off: the stroke fades to nothing over one brush size at 1, and over 40 sizes near 0. */
     private fun falloffFactor(
