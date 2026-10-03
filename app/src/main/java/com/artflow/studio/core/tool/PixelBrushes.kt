@@ -86,6 +86,7 @@ object PixelBrushes {
                 hardness = settings.hardness,
                 mask = settings.mask,
                 alphaLock = settings.alphaLock,
+                texture = settings.texture,
             )
 
             accumulatedDistance += distance
@@ -118,6 +119,8 @@ object PixelBrushes {
         val fingerMode: Boolean = false,
         val mask: SelectionMask? = null,
         val alphaLock: Boolean = false,
+        /** The selected brush's tip and grain, so smudging carries its texture as in Procreate. */
+        val texture: Stamping.PatchTexture = Stamping.PatchTexture(),
     ) {
         val radius: Float get() = (size / 2f).coerceAtLeast(0.5f)
     }

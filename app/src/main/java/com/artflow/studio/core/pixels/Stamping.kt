@@ -279,13 +279,24 @@ object Stamping {
         hardness: Float,
         mask: SelectionMask? = null,
         alphaLock: Boolean = false,
+        texture: PatchTexture = PatchTexture(),
     ) {
         if (radius <= 0f || strength <= 0f) return
         // Read the source patch first: dragging while reading would smear the write back in.
         val patch = readPatch(target, fromX, fromY, radius)
         val alpha = strength.coerceIn(0f, 1f)
-        stampPatch(target, patch, toX, toY, radius, alpha, hardness, mask, alphaLock)
+        stampPatch(target, patch, toX, toY, radius, alpha, hardness, mask, alphaLock, texture)
     }
+
+    /**
+     * The brush character of a smudge or patch stamp: [shape] gives coverage at an offset measured
+     * in radii (-1..1 on each axis) in place of the round soft edge, and [grain] scales it by canvas
+     * position.
+     */
+    data class PatchTexture(
+        val shape: ((Float, Float) -> Float)? = null,
+        val grain: ((Int, Int) -> Float)? = null,
+    )
 
     /** Reads a circular patch into a (2r+1)^2 buffer so it can be written back displaced. */
     fun readPatch(
@@ -320,6 +331,7 @@ object Stamping {
         hardness: Float,
         mask: SelectionMask? = null,
         alphaLock: Boolean = false,
+        texture: PatchTexture = PatchTexture(),
     ) {
         val r = (sqrt(patch.size.toFloat()).toInt() - 1) / 2
         if (r <= 0) return
@@ -332,7 +344,13 @@ object Stamping {
                 if (!target.contains(px, py)) continue
                 val distance = sqrt((dx * dx + dy * dy).toFloat())
                 if (distance > radius) continue
-                val falloff = if (distance <= inner) 1f else ((radius - distance) / edge).coerceIn(0f, 1f)
+                val shape = texture.shape
+                val falloff =
+                    when {
+                        shape != null -> shape(dx / radius, dy / radius)
+                        distance <= inner -> 1f
+                        else -> ((radius - distance) / edge).coerceIn(0f, 1f)
+                    } * (texture.grain?.invoke(px, py) ?: 1f)
                 val index = py * target.width + px
                 val coverage =
                     if (mask == null) {

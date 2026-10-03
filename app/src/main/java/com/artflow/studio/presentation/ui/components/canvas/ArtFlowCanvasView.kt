@@ -25,6 +25,7 @@ import com.artflow.studio.core.pixels.RasterOverlay
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.pixels.TransformQuad
 import com.artflow.studio.core.pixels.WarpMesh
+import com.artflow.studio.core.render.BrushPatch
 import com.artflow.studio.core.symmetry.SymmetryEngine
 import com.artflow.studio.core.text.TextLayout
 import com.artflow.studio.core.tool.FillTool
@@ -1778,7 +1779,12 @@ class ArtFlowCanvasView
                         PixelBrushes.beginSmudge(
                             x,
                             y,
-                            gestureInput.smudge.copy(size = gestureInput.brushParams.size, mask = selection, alphaLock = alphaLocked),
+                            gestureInput.smudge.copy(
+                                size = gestureInput.brushParams.size,
+                                mask = selection,
+                                alphaLock = alphaLocked,
+                                texture = BrushPatch.texture(gestureInput.brushParams),
+                            ),
                         )
                 ToolType.CLONE_STAMP -> {
                     val source = cloneSource ?: (x to y)
