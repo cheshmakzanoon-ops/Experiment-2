@@ -12,22 +12,29 @@ are recorded separately; they are not silently counted as shipped capabilities.
 
 ## Current comparison
 
+Updated 3 October 2026 for the `claude/adoring-wozniak-7oybyj` branch. Rows describe what is
+reachable in the editor; device validation by artists is still outstanding for every row.
+
 | Workflow | Reference product | ArtFlow now | Remaining work |
 | --- | --- | --- | --- |
-| Canvas-first workspace | Primary painting controls, movable sidebar, hide-interface mode [1] | Compact dock, focus mode, explicit panel closing, neutral contrast-tested themes and split-view tablet Brush Studio | Handedness-aware sidebar, anchored canvas panels, broader adaptive-layout and artist validation |
-| Brush library | Search, organization and management [13] | Eight original starter presets; searchable saved copies with rename and confirmed deletion | Favorites, user sets, preset interchange, a professionally curated and artist-tested collection |
-| Brush Studio | Staged settings, numerical input, re-rendering drawing pad, custom shapes/grains and dual brushes [2] | Local draft/apply/cancel/reset, exact values, pressure curves, procedural grains, isolated practice, complete-parameter saved copies | Imported shape/grain assets, dual-brush workflow, tilt-aware rendering and physical-stylus response validation |
-| Transform | Scale, rotate, distort, warp, snapping and interpolation controls [3] | Move, uniform/freeform scale, rotate and flip of the layer or only the selected pixels, with live preview and bilinear commit (`LayerTransform`) | On-canvas handles, distort/warp/perspective, snapping and interpolation choice |
-| Layer organization | Multi-selection, drag ordering and nested groups [4] | Topmost-first stack, active-layer up/down, organisational groups (collapse, cascading visibility/opacity), photo insert, masks, opacity, blending, adjustments and filters | Nested groups with isolated blending, multi-selection and drag ordering |
-| Reference companion | Floating canvas/image reference with sampling and navigation [5] | Movable image window with bounded decode, pan/zoom/fit, long-press/pick-mode sampling | Live canvas view, manual resize and source persistence; sampling currently uses a decoded preview |
-| Selections and fill | Automatic/freehand/rectangle/ellipse selection and ColorDrop [6] | Selection masks, boolean combination, invert/feather, cut/copy/paste to a new layer, bucket fill and ColorDrop (drag the colour chip onto the canvas) | Interactive ColorDrop threshold drag and Selection-mask painting |
-| Drawing assistance | QuickShape, grids, perspective and symmetry [7] | Shapes, symmetry, perspective guides, StreamLine stabilisation and QuickShape line/ellipse snapping | Editable recognized shapes, polyline/rectangle recognition and assisted-line validation on devices |
-| Colour | Working-space profiles and imported ICC profiles [8] | Wheel, RGB/HSV/CMYK controls, hex, harmonies and palettes | ICC-managed working spaces and tagged interchange; CMYK sliders are not print colour management |
-| Animation | Animation Assist timeline and onion skin [9] | Reachable frame editing, duration/FPS, playback, onion skin and animated export | Artist-tested navigation/timing, long-session memory and cross-tool fidelity |
-| Drawing timelapse | Process recording and video export [10] | Automatic per-edit capture beside the project and MP4 replay export (`TimelapseRecorder`) | In-app replay viewer and recording resolution choices |
-| File interchange | Image/layered-document import and sharing [11] | PNG/JPEG/WebP/PDF/PSD/GIF/MP4 and frame-sequence export; PSD layer import; photo import as a layer or a new canvas | Broader external-application round-trip fixtures |
-| Page and 3D workflows | Page Assist and 3D painting [12] | Not implemented | Remain explicit gaps for full product equivalence |
-| Reliability and performance | Must be compared through executed tasks, not marketing claims | Automated engine/storage/export/UI tests; CPU painting/composition with GL ES 2.0 display | Physical latency, sustained frame times, large documents, interruption, low storage and long-session evaluation |
+| Canvas-first workspace | Top bar, movable sidebar, hide-interface mode [1] | Gallery/Actions/Adjustments/Selection/Transform and Paint/Smudge/Erase/Layers/colour top bar; sidebar with size and opacity sliders, eyedropper button and undo/redo; right-hand interface option; full screen by four-finger tap; anchored popovers on tablets | Artist validation of layout and reach on phones and tablets |
+| Gestures | Taps for undo/redo, pinch navigation, Copy & Paste swipe, clear scrub [1] | Two/three/four-finger taps, pinch/rotate/pan, quick pinch to fit, three-finger swipe for Copy & Paste, three-finger scrub to clear, touch-and-hold eyedropper, stylus hover outline and side-button eyedropper | Gesture customisation in preferences |
+| Actions | Add, Canvas, Share, Video, Prefs and Help [1] | Tabbed Actions panel with those six tabs, including pressure curve and stabilization preferences | Help links to a fuller handbook |
+| Brush library | Search, organisation and management [13] | 39 original presets in categories; searchable saved copies with rename and deletion; `.artbrush` share and import that carry imported images | Favourites, user sets and a professionally curated, artist-tested collection |
+| Brush Studio | Staged settings, drawing pad, custom shapes/grains and dual brushes [2] | Draft/apply/cancel, exact values, pressure curves, procedural and imported grains, imported shape tips, flat tips, per-brush blend mode, wet edges and wet mix | Dual brushes and tilt-aware rendering |
+| Adjustments | Live adjustments in Layer and Pencil modes [14] | Hue/Saturation/Brightness, Colour Balance, Curves, Gradient Map, Gaussian and Motion Blur, Noise, Sharpen, Bloom, Glitch, Halftone, Chromatic Aberration and Recolor, each with Layer or Pencil mode | Perspective Blur and Liquify Adjust/Reset |
+| Transform | Freeform, Uniform, Distort and Warp with snapping [3] | On-canvas box with corner, edge and rotation handles; Freeform, Uniform, Distort and Warp (4 × 4 Bézier mesh); flip, rotate, fit, reset and interpolation choice | Snapping and magnetics |
+| Layer organisation | Thumbnails, options, swipe actions, groups [4] | Thumbnails, tap-the-selected-layer options, swipe for Lock/Duplicate/Delete, blend-mode codes, groups whose blend mode and opacity apply to the merged group, editable text layers | Multi-selection, drag ordering and nested groups |
+| Reference companion | Floating canvas/image reference [5] | Movable image window with pan/zoom/fit and sampling | Live canvas view and source persistence |
+| Selections and fill | Automatic/freehand/rectangle/ellipse, Save & Load, ColorDrop [6] | Automatic with slide-to-set threshold, freehand, rectangle, ellipse; Add/Remove; invert, feather, Save & Load, Colour Fill, Copy & Paste; ColorDrop | ColorDrop threshold drag and selection-mask painting |
+| Drawing assistance | QuickShape, grids, perspective and symmetry [7] | QuickShape lines, polylines, ellipses, triangles, rectangles and polygons, adjustable while held with 45° line snapping; symmetry, perspective, isometric and grid guides; stabilization | Assisted drawing per layer and device validation |
+| Colour | Disc, Classic, Harmony, Value, Palettes; ICC profiles [8] | Disc, Classic, Harmony, Value and Palettes tabs with history and previous-colour swatch | ICC-managed working spaces |
+| Animation | Animation Assist timeline and onion skin [9] | Frame editing, duration/FPS, loop and ping-pong, onion skin colours and animated export | Artist-tested navigation and timing |
+| Drawing timelapse | Recording, replay and export [10] | Automatic capture, in-app replay with scrubbing, MP4 export | Recording resolution choices |
+| Gallery | Stacks, preview, import and share [11] | Stacks, full-screen swipe preview, share, photo import as a new canvas | Drag-to-stack and multi-select |
+| File interchange | Image and layered-document import and sharing [11] | PNG/JPEG/WebP/PDF/PSD/GIF/MP4 and frame-sequence export; PSD layer import; photo import | Broader external round-trip fixtures |
+| Page and 3D workflows | Page Assist and 3D painting [12] | Not implemented | Remain explicit gaps |
+| Reliability and performance | Measured through executed tasks | CPU painting and compositing; strokes in progress and finished strokes recomposite and upload only the area they touched; GL ES 2.0 display | GPU painting engine; physical latency and sustained frame-time measurements on large documents |
 
 Cloud collaboration and smart objects are separate ArtFlow roadmap ideas, not asserted Procreate
 features. Telemetry is intentionally absent and is not a parity requirement. Procreate is a workflow
@@ -212,3 +219,4 @@ These references document Procreate; they do not validate ArtFlow.
 [11]: https://help.procreate.com/procreate/handbook/gallery/gallery-import-share
 [12]: https://procreate.com/procreate
 [13]: https://help.procreate.com/procreate/handbook/brushes/brush-library
+[14]: https://help.procreate.com/procreate/handbook/adjustments
