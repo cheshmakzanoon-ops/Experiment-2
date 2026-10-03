@@ -23,6 +23,7 @@ import com.artflow.studio.core.export.FitMode
 import com.artflow.studio.core.export.GifEncoder
 import com.artflow.studio.core.export.PdfPageSize
 import com.artflow.studio.core.export.PsdCodec
+import com.artflow.studio.core.export.TiffCodec
 import com.artflow.studio.core.pixels.BlendModes
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.data.local.ProjectStorage
@@ -118,6 +119,8 @@ class ArtworkExporter
                                 )
                             ExportFormat.PDF -> buildPdf(listOf(prepared), options)
                             ExportFormat.PSD -> buildPsd(prepared, layers, options, hasAdjustmentLayers)
+                            ExportFormat.TIFF -> TiffCodec.write(flatten(prepared, options), options.dpi)
+                            ExportFormat.LAYER_PNGS -> buildLayerZip(prepared, layers, projectName, options)
                             else -> return@withContext Result.failure(
                                 ExportFailure(ExportError.UnsupportedFormat(options.format).message),
                             )
@@ -357,6 +360,29 @@ class ArtworkExporter
                 matteColor = options.backgroundColor,
                 keepTransparency = options.keepGifTransparency && !options.flattenOntoBackground,
             )
+        }
+
+        /** Procreate's Share Layers > PNG files: every layer as its own PNG, plus the composite. */
+        private fun buildLayerZip(
+            composite: PixelBuffer,
+            layers: List<LayerRaster>,
+            projectName: String,
+            options: ExportOptions,
+        ): ByteArray {
+            val out = ByteArrayOutputStream()
+            ZipOutputStream(out).use { zip ->
+                val prefix = ExportNaming.sanitize(projectName).ifEmpty { "ArtFlow" }
+                layers.forEachIndexed { index, entry ->
+                    val name = ExportNaming.sanitize(entry.name).ifEmpty { "Layer" }
+                    zip.putNextEntry(ZipEntry("%s_%02d_%s.png".format(prefix, index + 1, name)))
+                    zip.write(BitmapPixelBridge.toPngBytes(prepare(entry.buffer, composite.width, composite.height, options), options.dpi))
+                    zip.closeEntry()
+                }
+                zip.putNextEntry(ZipEntry("%s_composite.png".format(prefix)))
+                zip.write(BitmapPixelBridge.toPngBytes(flatten(composite, options), options.dpi))
+                zip.closeEntry()
+            }
+            return out.toByteArray()
         }
 
         private fun buildFrameSequenceZip(

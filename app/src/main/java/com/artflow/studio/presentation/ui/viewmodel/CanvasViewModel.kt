@@ -1251,7 +1251,7 @@ class CanvasViewModel
                         canvasRepository.exportSnapshot(
                             allFrames,
                             resolved.includeHiddenLayers,
-                            resolved.format == ExportFormat.PSD,
+                            resolved.format.needsLayers,
                         )
                     val region = ExportRegion.resolve(snapshot.frames, snapshot.selection, resolved.area)
                     val frames = snapshot.frames.map { ExportRegion.apply(it, snapshot.selection, resolved.area, region) }

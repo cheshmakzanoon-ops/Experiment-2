@@ -32,7 +32,7 @@ reachable in the editor; device validation by artists is still outstanding for e
 | Animation | Animation Assist timeline and onion skin [9] | Frame editing, duration/FPS, loop and ping-pong, background and foreground frames, onion skin colours and animated export | Artist-tested navigation and timing |
 | Drawing timelapse | Recording, replay and export [10] | Automatic capture, in-app replay with scrubbing, full-length or 30-second MP4 export, 720p, 1080p or 1440p recording | Device validation of 1440p encoding |
 | Gallery | Stacks, preview, import and share [11] | Stacks with drag-to-stack (touch and hold, drop on an artwork or stack), Select mode to stack, duplicate or delete several artworks, full-screen swipe preview, share, photo import as a new canvas | Artist validation of drag gestures in long galleries |
-| File interchange | Image and layered-document import and sharing [11] | PNG/JPEG/WebP/PDF/PSD/GIF/MP4 and frame-sequence export; PSD layer import; photo import | Broader external round-trip fixtures |
+| File interchange | Image and layered-document import and sharing [11] | PNG/JPEG/WebP/PDF/PSD/TIFF/GIF/MP4, layers as PNG files and frame-sequence export; PSD layer import; photo import | Broader external round-trip fixtures |
 | Page and 3D workflows | Page Assist and 3D painting [12] | Page Assist: page strip with thumbnails, add, duplicate, delete and reorder; all pages export as one PDF | 3D painting remains an explicit gap |
 | Reliability and performance | Measured through executed tasks | CPU painting and compositing; strokes in progress and finished strokes recomposite and upload only the area they touched; GL ES 2.0 display | GPU painting engine; physical latency and sustained frame-time measurements on large documents |
 

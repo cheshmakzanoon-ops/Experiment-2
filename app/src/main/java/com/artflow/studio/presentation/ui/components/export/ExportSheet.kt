@@ -187,7 +187,7 @@ private fun FormatControls(
     if (options.format == ExportFormat.JPEG || options.format == ExportFormat.WEBP) {
         LabeledSlider("Quality", options.quality.toFloat(), 1f..100f, { onChange(options.copy(quality = it.toInt())) })
     }
-    if (options.format in listOf(ExportFormat.PNG, ExportFormat.JPEG, ExportFormat.PSD, ExportFormat.PDF)) {
+    if (options.format in DPI_FORMATS) {
         LabeledSlider("DPI", options.dpi.toFloat(), 36f..600f, { onChange(options.copy(dpi = it.toInt())) })
     }
     if (options.format == ExportFormat.PDF) {
@@ -299,3 +299,7 @@ fun previewBytesFor(buffer: com.artflow.studio.core.pixels.PixelBuffer?): ByteAr
 /** Human-readable frame timing summary, used by the animation export section. */
 fun frameSummary(frames: List<AnimationFrame>): String =
     if (frames.isEmpty()) "No frames" else "${frames.size} frames · ${frames.sumOf { it.durationMs }} ms"
+
+/** Formats that record a print resolution. */
+private val DPI_FORMATS =
+    setOf(ExportFormat.PNG, ExportFormat.JPEG, ExportFormat.PSD, ExportFormat.PDF, ExportFormat.TIFF, ExportFormat.LAYER_PNGS)
