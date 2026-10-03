@@ -58,6 +58,11 @@ class CanvasMutationTest {
     private suspend fun image(transparent: Boolean = true): PixelBuffer =
         requireNotNull(repository.compositeFrame(0, transparentBackground = transparent))
 
+    private suspend fun firstPixel(frame: Int): Int {
+        val image = requireNotNull(repository.compositeFrame(frame, transparentBackground = true))
+        return image.pixels.first()
+    }
+
     private suspend fun paint(
         layer: Long,
         color: Int,
@@ -90,10 +95,11 @@ class CanvasMutationTest {
         runTest {
             paint(open(), red)
             repository.addFrame(duplicateCurrent = false)
-            assertEquals(0, requireNotNull(repository.compositeFrame(1, transparentBackground = true)).pixels.first() ushr 24)
-            repository.updateAnimationSettings(repository.timeline.value.settings.copy(backgroundFrame = true))
-            assertEquals(red, requireNotNull(repository.compositeFrame(1, transparentBackground = true)).pixels.first())
-            assertEquals(red, requireNotNull(repository.compositeFrame(0, transparentBackground = true)).pixels.first())
+            assertEquals(0, firstPixel(1) ushr 24)
+            val settings = repository.timeline.value.settings
+            repository.updateAnimationSettings(settings.copy(backgroundFrame = true))
+            assertEquals(red, firstPixel(1))
+            assertEquals(red, firstPixel(0))
         }
 
     @Test
