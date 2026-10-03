@@ -237,7 +237,9 @@ class ArtFlowCanvasView
             val tool = if (type == MotionEvent.TOOL_TYPE_ERASER) ToolType.ERASER else input.tool
             val showing = input.brushCursor && tool in CURSOR_TOOLS && event.actionMasked != MotionEvent.ACTION_HOVER_EXIT
             val size = if (tool == ToolType.ERASER) input.eraserSize else input.brushParams.size
-            onBrushCursorChanged?.invoke(if (showing) BrushCursor(event.x, event.y, size / 2f * scale) else null)
+            // With dynamic brush scaling the brush keeps its size on screen, whatever the zoom.
+            val onScreen = if (input.dynamicBrushScaling) size / 2f else size / 2f * scale
+            onBrushCursorChanged?.invoke(if (showing) BrushCursor(event.x, event.y, onScreen) else null)
             return true
         }
 
