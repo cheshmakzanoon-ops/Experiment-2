@@ -1009,6 +1009,8 @@ class CanvasRepositoryImpl
                 mergeStack(selected.map { it.id }.toSet(), targetLayerId, layers[target].name, lowerIndex) != null
             }
 
+        private fun mergeable(layer: LayerData): Boolean = layer.isVisible && !layer.isLocked && !layer.isReference && !layer.isGroup
+
         override suspend fun mergeLayerRange(layerIds: List<Long>): Boolean =
             withState {
                 val layers = currentLayers()
@@ -1016,7 +1018,7 @@ class CanvasRepositoryImpl
                 // Only a run of neighbouring layers merges, so nothing between them changes order.
                 if (indices.size < 2 || indices.first() < 0 || indices.last() - indices.first() != indices.size - 1) return@withState false
                 val selected = indices.map { layers[it] }
-                if (selected.any { !it.isVisible || it.isLocked || it.isReference || it.isGroup }) return@withState false
+                if (!selected.all(::mergeable)) return@withState false
                 val bottom = selected.first()
                 mergeStack(selected.map { it.id }.toSet(), bottom.id, bottom.name, indices.first()) != null
             }
