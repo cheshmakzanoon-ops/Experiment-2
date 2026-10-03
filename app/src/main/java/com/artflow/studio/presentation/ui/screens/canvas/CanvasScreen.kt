@@ -430,6 +430,10 @@ fun CanvasScreen(
                             onDuplicate = { viewModel.duplicateLayer(it) },
                             onDelete = { viewModel.removeLayer(it) },
                             onMergeDown = { viewModel.mergeLayerDown(it) },
+                            onSelectContents = { id ->
+                                viewModel.setActiveLayer(id)
+                                viewModel.selectionFromAlphaOfActiveLayer()
+                            },
                             onOpacityMode = { id ->
                                 viewModel.setActiveLayer(id)
                                 panel = EditorPanel.NONE

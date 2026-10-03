@@ -81,6 +81,8 @@ data class LayerRowActions(
     val onMergeDown: (Long) -> Unit,
     /** Two-finger tap: slide across the canvas to set this layer's opacity. */
     val onOpacityMode: (Long) -> Unit = {},
+    /** Two-finger touch and hold: select the layer's contents. */
+    val onSelectContents: (Long) -> Unit = {},
 )
 
 data class LayerStackActions(

@@ -72,6 +72,7 @@ internal fun LayerRow(
                     key = layer.id,
                     onTap = { actions.onOpacityMode(layer.id) },
                     onSwipeRight = { actions.onAlphaLock(layer.id, !layer.isAlphaLocked) },
+                    onHold = { actions.onSelectContents(layer.id) },
                 ).pointerInput(layer.id) {
                     var travel = 0f
                     detectHorizontalDragGestures(
@@ -167,12 +168,13 @@ private val SWIPE_REVEAL = 56.dp
 
 /**
  * Procreate's two-finger layer gestures: a quick tap adjusts opacity, a swipe right toggles Alpha
- * Lock. Two-finger touches are consumed so the row's own tap and swipe handling stays out of the way.
+ * Lock and a touch and hold selects the layer's contents. Two-finger touches are consumed so the row's own tap and swipe handling stays out of the way.
  */
 private fun Modifier.twoFingerGestures(
     key: Any,
     onTap: () -> Unit,
     onSwipeRight: () -> Unit,
+    onHold: () -> Unit,
 ): Modifier =
     pointerInput(key) {
         awaitEachGesture {
@@ -192,14 +194,17 @@ private fun Modifier.twoFingerGestures(
                 if (event.changes.none { it.pressed }) break
             }
             if (pointers != 2) return@awaitEachGesture
+            val still = travel < viewConfiguration.touchSlop * 2
             when {
                 sideways > TWO_FINGER_SWIPE_DP.dp.toPx() -> onSwipeRight()
-                travel < viewConfiguration.touchSlop * 2 && last - first.uptimeMillis < TWO_FINGER_TAP_MS -> onTap()
+                still && last - first.uptimeMillis < TWO_FINGER_TAP_MS -> onTap()
+                still && last - first.uptimeMillis >= TWO_FINGER_HOLD_MS -> onHold()
             }
         }
     }
 
 private const val TWO_FINGER_SWIPE_DP = 48
+private const val TWO_FINGER_HOLD_MS = 500L
 private const val TWO_FINGER_TAP_MS = 400L
 
 @Composable
