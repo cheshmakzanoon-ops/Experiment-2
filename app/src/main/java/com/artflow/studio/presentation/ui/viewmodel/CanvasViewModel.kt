@@ -6,7 +6,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.artflow.studio.core.animation.AnimationTimeline
 import com.artflow.studio.core.animation.PlaybackStepper
-import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.color.ColorHarmony
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.color.PaletteLibrary
@@ -16,7 +15,6 @@ import com.artflow.studio.core.export.ExportOptions
 import com.artflow.studio.core.export.ExportRegion
 import com.artflow.studio.core.export.ExportResult
 import com.artflow.studio.core.perspective.PerspectiveGuide
-import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.pixels.TransformQuad
@@ -65,6 +63,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.plus
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import javax.inject.Inject
@@ -752,6 +751,7 @@ class CanvasViewModel
         val savedSelections = SavedSelections(canvasRepository) { refreshSelection() }
         val textLayers = TextLayerController(canvasRepository, ::layerOp)
         val layerBatch = LayerBatchController(canvasRepository, ::layerOp)
+        val canvasOps = CanvasOpsController(canvasRepository, viewModelScope + editorErrors, ::notify, ::refreshUiStateSize)
         val canvasPreview = CanvasPreviewController(canvasRepository, viewModelScope)
         val pageThumbnails = PageThumbnailController(canvasRepository, viewModelScope)
 
@@ -1023,93 +1023,6 @@ class CanvasViewModel
         // -----------------------------------------------------------------------------------------
         // Canvas operations
         // -----------------------------------------------------------------------------------------
-
-        fun resizeCanvas(
-            width: Int,
-            height: Int,
-            resample: Boolean,
-            anchor: CanvasOperations.Anchor,
-        ) {
-            viewModelScope.launch(editorErrors) {
-                if (canvasRepository.resizeCanvas(width, height, resample, anchor)) {
-                    refreshUiStateSize(width, height, canvasSize().third)
-                    notify("Canvas resized to ${width}x$height")
-                } else {
-                    notify("That canvas size is not supported")
-                }
-            }
-        }
-
-        fun cropCanvas(bounds: IntBounds) {
-            viewModelScope.launch(editorErrors) {
-                if (canvasRepository.cropCanvas(bounds)) {
-                    val (width, height, dpi) = canvasSize()
-                    refreshUiStateSize(width, height, dpi)
-                } else {
-                    notify("Crop not applied. Select an area inside the canvas and finish active edits.")
-                }
-            }
-        }
-
-        fun rotateCanvas(degrees: Int) {
-            viewModelScope.launch(editorErrors) {
-                if (canvasRepository.rotateCanvas(degrees)) {
-                    val (width, height, dpi) = canvasSize()
-                    refreshUiStateSize(width, height, dpi)
-                    notify("Canvas rotated $degrees°")
-                } else {
-                    notify("Rotation not applied. Choose a quarter turn and finish active edits.")
-                }
-            }
-        }
-
-        fun flipCanvas(vertical: Boolean) {
-            viewModelScope.launch(editorErrors) {
-                if (canvasRepository.flipCanvas(vertical)) {
-                    notify(if (vertical) "Canvas flipped vertically" else "Canvas flipped horizontally")
-                } else {
-                    notify("Flip not applied. Finish active edits first.")
-                }
-            }
-        }
-
-        fun trimTransparent() {
-            viewModelScope.launch(editorErrors) {
-                if (canvasRepository.trimTransparent()) {
-                    val (width, height, dpi) = canvasSize()
-                    refreshUiStateSize(width, height, dpi)
-                    notify("Trimmed to content")
-                } else {
-                    notify("Nothing to trim")
-                }
-            }
-        }
-
-        fun trimToSelection() {
-            val mask =
-                canvasRepository.selection() ?: run {
-                    notify("Make a selection first")
-                    return
-                }
-            val bounds =
-                mask.bounds() ?: run {
-                    notify("The selection is empty")
-                    return
-                }
-            cropCanvas(bounds)
-        }
-
-        fun setCanvasDpi(dpi: Int) {
-            viewModelScope.launch(editorErrors) {
-                canvasRepository.setCanvasDpi(dpi)
-                val size = canvasSize()
-                refreshUiStateSize(size.first, size.second, size.third)
-            }
-        }
-
-        fun setCanvasBackgroundColor(color: Int) {
-            viewModelScope.launch(editorErrors) { canvasRepository.setCanvasBackgroundColor(color) }
-        }
 
         fun clearCanvas(color: Int = 0) {
             viewModelScope.launch(editorErrors) {

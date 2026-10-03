@@ -46,7 +46,7 @@ class CanvasMetadataViewModelTest {
                 runCurrent()
                 assertTrue(fixture.viewModel.uiState.value is CanvasUiState.Ready)
                 assertFalse(fixture.viewModel.dirty.value)
-                fixture.viewModel.setCanvasDpi(300)
+                fixture.viewModel.canvasOps.setCanvasDpi(300)
                 runCurrent()
                 assertTrue(fixture.viewModel.dirty.value)
                 assertEquals(1, fixture.viewModel.history.value.undoDepth)
@@ -86,10 +86,10 @@ class CanvasMetadataViewModelTest {
             try {
                 fixture.viewModel.open(1L)
                 runCurrent()
-                fixture.viewModel.setCanvasDpi(Int.MAX_VALUE)
+                fixture.viewModel.canvasOps.setCanvasDpi(Int.MAX_VALUE)
                 runCurrent()
                 assertEquals(CanvasOperations.MAX_DPI, (fixture.viewModel.uiState.value as CanvasUiState.Ready).dpi)
-                fixture.viewModel.setCanvasDpi(Int.MIN_VALUE)
+                fixture.viewModel.canvasOps.setCanvasDpi(Int.MIN_VALUE)
                 runCurrent()
                 assertEquals(CanvasOperations.MIN_DPI, (fixture.viewModel.uiState.value as CanvasUiState.Ready).dpi)
             } finally {
@@ -106,10 +106,10 @@ class CanvasMetadataViewModelTest {
             try {
                 fixture.viewModel.open(1L)
                 runCurrent()
-                fixture.viewModel.setCanvasDpi(72)
+                fixture.viewModel.canvasOps.setCanvasDpi(72)
                 val frame = fixture.repository.frames().single()
                 fixture.viewModel.setFrameDuration(0, frame.durationMs)
-                fixture.viewModel.setCanvasBackgroundColor(fixture.repository.getBackgroundColor())
+                fixture.viewModel.canvasOps.setCanvasBackgroundColor(fixture.repository.getBackgroundColor())
                 runCurrent()
                 assertFalse(fixture.viewModel.dirty.value)
                 assertEquals(0, fixture.viewModel.history.value.undoDepth)
@@ -128,7 +128,7 @@ class CanvasMetadataViewModelTest {
                 fixture.viewModel.open(1L)
                 runCurrent()
                 val before = fixture.viewModel.uiState.value
-                fixture.viewModel.cropCanvas(IntBounds(50, 50, 60, 60))
+                fixture.viewModel.canvasOps.cropCanvas(IntBounds(50, 50, 60, 60))
                 runCurrent()
                 assertEquals(before, fixture.viewModel.uiState.value)
                 assertFalse(fixture.viewModel.dirty.value)
@@ -149,7 +149,7 @@ class CanvasMetadataViewModelTest {
                 runCurrent()
                 val before = fixture.viewModel.uiState.value
                 val message = async(UnconfinedTestDispatcher(testScheduler)) { fixture.viewModel.messageFlow.first() }
-                fixture.viewModel.rotateCanvas(45)
+                fixture.viewModel.canvasOps.rotateCanvas(45)
                 runCurrent()
                 assertEquals(before, fixture.viewModel.uiState.value)
                 assertTrue(message.await().startsWith("Rotation not applied."))
@@ -170,7 +170,7 @@ class CanvasMetadataViewModelTest {
                 runCurrent()
                 val session = requireNotNull(fixture.repository.beginRasterEdit(fixture.repository.getActiveLayerId()))
                 val message = async(UnconfinedTestDispatcher(testScheduler)) { fixture.viewModel.messageFlow.first() }
-                fixture.viewModel.flipCanvas(true)
+                fixture.viewModel.canvasOps.flipCanvas(true)
                 runCurrent()
                 assertTrue(message.await().startsWith("Flip not applied."))
                 assertFalse(fixture.viewModel.dirty.value)
@@ -215,7 +215,7 @@ class CanvasMetadataViewModelTest {
                 val original = fixture.repository.getBackgroundColor()
                 assertEquals(original, (fixture.viewModel.uiState.value as CanvasUiState.Ready).backgroundColor)
                 val colour = 0xFF172A3B.toInt()
-                fixture.viewModel.setCanvasBackgroundColor(colour)
+                fixture.viewModel.canvasOps.setCanvasBackgroundColor(colour)
                 runCurrent()
                 assertEquals(colour, (fixture.viewModel.uiState.value as CanvasUiState.Ready).backgroundColor)
                 fixture.viewModel.undo()

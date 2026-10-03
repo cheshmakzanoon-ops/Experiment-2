@@ -498,7 +498,7 @@ fun CanvasScreen(
                         onInvertSelection = { viewModel.invertSelection() },
                         onApplyFeather = { viewModel.featherSelection(featherRadius) },
                         onSelectionFromLayer = { viewModel.selectionFromAlphaOfActiveLayer() },
-                        onTrimToSelection = { viewModel.trimToSelection() },
+                        onTrimToSelection = { viewModel.canvasOps.trimToSelection() },
                         onColorRange = { viewModel.selectionFromColorRange(it, input.fillTolerance) },
                     )
                 }
@@ -534,12 +534,12 @@ fun CanvasScreen(
                     height = ready?.height ?: 0,
                     dpi = ready?.dpi ?: 72,
                     backgroundColor = ready?.backgroundColor ?: 0xFFFFFFFF.toInt(),
-                    onResize = { w, h, resample, anchor -> viewModel.resizeCanvas(w, h, resample, anchor) },
-                    onRotate = { viewModel.rotateCanvas(it) },
-                    onFlip = { viewModel.flipCanvas(it) },
-                    onTrim = { viewModel.trimTransparent() },
-                    onDpi = { viewModel.setCanvasDpi(it) },
-                    onBackgroundColor = { viewModel.setCanvasBackgroundColor(it) },
+                    onResize = { w, h, resample, anchor -> viewModel.canvasOps.resizeCanvas(w, h, resample, anchor) },
+                    onRotate = { viewModel.canvasOps.rotateCanvas(it) },
+                    onFlip = { viewModel.canvasOps.flipCanvas(it) },
+                    onTrim = { viewModel.canvasOps.trimTransparent() },
+                    onDpi = { viewModel.canvasOps.setCanvasDpi(it) },
+                    onBackgroundColor = { viewModel.canvasOps.setCanvasBackgroundColor(it) },
                     onClear = { viewModel.clearCanvas(it) },
                 )
             EditorPanel.TEXT ->
@@ -597,8 +597,8 @@ fun CanvasScreen(
                     onFit = { canvasView?.fitToView() },
                     onResetView = { canvasView?.resetView() },
                     onRotate = { canvasView?.rotateView(it) },
-                    onFlipCanvas = { viewModel.flipCanvas(it) },
-                    onRotateCanvas = { viewModel.rotateCanvas(it) },
+                    onFlipCanvas = { viewModel.canvasOps.flipCanvas(it) },
+                    onRotateCanvas = { viewModel.canvasOps.rotateCanvas(it) },
                     onSelectAll = { viewModel.selectAll() },
                     onClearSelection = { viewModel.clearSelection() },
                     onInvertSelection = { viewModel.invertSelection() },
@@ -647,7 +647,7 @@ fun CanvasScreen(
                                 panel = EditorPanel.NONE
                                 showReference = true
                             },
-                            onFlip = { viewModel.flipCanvas(it) },
+                            onFlip = { viewModel.canvasOps.flipCanvas(it) },
                             onPageAssist = {
                                 panel = EditorPanel.NONE
                                 pageAssist = true
@@ -982,7 +982,7 @@ fun CanvasScreen(
                     onCancel = { cropBox = null },
                     onDone = {
                         cropBox = null
-                        if (crop != CropBox.Box.of(ready.width, ready.height)) viewModel.cropCanvas(crop.toBounds())
+                        if (crop != CropBox.Box.of(ready.width, ready.height)) viewModel.canvasOps.cropCanvas(crop.toBounds())
                     },
                     modifier = Modifier.align(Alignment.TopCenter).zIndex(6f),
                 )
