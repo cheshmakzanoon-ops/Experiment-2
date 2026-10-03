@@ -98,6 +98,21 @@ class BrushLibraryTest {
     }
 
     @Test(timeout = 10_000)
+    fun brushSetsPersistInOrderAndRejectBadNames() =
+        runBlocking {
+            val dao = MemoryDao()
+            val store = BrushLibraryStore(dao)
+            assertTrue(store.sets.first().isEmpty())
+            store.editSets { it + ("Inks" to listOf("fine-liner")) + ("Paint" to emptyList()) }
+            store.editSets { sets -> sets + ("Paint" to sets.getValue("Paint") + "saved-1234") }
+            val reopened = BrushLibraryStore(dao).sets.first()
+            assertEquals(listOf("Inks", "Paint"), reopened.keys.toList())
+            assertEquals(listOf("saved-1234"), reopened.getValue("Paint"))
+            assertTrue(runCatching { store.editSets { it + ("\n" to emptyList()) } }.isFailure)
+            assertTrue(runCatching { store.editSets { it + ("Bad" to listOf("../x")) } }.isFailure)
+        }
+
+    @Test(timeout = 10_000)
     fun favouritesPersistAndRejectUnknownIdentities() =
         runBlocking {
             val dao = MemoryDao()

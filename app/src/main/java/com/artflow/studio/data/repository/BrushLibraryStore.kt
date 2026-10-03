@@ -17,6 +17,10 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.Json
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -72,6 +76,53 @@ class BrushLibraryStore
                 .take(MAX_FAVOURITES)
                 .toSet()
                 .also { favouriteIds.value = it }
+        }
+
+        private val brushSets = MutableStateFlow<Map<String, List<String>>?>(null)
+
+        /** The artist's own brush sets, by name, in creation order. */
+        val sets: Flow<Map<String, List<String>>> =
+            flow {
+                mutex.withLock { loadSets() }
+                emitAll(brushSets.map { it.orEmpty() })
+            }
+
+        /** Applies [change] to the brush sets and stores the result; invalid names or sizes are refused. */
+        suspend fun editSets(change: (Map<String, List<String>>) -> Map<String, List<String>>) {
+            mutex.withLock {
+                val current = loadSets()
+                val updated = change(current)
+                require(updated.size <= MAX_SETS && updated.all { (name, ids) -> validSet(name, ids) }) { "Unsupported brush set" }
+                if (updated == current) return@withLock
+                val encoded = setsJson.encodeToString(SETS_SERIALIZER, updated)
+                withContext(NonCancellable) {
+                    dao.insertSetting(SettingsEntity(key = SETS_KEY, value = encoded, category = "brush"))
+                    brushSets.value = updated
+                }
+            }
+        }
+
+        private fun validSet(
+            name: String,
+            ids: List<String>,
+        ): Boolean {
+            val validName = BrushLibraryCodec.validName(name) && name.length <= MAX_SET_NAME
+            return validName && ids.size <= MAX_FAVOURITES && ids.all { it.matches(FAVOURITE_ID) }
+        }
+
+        private suspend fun loadSets(): Map<String, List<String>> {
+            brushSets.value?.let { return it }
+            val stored = dao.getSettingByKey(SETS_KEY)?.value
+            val decoded =
+                stored
+                    ?.let { runCatching { setsJson.decodeFromString(SETS_SERIALIZER, it) }.getOrNull() }
+                    .orEmpty()
+                    .filter { (name, ids) -> validSet(name, ids) }
+                    .entries
+                    .take(MAX_SETS)
+                    .associate { it.key to it.value }
+            brushSets.value = decoded
+            return decoded
         }
 
         suspend fun saveCopy(
@@ -132,6 +183,11 @@ class BrushLibraryStore
         companion object {
             const val STORAGE_KEY = "brush.savedLibrary.v1"
             const val FAVOURITES_KEY = "brush.favourites.v1"
+            const val SETS_KEY = "brush.sets.v1"
+            private const val MAX_SETS = 32
+            private const val MAX_SET_NAME = 40
+            private val setsJson = Json { ignoreUnknownKeys = true }
+            private val SETS_SERIALIZER = MapSerializer(String.serializer(), ListSerializer(String.serializer()))
             private const val MAX_FAVOURITES = 256
             private val FAVOURITE_ID = Regex("[a-zA-Z0-9-]{1,72}")
         }

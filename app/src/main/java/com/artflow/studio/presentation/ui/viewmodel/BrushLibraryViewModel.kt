@@ -28,6 +28,7 @@ class BrushLibraryViewModel
             val error: String? = null,
             val revision: Long = 0L,
             val favourites: Set<String> = emptySet(),
+            val sets: Map<String, List<String>> = emptyMap(),
         )
 
         private val mutableState = MutableStateFlow(State())
@@ -49,6 +50,26 @@ class BrushLibraryViewModel
             viewModelScope.launch(errors) {
                 store.favourites.collect { mutableState.value = mutableState.value.copy(favourites = it) }
             }
+            viewModelScope.launch(errors) {
+                store.sets.collect { mutableState.value = mutableState.value.copy(sets = it) }
+            }
+        }
+
+        fun createSet(name: String) = editSets { sets -> if (name.trim() in sets) sets else sets + (name.trim() to emptyList()) }
+
+        fun deleteSet(name: String) = editSets { it - name }
+
+        /** Adds [id] to the set [name], or takes it out when it is already there. */
+        fun toggleInSet(
+            name: String,
+            id: String,
+        ) = editSets { sets ->
+            val members = sets[name] ?: return@editSets sets
+            sets + (name to if (id in members) members - id else members + id)
+        }
+
+        private fun editSets(change: (Map<String, List<String>>) -> Map<String, List<String>>) {
+            viewModelScope.launch(errors) { store.editSets(change) }
         }
 
         /** Stars or unstars a brush in the Favourites set. */

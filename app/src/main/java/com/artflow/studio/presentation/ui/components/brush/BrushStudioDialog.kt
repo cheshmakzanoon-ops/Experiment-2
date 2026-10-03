@@ -10,6 +10,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
@@ -130,24 +131,27 @@ fun StudioBrushLibrary(
     val focusManager = LocalFocusManager.current
     val saved = library?.state?.brushes.orEmpty()
     val favourites = library?.state?.favourites.orEmpty()
+    val sets = library?.state?.sets.orEmpty()
+    var naming by remember { mutableStateOf(false) }
     val matches =
-        remember(query, category, saved, favourites) {
-            val favouritesOnly = category == FAVOURITES
-            val originals = StudioBrushes.search(query, if (favouritesOnly) "All" else category)
+        remember(query, category, saved, favourites, sets) {
+            // Favourites and the artist's own sets gather brushes from every category.
+            val chosen = if (category == FAVOURITES) favourites else sets[category]?.toSet()
+            val originals = StudioBrushes.search(query, if (chosen != null) "All" else category)
             val words = query.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
             val own =
                 saved
                     .filter { brush ->
-                        val shown = category == "All" || category == "Saved" || favouritesOnly
+                        val shown = category == "All" || category == "Saved" || chosen != null
                         shown && words.all { brush.name.contains(it, ignoreCase = true) }
                     }.map { StudioBrushes.Preset("saved-${it.id}", it.name, "Saved", "Your saved brush", it.parameters) }
-            (own + originals).filter { !favouritesOnly || it.id in favourites }
+            (own + originals).filter { chosen == null || it.id in chosen }
         }
     val categories =
         if (library == null) {
             StudioBrushes.categories
         } else {
-            listOf("All", FAVOURITES, "Saved") + StudioBrushes.categories.drop(1)
+            listOf("All", FAVOURITES, "Saved") + sets.keys + StudioBrushes.categories.drop(1).filter { it !in sets }
         }
     Column(modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
@@ -166,6 +170,20 @@ fun StudioBrushLibrary(
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             categories.forEach { title ->
                 FilterChip(selected = category == title, onClick = { category = title }, label = { Text(title) })
+            }
+            if (library != null) AssistChip(onClick = { naming = true }, label = { Text("New set") })
+        }
+        if (library != null && category in sets) {
+            TextButton(onClick = {
+                library.deleteSet(category)
+                category = "All"
+            }) { Text("Delete the set $category") }
+        }
+        if (naming && library != null) {
+            NewSetDialog(taken = categories.toSet(), onDismiss = { naming = false }) { name ->
+                library.createSet(name)
+                category = name
+                naming = false
             }
         }
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
@@ -192,6 +210,7 @@ fun StudioBrushLibrary(
                             Text(preset.name, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                             val owned = saved.firstOrNull { "saved-${it.id}" == preset.id }
                             if (library != null) FavouriteButton(preset.id in favourites) { library.toggleFavourite(preset.id) }
+                            if (library != null && sets.isNotEmpty()) SetMenu(preset.id, sets, library.toggleInSet)
                             if (owned != null && library != null) SavedBrushMenu(owned, library)
                         }
                         BrushSample(preset.parameters, Modifier.fillMaxWidth().height(42.dp))
@@ -221,4 +240,55 @@ private fun FavouriteButton(
     }
 }
 
+/** Adds a brush to, or takes it out of, the artist's own sets. */
+@Composable
+private fun SetMenu(
+    id: String,
+    sets: Map<String, List<String>>,
+    onToggle: (String, String) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) { Icon(Icons.Default.PlaylistAdd, contentDescription = "Brush sets") }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            sets.forEach { (name, members) ->
+                DropdownMenuItem(
+                    text = { Text(if (id in members) "$name ✓" else name) },
+                    onClick = {
+                        onToggle(name, id)
+                        open = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NewSetDialog(
+    taken: Set<String>,
+    onDismiss: () -> Unit,
+    onCreate: (String) -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    val trimmed = name.trim()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("New brush set") },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it.take(MAX_SET_NAME) },
+                label = { Text("Set name") },
+                singleLine = true,
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onCreate(trimmed) }, enabled = trimmed.isNotEmpty() && trimmed !in taken) { Text("Create") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
 private const val FAVOURITES = "Favourites"
+private const val MAX_SET_NAME = 40
