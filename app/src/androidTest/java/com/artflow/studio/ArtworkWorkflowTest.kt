@@ -232,7 +232,8 @@ class ArtworkWorkflowTest {
         }
         val (tab, item) = ACTIONS_LOCATIONS[title] ?: ("Add" to title)
         compose.onNodeWithContentDescription("Actions").performClick()
-        compose.onNodeWithText(tab).performClick()
+        // The tab row scrolls on narrow phones, so bring the tab into view before tapping it.
+        compose.onNodeWithText(tab).performScrollTo().performClick()
         compose.onNodeWithText(item).performScrollTo().performClick()
         compose.waitForIdle()
     }

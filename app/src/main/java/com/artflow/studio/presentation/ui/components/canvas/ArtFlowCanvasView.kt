@@ -322,6 +322,9 @@ class ArtFlowCanvasView
         // --- Lifecycle ----------------------------------------------------------------------------
 
         private var rendererAttached = false
+
+        /** Set when the renderer has no image to patch, so the next frame publishes the whole composite. */
+        private var fullCompositeNeeded = true
         private var observingInvalidations = false
         private var invalidateJob: Job? = null
         private var onionEnabled = false
@@ -343,6 +346,8 @@ class ArtFlowCanvasView
                 renderer.setBackgroundArgb(canvasRepository.getBackgroundColor())
             }
             coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate + toolErrors)
+            // Detaching disposed the renderer's image, so the next frame must carry the whole canvas.
+            fullCompositeNeeded = true
             observingInvalidations = false
             startObservingInvalidations()
             requestRender()
@@ -972,17 +977,25 @@ class ArtFlowCanvasView
                 val dirty = frame?.dirty
                 when {
                     frame == null -> Unit
-                    dirty == null -> renderer.setComposite(frame.buffer)
+                    dirty == null || fullCompositeNeeded -> {
+                        renderer.setComposite(frame.buffer)
+                        fullCompositeNeeded = false
+                    }
                     else -> renderer.setCompositeRegion(frame.buffer, dirty)
                 }
                 requestRender()
             } catch (cancelled: CancellationException) {
+                // The repository may already have handed out this frame's damage; resend everything.
+                fullCompositeNeeded = true
                 throw cancelled
             } catch (error: IllegalArgumentException) {
+                fullCompositeNeeded = true
                 reportCompositeFailure(error)
             } catch (error: IllegalStateException) {
+                fullCompositeNeeded = true
                 reportCompositeFailure(error)
             } catch (error: OutOfMemoryError) {
+                fullCompositeNeeded = true
                 Timber.e(error, "Insufficient memory for canvas preview")
                 onStatusMessage?.invoke("Not enough memory to render this canvas. Save your artwork and reduce its size.")
             }

@@ -39,7 +39,8 @@ class BrushStudioUiTest {
             }
         }
         compose.onNodeWithText("Search brushes").performTextInput("fine liner")
-        compose.onNodeWithText("Fine liner").performClick()
+        // The open keyboard can squeeze the list off a small phone screen, so select by its action.
+        compose.onNodeWithText("Fine liner").performSemanticsAction(SemanticsActions.OnClick)
         compose.onNodeWithText("Search brushes").assertIsNotFocused()
         compose.runOnIdle { assertNull(applied) }
         TestEvidence.screenshot("studio-brush-library.png")

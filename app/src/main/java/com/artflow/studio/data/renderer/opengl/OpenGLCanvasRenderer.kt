@@ -203,6 +203,8 @@ class OpenGLCanvasRenderer
                 retainedComposite?.recycle()
                 retainedComposite = incoming
             }
+            // Regions without a base image have nothing to patch; the view resends the whole canvas.
+            if (retainedComposite == null) regions.forEach { it.bitmap.recycle() }
             retainedComposite?.let { bitmap ->
                 val partial = applyRegions(bitmap, regions)
                 if (compositeTexture == 0) {

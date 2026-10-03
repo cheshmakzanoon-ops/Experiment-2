@@ -70,9 +70,9 @@ class BrushSettingsAccessibilityTest {
             }
         }
         change("Wet Mix", 0.75f)
-        compose.onNodeWithContentDescription("Collapse Wet Paint").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Collapse Wet Paint and Rendering").performScrollTo().performClick()
         compose.onNodeWithContentDescription("Wet Mix").assertDoesNotExist()
-        compose.onNodeWithContentDescription("Expand Wet Paint").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Expand Wet Paint and Rendering").performScrollTo().performClick()
         compose.onNodeWithContentDescription("Wet Mix").performScrollTo().assertIsDisplayed()
         compose.runOnIdle { assertEquals(0.75f, parameters.wetMix, 0.001f) }
         change("Spacing", 0.2f)
