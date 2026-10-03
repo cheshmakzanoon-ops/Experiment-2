@@ -61,7 +61,6 @@ fun GalleryScreen(
     var showNewProjectDialog by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<Project?>(null) }
     var deleteTarget by remember { mutableStateOf<Project?>(null) }
-    var sortMenu by remember { mutableStateOf(false) }
     var searchVisible by remember { mutableStateOf(false) }
     var openStack by rememberSaveable { mutableStateOf<String?>(null) }
     var stackTarget by remember { mutableStateOf<Project?>(null) }
@@ -134,27 +133,7 @@ fun GalleryScreen(
                             contentDescription = "Search",
                         )
                     }
-                    Box {
-                        IconButton(onClick = { sortMenu = true }) {
-                            Icon(Icons.Default.Sort, contentDescription = "Sort")
-                        }
-                        DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
-                            GallerySort.entries.forEach { sort ->
-                                DropdownMenuItem(
-                                    text = { Text(sort.displayName) },
-                                    onClick = {
-                                        viewModel.setSort(sort)
-                                        sortMenu = false
-                                    },
-                                    leadingIcon = {
-                                        if (settings.gallerySort == sort) {
-                                            Icon(Icons.Default.Check, contentDescription = null)
-                                        }
-                                    },
-                                )
-                            }
-                        }
-                    }
+                    SortMenu(settings.gallerySort, viewModel::setSort)
                     IconButton(onClick = { runCatching { photoImport.launch("image/*") } }) {
                         Icon(Icons.Default.AddPhotoAlternate, contentDescription = "Import photo as a new canvas")
                     }
@@ -214,16 +193,7 @@ fun GalleryScreen(
                                     onDelete = { deleteTarget = project },
                                     onStack = { stackTarget = project },
                                     onPreview = { preview = layout.projects to layout.projects.indexOf(project) },
-                                    onShare = {
-                                        scope.launch {
-                                            val file = viewModel.shareablePng(project)
-                                            if (file == null) {
-                                                snackbarHostState.showSnackbar("Open the artwork once so it can be shared")
-                                            } else {
-                                                runCatching { sharePng(context, file) }
-                                            }
-                                        }
-                                    },
+                                    onShare = { scope.launch { shareProject(viewModel, project, context, snackbarHostState) } },
                                 )
                             }
                         }
@@ -253,56 +223,99 @@ fun GalleryScreen(
     }
 
     stackTarget?.let { project ->
-        val existing =
-            (uiState as? MainUiState.Success)
-                ?.projects
-                ?.mapNotNull { it.stack }
-                ?.distinct()
-                ?.sorted()
-                .orEmpty()
-        StackDialog(
-            project = project,
-            stacks = existing,
-            onDismiss = { stackTarget = null },
-            onMove = { stack ->
-                viewModel.moveToStack(project.id, stack)
-                stackTarget = null
-            },
-        )
+        StackDialog(project, existingStacks(uiState), onDismiss = { stackTarget = null }) { stack ->
+            viewModel.moveToStack(project.id, stack)
+            stackTarget = null
+        }
     }
-
     renameTarget?.let { project ->
-        var text by remember(project.id) { mutableStateOf(project.name) }
-        AlertDialog(
-            onDismissRequest = { renameTarget = null },
-            title = { Text("Rename artwork") },
-            text = {
-                OutlinedTextField(value = text, onValueChange = { text = it }, singleLine = true)
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.rename(project, text)
-                    renameTarget = null
-                }) { Text("Rename") }
-            },
-            dismissButton = { TextButton(onClick = { renameTarget = null }) { Text("Cancel") } },
-        )
+        RenameDialog(project, onDismiss = { renameTarget = null }) { name ->
+            viewModel.rename(project, name)
+            renameTarget = null
+        }
     }
-
     deleteTarget?.let { project ->
-        AlertDialog(
-            onDismissRequest = { deleteTarget = null },
-            title = { Text("Delete ${project.name}?") },
-            text = { Text("The artwork and its layers are removed from this device. This cannot be undone.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.delete(project)
-                    deleteTarget = null
-                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("Cancel") } },
-        )
+        DeleteDialog(project, onDismiss = { deleteTarget = null }) {
+            viewModel.delete(project)
+            deleteTarget = null
+        }
     }
+}
+
+@Composable
+private fun SortMenu(
+    current: GallerySort,
+    onSort: (GallerySort) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) { Icon(Icons.Default.Sort, contentDescription = "Sort") }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            GallerySort.entries.forEach { sort ->
+                DropdownMenuItem(
+                    text = { Text(sort.displayName) },
+                    onClick = {
+                        onSort(sort)
+                        open = false
+                    },
+                    leadingIcon = { if (current == sort) Icon(Icons.Default.Check, contentDescription = null) },
+                )
+            }
+        }
+    }
+}
+
+private suspend fun shareProject(
+    viewModel: MainViewModel,
+    project: Project,
+    context: android.content.Context,
+    snackbar: SnackbarHostState,
+) {
+    val file = viewModel.shareablePng(project)
+    if (file == null) {
+        snackbar.showSnackbar("Open the artwork once so it can be shared")
+    } else {
+        runCatching { sharePng(context, file) }
+    }
+}
+
+private fun existingStacks(state: MainUiState): List<String> =
+    (state as? MainUiState.Success)
+        ?.projects
+        ?.mapNotNull { it.stack }
+        ?.distinct()
+        ?.sorted()
+        .orEmpty()
+
+@Composable
+private fun RenameDialog(
+    project: Project,
+    onDismiss: () -> Unit,
+    onRename: (String) -> Unit,
+) {
+    var text by remember(project.id) { mutableStateOf(project.name) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Rename artwork") },
+        text = { OutlinedTextField(value = text, onValueChange = { text = it }, singleLine = true) },
+        confirmButton = { TextButton(onClick = { onRename(text) }) { Text("Rename") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun DeleteDialog(
+    project: Project,
+    onDismiss: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete ${project.name}?") },
+        text = { Text("The artwork and its layers are removed from this device. This cannot be undone.") },
+        confirmButton = { TextButton(onClick = onDelete) { Text("Delete", color = MaterialTheme.colorScheme.error) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable

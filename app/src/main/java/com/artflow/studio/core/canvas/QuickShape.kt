@@ -182,7 +182,10 @@ object QuickShape {
 
     /** A four-sided shape with near-right corners becomes an exact rectangle. */
     private fun squared(corners: List<Pair<Float, Float>>): List<Pair<Float, Float>> {
-        val (a, b, c, d) = corners
+        val a = corners[0]
+        val b = corners[1]
+        val c = corners[2]
+        val d = corners[3]
         val ux = b.first - a.first
         val uy = b.second - a.second
         val width = (hypot(ux, uy) + hypot(c.first - d.first, c.second - d.second)) / 2f
