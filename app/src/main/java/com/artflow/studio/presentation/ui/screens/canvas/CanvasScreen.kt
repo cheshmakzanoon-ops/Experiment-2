@@ -46,6 +46,7 @@ import com.artflow.studio.core.pixels.WarpMesh
 import com.artflow.studio.core.text.TextLayerContent
 import com.artflow.studio.core.tool.ToolGroup
 import com.artflow.studio.core.tool.ToolType
+import com.artflow.studio.data.local.ReferenceImages
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.brush.StrokeDestination
 import com.artflow.studio.domain.model.layer.AdjustmentType
@@ -199,7 +200,9 @@ fun CanvasScreen(
     var colorChipOrigin by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
     var contentOrigin by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
     var showReference by rememberSaveable(projectId) { mutableStateOf(false) }
-    var referenceUri by rememberSaveable(projectId) { mutableStateOf<String?>(null) }
+    val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    // The reference image is remembered per artwork; the picker grants lasting read access.
+    var referenceUri by rememberSaveable(projectId) { mutableStateOf(ReferenceImages.get(appContext, projectId)) }
     var referenceCanvas by rememberSaveable(projectId) { mutableStateOf(false) }
     var pageAssist by rememberSaveable(projectId) { mutableStateOf(false) }
     val pageThumbnails by viewModel.pageThumbnails.pages.collectAsState()
@@ -218,10 +221,14 @@ fun CanvasScreen(
     }
     var referenceImportProject by rememberSaveable(projectId) { mutableStateOf<Long?>(null) }
     val referencePicker =
-        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (referenceImportProject == projectId && uri != null) {
                 if (uri.scheme == "content") {
+                    runCatching {
+                        appContext.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
                     referenceUri = uri.toString()
+                    ReferenceImages.set(appContext, projectId, referenceUri)
                     showReference = true
                 } else {
                     viewModel.notify("Choose a reference image from an Android document provider")
@@ -280,7 +287,7 @@ fun CanvasScreen(
         canvasView?.cancelActiveGesture()
         referenceImportProject = projectId
         try {
-            referencePicker.launch("image/*")
+            referencePicker.launch(arrayOf("image/*"))
         } catch (missing: ActivityNotFoundException) {
             referenceImportProject = null
             viewModel.notify("No image picker is available on this device")
