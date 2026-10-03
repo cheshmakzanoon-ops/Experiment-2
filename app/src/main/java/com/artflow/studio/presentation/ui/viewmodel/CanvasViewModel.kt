@@ -751,6 +751,7 @@ class CanvasViewModel
         val textLayers = TextLayerController(canvasRepository, ::layerOp)
         val layerBatch = LayerBatchController(canvasRepository, ::layerOp)
         val canvasPreview = CanvasPreviewController(canvasRepository, viewModelScope)
+        val pageThumbnails = PageThumbnailController(canvasRepository, viewModelScope)
 
         val layerThumbnails = LayerThumbnailController(canvasRepository, viewModelScope)
 

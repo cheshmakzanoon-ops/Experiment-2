@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.artflow.studio.presentation.ui.screens.gallery
 
 import androidx.compose.foundation.background

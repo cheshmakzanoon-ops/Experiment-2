@@ -29,6 +29,7 @@ data class CanvasActions(
     val onDrawingGuide: () -> Unit,
     val onReference: () -> Unit,
     val onFlip: (vertical: Boolean) -> Unit,
+    val onPageAssist: () -> Unit = {},
 )
 
 data class VideoActions(
@@ -137,6 +138,7 @@ private fun CanvasTab(
 ) {
     ActionRow("Crop & Resize", canvas.onCropResize)
     ActionRow("Animation Assist", canvas.onAnimationAssist)
+    ActionRow("Page Assist", canvas.onPageAssist)
     ActionRow("Drawing Guide", canvas.onDrawingGuide)
     ActionRow("Reference", canvas.onReference)
     ActionRow("Flip canvas horizontally", onClick = { canvas.onFlip(false) })

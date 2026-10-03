@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -78,6 +79,8 @@ import com.artflow.studio.presentation.ui.components.editor.LayerOptionActions
 import com.artflow.studio.presentation.ui.components.editor.LayerRowActions
 import com.artflow.studio.presentation.ui.components.editor.LayerStackActions
 import com.artflow.studio.presentation.ui.components.editor.LayersSheet
+import com.artflow.studio.presentation.ui.components.editor.PageAssistActions
+import com.artflow.studio.presentation.ui.components.editor.PageAssistBar
 import com.artflow.studio.presentation.ui.components.editor.PrefActions
 import com.artflow.studio.presentation.ui.components.editor.QuickMenuSheet
 import com.artflow.studio.presentation.ui.components.editor.ReferenceCompanion
@@ -198,6 +201,15 @@ fun CanvasScreen(
     var showReference by rememberSaveable(projectId) { mutableStateOf(false) }
     var referenceUri by rememberSaveable(projectId) { mutableStateOf<String?>(null) }
     var referenceCanvas by rememberSaveable(projectId) { mutableStateOf(false) }
+    var pageAssist by rememberSaveable(projectId) { mutableStateOf(false) }
+    val pageThumbnails by viewModel.pageThumbnails.pages.collectAsState()
+    val pageImages =
+        remember(pageThumbnails) {
+            pageThumbnails.map { page -> page?.let { BitmapPixelBridge.toBitmap(it).asImageBitmap() } }
+        }
+    LaunchedEffect(pageAssist, history, timeline.frameCount) {
+        if (pageAssist) viewModel.pageThumbnails.refresh()
+    }
     val canvasPreview by viewModel.canvasPreview.preview.collectAsState()
     val canvasPreviewBitmap =
         remember(canvasPreview) { canvasPreview?.let { BitmapPixelBridge.toBitmap(it) } }
@@ -613,6 +625,10 @@ fun CanvasScreen(
                                 showReference = true
                             },
                             onFlip = { viewModel.flipCanvas(it) },
+                            onPageAssist = {
+                                panel = EditorPanel.NONE
+                                pageAssist = true
+                            },
                         ),
                     video =
                         VideoActions(
@@ -859,7 +875,27 @@ fun CanvasScreen(
                             Modifier.align(Alignment.CenterStart).padding(start = 8.dp)
                         },
                 )
-                ContextToolbar(viewModel, input, canvasView, Modifier.align(Alignment.BottomCenter)) { panel = it }
+                val toolbarLift = if (pageAssist) PAGE_ASSIST_HEIGHT else 0.dp
+                ContextToolbar(viewModel, input, canvasView, Modifier.align(Alignment.BottomCenter).padding(bottom = toolbarLift)) {
+                    panel = it
+                }
+                if (pageAssist) {
+                    PageAssistBar(
+                        pageCount = timeline.frameCount,
+                        activePage = timeline.activeIndex,
+                        thumbnails = pageImages,
+                        actions =
+                            PageAssistActions(
+                                onSelect = { viewModel.selectFrame(it) },
+                                onAdd = { viewModel.addFrame(false) },
+                                onDuplicate = { viewModel.addFrame(true) },
+                                onDelete = { viewModel.deleteFrame(it) },
+                                onMove = { from, to -> viewModel.moveFrame(from, to) },
+                                onClose = { pageAssist = false },
+                            ),
+                        modifier = Modifier.align(Alignment.BottomCenter).widthIn(max = 720.dp),
+                    )
+                }
             }
             val quad = transformQuad
             if (quad != null && ready != null && input.tool == ToolType.TRANSFORM) {
@@ -1378,3 +1414,6 @@ private fun ErrorState(
         Button(onClick = onRetry) { Text("Retry") }
     }
 }
+
+/** Room the Page Assist strip takes along the bottom of the canvas. */
+private val PAGE_ASSIST_HEIGHT = 150.dp
