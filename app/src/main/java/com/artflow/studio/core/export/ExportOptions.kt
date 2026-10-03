@@ -26,6 +26,7 @@ enum class ExportFormat(
     LAYER_PNGS("PNG layers (zip)", "zip", "application/zip"),
     GIF("Animated GIF", "gif", "image/gif", requiresAnimation = true),
     MP4("MP4 video", "mp4", "video/mp4", requiresAnimation = true),
+    APNG("Animated PNG", "png", "image/png", requiresAnimation = true),
     FRAME_SEQUENCE("PNG frames (zip)", "zip", "application/zip", requiresAnimation = true),
     ;
 
@@ -33,14 +34,14 @@ enum class ExportFormat(
     val needsLayers: Boolean get() = this == PSD || this == LAYER_PNGS
 
     /** MediaStore accepts these image/video types; PSD/PDF/ZIP use the document picker. */
-    val supportsGallery: Boolean get() = this in setOf(PNG, JPEG, WEBP, GIF, MP4)
+    val supportsGallery: Boolean get() = this in setOf(PNG, JPEG, WEBP, GIF, MP4, APNG)
 
     companion object {
         /** Formats offered for a still image. */
         fun stillFormats(): List<ExportFormat> = listOf(PNG, JPEG, WEBP, PDF, PSD, TIFF, LAYER_PNGS)
 
         /** Formats offered for an animation. */
-        fun animationFormats(): List<ExportFormat> = listOf(GIF, MP4, FRAME_SEQUENCE)
+        fun animationFormats(): List<ExportFormat> = listOf(GIF, MP4, APNG, FRAME_SEQUENCE)
 
         fun byName(name: String): ExportFormat? = entries.firstOrNull { it.name == name }
     }

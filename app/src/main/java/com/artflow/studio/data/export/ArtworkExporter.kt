@@ -14,6 +14,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
 import androidx.core.graphics.createBitmap
+import com.artflow.studio.core.export.ApngEncoder
 import com.artflow.studio.core.export.ExportError
 import com.artflow.studio.core.export.ExportFormat
 import com.artflow.studio.core.export.ExportNaming
@@ -194,6 +195,12 @@ class ArtworkExporter
                         when (options.format) {
                             ExportFormat.GIF -> buildGif(prepared, delaysMs, options)
                             ExportFormat.MP4 -> buildMp4(prepared, delaysMs, options)
+                            ExportFormat.APNG ->
+                                ApngEncoder.encode(
+                                    prepared.map { BitmapPixelBridge.toPngBytes(flatten(it, options), options.dpi) },
+                                    delaysMs,
+                                    loops = if (options.gifLoop) 0 else 1,
+                                )
                             ExportFormat.FRAME_SEQUENCE -> buildFrameSequenceZip(prepared, projectName, options)
                             ExportFormat.PNG -> BitmapPixelBridge.toPngBytes(flatten(prepared.first(), options), options.dpi)
                             ExportFormat.JPEG ->

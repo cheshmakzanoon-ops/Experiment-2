@@ -209,7 +209,7 @@ private fun FormatControls(
             Text("RLE compress layers", style = MaterialTheme.typography.bodySmall)
         }
     }
-    if (options.format == ExportFormat.GIF) {
+    if (options.format == ExportFormat.GIF || options.format == ExportFormat.APNG) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(options.gifLoop, onCheckedChange = { onChange(options.copy(gifLoop = it)) })
             Spacer(Modifier.width(8.dp))
