@@ -110,4 +110,11 @@ class BrushRenderingTest {
         val tapered = plain.copy(taperEnd = 0.5f)
         assertTrue(alphaAt(tapered.copy(taperOpacity = 1f), 26) < alphaAt(tapered, 26))
     }
+
+    @Test fun blendingBuildsUpWhereGlazingCaps() {
+        val glaze = BrushParams(size = 8f, spacing = 0.05f, flow = 0.2f)
+        val glazed = paint(glaze, 0xFF000000.toInt(), 0).pixels[10 * 40 + 20] ushr 24
+        val blended = paint(glaze.copy(buildUp = true), 0xFF000000.toInt(), 0).pixels[10 * 40 + 20] ushr 24
+        assertTrue("$blended should exceed $glazed", blended > glazed + 40)
+    }
 }

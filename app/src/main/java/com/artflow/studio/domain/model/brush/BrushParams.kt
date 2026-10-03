@@ -57,6 +57,7 @@ data class BrushParams(
     val tipFlipX: Boolean = false, // Mirror the shape image across its vertical axis
     val tipFlipY: Boolean = false, // Mirror the shape image across its horizontal axis
     val tipRandomized: Boolean = false, // Each stroke starts the tip at a random angle
+    val buildUp: Boolean = false, // Blending rendering: overlapping dabs build up within one stroke instead of glazing
 ) {
     /** Imported grain and shape images this brush (and its second brush) paints with. */
     val imageIds: List<String>
