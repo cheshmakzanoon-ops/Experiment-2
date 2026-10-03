@@ -1634,6 +1634,8 @@ class ArtFlowCanvasView
                             }
                     }
                     initToolSession(tool, session.buffer, x, y, pressure, gestureInput, gestureSelection)
+                    // These tools report exactly what each sample changed, so previews redraw only that.
+                    if (tool in DAMAGE_TRACKED_TOOLS) canvasRepository.trackPreviewDamage(session)
                     rasterBuffer = session.buffer
                     drainPendingSamples()
                     if (pendingPixelCommit) commitPixelGesture(cancelled = pendingPixelCancel)
@@ -1763,10 +1765,16 @@ class ArtFlowCanvasView
             pressure: Float,
         ) {
             val buffer = rasterBuffer ?: return
+            val changed =
+                when (pixelTool) {
+                    ToolType.SMUDGE -> smudgeSession?.dragTo(x, y, buffer)
+                    ToolType.CLONE_STAMP -> cloneSession?.dragTo(x, y, buffer, rasterSource ?: buffer)
+                    ToolType.HEALING -> healingSession?.dragTo(x, y, buffer, rasterSource ?: buffer)
+                    else -> null
+                }
+            val session = rasterSession
+            if (changed != null && session != null) canvasRepository.markPreviewDamage(session, changed)
             when (pixelTool) {
-                ToolType.SMUDGE -> smudgeSession?.dragTo(x, y, buffer)
-                ToolType.CLONE_STAMP -> cloneSession?.dragTo(x, y, buffer, rasterSource ?: buffer)
-                ToolType.HEALING -> healingSession?.dragTo(x, y, buffer, rasterSource ?: buffer)
                 ToolType.LIQUIFY -> {
                     liquifySession?.dragTo(x, y, pressure)
                     previewLiquify(buffer)
@@ -2355,6 +2363,7 @@ class ArtFlowCanvasView
 
         companion object {
             private const val MIN_SCALE = 0.05f
+            private val DAMAGE_TRACKED_TOOLS = setOf(ToolType.SMUDGE, ToolType.CLONE_STAMP, ToolType.HEALING)
             private val CURSOR_TOOLS =
                 setOf(ToolType.BRUSH, ToolType.ERASER, ToolType.SMUDGE, ToolType.CLONE_STAMP, ToolType.HEALING, ToolType.LIQUIFY)
             private const val FIT_ANIMATION_MS = 260L

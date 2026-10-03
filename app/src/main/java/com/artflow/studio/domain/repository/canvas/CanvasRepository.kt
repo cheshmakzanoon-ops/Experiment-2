@@ -155,6 +155,18 @@ interface CanvasRepository {
         val alphaLocked: Boolean,
     )
 
+    /**
+     * Declares that every change the caller makes to [session]'s buffer will be reported through
+     * [markPreviewDamage], so previews can redraw just those areas while the session is open.
+     */
+    fun trackPreviewDamage(session: RasterEditSession) {}
+
+    /** Reports that [session]'s buffer changed inside [area] (canvas pixels, inclusive). */
+    fun markPreviewDamage(
+        session: RasterEditSession,
+        area: IntBounds,
+    ) {}
+
     /** A caller-owned copy of the layer's committed pixels. */
     suspend fun layerPixels(layerId: Long): PixelBuffer?
 

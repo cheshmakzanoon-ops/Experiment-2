@@ -156,6 +156,9 @@ class CanvasRepositoryImpl
 
         private val pendingEdits = mutableMapOf<Long, PendingEdit>()
 
+        /** Sessions whose every buffer change is reported as preview damage. */
+        private val damageTrackedSessions = mutableSetOf<Long>()
+
         init {
             // A blank frame keeps every accessor total: the repository is usable before a project is
             // created, which removes a whole class of null handling from the ViewModel.
@@ -197,6 +200,7 @@ class CanvasRepositoryImpl
             backgroundColor = 0xFFFFFFFF.toInt()
             animationSettings = AnimationSettings()
             pendingEdits.clear()
+            damageTrackedSessions.clear()
             nextLayerId = 1
             nextFrameId = 1
             nextStrokeId = 1
@@ -321,6 +325,7 @@ class CanvasRepositoryImpl
                 .maxOfOrNull { it.id }
                 ?.plus(1) ?: 1L
             pendingEdits.clear()
+            damageTrackedSessions.clear()
             frameList = decodedFrames
 
             if (frameList.isEmpty()) {
@@ -716,6 +721,8 @@ class CanvasRepositoryImpl
         ): Boolean =
             withState {
                 val pending = pendingEdits.remove(session.snapshotToken) ?: return@withState false
+                damageTrackedSessions -= session.snapshotToken
+                previewDamage = null
                 val layer = layerById(session.layerId) ?: return@withState false
                 if (pending.session !== session || pending.projectId != currentProjectId) return@withState false
                 if (layer !== pending.layer || layer.raster !== pending.original || !layer.canPaint()) return@withState false
@@ -738,6 +745,9 @@ class CanvasRepositoryImpl
         override suspend fun cancelRasterEdit(session: CanvasRepository.RasterEditSession) =
             withState {
                 if (pendingEdits[session.snapshotToken]?.session === session) pendingEdits.remove(session.snapshotToken)
+                damageTrackedSessions -= session.snapshotToken
+                // Everything the session showed must be redrawn from the layer again.
+                previewDamage = null
                 emit(CanvasInvalidationEvent.Full)
             }
 
@@ -1954,7 +1964,7 @@ class CanvasRepositoryImpl
             val layers = currentLayers()
             val selection = activeSelection
             val local =
-                pendingEdits.isEmpty() &&
+                pendingEdits.keys.all { it in damageTrackedSessions } &&
                     (selection == null || (selection.width == canvasWidth && selection.height == canvasHeight)) &&
                     layers.none { it.filterType != null || it.maskFeather > 0f } &&
                     layers.all { canvasSized(it.raster) && canvasSized(it.mask) }
@@ -1962,12 +1972,32 @@ class CanvasRepositoryImpl
 
             fun id(value: Any?) = System.identityHashCode(value)
 
+            // While a tracked session is open the preview shows its buffer, which changes only where reported.
+            val sessionBuffers = pendingEdits.values.associate { it.layer.id to it.session.buffer }
             val document = listOf(id(layers), canvasWidth, canvasHeight, id(selection), symmetrySettings)
-            return PreviewCache.Key(document, layers.associate { it.id to listOf(id(it), id(it.raster), id(it.mask)) })
+            return PreviewCache.Key(
+                document,
+                layers.associate { it.id to listOf(id(it), id(sessionBuffers[it.id] ?: it.raster), id(it.mask)) },
+            )
         }
 
         private fun canvasSized(buffer: PixelBuffer?): Boolean =
             buffer == null || (buffer.width == canvasWidth && buffer.height == canvasHeight)
+
+        override fun trackPreviewDamage(session: CanvasRepository.RasterEditSession) {
+            if (pendingEdits[session.snapshotToken]?.session !== session) return
+            damageTrackedSessions += session.snapshotToken
+            // Show the whole session buffer once; after this only reported areas are redrawn.
+            previewDamage = null
+        }
+
+        override fun markPreviewDamage(
+            session: CanvasRepository.RasterEditSession,
+            area: IntBounds,
+        ) {
+            if (session.snapshotToken !in damageTrackedSessions) return
+            previewDamage = previewDamage?.plus(area, session.layerId)
+        }
 
         override suspend fun compositePreview(): PixelBuffer? {
             val snapshot = withState { takePreviewSnapshot() }
@@ -2299,6 +2329,7 @@ class CanvasRepositoryImpl
             backgroundColor = snapshot.backgroundColor
             animationSettings = snapshot.animation
             pendingEdits.clear()
+            damageTrackedSessions.clear()
             pendingSelection = null
             activeSelection = null
             activeStrokes.clear()
@@ -2436,6 +2467,7 @@ class CanvasRepositoryImpl
             editRevision++
             compositor.release()
             pendingEdits.clear()
+            damageTrackedSessions.clear()
             activeStrokes.clear()
             strokeBrushParams.clear()
             strokeLayerIds.clear()
