@@ -152,6 +152,11 @@ class ArtworkWorkflowTest {
         val depth = runBlocking(Dispatchers.Main) { canvas.undoDepth }
         listOf("Guides", "Animation", "Canvas", "Text").forEach { title ->
             openWorkspace(if (title == "Text") "Add text" else title)
+            // Crop & Resize starts with the crop box; its Settings button opens the exact sizes.
+            if (title == "Canvas") {
+                compose.onNodeWithContentDescription("Crop box").assertIsDisplayed()
+                compose.onNodeWithText("Crop settings").performClick()
+            }
             compose.onNodeWithContentDescription("Close $title").assertIsDisplayed()
             if (title == "Guides") TestEvidence.screenshot("studio-guides.png")
             compose.onNodeWithContentDescription("Close $title").performClick()

@@ -39,6 +39,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.artflow.studio.core.canvas.CropBox
 import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.LiveAdjustments
 import com.artflow.studio.core.pixels.Quad
@@ -73,6 +74,8 @@ import com.artflow.studio.presentation.ui.components.editor.CanvasReference
 import com.artflow.studio.presentation.ui.components.editor.ColorChip
 import com.artflow.studio.presentation.ui.components.editor.CopyPasteActions
 import com.artflow.studio.presentation.ui.components.editor.CopyPasteMenu
+import com.artflow.studio.presentation.ui.components.editor.CropBar
+import com.artflow.studio.presentation.ui.components.editor.CropOverlay
 import com.artflow.studio.presentation.ui.components.editor.GuidesOverlay
 import com.artflow.studio.presentation.ui.components.editor.GuidesSheet
 import com.artflow.studio.presentation.ui.components.editor.LayerMaskActions
@@ -208,6 +211,7 @@ fun CanvasScreen(
     var referenceUri by rememberSaveable(projectId) { mutableStateOf(ReferenceImages.get(appContext, projectId)) }
     var referenceCanvas by rememberSaveable(projectId) { mutableStateOf(false) }
     var pageAssist by rememberSaveable(projectId) { mutableStateOf(false) }
+    var cropBox by remember { mutableStateOf<CropBox.Box?>(null) }
     val pageThumbnails by viewModel.pageThumbnails.pages.collectAsState()
     val pageImages =
         remember(pageThumbnails) {
@@ -348,6 +352,7 @@ fun CanvasScreen(
     }
 
     BackHandler(enabled = panel != EditorPanel.NONE, onBack = dismissPanel)
+    BackHandler(enabled = cropBox != null) { cropBox = null }
     BackHandler(enabled = panel == EditorPanel.NONE && dirty && !focusMode) { showExitConfirm = true }
     BackHandler(enabled = panel == EditorPanel.NONE && focusMode) {
         canvasView?.cancelActiveGesture()
@@ -629,7 +634,12 @@ fun CanvasScreen(
                         ),
                     canvas =
                         CanvasActions(
-                            onCropResize = { panel = EditorPanel.CANVAS },
+                            onCropResize = {
+                                // Crop & Resize starts with the box on the canvas; Settings has the exact sizes.
+                                panel = EditorPanel.NONE
+                                canvasView?.cancelActiveGesture()
+                                cropBox = ready?.let { CropBox.Box.of(it.width, it.height) }
+                            },
                             onAnimationAssist = { panel = EditorPanel.ANIMATION },
                             onDrawingGuide = { panel = EditorPanel.GUIDES },
                             onReference = {
@@ -949,6 +959,31 @@ fun CanvasScreen(
                     canvasHeight = ready.height,
                     view = ViewTransform(viewScale, viewOffsetX, viewOffsetY, viewRotation),
                     modifier = Modifier.fillMaxSize(),
+                )
+            }
+            val crop = cropBox
+            if (crop != null && ready != null) {
+                CropOverlay(
+                    box = crop,
+                    canvasWidth = ready.width,
+                    canvasHeight = ready.height,
+                    view = ViewTransform(viewScale, viewOffsetX, viewOffsetY, viewRotation),
+                    onChange = { cropBox = it },
+                    modifier = Modifier.fillMaxSize().zIndex(5f),
+                )
+                CropBar(
+                    box = crop,
+                    onSettings = {
+                        cropBox = null
+                        panel = EditorPanel.CANVAS
+                    },
+                    onReset = { cropBox = CropBox.Box.of(ready.width, ready.height) },
+                    onCancel = { cropBox = null },
+                    onDone = {
+                        cropBox = null
+                        if (crop != CropBox.Box.of(ready.width, ready.height)) viewModel.cropCanvas(crop.toBounds())
+                    },
+                    modifier = Modifier.align(Alignment.TopCenter).zIndex(6f),
                 )
             }
             adjustment?.let { active ->
