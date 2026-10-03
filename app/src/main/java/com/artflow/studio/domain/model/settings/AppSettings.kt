@@ -73,6 +73,12 @@ data class AppSettings(
     val pressureCurve: Float = 1f,
     /** Extra stroke steadying applied on top of every brush's own smoothing (0..1). */
     val stabilization: Float = 0f,
+    /** Gesture controls: rubbing three fingers clears the layer. */
+    val scrubToClear: Boolean = true,
+    /** Gesture controls: swiping three fingers down opens Copy & Paste. */
+    val swipeCopyPaste: Boolean = true,
+    /** Gesture controls: tapping four fingers toggles full screen. */
+    val fourFingerFullScreen: Boolean = true,
     // Saving
     val autosaveIntervalMs: Long = 20_000L,
     val autosaveEnabled: Boolean = true,

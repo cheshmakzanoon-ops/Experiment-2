@@ -128,6 +128,15 @@ data class EditorInput(
     val stabilization: Float = 0f,
     /** Outline the brush under a hovering stylus. */
     val brushCursor: Boolean = true,
+    /** Gesture controls from Prefs; each can be switched off. */
+    val gestures: GestureControls = GestureControls(),
+)
+
+/** Which multi-finger shortcuts are active, from Prefs > Gesture controls. */
+data class GestureControls(
+    val scrubToClear: Boolean = true,
+    val swipeCopyPaste: Boolean = true,
+    val fourFingerFullScreen: Boolean = true,
 )
 
 /** Brush outline under a hovering stylus, in view pixels. */
@@ -1099,11 +1108,11 @@ class ArtFlowCanvasView
                 PointerGestureRouter.Action.FINISH_NAVIGATION -> finishNavigation(route.historyPointers, event.eventTime)
                 PointerGestureRouter.Action.THREE_FINGER_SWIPE_DOWN -> {
                     resetNavigation()
-                    onCopyPasteMenuRequested?.invoke()
+                    if (input.gestures.swipeCopyPaste) onCopyPasteMenuRequested?.invoke()
                 }
                 PointerGestureRouter.Action.THREE_FINGER_SCRUB -> {
                     resetNavigation()
-                    onClearLayerRequested?.invoke()
+                    if (input.gestures.scrubToClear) onClearLayerRequested?.invoke()
                 }
                 PointerGestureRouter.Action.IGNORE -> Unit
             }
@@ -1374,7 +1383,7 @@ class ArtFlowCanvasView
             when {
                 tapFingers == 2 -> onUndoRequested?.invoke()
                 tapFingers == 3 -> onRedoRequested?.invoke()
-                tapFingers == 4 -> onFullscreenRequested?.invoke()
+                tapFingers == 4 -> if (input.gestures.fourFingerFullScreen) onFullscreenRequested?.invoke()
                 quickPinch -> animateFitToView()
             }
         }

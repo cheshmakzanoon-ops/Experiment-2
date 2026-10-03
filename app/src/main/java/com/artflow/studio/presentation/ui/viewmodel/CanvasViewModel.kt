@@ -45,6 +45,7 @@ import com.artflow.studio.domain.repository.canvas.CanvasInvalidationEvent
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import com.artflow.studio.domain.repository.settings.SettingsRepository
 import com.artflow.studio.presentation.ui.components.canvas.EditorInput
+import com.artflow.studio.presentation.ui.components.canvas.GestureControls
 import com.artflow.studio.presentation.ui.components.canvas.SelectionCombineMode
 import com.artflow.studio.presentation.ui.components.canvas.ShapeKind
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -231,6 +232,7 @@ class CanvasViewModel
                             pressureCurve = stored.pressureCurve,
                             stabilization = stored.stabilization,
                             brushCursor = stored.brushCursor,
+                            gestures = GestureControls(stored.scrubToClear, stored.swipeCopyPaste, stored.fourFingerFullScreen),
                         )
                 }
             }
@@ -566,6 +568,18 @@ class CanvasViewModel
 
         fun setRightHandedInterface(enabled: Boolean) {
             viewModelScope.launch(editorErrors) { settingsRepository.update { it.copy(rightHandedInterface = enabled) } }
+        }
+
+        fun setGestureControls(controls: GestureControls) {
+            viewModelScope.launch(editorErrors) {
+                settingsRepository.update {
+                    it.copy(
+                        scrubToClear = controls.scrubToClear,
+                        swipeCopyPaste = controls.swipeCopyPaste,
+                        fourFingerFullScreen = controls.fourFingerFullScreen,
+                    )
+                }
+            }
         }
 
         fun setPressureAndSmoothing(

@@ -55,6 +55,7 @@ import com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView
 import com.artflow.studio.presentation.ui.components.canvas.BrushCursor
 import com.artflow.studio.presentation.ui.components.canvas.DragPreview
 import com.artflow.studio.presentation.ui.components.canvas.EditorInput
+import com.artflow.studio.presentation.ui.components.canvas.GestureControls
 import com.artflow.studio.presentation.ui.components.color.ColorPanel
 import com.artflow.studio.presentation.ui.components.editor.ActionsPanel
 import com.artflow.studio.presentation.ui.components.editor.AddActions
@@ -576,6 +577,7 @@ fun CanvasScreen(
                             input.fingerPainting,
                             settings.pressureCurve,
                             settings.stabilization,
+                            GestureControls(settings.scrubToClear, settings.swipeCopyPaste, settings.fourFingerFullScreen),
                         ),
                     add =
                         AddActions(
@@ -622,6 +624,7 @@ fun CanvasScreen(
                             },
                             onMoreSettings = onOpenSettings,
                             onPressureAndSmoothing = viewModel::setPressureAndSmoothing,
+                            onGestures = viewModel::setGestureControls,
                         ),
                     onShare = { panel = EditorPanel.EXPORT },
                     canPaste = hasClipboard,

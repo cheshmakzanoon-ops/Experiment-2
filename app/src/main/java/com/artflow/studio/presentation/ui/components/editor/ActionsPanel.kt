@@ -9,6 +9,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.presentation.ui.components.canvas.GestureControls
 import kotlin.math.exp
 import kotlin.math.ln
 
@@ -43,6 +44,7 @@ data class StudioPrefs(
     val fingerPainting: Boolean,
     val pressureCurve: Float = 1f,
     val stabilization: Float = 0f,
+    val gestures: GestureControls = GestureControls(),
 )
 
 data class PrefActions(
@@ -54,6 +56,7 @@ data class PrefActions(
     val onMoreSettings: () -> Unit,
     /** Pressure curve exponent and stabilization, saved together. */
     val onPressureAndSmoothing: (Float, Float) -> Unit = { _, _ -> },
+    val onGestures: (GestureControls) -> Unit = {},
 )
 
 /** Canvas facts shown under Canvas > Canvas information. */
@@ -175,6 +178,16 @@ private fun PrefsTab(
                 else -> "Linear"
             },
     ) { actions.onPressureAndSmoothing(exp(it), prefs.stabilization) }
+    HorizontalDivider()
+    Text("Gesture controls", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
+    val gestures = prefs.gestures
+    PrefSwitch("Three-finger scrub clears the layer", gestures.scrubToClear) { actions.onGestures(gestures.copy(scrubToClear = it)) }
+    PrefSwitch("Three-finger swipe opens Copy & Paste", gestures.swipeCopyPaste) {
+        actions.onGestures(gestures.copy(swipeCopyPaste = it))
+    }
+    PrefSwitch("Four-finger tap toggles full screen", gestures.fourFingerFullScreen) {
+        actions.onGestures(gestures.copy(fourFingerFullScreen = it))
+    }
     HorizontalDivider()
     ActionRow("Full screen", actions.onFullScreen)
     ActionRow("More preferences…", actions.onMoreSettings)
