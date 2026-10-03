@@ -48,6 +48,8 @@ fun ColorPanel(
     onSavePalette: (String, List<Int>) -> Unit,
     onRemovePalette: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    onImportPalette: (() -> Unit)? = null,
+    onPaletteFromPhoto: (() -> Unit)? = null,
 ) {
     var mode by remember { mutableStateOf(ColorHarmony.ColorMode.HSV) }
     var harmony by remember { mutableStateOf(ColorHarmony.Harmony.COMPLEMENTARY) }
@@ -88,7 +90,13 @@ fun ColorPanel(
             ColorTab.CLASSIC -> ClassicPicker(color = color, onColorSelected = onColorSelected)
             ColorTab.HARMONY -> HarmonyTab(color, harmony, { harmony = it }, onColorSelected)
             ColorTab.VALUE -> ValueTab(color, mode, { mode = it }, onColorSelected)
-            ColorTab.PALETTES -> PaletteList(palettes, color, onColorSelected, onRemovePalette)
+            ColorTab.PALETTES -> {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    onImportPalette?.let { OutlinedButton(onClick = it) { Text("Import palette") } }
+                    onPaletteFromPhoto?.let { OutlinedButton(onClick = it) { Text("New from photo") } }
+                }
+                PaletteList(palettes, color, onColorSelected, onRemovePalette)
+            }
         }
 
         TabRow(selectedTabIndex = tab.ordinal) {

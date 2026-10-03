@@ -268,6 +268,7 @@ fun CanvasScreen(
             }
         }
     val takePhoto = rememberCameraCapture(onImage = viewModel::insertImageLayer, onError = viewModel::notify)
+    val paletteImports = rememberPaletteImports(onPalette = viewModel::addPaletteFromColors, onError = viewModel::notify)
     var importedFonts by remember { mutableStateOf(FontLibrary.families(context)) }
     val fontPicker =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -442,6 +443,8 @@ fun CanvasScreen(
                     onColorSelected = { viewModel.setColor(it) },
                     onClearRecents = { scope.launch { viewModel.clearRecentColors() } },
                     onSavePalette = { name, colors -> viewModel.addPaletteFromColors(name, colors) },
+                    onImportPalette = paletteImports.fromFile,
+                    onPaletteFromPhoto = paletteImports.fromPhoto,
                     onRemovePalette = { viewModel.removePalette(it) },
                 )
             EditorPanel.LAYERS ->
