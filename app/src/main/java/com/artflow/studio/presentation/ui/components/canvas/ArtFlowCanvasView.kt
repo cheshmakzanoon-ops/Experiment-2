@@ -666,8 +666,34 @@ class ArtFlowCanvasView
             val (x, y) = viewToCanvas(localX, localY)
             if (floor(x).toInt() !in 0 until canvasWidth || floor(y).toInt() !in 0 until canvasHeight) return false
             cancelActiveGesture()
-            bucketFill(x, y)
+            lastColorDrop = null
+            bucketFill(x, y, input.fillTolerance) { depth -> lastColorDrop = ColorDropFill(x, y, depth) }
             return true
+        }
+
+        /** Where the last ColorDrop landed and the history depth its fill produced. */
+        private class ColorDropFill(
+            val x: Float,
+            val y: Float,
+            val depth: Int,
+        )
+
+        private var lastColorDrop: ColorDropFill? = null
+
+        /**
+         * Procreate's ColorDrop threshold: replaces the last drop's fill with one at [tolerance]
+         * (0-255). Ignored once anything else has been done since the drop.
+         */
+        fun adjustColorDrop(tolerance: Int) {
+            val drop = lastColorDrop ?: return
+            coroutineScope.launch {
+                if (canvasRepository.undoDepth != drop.depth || !canvasRepository.undo()) {
+                    lastColorDrop = null
+                    return@launch
+                }
+                reportHistory()
+                bucketFill(drop.x, drop.y, tolerance.coerceIn(0, 255)) { depth -> lastColorDrop = ColorDropFill(drop.x, drop.y, depth) }
+            }
         }
 
         /** Moves the active layer's pixels by a canvas-space offset. */
@@ -1881,11 +1907,13 @@ class ArtFlowCanvasView
         private fun bucketFill(
             x: Float,
             y: Float,
+            tolerance: Int = input.fillTolerance,
+            onCommitted: ((Int) -> Unit)? = null,
         ) {
             val cx = x.roundToInt()
             val cy = y.roundToInt()
             val captured = input
-            applyFillEdit("Paint bucket") { target, selection, alphaLocked ->
+            applyFillEdit("Paint bucket", onCommitted) { target, selection, alphaLocked ->
                 FillTool
                     .floodFill(
                         target = target,
@@ -1894,7 +1922,7 @@ class ArtFlowCanvasView
                         color = captured.brushColor,
                         settings =
                             FillTool.Settings(
-                                tolerance = captured.fillTolerance,
+                                tolerance = tolerance,
                                 contiguous = captured.fillContiguous,
                                 mask = selection,
                                 alphaLock = alphaLocked,
@@ -1924,6 +1952,7 @@ class ArtFlowCanvasView
         /** Capture the destination and policy before yielding; a no-op never consumes history. */
         private fun applyFillEdit(
             description: String,
+            onCommitted: ((Int) -> Unit)? = null,
             edit: (PixelBuffer, SelectionMask?, Boolean) -> Boolean,
         ) {
             val layerId = activeLayerId
@@ -1940,6 +1969,7 @@ class ArtFlowCanvasView
                         onStatusMessage?.invoke("$description did not change any pixels")
                     } else if (canvasRepository.commitRasterEdit(session, description)) {
                         reportHistory()
+                        onCommitted?.invoke(canvasRepository.undoDepth)
                     } else {
                         onStatusMessage?.invoke("The document changed before $description could be applied")
                     }

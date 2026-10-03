@@ -15,6 +15,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -104,6 +105,7 @@ import com.artflow.studio.presentation.ui.components.export.rememberExportAction
 import com.artflow.studio.presentation.ui.viewmodel.CanvasUiState
 import com.artflow.studio.presentation.ui.viewmodel.CanvasViewModel
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /** Which panel is open above the canvas. */
 private enum class EditorPanel(
@@ -177,6 +179,7 @@ fun CanvasScreen(
     var transformQuad by remember { mutableStateOf<Quad?>(null) }
     var warpMesh by remember { mutableStateOf<WarpMesh?>(null) }
     var brushCursor by remember { mutableStateOf<BrushCursor?>(null) }
+    var colorDropThreshold by remember { mutableStateOf<Float?>(null) }
     var editingText by remember { mutableStateOf<Layer?>(null) }
     val adjustment by viewModel.adjustments.state.collectAsState()
     val layerThumbnails by viewModel.layerThumbnails.thumbnails.collectAsState()
@@ -696,7 +699,7 @@ fun CanvasScreen(
                                                 val drop = colorDropPosition
                                                 colorDropPosition = null
                                                 if (drop != null && canvasView?.colorDrop(drop.x, drop.y) == true) {
-                                                    viewModel.notify("ColorDrop filled the area")
+                                                    colorDropThreshold = input.fillTolerance.toFloat()
                                                 }
                                             },
                                             onDragCancel = { colorDropPosition = null },
@@ -851,6 +854,16 @@ fun CanvasScreen(
                     canvasHeight = ready.height,
                     view = ViewTransform(viewScale, viewOffsetX, viewOffsetY, viewRotation),
                     modifier = Modifier.fillMaxSize(),
+                )
+            }
+            colorDropThreshold?.let { threshold ->
+                ColorDropThresholdBar(
+                    threshold = threshold,
+                    onChange = { colorDropThreshold = it },
+                    // Read the state itself: the slider can finish before the latest value recomposes.
+                    onCommit = { colorDropThreshold?.let { latest -> canvasView?.adjustColorDrop(latest.roundToInt()) } },
+                    onDone = { colorDropThreshold = null },
+                    modifier = Modifier.align(Alignment.TopCenter).zIndex(4f),
                 )
             }
             brushCursor?.let { cursor ->
@@ -1157,6 +1170,30 @@ private fun ToolOptionsPanel(
 }
 
 private const val MAX_PSD_IMPORT_BYTES = 256 * 1024 * 1024
+
+/** After a ColorDrop, slide to fill more or less of the area, as with Procreate's drop threshold. */
+@Composable
+private fun ColorDropThresholdBar(
+    threshold: Float,
+    onChange: (Float) -> Unit,
+    onCommit: () -> Unit,
+    onDone: () -> Unit,
+    modifier: Modifier,
+) {
+    Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 4.dp, modifier = modifier.padding(12.dp).widthIn(max = 420.dp)) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("ColorDrop threshold ${(threshold / 255f * 100).roundToInt()}%", style = MaterialTheme.typography.labelMedium)
+            Slider(
+                value = threshold,
+                onValueChange = onChange,
+                onValueChangeFinished = onCommit,
+                valueRange = 0f..255f,
+                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+            )
+            TextButton(onClick = onDone) { Text("Done") }
+        }
+    }
+}
 
 /** Non-modal bar for the active tool: selection kinds, transform modes or the mask-painting exit. */
 @Composable
