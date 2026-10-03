@@ -41,6 +41,8 @@ data class CanvasDocument(
     val dpi: Int,
     /** A [com.artflow.studio.core.color.ColorProfile] name; documents before profiles are sRGB. */
     val colorProfile: String = "SRGB",
+    /** Time spent changing the artwork, in milliseconds. */
+    val trackedMs: Long = 0L,
     val backgroundColor: Int,
     val activeLayerId: Long,
     val nextLayerId: Long,

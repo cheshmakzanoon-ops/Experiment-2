@@ -660,4 +660,15 @@ class CanvasMutationTest {
             assertTrue(repository.undo())
             assertEquals(ColorProfile.SRGB, repository.getColorProfile())
         }
+
+    @Test
+    fun trackedTimeAddsUpAndStartsAtZeroOnANewCanvas() =
+        runTest {
+            open()
+            repository.addTrackedTime(10_000L)
+            repository.addTrackedTime(5_000L)
+            assertEquals(15_000L, repository.trackedTimeMs())
+            repository.createCanvas(16, 16, 72)
+            assertEquals(0L, repository.trackedTimeMs())
+        }
 }

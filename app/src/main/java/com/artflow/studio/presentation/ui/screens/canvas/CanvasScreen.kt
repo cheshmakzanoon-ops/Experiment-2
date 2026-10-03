@@ -682,6 +682,7 @@ fun CanvasScreen(
                             layers.size,
                             ready?.frameCount ?: 1,
                             (ready?.colorProfile ?: ColorProfile.SRGB).label,
+                            viewModel.trackedTimeMs(),
                         ),
                     prefs =
                         StudioPrefs(

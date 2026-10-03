@@ -482,6 +482,11 @@ interface CanvasRepository {
 
     suspend fun setCanvasDpi(dpi: Int): Boolean
 
+    /** Time spent changing the artwork, saved with it (Procreate's tracked time). */
+    fun trackedTimeMs(): Long = 0L
+
+    fun addTrackedTime(ms: Long) {}
+
     /** The colour space pixel values are stored in. */
     fun getColorProfile(): ColorProfile = ColorProfile.SRGB
 

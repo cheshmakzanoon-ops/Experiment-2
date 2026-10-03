@@ -375,6 +375,7 @@ class CanvasViewModel
             autosaveJob?.cancel()
             autosaveJob =
                 viewModelScope.launch(editorErrors) {
+                    launch { TimeTracker.run(canvasRepository) }
                     while (true) {
                         val settings = _settings.value
                         delay(settings.autosaveIntervalMs.coerceAtLeast(5_000L))
@@ -1231,6 +1232,9 @@ class CanvasViewModel
                 if (state is CanvasUiState.Ready) _uiState.value = state.copy(recoveryAvailable = false)
             }
         }
+
+        /** Time spent changing this artwork, for Canvas information. */
+        fun trackedTimeMs(): Long = canvasRepository.trackedTimeMs()
 
         /** Runs an export through the shared pipeline and keeps the result for the dialog. */
         fun export(options: ExportOptions) {

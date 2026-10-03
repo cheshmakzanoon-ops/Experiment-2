@@ -84,6 +84,7 @@ data class CanvasInfo(
     val layers: Int,
     val frames: Int,
     val profile: String = "sRGB IEC61966-2.1",
+    val trackedMs: Long = 0L,
 )
 
 private enum class ActionsTab { Add, Canvas, Share, Video, Prefs, Help }
@@ -168,11 +169,18 @@ private fun CanvasTab(
     HorizontalDivider()
     Text("Canvas information", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
     Text(
-        "${info.width} × ${info.height} px · ${info.dpi} dpi · ${info.layers} layers · ${info.frames} frame(s) · ${info.profile}",
+        "${info.width} × ${info.height} px · ${info.dpi} dpi · ${info.layers} layers · ${info.frames} frame(s) · " +
+            "${info.profile} · tracked time ${trackedLabel(info.trackedMs)}",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = 8.dp),
     )
+}
+
+/** Tracked time as hours and minutes, the way Procreate lists it. */
+internal fun trackedLabel(ms: Long): String {
+    val minutes = ms / 60_000L
+    return if (minutes < 60) "$minutes min" else "${minutes / 60} h ${minutes % 60} min"
 }
 
 @Composable

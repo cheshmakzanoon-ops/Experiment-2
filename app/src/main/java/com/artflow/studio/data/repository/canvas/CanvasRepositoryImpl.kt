@@ -49,6 +49,7 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.coroutineContext
@@ -94,6 +95,7 @@ class CanvasRepositoryImpl
         private var canvasHeight = 1080
         private var canvasDpi = 72
         private var colorProfile = ColorProfile.SRGB
+        private val trackedMs = AtomicLong()
         private var backgroundColor = 0xFFFFFFFF.toInt()
 
         private var frameList: MutableList<FrameData> = mutableListOf()
@@ -200,6 +202,7 @@ class CanvasRepositoryImpl
             canvasHeight = height
             canvasDpi = dpi.coerceIn(CanvasOperations.MIN_DPI, CanvasOperations.MAX_DPI)
             colorProfile = ColorProfile.SRGB
+            trackedMs.set(0L)
             backgroundColor = 0xFFFFFFFF.toInt()
             animationSettings = AnimationSettings()
             pendingEdits.clear()
@@ -319,6 +322,7 @@ class CanvasRepositoryImpl
             canvasHeight = document.height
             canvasDpi = document.dpi
             colorProfile = ColorProfile.from(document.colorProfile)
+            trackedMs.set(document.trackedMs)
             backgroundColor = document.backgroundColor
             animationSettings = document.animation
             nextLayerId = max(document.nextLayerId, frames.flatMap { it.layers }.maxOfOrNull { it.id }?.plus(1) ?: 1L)
@@ -1847,6 +1851,12 @@ class CanvasRepositoryImpl
 
         override fun getColorProfile(): ColorProfile = colorProfile
 
+        override fun trackedTimeMs(): Long = trackedMs.get()
+
+        override fun addTrackedTime(ms: Long) {
+            trackedMs.addAndGet(ms.coerceAtLeast(0L))
+        }
+
         override suspend fun setColorProfile(
             profile: ColorProfile,
             undoable: Boolean,
@@ -2671,6 +2681,7 @@ class CanvasRepositoryImpl
                 height = canvasHeight,
                 dpi = canvasDpi,
                 colorProfile = colorProfile.name,
+                trackedMs = trackedMs.get(),
                 backgroundColor = backgroundColor,
                 activeLayerId = activeLayerId(),
                 nextLayerId = nextLayerId,
