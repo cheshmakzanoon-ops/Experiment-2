@@ -1157,6 +1157,18 @@ private fun ToolOptionsPanel(
                     )
                 }
             }
+            Text("Size ${input.liquify.size.toInt()} px", style = MaterialTheme.typography.labelSmall)
+            Slider(
+                value = input.liquify.size.coerceIn(8f, 400f),
+                onValueChange = { viewModel.setLiquifySettings(input.liquify.copy(size = it)) },
+                valueRange = 8f..400f,
+            )
+            Text("Distortion ${(input.liquify.strength * 100).toInt()}%", style = MaterialTheme.typography.labelSmall)
+            Slider(
+                value = input.liquify.strength.coerceIn(0f, 1f),
+                onValueChange = { viewModel.setLiquifySettings(input.liquify.copy(strength = it)) },
+            )
+            TextButton(onClick = viewModel::resetLiquify) { Text("Reset liquify") }
         }
         if (input.tool == ToolType.TRANSFORM) TransformOptions(viewModel, input, canvasView)
         if (input.tool == ToolType.BRUSH) BrushAssistOptions(viewModel, input)

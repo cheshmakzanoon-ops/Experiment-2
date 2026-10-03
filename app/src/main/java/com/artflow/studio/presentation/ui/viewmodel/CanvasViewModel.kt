@@ -434,7 +434,23 @@ class CanvasViewModel
         // Tool state
         // -----------------------------------------------------------------------------------------
 
-        fun setTool(tool: ToolType) = updateInput { it.copy(tool = tool, strokeDestination = StrokeDestination.LAYER) }
+        fun setTool(tool: ToolType) {
+            if (tool == ToolType.LIQUIFY && _input.value.tool != ToolType.LIQUIFY) liquifyStartDepth = canvasRepository.undoDepth
+            updateInput { it.copy(tool = tool, strokeDestination = StrokeDestination.LAYER) }
+        }
+
+        /** History depth when Liquify was chosen; Reset returns the canvas there. */
+        private var liquifyStartDepth = 0
+
+        /** Liquify's Reset: undoes every change made since Liquify was chosen. */
+        fun resetLiquify() {
+            var undone = false
+            while (canvasRepository.undoDepth > liquifyStartDepth && canvasRepository.undo()) undone = true
+            if (!undone) return
+            refreshLayers()
+            refreshHistory()
+            refreshSelection()
+        }
 
         fun paintMask(reveal: Boolean) {
             val layer = canvasRepository.getActiveLayer()
