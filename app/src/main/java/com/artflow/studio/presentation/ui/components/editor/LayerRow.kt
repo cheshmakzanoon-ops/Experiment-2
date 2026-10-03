@@ -168,7 +168,8 @@ private val SWIPE_REVEAL = 56.dp
 
 /**
  * Procreate's two-finger layer gestures: a quick tap adjusts opacity, a swipe right toggles Alpha
- * Lock and a touch and hold selects the layer's contents. Two-finger touches are consumed so the row's own tap and swipe handling stays out of the way.
+ * Lock and a touch and hold selects the layer's contents. Two-finger touches are consumed so the
+ * row's own tap and swipe handling stays out of the way.
  */
 private fun Modifier.twoFingerGestures(
     key: Any,
