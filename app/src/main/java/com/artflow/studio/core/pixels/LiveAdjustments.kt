@@ -147,13 +147,15 @@ object LiveAdjustments {
         dx: Float,
         dy: Float,
     ): Int {
+        // Short streaks near the focus need only a few taps; long ones far away use the most.
+        val count = ((sqrt(dx * dx + dy * dy) / PERSPECTIVE_TAP_SPACING).toInt() + 1).coerceAtMost(PERSPECTIVE_SAMPLES)
         var a = 0f
         var r = 0f
         var g = 0f
         var b = 0f
-        for (k in 0 until PERSPECTIVE_SAMPLES) {
-            val t = k / PERSPECTIVE_SAMPLES.toFloat()
-            val sample = source.sampleBilinear(px + dx * t, py + dy * t)
+        for (k in 0 until count) {
+            val t = k / count.toFloat()
+            val sample = source.sampleNearest(px + dx * t, py + dy * t)
             val alpha = (sample ushr 24) / 255f
             a += alpha
             r += ((sample shr 16) and 0xFF) * alpha
@@ -162,7 +164,7 @@ object LiveAdjustments {
         }
         if (a <= 0f) return 0
         return Channels.argb(
-            (a / PERSPECTIVE_SAMPLES * 255f).roundToInt().coerceIn(0, 255),
+            (a / count * 255f).roundToInt().coerceIn(0, 255),
             (r / a).roundToInt().coerceIn(0, 255),
             (g / a).roundToInt().coerceIn(0, 255),
             (b / a).roundToInt().coerceIn(0, 255),
@@ -298,4 +300,5 @@ object LiveAdjustments {
     private const val RECOLOR_MAX_TOLERANCE = 128f
     private const val MAX_PERSPECTIVE_PULL = 0.35f
     private const val PERSPECTIVE_SAMPLES = 16
+    private const val PERSPECTIVE_TAP_SPACING = 3f
 }
