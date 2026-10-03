@@ -6,6 +6,7 @@
 package com.artflow.studio.presentation.ui.components.editor
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -19,10 +20,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.artflow.studio.core.animation.AnimationTimeline
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.perspective.PerspectiveGuide
@@ -36,6 +40,7 @@ import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.FilterType
 import com.artflow.studio.domain.model.layer.Layer
 import com.artflow.studio.presentation.ui.components.canvas.SelectionCombineMode
+import kotlin.math.roundToInt
 
 // ---------------------------------------------------------------------------------------------
 // Layers
@@ -114,6 +119,8 @@ fun LayersSheet(
     val onName = rowActions.onName
     val onBlendMode = rowActions.onBlendMode
     val onAddLayer = stackActions.onAddLayer
+    var dragging by remember { mutableStateOf<Long?>(null) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
     val onFlatten = stackActions.onFlatten
     val onMergeVisible = stackActions.onMergeVisible
     val onAddAdjustment = stackActions.onAddAdjustment
@@ -210,7 +217,20 @@ fun LayersSheet(
                 GroupedRow(layer, layer.id in collapsedGroups) {
                     collapsedGroups = if (layer.id in collapsedGroups) collapsedGroups - layer.id else collapsedGroups + layer.id
                 }
-                Box(Modifier.padding(start = if (layer.parentGroupId != null) 20.dp else 0.dp)) {
+                Box(
+                    Modifier
+                        .padding(start = if (layer.parentGroupId != null) 20.dp else 0.dp)
+                        .reorderOnLongPress(
+                            layer = layer,
+                            lifted = dragging == layer.id,
+                            offset = dragOffset,
+                            lastIndex = layers.lastIndex,
+                            onReorder = stackActions.onReorder,
+                        ) { id, offset ->
+                            dragging = id
+                            dragOffset = offset
+                        },
+                ) {
                     LayerRow(
                         layer = layer,
                         isActive = layer.id == activeLayerId,
@@ -354,6 +374,43 @@ private fun LayerMaskControls(
         )
     }
 }
+
+/**
+ * Touch and hold a layer, then drag it up or down the stack, as in Procreate. [onDrag] reports the
+ * lifted layer (null when dropped) and its offset in pixels.
+ */
+private fun Modifier.reorderOnLongPress(
+    layer: Layer,
+    lifted: Boolean,
+    offset: Float,
+    lastIndex: Int,
+    onReorder: (Long, Int) -> Unit,
+    onDrag: (Long?, Float) -> Unit,
+): Modifier =
+    zIndex(if (lifted) 1f else 0f)
+        .graphicsLayer {
+            translationY = if (lifted) offset else 0f
+            shadowElevation = if (lifted) 8f else 0f
+        }.pointerInput(layer.id, layer.index) {
+            var travel = 0f
+            detectDragGesturesAfterLongPress(
+                onDragStart = {
+                    travel = 0f
+                    onDrag(layer.id, 0f)
+                },
+                onDragEnd = {
+                    // The list runs top layer first, so dragging down moves the layer lower in the stack.
+                    val steps = (travel / size.height.coerceAtLeast(1)).roundToInt()
+                    if (steps != 0) onReorder(layer.id, (layer.index - steps).coerceIn(0, lastIndex))
+                    onDrag(null, 0f)
+                },
+                onDragCancel = { onDrag(null, 0f) },
+            ) { change, amount ->
+                change.consume()
+                travel += amount.y
+                onDrag(layer.id, travel)
+            }
+        }
 
 /** Header for a group (collapse toggle) — member rows are indented by [LayerRow]. */
 @Composable
