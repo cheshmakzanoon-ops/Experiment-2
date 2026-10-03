@@ -13,7 +13,7 @@ class BrushRenderingTest {
         params: BrushParams,
         color: Int,
     ) = Stroke(
-            id = 3,
+        id = 3,
         points = listOf(StrokePoint(4f, 10f, 1f, timestamp = 0L), StrokePoint(36f, 10f, 1f, timestamp = 16L)),
         brushParams = params,
         layerId = 1,
