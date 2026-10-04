@@ -25,6 +25,7 @@ import com.artflow.studio.core.export.FitMode
 import com.artflow.studio.core.export.GifEncoder
 import com.artflow.studio.core.export.PdfPageSize
 import com.artflow.studio.core.export.PsdCodec
+import com.artflow.studio.core.export.PsdFolders
 import com.artflow.studio.core.export.TiffCodec
 import com.artflow.studio.core.pixels.BlendModes
 import com.artflow.studio.core.pixels.PixelBuffer
@@ -84,6 +85,7 @@ class ArtworkExporter
             layers: List<LayerRaster>,
             options: ExportOptions,
             hasAdjustmentLayers: Boolean = false,
+            groups: List<Layer> = emptyList(),
         ): Result<ExportResult> =
             withContext(Dispatchers.Default) {
                 try {
@@ -106,8 +108,11 @@ class ArtworkExporter
 
                     val bytes: ByteArray =
                         when (options.format) {
-                            ExportFormat.PNG -> BitmapPixelBridge.toPngBytes(flatten(prepared, options), options.dpi, options.outputProfile)
-                            ExportFormat.JPEG ->
+                            ExportFormat.PNG -> {
+                                BitmapPixelBridge.toPngBytes(flatten(prepared, options), options.dpi, options.outputProfile)
+                            }
+
+                            ExportFormat.JPEG -> {
                                 BitmapPixelBridge.toJpegBytes(
                                     flatten(prepared, options),
                                     options.quality,
@@ -115,20 +120,41 @@ class ArtworkExporter
                                     options.dpi,
                                     options.outputProfile,
                                 )
-                            ExportFormat.WEBP ->
+                            }
+
+                            ExportFormat.WEBP -> {
                                 BitmapPixelBridge.toWebpBytes(
                                     flatten(prepared, options),
                                     lossless = options.quality >= 100,
                                     quality = options.quality,
                                 )
-                            ExportFormat.PDF -> buildPdf(listOf(prepared), options)
-                            ExportFormat.PSD -> buildPsd(prepared, layers, options, hasAdjustmentLayers)
-                            ExportFormat.TIFF -> TiffCodec.write(flatten(prepared, options), options.dpi)
-                            ExportFormat.LAYER_PNGS -> buildLayerZip(prepared, layers, projectName, options)
-                            ExportFormat.MODEL_OBJ -> buildModelZip(projectId, flatten(prepared, options), options)
-                            else -> return@withContext Result.failure(
-                                ExportFailure(ExportError.UnsupportedFormat(options.format).message),
-                            )
+                            }
+
+                            ExportFormat.PDF -> {
+                                buildPdf(listOf(prepared), options)
+                            }
+
+                            ExportFormat.PSD -> {
+                                buildPsd(prepared, layers, options, hasAdjustmentLayers, groups)
+                            }
+
+                            ExportFormat.TIFF -> {
+                                TiffCodec.write(flatten(prepared, options), options.dpi)
+                            }
+
+                            ExportFormat.LAYER_PNGS -> {
+                                buildLayerZip(prepared, layers, projectName, options)
+                            }
+
+                            ExportFormat.MODEL_OBJ -> {
+                                buildModelZip(projectId, flatten(prepared, options), options)
+                            }
+
+                            else -> {
+                                return@withContext Result.failure(
+                                    ExportFailure(ExportError.UnsupportedFormat(options.format).message),
+                                )
+                            }
                         }
 
                     val file = storage.saveExport(projectId, fileName, bytes)
@@ -197,18 +223,31 @@ class ArtworkExporter
 
                     val bytes =
                         when (options.format) {
-                            ExportFormat.GIF -> buildGif(prepared, delaysMs, options)
-                            ExportFormat.MP4 -> buildMp4(prepared, delaysMs, options)
-                            ExportFormat.APNG ->
+                            ExportFormat.GIF -> {
+                                buildGif(prepared, delaysMs, options)
+                            }
+
+                            ExportFormat.MP4 -> {
+                                buildMp4(prepared, delaysMs, options)
+                            }
+
+                            ExportFormat.APNG -> {
                                 ApngEncoder.encode(
                                     prepared.map { BitmapPixelBridge.toPngBytes(flatten(it, options), options.dpi) },
                                     delaysMs,
                                     loops = if (options.gifLoop) 0 else 1,
                                 )
-                            ExportFormat.FRAME_SEQUENCE -> buildFrameSequenceZip(prepared, projectName, options)
-                            ExportFormat.PNG ->
+                            }
+
+                            ExportFormat.FRAME_SEQUENCE -> {
+                                buildFrameSequenceZip(prepared, projectName, options)
+                            }
+
+                            ExportFormat.PNG -> {
                                 BitmapPixelBridge.toPngBytes(flatten(prepared.first(), options), options.dpi, options.outputProfile)
-                            ExportFormat.JPEG ->
+                            }
+
+                            ExportFormat.JPEG -> {
                                 BitmapPixelBridge.toJpegBytes(
                                     flatten(prepared.first(), options),
                                     options.quality,
@@ -216,10 +255,17 @@ class ArtworkExporter
                                     options.dpi,
                                     options.outputProfile,
                                 )
-                            ExportFormat.PDF -> buildPdf(prepared, options)
-                            else -> return@withContext Result.failure(
-                                ExportFailure(ExportError.UnsupportedFormat(options.format).message),
-                            )
+                            }
+
+                            ExportFormat.PDF -> {
+                                buildPdf(prepared, options)
+                            }
+
+                            else -> {
+                                return@withContext Result.failure(
+                                    ExportFailure(ExportError.UnsupportedFormat(options.format).message),
+                                )
+                            }
                         }
 
                     val file = storage.saveExport(projectId, fileName, bytes)
@@ -368,15 +414,25 @@ class ArtworkExporter
             layers: List<LayerRaster>,
             options: ExportOptions,
             hasAdjustmentLayers: Boolean,
+            groups: List<Layer>,
         ): ByteArray {
+            fun shown(layer: Layer) = !hasAdjustmentLayers && (options.includeHiddenLayers || layer.isVisible)
+
+            fun opacity(layer: Layer) = (layer.opacity * 255f).roundToInt().coerceIn(0, 255)
             val psdLayers =
-                layers
-                    .map { entry ->
+                PsdFolders
+                    .records(
+                        items = layers,
+                        layerOf = { it.layer },
+                        groups = groups,
+                        includeHidden = options.includeHiddenLayers,
+                        header = { group -> PsdCodec.PsdLayer.groupHeader(group.name, opacity(group), shown(group), group.blendMode) },
+                    ) { entry ->
                         PsdCodec.PsdLayer(
                             name = entry.name,
                             pixels = prepare(entry.buffer, composite.width, composite.height, options),
-                            opacity = (entry.layer.opacity * 255f).roundToInt().coerceIn(0, 255),
-                            isVisible = !hasAdjustmentLayers && (options.includeHiddenLayers || entry.layer.isVisible),
+                            opacity = opacity(entry.layer),
+                            isVisible = shown(entry.layer),
                             blendMode = entry.layer.blendMode,
                             isClippingMask = entry.layer.isClippingMask,
                         )

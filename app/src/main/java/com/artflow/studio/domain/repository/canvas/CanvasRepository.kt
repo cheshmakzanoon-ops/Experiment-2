@@ -672,4 +672,6 @@ data class CanvasExportSnapshot(
     val selection: SelectionMask?,
     /** Stack effects need a rendered PSD appearance layer; includes filters as well as adjustments. */
     val hasAdjustmentLayers: Boolean,
+    /** Every layer group of the exported frame, hidden ones included, so layered formats keep the folders. */
+    val groups: List<Layer> = emptyList(),
 )

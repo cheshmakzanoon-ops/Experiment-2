@@ -38,6 +38,8 @@ object PsdCodec {
     private const val CHANNEL_GREEN = 1
     private const val CHANNEL_BLUE = 2
     private const val CHANNEL_ALPHA = -1
+    private const val LSCT_LENGTH = 12
+    private const val PASS_THROUGH_KEY = "pass"
 
     /** A layer to be written to (or read from) a PSD file. */
     data class PsdLayer(
@@ -50,7 +52,46 @@ object PsdCodec {
         val left: Int = 0,
         val top: Int = 0,
         val isClippingMask: Boolean = false,
-    )
+        /** Folder structure; folder records carry no pixels. */
+        val section: Section = Section.NONE,
+    ) {
+        companion object {
+            private val NO_PIXELS = PixelBuffer(1, 1)
+
+            /** The hidden divider below a folder's contents (records are stored bottom first). */
+            fun groupEnd() = PsdLayer(GROUP_END_NAME, NO_PIXELS, section = Section.GROUP_END)
+
+            /** A folder's own record, above its contents: its name, opacity, visibility and blend. */
+            fun groupHeader(
+                name: String,
+                opacity: Int = 255,
+                isVisible: Boolean = true,
+                blendMode: BlendMode = BlendMode.PASS_THROUGH,
+            ) = PsdLayer(name, NO_PIXELS, opacity, isVisible, blendMode, section = Section.GROUP_OPEN)
+        }
+    }
+
+    /**
+     * Photoshop layer folders: the records between a [GROUP_END] divider and the next folder
+     * header above it are inside that folder; folders nest.
+     */
+    enum class Section(
+        val code: Int,
+    ) {
+        NONE(0),
+        GROUP_OPEN(1),
+        GROUP_CLOSED(2),
+        GROUP_END(3),
+        ;
+
+        val isGroupHeader: Boolean get() = this == GROUP_OPEN || this == GROUP_CLOSED
+
+        companion object {
+            fun of(code: Int): Section = entries.firstOrNull { it.code == code } ?: NONE
+        }
+    }
+
+    const val GROUP_END_NAME = "</Layer group>"
 
     /** A parsed PSD document. */
     data class PsdDocument(
@@ -164,10 +205,11 @@ object PsdCodec {
         useRle: Boolean,
     ) {
         val pixels = layer.pixels
-        val top = layer.top
-        val left = layer.left
-        val bottom = top + pixels.height
-        val right = left + pixels.width
+        val folder = layer.section != Section.NONE
+        val top = if (folder) 0 else layer.top
+        val left = if (folder) 0 else layer.left
+        val bottom = if (folder) 0 else top + pixels.height
+        val right = if (folder) 0 else left + pixels.width
 
         out.writeInt(top)
         out.writeInt(left)
@@ -181,7 +223,11 @@ object PsdCodec {
         val channelPayloads =
             channelIds.map { channelId ->
                 val plane = extractChannel(pixels, channelId)
-                if (useRle) encodeRle(plane, pixels.width, pixels.height) else rawBytes(plane)
+                when {
+                    folder -> ByteArray(0)
+                    useRle -> encodeRle(plane, pixels.width, pixels.height)
+                    else -> rawBytes(plane)
+                }
             }
         channelIds.forEachIndexed { index, channelId ->
             out.writeShort(channelId)
@@ -212,6 +258,14 @@ object PsdCodec {
         extra.writeInt(4 + unicode.size)
         extra.writeInt(unicode.size / 2)
         extra.write(unicode)
+        if (folder) {
+            extra.writeAscii("8BIM")
+            extra.writeAscii("lsct")
+            extra.writeInt(LSCT_LENGTH)
+            extra.writeInt(layer.section.code)
+            extra.writeAscii("8BIM")
+            extra.writeAscii(if (layer.blendMode == BlendMode.PASS_THROUGH) PASS_THROUGH_KEY else blendModeKey(layer.blendMode))
+        }
         val extraBytes = extra.toByteArray()
         out.writeInt(extraBytes.size)
         out.write(extraBytes)
@@ -223,6 +277,11 @@ object PsdCodec {
     ): ByteArray {
         val pixels = layer.pixels
         val out = ByteArrayOutputStream()
+        if (layer.section != Section.NONE) {
+            // Folder records have an empty rectangle: each channel is just its compression flag.
+            repeat(4) { out.writeShort(COMPRESSION_RAW) }
+            return out.toByteArray()
+        }
         intArrayOf(CHANNEL_RED, CHANNEL_GREEN, CHANNEL_BLUE, CHANNEL_ALPHA).forEach { channelId ->
             val plane = extractChannel(pixels, channelId)
             if (useRle) {
@@ -375,6 +434,7 @@ object PsdCodec {
             val blendMode: BlendMode,
             val channels: List<Pair<Int, Int>>,
             val isClippingMask: Boolean,
+            val section: Section,
         )
 
         val pending = mutableListOf<Pending>()
@@ -401,6 +461,8 @@ object PsdCodec {
             val extraEnd = reader.position + extraLength
 
             var name = "Layer ${i + 1}"
+            var section = Section.NONE
+            var folderBlend: BlendMode? = null
             if (extraLength > 0 && reader.remaining() >= 8) {
                 val maskLength = reader.readInt()
                 if (maskLength > 0) reader.skip(maskLength)
@@ -411,21 +473,28 @@ object PsdCodec {
                     if (nameLength > 0) name = reader.readAscii(nameLength)
                     reader.skip((4 - (nameLength + 1) % 4) % 4)
                 }
-                // A "luni" block carries the UTF-16 name and is preferred when present.
+                // A "luni" block carries the UTF-16 name and is preferred when present; "lsct"
+                // marks folder records. Other blocks are skipped.
                 var scanPosition = reader.position
-                while (scanPosition + 12 < extraEnd) {
+                while (scanPosition + 12 <= extraEnd) {
                     reader.position = scanPosition
                     val signature = reader.readAscii(4)
-                    if (signature != "8BIM") break
+                    if (signature != "8BIM" && signature != "8B64") break
                     val key = reader.readAscii(4)
                     val length = reader.readInt()
-                    if (length <= 0 || reader.remaining() < length) break
+                    if (length < 0 || reader.remaining() < length) break
+                    val blockStart = reader.position
                     if (key == "luni") {
                         val unicodeName = reader.readUnicodeString(length)
                         if (unicodeName.isNotBlank()) name = unicodeName
-                        break
+                    } else if ((key == "lsct" || key == "lsdk") && length >= 4) {
+                        section = Section.of(reader.readInt())
+                        if (length >= LSCT_LENGTH && reader.readAscii(4) == "8BIM") {
+                            val blend = reader.readAscii(4)
+                            folderBlend = if (blend == PASS_THROUGH_KEY) BlendMode.PASS_THROUGH else blendModeFromKey(blend)
+                        }
                     }
-                    scanPosition = reader.position + length + (length % 2)
+                    scanPosition = blockStart + length + (length % 2)
                 }
             }
             reader.position = extraEnd
@@ -439,9 +508,10 @@ object PsdCodec {
                     right = right,
                     opacity = opacity,
                     isVisible = (flags and 0x02) == 0,
-                    blendMode = blendModeFromKey(if (blendSignature == "8BIM") blendKey else "norm"),
+                    blendMode = folderBlend ?: blendModeFromKey(if (blendSignature == "8BIM") blendKey else "norm"),
                     channels = channels,
                     isClippingMask = isClippingMask,
+                    section = section,
                 )
         }
 
@@ -450,6 +520,18 @@ object PsdCodec {
         pending.forEach { record ->
             val layerWidth = (record.right - record.left).coerceAtLeast(0)
             val layerHeight = (record.bottom - record.top).coerceAtLeast(0)
+            if (record.section != Section.NONE) {
+                record.channels.forEach { (_, length) -> reader.skip(max(0, length)) }
+                layers +=
+                    if (record.section == Section.GROUP_END) {
+                        PsdLayer.groupEnd()
+                    } else {
+                        PsdLayer
+                            .groupHeader(record.name, record.opacity, record.isVisible, record.blendMode)
+                            .copy(section = record.section)
+                    }
+                return@forEach
+            }
             if (layerWidth == 0 || layerHeight == 0) {
                 record.channels.forEach { (_, length) -> reader.skip(max(0, length)) }
                 return@forEach
@@ -518,15 +600,22 @@ object PsdCodec {
         val channelIds =
             (0 until channelCount).map { index ->
                 when (colorMode) {
-                    COLOR_MODE_GRAYSCALE -> if (index == 0) CHANNEL_RED else CHANNEL_ALPHA
-                    COLOR_MODE_CMYK -> index
-                    else ->
+                    COLOR_MODE_GRAYSCALE -> {
+                        if (index == 0) CHANNEL_RED else CHANNEL_ALPHA
+                    }
+
+                    COLOR_MODE_CMYK -> {
+                        index
+                    }
+
+                    else -> {
                         when (index) {
                             0 -> CHANNEL_RED
                             1 -> CHANNEL_GREEN
                             2 -> CHANNEL_BLUE
                             else -> CHANNEL_ALPHA
                         }
+                    }
                 }
             }
 
@@ -537,6 +626,7 @@ object PsdCodec {
                     planes[id] = reader.readBytes(min(size, reader.remaining()))
                 }
             }
+
             COMPRESSION_RLE -> {
                 // The byte-count table lists every row of every channel, then the row data follows.
                 repeat(channelCount * height) { reader.readShort() }
@@ -549,6 +639,7 @@ object PsdCodec {
                     planes[id] = out
                 }
             }
+
             COMPRESSION_ZIP, COMPRESSION_ZIP_PREDICTION -> {
                 channelIds.forEach { id ->
                     // ZIP channels carry their own length prefix.
@@ -558,7 +649,10 @@ object PsdCodec {
                     planes[id] = inflate(compressed)
                 }
             }
-            else -> return null
+
+            else -> {
+                return null
+            }
         }
 
         val buffer = PixelBuffer(width, height)
@@ -621,6 +715,7 @@ object PsdCodec {
                 val raw = reader.readBytes(min(declaredLength - 2, reader.remaining()))
                 downsample(raw, width, height, depth)
             }
+
             COMPRESSION_RLE -> {
                 repeat(height) { reader.readShort() } // row byte counts
                 val out = ByteArray(width * height)
@@ -630,6 +725,7 @@ object PsdCodec {
                 }
                 downsample(out, width, height, 1)
             }
+
             COMPRESSION_ZIP, COMPRESSION_ZIP_PREDICTION -> {
                 val size = reader.readInt()
                 if (size <= 0 || reader.remaining() < size) {
@@ -638,7 +734,10 @@ object PsdCodec {
                     downsample(inflate(reader.readBytes(size)), width, height, depth)
                 }
             }
-            else -> ByteArray(width * height)
+
+            else -> {
+                ByteArray(width * height)
+            }
         }
     }
 
@@ -796,7 +895,12 @@ object PsdCodec {
                         out[written++] = reader.readByte().toByte()
                     }
                 }
-                control == 128 -> Unit // no-op
+
+                control == 128 -> {
+                    Unit
+                }
+
+                // no-op
                 else -> {
                     val count = 257 - control
                     val value = reader.readByte().toByte()

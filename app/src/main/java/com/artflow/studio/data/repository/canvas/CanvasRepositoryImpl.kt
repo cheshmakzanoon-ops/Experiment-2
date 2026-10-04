@@ -2357,6 +2357,7 @@ class CanvasRepositoryImpl
                         layers = layerPixels,
                         selection = frozen.third,
                         hasAdjustmentLayers = selectedLayers.any { it.adjustmentType != null || it.filterType != null },
+                        groups = frames.first().layers.mapIndexedNotNull { index, data -> data.takeIf { it.isGroup }?.toDomain(index) },
                     )
                 } finally {
                     renderer.release()
@@ -2405,8 +2406,8 @@ class CanvasRepositoryImpl
             return try {
                 localCompositor.composite(
                     layers.mapIndexed {
-                            index,
-                            layer,
+                        index,
+                        layer,
                         ->
                         Compositor.LayerInput(layer.toDomain(index), layer.raster, layer.strokes.toList(), layer.mask)
                     },

@@ -36,7 +36,11 @@ object LayerImports {
         check(drawn) { "The photo could not be placed on the new layer" }
     }
 
-    /** Adds every PSD layer (or the flattened composite) as new layers; returns how many were added. */
+    /**
+     * Adds every PSD layer (or the flattened composite) as new layers, with Photoshop folders
+     * rebuilt as layer groups (nested as they were) and clipping kept; returns how many pixel
+     * layers were added.
+     */
     suspend fun importPsd(
         repository: CanvasRepository,
         bytes: ByteArray,
@@ -49,19 +53,80 @@ object LayerImports {
         val dx = (size.width - document.width) / 2
         val dy = (size.height - document.height) / 2
         val sources =
-            document.layers.ifEmpty {
-                listOfNotNull(document.composite?.let { PsdCodec.PsdLayer("Background", it) })
-            }
+            document.layers
+                .takeIf { layers -> layers.any { it.section == PsdCodec.Section.NONE } }
+                ?: listOfNotNull(document.composite?.let { PsdCodec.PsdLayer("Background", it) })
         check(sources.isNotEmpty()) { "The PSD document has no readable layers" }
+        // Records are bottom first: a divider opens a folder, its header (above the contents) closes it.
+        val open = ArrayDeque<MutableList<Node>>()
+        val root = mutableListOf<Node>()
+        var added = 0
         sources.forEach { source ->
-            val layer = repository.addLayer(name = source.name.ifBlank { "PSD layer" })
-            repository.applyRasterEdit(layer.id, "Import PSD layer") { target ->
-                target.drawInto(ColorProfiles.convert(source.pixels, ColorProfile.SRGB, profile), dx + source.left, dy + source.top)
+            when {
+                source.section == PsdCodec.Section.GROUP_END -> {
+                    open.addLast(mutableListOf())
+                }
+
+                source.section.isGroupHeader -> {
+                    val members = open.removeLastOrNull() ?: return@forEach
+                    (open.lastOrNull() ?: root) += Node.Folder(source, members)
+                }
+
+                else -> {
+                    val layer = repository.addLayer(name = source.name.ifBlank { "PSD layer" })
+                    repository.applyRasterEdit(layer.id, "Import PSD layer") { target ->
+                        target.drawInto(ColorProfiles.convert(source.pixels, ColorProfile.SRGB, profile), dx + source.left, dy + source.top)
+                    }
+                    applyLook(repository, layer.id, source)
+                    if (source.isClippingMask) repository.setLayerClippingMask(layer.id, true)
+                    (open.lastOrNull() ?: root) += Node.Pixels(layer.id)
+                    added++
+                }
             }
-            if (source.opacity < 255) repository.setLayerOpacity(layer.id, source.opacity / 255f)
-            if (source.blendMode != BlendMode.NORMAL) repository.setLayerBlendMode(layer.id, source.blendMode)
-            if (!source.isVisible) repository.setLayerVisibility(layer.id, false)
         }
-        return sources.size
+        // Folders left open by a damaged file keep their layers ungrouped.
+        open.forEach { root += it }
+        root.forEach { node -> if (node is Node.Folder) group(repository, node) }
+        return added
+    }
+
+    private sealed interface Node {
+        data class Pixels(
+            val id: Long,
+        ) : Node
+
+        data class Folder(
+            val header: PsdCodec.PsdLayer,
+            val members: List<Node>,
+        ) : Node
+    }
+
+    /** Groups a folder's layers, inner folders first; returns the group id, or null when it holds no layers. */
+    private suspend fun group(
+        repository: CanvasRepository,
+        folder: Node.Folder,
+    ): Long? {
+        val ids =
+            folder.members.mapNotNull { member ->
+                when (member) {
+                    is Node.Pixels -> member.id
+                    is Node.Folder -> group(repository, member)
+                }
+            }
+        if (ids.isEmpty()) return null
+        val id = repository.groupLayers(ids) ?: return null
+        repository.setLayerName(id, folder.header.name.ifBlank { "Group" })
+        applyLook(repository, id, folder.header)
+        return id
+    }
+
+    private suspend fun applyLook(
+        repository: CanvasRepository,
+        id: Long,
+        source: PsdCodec.PsdLayer,
+    ) {
+        if (source.opacity < 255) repository.setLayerOpacity(id, source.opacity / 255f)
+        if (source.blendMode != BlendMode.NORMAL) repository.setLayerBlendMode(id, source.blendMode)
+        if (!source.isVisible) repository.setLayerVisibility(id, false)
     }
 }

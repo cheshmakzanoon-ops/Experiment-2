@@ -1309,7 +1309,7 @@ class CanvasViewModel
                     snapshot.layers.map { (layer, buffer) ->
                         LayerRaster(layer.name, ExportRegion.apply(buffer, snapshot.selection, resolved.area, region), layer)
                     }
-                exporter.exportStill(projectId, name, frames.first(), layers, resolved, snapshot.hasAdjustmentLayers)
+                exporter.exportStill(projectId, name, frames.first(), layers, resolved, snapshot.hasAdjustmentLayers, snapshot.groups)
             }
         }
 
