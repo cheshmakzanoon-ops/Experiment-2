@@ -260,7 +260,7 @@ class Compositor(
                 val aligned: PixelBuffer =
                     if (bufferPool != null) {
                         val canvas = bufferPool.obtain(width, height)
-                        canvas.drawInto(base, 0, 0)
+                        placeOnClear(canvas, base)
                         canvas
                     } else if (base.width == width && base.height == height) {
                         base.copy()
@@ -293,6 +293,27 @@ class Compositor(
         return content
     }
 
+    /**
+     * [PixelBuffer.drawInto] onto a cleared [canvas], with the same result: opaque pixels are
+     * copied and transparent ones skipped, so only partly transparent pixels need blending.
+     */
+    private fun placeOnClear(
+        canvas: PixelBuffer,
+        base: PixelBuffer,
+    ) {
+        if (base.width != canvas.width || base.height != canvas.height) return canvas.drawInto(base, 0, 0)
+        val source = base.pixels
+        val target = canvas.pixels
+        for (i in source.indices) {
+            val pixel = source[i]
+            when (pixel ushr 24) {
+                0 -> Unit
+                OPAQUE -> target[i] = pixel
+                else -> target[i] = BlendModes.sourceOver(0, pixel)
+            }
+        }
+    }
+
     /** Applies a filter layer's effect to [buffer] in place, mixing by [amount]. */
     fun applyFilter(
         buffer: PixelBuffer,
@@ -303,27 +324,51 @@ class Compositor(
         if (intensity <= 0f) return
         val filtered =
             when (filter) {
-                FilterType.GAUSSIAN_BLUR -> ImageFilters.gaussianBlur(buffer, 1f + intensity * 12f)
-                FilterType.MOTION_BLUR -> ImageFilters.motionBlur(buffer, 1f + intensity * 40f, 0f)
-                FilterType.SHARPEN -> ImageFilters.sharpen(buffer, intensity * 3f)
-                FilterType.NOISE -> ImageFilters.addNoise(buffer, intensity * 0.4f)
-                FilterType.CHROMATIC_ABERRATION ->
+                FilterType.GAUSSIAN_BLUR -> {
+                    ImageFilters.gaussianBlur(buffer, 1f + intensity * 12f)
+                }
+
+                FilterType.MOTION_BLUR -> {
+                    ImageFilters.motionBlur(buffer, 1f + intensity * 40f, 0f)
+                }
+
+                FilterType.SHARPEN -> {
+                    ImageFilters.sharpen(buffer, intensity * 3f)
+                }
+
+                FilterType.NOISE -> {
+                    ImageFilters.addNoise(buffer, intensity * 0.4f)
+                }
+
+                FilterType.CHROMATIC_ABERRATION -> {
                     ImageFilters.chromaticAberration(
                         buffer,
                         intensity * 0.02f,
                         buffer.width / 2f,
                         buffer.height / 2f,
                     )
-                FilterType.VIGNETTE -> ImageFilters.vignette(buffer, intensity)
-                FilterType.FIND_EDGES -> ImageFilters.findEdges(buffer)
-                FilterType.EMBOSS -> ImageFilters.emboss(buffer, intensity * 1.5f)
-                FilterType.TILT_SHIFT ->
+                }
+
+                FilterType.VIGNETTE -> {
+                    ImageFilters.vignette(buffer, intensity)
+                }
+
+                FilterType.FIND_EDGES -> {
+                    ImageFilters.findEdges(buffer)
+                }
+
+                FilterType.EMBOSS -> {
+                    ImageFilters.emboss(buffer, intensity * 1.5f)
+                }
+
+                FilterType.TILT_SHIFT -> {
                     ImageFilters.tiltShift(
                         buffer,
                         intensity * 12f,
                         buffer.height / 2f,
                         buffer.height * 0.35f,
                     )
+                }
             }
         // Blend the filtered result back at full strength: the amount already shaped the filter.
         System.arraycopy(filtered.pixels, 0, buffer.pixels, 0, buffer.pixels.size)
@@ -493,6 +538,7 @@ class Compositor(
     private companion object {
         /** Padding added around a vector layer's stroke bounds when sizing its thumbnail. */
         const val THUMBNAIL_PADDING = 16
+        const val OPAQUE = 255
     }
 }
 
