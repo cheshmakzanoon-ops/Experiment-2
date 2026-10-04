@@ -57,6 +57,18 @@ class OpenGLCanvasRenderer
         @Volatile
         private var wideColor = false
 
+        /** Predicted pen positions ahead of the live stroke: x, y pairs in canvas pixels. */
+        @Volatile
+        private var prediction: Prediction? = null
+
+        private class Prediction(
+            val points: FloatArray,
+            val radius: Float,
+            val color: Int,
+        )
+
+        private var dabProgram = 0
+
         // --- Programs ------------------------------------------------------------------------------
 
         private var quadProgram = 0
@@ -143,6 +155,7 @@ class OpenGLCanvasRenderer
             quadCanvasSizeHandle = GLES20.glGetUniformLocation(quadProgram, "uCanvasSize")
             quadUseTextureHandle = GLES20.glGetUniformLocation(quadProgram, "uUseTexture")
             quadWideColorHandle = GLES20.glGetUniformLocation(quadProgram, "uWideColor")
+            dabProgram = createProgram(DAB_VERTEX_SHADER, DAB_FRAGMENT_SHADER)
 
             checkerTexture = createCheckerboardTexture()
             isInitialized = true
@@ -221,6 +234,66 @@ class OpenGLCanvasRenderer
                 GLES20.glUniform4f(quadTintHandle, 1f, 1f, 1f, 1f)
                 drawQuad(compositeTexture, textureRepeat = false)
             }
+            prediction?.let { drawPrediction(it, matrix) }
+        }
+
+        /** Shows soft dabs where the pen is predicted to be; [points] are canvas x, y pairs. */
+        fun setPrediction(
+            points: FloatArray?,
+            radius: Float,
+            color: Int,
+        ) {
+            prediction = points?.takeIf { it.size >= 2 }?.let { Prediction(it, radius, color) }
+        }
+
+        private fun drawPrediction(
+            current: Prediction,
+            matrix: FloatArray,
+        ) {
+            val count = current.points.size / 2
+            // Two triangles per dab: canvas position plus a corner offset in -1..1.
+            val vertices = FloatArray(count * DAB_FLOATS)
+            val corners = floatArrayOf(-1f, -1f, 1f, -1f, 1f, 1f, -1f, -1f, 1f, 1f, -1f, 1f)
+            for (dab in 0 until count) {
+                for (corner in 0 until 6) {
+                    val base = dab * DAB_FLOATS + corner * 4
+                    vertices[base] = current.points[dab * 2] + corners[corner * 2] * current.radius
+                    vertices[base + 1] = current.points[dab * 2 + 1] + corners[corner * 2 + 1] * current.radius
+                    vertices[base + 2] = corners[corner * 2]
+                    vertices[base + 3] = corners[corner * 2 + 1]
+                }
+            }
+            val buffer =
+                java.nio.ByteBuffer
+                    .allocateDirect(vertices.size * 4)
+                    .order(java.nio.ByteOrder.nativeOrder())
+                    .asFloatBuffer()
+                    .apply {
+                        put(vertices)
+                        position(0)
+                    }
+            GLES20.glUseProgram(dabProgram)
+            GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, 0)
+            GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(dabProgram, "uMatrix"), 1, false, matrix, 0)
+            val alpha = ((current.color ushr 24) and 0xFF) / 255f * PREDICTION_ALPHA
+            GLES20.glUniform4f(
+                GLES20.glGetUniformLocation(dabProgram, "uColor"),
+                ((current.color shr 16) and 0xFF) / 255f * alpha,
+                ((current.color shr 8) and 0xFF) / 255f * alpha,
+                (current.color and 0xFF) / 255f * alpha,
+                alpha,
+            )
+            val position = GLES20.glGetAttribLocation(dabProgram, "aPosition")
+            val corner = GLES20.glGetAttribLocation(dabProgram, "aCorner")
+            buffer.position(0)
+            GLES20.glEnableVertexAttribArray(position)
+            GLES20.glVertexAttribPointer(position, 2, GLES20.GL_FLOAT, false, 16, buffer)
+            buffer.position(2)
+            GLES20.glEnableVertexAttribArray(corner)
+            GLES20.glVertexAttribPointer(corner, 2, GLES20.GL_FLOAT, false, 16, buffer)
+            GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, count * 6)
+            GLES20.glDisableVertexAttribArray(position)
+            GLES20.glDisableVertexAttribArray(corner)
         }
 
         private fun refreshOnionTextures() {
@@ -569,6 +642,30 @@ class OpenGLCanvasRenderer
                     1f,
                     1f,
                 )
+
+            private const val DAB_FLOATS = 24
+            private const val PREDICTION_ALPHA = 0.85f
+
+            private const val DAB_VERTEX_SHADER = """
+            uniform mat4 uMatrix;
+            attribute vec2 aPosition;
+            attribute vec2 aCorner;
+            varying vec2 vCorner;
+            void main() {
+                gl_Position = uMatrix * vec4(aPosition, 0.0, 1.0);
+                vCorner = aCorner;
+            }
+        """
+
+            private const val DAB_FRAGMENT_SHADER = """
+            precision mediump float;
+            uniform vec4 uColor;
+            varying vec2 vCorner;
+            void main() {
+                float edge = 1.0 - smoothstep(0.8, 1.0, length(vCorner));
+                gl_FragColor = uColor * edge;
+            }
+        """
 
             private const val QUAD_VERTEX_SHADER = """
             uniform mat4 uMatrix;

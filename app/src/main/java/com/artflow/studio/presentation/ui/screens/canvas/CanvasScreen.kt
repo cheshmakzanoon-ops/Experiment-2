@@ -1009,10 +1009,10 @@ fun CanvasScreen(
                     }
                 }
             }
-            val mesh = modelMesh
-            if (mesh != null && showModel && !focusMode) {
+            val model3d = modelMesh
+            if (model3d != null && showModel && !focusMode) {
                 ModelCompanion(
-                    mesh = mesh,
+                    mesh = model3d,
                     artwork = canvasPreviewBitmap,
                     painter = modelPainter,
                     onClose = { showModel = false },

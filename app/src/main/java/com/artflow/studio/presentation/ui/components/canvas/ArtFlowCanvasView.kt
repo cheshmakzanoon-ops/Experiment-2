@@ -14,6 +14,7 @@ import com.artflow.studio.core.canvas.PointerGestureRouter
 import com.artflow.studio.core.canvas.PointerPressure
 import com.artflow.studio.core.canvas.QuickPinch
 import com.artflow.studio.core.canvas.QuickShape
+import com.artflow.studio.core.canvas.StrokePredictor
 import com.artflow.studio.core.canvas.StrokeStabilizer
 import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.Channels
@@ -249,6 +250,7 @@ class ArtFlowCanvasView
         private var drawing = false
         private var currentStrokeId = 0L
         private var stabilizer: StrokeStabilizer? = null
+        private val predictor = StrokePredictor()
         private val strokeRawPoints = mutableListOf<Pair<Float, Float>>()
         private var strokePressureSum = 0f
         private var strokeLastPressure = 1f
@@ -400,6 +402,7 @@ class ArtFlowCanvasView
         }
 
         fun cancelActiveGesture() {
+            clearPrediction()
             pointerRouter.suppress()
             resetNavigation()
             pinchStartScale = 0f
@@ -1019,12 +1022,18 @@ class ArtFlowCanvasView
                 val frame = canvasRepository.compositePreviewFrame()
                 val dirty = frame?.dirty
                 when {
-                    frame == null -> Unit
+                    frame == null -> {
+                        Unit
+                    }
+
                     dirty == null || fullCompositeNeeded -> {
                         renderer.setComposite(frame.buffer)
                         fullCompositeNeeded = false
                     }
-                    else -> renderer.setCompositeRegion(frame.buffer, dirty)
+
+                    else -> {
+                        renderer.setCompositeRegion(frame.buffer, dirty)
+                    }
                 }
                 requestRender()
             } catch (cancelled: CancellationException) {
@@ -1141,6 +1150,7 @@ class ArtFlowCanvasView
                     val pointer = samples[route.index]
                     beginGesture(event, route.index, pointer.x, pointer.y, pointer.stylus)
                 }
+
                 PointerGestureRouter.Action.MOVE_TOOL -> {
                     for (history in 0 until event.historySize) {
                         continueGesture(
@@ -1153,6 +1163,7 @@ class ArtFlowCanvasView
                     }
                     continueGesture(event, route.index, event.getX(route.index), event.getY(route.index))
                 }
+
                 PointerGestureRouter.Action.END_TOOL -> {
                     val x = event.getX(route.index)
                     val y = event.getY(route.index)
@@ -1160,10 +1171,12 @@ class ArtFlowCanvasView
                     if (x != lastPointerX || y != lastPointerY) continueGesture(event, route.index, x, y)
                     endGesture(event, x, y, cancelled = false)
                 }
+
                 PointerGestureRouter.Action.CANCEL -> {
                     removeCallbacks(rapidHistory)
                     cancelActiveGesture()
                 }
+
                 PointerGestureRouter.Action.REBASE_NAVIGATION -> {
                     removeCallbacks(rapidHistory)
                     postDelayed(rapidHistory, RAPID_HISTORY_DELAY_MS)
@@ -1177,20 +1190,29 @@ class ArtFlowCanvasView
                         }
                     rebaseNavigation(remaining)
                 }
-                PointerGestureRouter.Action.NAVIGATE -> navigate(samples)
+
+                PointerGestureRouter.Action.NAVIGATE -> {
+                    navigate(samples)
+                }
+
                 PointerGestureRouter.Action.FINISH_NAVIGATION -> {
                     removeCallbacks(rapidHistory)
                     finishNavigation(route.historyPointers, event.eventTime)
                 }
+
                 PointerGestureRouter.Action.THREE_FINGER_SWIPE_DOWN -> {
                     resetNavigation()
                     if (input.gestures.swipeCopyPaste) onCopyPasteMenuRequested?.invoke()
                 }
+
                 PointerGestureRouter.Action.THREE_FINGER_SCRUB -> {
                     resetNavigation()
                     if (input.gestures.scrubToClear) onClearLayerRequested?.invoke()
                 }
-                PointerGestureRouter.Action.IGNORE -> Unit
+
+                PointerGestureRouter.Action.IGNORE -> {
+                    Unit
+                }
             }
             return true
         }
@@ -1243,8 +1265,14 @@ class ArtFlowCanvasView
             val pressure = pressureOf(event, index)
 
             when (tool) {
-                ToolType.BRUSH, ToolType.ERASER -> startStroke(canvasX, canvasY, pressure, tool)
-                ToolType.SMUDGE -> startPixelGesture(tool, canvasX, canvasY, pressure, "Smudge")
+                ToolType.BRUSH, ToolType.ERASER -> {
+                    startStroke(canvasX, canvasY, pressure, tool)
+                }
+
+                ToolType.SMUDGE -> {
+                    startPixelGesture(tool, canvasX, canvasY, pressure, "Smudge")
+                }
+
                 ToolType.CLONE_STAMP -> {
                     cloneDragStarted = false
                     if (cloneSource == null) {
@@ -1253,23 +1281,42 @@ class ArtFlowCanvasView
                         startPixelGesture(tool, canvasX, canvasY, pressure, "Clone stamp")
                     }
                 }
-                ToolType.HEALING -> startPixelGesture(tool, canvasX, canvasY, pressure, "Healing")
-                ToolType.LIQUIFY -> startPixelGesture(tool, canvasX, canvasY, pressure, "Liquify")
-                ToolType.MOVE -> startPixelGesture(tool, canvasX, canvasY, pressure, "Move")
-                ToolType.TRANSFORM -> startPixelGesture(tool, canvasX, canvasY, pressure, "Transform")
+
+                ToolType.HEALING -> {
+                    startPixelGesture(tool, canvasX, canvasY, pressure, "Healing")
+                }
+
+                ToolType.LIQUIFY -> {
+                    startPixelGesture(tool, canvasX, canvasY, pressure, "Liquify")
+                }
+
+                ToolType.MOVE -> {
+                    startPixelGesture(tool, canvasX, canvasY, pressure, "Move")
+                }
+
+                ToolType.TRANSFORM -> {
+                    startPixelGesture(tool, canvasX, canvasY, pressure, "Transform")
+                }
+
                 ToolType.GRADIENT -> {
                     gradientOrigin = canvasX to canvasY
                     previewPoints = mutableListOf(canvasX to canvasY)
                 }
+
                 ToolType.SHAPE -> {
                     shapeOrigin = canvasX to canvasY
                     previewPoints = mutableListOf(canvasX to canvasY)
                 }
+
                 ToolType.SELECT_RECTANGLE, ToolType.SELECT_ELLIPSE,
                 ToolType.SELECT_LASSO, ToolType.SELECT_FREEHAND,
-                ->
+                -> {
                     previewPoints = mutableListOf(canvasX to canvasY)
-                else -> Unit // Paint bucket, magic wand, text, eyedropper and zoom act on release.
+                }
+
+                else -> {
+                    Unit
+                } // Paint bucket, magic wand, text, eyedropper and zoom act on release.
             }
             return true
         }
@@ -1298,7 +1345,7 @@ class ArtFlowCanvasView
             val pressure = pressureOf(event, index, history)
 
             when (tool) {
-                ToolType.BRUSH, ToolType.ERASER ->
+                ToolType.BRUSH, ToolType.ERASER -> {
                     if (drawing && quickShapeApplied) {
                         adjustQuickShape(canvasX, canvasY)
                     } else if (drawing) {
@@ -1312,14 +1359,19 @@ class ArtFlowCanvasView
                             tiltX = axisOf(event, index, MotionEvent.AXIS_TILT, history),
                             tiltY = axisOf(event, index, MotionEvent.AXIS_ORIENTATION, history),
                         )
+                        val time = if (history >= 0) event.getHistoricalEventTime(history) else event.eventTime
+                        predict(tool, smoothX, smoothY, pressure, time)
                         updateLiveStroke()
                     }
+                }
+
                 ToolType.SMUDGE, ToolType.CLONE_STAMP, ToolType.HEALING,
                 ToolType.LIQUIFY, ToolType.MOVE, ToolType.TRANSFORM,
                 -> {
                     if (tool == ToolType.CLONE_STAMP && gestureMoved > TAP_SLOP) cloneDragStarted = true
                     queuePixelSample(canvasX, canvasY, pressure)
                 }
+
                 ToolType.GRADIENT, ToolType.SHAPE,
                 ToolType.SELECT_RECTANGLE, ToolType.SELECT_ELLIPSE,
                 -> {
@@ -1331,11 +1383,15 @@ class ArtFlowCanvasView
                     }
                     emitDragPreview(tool)
                 }
+
                 ToolType.SELECT_FREEHAND, ToolType.SELECT_LASSO -> {
                     previewPoints.add(canvasX to canvasY)
                     emitDragPreview(tool, closed = tool == ToolType.SELECT_LASSO)
                 }
-                else -> Unit
+
+                else -> {
+                    Unit
+                }
             }
 
             lastPointerX = x
@@ -1375,9 +1431,13 @@ class ArtFlowCanvasView
                     drawing = false
                     reportHistory()
                 }
+
                 ToolType.SMUDGE, ToolType.HEALING, ToolType.LIQUIFY,
                 ToolType.MOVE, ToolType.TRANSFORM,
-                -> endPixelGesture(cancelled)
+                -> {
+                    endPixelGesture(cancelled)
+                }
+
                 ToolType.CLONE_STAMP -> {
                     if (!cancelled && cloneSource == null && wasTap) {
                         cloneSource = canvasX to canvasY
@@ -1387,13 +1447,18 @@ class ArtFlowCanvasView
                         endPixelGesture(cancelled)
                     }
                 }
-                ToolType.PAINT_BUCKET -> if (!cancelled && wasTap) bucketFill(canvasX, canvasY)
+
+                ToolType.PAINT_BUCKET -> {
+                    if (!cancelled && wasTap) bucketFill(canvasX, canvasY)
+                }
+
                 ToolType.GRADIENT -> {
                     if (!cancelled && gradientStart != null && gestureMoved > TAP_SLOP) {
                         gradientFill(gradientStart, canvasX to canvasY)
                     }
                     onDragPreview?.invoke(null)
                 }
+
                 ToolType.SHAPE -> {
                     if (!cancelled && shapeStart != null && gestureMoved > TAP_SLOP) {
                         placeShape(
@@ -1409,17 +1474,33 @@ class ArtFlowCanvasView
                     }
                     onDragPreview?.invoke(null)
                 }
-                ToolType.TEXT -> if (!cancelled && wasTap) onTextPlacementRequested?.invoke(canvasX, canvasY)
-                ToolType.EYEDROPPER -> if (!cancelled) pickColor(canvasX, canvasY)
-                ToolType.SELECT_MAGIC_WAND -> if (!cancelled) automaticSelect(x, wasTap)
+
+                ToolType.TEXT -> {
+                    if (!cancelled && wasTap) onTextPlacementRequested?.invoke(canvasX, canvasY)
+                }
+
+                ToolType.EYEDROPPER -> {
+                    if (!cancelled) pickColor(canvasX, canvasY)
+                }
+
+                ToolType.SELECT_MAGIC_WAND -> {
+                    if (!cancelled) automaticSelect(x, wasTap)
+                }
+
                 ToolType.SELECT_RECTANGLE, ToolType.SELECT_ELLIPSE,
                 ToolType.SELECT_FREEHAND, ToolType.SELECT_LASSO,
                 -> {
                     if (!cancelled) commitSelectionDrag(tool, selectionPoints)
                     onDragPreview?.invoke(null)
                 }
-                ToolType.ZOOM -> Unit
-                else -> Unit
+
+                ToolType.ZOOM -> {
+                    Unit
+                }
+
+                else -> {
+                    Unit
+                }
             }
         }
 
@@ -1528,6 +1609,7 @@ class ArtFlowCanvasView
                     destination = input.strokeDestination,
                 )
             drawing = currentStrokeId != 0L
+            clearPrediction()
             if (!drawing) onStatusMessage?.invoke("Choose an unlocked, visible layer with an editable destination")
             stabilizer = StrokeStabilizer(max(params.smoothing, input.stabilization)).takeIf { it.isActive }?.also { it.start(x, y) }
             strokeRawPoints.clear()
@@ -1572,12 +1654,43 @@ class ArtFlowCanvasView
             pickColor(holdCanvasX, holdCanvasY)
         }
 
+        /**
+         * Draws where the pen is heading as a light overlay ahead of the brush stroke, so the line keeps
+         * up with the pen. Stabilized strokes lag on purpose and get no prediction; nothing is painted.
+         */
+        private fun predict(
+            tool: ToolType,
+            x: Float,
+            y: Float,
+            pressure: Float,
+            timeMs: Long,
+        ) {
+            if (tool != ToolType.BRUSH || stabilizer != null) return
+            predictor.add(x, y, timeMs)
+            val ahead = predictor.predict()
+            val points = FloatArray(ahead.size * 2)
+            ahead.forEachIndexed { index, (px, py) ->
+                points[index * 2] = px
+                points[index * 2 + 1] = py
+            }
+            val radius = input.brushParams.size * 0.5f * pressure.coerceIn(MIN_PREDICTED_PRESSURE, 1f)
+            val alpha = (input.brushParams.opacity.coerceIn(0f, 1f) * 255f).toInt()
+            renderer.setPrediction(points, radius, (input.brushColor and 0x00FFFFFF) or (alpha shl 24))
+            requestRender()
+        }
+
+        private fun clearPrediction() {
+            predictor.reset()
+            renderer.setPrediction(null, 0f, 0)
+        }
+
         /** Lets the stabilised line catch up to the lift point, then commits or cancels the stroke. */
         private fun finishStroke(
             x: Float,
             y: Float,
             cancelled: Boolean,
         ) {
+            clearPrediction()
             if (cancelled) {
                 canvasRepository.cancelStroke(currentStrokeId)
                 return
@@ -1779,7 +1892,7 @@ class ArtFlowCanvasView
         ) {
             val alphaLocked = rasterSession?.alphaLocked == true
             when (tool) {
-                ToolType.SMUDGE ->
+                ToolType.SMUDGE -> {
                     smudgeSession =
                         PixelBrushes.beginSmudge(
                             x,
@@ -1791,6 +1904,8 @@ class ArtFlowCanvasView
                                 texture = BrushPatch.texture(gestureInput.brushParams),
                             ),
                         )
+                }
+
                 ToolType.CLONE_STAMP -> {
                     val source = cloneSource ?: (x to y)
                     cloneSession =
@@ -1807,6 +1922,7 @@ class ArtFlowCanvasView
                                 ),
                         )
                 }
+
                 ToolType.HEALING -> {
                     val settings =
                         gestureInput.healing.copy(
@@ -1817,7 +1933,8 @@ class ArtFlowCanvasView
                     val (sourceX, sourceY) = PixelBrushes.findSpotSource(buffer, x, y, settings)
                     healingSession = PixelBrushes.beginHealing(x, y, sourceX, sourceY, settings)
                 }
-                ToolType.LIQUIFY ->
+
+                ToolType.LIQUIFY -> {
                     liquifySession =
                         LiquifyTool.beginSession(
                             x = x,
@@ -1832,7 +1949,11 @@ class ArtFlowCanvasView
                             width = buffer.width,
                             height = buffer.height,
                         )
-                else -> Unit
+                }
+
+                else -> {
+                    Unit
+                }
             }
         }
 
@@ -1876,7 +1997,11 @@ class ArtFlowCanvasView
                     liquifySession?.dragTo(x, y, pressure)
                     previewLiquify(buffer)
                 }
-                ToolType.TRANSFORM -> previewTransform(buffer, x, y)
+
+                ToolType.TRANSFORM -> {
+                    previewTransform(buffer, x, y)
+                }
+
                 ToolType.MOVE -> {
                     val base = rasterBase ?: return
                     buffer.clear()
@@ -1887,7 +2012,10 @@ class ArtFlowCanvasView
                         (y - moveOriginY()).roundToInt(),
                     )
                 }
-                else -> Unit
+
+                else -> {
+                    Unit
+                }
             }
             requestPreviewRefresh()
         }
@@ -2140,7 +2268,7 @@ class ArtFlowCanvasView
             runSelectionEdit(mode) { session ->
                 withContext(Dispatchers.Default) {
                     when (tool) {
-                        ToolType.SELECT_RECTANGLE ->
+                        ToolType.SELECT_RECTANGLE -> {
                             SelectionMask.rectangle(
                                 session.width,
                                 session.height,
@@ -2150,7 +2278,9 @@ class ArtFlowCanvasView
                                 points.last().second,
                                 checkActive = { ensureActive() },
                             )
-                        ToolType.SELECT_ELLIPSE ->
+                        }
+
+                        ToolType.SELECT_ELLIPSE -> {
                             SelectionMask.ellipse(
                                 session.width,
                                 session.height,
@@ -2160,10 +2290,15 @@ class ArtFlowCanvasView
                                 points.last().second,
                                 checkActive = { ensureActive() },
                             )
-                        ToolType.SELECT_LASSO ->
+                        }
+
+                        ToolType.SELECT_LASSO -> {
                             SelectionMask.polygon(session.width, session.height, points, checkActive = { ensureActive() })
-                        else ->
+                        }
+
+                        else -> {
                             SelectionMask.fromStroke(session.width, session.height, points, radius = 12f, checkActive = { ensureActive() })
+                        }
                     }
                 }
             }
@@ -2352,7 +2487,7 @@ class ArtFlowCanvasView
                 height = height,
                 build = { path ->
                     when (kind) {
-                        ShapeKind.RECTANGLE ->
+                        ShapeKind.RECTANGLE -> {
                             path.addRect(
                                 min(startX, endX),
                                 min(startY, endY),
@@ -2360,7 +2495,9 @@ class ArtFlowCanvasView
                                 max(startY, endY),
                                 Path.Direction.CW,
                             )
-                        ShapeKind.ELLIPSE ->
+                        }
+
+                        ShapeKind.ELLIPSE -> {
                             path.addOval(
                                 android.graphics.RectF(
                                     min(startX, endX),
@@ -2370,10 +2507,13 @@ class ArtFlowCanvasView
                                 ),
                                 Path.Direction.CW,
                             )
+                        }
+
                         ShapeKind.LINE -> {
                             path.moveTo(startX, startY)
                             path.lineTo(endX, endY)
                         }
+
                         ShapeKind.POLYGON -> {
                             val sides = 6
                             val radiusX = abs(endX - startX) / 2f
@@ -2480,6 +2620,7 @@ class ArtFlowCanvasView
 
         companion object {
             private const val MIN_SCALE = 0.05f
+            private const val MIN_PREDICTED_PRESSURE = 0.3f
             private val DAMAGE_TRACKED_TOOLS = setOf(ToolType.SMUDGE, ToolType.CLONE_STAMP, ToolType.HEALING)
             private val CURSOR_TOOLS =
                 setOf(ToolType.BRUSH, ToolType.ERASER, ToolType.SMUDGE, ToolType.CLONE_STAMP, ToolType.HEALING, ToolType.LIQUIFY)
