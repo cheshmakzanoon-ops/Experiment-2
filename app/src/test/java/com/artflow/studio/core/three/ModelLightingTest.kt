@@ -44,6 +44,20 @@ class ModelLightingTest {
         )
     }
 
+    @Test
+    fun smoothMetalHasSharperStrongerHighlightsThanRoughPaint() {
+        val metal = ModelLighting(metallic = 1f, roughness = 0.1f)
+        val paint = ModelLighting(metallic = 0f, roughness = 0.9f)
+        assertTrue(metal.highlightPower() > paint.highlightPower())
+        assertTrue(metal.highlightStrength() > paint.highlightStrength())
+        assertTrue(paint.highlightStrength() > 0f)
+        val sunset = ModelLighting.presets.first { it.name == "Sunset" }
+        val applied = sunset.appliedTo(metal)
+        assertEquals(1f, applied.metallic, EPSILON)
+        assertEquals(sunset.lighting.azimuth, applied.azimuth, EPSILON)
+        assertTrue(sunset.isApplied(applied))
+    }
+
     private companion object {
         const val EPSILON = 1e-4f
     }

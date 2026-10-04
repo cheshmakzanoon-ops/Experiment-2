@@ -109,7 +109,9 @@ class ModelRenderer : GLSurfaceView.Renderer {
         GLES20.glUniform3f(GLES20.glGetUniformLocation(program, "uLightColour"), colour.x, colour.y, colour.z)
         GLES20.glUniform3f(GLES20.glGetUniformLocation(program, "uEye"), eye.x, eye.y, eye.z)
         GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "uAmbient"), light.ambient)
-        GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "uShine"), light.shine)
+        GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "uMetallic"), light.metallic)
+        GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "uPower"), light.highlightPower())
+        GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "uSpecular"), light.highlightStrength())
         GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "uExposure"), light.exposure)
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture)
@@ -205,7 +207,9 @@ class ModelRenderer : GLSurfaceView.Renderer {
             uniform vec3 uLightColour;
             uniform vec3 uEye;
             uniform float uAmbient;
-            uniform float uShine;
+            uniform float uMetallic;
+            uniform float uPower;
+            uniform float uSpecular;
             uniform float uExposure;
             varying vec3 vNormal;
             varying vec3 vPosition;
@@ -217,8 +221,11 @@ class ModelRenderer : GLSurfaceView.Renderer {
                 // Light both faces of open meshes: turn the normal toward the viewer.
                 if (dot(normal, toEye) < 0.0) normal = -normal;
                 float diffuse = max(dot(normal, uLightDir), 0.0);
-                float highlight = pow(max(dot(normal, normalize(uLightDir + toEye)), 0.0), 32.0) * uShine;
-                vec3 lit = colour.rgb * (uAmbient + diffuse * uLightColour) + highlight * uLightColour;
+                float highlight = pow(max(dot(normal, normalize(uLightDir + toEye)), 0.0), uPower) * uSpecular * diffuse;
+                // Metals have no diffuse body colour; their highlights take the surface colour instead.
+                vec3 highlightColour = mix(uLightColour, colour.rgb * uLightColour, uMetallic);
+                vec3 body = colour.rgb * (uAmbient + diffuse * uLightColour * (1.0 - 0.8 * uMetallic));
+                vec3 lit = body + highlight * highlightColour * 4.0;
                 gl_FragColor = vec4(clamp(lit * uExposure, 0.0, 1.0), 1.0);
             }
         """

@@ -105,7 +105,7 @@ fun ModelCompanion(
     }
 }
 
-/** The lighting studio: presets plus the key light's angle, height, brightness, fill and exposure. */
+/** The lighting studio: presets, the key light's angle, height, brightness, fill and exposure, and the surface material. */
 @Composable
 private fun LightingPanel(
     lighting: ModelLighting,
@@ -120,8 +120,8 @@ private fun LightingPanel(
             Row(Modifier.horizontalScroll(rememberScrollState())) {
                 ModelLighting.presets.forEach { preset ->
                     FilterChip(
-                        selected = lighting == preset.lighting,
-                        onClick = { onChange(preset.lighting) },
+                        selected = preset.isApplied(lighting),
+                        onClick = { onChange(preset.appliedTo(lighting)) },
                         label = { Text(preset.name) },
                         modifier = Modifier.padding(end = 4.dp),
                     )
@@ -133,7 +133,8 @@ private fun LightingPanel(
             }
             LightSlider("Brightness", lighting.intensity, 0f..ModelLighting.MAX_INTENSITY) { onChange(lighting.copy(intensity = it)) }
             LightSlider("Fill", lighting.ambient, 0f..1f) { onChange(lighting.copy(ambient = it)) }
-            LightSlider("Shine", lighting.shine, 0f..1f) { onChange(lighting.copy(shine = it)) }
+            LightSlider("Metallic", lighting.metallic, 0f..1f) { onChange(lighting.copy(metallic = it)) }
+            LightSlider("Roughness", lighting.roughness, 0f..1f) { onChange(lighting.copy(roughness = it)) }
             LightSlider("Warmth", lighting.warmth, -1f..1f) { onChange(lighting.copy(warmth = it)) }
             LightSlider("Exposure", lighting.exposure, MIN_EXPOSURE..MAX_EXPOSURE) { onChange(lighting.copy(exposure = it)) }
         }
