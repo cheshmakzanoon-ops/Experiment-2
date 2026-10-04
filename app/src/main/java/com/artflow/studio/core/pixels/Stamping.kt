@@ -1,5 +1,6 @@
 package com.artflow.studio.core.pixels
 
+import java.util.concurrent.ForkJoinTask
 import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.floor
@@ -19,6 +20,10 @@ object Stamping {
     enum class Mode { SOURCE_OVER, REPLACE, ADD, SUBTRACT, MAX_COVERAGE }
 
     private const val ROUND_HALF = 0.5f
+    private const val PARALLEL_MIN_RADIUS = 48f
+    private const val MIN_ROWS_PER_PART = 24
+    private const val MAX_WORKERS = 4
+    private val WORKERS = (Runtime.getRuntime().availableProcessors() - 1).coerceIn(1, MAX_WORKERS)
     private const val RGB_MASK = 0x00FFFFFF
 
     /**
@@ -58,35 +63,79 @@ object Stamping {
         if (x1 < x0 || y1 < y0) return
 
         val inner = radius * hardness.coerceIn(0f, 1f)
-        val edge = max(radius - inner, 0.75f)
-        val radiusSquared = radius * radius
-        val innerSquared = inner * inner
-        // Plain painting skips the general per-pixel path: no selection, no alpha lock.
-        val direct = mask == null && !alphaLock && (mode == Mode.MAX_COVERAGE || mode == Mode.SOURCE_OVER)
-        val pixels = target.pixels
+        val dab = RoundDab(target, x, y, radius, inner, max(radius - inner, 0.75f), color, strength, mode, alphaLock, mask, x0, x1)
+        // Rows of a dab never share pixels, so a large dab is painted by several cores at once.
+        if (radius >= PARALLEL_MIN_RADIUS) inParallel(y0, y1, dab::paintRows) else dab.paintRows(y0, y1)
+    }
 
-        for (py in y0..y1) {
-            val dy = py + 0.5f - y
-            val dySquared = dy * dy
-            if (dySquared > radiusSquared) continue
-            // Only the pixels this row of the circle can reach; the distance test below stays exact.
-            val half = sqrt(radiusSquared - dySquared)
-            val left = max(x0, floor(x - half - 0.5f).toInt())
-            val right = min(x1, ceil(x + half - 0.5f).toInt())
-            val rowStart = py * target.width
-            for (px in left..right) {
-                val dx = px + 0.5f - x
-                val distanceSquared = dx * dx + dySquared
-                if (distanceSquared > radiusSquared) continue
-                val falloff = if (distanceSquared <= innerSquared) 1f else ((radius - sqrt(distanceSquared)) / edge).coerceIn(0f, 1f)
-                val index = rowStart + px
-                if (direct) {
-                    pixels[index] = directPixel(pixels[index], color, (falloff * strength).coerceIn(0f, 1f), mode)
-                } else {
-                    applyPixel(target, index, color, falloff * strength, mode, alphaLock, mask)
+    /** One soft round dab, painted row by row; rows are independent of each other. */
+    private class RoundDab(
+        val target: PixelBuffer,
+        val x: Float,
+        val y: Float,
+        val radius: Float,
+        inner: Float,
+        val edge: Float,
+        val color: Int,
+        val strength: Float,
+        val mode: Mode,
+        val alphaLock: Boolean,
+        val mask: SelectionMask?,
+        val x0: Int,
+        val x1: Int,
+    ) {
+        private val radiusSquared = radius * radius
+        private val innerSquared = inner * inner
+
+        // Plain painting skips the general per-pixel path: no selection, no alpha lock.
+        private val direct = mask == null && !alphaLock && (mode == Mode.MAX_COVERAGE || mode == Mode.SOURCE_OVER)
+
+        fun paintRows(
+            from: Int,
+            to: Int,
+        ) {
+            val pixels = target.pixels
+            for (py in from..to) {
+                val dy = py + 0.5f - y
+                val dySquared = dy * dy
+                if (dySquared > radiusSquared) continue
+                // Only the pixels this row of the circle can reach; the distance test below stays exact.
+                val half = sqrt(radiusSquared - dySquared)
+                val left = max(x0, floor(x - half - 0.5f).toInt())
+                val right = min(x1, ceil(x + half - 0.5f).toInt())
+                val rowStart = py * target.width
+                for (px in left..right) {
+                    val dx = px + 0.5f - x
+                    val distanceSquared = dx * dx + dySquared
+                    if (distanceSquared > radiusSquared) continue
+                    val falloff = if (distanceSquared <= innerSquared) 1f else ((radius - sqrt(distanceSquared)) / edge).coerceIn(0f, 1f)
+                    val index = rowStart + px
+                    if (direct) {
+                        pixels[index] = directPixel(pixels[index], color, (falloff * strength).coerceIn(0f, 1f), mode)
+                    } else {
+                        applyPixel(target, index, color, falloff * strength, mode, alphaLock, mask)
+                    }
                 }
             }
         }
+    }
+
+    /** Runs [work] over rows [from]..[to] split across the shared fork-join pool, returning when all are done. */
+    private fun inParallel(
+        from: Int,
+        to: Int,
+        work: (Int, Int) -> Unit,
+    ) {
+        val rows = to - from + 1
+        val parts = min(WORKERS, rows / MIN_ROWS_PER_PART)
+        if (parts <= 1) return work(from, to)
+        val chunk = (rows + parts - 1) / parts
+        val tasks =
+            (0 until parts).map { part ->
+                val start = from + part * chunk
+                ForkJoinTask.adapt { work(start, min(to, start + chunk - 1)) }
+            }
+        ForkJoinTask.invokeAll(tasks)
     }
 
     /** [applyPixel] for unmasked, unlocked SOURCE_OVER and MAX_COVERAGE, with the same results. */
