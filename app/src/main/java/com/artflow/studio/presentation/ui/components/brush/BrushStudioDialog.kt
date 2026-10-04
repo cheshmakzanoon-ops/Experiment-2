@@ -1,6 +1,7 @@
 package com.artflow.studio.presentation.ui.components.brush
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,6 +20,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -128,7 +131,9 @@ fun StudioBrushLibrary(
 ) {
     var query by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("All") }
-    val focusManager = LocalFocusManager.current
+    // Choosing a brush moves focus here, off the search field. Merely clearing focus lets Android 8
+    // hand it straight back to the first focusable view, the search field, reopening the keyboard.
+    val focusSink = remember { FocusRequester() }
     val saved = library?.state?.brushes.orEmpty()
     val favourites = library?.state?.favourites.orEmpty()
     val sets = library?.state?.sets.orEmpty()
@@ -153,7 +158,10 @@ fun StudioBrushLibrary(
         } else {
             listOf("All", FAVOURITES, "Saved") + sets.keys + StudioBrushes.categories.drop(1).filter { it !in sets }
         }
-    Column(modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(
+        modifier.focusRequester(focusSink).focusable().padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         OutlinedTextField(
             value = query,
             onValueChange = { query = it.take(100) },
@@ -201,7 +209,7 @@ fun StudioBrushLibrary(
                     color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
                     modifier =
                         Modifier.fillMaxWidth().selectable(selected, role = Role.RadioButton) {
-                            focusManager.clearFocus()
+                            focusSink.requestFocus()
                             onSelect(preset.parameters)
                         },
                 ) {

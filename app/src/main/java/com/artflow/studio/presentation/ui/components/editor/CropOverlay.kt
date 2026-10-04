@@ -2,7 +2,9 @@ package com.artflow.studio.presentation.ui.components.editor
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -98,6 +100,7 @@ fun CropOverlay(
 
 /** The bar shown while cropping: the new size, numeric settings, reset, cancel and done. */
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 fun CropBar(
     box: CropBox.Box,
     onSettings: () -> Unit,
@@ -107,11 +110,16 @@ fun CropBar(
     modifier: Modifier = Modifier,
 ) {
     Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 4.dp, shadowElevation = 6.dp, modifier = modifier.padding(12.dp)) {
-        Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        // Wraps on narrow phones so Done never ends up off-screen.
+        FlowRow(
+            Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.Center,
+        ) {
             Text(
                 "${box.width.roundToInt()} × ${box.height.roundToInt()} px",
                 style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.padding(horizontal = 8.dp),
+                modifier = Modifier.align(Alignment.CenterVertically).padding(horizontal = 8.dp),
             )
             TextButton(onClick = onSettings) { Text("Crop settings") }
             TextButton(onClick = onReset) { Text("Reset") }

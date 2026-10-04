@@ -5,6 +5,8 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
@@ -225,16 +227,23 @@ class ArtworkWorkflowTest {
     }
 
     private fun openWorkspace(title: String) {
-        compose.waitUntil(15_000) {
+        val ready =
             try {
-                compose
-                    .onAllNodesWithContentDescription("Actions")
-                    .fetchSemanticsNodes()
-                    .isNotEmpty()
-            } catch (_: IllegalStateException) {
+                compose.waitUntil(15_000) {
+                    try {
+                        compose
+                            .onAllNodesWithContentDescription("Actions")
+                            .fetchSemanticsNodes()
+                            .isNotEmpty()
+                    } catch (_: IllegalStateException) {
+                        false
+                    }
+                }
+                true
+            } catch (_: ComposeTimeoutException) {
                 false
             }
-        }
+        if (!ready) throw AssertionError("No Actions button before opening $title. Screen: ${screenSummary()}")
         val (tab, item) = ACTIONS_LOCATIONS[title] ?: ("Add" to title)
         compose.onNodeWithContentDescription("Actions").performClick()
         // A sheet that is still closing can swallow the tap; tap Actions again if the panel is missing.
@@ -245,6 +254,45 @@ class ArtworkWorkflowTest {
         compose.onNodeWithText(item).performScrollTo().performClick()
         compose.waitForIdle()
     }
+
+    /** Waits for a node to be laid out on screen; on failure, reports its bounds and the screen. */
+    private fun awaitDisplayed(description: String) {
+        val node = compose.onNodeWithContentDescription(description)
+        val shown =
+            try {
+                compose.waitUntil(5_000) { runCatching { node.assertIsDisplayed() }.isSuccess }
+                true
+            } catch (_: ComposeTimeoutException) {
+                false
+            }
+        if (!shown) {
+            val bounds =
+                try {
+                    node.fetchSemanticsNode().boundsInWindow
+                } catch (error: AssertionError) {
+                    error.message
+                }
+            throw AssertionError("$description is not displayed (bounds $bounds). Screen: ${screenSummary()}")
+        }
+    }
+
+    /** Texts and descriptions on screen, so a CI failure says what was showing. */
+    private fun screenSummary(): String =
+        try {
+            compose
+                .onAllNodes(SemanticsMatcher("any node") { true })
+                .fetchSemanticsNodes()
+                .flatMap { node ->
+                    val texts = node.config.getOrNull(SemanticsProperties.Text).orEmpty()
+                    texts.map { it.text } + node.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()
+                }.filter { it.isNotBlank() }
+                .map { it.take(24) }
+                .distinct()
+                .take(30)
+                .joinToString(", ")
+        } catch (error: IllegalStateException) {
+            "unavailable (${error.message})"
+        }
 
     private fun appears(
         text: String,
@@ -283,7 +331,7 @@ class ArtworkWorkflowTest {
         val undoDepth = runBlocking(Dispatchers.Main) { canvas.undoDepth }
         captureWorkspace("studio-workspace.png")
         openWorkspace("Full screen")
-        compose.onNodeWithContentDescription("Exit focus mode").assertIsDisplayed()
+        awaitDisplayed("Exit focus mode")
         compose.onNodeWithText("Gallery").assertDoesNotExist()
         compose.waitForIdle()
         scenario.onActivity {
