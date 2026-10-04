@@ -30,8 +30,10 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
@@ -42,6 +44,7 @@ import com.artflow.studio.core.pixels.TransformQuad
 import com.artflow.studio.core.pixels.WarpMesh
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.presentation.ui.components.canvas.SelectionCombineMode
+import kotlinx.coroutines.delay
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -699,3 +702,30 @@ fun StudioBottomPanel(
 /** Whether the device is wide enough for popovers instead of bottom sheets. */
 @Composable
 fun isWideLayout(): Boolean = LocalConfiguration.current.screenWidthDp >= 600
+
+/**
+ * Procreate-style notice: a small pill near the top of the canvas that reads the editor's messages
+ * and goes away by itself. It takes no touches, so taps reach whatever lies underneath.
+ */
+@Composable
+fun NoticePill(
+    hostState: SnackbarHostState,
+    modifier: Modifier = Modifier,
+) {
+    val data = hostState.currentSnackbarData ?: return
+    LaunchedEffect(data) {
+        delay(if (data.visuals.duration == SnackbarDuration.Long) LONG_NOTICE_MS else SHORT_NOTICE_MS)
+        data.dismiss()
+    }
+    Box(
+        modifier
+            .background(MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.92f), RoundedCornerShape(20.dp))
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .semantics { liveRegion = LiveRegionMode.Polite },
+    ) {
+        Text(data.visuals.message, color = MaterialTheme.colorScheme.inverseOnSurface, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+private const val SHORT_NOTICE_MS = 4_000L
+private const val LONG_NOTICE_MS = 10_000L

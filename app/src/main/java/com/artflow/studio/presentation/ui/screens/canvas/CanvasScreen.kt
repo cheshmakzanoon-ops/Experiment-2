@@ -89,6 +89,7 @@ import com.artflow.studio.presentation.ui.components.editor.LayerOptionActions
 import com.artflow.studio.presentation.ui.components.editor.LayerRowActions
 import com.artflow.studio.presentation.ui.components.editor.LayerStackActions
 import com.artflow.studio.presentation.ui.components.editor.LayersSheet
+import com.artflow.studio.presentation.ui.components.editor.NoticePill
 import com.artflow.studio.presentation.ui.components.editor.PageAssistActions
 import com.artflow.studio.presentation.ui.components.editor.PageAssistBar
 import com.artflow.studio.presentation.ui.components.editor.PrefActions
@@ -1217,13 +1218,12 @@ fun CanvasScreen(
                 // Phones: the panel rises over the canvas inside the editor window, below the top bar.
                 StudioBottomPanel(onDismiss = dismissPanel, content = panelContent)
             }
-            // Notices appear near the top centre, as in Procreate: clear of the panel and sidebar below,
-            // and inset below and between the corner buttons (exit focus mode, crop bar, copy & paste).
-            SnackbarHost(
+            // Notices appear near the top centre, as in Procreate, and let taps through to the controls below.
+            NoticePill(
                 snackbarHostState,
                 Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 64.dp, start = 56.dp, end = 56.dp)
+                    .padding(top = 12.dp, start = 56.dp, end = 56.dp)
                     .zIndex(8f),
             )
             if (focusMode) {
