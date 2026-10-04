@@ -235,6 +235,10 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+      - name: Report live stroke timing
+        if: always()
+        run: find app/build/outputs/connected_android_test_additional_output "${RUNNER_TEMP}/artflow-device" -name 'stroke-timing.txt' -exec cat {} + 2>/dev/null || true
+
       - name: Summarise failed device tests
         if: failure()
         run: |
