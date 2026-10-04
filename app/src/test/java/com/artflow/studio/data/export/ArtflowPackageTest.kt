@@ -14,6 +14,7 @@ class ArtflowPackageTest {
             "canvas.artflow" to "{}".toByteArray(),
             "layers/3/v2-ab12.png" to byteArrayOf(1, 2, 3),
             "thumbnail.png" to byteArrayOf(9),
+            "model.obj" to "v 0 0 0".toByteArray(),
         )
 
     private fun zip(vararg entries: Pair<String, ByteArray>): ByteArray {

@@ -386,13 +386,31 @@ class ProjectStorage
             return Files.exists(File(parent, "$projectId").toPath(), LinkOption.NOFOLLOW_LINKS)
         }
 
+        /** The 3D model (OBJ text) this artwork paints, if it has one. */
+        suspend fun loadModel(projectId: Long): String? =
+            withContext(Dispatchers.IO) {
+                val file = resolve(projectId, MODEL_NAME)
+                if (!file.isFile) return@withContext null
+                require(file.length() in 1..MAX_MODEL_BYTES) { "The 3D model is empty or too large" }
+                file.readText()
+            }
+
+        suspend fun saveModel(
+            projectId: Long,
+            objText: String,
+        ) = withContext(Dispatchers.IO) {
+            val bytes = objText.toByteArray()
+            require(bytes.size in 1..MAX_MODEL_BYTES) { "The 3D model is empty or too large" }
+            writeAtomically(resolve(projectId, MODEL_NAME)) { it.write(bytes) }
+        }
+
         /** A saved project's files for an `.artflow` package: manifest, layer pixels and previews. */
         suspend fun packageFiles(projectId: Long): Map<String, ByteArray> =
             withContext(Dispatchers.IO) {
                 val document = requireNotNull(loadDocument(projectId)) { "Save the artwork before sharing it" }
                 val files = linkedMapOf(DOCUMENT_NAME to documentFile(projectId).readBytes())
                 referencedFiles(document).forEach { relative -> files[relative] = requireNotNull(readRaster(projectId, relative)) }
-                listOf(FLATTENED_NAME, THUMBNAIL_NAME).forEach { name ->
+                listOf(FLATTENED_NAME, THUMBNAIL_NAME, MODEL_NAME).forEach { name ->
                     val file = resolve(projectId, name)
                     if (file.isFile) files[name] = file.readBytes()
                 }
@@ -484,7 +502,7 @@ class ProjectStorage
                         val bytes = requireNotNull(readRaster(sourceId, relative))
                         writeAtomically(resolve(destinationId, relative)) { it.write(bytes) }
                     }
-                    listOf(FLATTENED_NAME, THUMBNAIL_NAME).forEach { name ->
+                    listOf(FLATTENED_NAME, THUMBNAIL_NAME, MODEL_NAME).forEach { name ->
                         val source = resolve(sourceId, name)
                         if (source.isFile) {
                             writeAtomically(resolve(destinationId, name)) { out -> source.inputStream().use { it.copyTo(out) } }
@@ -634,6 +652,8 @@ class ProjectStorage
             const val AUTOSAVE_NAME = "autosave.artflow"
             const val FLATTENED_NAME = "canvas.png"
             const val THUMBNAIL_NAME = "thumbnail.png"
+            const val MODEL_NAME = "model.obj"
+            private const val MAX_MODEL_BYTES = 64L * 1024 * 1024
             const val LAYERS_DIR = "layers"
             const val EXPORTS_DIR = "exports"
             const val RASTER_PREFIX = "v"

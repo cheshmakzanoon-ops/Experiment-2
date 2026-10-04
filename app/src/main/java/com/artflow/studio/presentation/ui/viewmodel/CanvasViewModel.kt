@@ -285,6 +285,7 @@ class CanvasViewModel
                         startAutosave()
                         PendingImports.takeProfile(projectId)?.let { canvasRepository.setColorProfile(it, undoable = false) }
                         PendingImports.take(projectId)?.let(::insertImageLayer)
+                        PendingImports.takeModel(projectId)?.let(model::attach) ?: model.load()
                         PendingImports.takePsd(projectId)?.let(::importPsd)
                         Timber.d("Opened project $projectId (${state.width}x${state.height})")
                     } catch (cancelled: CancellationException) {
@@ -759,6 +760,9 @@ class CanvasViewModel
         val textLayers = TextLayerController(canvasRepository, ::layerOp)
         val layerBatch = LayerBatchController(canvasRepository, ::layerOp)
         val canvasOps = CanvasOpsController(canvasRepository, viewModelScope + editorErrors, ::notify, ::refreshUiStateSize)
+
+        /** 3D painting: the open artwork as the texture of a model. */
+        val model = ModelController(canvasRepository, viewModelScope + editorErrors, ::notify)
         val canvasPreview = CanvasPreviewController(canvasRepository, viewModelScope)
         val pageThumbnails = PageThumbnailController(canvasRepository, viewModelScope)
 

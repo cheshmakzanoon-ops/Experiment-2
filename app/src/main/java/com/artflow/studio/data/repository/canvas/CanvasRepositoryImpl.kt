@@ -1851,6 +1851,14 @@ class CanvasRepositoryImpl
 
         override fun getColorProfile(): ColorProfile = colorProfile
 
+        override suspend fun loadModel(): String? = currentProjectId.takeIf { it > 0 }?.let { storage.loadModel(it) }
+
+        override suspend fun saveModel(objText: String): Boolean {
+            val projectId = currentProjectId.takeIf { it > 0 } ?: return false
+            storage.saveModel(projectId, objText)
+            return true
+        }
+
         override fun trackedTimeMs(): Long = trackedMs.get()
 
         override fun addTrackedTime(ms: Long) {

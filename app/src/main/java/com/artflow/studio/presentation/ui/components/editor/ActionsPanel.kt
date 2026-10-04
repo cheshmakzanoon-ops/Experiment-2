@@ -36,6 +36,8 @@ data class CanvasActions(
     /** True when the canvas uses the Display P3 profile instead of sRGB. */
     val wideColor: Boolean = false,
     val onWideColor: (Boolean) -> Unit = {},
+    /** Reopens the 3D window; null when the artwork has no model. */
+    val onModelView: (() -> Unit)? = null,
 )
 
 data class VideoActions(
@@ -166,6 +168,7 @@ private fun CanvasTab(
     ActionRow("Page Assist", canvas.onPageAssist)
     ActionRow("Drawing Guide", canvas.onDrawingGuide)
     ActionRow("Reference", canvas.onReference)
+    canvas.onModelView?.let { ActionRow("3D view", it) }
     ActionRow("Flip canvas horizontally", onClick = { canvas.onFlip(false) })
     ActionRow("Flip canvas vertically", onClick = { canvas.onFlip(true) })
     PrefSwitch("Display P3 colour profile", canvas.wideColor, canvas.onWideColor)

@@ -111,5 +111,9 @@ object ArtflowPackage {
     private const val BUFFER = 64 * 1024
 
     /** The manifest, previews, and layer pixel and mask files; nothing else may be written. */
-    private val ALLOWED = Regex("""canvas\.artflow|canvas\.png|thumbnail\.png|layers/\d{1,19}/[A-Za-z0-9_][A-Za-z0-9_.-]{0,120}\.png""")
+    private val ALLOWED =
+        Regex(
+            """canvas\.artflow|canvas\.png|thumbnail\.png|model\.obj|""" +
+                """layers/\d{1,19}/[A-Za-z0-9_][A-Za-z0-9_.-]{0,120}\.png""",
+        )
 }

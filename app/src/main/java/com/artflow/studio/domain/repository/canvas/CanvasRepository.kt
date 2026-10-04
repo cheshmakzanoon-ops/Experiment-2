@@ -482,6 +482,12 @@ interface CanvasRepository {
 
     suspend fun setCanvasDpi(dpi: Int): Boolean
 
+    /** The 3D model (OBJ text) this artwork is painted onto, or null for a flat artwork. */
+    suspend fun loadModel(): String? = null
+
+    /** Makes this artwork the texture of [objText]'s model. */
+    suspend fun saveModel(objText: String): Boolean = false
+
     /** Time spent changing the artwork, saved with it (Procreate's tracked time). */
     fun trackedTimeMs(): Long = 0L
 

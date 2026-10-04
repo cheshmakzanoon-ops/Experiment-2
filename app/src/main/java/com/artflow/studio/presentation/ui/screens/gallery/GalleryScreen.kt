@@ -30,6 +30,7 @@ import coil.compose.AsyncImage
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.color.ColorProfile
 import com.artflow.studio.core.export.PsdCodec
+import com.artflow.studio.core.three.ObjParser
 import com.artflow.studio.data.export.PendingImports
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.Project
@@ -84,6 +85,7 @@ fun GalleryScreen(
     val photoImport = rememberPhotoImport(viewModel, snackbarHostState, onNavigateToCanvas)
     val psdImport = rememberPsdImport(viewModel, snackbarHostState, onNavigateToCanvas)
     val packageImport = rememberPackageImport(viewModel, snackbarHostState, onNavigateToCanvas)
+    val modelImport = rememberModelImport(viewModel, snackbarHostState, onNavigateToCanvas)
 
     LaunchedEffect(Unit) {
         viewModel.messageFlow.collect { snackbarHostState.showSnackbar(it) }
@@ -143,7 +145,7 @@ fun GalleryScreen(
                         }
                         SortMenu(settings.gallerySort, viewModel::setSort)
                         TextButton(onClick = { selection = emptySet() }) { Text("Select") }
-                        ImportMenu(onPhoto = photoImport, onPsd = psdImport, onPackage = packageImport)
+                        ImportMenu(ImportChoices(photoImport, psdImport, packageImport, modelImport))
                         IconButton(onClick = onOpenHelp) {
                             Icon(Icons.Default.HelpOutline, contentDescription = "Help")
                         }
@@ -301,6 +303,50 @@ private fun rememberPsdImport(
     return { runCatching { launcher.launch(arrayOf("image/vnd.adobe.photoshop", "application/octet-stream")) } }
 }
 
+/** What the gallery's Import menu can bring in, each as a new artwork. */
+private class ImportChoices(
+    val photo: () -> Unit,
+    val psd: () -> Unit,
+    val artwork: () -> Unit,
+    val model: () -> Unit,
+)
+
+/** Opens an OBJ model as a new artwork that is its texture, for 3D painting. */
+@Composable
+private fun rememberModelImport(
+    viewModel: MainViewModel,
+    snackbarHostState: SnackbarHostState,
+    onNavigateToCanvas: (Long) -> Unit,
+): () -> Unit {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val launcher =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            scope.launch {
+                val text =
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            val bytes = requireNotNull(context.contentResolver.openInputStream(uri)?.use { it.readBytes() })
+                            require(bytes.size <= MAX_MODEL_BYTES)
+                            bytes.decodeToString().also { ObjParser.parse(it) }
+                        }
+                    }
+                text.onFailure { snackbarHostState.showSnackbar(it.message ?: "That 3D model could not be read") }
+                val model = text.getOrNull() ?: return@launch
+                viewModel.createProject("3D model", null, MODEL_TEXTURE, MODEL_TEXTURE, MODEL_DPI) { id ->
+                    PendingImports.putModel(id, model)
+                    scope.launch { onNavigateToCanvas(id) }
+                }
+            }
+        }
+    return { runCatching { launcher.launch(arrayOf("*/*")) } }
+}
+
+private const val MAX_MODEL_BYTES = 64 * 1024 * 1024
+private const val MODEL_TEXTURE = 2048
+private const val MODEL_DPI = 132
+
 /** Opens an `.artflow` file as a new artwork with all its layers, frames and settings. */
 @Composable
 private fun rememberPackageImport(
@@ -336,11 +382,7 @@ private const val MAX_PACKAGE_BYTES = 512 * 1024 * 1024
 
 /** The gallery's Import menu: a photo or a layered Photoshop file, each as a new artwork. */
 @Composable
-private fun ImportMenu(
-    onPhoto: () -> Unit,
-    onPsd: () -> Unit,
-    onPackage: () -> Unit,
-) {
+private fun ImportMenu(choices: ImportChoices) {
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }) {
@@ -349,15 +391,19 @@ private fun ImportMenu(
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(text = { Text("Photo") }, onClick = {
                 open = false
-                onPhoto()
+                choices.photo()
             })
             DropdownMenuItem(text = { Text("Photoshop file (PSD)") }, onClick = {
                 open = false
-                onPsd()
+                choices.psd()
             })
             DropdownMenuItem(text = { Text("ArtFlow artwork (.artflow)") }, onClick = {
                 open = false
-                onPackage()
+                choices.artwork()
+            })
+            DropdownMenuItem(text = { Text("3D model (OBJ)") }, onClick = {
+                open = false
+                choices.model()
             })
         }
     }

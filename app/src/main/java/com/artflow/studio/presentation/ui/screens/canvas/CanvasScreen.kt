@@ -89,6 +89,7 @@ import com.artflow.studio.presentation.ui.components.editor.LayerOptionActions
 import com.artflow.studio.presentation.ui.components.editor.LayerRowActions
 import com.artflow.studio.presentation.ui.components.editor.LayerStackActions
 import com.artflow.studio.presentation.ui.components.editor.LayersSheet
+import com.artflow.studio.presentation.ui.components.editor.ModelCompanion
 import com.artflow.studio.presentation.ui.components.editor.NoticePill
 import com.artflow.studio.presentation.ui.components.editor.PageAssistActions
 import com.artflow.studio.presentation.ui.components.editor.PageAssistBar
@@ -235,9 +236,20 @@ fun CanvasScreen(
     val canvasPreview by viewModel.canvasPreview.preview.collectAsState()
     val canvasPreviewBitmap =
         remember(canvasPreview) { canvasPreview?.let { BitmapPixelBridge.toBitmap(it) } }
-    LaunchedEffect(showReference, referenceCanvas, history) {
-        if (showReference && referenceCanvas) viewModel.canvasPreview.refresh()
+    val modelMesh by viewModel.model.mesh.collectAsState()
+    var showModel by rememberSaveable(projectId) { mutableStateOf(true) }
+    LaunchedEffect(showReference, referenceCanvas, history, modelMesh, showModel) {
+        val referenceShowsCanvas = showReference && referenceCanvas
+        val modelShown = modelMesh != null && showModel
+        if (referenceShowsCanvas || modelShown) viewModel.canvasPreview.refresh()
     }
+    val modelPainter =
+        remember(viewModel) {
+            viewModel.model.painter(
+                params = { viewModel.input.value.brushParams },
+                layer = { viewModel.activeLayerId.value },
+            )
+        }
     var referenceImportProject by rememberSaveable(projectId) { mutableStateOf<Long?>(null) }
     val referencePicker =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -748,6 +760,13 @@ fun CanvasScreen(
                         ),
                     canvas =
                         CanvasActions(
+                            onModelView =
+                                modelMesh?.let {
+                                    {
+                                        panel = EditorPanel.NONE
+                                        showModel = true
+                                    }
+                                },
                             wideColor = ready?.colorProfile == ColorProfile.DISPLAY_P3,
                             onWideColor = { wide ->
                                 viewModel.canvasOps.setColorProfile(if (wide) ColorProfile.DISPLAY_P3 else ColorProfile.SRGB)
@@ -989,6 +1008,16 @@ fun CanvasScreen(
                         )
                     }
                 }
+            }
+            val mesh = modelMesh
+            if (mesh != null && showModel && !focusMode) {
+                ModelCompanion(
+                    mesh = mesh,
+                    artwork = canvasPreviewBitmap,
+                    painter = modelPainter,
+                    onClose = { showModel = false },
+                    modifier = Modifier.zIndex(4f),
+                )
             }
             if (showReference && ready != null) {
                 ReferenceCompanion(

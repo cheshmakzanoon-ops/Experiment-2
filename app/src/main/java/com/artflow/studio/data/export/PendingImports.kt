@@ -29,6 +29,18 @@ object PendingImports {
 
     fun takePsd(projectId: Long): ByteArray? = documents.remove(projectId)
 
+    private val models = ConcurrentHashMap<Long, String>()
+
+    /** A 3D model (OBJ text) whose texture the new canvas becomes. */
+    fun putModel(
+        projectId: Long,
+        objText: String,
+    ) {
+        models[projectId] = objText
+    }
+
+    fun takeModel(projectId: Long): String? = models.remove(projectId)
+
     private val profiles = ConcurrentHashMap<Long, ColorProfile>()
 
     /** The colour profile chosen for a new canvas, applied when it first opens. */
