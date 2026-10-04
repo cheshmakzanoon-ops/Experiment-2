@@ -30,6 +30,8 @@ import coil.compose.AsyncImage
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.color.ColorProfile
 import com.artflow.studio.core.export.PsdCodec
+import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.three.ModelPackage
 import com.artflow.studio.core.three.ObjParser
 import com.artflow.studio.data.export.PendingImports
 import com.artflow.studio.data.renderer.BitmapPixelBridge
@@ -171,15 +173,20 @@ fun GalleryScreen(
                     .padding(padding),
         ) {
             when (val state = uiState) {
-                is MainUiState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-                is MainUiState.Error ->
+                is MainUiState.Loading -> {
+                    CircularProgressIndicator(Modifier.align(Alignment.Center))
+                }
+
+                is MainUiState.Error -> {
                     Column(
                         modifier = Modifier.align(Alignment.Center),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Text(state.message, color = MaterialTheme.colorScheme.error)
                     }
-                is MainUiState.Success ->
+                }
+
+                is MainUiState.Success -> {
                     if (state.projects.isEmpty()) {
                         EmptyGallery(query.isNotEmpty())
                     } else {
@@ -217,6 +224,7 @@ fun GalleryScreen(
                             }
                         }
                     }
+                }
             }
         }
     }
@@ -324,18 +332,27 @@ private fun rememberModelImport(
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri == null) return@rememberLauncherForActivityResult
             scope.launch {
-                val text =
+                // An OBJ file, or a zip with the OBJ, its materials and textures.
+                val read =
                     withContext(Dispatchers.IO) {
                         runCatching {
-                            val bytes = requireNotNull(context.contentResolver.openInputStream(uri)?.use { it.readBytes() })
-                            require(bytes.size <= MAX_MODEL_BYTES)
-                            bytes.decodeToString().also { ObjParser.parse(it) }
+                            val bytes =
+                                requireNotNull(
+                                    context.contentResolver.openInputStream(uri)?.use { it.readBytes() },
+                                )
+                            val contents = ModelPackage.read(bytes)
+                            ObjParser.parse(contents.objText)
+                            contents.objText to contents.texture?.let(BitmapPixelBridge::fromEncodedBytes)?.let(::fittedTexture)
                         }
                     }
-                text.onFailure { snackbarHostState.showSnackbar(it.message ?: "That 3D model could not be read") }
-                val model = text.getOrNull() ?: return@launch
-                viewModel.createProject("3D model", null, MODEL_TEXTURE, MODEL_TEXTURE, MODEL_DPI) { id ->
+                read.onFailure { snackbarHostState.showSnackbar(it.message ?: "That 3D model could not be read") }
+                val (model, texture) = read.getOrNull() ?: return@launch
+                val width = texture?.width ?: MODEL_TEXTURE
+                val height = texture?.height ?: MODEL_TEXTURE
+                viewModel.createProject("3D model", null, width, height, MODEL_DPI) { id ->
                     PendingImports.putModel(id, model)
+                    // The model's own texture becomes the first layer to paint over.
+                    texture?.let { PendingImports.put(id, it) }
                     scope.launch { onNavigateToCanvas(id) }
                 }
             }
@@ -343,8 +360,16 @@ private fun rememberModelImport(
     return { runCatching { launcher.launch(arrayOf("*/*")) } }
 }
 
-private const val MAX_MODEL_BYTES = 64 * 1024 * 1024
 private const val MODEL_TEXTURE = 2048
+private const val MAX_MODEL_TEXTURE = 4096
+
+/** A model texture scaled down, if needed, so its longest side fits the canvas limit. */
+private fun fittedTexture(texture: PixelBuffer): PixelBuffer {
+    val scale = MAX_MODEL_TEXTURE.toFloat() / maxOf(texture.width, texture.height)
+    if (scale >= 1f) return texture
+    return texture.scaled((texture.width * scale).toInt().coerceAtLeast(1), (texture.height * scale).toInt().coerceAtLeast(1))
+}
+
 private const val MODEL_DPI = 132
 
 /** Opens an `.artflow` file as a new artwork with all its layers, frames and settings. */
@@ -484,7 +509,10 @@ private fun dropArtwork(
     target: GalleryDrop,
 ) {
     when (target) {
-        is GalleryDrop.OnStack -> viewModel.moveToStack(projectId, target.name)
+        is GalleryDrop.OnStack -> {
+            viewModel.moveToStack(projectId, target.name)
+        }
+
         is GalleryDrop.OnProject -> {
             val other = (state as? MainUiState.Success)?.projects?.firstOrNull { it.id == target.projectId } ?: return
             val name = other.stack ?: newStackName(existingStacks(state))
