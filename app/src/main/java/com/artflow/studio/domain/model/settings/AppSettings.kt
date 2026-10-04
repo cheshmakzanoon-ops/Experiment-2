@@ -83,6 +83,8 @@ data class AppSettings(
     val timelapseMaxSide: Int = 1280,
     /** Brush size follows the zoom so the brush looks the same size on screen. */
     val dynamicBrushScaling: Boolean = false,
+    /** The QuickMenu's six actions, by label, clockwise from the top; touch and hold a slot to change it. */
+    val quickMenu: List<String> = listOf("New layer", "Merge down", "Flip horizontal", "Clear layer", "Copy", "Paste"),
     // Saving
     val autosaveIntervalMs: Long = 20_000L,
     val autosaveEnabled: Boolean = true,

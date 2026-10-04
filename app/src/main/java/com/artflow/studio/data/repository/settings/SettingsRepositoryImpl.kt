@@ -230,6 +230,7 @@ class SettingsRepositoryImpl
                 KEY_FOUR_FINGER to settings.fourFingerFullScreen.toString(),
                 KEY_TIMELAPSE_SIDE to settings.timelapseMaxSide.toString(),
                 KEY_DYNAMIC_BRUSH to settings.dynamicBrushScaling.toString(),
+                KEY_QUICK_MENU to settings.quickMenu.joinToString("|"),
                 KEY_AUTOSAVE to settings.autosaveEnabled.toString(),
                 KEY_AUTOSAVE_INTERVAL to settings.autosaveIntervalMs.toString(),
                 KEY_DEFAULT_PRESET to settings.defaultPresetName,
@@ -245,6 +246,12 @@ class SettingsRepositoryImpl
             key: String,
             default: Boolean,
         ): Boolean = this[key]?.toBooleanStrictOrNull() ?: default
+
+        /** A stored QuickMenu, kept only when it still has one label for every slot. */
+        private fun Map<String, String>.slots(
+            key: String,
+            default: List<String>,
+        ): List<String> = this[key]?.split('|')?.takeIf { slots -> slots.size == default.size && slots.none { it.isBlank() } } ?: default
 
         private fun decode(stored: Map<String, String>): AppSettings {
             val defaults = AppSettings()
@@ -290,6 +297,7 @@ class SettingsRepositoryImpl
                 timelapseMaxSide =
                     stored[KEY_TIMELAPSE_SIDE]?.toIntOrNull()?.takeIf { it in TIMELAPSE_SIDES } ?: defaults.timelapseMaxSide,
                 dynamicBrushScaling = stored.flag(KEY_DYNAMIC_BRUSH, defaults.dynamicBrushScaling),
+                quickMenu = stored.slots(KEY_QUICK_MENU, defaults.quickMenu),
                 autosaveEnabled = stored.flag(KEY_AUTOSAVE, defaults.autosaveEnabled),
                 autosaveIntervalMs =
                     stored[KEY_AUTOSAVE_INTERVAL]
@@ -367,6 +375,7 @@ class SettingsRepositoryImpl
             private const val KEY_AUTOSAVE = "general.autosave"
             private const val KEY_AUTOSAVE_INTERVAL = "general.autosaveInterval"
             private const val KEY_DEFAULT_PRESET = "general.defaultPreset"
+            private const val KEY_QUICK_MENU = "studio.quickMenu"
             private const val KEY_GALLERY_SORT = "gallery.sort"
             private const val KEY_ONBOARDING = "general.onboardingSeen"
             private const val KEY_TIPS = "general.dismissedTips"

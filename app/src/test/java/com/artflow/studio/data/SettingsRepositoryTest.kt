@@ -65,6 +65,18 @@ class SettingsRepositoryTest {
         }
 
     @Test
+    fun quickMenuSlotsPersistAndIgnoreDamagedValues() =
+        runTest {
+            val dao = MemorySettingsDao(mapOf("studio.quickMenu" to "Copy|Paste"))
+            val repository = SettingsRepositoryImpl(dao)
+            val defaults = repository.settings.first().quickMenu
+            assertEquals(6, defaults.size)
+            val chosen = listOf("Undo") + defaults.drop(1)
+            repository.update { it.copy(quickMenu = chosen) }
+            assertEquals(chosen, SettingsRepositoryImpl(dao).settings.first().quickMenu)
+        }
+
+    @Test
     fun overlappingEditsAreSerializedAndPublishOnlyAfterPersistence() =
         runTest {
             val dao = MemorySettingsDao()

@@ -1072,16 +1072,32 @@ fun CanvasScreen(
                 )
             }
             if (quickMenu) {
+                // Every action a QuickMenu slot can hold; settings keep which six are on the ring.
+                val catalogue =
+                    listOf(
+                        QuickAction("New layer", Icons.Default.Add) { viewModel.addLayer() },
+                        QuickAction("Merge down", Icons.Default.MergeType) { viewModel.mergeLayerDown(activeLayerId) },
+                        QuickAction("Flip horizontal", Icons.Default.Flip) { viewModel.canvasOps.flipCanvas(false) },
+                        QuickAction("Flip vertical", Icons.Default.Flip) { viewModel.canvasOps.flipCanvas(true) },
+                        QuickAction("Clear layer", Icons.Default.LayersClear) { viewModel.clipboard.clear() },
+                        QuickAction("Copy", Icons.Default.ContentCopy) { viewModel.clipboard.copy() },
+                        QuickAction("Paste", Icons.Default.ContentPaste) { viewModel.clipboard.paste() },
+                        QuickAction("Duplicate layer", Icons.Default.ContentCopy) { viewModel.duplicateActiveLayer() },
+                        QuickAction("Undo", Icons.Default.Undo) { viewModel.undo() },
+                        QuickAction("Redo", Icons.Default.Redo) { viewModel.redo() },
+                        QuickAction("Full screen", Icons.Default.Fullscreen) { focusMode = true },
+                        QuickAction("Layers", Icons.Default.Layers) { panel = EditorPanel.LAYERS },
+                    )
                 RadialQuickMenu(
-                    actions =
-                        listOf(
-                            QuickAction("New layer", Icons.Default.Add) { viewModel.addLayer() },
-                            QuickAction("Merge down", Icons.Default.MergeType) { viewModel.mergeLayerDown(activeLayerId) },
-                            QuickAction("Flip horizontal", Icons.Default.Flip) { viewModel.canvasOps.flipCanvas(false) },
-                            QuickAction("Clear layer", Icons.Default.LayersClear) { viewModel.clipboard.clear() },
-                            QuickAction("Copy", Icons.Default.ContentCopy) { viewModel.clipboard.copy() },
-                            QuickAction("Paste", Icons.Default.ContentPaste) { viewModel.clipboard.paste() },
-                        ),
+                    actions = settings.quickMenu.map { label -> catalogue.firstOrNull { it.label == label } ?: catalogue.first() },
+                    choices = catalogue,
+                    onAssign = { slot, choice ->
+                        viewModel.updateSettings { current ->
+                            val slots = current.quickMenu.toMutableList()
+                            slots[slot] = choice.label
+                            current.copy(quickMenu = slots)
+                        }
+                    },
                     onMore = {
                         quickMenu = false
                         panel = EditorPanel.QUICK
