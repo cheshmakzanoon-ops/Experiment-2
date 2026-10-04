@@ -4,6 +4,9 @@ import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.OnBackPressedDispatcher
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -257,6 +260,19 @@ class ArtworkWorkflowTest {
         compose.waitForIdle()
     }
 
+    /** The activity's Back callbacks, newest last, and whether each is enabled. */
+    private fun backCallbacks(activity: ComponentActivity): String =
+        try {
+            val field = OnBackPressedDispatcher::class.java.getDeclaredField("onBackPressedCallbacks")
+            field.isAccessible = true
+            (field.get(activity.onBackPressedDispatcher) as Iterable<*>).joinToString { callback ->
+                val name = callback?.javaClass?.name?.substringAfterLast('.')
+                "$name=${(callback as? OnBackPressedCallback)?.isEnabled}"
+            }
+        } catch (error: ReflectiveOperationException) {
+            "unavailable (${error.message})"
+        }
+
     /** Where the last panel item was tapped, for failure messages. */
     private var lastTapped = "nothing"
 
@@ -369,7 +385,10 @@ class ArtworkWorkflowTest {
         }
         captureWorkspace("studio-focus.png")
         assertArrayEquals(expectedPixels, pixels())
-        scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        scenario.onActivity {
+            lastTapped = "system Back; callbacks ${backCallbacks(it)}"
+            it.onBackPressedDispatcher.onBackPressed()
+        }
         awaitDisplayed("Gallery", compose.onNodeWithText("Gallery"))
         compose.onNodeWithText("Save changes?").assertDoesNotExist()
         openWorkspace("Full screen")

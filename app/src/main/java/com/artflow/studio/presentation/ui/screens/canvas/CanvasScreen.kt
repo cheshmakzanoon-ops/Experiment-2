@@ -388,17 +388,34 @@ fun CanvasScreen(
         }
     }
 
-    BackHandler(enabled = panel != EditorPanel.NONE, onBack = dismissPanel)
-    BackHandler(enabled = cropBox != null) { cropBox = null }
-    BackHandler(enabled = opacityLayer != null) { opacityLayer = null }
-    BackHandler(enabled = quickMenu) { quickMenu = false }
-    BackHandler(enabled = panel == EditorPanel.NONE && dirty && !focusMode) { showExitConfirm = true }
-    BackHandler(enabled = panel == EditorPanel.NONE && focusMode) {
-        canvasView?.cancelActiveGesture()
-        focusMode = false
+    // One Back handler with an explicit order: the innermost open thing closes first, then focus
+    // mode ends, and only then does Back offer to leave an artwork with unsaved changes.
+    val backTarget =
+        when {
+            panel != EditorPanel.NONE -> BackTarget.PANEL
+            cropBox != null -> BackTarget.CROP
+            opacityLayer != null -> BackTarget.OPACITY
+            quickMenu -> BackTarget.QUICK_MENU
+            showReference -> BackTarget.REFERENCE
+            focusMode -> BackTarget.FOCUS
+            dirty -> BackTarget.LEAVE
+            else -> null
+        }
+    BackHandler(enabled = backTarget != null) {
+        when (backTarget) {
+            BackTarget.PANEL -> dismissPanel()
+            BackTarget.CROP -> cropBox = null
+            BackTarget.OPACITY -> opacityLayer = null
+            BackTarget.QUICK_MENU -> quickMenu = false
+            BackTarget.REFERENCE -> showReference = false
+            BackTarget.FOCUS -> {
+                canvasView?.cancelActiveGesture()
+                focusMode = false
+            }
+            BackTarget.LEAVE -> showExitConfirm = true
+            null -> Unit
+        }
     }
-
-    BackHandler(enabled = panel == EditorPanel.NONE && showReference) { showReference = false }
 
     val panelContent: @Composable ColumnScope.() -> Unit = {
         Row(
@@ -1623,3 +1640,6 @@ private fun ErrorState(
 
 /** Room the Page Assist strip takes along the bottom of the canvas. */
 private val PAGE_ASSIST_HEIGHT = 150.dp
+
+/** What the editor's Back handler closes, most specific first. */
+private enum class BackTarget { PANEL, CROP, OPACITY, QUICK_MENU, REFERENCE, FOCUS, LEAVE }
