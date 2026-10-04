@@ -13,8 +13,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
+import com.artflow.studio.data.local.BrushArchives
 import com.artflow.studio.data.local.BrushFiles
 import com.artflow.studio.data.local.GrainStorage
+import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.SavedBrush
 import com.artflow.studio.domain.model.brush.StudioBrushes
@@ -42,8 +44,13 @@ internal fun BrushFileButtons(
                     withContext(Dispatchers.IO) {
                         runCatching {
                             val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                            require(bytes != null && bytes.size <= BrushFiles.MAX_BYTES) { "Unreadable brush file" }
-                            importBrushes(context, bytes.toString(Charsets.UTF_8))
+                            require(bytes != null && bytes.size <= MAX_ARCHIVE_BYTES) { "Unreadable brush file" }
+                            if (BrushArchives.isArchive(bytes)) {
+                                importArchive(context, bytes)
+                            } else {
+                                require(bytes.size <= BrushFiles.MAX_BYTES) { "Unreadable brush file" }
+                                importBrushes(context, bytes.toString(Charsets.UTF_8))
+                            }
                         }.getOrNull()
                     }
                 if (brushes == null) onFailure("That file is not a brush ArtFlow can import") else latestControls.importAll(brushes)
@@ -66,6 +73,21 @@ internal fun BrushFileButtons(
     }, enabled = enabled) { Text("Share") }
     TextButton(onClick = { runCatching { picker.launch("*/*") } }, enabled = enabled) { Text("Import") }
 }
+
+/** Procreate `.brush` and `.brushset` files: their shape and grain images become new brushes. */
+private fun importArchive(
+    context: Context,
+    bytes: ByteArray,
+): List<SavedBrush> {
+    val directory = GrainStorage.directory(context.filesDir)
+    return BrushArchives.read(bytes, BitmapPixelBridge::fromEncodedBytes).mapIndexed { index, brush ->
+        val shape = brush.shape?.let { GrainStorage.save(directory, it) }
+        val grain = brush.grain?.let { GrainStorage.save(directory, it) }
+        SavedBrush("imported-$index", "Imported brush ${index + 1}", BrushArchives.parameters(shape, grain))
+    }
+}
+
+private const val MAX_ARCHIVE_BYTES = 64 * 1024 * 1024
 
 /** Stores the file's images under their content identities and points the brushes at them. */
 private fun importBrushes(
