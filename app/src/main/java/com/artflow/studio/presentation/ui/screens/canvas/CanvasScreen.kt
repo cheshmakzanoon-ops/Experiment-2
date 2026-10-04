@@ -40,6 +40,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.artflow.studio.core.canvas.CropBox
+import com.artflow.studio.core.color.CmykProof
 import com.artflow.studio.core.color.ColorProfile
 import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.LiveAdjustments
@@ -238,6 +239,7 @@ fun CanvasScreen(
         remember(canvasPreview) { canvasPreview?.let { BitmapPixelBridge.toBitmap(it) } }
     val modelMesh by viewModel.model.mesh.collectAsState()
     var showModel by rememberSaveable(projectId) { mutableStateOf(true) }
+    var proof by rememberSaveable(projectId) { mutableStateOf(CmykProof.Mode.OFF) }
     LaunchedEffect(showReference, referenceCanvas, history, modelMesh, showModel) {
         val referenceShowsCanvas = showReference && referenceCanvas
         val modelShown = modelMesh != null && showModel
@@ -357,13 +359,19 @@ fun CanvasScreen(
         val observer =
             LifecycleEventObserver { _, event ->
                 when (event) {
-                    Lifecycle.Event.ON_START -> view?.resumeRendering()
+                    Lifecycle.Event.ON_START -> {
+                        view?.resumeRendering()
+                    }
+
                     Lifecycle.Event.ON_STOP -> {
                         view?.cancelActiveGesture()
                         view?.pauseRendering()
                         viewModel.saveRecoveryOnBackground()
                     }
-                    else -> Unit
+
+                    else -> {
+                        Unit
+                    }
                 }
             }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -416,17 +424,38 @@ fun CanvasScreen(
         }
     BackHandler(enabled = backTarget != null) {
         when (backTarget) {
-            BackTarget.PANEL -> dismissPanel()
-            BackTarget.CROP -> cropBox = null
-            BackTarget.OPACITY -> opacityLayer = null
-            BackTarget.QUICK_MENU -> quickMenu = false
-            BackTarget.REFERENCE -> showReference = false
+            BackTarget.PANEL -> {
+                dismissPanel()
+            }
+
+            BackTarget.CROP -> {
+                cropBox = null
+            }
+
+            BackTarget.OPACITY -> {
+                opacityLayer = null
+            }
+
+            BackTarget.QUICK_MENU -> {
+                quickMenu = false
+            }
+
+            BackTarget.REFERENCE -> {
+                showReference = false
+            }
+
             BackTarget.FOCUS -> {
                 canvasView?.cancelActiveGesture()
                 focusMode = false
             }
-            BackTarget.LEAVE -> showExitConfirm = true
-            null -> Unit
+
+            BackTarget.LEAVE -> {
+                showExitConfirm = true
+            }
+
+            null -> {
+                Unit
+            }
         }
     }
 
@@ -467,7 +496,8 @@ fun CanvasScreen(
                 )
                 ToolOptionsPanel(viewModel, input, canvasView)
             }
-            EditorPanel.COLOUR ->
+
+            EditorPanel.COLOUR -> {
                 ColorPanel(
                     color = input.brushColor,
                     recentColors = recentColors,
@@ -479,7 +509,9 @@ fun CanvasScreen(
                     onPaletteFromPhoto = paletteImports.fromPhoto,
                     onRemovePalette = { viewModel.removePalette(it) },
                 )
-            EditorPanel.LAYERS ->
+            }
+
+            EditorPanel.LAYERS -> {
                 LayersSheet(
                     layers = layers,
                     activeLayerId = activeLayerId,
@@ -577,7 +609,9 @@ fun CanvasScreen(
                     picked = pickedLayers,
                     onPicked = viewModel.layerBatch::pick,
                 )
-            EditorPanel.SELECTION ->
+            }
+
+            EditorPanel.SELECTION -> {
                 Column {
                     ClipboardActions(viewModel, selectionCount > 0)
                     SelectionSheet(
@@ -598,7 +632,9 @@ fun CanvasScreen(
                         onColorRange = { viewModel.selectionFromColorRange(it, input.fillTolerance) },
                     )
                 }
-            EditorPanel.GUIDES ->
+            }
+
+            EditorPanel.GUIDES -> {
                 GuidesSheet(
                     symmetry = input.symmetry,
                     perspective = input.perspective,
@@ -623,7 +659,9 @@ fun CanvasScreen(
                             onAssisted = { viewModel.setLayerDrawingAssist(activeLayerId, it) },
                         ),
                 )
-            EditorPanel.ANIMATION ->
+            }
+
+            EditorPanel.ANIMATION -> {
                 AnimationSheet(
                     timeline = timeline,
                     onionEnabled = settings.onionSkin,
@@ -636,7 +674,9 @@ fun CanvasScreen(
                     onToggleOnion = { viewModel.toggleOnionSkin(it) },
                     onTogglePlayback = { viewModel.togglePlayback() },
                 )
-            EditorPanel.CANVAS ->
+            }
+
+            EditorPanel.CANVAS -> {
                 CanvasOpsSheet(
                     width = ready?.width ?: 0,
                     height = ready?.height ?: 0,
@@ -650,7 +690,9 @@ fun CanvasScreen(
                     onBackgroundColor = { viewModel.canvasOps.setCanvasBackgroundColor(it) },
                     onClear = { viewModel.clearCanvas(it) },
                 )
-            EditorPanel.TEXT ->
+            }
+
+            EditorPanel.TEXT -> {
                 TextSheet(
                     text = input.text,
                     style = input.textStyle,
@@ -668,6 +710,7 @@ fun CanvasScreen(
                                 viewModel.textLayers.edit(editing.id, updated)
                                 editingText = null
                             }
+
                             pending != null -> {
                                 // Text goes on its own layer and stays editable, as in Procreate.
                                 val content = TextLayerContent(input.text, input.textStyle, input.brushColor, pending.x, pending.y)
@@ -675,6 +718,7 @@ fun CanvasScreen(
                                 viewModel.cancelText()
                                 viewModel.setTool(ToolType.BRUSH)
                             }
+
                             else -> {
                                 viewModel.setTool(ToolType.TEXT)
                                 viewModel.notify("Tap the canvas to choose where the text goes")
@@ -685,7 +729,9 @@ fun CanvasScreen(
                     importedFonts = importedFonts,
                     onImportFont = importFont,
                 )
-            EditorPanel.EXPORT ->
+            }
+
+            EditorPanel.EXPORT -> {
                 ExportSheet(
                     availableFormats = viewModel.availableFormats(),
                     frameCount = ready?.frameCount ?: 1,
@@ -698,7 +744,9 @@ fun CanvasScreen(
                     actions = exportActions,
                     onDismissResult = { viewModel.resetExportState() },
                 )
-            EditorPanel.QUICK ->
+            }
+
+            EditorPanel.QUICK -> {
                 QuickMenuSheet(
                     scalePercent = (viewScale * 100).toInt(),
                     rotation = viewRotation.toInt(),
@@ -717,7 +765,9 @@ fun CanvasScreen(
                     canUndo = history.canUndo,
                     canRedo = history.canRedo,
                 )
-            EditorPanel.ACTIONS ->
+            }
+
+            EditorPanel.ACTIONS -> {
                 ActionsPanel(
                     info =
                         CanvasInfo(
@@ -771,6 +821,8 @@ fun CanvasScreen(
                             onWideColor = { wide ->
                                 viewModel.canvasOps.setColorProfile(if (wide) ColorProfile.DISPLAY_P3 else ColorProfile.SRGB)
                             },
+                            proof = proof,
+                            onProof = { proof = it },
                             onCropResize = {
                                 // Crop & Resize starts with the box on the canvas; Settings has the exact sizes.
                                 panel = EditorPanel.NONE
@@ -825,7 +877,11 @@ fun CanvasScreen(
                     // Within the panel's column, the list takes only the height that is left.
                     modifier = Modifier.weight(1f, fill = false),
                 )
-            EditorPanel.NONE -> Unit
+            }
+
+            EditorPanel.NONE -> {
+                Unit
+            }
         }
         Spacer(Modifier.height(24.dp))
     }
@@ -840,20 +896,41 @@ fun CanvasScreen(
                         canvasView?.cancelActiveGesture()
                         if (adjustment != null) viewModel.adjustments.apply()
                         when (button) {
-                            StudioButton.GALLERY -> if (dirty) showExitConfirm = true else onNavigateBack()
-                            StudioButton.ACTIONS -> panel = if (panel == EditorPanel.ACTIONS) EditorPanel.NONE else EditorPanel.ACTIONS
-                            StudioButton.ADJUSTMENTS -> openMenu = button
-                            StudioButton.SELECTION ->
+                            StudioButton.GALLERY -> {
+                                if (dirty) showExitConfirm = true else onNavigateBack()
+                            }
+
+                            StudioButton.ACTIONS -> {
+                                panel = if (panel == EditorPanel.ACTIONS) EditorPanel.NONE else EditorPanel.ACTIONS
+                            }
+
+                            StudioButton.ADJUSTMENTS -> {
+                                openMenu = button
+                            }
+
+                            StudioButton.SELECTION -> {
                                 viewModel.setTool(if (input.tool.group == ToolGroup.SELECTION) ToolType.BRUSH else ToolType.SELECT_FREEHAND)
-                            StudioButton.TRANSFORM ->
+                            }
+
+                            StudioButton.TRANSFORM -> {
                                 viewModel.setTool(if (input.tool == ToolType.TRANSFORM) ToolType.BRUSH else ToolType.TRANSFORM)
-                            StudioButton.PAINT ->
+                            }
+
+                            StudioButton.PAINT -> {
                                 if (input.tool == ToolType.BRUSH) showBrushEditor = true else viewModel.setTool(ToolType.BRUSH)
-                            StudioButton.SMUDGE ->
+                            }
+
+                            StudioButton.SMUDGE -> {
                                 if (input.tool == ToolType.SMUDGE) showBrushEditor = true else viewModel.setTool(ToolType.SMUDGE)
-                            StudioButton.ERASE ->
+                            }
+
+                            StudioButton.ERASE -> {
                                 if (input.tool == ToolType.ERASER) panel = EditorPanel.TOOLS else viewModel.setTool(ToolType.ERASER)
-                            StudioButton.LAYERS -> panel = if (panel == EditorPanel.LAYERS) EditorPanel.NONE else EditorPanel.LAYERS
+                            }
+
+                            StudioButton.LAYERS -> {
+                                panel = if (panel == EditorPanel.LAYERS) EditorPanel.NONE else EditorPanel.LAYERS
+                            }
                         }
                     },
                     onDismissMenu = { openMenu = null },
@@ -933,8 +1010,14 @@ fun CanvasScreen(
                 )
             }
             when (val state = uiState) {
-                is CanvasUiState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-                is CanvasUiState.Error -> ErrorState(state.message, onRetry = { viewModel.open(projectId) })
+                is CanvasUiState.Loading -> {
+                    CircularProgressIndicator(Modifier.align(Alignment.Center))
+                }
+
+                is CanvasUiState.Error -> {
+                    ErrorState(state.message, onRetry = { viewModel.open(projectId) })
+                }
+
                 is CanvasUiState.Ready -> {
                     AndroidView(
                         factory = { ctx ->
@@ -975,6 +1058,7 @@ fun CanvasScreen(
                             view.setOnionSkinEnabled(settings.onionSkin)
                             view.setCheckerboardVisible(settings.checkerboard)
                             view.setWideColor(state.colorProfile == ColorProfile.DISPLAY_P3)
+                            view.setProof(proof)
                         },
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -1363,23 +1447,65 @@ private fun ToolOptionsPanel(
         Text(input.tool.displayName, style = MaterialTheme.typography.titleMedium)
         Text(
             when (input.tool) {
-                ToolType.BRUSH -> "Pressure controls size and opacity; tap Brush for the full dynamics panel."
-                ToolType.ERASER -> "Erases to transparency on the active layer. Two fingers to navigate; the stylus keeps painting."
-                ToolType.SMUDGE -> "Pull colour along the stroke. Lower strength gives a softer blend."
-                ToolType.CLONE_STAMP -> "Tap once to set the source, then drag to stamp."
-                ToolType.HEALING -> "Spot-heals blemishes by matching the surrounding texture."
-                ToolType.LIQUIFY -> "Push, twirl, pinch or bloat pixels with a displacement map."
-                ToolType.PAINT_BUCKET -> "Flood fills the area under the tap within the tolerance."
-                ToolType.GRADIENT -> "Drag to set the gradient axis; the ramp is chosen in the colour panel."
-                ToolType.TEXT -> "Tap the canvas to place the current text."
-                ToolType.SHAPE -> "Drag to draw the selected shape."
-                ToolType.SELECT_MAGIC_WAND -> "Tap to select a colour region."
-                ToolType.EYEDROPPER -> "Tap to pick a colour from the artwork."
-                ToolType.MOVE -> "Drag to move the active layer's pixels."
-                ToolType.TRANSFORM ->
-                    "Drag to move, scale or rotate the active layer — or only the selection when one is active."
+                ToolType.BRUSH -> {
+                    "Pressure controls size and opacity; tap Brush for the full dynamics panel."
+                }
 
-                else -> "Drag on the canvas to use this tool."
+                ToolType.ERASER -> {
+                    "Erases to transparency on the active layer. Two fingers to navigate; the stylus keeps painting."
+                }
+
+                ToolType.SMUDGE -> {
+                    "Pull colour along the stroke. Lower strength gives a softer blend."
+                }
+
+                ToolType.CLONE_STAMP -> {
+                    "Tap once to set the source, then drag to stamp."
+                }
+
+                ToolType.HEALING -> {
+                    "Spot-heals blemishes by matching the surrounding texture."
+                }
+
+                ToolType.LIQUIFY -> {
+                    "Push, twirl, pinch or bloat pixels with a displacement map."
+                }
+
+                ToolType.PAINT_BUCKET -> {
+                    "Flood fills the area under the tap within the tolerance."
+                }
+
+                ToolType.GRADIENT -> {
+                    "Drag to set the gradient axis; the ramp is chosen in the colour panel."
+                }
+
+                ToolType.TEXT -> {
+                    "Tap the canvas to place the current text."
+                }
+
+                ToolType.SHAPE -> {
+                    "Drag to draw the selected shape."
+                }
+
+                ToolType.SELECT_MAGIC_WAND -> {
+                    "Tap to select a colour region."
+                }
+
+                ToolType.EYEDROPPER -> {
+                    "Tap to pick a colour from the artwork."
+                }
+
+                ToolType.MOVE -> {
+                    "Drag to move the active layer's pixels."
+                }
+
+                ToolType.TRANSFORM -> {
+                    "Drag to move, scale or rotate the active layer — or only the selection when one is active."
+                }
+
+                else -> {
+                    "Drag on the canvas to use this tool."
+                }
             },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1529,7 +1655,7 @@ private fun ContextToolbar(
 ) {
     val savedSelections by viewModel.savedSelections.saved.collectAsState()
     when {
-        input.tool.group == ToolGroup.SELECTION ->
+        input.tool.group == ToolGroup.SELECTION -> {
             SelectionToolbar(
                 tool = input.tool,
                 mode = input.selectionMode,
@@ -1551,7 +1677,9 @@ private fun ContextToolbar(
                 modifier = modifier,
                 savedCount = savedSelections.size,
             )
-        input.tool == ToolType.TRANSFORM ->
+        }
+
+        input.tool == ToolType.TRANSFORM -> {
             TransformToolbar(
                 mode = input.transformMode,
                 interpolation = input.transformInterpolation,
@@ -1570,7 +1698,9 @@ private fun ContextToolbar(
                 modifier = modifier,
                 assist = input.transformAssist,
             )
-        input.strokeDestination.isMask ->
+        }
+
+        input.strokeDestination.isMask -> {
             AssistChip(
                 onClick = { viewModel.setTool(ToolType.BRUSH) },
                 label = {
@@ -1578,6 +1708,7 @@ private fun ContextToolbar(
                 },
                 modifier = modifier.padding(16.dp),
             )
+        }
     }
 }
 

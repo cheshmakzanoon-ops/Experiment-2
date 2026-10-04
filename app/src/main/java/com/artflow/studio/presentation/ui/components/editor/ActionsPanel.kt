@@ -9,6 +9,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.core.color.CmykProof
 import com.artflow.studio.presentation.ui.components.canvas.GestureControls
 import kotlin.math.exp
 import kotlin.math.ln
@@ -36,6 +37,9 @@ data class CanvasActions(
     /** True when the canvas uses the Display P3 profile instead of sRGB. */
     val wideColor: Boolean = false,
     val onWideColor: (Boolean) -> Unit = {},
+    /** On-screen print proof; a view setting that never changes the artwork. */
+    val proof: CmykProof.Mode = CmykProof.Mode.OFF,
+    val onProof: (CmykProof.Mode) -> Unit = {},
     /** Reopens the 3D window; null when the artwork has no model. */
     val onModelView: (() -> Unit)? = null,
 )
@@ -123,9 +127,18 @@ fun ActionsPanel(
                     .padding(8.dp),
         ) {
             when (tab) {
-                ActionsTab.Add -> AddTab(add, canPaste)
-                ActionsTab.Canvas -> CanvasTab(canvas, info)
-                ActionsTab.Share -> ActionRow("Share or export artwork…", onShare)
+                ActionsTab.Add -> {
+                    AddTab(add, canPaste)
+                }
+
+                ActionsTab.Canvas -> {
+                    CanvasTab(canvas, info)
+                }
+
+                ActionsTab.Share -> {
+                    ActionRow("Share or export artwork…", onShare)
+                }
+
                 ActionsTab.Video -> {
                     ActionRow("Time-lapse Replay", video.onReplay)
                     ActionRow("Export Time-lapse (Full length)", onClick = { video.onExport(true) })
@@ -133,8 +146,14 @@ fun ActionsPanel(
                     ActionRow("Clear Time-lapse Recording", video.onClear)
                     TimelapseQuality(video.quality, video.onQuality)
                 }
-                ActionsTab.Prefs -> PrefsTab(prefs, prefActions)
-                ActionsTab.Help -> HelpTab(onHelp)
+
+                ActionsTab.Prefs -> {
+                    PrefsTab(prefs, prefActions)
+                }
+
+                ActionsTab.Help -> {
+                    HelpTab(onHelp)
+                }
             }
         }
     }
@@ -172,6 +191,14 @@ private fun CanvasTab(
     ActionRow("Flip canvas horizontally", onClick = { canvas.onFlip(false) })
     ActionRow("Flip canvas vertically", onClick = { canvas.onFlip(true) })
     PrefSwitch("Display P3 colour profile", canvas.wideColor, canvas.onWideColor)
+    PrefSwitch("CMYK print proof", canvas.proof != CmykProof.Mode.OFF) { on ->
+        canvas.onProof(if (on) CmykProof.Mode.PROOF else CmykProof.Mode.OFF)
+    }
+    if (canvas.proof != CmykProof.Mode.OFF) {
+        PrefSwitch("Grey out colours that won't print", canvas.proof == CmykProof.Mode.GAMUT_WARNING) { on ->
+            canvas.onProof(if (on) CmykProof.Mode.GAMUT_WARNING else CmykProof.Mode.PROOF)
+        }
+    }
     HorizontalDivider()
     Text("Canvas information", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
     Text(

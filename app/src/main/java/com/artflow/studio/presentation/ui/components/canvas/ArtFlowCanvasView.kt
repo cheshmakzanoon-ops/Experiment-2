@@ -16,6 +16,7 @@ import com.artflow.studio.core.canvas.QuickPinch
 import com.artflow.studio.core.canvas.QuickShape
 import com.artflow.studio.core.canvas.StrokePredictor
 import com.artflow.studio.core.canvas.StrokeStabilizer
+import com.artflow.studio.core.color.CmykProof
 import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.Channels
 import com.artflow.studio.core.pixels.IntBounds
@@ -527,6 +528,11 @@ class ArtFlowCanvasView
 
         fun setWideColor(enabled: Boolean) {
             renderer.setWideColor(enabled)
+            requestRender()
+        }
+
+        fun setProof(mode: CmykProof.Mode) {
+            renderer.setProof(mode.ordinal)
             requestRender()
         }
 

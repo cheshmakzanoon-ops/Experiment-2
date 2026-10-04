@@ -56,6 +56,7 @@ class OpenGLCanvasRenderer
 
         @Volatile
         private var wideColor = false
+        private var proofMode = 0
 
         /** Predicted pen positions ahead of the live stroke: x, y pairs in canvas pixels. */
         @Volatile
@@ -81,6 +82,7 @@ class OpenGLCanvasRenderer
         private var quadCanvasSizeHandle = 0
         private var quadUseTextureHandle = 0
         private var quadWideColorHandle = 0
+        private var quadProofHandle = 0
 
         // --- Textures ------------------------------------------------------------------------------
 
@@ -155,6 +157,7 @@ class OpenGLCanvasRenderer
             quadCanvasSizeHandle = GLES20.glGetUniformLocation(quadProgram, "uCanvasSize")
             quadUseTextureHandle = GLES20.glGetUniformLocation(quadProgram, "uUseTexture")
             quadWideColorHandle = GLES20.glGetUniformLocation(quadProgram, "uWideColor")
+            quadProofHandle = GLES20.glGetUniformLocation(quadProgram, "uProof")
             dabProgram = createProgram(DAB_VERTEX_SHADER, DAB_FRAGMENT_SHADER)
 
             checkerTexture = createCheckerboardTexture()
@@ -189,6 +192,7 @@ class OpenGLCanvasRenderer
             GLES20.glUniform1f(quadAlphaHandle, 1f)
             GLES20.glUniform4f(quadTintHandle, 1f, 1f, 1f, 1f)
             GLES20.glUniform1f(quadWideColorHandle, if (wideColor) 1f else 0f)
+            GLES20.glUniform1f(quadProofHandle, proofMode.toFloat())
 
             if (showCheckerboard) {
                 GLES20.glUniform1f(quadUseTextureHandle, 1f)
@@ -426,6 +430,11 @@ class OpenGLCanvasRenderer
         /** Display P3 artwork: its values are converted to sRGB on screen. */
         fun setWideColor(enabled: Boolean) {
             wideColor = enabled
+        }
+
+        /** Print soft-proofing on screen: 0 off, 1 CMYK proof, 2 proof with out-of-gamut colours greyed. */
+        fun setProof(mode: Int) {
+            proofMode = mode
         }
 
         /** Called only AFTER GLSurfaceView has stopped its GL thread and destroyed the surface. */
@@ -688,7 +697,13 @@ class OpenGLCanvasRenderer
             uniform float uAlpha;
             uniform float uUseTexture;
             uniform float uWideColor;
+            uniform float uProof;
             varying vec2 vTexCoord;
+            // Printed process inks on white paper, as encoded sRGB (see CmykProof).
+            const vec3 INK_C = vec3(0.0, 0.682, 0.937);
+            const vec3 INK_M = vec3(0.925, 0.0, 0.549);
+            const vec3 INK_Y = vec3(1.0, 0.949, 0.0);
+            const vec3 INK_K = vec3(0.137, 0.122, 0.125);
             // Linear Display P3 to linear sRGB (column-major).
             const mat3 P3_TO_SRGB = mat3(
                 1.2249402, -0.0420570, -0.0196376,
@@ -708,6 +723,16 @@ class OpenGLCanvasRenderer
                 if (uWideColor > 0.5 && color.a > 0.0) {
                     vec3 srgb = clamp(P3_TO_SRGB * toLinear(color.rgb / color.a), 0.0, 1.0);
                     color.rgb = toEncoded(srgb) * color.a;
+                }
+                if (uProof > 0.5 && color.a > 0.0) {
+                    vec3 rgb = clamp(color.rgb / color.a, 0.0, 1.0);
+                    float k = 1.0 - max(max(rgb.r, rgb.g), rgb.b);
+                    vec3 cmy = k < 0.999 ? (vec3(1.0 - k) - rgb) / (1.0 - k) : vec3(0.0);
+                    vec3 printed = (1.0 - cmy.x * (1.0 - INK_C)) * (1.0 - cmy.y * (1.0 - INK_M))
+                        * (1.0 - cmy.z * (1.0 - INK_Y)) * (1.0 - k * (1.0 - INK_K));
+                    vec3 shift = abs(printed - rgb);
+                    if (uProof > 1.5 && max(max(shift.r, shift.g), shift.b) > 0.08) printed = mix(printed, vec3(0.5), 0.6);
+                    color.rgb = printed * color.a;
                 }
                 gl_FragColor = color;
             }
