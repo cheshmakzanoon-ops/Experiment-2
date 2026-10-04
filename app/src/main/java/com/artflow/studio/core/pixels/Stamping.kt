@@ -193,17 +193,20 @@ object Stamping {
         val x1 = min(target.width - 1, ceil(x + reach).toInt())
         val y0 = max(0, floor(y - reach).toInt())
         val y1 = min(target.height - 1, ceil(y + reach).toInt())
-        for (py in y0..y1) {
-            for (px in x0..x1) {
-                val dx = px + 0.5f - x
-                val dy = py + 0.5f - y
-                val u = ((dx * cosA + dy * sinA) / radius + 1f) / 2f
-                val v = ((-dx * sinA + dy * cosA) / (radius * minor) + 1f) / 2f
-                val coverage = if (u in 0f..1f && v in 0f..1f) image(u, v) else 0f
-                if (coverage <= 0f) continue
-                applyPixel(target, py * target.width + px, color, coverage * strength, mode, alphaLock, mask)
+        val paintRows = { from: Int, to: Int ->
+            for (py in from..to) {
+                for (px in x0..x1) {
+                    val dx = px + 0.5f - x
+                    val dy = py + 0.5f - y
+                    val u = ((dx * cosA + dy * sinA) / radius + 1f) / 2f
+                    val v = ((-dx * sinA + dy * cosA) / (radius * minor) + 1f) / 2f
+                    val coverage = if (u in 0f..1f && v in 0f..1f) image(u, v) else 0f
+                    if (coverage <= 0f) continue
+                    applyPixel(target, py * target.width + px, color, coverage * strength, mode, alphaLock, mask)
+                }
             }
         }
+        if (radius >= PARALLEL_MIN_RADIUS) inParallel(y0, y1, paintRows) else paintRows(y0, y1)
     }
 
     /**
@@ -236,18 +239,21 @@ object Stamping {
         val inner = radius * hardness.coerceIn(0f, 1f)
         // Thin tips need a pixel-wide edge along the short axis to stay anti-aliased.
         val edge = max(radius - inner, 0.75f / minor)
-        for (py in y0..y1) {
-            for (px in x0..x1) {
-                val dx = px + 0.5f - x
-                val dy = py + 0.5f - y
-                val along = dx * cosA + dy * sinA
-                val across = (-dx * sinA + dy * cosA) / minor
-                val distance = sqrt(along * along + across * across)
-                if (distance > radius) continue
-                val falloff = if (distance <= inner) 1f else ((radius - distance) / edge).coerceIn(0f, 1f)
-                applyPixel(target, py * target.width + px, color, falloff * strength, mode, alphaLock, mask)
+        val paintRows = { from: Int, to: Int ->
+            for (py in from..to) {
+                for (px in x0..x1) {
+                    val dx = px + 0.5f - x
+                    val dy = py + 0.5f - y
+                    val along = dx * cosA + dy * sinA
+                    val across = (-dx * sinA + dy * cosA) / minor
+                    val distance = sqrt(along * along + across * across)
+                    if (distance > radius) continue
+                    val falloff = if (distance <= inner) 1f else ((radius - distance) / edge).coerceIn(0f, 1f)
+                    applyPixel(target, py * target.width + px, color, falloff * strength, mode, alphaLock, mask)
+                }
             }
         }
+        if (radius >= PARALLEL_MIN_RADIUS) inParallel(y0, y1, paintRows) else paintRows(y0, y1)
     }
 
     /**
