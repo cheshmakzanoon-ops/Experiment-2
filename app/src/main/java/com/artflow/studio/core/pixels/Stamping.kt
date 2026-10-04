@@ -18,6 +18,9 @@ object Stamping {
     /** How a stamped pixel is merged into the destination. */
     enum class Mode { SOURCE_OVER, REPLACE, ADD, SUBTRACT, MAX_COVERAGE }
 
+    private const val ROUND_HALF = 0.5f
+    private const val RGB_MASK = 0x00FFFFFF
+
     /**
      * Stamp a single soft round dab.
      *
@@ -56,18 +59,48 @@ object Stamping {
 
         val inner = radius * hardness.coerceIn(0f, 1f)
         val edge = max(radius - inner, 0.75f)
+        val radiusSquared = radius * radius
+        val innerSquared = inner * inner
+        // Plain painting skips the general per-pixel path: no selection, no alpha lock.
+        val direct = mask == null && !alphaLock && (mode == Mode.MAX_COVERAGE || mode == Mode.SOURCE_OVER)
+        val pixels = target.pixels
 
         for (py in y0..y1) {
-            for (px in x0..x1) {
+            val dy = py + 0.5f - y
+            val dySquared = dy * dy
+            if (dySquared > radiusSquared) continue
+            // Only the pixels this row of the circle can reach; the distance test below stays exact.
+            val half = sqrt(radiusSquared - dySquared)
+            val left = max(x0, floor(x - half - 0.5f).toInt())
+            val right = min(x1, ceil(x + half - 0.5f).toInt())
+            val rowStart = py * target.width
+            for (px in left..right) {
                 val dx = px + 0.5f - x
-                val dy = py + 0.5f - y
-                val distance = sqrt(dx * dx + dy * dy)
-                if (distance > radius) continue
-                val falloff = if (distance <= inner) 1f else ((radius - distance) / edge).coerceIn(0f, 1f)
-                val index = py * target.width + px
-                applyPixel(target, index, color, falloff * strength, mode, alphaLock, mask)
+                val distanceSquared = dx * dx + dySquared
+                if (distanceSquared > radiusSquared) continue
+                val falloff = if (distanceSquared <= innerSquared) 1f else ((radius - sqrt(distanceSquared)) / edge).coerceIn(0f, 1f)
+                val index = rowStart + px
+                if (direct) {
+                    pixels[index] = directPixel(pixels[index], color, (falloff * strength).coerceIn(0f, 1f), mode)
+                } else {
+                    applyPixel(target, index, color, falloff * strength, mode, alphaLock, mask)
+                }
             }
         }
+    }
+
+    /** [applyPixel] for unmasked, unlocked SOURCE_OVER and MAX_COVERAGE, with the same results. */
+    private fun directPixel(
+        existing: Int,
+        color: Int,
+        effective: Float,
+        mode: Mode,
+    ): Int {
+        if (effective <= 0f) return existing
+        if (mode == Mode.SOURCE_OVER) return BlendModes.sourceOver(existing, Channels.scaleAlpha(color, effective))
+        // Most pixels under an overlapping dab are already covered as strongly: compare alphas first.
+        val alpha = ((color ushr 24) * effective + ROUND_HALF).toInt()
+        return if (alpha >= (existing ushr 24)) (color and RGB_MASK) or (alpha shl 24) else existing
     }
 
     /**
@@ -475,33 +508,42 @@ object Stamping {
 
         val mixed =
             when (mode) {
-                Mode.SOURCE_OVER ->
+                Mode.SOURCE_OVER -> {
                     if (alphaLock) {
                         BlendModes.sourceAtop(existing, Channels.scaleAlpha(color, effective))
                     } else {
                         BlendModes.sourceOver(existing, Channels.scaleAlpha(color, effective))
                     }
+                }
+
                 Mode.MAX_COVERAGE -> {
                     // A single stroke covers a pixel once. Overlapping samples must not make
                     // pressure, opacity or feathered edges stronger merely due to sample count.
                     val candidate = Channels.scaleAlpha(color, effective)
                     if (Channels.alpha(candidate) >= Channels.alpha(existing)) candidate else existing
                 }
-                Mode.REPLACE -> ImageFilters.lerpArgb(existing, color, effective)
-                Mode.ADD ->
+
+                Mode.REPLACE -> {
+                    ImageFilters.lerpArgb(existing, color, effective)
+                }
+
+                Mode.ADD -> {
                     Channels.fromFloats(
                         a = min(255f, Channels.alpha(existing) + 255f * effective * (Channels.alpha(color) / 255f)),
                         r = Channels.red(existing) + Channels.red(color) * effective,
                         g = Channels.green(existing) + Channels.green(color) * effective,
                         b = Channels.blue(existing) + Channels.blue(color) * effective,
                     )
-                Mode.SUBTRACT ->
+                }
+
+                Mode.SUBTRACT -> {
                     Channels.fromFloats(
                         a = Channels.alpha(existing) + (255f - Channels.alpha(existing)) * effective,
                         r = Channels.red(existing) - Channels.red(color) * effective,
                         g = Channels.green(existing) - Channels.green(color) * effective,
                         b = Channels.blue(existing) - Channels.blue(color) * effective,
                     )
+                }
             }
         target.pixels[index] = if (alphaLock) Channels.withAlpha(mixed, (existing ushr 24) and 0xFF) else mixed
     }
