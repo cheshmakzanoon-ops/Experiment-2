@@ -11,7 +11,7 @@ import com.artflow.studio.domain.model.brush.StudioBrushes
 object BrushStudioChecks {
     fun originalPresetsAreDistinctAndSearchable() {
         val presets = StudioBrushes.presets
-        check(presets.size >= 36)
+        check(presets.size >= 100)
         check(presets.map { it.id }.distinct().size == presets.size)
         check(presets.map { it.parameters }.distinct().size == presets.size)
         check(StudioBrushes.search("  FINE   INK  ").single().id == "fine-liner")
@@ -34,6 +34,13 @@ object BrushStudioChecks {
                     "Charcoals",
                     "Spraypaints",
                     "Elements",
+                    "Touch-ups",
+                    "Retro",
+                    "Luminance",
+                    "Industrial",
+                    "Organic",
+                    "Water",
+                    "Abstract",
                 ),
         )
     }

@@ -10,7 +10,9 @@ object StudioBrushes {
         val parameters: BrushParams,
     )
 
-    val presets: List<Preset> =
+    val presets: List<Preset> by lazy { corePresets + StudioBrushesMore.presets }
+
+    private val corePresets: List<Preset> =
         listOf(
             Preset(
                 "graphite-point",
@@ -591,6 +593,13 @@ object StudioBrushes {
             "Charcoals",
             "Spraypaints",
             "Elements",
+            "Touch-ups",
+            "Retro",
+            "Luminance",
+            "Industrial",
+            "Organic",
+            "Water",
+            "Abstract",
         )
 
     val categories: List<String> =
