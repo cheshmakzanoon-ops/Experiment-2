@@ -69,6 +69,7 @@ import com.artflow.studio.presentation.ui.components.editor.AddActions
 import com.artflow.studio.presentation.ui.components.editor.AdjustmentOverlay
 import com.artflow.studio.presentation.ui.components.editor.AdjustmentOverlayActions
 import com.artflow.studio.presentation.ui.components.editor.AnimationSheet
+import com.artflow.studio.presentation.ui.components.editor.BackgroundControls
 import com.artflow.studio.presentation.ui.components.editor.BrushOptionsRow
 import com.artflow.studio.presentation.ui.components.editor.CanvasActions
 import com.artflow.studio.presentation.ui.components.editor.CanvasInfo
@@ -493,6 +494,20 @@ fun CanvasScreen(
                             onGroupLayers = viewModel.layerBatch::group,
                             onDeleteLayers = viewModel.layerBatch::delete,
                             onMergeLayers = viewModel.layerBatch::merge,
+                            background =
+                                BackgroundControls(
+                                    color = ready?.backgroundColor ?: 0xFFFFFFFF.toInt(),
+                                    onUseCurrentColour = {
+                                        viewModel.canvasOps.setCanvasBackgroundColor(input.brushColor or 0xFF000000.toInt())
+                                    },
+                                    onVisible = { shown ->
+                                        // Hiding keeps the colour, so showing it again brings the same one back.
+                                        val color = ready?.backgroundColor ?: 0xFFFFFFFF.toInt()
+                                        viewModel.canvasOps.setCanvasBackgroundColor(
+                                            if (shown) color or 0xFF000000.toInt() else color and 0x00FFFFFF,
+                                        )
+                                    },
+                                ),
                         ),
                     maskActions =
                         LayerMaskActions(

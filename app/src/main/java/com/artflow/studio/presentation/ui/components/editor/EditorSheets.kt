@@ -103,6 +103,15 @@ data class LayerStackActions(
     val onGroupLayers: (List<Long>) -> Unit = {},
     val onDeleteLayers: (List<Long>) -> Unit = {},
     val onMergeLayers: (List<Long>) -> Unit = {},
+    val background: BackgroundControls? = null,
+)
+
+/** Procreate's Background colour row at the foot of the Layers panel. */
+data class BackgroundControls(
+    val color: Int,
+    /** Tapping the swatch fills the background with the current colour. */
+    val onUseCurrentColour: () -> Unit,
+    val onVisible: (Boolean) -> Unit,
 )
 
 data class LayerMaskActions(
@@ -198,6 +207,8 @@ fun LayersSheet(
                 }
             }
         }
+
+        stackActions.background?.let { BackgroundRow(it) }
 
         active?.let { layer ->
             Divider(modifier = Modifier.padding(vertical = 8.dp))
@@ -465,6 +476,26 @@ private fun Modifier.reorderOnLongPress(
                 onDrag(layer.id, travel)
             }
         }
+
+@Composable
+private fun BackgroundRow(background: BackgroundControls) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ColorChip(
+            background.color or 0xFF000000.toInt(),
+            onClick = background.onUseCurrentColour,
+            modifier = Modifier.semantics { contentDescription = "Use the current colour for the background" },
+        )
+        Text("Background colour", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(start = 12.dp))
+        Checkbox(
+            checked = (background.color ushr 24) != 0,
+            onCheckedChange = background.onVisible,
+            modifier = Modifier.semantics { contentDescription = "Show the background" },
+        )
+    }
+}
 
 /** Header for a group (collapse toggle) — member rows are indented by [LayerRow]. */
 @Composable
