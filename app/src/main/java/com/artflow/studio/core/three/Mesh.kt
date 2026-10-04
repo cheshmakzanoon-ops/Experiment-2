@@ -16,6 +16,9 @@ class Mesh(
     val uvs: FloatArray,
 ) {
     val triangleCount: Int get() = positions.size / 9
+
+    /** The UV island of each triangle; worked out on first use. */
+    val islands: IntArray by lazy { UvIslands.of(this) }
 }
 
 /** Reads Wavefront OBJ text: positions, texture coordinates and normals; faces are fanned into triangles. */

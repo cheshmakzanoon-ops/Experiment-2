@@ -8,26 +8,14 @@ import android.view.MotionEvent
 import com.artflow.studio.core.three.Mesh
 import com.artflow.studio.core.three.MeshPicker
 import com.artflow.studio.core.three.ModelLighting
+import com.artflow.studio.core.three.SurfaceHit
+import com.artflow.studio.core.three.SurfaceSink
+import com.artflow.studio.core.three.SurfaceStroker
 import com.artflow.studio.data.renderer.opengl.ModelRenderer
-import kotlin.math.abs
 import kotlin.math.hypot
 
 /** Receives strokes painted on the model, in texture space: u and v run 0..1 with v = 0 at the bottom. */
-interface ModelPainter {
-    fun begin(
-        u: Float,
-        v: Float,
-        pressure: Float,
-    )
-
-    fun move(
-        u: Float,
-        v: Float,
-        pressure: Float,
-    )
-
-    fun end()
-}
+interface ModelPainter : SurfaceSink
 
 /**
  * The 3D model view. In paint mode one finger paints on the model; otherwise one finger turns it.
@@ -53,9 +41,35 @@ class ModelView(
         }
     var painting = false
     var painter: ModelPainter? = null
-    private var stroking = false
-    private var lastU = 0f
-    private var lastV = 0f
+    private val stroker =
+        SurfaceStroker(
+            pick = ::pick,
+            sink =
+                object : SurfaceSink {
+                    override fun begin(
+                        u: Float,
+                        v: Float,
+                        pressure: Float,
+                    ) {
+                        painter?.begin(u, v, pressure)
+                    }
+
+                    override fun move(
+                        u: Float,
+                        v: Float,
+                        pressure: Float,
+                    ) {
+                        painter?.move(u, v, pressure)
+                    }
+
+                    override fun end() {
+                        painter?.end()
+                    }
+                },
+        )
+
+    // After a two-finger turn, the finger left on the glass does not start painting.
+    private var gestureOnly = false
     private var lastX = 0f
     private var lastY = 0f
     private var lastSpan = 0f
@@ -75,11 +89,13 @@ class ModelView(
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) gestureOnly = false
         if (event.pointerCount >= 2) {
-            endStroke()
+            stroker.up()
+            gestureOnly = true
             twoFingers(event)
         } else if (painting) {
-            paint(event)
+            if (!gestureOnly) paint(event)
         } else {
             turn(event)
         }
@@ -122,70 +138,26 @@ class ModelView(
     }
 
     private fun paint(event: MotionEvent) {
+        val pressure = event.pressure.coerceIn(MIN_PRESSURE, 1f)
         when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
-                val hit = pick(event.x, event.y)
-                val pressure = event.pressure.coerceIn(MIN_PRESSURE, 1f)
-                when {
-                    hit == null -> {
-                        endStroke()
-                    }
-
-                    // Crossing a seam jumps across the texture; lift there rather than draw across it.
-                    stroking && abs(hit.first - lastU) + abs(hit.second - lastV) > SEAM_JUMP -> {
-                        endStroke()
-                        startStroke(hit, pressure)
-                    }
-
-                    stroking -> {
-                        painter?.move(hit.first, hit.second, pressure)
-                        track(hit)
-                    }
-
-                    else -> {
-                        startStroke(hit, pressure)
-                    }
-                }
-            }
-
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                endStroke()
-            }
+            MotionEvent.ACTION_DOWN -> stroker.down(event.x, event.y, pressure)
+            MotionEvent.ACTION_MOVE -> stroker.move(event.x, event.y, pressure)
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> stroker.up()
         }
-    }
-
-    private fun startStroke(
-        hit: Pair<Float, Float>,
-        pressure: Float,
-    ) {
-        painter?.begin(hit.first, hit.second, pressure)
-        stroking = true
-        track(hit)
-    }
-
-    private fun track(hit: Pair<Float, Float>) {
-        lastU = hit.first
-        lastV = hit.second
-    }
-
-    private fun endStroke() {
-        if (stroking) painter?.end()
-        stroking = false
     }
 
     private fun pick(
         x: Float,
         y: Float,
-    ): Pair<Float, Float>? {
+    ): SurfaceHit? {
         val model = mesh ?: return null
         val (origin, direction) = renderer.camera.ray(x, y, width.toFloat(), height.toFloat())
-        return MeshPicker.pick(model, origin, direction)
+        return MeshPicker.hit(model, origin, direction)
     }
 
     private companion object {
         const val DEPTH_BITS = 16
         const val TURN_PER_PIXEL = 0.01f
         const val MIN_PRESSURE = 0.05f
-        const val SEAM_JUMP = 0.15f
     }
 }

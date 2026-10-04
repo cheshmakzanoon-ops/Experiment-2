@@ -42,9 +42,12 @@ class ModelController(
                 } catch (failure: IllegalStateException) {
                     unreadable(failure)
                 }
-            _mesh.value = text?.let { withContext(Dispatchers.Default) { runCatching { ObjParser.parse(it) }.getOrNull() } }
+            _mesh.value = text?.let { withContext(Dispatchers.Default) { runCatching { prepared(it) }.getOrNull() } }
         }
     }
+
+    /** Parses [objText] and works out its UV islands here, off the main thread, before painting needs them. */
+    private fun prepared(objText: String): Mesh = ObjParser.parse(objText).also { it.islands }
 
     private fun unreadable(failure: Exception): String? {
         Timber.w(failure, "Saved 3D model could not be loaded")
@@ -54,7 +57,7 @@ class ModelController(
     /** Makes the open artwork the texture of the model in [objText]. */
     fun attach(objText: String) {
         scope.launch {
-            val parsed = withContext(Dispatchers.Default) { runCatching { ObjParser.parse(objText) } }
+            val parsed = withContext(Dispatchers.Default) { runCatching { prepared(objText) } }
             parsed.onFailure { notify(it.message ?: "That 3D model could not be read") }
             val model = parsed.getOrNull() ?: return@launch
             if (repository.saveModel(objText)) _mesh.value = model

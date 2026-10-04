@@ -56,11 +56,18 @@ object MeshPicker {
         mesh: Mesh,
         origin: Vec3,
         direction: Vec3,
-    ): Pair<Float, Float>? {
+    ): Pair<Float, Float>? = hit(mesh, origin, direction)?.let { it.u to it.v }
+
+    /** The nearest point the ray hits, with its UV island, or null when it misses. */
+    fun hit(
+        mesh: Mesh,
+        origin: Vec3,
+        direction: Vec3,
+    ): SurfaceHit? {
         var nearest = Float.MAX_VALUE
         var hitU = 0f
         var hitV = 0f
-        var found = false
+        var hitTriangle = -1
         val p = mesh.positions
         for (t in 0 until mesh.triangleCount) {
             val a = Vec3.at(p, t * 9)
@@ -82,9 +89,9 @@ object MeshPicker {
                 val w0 = 1f - b1 - b2
                 hitU = w0 * uv[t * 6] + b1 * uv[t * 6 + 2] + b2 * uv[t * 6 + 4]
                 hitV = w0 * uv[t * 6 + 1] + b1 * uv[t * 6 + 3] + b2 * uv[t * 6 + 5]
-                found = true
+                hitTriangle = t
             }
         }
-        return if (found) hitU to hitV else null
+        return if (hitTriangle >= 0) SurfaceHit(hitU, hitV, mesh.islands[hitTriangle]) else null
     }
 }
