@@ -3,6 +3,7 @@ package com.artflow.studio.core.render
 import com.artflow.studio.core.pixels.BlendModes
 import com.artflow.studio.core.pixels.Channels
 import com.artflow.studio.core.pixels.ImageFilters
+import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.pixels.Stamping
@@ -93,21 +94,24 @@ class StrokeRasterizer(
         }
 
         val buffer = scratchFor(scratch, target.width, target.height)
-        buffer.clear()
+        val reach = StrokeReach.bounds(points, params, target.width, target.height)
+        clear(buffer, reach)
         drawStrokeInto(buffer, stroke, params, points, alphaLock = false, mask = null, random = random, canvas = target)
-        val dual = params.dual?.let { drawDual(target, stroke, it) }
+        val dual = params.dual?.let { drawDual(target, stroke, it, reach) }
         val texture = BrushTexture.from(params)
         val (grainX, grainY) = grainOrigin(params, points)
         val wetEdges = params.wetEdges.coerceIn(0f, 1f)
-        for (i in target.pixels.indices) {
-            val source = dual?.combine(buffer.pixels[i], i, originX + i % target.width, originY + i / target.width) ?: buffer.pixels[i]
-            if ((source ushr 24) == 0) continue
-            val coverage = selectionCoverage(mask, target, i)
-            val grain = texture?.coverage(originX + i % target.width - grainX, originY + i / target.width - grainY) ?: 1f
-            val effective = strokeAlpha * coverage * grain * wetEdgeFactor(source, wetEdges)
-            if (effective <= 0f) continue
-            val paint = Channels.scaleAlpha(source, effective)
-            target.pixels[i] = deposit(target.pixels[i], paint, params, alphaLock)
+        for (y in reach.top..reach.bottom) {
+            for (i in y * target.width + reach.left..y * target.width + reach.right) {
+                val source = dual?.combine(buffer.pixels[i], i, originX + i % target.width, originY + i / target.width) ?: buffer.pixels[i]
+                if ((source ushr 24) == 0) continue
+                val coverage = selectionCoverage(mask, target, i)
+                val grain = texture?.coverage(originX + i % target.width - grainX, originY + i / target.width - grainY) ?: 1f
+                val effective = strokeAlpha * coverage * grain * wetEdgeFactor(source, wetEdges)
+                if (effective <= 0f) continue
+                val paint = Channels.scaleAlpha(source, effective)
+                target.pixels[i] = deposit(target.pixels[i], paint, params, alphaLock)
+            }
         }
         lastDabCount = dabCount.get()
     }
@@ -155,31 +159,34 @@ class StrokeRasterizer(
         random: Random,
     ) {
         val buffer = scratchFor(scratch, target.width, target.height)
-        buffer.clear()
+        val reach = StrokeReach.bounds(points, params, target.width, target.height)
+        clear(buffer, reach)
         // Erasing depends on brush coverage, never on the selected ink color's alpha.
         val eraseShape = stroke.copy(color = 0xFFFFFFFF.toInt())
         drawStrokeInto(buffer, eraseShape, params, points, alphaLock = false, mask = null, random = random)
         val texture = BrushTexture.from(params)
         val (grainX, grainY) = grainOrigin(params, points)
-        for (i in target.pixels.indices) {
-            val source = buffer.pixels[i]
-            val sourceCoverage = ((source ushr 24) and 0xFF) / 255f
-            if (sourceCoverage <= 0f) continue
-            val selectionCoverage = selectionCoverage(mask, target, i)
-            if (selectionCoverage <= 0f) continue
-            val grain = texture?.coverage(originX + i % target.width - grainX, originY + i / target.width - grainY) ?: 1f
-            val erase = (strokeAlpha * sourceCoverage * selectionCoverage * grain).coerceIn(0f, 1f)
-            val destination = target.pixels[i]
-            val destinationAlpha = (destination ushr 24) and 0xFF
-            if (destinationAlpha == 0) continue
-            val outAlpha = (destinationAlpha * (1f - erase)).roundToInt().coerceIn(0, 255)
-            target.pixels[i] =
-                Channels.argb(
-                    outAlpha,
-                    (destination shr 16) and 0xFF,
-                    (destination shr 8) and 0xFF,
-                    destination and 0xFF,
-                )
+        for (y in reach.top..reach.bottom) {
+            for (i in y * target.width + reach.left..y * target.width + reach.right) {
+                val source = buffer.pixels[i]
+                val sourceCoverage = ((source ushr 24) and 0xFF) / 255f
+                if (sourceCoverage <= 0f) continue
+                val selectionCoverage = selectionCoverage(mask, target, i)
+                if (selectionCoverage <= 0f) continue
+                val grain = texture?.coverage(originX + i % target.width - grainX, originY + i / target.width - grainY) ?: 1f
+                val erase = (strokeAlpha * sourceCoverage * selectionCoverage * grain).coerceIn(0f, 1f)
+                val destination = target.pixels[i]
+                val destinationAlpha = (destination ushr 24) and 0xFF
+                if (destinationAlpha == 0) continue
+                val outAlpha = (destinationAlpha * (1f - erase)).roundToInt().coerceIn(0, 255)
+                target.pixels[i] =
+                    Channels.argb(
+                        outAlpha,
+                        (destination shr 16) and 0xFF,
+                        (destination shr 8) and 0xFF,
+                        destination and 0xFF,
+                    )
+            }
         }
         lastDabCount = dabCount.get()
     }
@@ -516,6 +523,21 @@ class StrokeRasterizer(
     /** The user-selected stroke opacity; pressure is evaluated per dab, never averaged. */
     fun strokeAlpha(stroke: Stroke): Float = stroke.brushParams.opacity.coerceIn(0f, 1f)
 
+    /**
+     * Clears only [area] of the shared scratch buffer. Pixels outside it may hold an earlier
+     * stroke's coverage, but a stroke reads its scratch only inside its own reach, which it clears first.
+     */
+    private fun clear(
+        buffer: PixelBuffer,
+        area: IntBounds,
+    ) {
+        if (area.isEmpty) return
+        for (y in area.top..area.bottom) {
+            val start = y * buffer.width
+            buffer.pixels.fill(0, start + area.left, start + area.right + 1)
+        }
+    }
+
     private fun selectionCoverage(
         mask: SelectionMask?,
         target: PixelBuffer,
@@ -546,10 +568,12 @@ class StrokeRasterizer(
         target: PixelBuffer,
         stroke: Stroke,
         dual: DualBrush,
+        reach: IntBounds,
     ): DualMarks {
         val params = dual.params.copy(opacity = 1f, dual = null, wetMix = 0f)
         val marks = scratchFor(dualScratch, target.width, target.height)
-        marks.clear()
+        // [reach] already covers the second brush; marks are read only inside it.
+        clear(marks, reach)
         drawStrokeInto(marks, stroke, params, stroke.points, alphaLock = false, mask = null, random = Random(stroke.id + DUAL_SEED))
         return DualMarks(dual.mode, marks, BrushTexture.from(params))
     }
