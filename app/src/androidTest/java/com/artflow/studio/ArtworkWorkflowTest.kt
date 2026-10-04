@@ -281,8 +281,10 @@ class ArtworkWorkflowTest {
     }
 
     /** Waits for a node to be laid out on screen; on failure, reports its bounds and the screen. */
-    private fun awaitDisplayed(description: String) {
-        val node = compose.onNodeWithContentDescription(description)
+    private fun awaitDisplayed(
+        description: String,
+        node: SemanticsNodeInteraction = compose.onNodeWithContentDescription(description),
+    ) {
         val shown =
             try {
                 compose.waitUntil(5_000) { runCatching { node.assertIsDisplayed() }.isSuccess }
@@ -368,11 +370,11 @@ class ArtworkWorkflowTest {
         captureWorkspace("studio-focus.png")
         assertArrayEquals(expectedPixels, pixels())
         scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
-        compose.onNodeWithText("Gallery").assertIsDisplayed()
+        awaitDisplayed("Gallery", compose.onNodeWithText("Gallery"))
         compose.onNodeWithText("Save changes?").assertDoesNotExist()
         openWorkspace("Full screen")
         compose.onNodeWithContentDescription("Exit focus mode").performClick()
-        compose.onNodeWithText("Gallery").assertIsDisplayed()
+        awaitDisplayed("Gallery", compose.onNodeWithText("Gallery"))
         assertArrayEquals(expectedPixels, pixels())
         assertEquals(undoDepth, runBlocking(Dispatchers.Main) { canvas.undoDepth })
         assertTrue(runBlocking(Dispatchers.Main) { canvas.hasUnsavedChanges() })
