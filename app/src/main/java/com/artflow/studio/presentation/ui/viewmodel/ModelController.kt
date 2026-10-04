@@ -5,6 +5,7 @@ import com.artflow.studio.core.three.ObjParser
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import com.artflow.studio.presentation.ui.components.canvas.ModelPainter
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 
 /**
  * 3D painting: the artwork is the texture of a model. Strokes painted on the model arrive in
@@ -29,7 +31,16 @@ class ModelController(
     /** Loads the open artwork's model, if it has one. */
     fun load() {
         scope.launch {
-            val text = repository.loadModel()
+            // Most artworks have no model; an unreadable one is treated the same way.
+            val text =
+                try {
+                    repository.loadModel()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    Timber.w(failure, "Saved 3D model could not be loaded")
+                    null
+                }
             _mesh.value = text?.let { withContext(Dispatchers.Default) { runCatching { ObjParser.parse(it) }.getOrNull() } }
         }
     }
