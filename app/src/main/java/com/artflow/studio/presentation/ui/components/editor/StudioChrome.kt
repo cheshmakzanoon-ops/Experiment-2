@@ -107,19 +107,10 @@ fun StudioTopBar(
         tonalElevation = 2.dp,
         modifier = modifier.fillMaxWidth(),
     ) {
-        Row(
-            modifier =
-                Modifier
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
-                    .height(52.dp)
-                    .padding(horizontal = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        BoxWithConstraints(
+            Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
         ) {
-            TextButton(onClick = { onButton(StudioButton.GALLERY) }) { Text(StudioButton.GALLERY.label) }
-            Row(
-                modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+            val modify: @Composable () -> Unit = {
                 listOf(StudioButton.ACTIONS, StudioButton.ADJUSTMENTS, StudioButton.SELECTION, StudioButton.TRANSFORM).forEach { button ->
                     Box {
                         StudioIconButton(button, button in highlighted || openMenu == button) { onButton(button) }
@@ -127,15 +118,46 @@ fun StudioTopBar(
                     }
                 }
             }
-            listOf(StudioButton.PAINT, StudioButton.SMUDGE, StudioButton.ERASE, StudioButton.LAYERS).forEach { button ->
-                StudioIconButton(button, button in highlighted) { onButton(button) }
+            val paint: @Composable () -> Unit = {
+                listOf(StudioButton.PAINT, StudioButton.SMUDGE, StudioButton.ERASE, StudioButton.LAYERS).forEach { button ->
+                    StudioIconButton(button, button in highlighted) { onButton(button) }
+                }
+                Spacer(Modifier.width(4.dp))
+                colorSwatch()
+                Spacer(Modifier.width(8.dp))
             }
-            Spacer(Modifier.width(4.dp))
-            colorSwatch()
-            Spacer(Modifier.width(8.dp))
+            val gallery: @Composable () -> Unit = {
+                TextButton(onClick = { onButton(StudioButton.GALLERY) }) { Text(StudioButton.GALLERY.label) }
+            }
+            if (maxWidth < COMPACT_BAR_WIDTH) {
+                // Narrow phones: every button in a single row would squeeze some of them out of reach.
+                Column(Modifier.padding(horizontal = 4.dp)) {
+                    Row(Modifier.height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+                        gallery()
+                        modify()
+                    }
+                    Row(
+                        Modifier.fillMaxWidth().height(48.dp),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) { paint() }
+                }
+            } else {
+                Row(Modifier.height(52.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    gallery()
+                    Row(
+                        modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) { modify() }
+                    paint()
+                }
+            }
         }
     }
 }
+
+/** Below this width one row cannot show every button at full size, so the top bar uses two rows. */
+private val COMPACT_BAR_WIDTH = 560.dp
 
 @Composable
 private fun StudioIconButton(

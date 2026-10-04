@@ -248,12 +248,17 @@ class ArtworkWorkflowTest {
         compose.onNodeWithContentDescription("Actions").performClick()
         // A sheet that is still closing can swallow the tap; tap Actions again if the panel is missing.
         if (!appears(tab, 3_000)) compose.onNodeWithContentDescription("Actions").performClick()
-        compose.waitUntil(15_000) { appears(tab, 0) }
+        if (!appears(tab, 15_000)) throw AssertionError("The Actions panel did not open for $title. Screen: ${screenSummary()}")
         // The tab row scrolls on narrow phones, so bring the tab into view before tapping it.
         compose.onNodeWithText(tab).performScrollTo().performClick()
-        compose.onNodeWithText(item).performScrollTo().performClick()
+        val target = compose.onNodeWithText(item).performScrollTo()
+        lastTapped = "$item at ${target.fetchSemanticsNode().boundsInWindow}"
+        target.performClick()
         compose.waitForIdle()
     }
+
+    /** Where the last panel item was tapped, for failure messages. */
+    private var lastTapped = "nothing"
 
     /** Waits for a node to be laid out on screen; on failure, reports its bounds and the screen. */
     private fun awaitDisplayed(description: String) {
@@ -279,17 +284,18 @@ class ArtworkWorkflowTest {
     /** Texts and descriptions on screen, so a CI failure says what was showing. */
     private fun screenSummary(): String =
         try {
-            compose
-                .onAllNodes(SemanticsMatcher("any node") { true })
-                .fetchSemanticsNodes()
-                .flatMap { node ->
-                    val texts = node.config.getOrNull(SemanticsProperties.Text).orEmpty()
-                    texts.map { it.text } + node.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()
-                }.filter { it.isNotBlank() }
-                .map { it.take(24) }
-                .distinct()
-                .take(30)
-                .joinToString(", ")
+            "last tap: $lastTapped; window: ${compose.onAllNodes(isRoot()).fetchSemanticsNodes().map { it.size }}; " +
+                compose
+                    .onAllNodes(SemanticsMatcher("any node") { true })
+                    .fetchSemanticsNodes()
+                    .flatMap { node ->
+                        val texts = node.config.getOrNull(SemanticsProperties.Text).orEmpty()
+                        texts.map { it.text } + node.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()
+                    }.filter { it.isNotBlank() }
+                    .map { it.take(24) }
+                    .distinct()
+                    .take(30)
+                    .joinToString(", ")
         } catch (error: IllegalStateException) {
             "unavailable (${error.message})"
         }
