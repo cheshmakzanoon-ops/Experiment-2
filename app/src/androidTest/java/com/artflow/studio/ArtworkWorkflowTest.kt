@@ -212,8 +212,8 @@ class ArtworkWorkflowTest {
         compose.onNodeWithText("Place on canvas").performScrollTo().performClick()
         compose.waitUntil(15_000) { runBlocking(Dispatchers.Main) { canvas.undoDepth == depth + 1 } }
         assertFalse("The reachable text workflow must rasterise real glyphs", expectedPixels.contentEquals(pixels()))
-        compose.onNodeWithContentDescription("Undo").performClick()
-        compose.waitUntil(15_000) { runBlocking(Dispatchers.Main) { canvas.undoDepth == depth } }
+        tapWhenEnabled("Undo")
+        awaitOrReport("Undo did not remove the placed text") { runBlocking(Dispatchers.Main) { canvas.undoDepth == depth } }
         assertArrayEquals(expectedPixels, pixels())
 
         // Closing an anchored text panel cancels placement without another history entry.
@@ -259,6 +259,25 @@ class ArtworkWorkflowTest {
 
     /** Where the last panel item was tapped, for failure messages. */
     private var lastTapped = "nothing"
+
+    /** Waits for [condition]; on timeout, fails with [problem] and what the screen shows. */
+    private fun awaitOrReport(
+        problem: String,
+        condition: () -> Boolean,
+    ) {
+        try {
+            compose.waitUntil(15_000, condition)
+        } catch (_: ComposeTimeoutException) {
+            throw AssertionError("$problem. Screen: ${screenSummary()}")
+        }
+    }
+
+    /** History buttons follow the repository asynchronously; tap only once the button is enabled. */
+    private fun tapWhenEnabled(description: String) {
+        val node = compose.onNodeWithContentDescription(description)
+        compose.waitUntil(5_000) { runCatching { node.assertIsEnabled() }.isSuccess }
+        node.performClick()
+    }
 
     /** Waits for a node to be laid out on screen; on failure, reports its bounds and the screen. */
     private fun awaitDisplayed(description: String) {

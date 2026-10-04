@@ -101,17 +101,20 @@ fun ActionsPanel(
     onShare: () -> Unit,
     canPaste: Boolean,
     onHelp: () -> Unit = {},
+    modifier: Modifier = Modifier,
 ) {
     var tab by rememberSaveable { mutableStateOf(ActionsTab.Add) }
-    Column(Modifier.fillMaxWidth()) {
+    Column(modifier.fillMaxWidth()) {
         ScrollableTabRow(selectedTabIndex = tab.ordinal, edgePadding = 8.dp) {
             ActionsTab.entries.forEach { entry ->
                 Tab(selected = tab == entry, onClick = { tab = entry }, text = { Text(entry.name) })
             }
         }
+        // Only the space left under the tabs, so the end of the list stays on short screens.
         Column(
             modifier =
                 Modifier
+                    .weight(1f, fill = false)
                     .fillMaxWidth()
                     .heightIn(max = 440.dp)
                     .verticalScroll(rememberScrollState())

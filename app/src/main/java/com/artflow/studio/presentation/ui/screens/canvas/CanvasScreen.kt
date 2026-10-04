@@ -785,6 +785,8 @@ fun CanvasScreen(
                     onShare = { panel = EditorPanel.EXPORT },
                     canPaste = hasClipboard,
                     onHelp = onOpenHelp,
+                    // Within the panel's column, the list takes only the height that is left.
+                    modifier = Modifier.weight(1f, fill = false),
                 )
             EditorPanel.NONE -> Unit
         }
