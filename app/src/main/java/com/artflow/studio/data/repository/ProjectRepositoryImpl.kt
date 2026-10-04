@@ -2,6 +2,7 @@ package com.artflow.studio.data.repository
 
 import androidx.room.withTransaction
 import com.artflow.studio.core.canvas.CanvasOperations
+import com.artflow.studio.data.export.ArtflowPackage
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.local.dao.ProjectDao
 import com.artflow.studio.data.local.database.ArtFlowDatabase
@@ -118,6 +119,56 @@ class ProjectRepositoryImpl
                         withContext(NonCancellable + Dispatchers.IO) {
                             // Cancellation can arrive after Room commits but before withTransaction
                             // resumes. Never delete the files of a row that did commit successfully.
+                            if (projectDao.getProjectById(id) == null) storage.deleteProjectFiles(id)
+                        }
+                    }
+                }
+            }
+        }
+
+        override suspend fun importPackage(bytes: ByteArray): Long {
+            val contents = withContext(Dispatchers.Default) { ArtflowPackage.read(bytes) }
+            val document = storage.decodePackagedDocument(requireNotNull(contents.files[ArtflowPackage.DOCUMENT]))
+            var importedId: Long? = null
+            var completed = false
+            try {
+                val id =
+                    database.withTransaction {
+                        val now = System.currentTimeMillis()
+                        val project =
+                            Project(
+                                name = contents.name,
+                                filePath = "",
+                                thumbnailPath = null,
+                                width = document.width,
+                                height = document.height,
+                                dpi = document.dpi,
+                                createdAt = now,
+                                modifiedAt = now,
+                                layerCount = document.layers.size,
+                            )
+                        val newId = insertNewProject(project.toEntity())
+                        check(!withContext(Dispatchers.IO) { storage.projectDirectoryExists(newId) }) {
+                            "The destination already contains project data"
+                        }
+                        importedId = newId
+                        storage.importProject(newId, contents.files)
+                        projectDao.updateProject(
+                            project
+                                .copy(
+                                    id = newId,
+                                    filePath = storage.documentFile(newId).absolutePath,
+                                    thumbnailPath = storage.thumbnailPathIfExists(newId),
+                                ).toEntity(),
+                        )
+                        newId
+                    }
+                completed = true
+                return id
+            } finally {
+                if (!completed) {
+                    importedId?.let { id ->
+                        withContext(NonCancellable + Dispatchers.IO) {
                             if (projectDao.getProjectById(id) == null) storage.deleteProjectFiles(id)
                         }
                     }

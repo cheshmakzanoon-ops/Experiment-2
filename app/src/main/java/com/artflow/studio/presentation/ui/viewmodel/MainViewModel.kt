@@ -216,6 +216,18 @@ class MainViewModel
             }
         }
 
+        /** Adds the artwork in an `.artflow` file to the gallery, with every layer and frame, and opens it. */
+        fun importPackage(
+            bytes: ByteArray,
+            onImported: (Long) -> Unit,
+        ) {
+            viewModelScope.launch(galleryErrors) {
+                val id = projectRepository.importPackage(bytes)
+                storageBytes = withContext(Dispatchers.IO) { storage.totalStorageBytes() }
+                onImported(id)
+            }
+        }
+
         fun delete(project: Project) {
             viewModelScope.launch(galleryErrors) {
                 projectRepository.deleteProjectById(project.id)

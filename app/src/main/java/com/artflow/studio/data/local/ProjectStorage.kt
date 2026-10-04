@@ -386,6 +386,75 @@ class ProjectStorage
             return Files.exists(File(parent, "$projectId").toPath(), LinkOption.NOFOLLOW_LINKS)
         }
 
+        /** A saved project's files for an `.artflow` package: manifest, layer pixels and previews. */
+        suspend fun packageFiles(projectId: Long): Map<String, ByteArray> =
+            withContext(Dispatchers.IO) {
+                val document = requireNotNull(loadDocument(projectId)) { "Save the artwork before sharing it" }
+                val files = linkedMapOf(DOCUMENT_NAME to documentFile(projectId).readBytes())
+                referencedFiles(document).forEach { relative -> files[relative] = requireNotNull(readRaster(projectId, relative)) }
+                listOf(FLATTENED_NAME, THUMBNAIL_NAME).forEach { name ->
+                    val file = resolve(projectId, name)
+                    if (file.isFile) files[name] = file.readBytes()
+                }
+                files
+            }
+
+        /** The manifest of an `.artflow` package, checked before any project is created for it. */
+        fun decodePackagedDocument(bytes: ByteArray): CanvasDocument {
+            require(bytes.size in 1..MAX_DOCUMENT_BYTES) { "The artwork's document is empty or too large" }
+            val document = json.decodeFromString(CanvasDocument.serializer(), bytes.decodeToString())
+            require(document.version in 1..CanvasDocument.CURRENT_VERSION) { "Unsupported project version ${document.version}" }
+            require(CanvasOperations.isSizeSafe(document.width, document.height)) { "Invalid project dimensions" }
+            require(document.dpi in CanvasOperations.MIN_DPI..CanvasOperations.MAX_DPI) { "Invalid project DPI" }
+            return document
+        }
+
+        /**
+         * Writes an imported package into a new, empty project directory: pixels and previews first,
+         * the manifest last, then checks the manifest and that every pixel file it names arrived.
+         * A failed import leaves nothing behind.
+         */
+        suspend fun importProject(
+            projectId: Long,
+            files: Map<String, ByteArray>,
+        ): CanvasDocument =
+            withContext(Dispatchers.IO) {
+                val manifest = requireNotNull(files[DOCUMENT_NAME]) { "The artwork has no document" }
+                val destination = ownedPath("projects/$projectId")
+                check(!Files.exists(destination.toPath(), LinkOption.NOFOLLOW_LINKS)) { "The destination already contains project data" }
+                check(destination.mkdirs()) { "Cannot create the imported project directory" }
+                var completed = false
+                try {
+                    files.forEach { (relative, bytes) ->
+                        if (relative != DOCUMENT_NAME) {
+                            val file = resolve(projectId, relative)
+                            file.parentFile?.mkdirs()
+                            writeAtomically(file) { it.write(bytes) }
+                        }
+                    }
+                    writeAtomically(documentFile(projectId)) { it.write(manifest) }
+                    val document = decodeDocument(documentFile(projectId), projectId)
+                    referencedFiles(document).forEach { requireNotNull(readRaster(projectId, it)) }
+                    completed = true
+                    document
+                } finally {
+                    if (!completed) {
+                        try {
+                            StorageFileTree.delete(destination, context.filesDir)
+                        } catch (cleanupFailure: IOException) {
+                            Timber.w(cleanupFailure, "Could not remove an incomplete import")
+                        }
+                    }
+                }
+            }
+
+        private fun referencedFiles(document: CanvasDocument): List<String> =
+            document
+                .resolvedFrames()
+                .flatMap { it.layers }
+                .flatMap { listOfNotNull(it.rasterFile, it.maskFile) }
+                .distinct()
+
         /**
          * Copies immutable saved/recovery generations into a new project, never sharing files with
          * the original. Call inside the gallery transaction so an incomplete copy is not visible.

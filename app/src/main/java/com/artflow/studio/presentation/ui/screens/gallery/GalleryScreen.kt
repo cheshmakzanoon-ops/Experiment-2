@@ -83,6 +83,7 @@ fun GalleryScreen(
     val context = LocalContext.current
     val photoImport = rememberPhotoImport(viewModel, snackbarHostState, onNavigateToCanvas)
     val psdImport = rememberPsdImport(viewModel, snackbarHostState, onNavigateToCanvas)
+    val packageImport = rememberPackageImport(viewModel, snackbarHostState, onNavigateToCanvas)
 
     LaunchedEffect(Unit) {
         viewModel.messageFlow.collect { snackbarHostState.showSnackbar(it) }
@@ -142,7 +143,7 @@ fun GalleryScreen(
                         }
                         SortMenu(settings.gallerySort, viewModel::setSort)
                         TextButton(onClick = { selection = emptySet() }) { Text("Select") }
-                        ImportMenu(onPhoto = photoImport, onPsd = psdImport)
+                        ImportMenu(onPhoto = photoImport, onPsd = psdImport, onPackage = packageImport)
                         IconButton(onClick = onOpenHelp) {
                             Icon(Icons.Default.HelpOutline, contentDescription = "Help")
                         }
@@ -300,11 +301,45 @@ private fun rememberPsdImport(
     return { runCatching { launcher.launch(arrayOf("image/vnd.adobe.photoshop", "application/octet-stream")) } }
 }
 
+/** Opens an `.artflow` file as a new artwork with all its layers, frames and settings. */
+@Composable
+private fun rememberPackageImport(
+    viewModel: MainViewModel,
+    snackbarHostState: SnackbarHostState,
+    onNavigateToCanvas: (Long) -> Unit,
+): () -> Unit {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val launcher =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            scope.launch {
+                val bytes =
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            context.contentResolver.openInputStream(uri)?.use { input ->
+                                input.readBytes().also { require(it.size <= MAX_PACKAGE_BYTES) }
+                            }
+                        }.getOrNull()
+                    }
+                if (bytes == null) {
+                    snackbarHostState.showSnackbar("That file could not be read, or it is too large")
+                    return@launch
+                }
+                viewModel.importPackage(bytes) { id -> scope.launch { onNavigateToCanvas(id) } }
+            }
+        }
+    return { runCatching { launcher.launch(arrayOf("application/octet-stream", "application/zip")) } }
+}
+
+private const val MAX_PACKAGE_BYTES = 512 * 1024 * 1024
+
 /** The gallery's Import menu: a photo or a layered Photoshop file, each as a new artwork. */
 @Composable
 private fun ImportMenu(
     onPhoto: () -> Unit,
     onPsd: () -> Unit,
+    onPackage: () -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
@@ -319,6 +354,10 @@ private fun ImportMenu(
             DropdownMenuItem(text = { Text("Photoshop file (PSD)") }, onClick = {
                 open = false
                 onPsd()
+            })
+            DropdownMenuItem(text = { Text("ArtFlow artwork (.artflow)") }, onClick = {
+                open = false
+                onPackage()
             })
         }
     }

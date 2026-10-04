@@ -37,6 +37,9 @@ interface ProjectRepository {
     /** Copies the saved artwork and recovery snapshot before exposing the new gallery entry. */
     suspend fun duplicateProject(projectId: Long): Long
 
+    /** Adds the artwork in an `.artflow` package to the gallery and returns its new id. */
+    suspend fun importPackage(bytes: ByteArray): Long = error("Importing artworks is not supported here")
+
     /**
      * Update an existing project
      */

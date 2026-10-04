@@ -26,6 +26,7 @@ enum class ExportFormat(
     PSD("Photoshop (PSD)", "psd", "image/vnd.adobe.photoshop"),
     TIFF("TIFF", "tif", "image/tiff"),
     LAYER_PNGS("PNG layers (zip)", "zip", "application/zip"),
+    ARTFLOW("ArtFlow artwork (all layers and frames)", "artflow", "application/octet-stream"),
     GIF("Animated GIF", "gif", "image/gif", requiresAnimation = true),
     MP4("MP4 video", "mp4", "video/mp4", requiresAnimation = true),
     APNG("Animated PNG", "png", "image/png", requiresAnimation = true),
@@ -43,7 +44,7 @@ enum class ExportFormat(
 
     companion object {
         /** Formats offered for a still image. */
-        fun stillFormats(): List<ExportFormat> = listOf(PNG, JPEG, WEBP, PDF, PSD, TIFF, LAYER_PNGS)
+        fun stillFormats(): List<ExportFormat> = listOf(PNG, JPEG, WEBP, PDF, PSD, TIFF, LAYER_PNGS, ARTFLOW)
 
         /** Formats offered for an animation. */
         fun animationFormats(): List<ExportFormat> = listOf(GIF, MP4, APNG, FRAME_SEQUENCE)

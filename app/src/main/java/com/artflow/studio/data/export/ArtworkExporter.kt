@@ -241,6 +241,37 @@ class ArtworkExporter
                 }
             }
 
+        /** The whole artwork, as last saved, in an `.artflow` package that opens with everything intact. */
+        suspend fun exportPackage(
+            projectId: Long,
+            projectName: String,
+            options: ExportOptions,
+        ): Result<ExportResult> =
+            withContext(Dispatchers.IO) {
+                try {
+                    val files = storage.packageFiles(projectId)
+                    val document = storage.decodePackagedDocument(files.getValue(ArtflowPackage.DOCUMENT))
+                    val bytes = ArtflowPackage.write(projectName, files)
+                    val fileName = ExportNaming.fileName(projectName, options)
+                    val file = storage.saveExport(projectId, fileName, bytes)
+                    Result.success(
+                        ExportResult(
+                            format = ExportFormat.ARTFLOW,
+                            filePath = file.absolutePath,
+                            fileName = fileName,
+                            byteCount = bytes.size.toLong(),
+                            width = document.width,
+                            height = document.height,
+                        ),
+                    )
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (e: Exception) {
+                    Timber.e(e, "Artwork package export failed")
+                    Result.failure(ExportFailure(ExportError.EncodingFailed(e.message ?: "unknown").message))
+                }
+            }
+
         /** Every page and bitmap is released even when rendering or writing fails. */
         private fun buildPdf(
             frames: List<PixelBuffer>,
