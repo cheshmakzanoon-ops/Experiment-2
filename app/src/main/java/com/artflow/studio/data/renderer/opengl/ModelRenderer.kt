@@ -6,6 +6,7 @@ import android.opengl.GLSurfaceView
 import android.opengl.GLUtils
 import android.opengl.Matrix
 import com.artflow.studio.core.three.Mesh
+import com.artflow.studio.core.three.ModelLighting
 import com.artflow.studio.core.three.OrbitCamera
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -21,6 +22,9 @@ import javax.microedition.khronos.opengles.GL10
 class ModelRenderer : GLSurfaceView.Renderer {
     @Volatile
     var camera: OrbitCamera = OrbitCamera()
+
+    @Volatile
+    var lighting: ModelLighting = ModelLighting()
 
     private val pendingMesh = AtomicReference<Mesh?>(null)
     private val pendingTexture = AtomicReference<Bitmap?>(null)
@@ -98,7 +102,15 @@ class ModelRenderer : GLSurfaceView.Renderer {
         Matrix.multiplyMM(mvp, 0, projection, 0, view, 0)
         GLES20.glUseProgram(program)
         GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(program, "uMvp"), 1, false, mvp, 0)
-        GLES20.glUniform3f(GLES20.glGetUniformLocation(program, "uLight"), eye.x, eye.y + 1f, eye.z)
+        val light = lighting
+        val direction = light.direction()
+        val colour = light.colour()
+        GLES20.glUniform3f(GLES20.glGetUniformLocation(program, "uLightDir"), direction.x, direction.y, direction.z)
+        GLES20.glUniform3f(GLES20.glGetUniformLocation(program, "uLightColour"), colour.x, colour.y, colour.z)
+        GLES20.glUniform3f(GLES20.glGetUniformLocation(program, "uEye"), eye.x, eye.y, eye.z)
+        GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "uAmbient"), light.ambient)
+        GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "uShine"), light.shine)
+        GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "uExposure"), light.exposure)
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture)
         GLES20.glUniform1i(GLES20.glGetUniformLocation(program, "uTexture"), 0)
@@ -189,14 +201,25 @@ class ModelRenderer : GLSurfaceView.Renderer {
         const val FRAGMENT = """
             precision mediump float;
             uniform sampler2D uTexture;
-            uniform vec3 uLight;
+            uniform vec3 uLightDir;
+            uniform vec3 uLightColour;
+            uniform vec3 uEye;
+            uniform float uAmbient;
+            uniform float uShine;
+            uniform float uExposure;
             varying vec3 vNormal;
             varying vec3 vPosition;
             varying vec2 vUv;
             void main() {
                 vec4 colour = texture2D(uTexture, vUv);
-                float diffuse = abs(dot(normalize(vNormal), normalize(uLight - vPosition)));
-                gl_FragColor = vec4(colour.rgb * (0.35 + 0.65 * diffuse), 1.0);
+                vec3 toEye = normalize(uEye - vPosition);
+                vec3 normal = normalize(vNormal);
+                // Light both faces of open meshes: turn the normal toward the viewer.
+                if (dot(normal, toEye) < 0.0) normal = -normal;
+                float diffuse = max(dot(normal, uLightDir), 0.0);
+                float highlight = pow(max(dot(normal, normalize(uLightDir + toEye)), 0.0), 32.0) * uShine;
+                vec3 lit = colour.rgb * (uAmbient + diffuse * uLightColour) + highlight * uLightColour;
+                gl_FragColor = vec4(clamp(lit * uExposure, 0.0, 1.0), 1.0);
             }
         """
     }

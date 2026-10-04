@@ -1,6 +1,7 @@
 package com.artflow.studio.presentation.ui.components.editor
 
 import android.graphics.Bitmap
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -8,16 +9,21 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,9 +34,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.artflow.studio.core.three.Mesh
+import com.artflow.studio.core.three.ModelLighting
 import com.artflow.studio.presentation.ui.components.canvas.ModelPainter
 import com.artflow.studio.presentation.ui.components.canvas.ModelView
 
@@ -47,6 +56,8 @@ fun ModelCompanion(
     modifier: Modifier = Modifier,
 ) {
     var painting by rememberSaveable { mutableStateOf(false) }
+    var lightingOpen by rememberSaveable { mutableStateOf(false) }
+    var lighting by remember { mutableStateOf(ModelLighting()) }
     // The texture is sent to the view only when the artwork actually changes.
     val sent = remember { arrayOfNulls<Bitmap>(1) }
     BoxWithConstraints(modifier.fillMaxSize().padding(8.dp)) {
@@ -61,26 +72,92 @@ fun ModelCompanion(
                 Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("3D", style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.width(8.dp))
-                    FilterChip(selected = !painting, onClick = { painting = false }, label = { Text("Turn") })
-                    Spacer(Modifier.width(4.dp))
-                    FilterChip(selected = painting, onClick = { painting = true }, label = { Text("Paint") })
-                    Box(Modifier.weight(1f))
+                    Row(Modifier.weight(1f).horizontalScroll(rememberScrollState())) {
+                        FilterChip(selected = !painting, onClick = { painting = false }, label = { Text("Turn") })
+                        Spacer(Modifier.width(4.dp))
+                        FilterChip(selected = painting, onClick = { painting = true }, label = { Text("Paint") })
+                        Spacer(Modifier.width(4.dp))
+                        FilterChip(selected = lightingOpen, onClick = { lightingOpen = !lightingOpen }, label = { Text("Light") })
+                    }
                     IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = "Close 3D view") }
                 }
-                AndroidView(
-                    factory = { context -> ModelView(context) },
-                    update = { view ->
-                        if (view.mesh !== mesh) view.mesh = mesh
-                        view.painting = painting
-                        view.painter = painter
-                        if (artwork != null && sent[0] !== artwork) {
-                            sent[0] = artwork
-                            view.setTexture(artwork)
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                )
+                Box(Modifier.weight(1f)) {
+                    AndroidView(
+                        factory = { context -> ModelView(context) },
+                        update = { view ->
+                            if (view.mesh !== mesh) view.mesh = mesh
+                            view.painting = painting
+                            view.painter = painter
+                            view.lighting = lighting
+                            if (artwork != null && sent[0] !== artwork) {
+                                sent[0] = artwork
+                                view.setTexture(artwork)
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    if (lightingOpen) {
+                        LightingPanel(lighting, { lighting = it }, Modifier.align(Alignment.BottomCenter))
+                    }
+                }
             }
         }
     }
 }
+
+/** The lighting studio: presets plus the key light's angle, height, brightness, fill and exposure. */
+@Composable
+private fun LightingPanel(
+    lighting: ModelLighting,
+    onChange: (ModelLighting) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface.copy(alpha = PANEL_ALPHA),
+        modifier = modifier.fillMaxWidth().heightIn(max = 220.dp),
+    ) {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp)) {
+            Row(Modifier.horizontalScroll(rememberScrollState())) {
+                ModelLighting.presets.forEach { preset ->
+                    FilterChip(
+                        selected = lighting == preset.lighting,
+                        onClick = { onChange(preset.lighting) },
+                        label = { Text(preset.name) },
+                        modifier = Modifier.padding(end = 4.dp),
+                    )
+                }
+            }
+            LightSlider("Angle", lighting.azimuth, -180f..180f) { onChange(lighting.copy(azimuth = it)) }
+            LightSlider("Height", lighting.elevation, -ModelLighting.MAX_ELEVATION..ModelLighting.MAX_ELEVATION) {
+                onChange(lighting.copy(elevation = it))
+            }
+            LightSlider("Brightness", lighting.intensity, 0f..ModelLighting.MAX_INTENSITY) { onChange(lighting.copy(intensity = it)) }
+            LightSlider("Fill", lighting.ambient, 0f..1f) { onChange(lighting.copy(ambient = it)) }
+            LightSlider("Shine", lighting.shine, 0f..1f) { onChange(lighting.copy(shine = it)) }
+            LightSlider("Warmth", lighting.warmth, -1f..1f) { onChange(lighting.copy(warmth = it)) }
+            LightSlider("Exposure", lighting.exposure, MIN_EXPOSURE..MAX_EXPOSURE) { onChange(lighting.copy(exposure = it)) }
+        }
+    }
+}
+
+@Composable
+private fun LightSlider(
+    label: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    onChange: (Float) -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(64.dp))
+        Slider(
+            value = value.coerceIn(range),
+            onValueChange = onChange,
+            valueRange = range,
+            modifier = Modifier.weight(1f).height(32.dp).semantics { contentDescription = "Light $label" },
+        )
+    }
+}
+
+private const val PANEL_ALPHA = 0.92f
+private const val MIN_EXPOSURE = 0.4f
+private const val MAX_EXPOSURE = 2f

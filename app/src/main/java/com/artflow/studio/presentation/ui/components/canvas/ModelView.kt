@@ -7,6 +7,7 @@ import android.opengl.GLSurfaceView
 import android.view.MotionEvent
 import com.artflow.studio.core.three.Mesh
 import com.artflow.studio.core.three.MeshPicker
+import com.artflow.studio.core.three.ModelLighting
 import com.artflow.studio.data.renderer.opengl.ModelRenderer
 import kotlin.math.abs
 import kotlin.math.hypot
@@ -41,6 +42,13 @@ class ModelView(
         set(value) {
             field = value
             value?.let(renderer::setMesh)
+            requestRender()
+        }
+    var lighting: ModelLighting
+        get() = renderer.lighting
+        set(value) {
+            if (value == renderer.lighting) return
+            renderer.lighting = value
             requestRender()
         }
     var painting = false
