@@ -392,7 +392,10 @@ class ArtworkWorkflowTest {
         awaitDisplayed("Gallery", compose.onNodeWithText("Gallery"))
         compose.onNodeWithText("Save changes?").assertDoesNotExist()
         openWorkspace("Full screen")
-        compose.onNodeWithContentDescription("Exit focus mode").performClick()
+        awaitDisplayed("Exit focus mode")
+        val exit = compose.onNodeWithContentDescription("Exit focus mode")
+        lastTapped = "Exit focus mode at ${exit.fetchSemanticsNode().boundsInWindow}"
+        exit.performClick()
         awaitDisplayed("Gallery", compose.onNodeWithText("Gallery"))
         assertArrayEquals(expectedPixels, pixels())
         assertEquals(undoDepth, runBlocking(Dispatchers.Main) { canvas.undoDepth })

@@ -1217,8 +1217,15 @@ fun CanvasScreen(
                 // Phones: the panel rises over the canvas inside the editor window, below the top bar.
                 StudioBottomPanel(onDismiss = dismissPanel, content = panelContent)
             }
-            // Notices appear at the top centre, as in Procreate, so they never cover the panel or sidebar.
-            SnackbarHost(snackbarHostState, Modifier.align(Alignment.TopCenter).zIndex(8f))
+            // Notices appear near the top centre, as in Procreate: clear of the panel and sidebar below,
+            // and inset below and between the corner buttons (exit focus mode, crop bar, copy & paste).
+            SnackbarHost(
+                snackbarHostState,
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 64.dp, start = 56.dp, end = 56.dp)
+                    .zIndex(8f),
+            )
             if (focusMode) {
                 FilledTonalIconButton(
                     onClick = {
