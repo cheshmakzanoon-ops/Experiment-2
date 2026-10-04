@@ -206,7 +206,7 @@ internal object StudioBrushesExtra {
             p("quill", "Quill", DRAW, "Sharp tapers at both ends of every stroke.", liner(7f, 0.6f, 0.85f)),
             p("bamboo-pen", "Bamboo pen", DRAW, "A blunt, slightly flattened reed line.", liner(9f, 0.25f, 0.5f, 0.7f, 15f)),
             p("felt-tip", "Felt tip", DRAW, "Round, soft-edged marker line.", liner(10f, 0f, 0.05f)),
-            p("needle-liner", "Needle liner", DRAW, "The finest line the engine draws.", liner(1f, 0.1f, 0.4f)),
+            p("needle-liner", "Needle liner", DRAW, "The thinnest line the engine draws.", liner(1f, 0.1f, 0.4f)),
             // Painting
             p("filbert", "Filbert", PAINT, "An oval brush that blends edges as it goes.", bristle(28f, 0.85f, 0.35f, roundness = 0.75f)),
             p("bright", "Bright", PAINT, "Short, stiff flat bristles for crisp edges.", bristle(32f, 0.95f, 0.15f, roundness = 0.3f)),

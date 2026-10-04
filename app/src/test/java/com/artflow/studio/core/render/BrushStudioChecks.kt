@@ -15,6 +15,7 @@ object BrushStudioChecks {
         check(presets.map { it.id }.distinct().size == presets.size)
         check(presets.map { it.parameters }.distinct().size == presets.size)
         check(StudioBrushes.search("  FINE   INK  ").single().id == "fine-liner")
+        check(StudioBrushes.search("fine liner").single().id == "fine-liner")
         check(StudioBrushes.search("", "Inking").size == 6)
         check(StudioBrushes.search("charcoal", "Inking").isEmpty())
         check(StudioBrushes.search("does-not-exist").isEmpty())
