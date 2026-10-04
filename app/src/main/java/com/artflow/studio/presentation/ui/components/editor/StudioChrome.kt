@@ -200,13 +200,23 @@ fun StudioSidebar(
     actions: StudioSidebarActions,
     modifier: Modifier = Modifier,
 ) {
-    val tall = LocalConfiguration.current.screenHeightDp >= 560
-    val sliderHeight: Dp = if (tall) 170.dp else 110.dp
+    // The sliders share whatever height the editor leaves, so undo and redo always stay on screen.
+    BoxWithConstraints(modifier) {
+        val sliderHeight: Dp = ((maxHeight - SIDEBAR_FIXED_HEIGHT) / 2).coerceIn(MIN_SLIDER, MAX_SLIDER)
+        StudioSidebarContent(state, actions, sliderHeight)
+    }
+}
+
+@Composable
+private fun StudioSidebarContent(
+    state: StudioSidebarState,
+    actions: StudioSidebarActions,
+    sliderHeight: Dp,
+) {
     Surface(
         shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
         tonalElevation = 3.dp,
-        modifier = modifier,
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 10.dp),
@@ -247,6 +257,11 @@ fun StudioSidebar(
 }
 
 private const val MAX_BRUSH_SIZE = 512f
+
+/** The sidebar's padding, spacing, modify button, undo and redo; the two sliders get the rest. */
+private val SIDEBAR_FIXED_HEIGHT = 180.dp
+private val MIN_SLIDER = 72.dp
+private val MAX_SLIDER = 170.dp
 
 /** Square-root mapping gives fine control over small brushes, like Procreate's size slider. */
 internal fun sizeToSlider(size: Float): Float = sqrt(((size - 1f) / (MAX_BRUSH_SIZE - 1f)).coerceIn(0f, 1f))

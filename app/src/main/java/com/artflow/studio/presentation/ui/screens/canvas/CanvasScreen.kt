@@ -794,7 +794,6 @@ fun CanvasScreen(
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             if (!focusMode) {
                 StudioTopBar(
@@ -1201,6 +1200,8 @@ fun CanvasScreen(
                 // Phones: the panel rises over the canvas inside the editor window, below the top bar.
                 StudioBottomPanel(onDismiss = dismissPanel, content = panelContent)
             }
+            // Notices appear at the top centre, as in Procreate, so they never cover the panel or sidebar.
+            SnackbarHost(snackbarHostState, Modifier.align(Alignment.TopCenter).zIndex(8f))
             if (focusMode) {
                 FilledTonalIconButton(
                     onClick = {

@@ -276,6 +276,7 @@ class ArtworkWorkflowTest {
     private fun tapWhenEnabled(description: String) {
         val node = compose.onNodeWithContentDescription(description)
         compose.waitUntil(5_000) { runCatching { node.assertIsEnabled() }.isSuccess }
+        lastTapped = "$description at ${node.fetchSemanticsNode().boundsInWindow}"
         node.performClick()
     }
 
