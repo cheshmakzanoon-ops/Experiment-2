@@ -28,6 +28,7 @@ import com.artflow.studio.core.export.PsdCodec
 import com.artflow.studio.core.export.TiffCodec
 import com.artflow.studio.core.pixels.BlendModes
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.three.ObjExport
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.layer.Layer
@@ -124,6 +125,7 @@ class ArtworkExporter
                             ExportFormat.PSD -> buildPsd(prepared, layers, options, hasAdjustmentLayers)
                             ExportFormat.TIFF -> TiffCodec.write(flatten(prepared, options), options.dpi)
                             ExportFormat.LAYER_PNGS -> buildLayerZip(prepared, layers, projectName, options)
+                            ExportFormat.MODEL_OBJ -> buildModelZip(projectId, flatten(prepared, options), options)
                             else -> return@withContext Result.failure(
                                 ExportFailure(ExportError.UnsupportedFormat(options.format).message),
                             )
@@ -271,6 +273,28 @@ class ArtworkExporter
                     Result.failure(ExportFailure(ExportError.EncodingFailed(e.message ?: "unknown").message))
                 }
             }
+
+        /** The painted model: its OBJ with one material, the material, and the artwork as its texture. */
+        private suspend fun buildModelZip(
+            projectId: Long,
+            texture: PixelBuffer,
+            options: ExportOptions,
+        ): ByteArray {
+            val model = requireNotNull(storage.loadModel(projectId)) { "This artwork has no 3D model" }
+            val out = ByteArrayOutputStream()
+            ZipOutputStream(out).use { zip ->
+                zip.putNextEntry(ZipEntry(ObjExport.OBJ))
+                zip.write(ObjExport.withMaterial(model).toByteArray())
+                zip.closeEntry()
+                zip.putNextEntry(ZipEntry(ObjExport.MTL))
+                zip.write(ObjExport.material().toByteArray())
+                zip.closeEntry()
+                zip.putNextEntry(ZipEntry(ObjExport.TEXTURE))
+                zip.write(BitmapPixelBridge.toPngBytes(texture, options.dpi, options.outputProfile))
+                zip.closeEntry()
+            }
+            return out.toByteArray()
+        }
 
         /** Every page and bitmap is released even when rendering or writing fails. */
         private fun buildPdf(

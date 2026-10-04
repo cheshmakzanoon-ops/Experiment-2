@@ -27,6 +27,7 @@ enum class ExportFormat(
     TIFF("TIFF", "tif", "image/tiff"),
     LAYER_PNGS("PNG layers (zip)", "zip", "application/zip"),
     ARTFLOW("ArtFlow artwork (all layers and frames)", "artflow", "application/octet-stream"),
+    MODEL_OBJ("3D model (OBJ, material and texture)", "zip", "application/zip"),
     GIF("Animated GIF", "gif", "image/gif", requiresAnimation = true),
     MP4("MP4 video", "mp4", "video/mp4", requiresAnimation = true),
     APNG("Animated PNG", "png", "image/png", requiresAnimation = true),

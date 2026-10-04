@@ -1378,7 +1378,7 @@ class CanvasViewModel
                 ExportFormat.stillFormats() + ExportFormat.animationFormats()
             } else {
                 ExportFormat.stillFormats()
-            }
+            } + listOfNotNull(ExportFormat.MODEL_OBJ.takeIf { model.mesh.value != null })
 
         /** The selection, ready to be baked into a new layer or used by a filter. */
         fun activeSelection(): SelectionMask? = canvasRepository.selection()
