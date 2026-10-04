@@ -104,7 +104,7 @@ internal object StudioBrushesMore {
                 ),
             ),
             p(
-                "crayon",
+                "wax-crayon",
                 "Wax crayon",
                 DRAW,
                 "Waxy coverage that skips across the grain.",
@@ -127,8 +127,8 @@ internal object StudioBrushesMore {
                 ),
             ),
             p(
-                "palette-knife",
-                "Palette knife",
+                "knife-slab",
+                "Knife slab",
                 PAINT,
                 "Thick slabs of paint with hard edges and drag.",
                 BrushParams(size = 48f, roundness = 0.15f, rotation = 20f, wetMix = 0.55f, falloff = 0.15f, pressureToSize = 0.2f),
@@ -194,16 +194,16 @@ internal object StudioBrushesMore {
                 ),
             ),
             p(
-                "impasto",
-                "Impasto",
+                "loaded-impasto",
+                "Loaded impasto",
                 ART,
                 "Heavy loaded strokes with wet, pooled edges.",
                 BrushParams(size = 44f, wetMix = 0.45f, wetEdges = 0.6f, textureId = "bristle", textureScale = 1.6f, blendTexture = true),
             ),
             // Calligraphy
             p(
-                "brush-pen",
-                "Brush pen",
+                "spring-pen",
+                "Spring pen",
                 CALLI,
                 "Springy tip that swells with pressure and tapers away.",
                 BrushParams(
@@ -227,22 +227,22 @@ internal object StudioBrushesMore {
             // Airbrushing
             p(
                 "hard-air",
-                "Hard airbrush",
+                "Firm airbrush",
                 AIR,
                 "A firm-edged spray for crisp gradients.",
                 BrushParams(size = 70f, opacity = 0.6f, flow = 0.35f, buildUp = true, pressureToSize = 0.1f, pressureToOpacity = 0.7f),
             ),
             p(
                 "medium-air",
-                "Medium airbrush",
+                "Blending airbrush",
                 AIR,
                 "Soft enough to blend, firm enough to shape.",
                 BrushParams(size = 90f, opacity = 0.5f, flow = 0.2f, buildUp = true, pressureToOpacity = 0.8f, spacing = 0.06f),
             ),
             // Textures
             p(
-                "crosshatch",
-                "Cross hatch",
+                "hatch-weave",
+                "Hatch weave",
                 TEXTURE,
                 "Hatched shading in two directions.",
                 BrushParams(size = 46f, textureId = "hatch", textureRotation = 45f, blendTexture = true, opacity = 0.8f),
@@ -270,8 +270,8 @@ internal object StudioBrushesMore {
             ),
             // Charcoals
             p(
-                "compressed-charcoal",
-                "Compressed charcoal",
+                "charcoal-block",
+                "Charcoal block",
                 CHARCOAL,
                 "Deep, dense black with a dusty edge.",
                 BrushParams(
