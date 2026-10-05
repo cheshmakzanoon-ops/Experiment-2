@@ -251,3 +251,5 @@ jobs:
                       print(f"FAILED {case.get('classname')}.{case.get('name')}: {' | '.join(text[:4])[:600]}")
           PY
           grep -rhE 'FAILED|Process crashed|INSTRUMENTATION_FAILED' "${RUNNER_TEMP}/artflow-device" 2>/dev/null | head -20 || true
+          # The app's own crash, if any: the exception and the frames that explain it.
+          grep -h -A 40 'FATAL EXCEPTION' "${RUNNER_TEMP}"/artflow-device/*logcat*.txt 2>/dev/null | grep -E 'FATAL|Process: |Exception|Error|Caused by|\tat com\.artflow|at com\.artflow' | head -60 || true
