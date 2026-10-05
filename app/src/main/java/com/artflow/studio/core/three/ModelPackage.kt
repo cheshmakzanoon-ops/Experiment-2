@@ -23,8 +23,15 @@ object ModelPackage {
     fun read(bytes: ByteArray): Contents {
         require(bytes.size <= MAX_BYTES) { "This 3D model is too large" }
         if (GltfReader.isGlb(bytes) || isGltfText(bytes)) return gltf(bytes, emptyMap())
+        if (UsdReader.isUsdc(bytes)) return UsdReader.read(bytes).let { Contents(it.objText, it.texture) }
         if (!isZip(bytes)) return Contents(bytes.decodeToString())
         val files = unzip(bytes)
+        // A .usdz is a zip whose first USD file is the scene.
+        files.keys.firstOrNull { it.endsWith(".usdc") || it.endsWith(".usda") || it.endsWith(".usd") }?.let { name ->
+            val layer = requireNotNull(files[name])
+            require(UsdReader.isUsdc(layer)) { "This USDZ stores its scene as text USD, which is not supported yet" }
+            return UsdReader.read(layer, files).let { Contents(it.objText, it.texture) }
+        }
         files.keys.firstOrNull { it.endsWith(".obj") }?.let { name ->
             val objText = requireNotNull(files[name]).decodeToString()
             return Contents(objText, textureFor(objText, files))
