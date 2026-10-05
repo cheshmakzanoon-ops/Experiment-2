@@ -49,8 +49,10 @@ class RealProcreateFilesTest {
             val document = ProcreateReader.open(files, TestPng::decode)
             val layers = document.layers()
             val masks = layers.count { document.mask(it) != null }
-            val recomposited = recomposite(document)
-            val difference = document.composite()?.let { meanDifference(it, recomposited, document.background ?: WHITE) }
+            // Blending is per pixel, so compositing layers sampled on a grid gives the full composite's pixels on that grid.
+            val step = maxOf(1, maxOf(document.width, document.height) / GRID)
+            val recomposited = recomposite(document, step)
+            val difference = document.composite()?.let { meanDifference(subsample(it, step), recomposited, document.background ?: WHITE) }
             report.appendLine(
                 "${sample.name}: ${document.width}x${document.height} ${document.dpi} dpi, ${layers.size} layers, $masks masks, " +
                     "blend modes ${layers.map { it.blendMode }.distinct()}, calibration error " +
@@ -61,7 +63,10 @@ class RealProcreateFilesTest {
     }
 
     /** Composites the document the way the import lays it out: bottom first, groups as headers above their members. */
-    private fun recomposite(document: ProcreateReader.Document): PixelBuffer {
+    private fun recomposite(
+        document: ProcreateReader.Document,
+        step: Int,
+    ): PixelBuffer {
         val inputs = mutableListOf<Compositor.LayerInput>()
         var next = 0L
 
@@ -91,21 +96,35 @@ class RealProcreateFilesTest {
                         )
                     val mask =
                         document.mask(node)?.let { coverage ->
-                            PixelBuffer(coverage.width, coverage.height).also { grey ->
-                                coverage.coverage.forEachIndexed { index, value ->
-                                    grey.pixels[index] = OPAQUE or ((value.toInt() and 0xFF) * GREY)
-                                }
+                            val grey = PixelBuffer(coverage.width, coverage.height)
+                            coverage.coverage.forEachIndexed { index, value ->
+                                grey.pixels[index] =
+                                    OPAQUE or ((value.toInt() and 0xFF) * GREY)
                             }
+                            subsample(grey, step)
                         }
-                    inputs += Compositor.LayerInput(layer, document.pixels(node), mask = mask)
+                    inputs += Compositor.LayerInput(layer, subsample(document.pixels(node), step), mask = mask)
                 }
             }
         }
         document.nodes.asReversed().forEach { add(it, null) }
-        return Compositor().composite(inputs, document.width, document.height, document.background ?: 0)
+        val first = inputs.firstNotNullOfOrNull { it.raster } ?: subsample(PixelBuffer(document.width, document.height), step)
+        return Compositor().composite(inputs, first.width, first.height, document.background ?: 0)
     }
 
-    /** Mean difference per channel (0-255) of the two images over [background], on a sampling grid. */
+    /** Every [step]th pixel of every [step]th row. */
+    private fun subsample(
+        buffer: PixelBuffer,
+        step: Int,
+    ): PixelBuffer {
+        val out = PixelBuffer((buffer.width + step - 1) / step, (buffer.height + step - 1) / step)
+        for (y in 0 until out.height) {
+            for (x in 0 until out.width) out.pixels[y * out.width + x] = buffer.pixels[y * step * buffer.width + x * step]
+        }
+        return out
+    }
+
+    /** Mean difference per channel (0-255) of the two images over [background]. */
     private fun meanDifference(
         expected: PixelBuffer,
         actual: PixelBuffer,
@@ -113,9 +132,8 @@ class RealProcreateFilesTest {
     ): Double {
         var total = 0L
         var count = 0
-        val step = maxOf(1, minOf(expected.width, expected.height) / SAMPLES)
-        for (y in 0 until minOf(expected.height, actual.height) step step) {
-            for (x in 0 until minOf(expected.width, actual.width) step step) {
+        for (y in 0 until minOf(expected.height, actual.height)) {
+            for (x in 0 until minOf(expected.width, actual.width)) {
                 val a = over(expected.pixels[y * expected.width + x], background)
                 val b = over(actual.pixels[y * actual.width + x], background)
                 for (shift in intArrayOf(16, 8, 0)) total += abs(((a shr shift) and 0xFF) - ((b shr shift) and 0xFF))
@@ -140,7 +158,7 @@ class RealProcreateFilesTest {
 
     private companion object {
         const val MAX_CALIBRATION_ERROR = 25.0
-        const val SAMPLES = 256
+        const val GRID = 512
         const val WHITE = 0xFFFFFFFF.toInt()
         const val OPAQUE = 0xFF shl 24
         const val GREY = 0x010101
