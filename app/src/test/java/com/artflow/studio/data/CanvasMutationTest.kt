@@ -133,6 +133,22 @@ class CanvasMutationTest {
         }
 
     @Test
+    fun privateLayersStayInTheArtworkButOutOfTheTimeLapse() =
+        runTest {
+            val base = open()
+            paint(base, red)
+            val photo = repository.addLayer("Photo").id
+            paint(photo, blue)
+            assertTrue(repository.setLayerPrivate(photo, true))
+            assertTrue(repository.getAllLayers().first { it.id == photo }.isPrivate)
+            assertEquals(blue, requireNotNull(repository.compositeBuffer()).pixels.first())
+            assertEquals(red, requireNotNull(repository.compositeWithoutPrivateLayers()).pixels.first())
+            // Undo brings the photo back into the recording.
+            assertTrue(repository.undo())
+            assertEquals(blue, requireNotNull(repository.compositeWithoutPrivateLayers()).pixels.first())
+        }
+
+    @Test
     fun symmetryMirrorsOnlyOnAssistedLayers() =
         runTest {
             val layer = open()

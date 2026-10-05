@@ -276,7 +276,10 @@ fun CanvasScreen(
         }
     val context = androidx.compose.ui.platform.LocalContext.current
     // Picked or dropped pictures become a new layer.
+    var insertPrivately by remember { mutableStateOf(false) }
     val insertImageFrom = { uri: android.net.Uri ->
+        val private = insertPrivately
+        insertPrivately = false
         scope.launch {
             val image =
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -285,7 +288,11 @@ fun CanvasScreen(
                             .decodeUri(context.contentResolver, uri)
                     }.getOrNull()
                 }
-            if (image == null) viewModel.notify("That image could not be opened") else viewModel.insertImageLayer(image)
+            when {
+                image == null -> viewModel.notify("That image could not be opened")
+                private -> viewModel.insertPrivateImageLayer(image)
+                else -> viewModel.insertImageLayer(image)
+            }
         }
         Unit
     }
@@ -350,6 +357,10 @@ fun CanvasScreen(
         } catch (missing: ActivityNotFoundException) {
             viewModel.notify("No image picker is available on this device")
         }
+    }
+    val insertPrivatePhoto = {
+        insertPrivately = true
+        insertPhoto()
     }
     val importReference = {
         canvasView?.cancelActiveGesture()
@@ -604,6 +615,7 @@ fun CanvasScreen(
                             onReference = viewModel::setLayerReference,
                             onFillReference = viewModel::setLayerFillReference,
                             onDrawingAssist = viewModel::setLayerDrawingAssist,
+                            onPrivate = viewModel::setLayerPrivate,
                             onMask = { viewModel.createLayerMask(LayerMaskSource.REVEAL_ALL) },
                             onCombineDown = viewModel::groupWithLayerBelow,
                             onEditText = { layer ->
@@ -804,6 +816,7 @@ fun CanvasScreen(
                         AddActions(
                             onInsertFile = importPsd,
                             onInsertPhoto = insertPhoto,
+                            onInsertPrivatePhoto = insertPrivatePhoto,
                             onAddText = {
                                 viewModel.setTool(ToolType.TEXT)
                                 panel = EditorPanel.TEXT

@@ -26,6 +26,7 @@ data class AddActions(
     val onTakePhoto: () -> Unit = {},
     val onCutAndPaste: () -> Unit = {},
     val onDuplicate: () -> Unit = {},
+    val onInsertPrivatePhoto: () -> Unit = {},
 )
 
 data class CanvasActions(
@@ -166,6 +167,7 @@ private fun AddTab(
 ) {
     ActionRow("Insert a file (PSD)", add.onInsertFile)
     ActionRow("Insert a photo", add.onInsertPhoto)
+    ActionRow("Insert a private photo", add.onInsertPrivatePhoto)
     ActionRow("Take a photo", add.onTakePhoto)
     ActionRow("Add text", add.onAddText)
     HorizontalDivider()

@@ -240,6 +240,7 @@ private fun LayerStatus(layer: Layer) {
             if (layer.isFillReference) add("reference")
             if (layer.drawingAssist) add("assisted")
             if (layer.isReference) add("not exported")
+            if (layer.isPrivate) add("private")
             if (layer.textContent != null) add("text")
             if (layer.hasMask()) add("mask")
         }
@@ -300,6 +301,10 @@ private fun LayerMenu(
             DropdownMenuItem(
                 text = { Text(if (layer.isReference) "Exclude from export ✓" else "Exclude from export") },
                 onClick = item { options.onReference(layer.id, !layer.isReference) },
+            )
+            DropdownMenuItem(
+                text = { Text(if (layer.isPrivate) "Private (not in time-lapse) ✓" else "Private (not in time-lapse)") },
+                onClick = item { options.onPrivate(layer.id, !layer.isPrivate) },
             )
         }
         DropdownMenuItem(text = { Text("Blend mode") }, onClick = item(onBlendMode))

@@ -343,7 +343,8 @@ class CanvasViewModel
                         // Playback only switches frames; it is not an edit worth recording.
                         if (projectId == 0L || revision == timelapseRevision || playbackActive) return@collect
                         try {
-                            val composite = canvasRepository.compositeBuffer() ?: return@collect
+                            // Private layers (Insert a private photo) are left out of the recording.
+                            val composite = canvasRepository.compositeWithoutPrivateLayers() ?: return@collect
                             timelapse.capture(projectId, composite, _settings.value.timelapseMaxSide)
                             timelapseRevision = revision
                         } catch (cancelled: CancellationException) {
@@ -762,6 +763,19 @@ class CanvasViewModel
 
         /** Adds [image] as a new layer, centred and scaled down to fit the canvas if needed. */
         fun insertImageLayer(image: PixelBuffer) = layerOp { LayerImports.insertImage(canvasRepository, image) }
+
+        /** Procreate's Insert a private photo: a photo layer the time-lapse never shows. */
+        fun insertPrivateImageLayer(image: PixelBuffer) =
+            layerOp {
+                val id = LayerImports.insertImage(canvasRepository, image)
+                canvasRepository.setLayerPrivate(id, true)
+                notify("Private photo added: it is part of the artwork but stays out of the time-lapse")
+            }
+
+        fun setLayerPrivate(
+            layerId: Long,
+            isPrivate: Boolean,
+        ) = layerOp { canvasRepository.setLayerPrivate(layerId, isPrivate) }
 
         /** Cut, copy, paste, clear and fill (Copy & Paste menu and layer options). */
         val clipboard = ClipboardController(canvasRepository, ::layerOp)

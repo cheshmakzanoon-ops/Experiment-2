@@ -55,6 +55,8 @@ data class Layer(
     val isFillReference: Boolean = false,
     /** Procreate's Drawing Assist: symmetry and guide snapping apply to strokes on this layer. */
     val drawingAssist: Boolean = false,
+    /** Procreate's private photo: part of the artwork, but left out of the time-lapse recording. */
+    val isPrivate: Boolean = false,
     /** Set for an editable text layer; null once the text has been turned into pixels. */
     val textContent: com.artflow.studio.core.text.TextLayerContent? = null,
     /** Runtime mask presence is independent of whether its immutable PNG has been saved yet. */
@@ -139,6 +141,7 @@ data class Layer(
             isGroup = this.isGroup,
             isFillReference = this.isFillReference,
             drawingAssist = this.drawingAssist,
+            isPrivate = this.isPrivate,
             hasInMemoryMask = hasInMemoryMask,
         )
 }

@@ -398,6 +398,7 @@ class CanvasRepositoryImpl
                     parentGroupId = layer.parentGroupId
                     isFillReference = layer.isFillReference
                     drawingAssist = layer.drawingAssist
+                    isPrivate = layer.isPrivate
                 }
             data.raster = loadRaster(projectId, layer.rasterFile)
             data.text = layer.textContent
@@ -1315,6 +1316,20 @@ class CanvasRepositoryImpl
                 true
             }
 
+        override suspend fun setLayerPrivate(
+            layerId: Long,
+            isPrivate: Boolean,
+        ): Boolean =
+            withState {
+                val layer = layerById(layerId)?.takeIf { !it.isGroup } ?: return@withState false
+                if (layer.isPrivate == isPrivate) return@withState true
+                pushUndo()
+                layer.isPrivate = isPrivate
+                dirty = true
+                emit(CanvasInvalidationEvent.LayersChanged)
+                true
+            }
+
         override suspend fun setLayerFillReference(
             layerId: Long,
             enabled: Boolean,
@@ -2156,11 +2171,21 @@ class CanvasRepositoryImpl
         override suspend fun compositeBuffer(
             includeHidden: Boolean,
             applyAdjustments: Boolean,
+        ): PixelBuffer? = composite(includeHidden, applyAdjustments, includePrivate = true)
+
+        override suspend fun compositeWithoutPrivateLayers(): PixelBuffer? =
+            composite(includeHidden = false, applyAdjustments = true, includePrivate = false)
+
+        private suspend fun composite(
+            includeHidden: Boolean,
+            applyAdjustments: Boolean,
+            includePrivate: Boolean,
         ): PixelBuffer? {
             val snapshot =
                 withState {
                     markRastersShared()
                     withPinnedFrames(activeFrame, currentLayers(), frameList.map { it.layers }, animationSettings)
+                        .filter { includePrivate || !it.isPrivate }
                         .map { it.snapshotCopy() } to canvasSnapshot()
                 }
             return withContext(Dispatchers.Default) { renderFrozen(snapshot.first, snapshot.second, includeHidden, applyAdjustments) }
@@ -2960,6 +2985,7 @@ class CanvasRepositoryImpl
             var isGroup: Boolean = false
             var isFillReference: Boolean = false
             var drawingAssist: Boolean = false
+            var isPrivate: Boolean = false
             var parentGroupId: Long? = null
 
             /** Editable text; set it after [raster], because any new pixels turn the text into pixels. */
@@ -3016,6 +3042,7 @@ class CanvasRepositoryImpl
                     parentGroupId = this@LayerData.parentGroupId
                     isFillReference = this@LayerData.isFillReference
                     drawingAssist = this@LayerData.drawingAssist
+                    isPrivate = this@LayerData.isPrivate
                 }.also {
                     it.raster = raster
                     it.text = text
@@ -3066,6 +3093,7 @@ class CanvasRepositoryImpl
                     parentGroupId = this@LayerData.parentGroupId
                     isFillReference = this@LayerData.isFillReference
                     drawingAssist = this@LayerData.drawingAssist
+                    isPrivate = this@LayerData.isPrivate
                 }.also { fresh ->
                     fresh.raster = raster
                     fresh.text = text
@@ -3100,6 +3128,7 @@ class CanvasRepositoryImpl
                     isGroup = isGroup,
                     isFillReference = isFillReference,
                     drawingAssist = drawingAssist,
+                    isPrivate = isPrivate,
                     parentGroupId = parentGroupId,
                     isInternal = isInternal,
                     textContent = text,

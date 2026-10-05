@@ -12,11 +12,11 @@ import kotlinx.coroutines.withContext
 
 /** Brings outside pictures, Photoshop and Procreate documents into the open canvas as new layers. */
 object LayerImports {
-    /** Adds [image] as a new layer, centred and scaled down to fit the canvas if needed. */
+    /** Adds [image] as a new layer, centred and scaled down to fit the canvas if needed; returns its id. */
     suspend fun insertImage(
         repository: CanvasRepository,
         image: PixelBuffer,
-    ) {
+    ): Long {
         val size = repository.getCanvasSize()
         val fit = minOf(1f, size.width.toFloat() / image.width, size.height.toFloat() / image.height)
         val scaled =
@@ -35,6 +35,7 @@ object LayerImports {
                 target.drawInto(placed, (size.width - placed.width) / 2, (size.height - placed.height) / 2)
             }
         check(drawn) { "The photo could not be placed on the new layer" }
+        return layer.id
     }
 
     /**

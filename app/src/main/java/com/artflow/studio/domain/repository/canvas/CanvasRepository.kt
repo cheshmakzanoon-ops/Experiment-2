@@ -356,6 +356,12 @@ interface CanvasRepository {
 
     fun isDrawingAssisted(layerId: Long): Boolean = true
 
+    /** Marks a layer private: it stays in the artwork but is left out of the time-lapse. */
+    suspend fun setLayerPrivate(
+        layerId: Long,
+        isPrivate: Boolean,
+    ): Boolean = false
+
     /** Makes a layer the fill reference whose lines bound ColorDrop on other layers (one at a time). */
     suspend fun setLayerFillReference(
         layerId: Long,
@@ -579,6 +585,9 @@ interface CanvasRepository {
 
     /** Flattens the document with the normal visible-layer/adjustment policy. */
     suspend fun compositeBuffer(): PixelBuffer? = compositeBuffer(includeHidden = false, applyAdjustments = true)
+
+    /** The artwork as the time-lapse records it: private layers left out. */
+    suspend fun compositeWithoutPrivateLayers(): PixelBuffer? = compositeBuffer()
 
     /** Flattens the document with an explicit compositing policy. Callers own the returned buffer. */
     suspend fun compositeBuffer(
