@@ -359,7 +359,12 @@ private fun rememberModelImport(
                                 ?: (contents.objText to contents.texture?.let(BitmapPixelBridge::fromEncodedBytes)?.let(::fittedTexture))
                         }
                     }
-                read.onFailure { snackbarHostState.showSnackbar(it.message ?: "That 3D model could not be read") }
+                read.onFailure { failure ->
+                    // Our own checks explain themselves; anything else means a damaged or unusual file.
+                    val explained =
+                        (failure is IllegalArgumentException || failure is IllegalStateException) && failure !is NumberFormatException
+                    snackbarHostState.showSnackbar(failure.message?.takeIf { explained } ?: "That 3D model could not be read")
+                }
                 val (model, texture) = read.getOrNull() ?: return@launch
                 val width = texture?.width ?: MODEL_TEXTURE
                 val height = texture?.height ?: MODEL_TEXTURE

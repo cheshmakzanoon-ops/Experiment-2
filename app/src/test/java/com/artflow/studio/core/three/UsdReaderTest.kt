@@ -3,6 +3,7 @@ package com.artflow.studio.core.three
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.zip.ZipInputStream
 
@@ -62,5 +63,14 @@ class UsdReaderTest {
     fun quaternionOrientMatchesUsd() {
         val contents = ModelPackage.read(fixture("orient.usdc"))
         assertNear(listOf(0.42093f, 1.31927f, -0.80302f), records(contents.objText, "v")[0])
+    }
+
+    @Test
+    fun aTruncatedFileIsRefused() {
+        val bytes = fixture("ops.usdc")
+        for (length in listOf(40, bytes.size / 2, bytes.size - 9)) {
+            val failure = runCatching { ModelPackage.read(bytes.copyOf(length)) }.exceptionOrNull()
+            assertTrue("length $length was read", failure != null)
+        }
     }
 }
