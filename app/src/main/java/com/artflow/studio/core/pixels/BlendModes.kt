@@ -216,6 +216,39 @@ object BlendModes {
             }
             BlendMode.COLOR -> setLuminosity(csR, csG, csB, luminosity(cbR, cbG, cbB))
             BlendMode.LUMINOSITY -> setLuminosity(cbR, cbG, cbB, luminosity(csR, csG, csB))
+            BlendMode.DARKER_COLOR ->
+                if (luminosity(csR, csG, csB) < luminosity(cbR, cbG, cbB)) Triple(csR, csG, csB) else Triple(cbR, cbG, cbB)
+            BlendMode.LIGHTER_COLOR ->
+                if (luminosity(csR, csG, csB) > luminosity(cbR, cbG, cbB)) Triple(csR, csG, csB) else Triple(cbR, cbG, cbB)
+            else -> Triple(extended(cbR, csR, mode), extended(cbG, csG, mode), extended(cbB, csB, mode))
+        }
+
+    /** The separable modes beyond the W3C set, as image editors define them. */
+    private fun extended(
+        base: Float,
+        source: Float,
+        mode: BlendMode,
+    ): Float =
+        when (mode) {
+            BlendMode.LINEAR_BURN -> max(0f, base + source - 1f)
+            BlendMode.ADD -> min(1f, base + source)
+            BlendMode.VIVID_LIGHT -> if (source <= 0.5f) burn(base, 2f * source) else dodge(base, 2f * source - 1f)
+            BlendMode.LINEAR_LIGHT -> (base + 2f * source - 1f).coerceIn(0f, 1f)
+            BlendMode.PIN_LIGHT -> if (source <= 0.5f) min(base, 2f * source) else max(base, 2f * source - 1f)
+            BlendMode.HARD_MIX -> if (base + source >= 1f) 1f else 0f
+            BlendMode.SUBTRACT -> max(0f, base - source)
+            BlendMode.DIVIDE -> divide(base, source)
+            else -> source
+        }
+
+    private fun divide(
+        base: Float,
+        source: Float,
+    ): Float =
+        when {
+            base <= 0f -> 0f
+            source <= 0f -> 1f
+            else -> min(1f, base / source)
         }
 
     private fun screen(
@@ -379,6 +412,16 @@ object BlendModes {
             BlendMode.SATURATION -> "Source saturation over backdrop hue and luminosity"
             BlendMode.COLOR -> "Source hue and saturation over backdrop luminosity"
             BlendMode.LUMINOSITY -> "Source luminosity over backdrop colour"
+            BlendMode.LINEAR_BURN -> "Darkens by adding the layers and subtracting white"
+            BlendMode.DARKER_COLOR -> "Keeps whichever whole colour is darker"
+            BlendMode.ADD -> "Brightens by adding the layers (linear dodge)"
+            BlendMode.LIGHTER_COLOR -> "Keeps whichever whole colour is lighter"
+            BlendMode.VIVID_LIGHT -> "Burns or dodges by the source, for strong contrast"
+            BlendMode.LINEAR_LIGHT -> "Darkens or brightens linearly by the source"
+            BlendMode.PIN_LIGHT -> "Replaces the backdrop where the source is darker or lighter"
+            BlendMode.HARD_MIX -> "Posterises each channel to full on or off"
+            BlendMode.SUBTRACT -> "Subtracts the source from the backdrop"
+            BlendMode.DIVIDE -> "Divides the backdrop by the source"
             BlendMode.PASS_THROUGH -> "Group mode: blends with the layers below the group"
         }
 

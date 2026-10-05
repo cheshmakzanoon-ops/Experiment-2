@@ -960,6 +960,16 @@ object PsdCodec {
             BlendMode.SATURATION -> "sat "
             BlendMode.COLOR -> "colr"
             BlendMode.LUMINOSITY -> "lum "
+            BlendMode.LINEAR_BURN -> "lbrn"
+            BlendMode.DARKER_COLOR -> "dkCl"
+            BlendMode.ADD -> "lddg"
+            BlendMode.LIGHTER_COLOR -> "lgCl"
+            BlendMode.VIVID_LIGHT -> "vLit"
+            BlendMode.LINEAR_LIGHT -> "lLit"
+            BlendMode.PIN_LIGHT -> "pLit"
+            BlendMode.HARD_MIX -> "hMix"
+            BlendMode.SUBTRACT -> "fsub"
+            BlendMode.DIVIDE -> "fdiv"
         }
 
     /** Inverse of [blendModeKey]; unknown keys fall back to normal. */
@@ -980,6 +990,16 @@ object PsdCodec {
             "sat " -> BlendMode.SATURATION
             "colr" -> BlendMode.COLOR
             "lum " -> BlendMode.LUMINOSITY
+            "lbrn" -> BlendMode.LINEAR_BURN
+            "dkCl" -> BlendMode.DARKER_COLOR
+            "lddg" -> BlendMode.ADD
+            "lgCl" -> BlendMode.LIGHTER_COLOR
+            "vLit" -> BlendMode.VIVID_LIGHT
+            "lLit" -> BlendMode.LINEAR_LIGHT
+            "pLit" -> BlendMode.PIN_LIGHT
+            "hMix" -> BlendMode.HARD_MIX
+            "fsub" -> BlendMode.SUBTRACT
+            "fdiv" -> BlendMode.DIVIDE
             else -> BlendMode.NORMAL
         }
 
