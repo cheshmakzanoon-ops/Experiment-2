@@ -3,7 +3,6 @@ package com.artflow.studio.data.repository.canvas
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.render.StrokeReach
-import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import kotlin.math.ceil

@@ -12,6 +12,7 @@ import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.render.Compositor
 import com.artflow.studio.core.render.LayerStrokeRenderer
 import com.artflow.studio.core.render.StrokeRasterizer
+import com.artflow.studio.core.render.TileCache
 import com.artflow.studio.core.symmetry.SymmetryEngine
 import com.artflow.studio.core.text.TextLayerContent
 import com.artflow.studio.data.local.CanvasDocument
@@ -2144,6 +2145,36 @@ class CanvasRepositoryImpl
         private val previewCache = PreviewCache()
         private val previewMutex = Mutex()
 
+        /** The layers below the one being painted, composited once per area while a stroke goes on. */
+        private val belowCache = TileCache()
+
+        private class PreviewRequest(
+            val snapshot: PreviewSnapshot,
+            val key: PreviewCache.Key?,
+            val damage: PreviewCache.Damage?,
+            val below: List<Any?>?,
+        )
+
+        /**
+         * Identifies the layers below the one a single stroke in progress paints, or null when the
+         * preview cannot keep them aside: several strokes, mask strokes, a stroke inside a group or
+         * clipping to the layer below, or pinned animation frames. Starts with the painted layer's id.
+         */
+        private fun belowKey(): List<Any?>? {
+            val stroke = activeStrokes.keys.singleOrNull() ?: return null
+            if ((strokeDestinations[stroke] ?: StrokeDestination.LAYER) != StrokeDestination.LAYER) return null
+            val layerId = strokeLayerIds[stroke] ?: return null
+            val layers = currentLayers()
+            val index = layers.indexOfFirst { it.id == layerId }
+            val layer = layers.getOrNull(index) ?: return null
+            if (layer.parentGroupId != null || layer.isClippingMask) return null
+            if (withPinnedFrames(activeFrame, layers, frameList.map { it.layers }, animationSettings).size != layers.size) return null
+
+            fun id(value: Any?) = System.identityHashCode(value)
+            return listOf(layerId, canvasWidth, canvasHeight, id(layers)) +
+                layers.take(index).map { listOf(id(it), id(it.raster), id(it.mask), it.strokes.size) }
+        }
+
         private fun takePreviewSnapshot(): PreviewSnapshot {
             markRastersShared()
             val current =
@@ -2220,12 +2251,15 @@ class CanvasRepositoryImpl
 
         override suspend fun compositePreviewFrame(): CanvasRepository.PreviewFrame? =
             previewMutex.withLock {
-                val (snapshot, key, damage) =
+                val request =
                     withState {
                         val damage = previewDamage
                         previewDamage = PreviewCache.Damage.NONE
-                        Triple(takePreviewSnapshot(), previewKey(), damage)
+                        PreviewRequest(takePreviewSnapshot(), previewKey(), damage, belowKey())
                     }
+                val snapshot = request.snapshot
+                val key = request.key
+                val damage = request.damage
                 withContext(Dispatchers.Default) {
                     val drawn =
                         snapshot.strokes.flatMap { stroke ->
@@ -2233,8 +2267,16 @@ class CanvasRepositoryImpl
                             val symmetry = symmetryFor(layer, snapshot.symmetry)
                             SymmetryEngine.mirrorStroke(stroke, snapshot.document.width, snapshot.document.height, symmetry)
                         }
+                    // Unchanged document and a local preview: layers below the stroke come from the cache.
+                    val keepBelow = key != null && damage == PreviewCache.Damage.NONE
                     previewCache.frame(key, damage, drawn, snapshot.document.width, snapshot.document.height) { region ->
-                        renderPreview(if (region == null) snapshot else cropPreview(snapshot, region))
+                        val below = request.below
+                        if (region != null && below != null && keepBelow) {
+                            renderOverBelow(snapshot, region, below)
+                        } else {
+                            belowCache.reset()
+                            renderPreview(if (region == null) snapshot else cropPreview(snapshot, region))
+                        }
                     }
                 }
             }
@@ -2253,6 +2295,52 @@ class CanvasRepositoryImpl
                 transparentBackground = true,
                 origin = region,
             )
+        }
+
+        /**
+         * [renderPreview] for [region], starting from the cached composite of the layers below the
+         * painted one (first in [below]) and compositing only that layer and those above it.
+         */
+        private suspend fun renderOverBelow(
+            snapshot: PreviewSnapshot,
+            region: IntBounds,
+            below: List<Any?>,
+        ): PixelBuffer {
+            val split = snapshot.layers.indexOfFirst { it.id == below.first() }
+            if (split < 0) {
+                belowCache.reset()
+                return renderPreview(cropPreview(snapshot, region))
+            }
+            val document = snapshot.document
+            val target =
+                belowCache.read(below, document.width, document.height, region) { area ->
+                    val lower = cropPreview(snapshot.copy(layers = snapshot.layers.subList(0, split), strokes = emptyList()), area)
+                    renderFrozen(
+                        lower.layers,
+                        document.copy(width = area.width, height = area.height),
+                        transparentBackground = true,
+                        origin = area,
+                    )
+                }
+            val upper = cropPreview(snapshot.copy(layers = snapshot.layers.subList(split, snapshot.layers.size)), region)
+            val strokesByLayer = upper.strokes.groupBy { it.layerId }
+            for (layer in upper.layers) {
+                coroutineContext.ensureActive()
+                val active = strokesByLayer[layer.id] ?: continue
+                paintPreviewStrokes(layer, active, upper)
+            }
+            val compositor = Compositor(StrokeRasterizer(region.left, region.top))
+            try {
+                compositor.compositeOnto(
+                    target,
+                    upper.layers.mapIndexed { index, layer ->
+                        Compositor.LayerInput(layer.toDomain(split + index), layer.raster, layer.strokes.toList(), layer.mask)
+                    },
+                )
+            } finally {
+                compositor.release()
+            }
+            return target
         }
 
         /** The same preview limited to [region]: layers hold cropped pixels and shifted strokes. */
@@ -2405,10 +2493,7 @@ class CanvasRepositoryImpl
             val localCompositor = Compositor(StrokeRasterizer(origin?.left ?: 0, origin?.top ?: 0))
             return try {
                 localCompositor.composite(
-                    layers.mapIndexed {
-                        index,
-                        layer,
-                        ->
+                    layers.mapIndexed { index, layer ->
                         Compositor.LayerInput(layer.toDomain(index), layer.raster, layer.strokes.toList(), layer.mask)
                     },
                     document.width,
@@ -2709,6 +2794,7 @@ class CanvasRepositoryImpl
         }
 
         override fun dispose() {
+            belowCache.release()
             pendingSelection = null
             editRevision++
             compositor.release()

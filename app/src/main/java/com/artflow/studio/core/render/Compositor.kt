@@ -91,6 +91,20 @@ class Compositor(
         }
     }
 
+    /**
+     * Continues compositing [inputs] (bottom first) on top of [target], which already holds the
+     * stack below them, exactly as [composite] would have reached that point. [inputs] must not
+     * start with a clipping layer or split a group.
+     */
+    fun compositeOnto(
+        target: PixelBuffer,
+        inputs: List<LayerInput>,
+        options: Options = Options(),
+    ) {
+        compositeEntries(target, LayerGroups.plan(inputs), options)
+        options.selection?.let { selection -> applySelection(target, selection) }
+    }
+
     /** Compositing body of [composite], factored out so the pool guard stays a plain [finally]. */
     private fun compositeInto(
         result: PixelBuffer,
