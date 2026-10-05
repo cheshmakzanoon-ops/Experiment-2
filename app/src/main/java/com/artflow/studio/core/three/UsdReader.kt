@@ -25,14 +25,24 @@ object UsdReader {
         val out = StringBuilder()
         var vertices = 0
         var triangles = 0
+        val materials = LinkedHashSet<String>()
         for (mesh in scene.meshes()) {
+            // Each mesh's faces carry its bound material, so models with several can share one artwork.
+            val material = scene.boundMaterial(mesh) ?: "unassigned"
+            materials += material
+            out.append("usemtl ").append(material).append('\n')
             val added = scene.writeMesh(mesh, out, vertices)
             vertices += added.first
             triangles += added.second
             require(triangles <= ObjParser.MAX_TRIANGLES) { "This model has too many triangles" }
         }
         require(triangles > 0) { "This model has no textured triangles (UVs) to paint on" }
-        return GltfReader.Result(out.toString(), scene.diffuseTexture()?.let { files[baseName(it)] })
+        val textures =
+            materials
+                .mapNotNull { material ->
+                    scene.diffuseTexture(material)?.let { files[baseName(it)] }?.let { material to it }
+                }.toMap()
+        return GltfReader.Result(out.toString(), scene.diffuseTexture(null)?.let { files[baseName(it)] }, textures)
     }
 
     private fun baseName(path: String): String =
@@ -217,19 +227,35 @@ object UsdReader {
             }
         }
 
+        /** The material bound to [prim] or its nearest ancestor with a binding. */
+        fun boundMaterial(prim: String): String? {
+            var path = prim
+            while (path.isNotEmpty() && path != "/") {
+                specs["$path.material:binding"]
+                    ?.get("targetPaths")
+                    ?.let(crate::paths)
+                    ?.firstOrNull()
+                    ?.let { return it }
+                path = path.substringBeforeLast('/')
+            }
+            return null
+        }
+
         /**
-         * The image of the texture feeding a preview surface's diffuse colour, or failing that the
-         * first texture whose name suggests colour, or the first texture at all.
+         * The image of the texture feeding a preview surface's diffuse colour within [material]
+         * (anywhere when null), or failing that the first texture whose name suggests colour, or
+         * the first texture at all.
          */
-        fun diffuseTexture(): String? {
+        fun diffuseTexture(material: String?): String? {
+            fun inside(path: String) = material == null || path.startsWith("$material/")
             val textures =
                 specs.keys
-                    .filter { !it.contains('.') && crate.token(value(it, "info:id")) == "UsdUVTexture" }
+                    .filter { !it.contains('.') && inside(it) && crate.token(value(it, "info:id")) == "UsdUVTexture" }
                     .associateWith { prim -> value(prim, "inputs:file")?.let(crate::assetPath) }
                     .filterValues { it != null }
             val connected =
                 specs.entries
-                    .filter { (path, _) -> path.endsWith(".inputs:diffuseColor") }
+                    .filter { (path, _) -> path.endsWith(".inputs:diffuseColor") && inside(path) }
                     .flatMap { (_, fields) -> fields["connectionPaths"]?.let(crate::paths).orEmpty() }
                     .map { it.substringBefore('.') }
             val chosen =

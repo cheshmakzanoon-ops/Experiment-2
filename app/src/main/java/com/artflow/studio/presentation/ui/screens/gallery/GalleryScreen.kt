@@ -33,6 +33,7 @@ import com.artflow.studio.core.export.PsdCodec
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.three.ModelPackage
 import com.artflow.studio.core.three.ObjParser
+import com.artflow.studio.core.three.TextureAtlas
 import com.artflow.studio.data.export.PendingImports
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.Project
@@ -342,7 +343,20 @@ private fun rememberModelImport(
                                 )
                             val contents = ModelPackage.read(bytes)
                             ObjParser.parse(contents.objText)
-                            contents.objText to contents.texture?.let(BitmapPixelBridge::fromEncodedBytes)?.let(::fittedTexture)
+                            // Several textured materials share one artwork, each in its own cell.
+                            val decoded =
+                                contents.textures
+                                    .mapNotNull { (name, image) ->
+                                        BitmapPixelBridge.fromEncodedBytes(image)?.let {
+                                            name to
+                                                it
+                                        }
+                                    }.toMap()
+                            TextureAtlas.pack(contents.objText, decoded, MAX_MODEL_TEXTURE)?.takeIf { decoded.isNotEmpty() }?.let {
+                                it.objText to
+                                    it.image
+                            }
+                                ?: (contents.objText to contents.texture?.let(BitmapPixelBridge::fromEncodedBytes)?.let(::fittedTexture))
                         }
                     }
                 read.onFailure { snackbarHostState.showSnackbar(it.message ?: "That 3D model could not be read") }

@@ -18,23 +18,26 @@ object ModelPackage {
         val objText: String,
         /** Encoded image bytes of the model's texture, if the package had one. */
         val texture: ByteArray? = null,
+        /** Each material's texture by the name its faces use (`usemtl`), for models with several. */
+        val textures: Map<String, ByteArray> = emptyMap(),
     )
 
     fun read(bytes: ByteArray): Contents {
         require(bytes.size <= MAX_BYTES) { "This 3D model is too large" }
         if (GltfReader.isGlb(bytes) || isGltfText(bytes)) return gltf(bytes, emptyMap())
-        if (UsdReader.isUsdc(bytes)) return UsdReader.read(bytes).let { Contents(it.objText, it.texture) }
+        if (UsdReader.isUsdc(bytes)) return contents(UsdReader.read(bytes))
         if (!isZip(bytes)) return Contents(bytes.decodeToString())
         val files = unzip(bytes)
         // A .usdz is a zip whose first USD file is the scene.
         files.keys.firstOrNull { it.endsWith(".usdc") || it.endsWith(".usda") || it.endsWith(".usd") }?.let { name ->
             val layer = requireNotNull(files[name])
             require(UsdReader.isUsdc(layer)) { "This USDZ stores its scene as text USD, which is not supported yet" }
-            return UsdReader.read(layer, files).let { Contents(it.objText, it.texture) }
+            return contents(UsdReader.read(layer, files))
         }
         files.keys.firstOrNull { it.endsWith(".obj") }?.let { name ->
             val objText = requireNotNull(files[name]).decodeToString()
-            return Contents(objText, textureFor(objText, files))
+            val textures = materialTextures(objText, files)
+            return Contents(objText, textureFor(objText, files), textures)
         }
         val scene = files.keys.firstOrNull { it.endsWith(".glb") } ?: files.keys.firstOrNull { it.endsWith(".gltf") }
         return gltf(requireNotNull(files[scene ?: error("The zip has no OBJ or glTF model in it")]), files)
@@ -43,7 +46,26 @@ object ModelPackage {
     private fun gltf(
         bytes: ByteArray,
         files: Map<String, ByteArray>,
-    ): Contents = GltfReader.read(bytes, files).let { Contents(it.objText, it.texture) }
+    ): Contents = contents(GltfReader.read(bytes, files))
+
+    private fun contents(result: GltfReader.Result) = Contents(result.objText, result.texture, result.textures)
+
+    /** Every material's diffuse texture found in the package, by material name. */
+    internal fun materialTextures(
+        objText: String,
+        files: Map<String, ByteArray>,
+    ): Map<String, ByteArray> {
+        val maps =
+            files.filterKeys { it.endsWith(".mtl") }.values.fold(emptyMap<String, String>()) { all, mtl ->
+                diffuseMaps(mtl.decodeToString()) +
+                    all
+            }
+        return statements(objText, "usemtl")
+            .distinct()
+            .mapNotNull { name ->
+                maps[name]?.let { files[baseName(it)] }?.let { name to it }
+            }.toMap()
+    }
 
     /** A .gltf file is JSON describing an "asset". */
     private fun isGltfText(bytes: ByteArray): Boolean {

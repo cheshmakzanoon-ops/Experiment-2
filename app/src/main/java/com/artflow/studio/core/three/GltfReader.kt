@@ -23,6 +23,8 @@ object GltfReader {
     class Result(
         val objText: String,
         val texture: ByteArray?,
+        /** Each material's base colour image by the name its faces use (`usemtl`), when it has one. */
+        val textures: Map<String, ByteArray> = emptyMap(),
     )
 
     private const val GLB_MAGIC = 0x46546C67
@@ -50,27 +52,27 @@ object GltfReader {
         val root = json.parseToJsonElement(text).jsonObject
         val document = Document(root, buffers(root, bin, files), files)
         val out = ObjWriter()
-        var texture: ByteArray? = null
+        val textures = LinkedHashMap<String, ByteArray>()
         for ((meshIndex, matrix) in meshInstances(root)) {
             for (primitive in array(document.mesh(meshIndex)["primitives"])) {
                 val material = addPrimitive(document, primitive.jsonObject, matrix, out)
-                if (texture == null) texture = material?.let(document::baseColour)
+                if (material != null && material !in textures) remember(textures, material, document.baseColour(material))
             }
         }
         require(out.triangles > 0) { "This model has no textured triangles (UVs) to paint on" }
-        return Result(out.text(), texture)
+        return Result(out.text(), textures.values.firstOrNull(), textures)
     }
 
     /**
      * Adds a triangle primitive with positions and texture coordinates to [out]; others are skipped.
-     * Returns the primitive's material when it was added.
+     * Returns the name its faces use for the primitive's material when it was added with one.
      */
     private fun addPrimitive(
         document: Document,
         primitive: JsonObject,
         matrix: FloatArray,
         out: ObjWriter,
-    ): Int? {
+    ): String? {
         val attributes = primitive["attributes"]?.jsonObject ?: return null
         val mode = primitive["mode"]?.jsonPrimitive?.intOrNull ?: TRIANGLES
         val uvAccessor = attributes["TEXCOORD_0"]?.jsonPrimitive?.intOrNull
@@ -79,8 +81,18 @@ object GltfReader {
         val positions = document.floats(positionAccessor)
         val normals = attributes["NORMAL"]?.jsonPrimitive?.intOrNull?.let(document::floats)
         val indices = primitive["indices"]?.jsonPrimitive?.intOrNull?.let(document::ints) ?: IntArray(positions.size / 3) { it }
-        out.add(positions, normals, document.floats(uvAccessor), indices, matrix)
-        return primitive["material"]?.jsonPrimitive?.intOrNull
+        // Faces without a material get a name of their own, so they never take on the previous one.
+        val material = primitive["material"]?.jsonPrimitive?.intOrNull?.let { "material$it" } ?: "unassigned"
+        out.add(positions, normals, document.floats(uvAccessor), indices, matrix, material)
+        return material
+    }
+
+    private fun remember(
+        textures: MutableMap<String, ByteArray>,
+        material: String,
+        image: ByteArray?,
+    ) {
+        if (image != null) textures[material] = image
     }
 
     /** The JSON text and binary chunk of a .glb file. */
@@ -216,8 +228,9 @@ object GltfReader {
             return FloatArray(count * components) { i -> value(data, start + (i / components) * stride + (i % components) * size) }
         }
 
-        /** Encoded image bytes of [material]'s base colour texture, if it has one. */
-        fun baseColour(material: Int): ByteArray? {
+        /** Encoded image bytes of [name]'s ("material" and its index) base colour texture, if it has one. */
+        fun baseColour(name: String): ByteArray? {
+            val material = name.removePrefix("material").toIntOrNull() ?: return null
             val pbr =
                 array(root["materials"])
                     .getOrNull(material)
@@ -269,6 +282,7 @@ object GltfReader {
             uvs: FloatArray,
             indices: IntArray,
             matrix: FloatArray,
+            material: String,
         ) {
             val count = positions.size / 3
             require(uvs.size / 2 >= count && (normals == null || normals.size / 3 >= count)) { "The model's vertex data does not line up" }
@@ -301,6 +315,7 @@ object GltfReader {
                         .append('\n')
                 }
             }
+            text.append("usemtl ").append(material).append('\n')
             for (t in 0 until indices.size / 3) {
                 text.append('f')
                 for (corner in 0 until 3) {
