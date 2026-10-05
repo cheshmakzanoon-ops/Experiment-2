@@ -185,4 +185,30 @@ class ProcreateReaderTest {
             }
         assertTrue(runCatching { ProcreateReader.open(empty) { null } }.exceptionOrNull() is IllegalArgumentException)
     }
+
+    @Test
+    fun everyLayoutsClosedFormMatchesTurningStepByStep() {
+        val storedWidth = 5
+        val storedHeight = 3
+        for (orientation in 0 until ProcreateReader.ORIENTATION_COUNT) {
+            val turned = orientation / 2 % 2 == 1
+            val width = if (turned) storedHeight else storedWidth
+            val height = if (turned) storedWidth else storedHeight
+            val mirrored = orientation % 2 == 1
+            val seen = HashSet<Int>()
+            for (y in 0 until height) {
+                for (x in 0 until width) {
+                    val (sx, sy) = ProcreateReader.locate(x, y, width, height, orientation)
+                    val expected = sy * storedWidth + if (mirrored) storedWidth - 1 - sx else sx
+                    assertEquals(
+                        "layout $orientation at ($x, $y)",
+                        expected,
+                        ProcreateReader.orientedIndex(x, y, storedWidth, storedHeight, orientation),
+                    )
+                    seen += expected
+                }
+            }
+            assertEquals("layout $orientation covers every stored pixel once", storedWidth * storedHeight, seen.size)
+        }
+    }
 }

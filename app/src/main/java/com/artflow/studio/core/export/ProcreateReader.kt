@@ -222,9 +222,10 @@ object ProcreateReader {
             val out = PixelBuffer(width, height)
             stored ?: return out
             val swap = bgra
+            val upright = orientation == 0
             for (y in 0 until height) {
                 for (x in 0 until width) {
-                    val raw = stored[storedIndex(x, y)]
+                    val raw = stored[if (upright) y * width + x else storedIndex(x, y)]
                     out.pixels[y * width + x] = straight(if (swap) swapRedBlue(raw) else raw)
                 }
             }
@@ -259,14 +260,10 @@ object ProcreateReader {
 
         private fun turns() = ORIENTATIONS[orientation].first
 
-        /** Where output pixel ([x], [y]) is in the stored grid. */
         private fun storedIndex(
             x: Int,
             y: Int,
-        ): Int {
-            val (sx, sy) = locate(x, y, width, height, orientation)
-            return sy * storedWidth + if (ORIENTATIONS[orientation].second) storedWidth - 1 - sx else sx
-        }
+        ): Int = orientedIndex(x, y, storedWidth, storedHeight, orientation)
 
         /** The layer's tiles as stored: premultiplied, channels packed in file order behind alpha. */
         private fun stored(uuid: String): IntArray? {
@@ -434,10 +431,51 @@ object ProcreateReader {
     }
 
     /**
+     * Where output pixel ([x], [y]) is in a stored grid of [storedWidth] by [storedHeight] laid out
+     * as [orientation]: [locate]'s quarter turns and the mirroring undone in closed form, without
+     * allocating, as this runs for every pixel of every layer.
+     */
+    internal fun orientedIndex(
+        x: Int,
+        y: Int,
+        storedWidth: Int,
+        storedHeight: Int,
+        orientation: Int,
+    ): Int {
+        val lastColumn = storedWidth - 1
+        val lastRow = storedHeight - 1
+        val (turns, mirrored) = ORIENTATIONS[orientation]
+        val sx: Int
+        val sy: Int
+        when (turns) {
+            0 -> {
+                sx = x
+                sy = y
+            }
+            1 -> {
+                sx = y
+                sy = lastRow - x
+            }
+            2 -> {
+                sx = lastColumn - x
+                sy = lastRow - y
+            }
+            else -> {
+                sx = lastColumn - y
+                sy = x
+            }
+        }
+        return sy * storedWidth + if (mirrored) lastColumn - sx else sx
+    }
+
+    /** The number of layouts [orientedIndex] and [locate] take. */
+    internal val ORIENTATION_COUNT get() = ORIENTATIONS.size
+
+    /**
      * Where pixel ([x], [y]) of an image laid out as [orientation] (size [width] by [height]) comes
      * from in the stored image, before mirroring: each quarter turn is undone in turn.
      */
-    private fun locate(
+    internal fun locate(
         x: Int,
         y: Int,
         width: Int,
