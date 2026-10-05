@@ -146,7 +146,9 @@ object ProcreateReader {
             val children = archive.array(item["children"]).mapNotNull { node(archive, it, depth + 1) }
             return Group(name, opacity, visible, children)
         }
-        val mode = number(item["extendedBlend"])?.toInt()?.let(BLEND_MODES::get) ?: number(item["blend"])?.toInt()?.let(BLEND_MODES::get)
+        val mode =
+            number(item["extendedBlend"])?.toInt()?.let(ProcreateBlendModes::of)
+                ?: number(item["blend"])?.toInt()?.let(ProcreateBlendModes::of)
         return Layer(
             name = name,
             opacity = opacity,
@@ -472,37 +474,6 @@ object ProcreateReader {
 
     /** Quarter turns clockwise and mirroring for each of the eight layouts. */
     private val ORIENTATIONS = (0 until 4).flatMap { turns -> listOf(turns to false, turns to true) }
-
-    /** Procreate's blend mode numbers. */
-    private val BLEND_MODES =
-        mapOf(
-            0 to BlendMode.NORMAL,
-            1 to BlendMode.MULTIPLY,
-            2 to BlendMode.SCREEN,
-            3 to BlendMode.ADD,
-            4 to BlendMode.LIGHTEN,
-            5 to BlendMode.EXCLUSION,
-            6 to BlendMode.DIFFERENCE,
-            7 to BlendMode.SUBTRACT,
-            8 to BlendMode.LINEAR_BURN,
-            9 to BlendMode.COLOR_DODGE,
-            10 to BlendMode.COLOR_BURN,
-            11 to BlendMode.OVERLAY,
-            12 to BlendMode.HARD_LIGHT,
-            13 to BlendMode.COLOR,
-            14 to BlendMode.LUMINOSITY,
-            15 to BlendMode.HUE,
-            16 to BlendMode.SATURATION,
-            17 to BlendMode.SOFT_LIGHT,
-            19 to BlendMode.DARKEN,
-            20 to BlendMode.HARD_MIX,
-            21 to BlendMode.VIVID_LIGHT,
-            22 to BlendMode.LINEAR_LIGHT,
-            23 to BlendMode.PIN_LIGHT,
-            24 to BlendMode.LIGHTER_COLOR,
-            25 to BlendMode.DARKER_COLOR,
-            26 to BlendMode.DIVIDE,
-        )
 
     private const val ARCHIVE = "Document.archive"
     private const val THUMBNAIL = "QuickLook/Thumbnail.png"

@@ -74,7 +74,7 @@ internal fun BrushFileButtons(
     TextButton(onClick = { runCatching { picker.launch("*/*") } }, enabled = enabled) { Text("Import") }
 }
 
-/** Procreate `.brush` and `.brushset` files: their shape and grain images become new brushes. */
+/** Procreate `.brush` and `.brushset` files: each brush comes in with its name, settings, shape and grain. */
 private fun importArchive(
     context: Context,
     bytes: ByteArray,
@@ -83,7 +83,7 @@ private fun importArchive(
     return BrushArchives.read(bytes, BitmapPixelBridge::fromEncodedBytes).mapIndexed { index, brush ->
         val shape = brush.shape?.let { GrainStorage.save(directory, it) }
         val grain = brush.grain?.let { GrainStorage.save(directory, it) }
-        SavedBrush("imported-$index", "Imported brush ${index + 1}", BrushArchives.parameters(shape, grain))
+        SavedBrush("imported-$index", brush.name ?: "Imported brush ${index + 1}", BrushArchives.parameters(shape, grain, brush.settings))
     }
 }
 

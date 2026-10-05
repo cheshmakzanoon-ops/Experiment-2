@@ -49,4 +49,20 @@ class BrushArchivesTest {
         assertFalse(BrushArchives.isArchive("{}".toByteArray()))
         assertThrows(IllegalArgumentException::class.java) { BrushArchives.read(zip("Brush.archive"), decode) }
     }
+
+    @Test fun aProcreateSetKeepsItsOrderNamesSettingsAndInvertedShapes() {
+        val set = requireNotNull(javaClass.getResourceAsStream("/procreate/fixture.brushset")).use { it.readBytes() }
+        val brushes = BrushArchives.read(set, decode)
+        assertEquals(listOf("Plain", "Inked Grain"), brushes.map { it.name })
+        val inked = brushes[1]
+        // The stand-in shape is a white disc; this brush's shape is inverted, so its centre holds paint back.
+        val shape = requireNotNull(inked.shape)
+        assertEquals(0, shape.values[shape.size / 2 * shape.size + shape.size / 2].toInt() and 0xFF)
+        assertEquals(255, shape.values[0].toInt() and 0xFF)
+        val params = BrushArchives.parameters("custom-a", "custom-b", inked.settings)
+        assertEquals(0.2f, params.spacing, 1e-6f)
+        assertEquals("custom-b", params.textureId)
+        assertTrue(params.blendTexture)
+        assertNull(brushes[0].shape)
+    }
 }

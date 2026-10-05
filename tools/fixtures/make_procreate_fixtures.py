@@ -153,3 +153,41 @@ def build(path, turns, mirrored, bgra, codec, cut_edges):
 
 build(OUT + '/upright.procreate', 0, False, False, 'lzo', True)
 build(OUT + '/turned.procreate', 1, True, True, 'lz4', False)
+
+
+# --- Brushes ------------------------------------------------------------------------------
+def brush_archive(settings):
+    ar = Archive()
+    root = {}
+    root_uid = ar.add(root)
+    for key, value in settings.items():
+        root[key] = ar.add(value) if isinstance(value, str) else value
+    root['$class'] = ar.add({'$classname': 'SilicaBrush', '$classes': ['SilicaBrush', 'ValkyrieBrush', 'NSObject']})
+    top = {'$archiver': 'NSKeyedArchiver', '$version': 100000, '$top': {'root': root_uid}, '$objects': ar.objects}
+    return plistlib.dumps(top, fmt=plistlib.FMT_BINARY)
+
+def grey_png(size, fn):
+    rows = b''.join(b'\x00' + bytes(fn(x, y) for x in range(size)) for y in range(size))
+    def chunk(kind, data): return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data))
+    return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', size, size, 8, 0, 0, 0, 0)) +
+            chunk(b'IDAT', zlib.compress(rows)) + chunk(b'IEND', b''))
+
+def build_brushset(path):
+    inked = {'name': 'Inked Grain', 'plotSpacing': 0.2, 'plotJitter': 0.3, 'shapeCount': 0.2, 'shapeRoundness': 0.5,
+             'dynamicsPressureSize': 0.8, 'dynamicsPressureOpacity': 0.1, 'maxSize': 2.0, 'paintSize': 0.5,
+             'maxOpacity': 0.9, 'paintOpacity': 1.0, 'blendMode': 1, 'extendedBlend': 22, 'shapeInverted': True,
+             'textureInverted': False, 'bundledShapePath': '$null', 'bundledGrainPath': '$null', 'shapeRandomise': True,
+             'renderingRecursiveMixing': True, 'dynamicsMix': 0.4, 'textureMovement': 0.8, 'pencilTaperStartLength': 0.25,
+             'dynamicsJitterHue': 0.15, 'textureScale': 1.5, 'dynamicsGlazedFlow': 0.7}
+    plain = {'name': 'Plain', 'bundledShapePath': 'Brush-Preset-Blank.png', 'plotSpacing': 0.05}
+    disc = lambda x, y: 255 if (x - 16) ** 2 + (y - 16) ** 2 < 100 else 0
+    noise = lambda x, y: (x * 37 + y * 91) % 256
+    with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as z:
+        z.writestr('brushset.plist', plistlib.dumps({'name': 'Fixture Set', 'brushes': ['B-PLAIN', 'A-INKED']}))
+        z.writestr('A-INKED/Brush.archive', brush_archive(inked))
+        z.writestr('A-INKED/Shape.png', grey_png(32, disc))
+        z.writestr('A-INKED/Grain.png', grey_png(32, noise))
+        z.writestr('B-PLAIN/Brush.archive', brush_archive(plain))
+        z.writestr('B-PLAIN/Grain.png', grey_png(32, noise))
+
+build_brushset(OUT + '/fixture.brushset')
