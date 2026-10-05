@@ -253,3 +253,6 @@ jobs:
           grep -rhE 'FAILED|Process crashed|INSTRUMENTATION_FAILED' "${RUNNER_TEMP}/artflow-device" 2>/dev/null | head -20 || true
           # The app's own crash, if any: the exception and the frames that explain it.
           grep -h -A 40 'FATAL EXCEPTION' "${RUNNER_TEMP}"/artflow-device/*logcat*.txt 2>/dev/null | grep -E 'FATAL|Process: |Exception|Error|Caused by|\tat com\.artflow|at com\.artflow' | head -60 || true
+          # A native crash (including the first attempt before a framework-crash retry): the signal,
+          # the crashing thread and the top of its backtrace.
+          find "${RUNNER_TEMP}/artflow-device" -name '*logcat*.txt' -exec grep -hE 'Fatal signal|>>> com\.artflow|Abort message|#(0[0-9]|1[0-5]) pc ' {} + 2>/dev/null | head -80 || true
