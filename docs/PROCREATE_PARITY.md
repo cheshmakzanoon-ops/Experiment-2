@@ -158,10 +158,10 @@ Compose checks require the full device matrix; no baseline, assertion or job is 
 | Priority | Missing workflow / quality | Concrete acceptance task |
 | --- | --- | --- |
 | 1 | Reliable, discoverable editing | All six device lanes pass with preserved crash evidence; inspect phone/tablet, large text and theme captures. Complete paint → change brush → edit layer → save → reopen without hidden controls. |
-| 2 | Useful transformations and layer organization | Reconcile unmerged PR #34 without overwriting newer work. Then transform selected/masked art with handles and cancel/undo/redo; organize nested groups and preserve composition on reload. |
-| 3 | Artist-grade brushes | Imported shape/grain sources, real tilt-aware tips, dual brushes and curated presets. Compare named physical styluses using the same pressure/tilt/speed tasks, not parameter counts. |
-| 4 | Drawing assistance and colour fidelity | Editable hold-to-recognize shapes, interactive colour-drop filling, saved selections, ICC-tagged workflows and external layered-document fixtures. |
-| 5 | Broader Procreate workflows | Drawing-process timelapse, Page Assist and 3D painting remain explicit product-scope gaps. |
+| 2 | Useful transformations and layer organization | Done in this branch: on-canvas transform with handles (freeform, uniform, distort, warp) with cancel/undo/redo, nested groups kept through save and PSD/Procreate import. PR #34's separate transform work overlaps this and conflicts with it, so it was not merged. Remaining: artist validation of large multi-layer moves. |
+| 3 | Artist-grade brushes | Done: imported shape/grain sources, tilt-aware tips, dual brushes, 200 original presets, and Procreate (.brush/.brushset, with settings) and Photoshop (.abr) brush import. Remaining: compare named physical styluses on the same pressure/tilt/speed tasks. |
+| 4 | Drawing assistance and colour fidelity | Done: QuickShape with Edit Shape nodes, ColorDrop threshold, saved selections, CMYK proof, ICC-tagged export, PSD and Procreate document import. Remaining: validation against files from current Procreate and Photoshop versions (fixtures are synthetic or open-source). |
+| 5 | Broader Procreate workflows | Done: drawing timelapse with private photos left out, Page Assist, 3D painting (OBJ, glTF, USD/USDZ). Remaining: artist validation on real devices. |
 
 A high-contrast theme is not whole-app accessibility; a decoder is not faithful interchange;
 a numerical transform helper is not an ergonomic transform workflow; and automated tests alone
