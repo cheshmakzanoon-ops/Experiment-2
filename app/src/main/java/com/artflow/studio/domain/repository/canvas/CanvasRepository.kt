@@ -234,6 +234,9 @@ interface CanvasRepository {
 
     fun getStrokeColor(): Int
 
+    /** The secondary colour new strokes carry for their colour dynamics. */
+    fun setSecondaryColor(color: Int) = Unit
+
     // -----------------------------------------------------------------------------------------
     // Selection
     // -----------------------------------------------------------------------------------------

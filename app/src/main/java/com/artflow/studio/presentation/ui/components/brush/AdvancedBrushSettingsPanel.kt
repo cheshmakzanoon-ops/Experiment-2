@@ -355,6 +355,22 @@ private fun BrushJitterSettings(
             valueRange = 0f..1f,
             valueDisplay = "%.0f%%".format(brushParams.brightnessJitter * 100),
         )
+
+        // Procreate's secondary colour dynamics (the secondary swatch in the colour panel).
+        BrushParameterSlider(
+            label = "Secondary Colour Pressure",
+            value = brushParams.secondaryPressure,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(secondaryPressure = it)) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.secondaryPressure * 100),
+        )
+        BrushParameterSlider(
+            label = "Secondary Colour Jitter",
+            value = brushParams.secondaryJitter,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(secondaryJitter = it)) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.secondaryJitter * 100),
+        )
     }
 }
 

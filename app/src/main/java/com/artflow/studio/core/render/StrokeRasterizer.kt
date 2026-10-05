@@ -450,7 +450,13 @@ class StrokeRasterizer(
         val dabOpacity = opacity * (1f - params.taperOpacity.coerceIn(0f, 1f) * (1f - taper)) * falloffFactor(params, accumulatedDistance)
 
         val color =
-            wetColor(params.applyColorJitter(stroke.color, pressure, velocity, random), context.canvas, x, y, params.wetMix)
+            wetColor(
+                params.applyColorJitter(stroke.color, pressure, velocity, random, stroke.secondaryColor),
+                context.canvas,
+                x,
+                y,
+                params.wetMix,
+            )
 
         // Scatter offsets each dab; count repeats it along a random perpendicular offset.
         val dabs = params.count.coerceIn(1, 32)
@@ -531,6 +537,8 @@ class StrokeRasterizer(
                 params.velocityToSize,
                 params.velocityToOpacity,
                 params.velocityToHue,
+                params.secondaryPressure,
+                params.secondaryJitter,
             ).all { it == 0f }
 
     private fun drawSegment(
@@ -548,7 +556,13 @@ class StrokeRasterizer(
         val startAlpha = params.calculateEffectiveOpacity(start.pressure, random = random) * params.flow.coerceIn(0f, 1f)
         val endAlpha = params.calculateEffectiveOpacity(end.pressure, random = random) * params.flow.coerceIn(0f, 1f)
         val averageAlpha = (startAlpha + endAlpha) / 2f
-        val color = params.applyColorJitter(stroke.color, (start.pressure + end.pressure) / 2f, random = random)
+        val color =
+            params.applyColorJitter(
+                stroke.color,
+                (start.pressure + end.pressure) / 2f,
+                random = random,
+                secondary = stroke.secondaryColor,
+            )
 
         if (start.x == end.x && start.y == end.y) {
             Stamping.dab(

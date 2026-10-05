@@ -56,6 +56,8 @@ data class Stroke(
      * replays it exactly like it was drawn, so a saved document reopens identical to the screen.
      */
     val isEraser: Boolean = false,
+    /** The secondary colour when the stroke began, which colour dynamics may blend toward. */
+    val secondaryColor: Int? = null,
 ) {
     /**
      * Get the bounding box of the stroke

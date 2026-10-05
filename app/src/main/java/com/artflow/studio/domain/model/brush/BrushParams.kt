@@ -59,6 +59,8 @@ data class BrushParams(
     val tipRandomized: Boolean = false, // Each stroke starts the tip at a random angle
     val buildUp: Boolean = false, // Blending rendering: overlapping dabs build up within one stroke instead of glazing
     val grainMoving: Boolean = false, // Grain starts afresh with each stroke instead of staying fixed to the canvas
+    val secondaryPressure: Float = 0f, // 0..1: firmer pressure blends the colour toward the secondary colour
+    val secondaryJitter: Float = 0f, // 0..1: each dab blends a random amount toward the secondary colour
 ) {
     /** Imported grain and shape images this brush (and its second brush) paints with. */
     val imageIds: List<String>
@@ -169,6 +171,39 @@ data class BrushParams(
         pressure: Float = 1f,
         velocity: Float = 0f,
         random: Random? = null,
+        secondary: Int? = null,
+    ): Int {
+        val mixed = towardSecondary(baseColor, secondary, pressure, random)
+        return jittered(mixed, pressure, velocity, random)
+    }
+
+    /** Procreate's secondary colour dynamics: pressure and per-dab jitter blend toward [secondary]. */
+    private fun towardSecondary(
+        baseColor: Int,
+        secondary: Int?,
+        pressure: Float,
+        random: Random?,
+    ): Int {
+        if (secondary == null || (secondaryPressure <= 0f && secondaryJitter <= 0f)) return baseColor
+        val amount =
+            (
+                secondaryPressure.coerceIn(0f, 1f) * pressureResponse(pressure) +
+                    secondaryJitter.coerceIn(0f, 1f) * (random?.nextFloat() ?: 0.5f)
+            ).coerceIn(0f, 1f)
+
+        fun channel(shift: Int): Int {
+            val from = (baseColor shr shift) and 0xFF
+            val to = (secondary shr shift) and 0xFF
+            return (from + (to - from) * amount + 0.5f).toInt().coerceIn(0, 255)
+        }
+        return (baseColor and 0xFF000000.toInt()) or (channel(16) shl 16) or (channel(8) shl 8) or channel(0)
+    }
+
+    private fun jittered(
+        baseColor: Int,
+        pressure: Float,
+        velocity: Float,
+        random: Random?,
     ): Int {
         if (hueJitter <= 0f &&
             saturationJitter <= 0f &&

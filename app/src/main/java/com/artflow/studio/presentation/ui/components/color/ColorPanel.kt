@@ -50,6 +50,8 @@ fun ColorPanel(
     modifier: Modifier = Modifier,
     onImportPalette: (() -> Unit)? = null,
     onPaletteFromPhoto: (() -> Unit)? = null,
+    /** The secondary colour and swapping it with the primary; null hides the swatch. */
+    secondary: SecondarySwatch? = null,
 ) {
     var mode by remember { mutableStateOf(ColorHarmony.ColorMode.HSV) }
     var harmony by remember { mutableStateOf(ColorHarmony.Harmony.COMPLEMENTARY) }
@@ -75,6 +77,7 @@ fun ColorPanel(
                 )
             }
             Swatch(color = previous, onClick = { onColorSelected(previous) }, description = "Previous colour")
+            secondary?.let { Swatch(color = it.color, onClick = it.onSwap, description = "Secondary colour, tap to swap") }
             Box(
                 modifier =
                     Modifier
@@ -263,6 +266,12 @@ private fun HexField(
         modifier = Modifier.fillMaxWidth(),
     )
 }
+
+/** Procreate's secondary colour swatch: its colour, and swapping it with the primary. */
+data class SecondarySwatch(
+    val color: Int,
+    val onSwap: () -> Unit,
+)
 
 @Composable
 private fun Swatch(

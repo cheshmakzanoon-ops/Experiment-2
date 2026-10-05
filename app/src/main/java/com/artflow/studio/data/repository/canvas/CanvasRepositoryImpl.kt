@@ -110,6 +110,7 @@ class CanvasRepositoryImpl
         private val strokeBrushParams = mutableMapOf<Long, BrushParams>()
         private val strokeLayerIds = mutableMapOf<Long, Long>()
         private val strokeErasers = mutableMapOf<Long, Boolean>()
+        private val strokeSecondaries = mutableMapOf<Long, Int>()
         private val strokeDestinations = mutableMapOf<Long, StrokeDestination>()
 
         private var strokeColor: Int = 0xFF000000.toInt()
@@ -230,6 +231,7 @@ class CanvasRepositoryImpl
             strokeBrushParams.clear()
             strokeLayerIds.clear()
             strokeErasers.clear()
+            strokeSecondaries.clear()
             strokeDestinations.clear()
             undoStack.clear()
             historyMark++
@@ -357,6 +359,7 @@ class CanvasRepositoryImpl
             strokeBrushParams.clear()
             strokeLayerIds.clear()
             strokeErasers.clear()
+            strokeSecondaries.clear()
             strokeDestinations.clear()
             undoStack.clear()
             historyMark++
@@ -565,12 +568,15 @@ class CanvasRepositoryImpl
                         colorPressure = false,
                         velocityToHue = 0f,
                         wetMix = 0f,
+                        secondaryPressure = 0f,
+                        secondaryJitter = 0f,
                     )
                 } else {
                     brushParams
                 }
             strokeLayerIds[strokeId] = layerId
             strokeErasers[strokeId] = isEraser && !destination.isMask
+            strokeSecondaries[strokeId] = secondaryStrokeColor
             strokeDestinations[strokeId] = destination
             return strokeId
         }
@@ -602,6 +608,7 @@ class CanvasRepositoryImpl
             val brushParams = strokeBrushParams.remove(strokeId) ?: return
             val layerId = strokeLayerIds.remove(strokeId) ?: return
             val isEraser = strokeErasers.remove(strokeId) ?: false
+            val secondary = strokeSecondaries.remove(strokeId)
             val destination = strokeDestinations.remove(strokeId) ?: StrokeDestination.LAYER
 
             val layer =
@@ -622,6 +629,7 @@ class CanvasRepositoryImpl
                     layerId = layerId,
                     color = points.firstOrNull()?.color ?: strokeColor,
                     isEraser = isEraser,
+                    secondaryColor = secondary,
                 )
             // Preview and commit share this exact raw-pixel operation. Compute first so a failed
             // allocation or render cannot add an undo entry or modify the committed document.
@@ -707,6 +715,7 @@ class CanvasRepositoryImpl
             strokeBrushParams.remove(strokeId)
             strokeLayerIds.remove(strokeId)
             strokeErasers.remove(strokeId)
+            strokeSecondaries.remove(strokeId)
             strokeDestinations.remove(strokeId)
             emitAsync(CanvasInvalidationEvent.Full)
         }
@@ -730,6 +739,7 @@ class CanvasRepositoryImpl
                 layerId = layerId,
                 color = points.firstOrNull()?.color ?: strokeColor,
                 isEraser = strokeErasers[strokeId] ?: false,
+                secondaryColor = strokeSecondaries[strokeId],
             )
         }
 
@@ -857,6 +867,12 @@ class CanvasRepositoryImpl
 
         override fun setStrokeColor(color: Int) {
             strokeColor = color
+        }
+
+        private var secondaryStrokeColor: Int = 0xFFFFFFFF.toInt()
+
+        override fun setSecondaryColor(color: Int) {
+            secondaryStrokeColor = color
         }
 
         override fun getStrokeColor(): Int = strokeColor
@@ -2810,6 +2826,7 @@ class CanvasRepositoryImpl
             strokeBrushParams.clear()
             strokeLayerIds.clear()
             strokeErasers.clear()
+            strokeSecondaries.clear()
             strokeDestinations.clear()
             dirtyRasters.addAll(allLayers().map { it.id })
             syncTimeline()
@@ -2950,6 +2967,7 @@ class CanvasRepositoryImpl
             strokeBrushParams.clear()
             strokeLayerIds.clear()
             strokeErasers.clear()
+            strokeSecondaries.clear()
             strokeDestinations.clear()
             undoStack.clear()
             historyMark++

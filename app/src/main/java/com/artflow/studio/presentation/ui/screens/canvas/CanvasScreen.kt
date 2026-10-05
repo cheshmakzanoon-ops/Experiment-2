@@ -70,6 +70,7 @@ import com.artflow.studio.presentation.ui.components.canvas.GestureControls
 import com.artflow.studio.presentation.ui.components.canvas.ShapeEditState
 import com.artflow.studio.presentation.ui.components.canvas.imageDropTarget
 import com.artflow.studio.presentation.ui.components.color.ColorPanel
+import com.artflow.studio.presentation.ui.components.color.SecondarySwatch
 import com.artflow.studio.presentation.ui.components.editor.ActionsPanel
 import com.artflow.studio.presentation.ui.components.editor.AddActions
 import com.artflow.studio.presentation.ui.components.editor.AdjustmentOverlay
@@ -532,6 +533,7 @@ fun CanvasScreen(
                     onImportPalette = paletteImports.fromFile,
                     onPaletteFromPhoto = paletteImports.fromPhoto,
                     onRemovePalette = { viewModel.removePalette(it) },
+                    secondary = SecondarySwatch(input.secondaryColor, viewModel::swapColors),
                 )
             }
 

@@ -103,6 +103,8 @@ data class EditorInput(
     val brushParams: BrushParams = BrushParams(),
     val strokeDestination: StrokeDestination = StrokeDestination.LAYER,
     val brushColor: Int = 0xFF1F2933.toInt(),
+    /** Procreate's secondary colour: brushes with secondary colour dynamics blend toward it. */
+    val secondaryColor: Int = 0xFFFFFFFF.toInt(),
     val eraserSize: Float = 48f,
     val symmetry: SymmetryEngine.Settings = SymmetryEngine.Settings(),
     val perspective: PerspectiveGuide.Settings = PerspectiveGuide.Settings(),
@@ -525,6 +527,7 @@ class ArtFlowCanvasView
                 ensureTransformSession()
             }
             canvasRepository.setStrokeColor(newInput.brushColor)
+            canvasRepository.setSecondaryColor(newInput.secondaryColor)
             canvasRepository.setSymmetry(newInput.symmetry)
         }
 

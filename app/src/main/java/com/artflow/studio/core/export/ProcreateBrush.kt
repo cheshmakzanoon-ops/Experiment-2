@@ -76,6 +76,8 @@ object ProcreateBrush {
                 tipRandomized = flag("shapeRandomise"),
                 buildUp = flag("renderingRecursiveMixing"),
                 grainMoving = unit("textureMovement") >= MOVING_GRAIN,
+                secondaryPressure = unit("dynamicsPressureSecondaryColor"),
+                secondaryJitter = unit("jitterSecondary"),
             )
         return Settings(
             name = keyed.string(brush["name"])?.trim()?.takeIf { it.isNotEmpty() },

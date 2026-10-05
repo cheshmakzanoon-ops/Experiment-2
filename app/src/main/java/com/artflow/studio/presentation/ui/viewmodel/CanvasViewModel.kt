@@ -500,6 +500,9 @@ class CanvasViewModel
 
         fun setEraserSize(size: Float) = updateInput { it.copy(eraserSize = size.coerceIn(1f, 512f)) }
 
+        /** Swaps the primary and secondary colours, as tapping Procreate's secondary swatch does. */
+        fun swapColors() = updateInput { it.copy(brushColor = it.secondaryColor, secondaryColor = it.brushColor) }
+
         fun setColor(color: Int) {
             updateInput { it.copy(brushColor = color) }
             viewModelScope.launch(editorErrors) { settingsRepository.pushRecentColor(color) }
