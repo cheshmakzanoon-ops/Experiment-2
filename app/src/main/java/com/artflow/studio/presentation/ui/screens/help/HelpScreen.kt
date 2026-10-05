@@ -53,7 +53,7 @@ object Tutorials {
             ),
             TutorialStep(
                 "Sample and snap",
-                "Touch and hold the canvas to pick a colour, or hold the square modify button for the QuickMenu. " +
+                "Touch and hold the canvas to pick a colour (a ring shows the new colour over the old one), or hold the square modify button for the QuickMenu. " +
                     "Hold the pen still at the end of a stroke to turn " +
                     "it into a clean line, ellipse or polygon, and keep holding to adjust it before you lift. " +
                     "Tap Edit Shape on the banner afterwards to drag its points.",

@@ -48,10 +48,12 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.conflate
@@ -157,6 +159,14 @@ data class BrushCursor(
     val x: Float,
     val y: Float,
     val radius: Float,
+)
+
+/** Procreate's eyedropper loupe: where the sample is (view pixels), the colour found and the one it replaces. */
+data class EyedropperLoupe(
+    val x: Float,
+    val y: Float,
+    val color: Int,
+    val previous: Int,
 )
 
 /** Rubber-band geometry reported while a selection, shape or gradient drag is in progress. */
@@ -353,6 +363,9 @@ class ArtFlowCanvasView
         // --- Callbacks ----------------------------------------------------------------------------
 
         var onColorPicked: ((Int) -> Unit)? = null
+
+        /** The eyedropper loupe while colour is being sampled, then null. */
+        var onEyedropperChanged: ((EyedropperLoupe?) -> Unit)? = null
         var onSelectionChanged: ((SelectionMask?, Int) -> Unit)? = null
         var onDragPreview: ((DragPreview?) -> Unit)? = null
         var onHistoryChanged: ((undo: Int, redo: Int) -> Unit)? = null
@@ -451,7 +464,7 @@ class ArtFlowCanvasView
             drawing = false
             removeCallbacks(quickShapeCheck)
             removeCallbacks(holdEyedropper)
-            holdSampling = false
+            endSampling()
             cancelPixelInteraction()
             selectionJob?.cancel()
             onDragPreview?.invoke(null)
@@ -1295,6 +1308,7 @@ class ArtFlowCanvasView
             // The stylus side button samples colour, the usual Android pen shortcut.
             if (isStylus && (event.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY) != 0) {
                 val (canvasX, canvasY) = viewToCanvas(x, y)
+                startSampling()
                 pickColor(canvasX, canvasY)
                 gestureTool = null
                 return true
@@ -1310,6 +1324,13 @@ class ArtFlowCanvasView
             gestureTool = tool
             val (canvasX, canvasY) = snapped(event, x, y, index)
             val pressure = pressureOf(event, index)
+            if (tool == ToolType.EYEDROPPER) {
+                // The eyedropper samples while it is dragged, showing the loupe; lifting keeps the colour.
+                startSampling()
+                pickColor(canvasX, canvasY)
+                gestureTool = null
+                return true
+            }
 
             when (tool) {
                 ToolType.BRUSH, ToolType.ERASER -> {
@@ -1462,7 +1483,7 @@ class ArtFlowCanvasView
         ) {
             removeCallbacks(holdEyedropper)
             if (holdSampling) {
-                holdSampling = false
+                endSampling()
                 gestureTool = null
                 return
             }
@@ -1714,7 +1735,7 @@ class ArtFlowCanvasView
             cancelPixelInteraction()
             previewPoints.clear()
             onDragPreview?.invoke(null)
-            holdSampling = true
+            startSampling()
             performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
             pickColor(holdCanvasX, holdCanvasY)
         }
@@ -2401,14 +2422,32 @@ class ArtFlowCanvasView
             }
         }
 
+        /** The flattened artwork for the sampling gesture under way, read once rather than per sample. */
+        private var samplingSource: Deferred<PixelBuffer?>? = null
+        private var samplingPrevious = 0
+
+        private fun startSampling() {
+            holdSampling = true
+            samplingPrevious = input.brushColor
+            samplingSource = coroutineScope.async(Dispatchers.Default) { canvasRepository.compositeBuffer() }
+        }
+
+        private fun endSampling() {
+            holdSampling = false
+            samplingSource = null
+            onEyedropperChanged?.invoke(null)
+        }
+
         private fun pickColor(
             x: Float,
             y: Float,
         ) {
+            val source = samplingSource
+            val (viewX, viewY) = canvasToView(x, y)
             coroutineScope.launch {
                 val color =
                     withContext(Dispatchers.Default) {
-                        val buffer = canvasRepository.compositeBuffer()
+                        val buffer = source?.await() ?: canvasRepository.compositeBuffer()
                         val px = x.roundToInt()
                         val py = y.roundToInt()
                         if (buffer == null || !buffer.contains(px, py)) {
@@ -2418,8 +2457,12 @@ class ArtFlowCanvasView
                         }
                     }
                 if (color != null) {
-                    onColorPicked?.invoke(Channels.withAlpha(color, 255))
-                } else {
+                    val opaque = Channels.withAlpha(color, 255)
+                    if (source != null && source === samplingSource) {
+                        onEyedropperChanged?.invoke(EyedropperLoupe(viewX, viewY, opaque, samplingPrevious))
+                    }
+                    onColorPicked?.invoke(opaque)
+                } else if (source == null) {
                     onStatusMessage?.invoke("Nothing to sample here")
                 }
             }

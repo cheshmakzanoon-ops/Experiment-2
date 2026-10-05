@@ -24,6 +24,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -64,6 +65,7 @@ import com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView
 import com.artflow.studio.presentation.ui.components.canvas.BrushCursor
 import com.artflow.studio.presentation.ui.components.canvas.DragPreview
 import com.artflow.studio.presentation.ui.components.canvas.EditorInput
+import com.artflow.studio.presentation.ui.components.canvas.EyedropperLoupe
 import com.artflow.studio.presentation.ui.components.canvas.GestureControls
 import com.artflow.studio.presentation.ui.components.canvas.ShapeEditState
 import com.artflow.studio.presentation.ui.components.canvas.imageDropTarget
@@ -205,6 +207,7 @@ fun CanvasScreen(
     var showCopyPaste by remember { mutableStateOf(false) }
     var transformQuad by remember { mutableStateOf<Quad?>(null) }
     var shapeEdit by remember { mutableStateOf<ShapeEditState?>(null) }
+    var eyedropper by remember { mutableStateOf<EyedropperLoupe?>(null) }
     var warpMesh by remember { mutableStateOf<WarpMesh?>(null) }
     var brushCursor by remember { mutableStateOf<BrushCursor?>(null) }
     var colorDropThreshold by remember { mutableStateOf<Float?>(null) }
@@ -1062,6 +1065,7 @@ fun CanvasScreen(
                                 onClearLayerRequested = { viewModel.clipboard.clear() }
                                 onTransformQuadChanged = { transformQuad = it }
                                 onShapeEditChanged = { shapeEdit = it }
+                                onEyedropperChanged = { eyedropper = it }
                                 onWarpMeshChanged = { warpMesh = it }
                                 onBrushCursorChanged = { brushCursor = it }
                                 onViewChanged = { s, ox, oy, r -> viewModel.onViewChanged(s, ox, oy, r) }
@@ -1225,6 +1229,7 @@ fun CanvasScreen(
                     modifier = Modifier.align(Alignment.TopCenter).zIndex(4f),
                 )
             }
+            eyedropper?.let { loupe -> EyedropperRing(loupe, Modifier.fillMaxSize()) }
             brushCursor?.let { cursor ->
                 Canvas(Modifier.fillMaxSize()) {
                     val center = Offset(cursor.x, cursor.y)
@@ -1681,6 +1686,28 @@ private fun ColorDropThresholdBar(
             )
             TextButton(onClick = onDone) { Text("Done") }
         }
+    }
+}
+
+/**
+ * Procreate's eyedropper loupe: a ring around the sampled point, the colour found on its upper half
+ * and the colour it replaces on the lower half.
+ */
+@Composable
+private fun EyedropperRing(
+    loupe: EyedropperLoupe,
+    modifier: Modifier,
+) {
+    val density = LocalDensity.current
+    Canvas(modifier) {
+        val radius = with(density) { 56.dp.toPx() }
+        val band = with(density) { 18.dp.toPx() }
+        val corner = Offset(loupe.x - radius, loupe.y - radius)
+        val size = Size(radius * 2, radius * 2)
+        drawArc(Color(loupe.color), 180f, 180f, false, corner, size, style = Stroke(band))
+        drawArc(Color(loupe.previous), 0f, 180f, false, corner, size, style = Stroke(band))
+        drawCircle(Color.White, radius + band / 2, Offset(loupe.x, loupe.y), style = Stroke(2f))
+        drawCircle(Color.Black.copy(alpha = 0.5f), radius - band / 2, Offset(loupe.x, loupe.y), style = Stroke(1.5f))
     }
 }
 
