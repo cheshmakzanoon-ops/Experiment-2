@@ -191,3 +191,68 @@ def build_brushset(path):
         z.writestr('B-PLAIN/Grain.png', grey_png(32, noise))
 
 build_brushset(OUT + '/fixture.brushset')
+
+
+# --- Photoshop brushes (.abr), laid out as GIMP's and Krita's loaders read them ----------------
+def packbits(row):
+    out, i = bytearray(), 0
+    while i < len(row):
+        run = 1
+        while i + run < len(row) and run < 128 and row[i + run] == row[i]: run += 1
+        if run > 1:
+            out += bytes([(257 - run) & 0xFF, row[i]]); i += run
+        else:
+            j = i
+            while j < len(row) and j - i < 128 and (j + 1 >= len(row) or row[j + 1] != row[j]): j += 1
+            j = max(j, i + 1)
+            out += bytes([j - i - 1]) + bytes(row[i:j]); i = j
+    return bytes(out)
+
+def tip_pixels(width, height, depth, compressed, fn):
+    rows = []
+    for y in range(height):
+        row = bytearray()
+        for x in range(width):
+            v = fn(x, y)
+            row += bytes([v, (v * 7) & 0xFF]) if depth == 16 else bytes([v])
+        rows.append(bytes(row))
+    head = struct.pack('>hb', depth, 1 if compressed else 0)
+    if not compressed: return head + b''.join(rows)
+    packed = [packbits(r) for r in rows]
+    return head + b''.join(struct.pack('>h', len(p)) for p in packed) + b''.join(packed)
+
+def unicode_text(text):
+    return struct.pack('>I', len(text) + 1) + (text + '\0').encode('utf-16-be')
+
+def build_abr6(path):
+    ring = lambda x, y: 255 if 36 <= (x - 10) ** 2 + (y - 7) ** 2 < 49 else 0
+    ramp = lambda x, y: (x * 255) // 11
+    samples = [('$1111aaaa-0000-0000-0000-000000000001', 20, 14, 8, True, ring),
+               ('$2222bbbb-0000-0000-0000-000000000002', 12, 9, 16, False, ramp)]
+    samp = bytearray()
+    for key, w, h, depth, compressed, fn in samples:
+        body = bytes([len(key)]) + key.encode('ascii')
+        body += bytes(301 - len(body))
+        body += struct.pack('>iiii', 2, 3, 2 + h, 3 + w) + tip_pixels(w, h, depth, compressed, fn)
+        samp += struct.pack('>I', len(body)) + body + bytes((4 - len(body) % 4) % 4)
+    # Presets name the tips they use; the second preset is listed first.
+    desc = bytearray(b'\x00\x00\x00\x10null')
+    for name, key in [('Smooth Ramp', samples[1][0]), ('Ring Tip', samples[0][0])]:
+        desc += b'\x00\x00\x00\x00Nm  TEXT' + unicode_text(name)
+        desc += b'\x00\x00\x00\x00BrshObjc' + b'\x00\x00\x00\x0bsampledDataTEXT' + unicode_text(key)
+    data = struct.pack('>hh', 6, 2)
+    for tag, body in [(b'samp', bytes(samp)), (b'desc', bytes(desc))]:
+        data += b'8BIM' + tag + struct.pack('>I', len(body)) + body
+    open(path, 'wb').write(data)
+
+def build_abr2(path):
+    cross = lambda x, y: 255 if x == 4 or y == 3 else 0
+    computed = struct.pack('>ihhhhb', 0, 25, 30, 0, 100, 0)
+    sampled = struct.pack('>ih', 0, 25) + unicode_text('Cross') + b'\x01' + struct.pack('>hhhh', 0, 0, 7, 9)
+    sampled += struct.pack('>iiii', 0, 0, 7, 9) + tip_pixels(9, 7, 8, True, cross)
+    data = struct.pack('>hh', 2, 2)
+    data += struct.pack('>hI', 1, len(computed)) + computed + struct.pack('>hI', 2, len(sampled)) + sampled
+    open(path, 'wb').write(data)
+
+build_abr6(OUT + '/tips-v6.abr')
+build_abr2(OUT + '/tips-v2.abr')

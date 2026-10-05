@@ -7,8 +7,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.nio.ByteBuffer
+import java.util.zip.Inflater
 import java.util.zip.ZipInputStream
-import javax.imageio.ImageIO
 import kotlin.math.abs
 
 /**
@@ -32,10 +33,37 @@ class ProcreateReaderTest {
         }
     }
 
-    private fun decode(bytes: ByteArray): PixelBuffer? =
-        ImageIO.read(bytes.inputStream())?.let { image ->
-            PixelBuffer(image.width, image.height, image.getRGB(0, 0, image.width, image.height, null, 0, image.width))
+    /** The fixtures' thumbnails are 8-bit RGB PNGs with unfiltered rows (javax.imageio is not on Android). */
+    private fun decode(bytes: ByteArray): PixelBuffer? {
+        val data = ByteBuffer.wrap(bytes)
+        data.position(PNG_SIGNATURE)
+        var width = 0
+        var height = 0
+        val compressed = java.io.ByteArrayOutputStream()
+        while (data.remaining() >= 12) {
+            val length = data.int
+            val kind = String(ByteArray(4).also { data.get(it) }, Charsets.ISO_8859_1)
+            val body = ByteArray(length).also { data.get(it) }
+            data.int
+            if (kind == "IHDR") {
+                width = ByteBuffer.wrap(body).int
+                height = ByteBuffer.wrap(body, 4, 4).int
+            }
+            if (kind == "IDAT") compressed.write(body)
         }
+        val rows = ByteArray(height * (1 + width * 3))
+        Inflater().apply { setInput(compressed.toByteArray()) }.inflate(rows)
+        return PixelBuffer(width, height).also { image ->
+            for (y in 0 until height) {
+                for (x in 0 until width) {
+                    val at = y * (1 + width * 3) + 1 + x * 3
+                    val rgb =
+                        ((rows[at].toInt() and 0xFF) shl 16) or ((rows[at + 1].toInt() and 0xFF) shl 8) or (rows[at + 2].toInt() and 0xFF)
+                    image.pixels[y * width + x] = (0xFF shl 24) or rgb
+                }
+            }
+        }
+    }
 
     private fun open(name: String) = ProcreateReader.open(files(fixture(name)), ::decode)
 
@@ -78,6 +106,10 @@ class ProcreateReaderTest {
                 }
             }
         }
+    }
+
+    private companion object {
+        const val PNG_SIGNATURE = 8
     }
 
     @Test

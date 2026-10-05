@@ -13,6 +13,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
+import com.artflow.studio.core.export.AbrReader
 import com.artflow.studio.data.local.BrushArchives
 import com.artflow.studio.data.local.BrushFiles
 import com.artflow.studio.data.local.GrainStorage
@@ -25,7 +26,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-/** Share the brush being edited as an `.artbrush` file, or import brushes someone shared. */
+/** Share the brush being edited as an `.artbrush` file, or import brushes (ArtFlow, Procreate or Photoshop). */
 @Composable
 internal fun BrushFileButtons(
     parameters: BrushParams,
@@ -47,6 +48,8 @@ internal fun BrushFileButtons(
                             require(bytes != null && bytes.size <= MAX_ARCHIVE_BYTES) { "Unreadable brush file" }
                             if (BrushArchives.isArchive(bytes)) {
                                 importArchive(context, bytes)
+                            } else if (AbrReader.isAbr(bytes)) {
+                                importAbr(context, bytes)
                             } else {
                                 require(bytes.size <= BrushFiles.MAX_BYTES) { "Unreadable brush file" }
                                 importBrushes(context, bytes.toString(Charsets.UTF_8))
@@ -84,6 +87,18 @@ private fun importArchive(
         val shape = brush.shape?.let { GrainStorage.save(directory, it) }
         val grain = brush.grain?.let { GrainStorage.save(directory, it) }
         SavedBrush("imported-$index", brush.name ?: "Imported brush ${index + 1}", BrushArchives.parameters(shape, grain, brush.settings))
+    }
+}
+
+/** Photoshop `.abr` files: each sampled tip comes in as a brush shape. */
+private fun importAbr(
+    context: Context,
+    bytes: ByteArray,
+): List<SavedBrush> {
+    val directory = GrainStorage.directory(context.filesDir)
+    return BrushArchives.readAbr(bytes).mapIndexed { index, brush ->
+        val shape = brush.shape?.let { GrainStorage.save(directory, it) }
+        SavedBrush("imported-abr-$index", brush.name ?: "Photoshop brush ${index + 1}", BrushArchives.parameters(shape, null))
     }
 }
 

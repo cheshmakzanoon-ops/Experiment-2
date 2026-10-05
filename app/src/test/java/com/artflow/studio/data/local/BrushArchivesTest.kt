@@ -65,4 +65,12 @@ class BrushArchivesTest {
         assertTrue(params.blendTexture)
         assertNull(brushes[0].shape)
     }
+
+    @Test fun photoshopTipsBecomeNamedShapes() {
+        val abr = requireNotNull(javaClass.getResourceAsStream("/procreate/tips-v6.abr")).use { it.readBytes() }
+        assertFalse(BrushArchives.isArchive(abr))
+        val brushes = BrushArchives.readAbr(abr)
+        assertEquals(listOf("Ring Tip", "Smooth Ramp"), brushes.map { it.name })
+        assertTrue(brushes.all { it.shape != null && it.grain == null })
+    }
 }

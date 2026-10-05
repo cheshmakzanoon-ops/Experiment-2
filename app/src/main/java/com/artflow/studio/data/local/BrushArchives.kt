@@ -1,5 +1,6 @@
 package com.artflow.studio.data.local
 
+import com.artflow.studio.core.export.AbrReader
 import com.artflow.studio.core.export.BinaryPlist
 import com.artflow.studio.core.export.ProcreateBrush
 import com.artflow.studio.core.pixels.PixelBuffer
@@ -13,7 +14,7 @@ import java.util.zip.ZipInputStream
  * Procreate `.brush` and `.brushset` files: zip archives holding, per brush, its settings
  * (`Brush.archive`) with a `Shape.png` and a `Grain.png`; a set lists its brushes, in order, in
  * `brushset.plist`. The images become ArtFlow tip and grain images and the settings are carried
- * over by [ProcreateBrush].
+ * over by [ProcreateBrush]. Photoshop `.abr` files bring their sampled tips ([readAbr]).
  */
 object BrushArchives {
     /** One brush: its name and settings when the archive has them, and its images as ArtFlow tiles. */
@@ -21,9 +22,25 @@ object BrushArchives {
         val shape: CustomGrains.Tile?,
         val grain: CustomGrains.Tile?,
         val settings: ProcreateBrush.Settings? = null,
-    ) {
-        val name: String? get() = settings?.name
-    }
+        val name: String? = settings?.name,
+    )
+
+    /** Photoshop brush files: each sampled tip becomes a brush shape, named as the file names it. */
+    fun readAbr(bytes: ByteArray): List<Imported> =
+        AbrReader.read(bytes).map { tip ->
+            // Tips are padded to a square, centred, so long tips keep their whole shape.
+            val side = maxOf(tip.width, tip.height)
+            val square = PixelBuffer(side, side, IntArray(side * side) { OPAQUE_BLACK })
+            val left = (side - tip.width) / 2
+            val top = (side - tip.height) / 2
+            for (y in 0 until tip.height) {
+                for (x in 0 until tip.width) {
+                    val value = tip.values[y * tip.width + x].toInt() and 0xFF
+                    square.pixels[(top + y) * side + left + x] = OPAQUE_BLACK or (value shl 16) or (value shl 8) or value
+                }
+            }
+            Imported(CustomGrains.tileFrom(square), null, name = tip.name)
+        }
 
     /** Zip files start with the local-file signature `PK\u0003\u0004`. */
     fun isArchive(bytes: ByteArray): Boolean =
@@ -134,6 +151,7 @@ object BrushArchives {
     private const val SHAPE = "shape"
     private const val GRAIN = "grain"
     private const val SETTINGS = "settings"
+    private const val OPAQUE_BLACK = 0xFF000000.toInt()
     private const val SET = "set"
     private const val MAX_ENTRIES = 2_000
     private const val MAX_BRUSHES = 100
