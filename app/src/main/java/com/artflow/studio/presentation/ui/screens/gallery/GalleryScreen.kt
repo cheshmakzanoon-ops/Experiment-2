@@ -426,7 +426,7 @@ private fun ImportMenu(choices: ImportChoices) {
                 open = false
                 choices.artwork()
             })
-            DropdownMenuItem(text = { Text("3D model (OBJ)") }, onClick = {
+            DropdownMenuItem(text = { Text("3D model (OBJ, glTF)") }, onClick = {
                 open = false
                 choices.model()
             })

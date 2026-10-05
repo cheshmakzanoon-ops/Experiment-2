@@ -132,7 +132,8 @@ object Tutorials {
             ),
             TutorialStep(
                 "Gallery and saving",
-                "Import a 3D model (OBJ with texture coordinates) to paint on it in the 3D window: Paint mode paints " +
+                "Import a 3D model (OBJ or glTF/GLB with texture coordinates, or a zip with its textures) " +
+                    "to paint on it in the 3D window: Paint mode paints " +
                     "the model with the current brush, Turn mode or two fingers spin and zoom it. " +
                     "Touch and hold an artwork and drop it on another to make a stack, or use Select to stack, " +
                     "duplicate or delete several at once. ArtFlow autosaves as you work; if the app is killed, " +

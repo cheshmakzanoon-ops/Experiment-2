@@ -22,11 +22,28 @@ object ModelPackage {
 
     fun read(bytes: ByteArray): Contents {
         require(bytes.size <= MAX_BYTES) { "This 3D model is too large" }
+        if (GltfReader.isGlb(bytes) || isGltfText(bytes)) return gltf(bytes, emptyMap())
         if (!isZip(bytes)) return Contents(bytes.decodeToString())
         val files = unzip(bytes)
-        val objName = files.keys.firstOrNull { it.endsWith(".obj") } ?: error("The zip has no OBJ model in it")
-        val objText = requireNotNull(files[objName]).decodeToString()
-        return Contents(objText, textureFor(objText, files))
+        files.keys.firstOrNull { it.endsWith(".obj") }?.let { name ->
+            val objText = requireNotNull(files[name]).decodeToString()
+            return Contents(objText, textureFor(objText, files))
+        }
+        val scene = files.keys.firstOrNull { it.endsWith(".glb") } ?: files.keys.firstOrNull { it.endsWith(".gltf") }
+        return gltf(requireNotNull(files[scene ?: error("The zip has no OBJ or glTF model in it")]), files)
+    }
+
+    private fun gltf(
+        bytes: ByteArray,
+        files: Map<String, ByteArray>,
+    ): Contents = GltfReader.read(bytes, files).let { Contents(it.objText, it.texture) }
+
+    /** A .gltf file is JSON describing an "asset". */
+    private fun isGltfText(bytes: ByteArray): Boolean {
+        val start = bytes.indexOfFirst { !it.toInt().toChar().isWhitespace() }
+        return start >= 0 &&
+            bytes[start] == '{'.code.toByte() &&
+            String(bytes, start, minOf(bytes.size - start, PEEK)).contains("\"asset\"")
     }
 
     /** The diffuse texture of the first material [objText] uses (or of the first textured one). */
@@ -130,5 +147,6 @@ object ModelPackage {
     private fun isZip(bytes: ByteArray): Boolean = bytes.size >= ZIP_MAGIC.size && ZIP_MAGIC.indices.all { bytes[it] == ZIP_MAGIC[it] }
 
     private const val BUFFER = 64 * 1024
+    private const val PEEK = 4096
     private val IMAGE_EXTENSIONS = listOf(".png", ".jpg", ".jpeg", ".webp", ".bmp")
 }
