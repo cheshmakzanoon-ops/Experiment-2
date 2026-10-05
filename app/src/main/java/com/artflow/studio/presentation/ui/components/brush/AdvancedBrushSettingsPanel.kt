@@ -271,6 +271,13 @@ private fun BrushGrainSettings(
                 valueRange = 0f..360f,
                 valueDisplay = "%.0f°".format(brushParams.textureRotation),
             )
+            BrushParameterSlider(
+                label = "Grain depth",
+                value = brushParams.grainDepth.coerceIn(0f, 1f),
+                onValueChange = { onBrushParamsChanged(brushParams.copy(grainDepth = it)) },
+                valueRange = 0f..1f,
+                valueDisplay = "%.0f%%".format(brushParams.grainDepth * 100),
+            )
             ShapeSwitch("Moving grain (starts with each stroke)", brushParams.grainMoving) {
                 onBrushParamsChanged(brushParams.copy(grainMoving = it))
             }

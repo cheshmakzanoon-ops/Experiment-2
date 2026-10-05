@@ -71,6 +71,7 @@ object ProcreateBrush {
                 blendMode = mode ?: BlendMode.NORMAL,
                 wetEdges = unit("wetEdgesAmount"),
                 burntEdges = unit("burntEdgesAmount"),
+                grainDepth = number("grainDepth")?.coerceIn(0f, 1f) ?: 1f,
                 falloff = unit("dynamicsFalloff"),
                 tipFlipX = flag("shapeFlipXJitter"),
                 tipFlipY = flag("shapeFlipYJitter"),

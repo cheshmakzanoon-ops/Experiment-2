@@ -87,3 +87,20 @@ class BurntEdgesTest {
         assertTrue(paint(1f, 0f).pixels.contentEquals(paint(1f, 1f).pixels))
     }
 }
+
+class GrainDepthTest {
+    @Test
+    fun depthScalesHowStronglyTheGrainShows() {
+        fun coverages(depth: Float) =
+            requireNotNull(
+                com.artflow.studio.core.render.BrushTexture
+                    .from(BrushParams(textureId = "speckle", blendTexture = true, grainDepth = depth)),
+            ).let { texture -> (0 until 400).map { texture.coverage(it % 20, it / 20) } }
+        val full = coverages(1f)
+        val half = coverages(0.5f)
+        val none = coverages(0f)
+        assertTrue(full.any { it < 0.5f })
+        assertTrue(none.all { it == 1f })
+        full.indices.forEach { assertEquals(1f - 0.5f * (1f - full[it]), half[it], 1e-6f) }
+    }
+}

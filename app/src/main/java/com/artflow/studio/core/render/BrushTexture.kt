@@ -16,6 +16,8 @@ class BrushTexture private constructor(
     private val tile: CustomGrains.Tile?,
     scale: Float,
     rotation: Float,
+    /** Procreate's grain Depth: 1 shows the grain fully, 0 not at all. */
+    private val depth: Float = 1f,
 ) {
     enum class Kind(
         val id: String,
@@ -37,6 +39,11 @@ class BrushTexture private constructor(
     private val sine = sin(radians).toFloat() / scale
 
     fun coverage(
+        x: Int,
+        y: Int,
+    ): Float = if (depth >= 1f) grain(x, y) else 1f - depth * (1f - grain(x, y))
+
+    private fun grain(
         x: Int,
         y: Int,
     ): Float {
@@ -117,7 +124,8 @@ class BrushTexture private constructor(
             val kind = Kind.entries.firstOrNull { it.id == params.textureId }
             val tile = if (kind == null) CustomGrains.get(params.textureId) ?: return null else null
             require(params.textureScale.isFinite() && params.textureRotation.isFinite()) { "Texture settings must be finite" }
-            return BrushTexture(kind, tile, params.textureScale.coerceIn(0.25f, 8f), params.textureRotation % 360f)
+            val depth = if (params.grainDepth.isFinite()) params.grainDepth.coerceIn(0f, 1f) else 1f
+            return BrushTexture(kind, tile, params.textureScale.coerceIn(0.25f, 8f), params.textureRotation % 360f, depth)
         }
     }
 }
