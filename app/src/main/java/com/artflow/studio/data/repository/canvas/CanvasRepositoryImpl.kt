@@ -226,6 +226,7 @@ class CanvasRepositoryImpl
             pendingSelection = null
             activeSelection = null
             activeStrokes.clear()
+            synchronized(liveLock) { liveStrokes.clear() }
             strokeBrushParams.clear()
             strokeLayerIds.clear()
             strokeErasers.clear()
@@ -351,6 +352,7 @@ class CanvasRepositoryImpl
             pendingSelection = null
             activeSelection = null
             activeStrokes.clear()
+            synchronized(liveLock) { liveStrokes.clear() }
             strokeBrushParams.clear()
             strokeLayerIds.clear()
             strokeErasers.clear()
@@ -621,17 +623,24 @@ class CanvasRepositoryImpl
             val reach = incoming.map { PreviewCache.boundsOf(it, 0) }.reduce { a, b -> PreviewCache.union(a, b) }
             val area =
                 IntBounds(max(0, reach.left), max(0, reach.top), min(canvasWidth - 1, reach.right), min(canvasHeight - 1, reach.bottom))
+            // A live stroke already holds its dabs: the commit lays them down instead of redrawing.
+            val lives = synchronized(liveLock) { liveStrokes.remove(strokeId) }
+            val live = lives?.takeIf { destination == StrokeDestination.LAYER && it.size == incoming.size && layer.strokes.isEmpty() }
             val base =
-                LayerStrokeRenderer.render(
-                    if (destination.isMask) layer.mask else layer.raster,
-                    if (destination.isMask) emptyList() else layer.strokes.toList(),
-                    incoming,
-                    canvasWidth,
-                    canvasHeight,
-                    !destination.isMask && layer.isAlphaLocked,
-                    activeSelection,
-                    region = area,
-                )
+                if (live != null) {
+                    commitLive(layer, incoming, live)
+                } else {
+                    LayerStrokeRenderer.render(
+                        if (destination.isMask) layer.mask else layer.raster,
+                        if (destination.isMask) emptyList() else layer.strokes.toList(),
+                        incoming,
+                        canvasWidth,
+                        canvasHeight,
+                        !destination.isMask && layer.isAlphaLocked,
+                        activeSelection,
+                        region = area,
+                    )
+                }
             val damageBefore = previewDamage
             pushUndo()
             if (destination.isMask) {
@@ -648,6 +657,26 @@ class CanvasRepositoryImpl
             // The commit only changed this layer, inside the stroke's reach.
             previewDamage = damageBefore?.plus(area, layer.id)
             emitAsync(CanvasInvalidationEvent.Full)
+        }
+
+        /** [layer]'s pixels with the live [strokes] laid down, as a full redraw would paint them. */
+        private fun commitLive(
+            layer: LayerData,
+            strokes: List<Stroke>,
+            lives: List<StrokeRasterizer.LiveStroke>,
+        ): PixelBuffer {
+            val result = layer.raster?.copy() ?: PixelBuffer(canvasWidth, canvasHeight)
+            val rasterizer = StrokeRasterizer()
+            try {
+                synchronized(liveLock) {
+                    strokes.zip(lives).forEach { (stroke, live) ->
+                        rasterizer.drawLive(result, live, stroke, layer.raster, layer.isAlphaLocked, activeSelection)
+                    }
+                }
+            } finally {
+                rasterizer.release()
+            }
+            return result
         }
 
         private fun validSample(
@@ -667,6 +696,7 @@ class CanvasRepositoryImpl
             }
 
         override fun cancelStroke(strokeId: Long) {
+            synchronized(liveLock) { liveStrokes.remove(strokeId) }
             activeStrokes.remove(strokeId)
             strokeBrushParams.remove(strokeId)
             strokeLayerIds.remove(strokeId)
@@ -2140,10 +2170,16 @@ class CanvasRepositoryImpl
             val selection: SelectionMask?,
             val symmetry: SymmetryEngine.Settings,
             val region: IntBounds? = null,
+            /** Each layer's whole pixels in canvas coordinates, kept when [layers] are cropped. */
+            val fullRasters: Map<Long, PixelBuffer?> = emptyMap(),
         )
 
         private val previewCache = PreviewCache()
         private val previewMutex = Mutex()
+
+        /** Strokes being drawn live (one per mirrored copy), by stroke id; guarded by [liveLock]. */
+        private val liveStrokes = HashMap<Long, List<StrokeRasterizer.LiveStroke>>()
+        private val liveLock = Any()
 
         /** The layers below the one being painted, composited once per area while a stroke goes on. */
         private val belowCache = TileCache()
@@ -2200,6 +2236,7 @@ class CanvasRepositoryImpl
                 strokeDestinations.toMap(),
                 activeSelection?.copy(),
                 symmetrySettings,
+                fullRasters = layers.associate { it.id to it.raster },
             )
         }
 
@@ -2374,6 +2411,62 @@ class CanvasRepositoryImpl
             return snapshot.copy(layers = layers, selection = selection, region = region)
         }
 
+        /**
+         * Paints [stroke] (with its [mirrors]) on [layer]'s preview pixels from its live state: only
+         * dabs added since the last frame are stamped. False when the stroke must be redrawn whole.
+         */
+        private fun paintLive(
+            layer: LayerData,
+            stroke: Stroke,
+            mirrors: List<Stroke>,
+            snapshot: PreviewSnapshot,
+        ): Boolean {
+            val document = snapshot.document
+            val region = snapshot.region
+            synchronized(liveLock) {
+                val lives = liveFor(stroke, mirrors, layer, document.width, document.height) ?: return false
+                val target = layer.raster?.copy() ?: PixelBuffer(region?.width ?: document.width, region?.height ?: document.height)
+                val rasterizer = StrokeRasterizer(region?.left ?: 0, region?.top ?: 0)
+                try {
+                    mirrors.zip(lives).forEach { (mirror, live) ->
+                        rasterizer.drawLive(target, live, mirror, snapshot.fullRasters[layer.id], layer.isAlphaLocked, snapshot.selection)
+                    }
+                } finally {
+                    rasterizer.release()
+                }
+                layer.raster = target
+                layer.strokes.clear()
+            }
+            return true
+        }
+
+        /**
+         * The live copies of [stroke] (one per mirror) on a [width] × [height] canvas, started on
+         * first use; null when it has to be redrawn whole: a brush whose dabs depend on the finished
+         * stroke, older vector strokes still on [layer], wet mix across mirrors, or too little memory.
+         * Call with [liveLock] held.
+         */
+        private fun liveFor(
+            stroke: Stroke,
+            mirrors: List<Stroke>,
+            layer: LayerData,
+            width: Int,
+            height: Int,
+        ): List<StrokeRasterizer.LiveStroke>? {
+            val eligible =
+                StrokeRasterizer.canDrawLive(stroke) &&
+                    layer.strokes.isEmpty() &&
+                    (mirrors.size == 1 || stroke.brushParams.wetMix <= 0f)
+            val bytes = width.toLong() * height * BYTES_PER_PIXEL * mirrors.size
+            if (!eligible || bytes > Runtime.getRuntime().maxMemory() / LIVE_HEAP_SHARE) return null
+            val lives =
+                liveStrokes.getOrPut(stroke.id) {
+                    val starter = StrokeRasterizer()
+                    mirrors.map { starter.startLive(it, width, height) }
+                }
+            return lives.takeIf { it.size == mirrors.size }
+        }
+
         private fun paintPreviewStrokes(
             layer: LayerData,
             active: List<Stroke>,
@@ -2382,12 +2475,20 @@ class CanvasRepositoryImpl
             val region = snapshot.region
             for (stroke in active) {
                 val destination = snapshot.destinations[stroke.id] ?: StrokeDestination.LAYER
-                if (!canReceiveStroke(layer, destination)) continue
-                // Mirror in canvas coordinates, then shift into the region being rendered.
+                val mirrors =
+                    SymmetryEngine.mirrorStroke(
+                        stroke,
+                        snapshot.document.width,
+                        snapshot.document.height,
+                        symmetryFor(layer, snapshot.symmetry),
+                    )
+                val done =
+                    !canReceiveStroke(layer, destination) ||
+                        (destination == StrokeDestination.LAYER && paintLive(layer, stroke, mirrors, snapshot))
+                if (done) continue
+                // Shift the mirrored strokes into the region being rendered.
                 val incoming =
-                    SymmetryEngine
-                        .mirrorStroke(stroke, snapshot.document.width, snapshot.document.height, symmetryFor(layer, snapshot.symmetry))
-                        .map { if (region == null) it else PreviewCache.translate(it, -region.left.toFloat(), -region.top.toFloat()) }
+                    mirrors.map { if (region == null) it else PreviewCache.translate(it, -region.left.toFloat(), -region.top.toFloat()) }
                 val pixels =
                     LayerStrokeRenderer.render(
                         if (destination.isMask) layer.mask else layer.raster,
@@ -2665,6 +2766,7 @@ class CanvasRepositoryImpl
             pendingSelection = null
             activeSelection = null
             activeStrokes.clear()
+            synchronized(liveLock) { liveStrokes.clear() }
             strokeBrushParams.clear()
             strokeLayerIds.clear()
             strokeErasers.clear()
@@ -2804,6 +2906,7 @@ class CanvasRepositoryImpl
             pendingEdits.clear()
             damageTrackedSessions.clear()
             activeStrokes.clear()
+            synchronized(liveLock) { liveStrokes.clear() }
             strokeBrushParams.clear()
             strokeLayerIds.clear()
             strokeErasers.clear()
@@ -3001,6 +3104,7 @@ class CanvasRepositoryImpl
         companion object {
             private const val BYTES_PER_PIXEL = 4L
             private const val BELOW_CACHE_HEAP_SHARE = 8L
+            private const val LIVE_HEAP_SHARE = 6L
             private const val MAX_HISTORY = 30
             private val NO_SYMMETRY = SymmetryEngine.Settings()
             private const val OPACITY_MERGE_MS = 1_500L
