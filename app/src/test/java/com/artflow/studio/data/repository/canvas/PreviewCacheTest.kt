@@ -2,6 +2,7 @@ package com.artflow.studio.data.repository.canvas
 
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.render.StrokeReach
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.model.brush.StrokePoint
@@ -10,6 +11,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.ceil
+import kotlin.math.floor
 
 class PreviewCacheTest {
     private val params = BrushParams(size = 4f)
@@ -42,7 +45,9 @@ class PreviewCacheTest {
         val next = frame(cache, "doc", listOf(stroke(10f, 20f, 30f)))
         val dirty = requireNotNull(next.dirty)
         // From the previous last point (20) to the new one (30), grown by the brush reach.
-        assertTrue(dirty.left in 8..12 && dirty.right in 38..42)
+        val reach = StrokeReach.of(params) + StrokeReach.PADDING
+        assertTrue(dirty.left in floor(20 - reach).toInt() - 2..floor(20 - reach).toInt())
+        assertTrue(dirty.right in ceil(30 + reach).toInt()..ceil(30 + reach).toInt() + 2)
         assertEquals(dirty, requests.last())
     }
 
