@@ -64,6 +64,12 @@ object ProcreateReader {
         private val tiles: Tiles,
         private val compositeUuid: String?,
     ) {
+        /**
+         * How far the calibrated layout's image is from the file's thumbnail: the mean difference
+         * per colour channel (0-255) over a coarse grid, or NaN when there was nothing to compare.
+         */
+        val calibrationError: Double get() = tiles.calibrationError
+
         /** A layer's pixels (straight ARGB), upright; empty when it has no tiles. */
         fun pixels(layer: Layer): PixelBuffer = tiles.layer(layer.uuid)
 
@@ -201,6 +207,8 @@ object ProcreateReader {
         /** Index into [ORIENTATIONS]: quarter turns clockwise, then whether the image is mirrored. */
         private var orientation = 0
         private var bgra = false
+        var calibrationError = Double.NaN
+            private set
         private val byLayer: Map<String, List<Tile>> = index(files.names)
 
         val width get() = if (turns() % 2 == 0) storedWidth else storedHeight
@@ -253,6 +261,7 @@ object ProcreateReader {
                         best = error
                         orientation = candidate
                         bgra = swap
+                        calibrationError = error / (CELLS * CELLS * 3)
                     }
                 }
             }
