@@ -2192,17 +2192,23 @@ class CanvasRepositoryImpl
         )
 
         /**
-         * Identifies the layers below the one a single stroke in progress paints, or null when the
-         * preview cannot keep them aside: several strokes, mask strokes, a stroke inside a group or
-         * clipping to the layer below, or pinned animation frames. Starts with the painted layer's id.
+         * Identifies the layers below the one a single stroke in progress paints — or, with no stroke
+         * in progress, below [changedLayer], the one layer just edited (a stroke being committed) —
+         * or null when the preview cannot keep them aside: several strokes, mask strokes, a layer
+         * inside a group or clipping to the layer below, or pinned animation frames. Starts with
+         * the painted layer's id.
          */
-        private fun belowKey(): List<Any?>? {
-            val stroke = activeStrokes.keys.singleOrNull() ?: return null
+        private fun belowKey(changedLayer: Long?): List<Any?>? {
+            val stroke = activeStrokes.keys.singleOrNull()
+            if (stroke == null) return changedLayer?.let { if (activeStrokes.isEmpty()) belowKeyFor(it) else null }
+            if ((strokeDestinations[stroke] ?: StrokeDestination.LAYER) != StrokeDestination.LAYER) return null
+            return strokeLayerIds[stroke]?.let(::belowKeyFor)
+        }
+
+        private fun belowKeyFor(layerId: Long): List<Any?>? {
             // The cache is a canvas-sized image; skip it where that would crowd the heap.
             val cacheBytes = canvasWidth.toLong() * canvasHeight * BYTES_PER_PIXEL
             if (cacheBytes > Runtime.getRuntime().maxMemory() / BELOW_CACHE_HEAP_SHARE) return null
-            if ((strokeDestinations[stroke] ?: StrokeDestination.LAYER) != StrokeDestination.LAYER) return null
-            val layerId = strokeLayerIds[stroke] ?: return null
             val layers = currentLayers()
             val index = layers.indexOfFirst { it.id == layerId }
             val layer = layers.getOrNull(index) ?: return null
@@ -2295,7 +2301,7 @@ class CanvasRepositoryImpl
                     withState {
                         val damage = previewDamage
                         previewDamage = PreviewCache.Damage.NONE
-                        PreviewRequest(takePreviewSnapshot(), previewKey(), damage, belowKey())
+                        PreviewRequest(takePreviewSnapshot(), previewKey(), damage, belowKey(damage?.layers?.singleOrNull()))
                     }
                 val snapshot = request.snapshot
                 val key = request.key
@@ -2307,8 +2313,9 @@ class CanvasRepositoryImpl
                             val symmetry = symmetryFor(layer, snapshot.symmetry)
                             SymmetryEngine.mirrorStroke(stroke, snapshot.document.width, snapshot.document.height, symmetry)
                         }
-                    // Unchanged document and a local preview: layers below the stroke come from the cache.
-                    val keepBelow = key != null && damage == PreviewCache.Damage.NONE
+                    // A local preview where at most the painted layer changed: the layers below it come from the cache.
+                    val split = request.below?.first()
+                    val keepBelow = key != null && damage != null && damage.layers.all { it == split }
                     previewCache.frame(key, damage, drawn, snapshot.document.width, snapshot.document.height) { region ->
                         val below = request.below
                         if (region != null && below != null && keepBelow) {

@@ -73,6 +73,9 @@ class PreviewBelowCacheDeviceTest {
                     assertArrayEquals("round $round sample $sample", full.pixels, frame.buffer.pixels)
                 }
                 repository.endStroke(stroke)
+                // The commit frame keeps the layers below too; it must still match a full redraw.
+                val committed = requireNotNull(repository.compositePreviewFrame())
+                assertArrayEquals("round $round commit", requireNotNull(repository.compositePreview()).pixels, committed.buffer.pixels)
             }
         }
 
