@@ -188,27 +188,33 @@ class ProcreateReaderTest {
 
     @Test
     fun everyLayoutsClosedFormMatchesTurningStepByStep() {
-        val storedWidth = 5
-        val storedHeight = 3
         for (orientation in 0 until ProcreateReader.ORIENTATION_COUNT) {
-            val turned = orientation / 2 % 2 == 1
-            val width = if (turned) storedHeight else storedWidth
-            val height = if (turned) storedWidth else storedHeight
-            val mirrored = orientation % 2 == 1
-            val seen = HashSet<Int>()
-            for (y in 0 until height) {
-                for (x in 0 until width) {
-                    val (sx, sy) = ProcreateReader.locate(x, y, width, height, orientation)
-                    val expected = sy * storedWidth + if (mirrored) storedWidth - 1 - sx else sx
-                    assertEquals(
-                        "layout $orientation at ($x, $y)",
-                        expected,
-                        ProcreateReader.orientedIndex(x, y, storedWidth, storedHeight, orientation),
-                    )
-                    seen += expected
-                }
-            }
-            assertEquals("layout $orientation covers every stored pixel once", storedWidth * storedHeight, seen.size)
+            val seen = layoutIndices(orientation, storedWidth = 5, storedHeight = 3)
+            assertEquals("layout $orientation covers every stored pixel once", 15, seen.toSet().size)
+        }
+    }
+
+    /** Every output pixel's stored index for [orientation], checked against turning step by step. */
+    private fun layoutIndices(
+        orientation: Int,
+        storedWidth: Int,
+        storedHeight: Int,
+    ): List<Int> {
+        val turned = orientation / 2 % 2 == 1
+        val width = if (turned) storedHeight else storedWidth
+        val height = if (turned) storedWidth else storedHeight
+        val mirrored = orientation % 2 == 1
+        return (0 until width * height).map { index ->
+            val x = index % width
+            val y = index / width
+            val (sx, sy) = ProcreateReader.locate(x, y, width, height, orientation)
+            val expected = sy * storedWidth + if (mirrored) storedWidth - 1 - sx else sx
+            assertEquals(
+                "layout $orientation at ($x, $y)",
+                expected,
+                ProcreateReader.orientedIndex(x, y, storedWidth, storedHeight, orientation),
+            )
+            expected
         }
     }
 }
