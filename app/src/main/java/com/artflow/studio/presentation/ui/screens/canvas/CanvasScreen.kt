@@ -211,6 +211,7 @@ fun CanvasScreen(
     var warpMesh by remember { mutableStateOf<WarpMesh?>(null) }
     var brushCursor by remember { mutableStateOf<BrushCursor?>(null) }
     var colorDropThreshold by remember { mutableStateOf<Float?>(null) }
+    var continueFilling by remember { mutableStateOf(false) }
     var editingText by remember { mutableStateOf<Layer?>(null) }
     val adjustment by viewModel.adjustments.state.collectAsState()
     val layerThumbnails by viewModel.layerThumbnails.thumbnails.collectAsState()
@@ -1225,7 +1226,16 @@ fun CanvasScreen(
                     onChange = { colorDropThreshold = it },
                     // Read the state itself: the slider can finish before the latest value recomposes.
                     onCommit = { colorDropThreshold?.let { latest -> canvasView?.adjustColorDrop(latest.roundToInt()) } },
-                    onDone = { colorDropThreshold = null },
+                    continueFilling = continueFilling,
+                    onContinueFilling = {
+                        continueFilling = !continueFilling
+                        canvasView?.continueFilling = continueFilling
+                    },
+                    onDone = {
+                        colorDropThreshold = null
+                        continueFilling = false
+                        canvasView?.continueFilling = false
+                    },
                     modifier = Modifier.align(Alignment.TopCenter).zIndex(4f),
                 )
             }
@@ -1671,6 +1681,8 @@ private fun ColorDropThresholdBar(
     threshold: Float,
     onChange: (Float) -> Unit,
     onCommit: () -> Unit,
+    continueFilling: Boolean,
+    onContinueFilling: () -> Unit,
     onDone: () -> Unit,
     modifier: Modifier,
 ) {
@@ -1684,6 +1696,8 @@ private fun ColorDropThresholdBar(
                 valueRange = 0f..255f,
                 modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
             )
+            // Procreate's Continue Filling: further taps fill more areas with the same colour.
+            TextButton(onClick = onContinueFilling) { Text(if (continueFilling) "Filling: tap areas" else "Continue filling") }
             TextButton(onClick = onDone) { Text("Done") }
         }
     }

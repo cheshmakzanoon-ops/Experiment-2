@@ -465,6 +465,7 @@ class ArtFlowCanvasView
             removeCallbacks(quickShapeCheck)
             removeCallbacks(holdEyedropper)
             endSampling()
+            fillingTap = false
             cancelPixelInteraction()
             selectionJob?.cancel()
             onDragPreview?.invoke(null)
@@ -763,8 +764,28 @@ class ArtFlowCanvasView
             if (floor(x).toInt() !in 0 until canvasWidth || floor(y).toInt() !in 0 until canvasHeight) return false
             cancelActiveGesture()
             lastColorDrop = null
-            bucketFill(x, y, input.fillTolerance) { depth -> lastColorDrop = ColorDropFill(x, y, depth) }
+            colorDropTolerance = input.fillTolerance
+            bucketFill(x, y, colorDropTolerance) { depth -> lastColorDrop = ColorDropFill(x, y, depth) }
             return true
+        }
+
+        /**
+         * ColorDrop's Continue Filling: while on, each tap on the canvas fills there with the current
+         * colour at the threshold last set, and becomes the fill the threshold slider adjusts.
+         */
+        var continueFilling = false
+
+        private var colorDropTolerance = 0
+        private var fillingTap = false
+
+        private fun continueFill(
+            viewX: Float,
+            viewY: Float,
+        ) {
+            val (x, y) = viewToCanvas(viewX, viewY)
+            if (floor(x).toInt() !in 0 until canvasWidth || floor(y).toInt() !in 0 until canvasHeight) return
+            lastColorDrop = null
+            bucketFill(x, y, colorDropTolerance) { depth -> lastColorDrop = ColorDropFill(x, y, depth) }
         }
 
         /** Where the last ColorDrop landed and the history depth its fill produced. */
@@ -781,6 +802,7 @@ class ArtFlowCanvasView
          * (0-255). Ignored once anything else has been done since the drop.
          */
         fun adjustColorDrop(tolerance: Int) {
+            colorDropTolerance = tolerance.coerceIn(0, 255)
             val drop = lastColorDrop ?: return
             coroutineScope.launch {
                 if (canvasRepository.undoDepth != drop.depth || !canvasRepository.undo()) {
@@ -1305,6 +1327,12 @@ class ArtFlowCanvasView
                 gestureTool = null
                 return true
             }
+            if (continueFilling) {
+                // Fills on release, so a pinch or pan that starts with one finger never fills.
+                fillingTap = true
+                gestureTool = null
+                return true
+            }
             // The stylus side button samples colour, the usual Android pen shortcut.
             if (isStylus && (event.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY) != 0) {
                 val (canvasX, canvasY) = viewToCanvas(x, y)
@@ -1485,6 +1513,11 @@ class ArtFlowCanvasView
             if (holdSampling) {
                 endSampling()
                 gestureTool = null
+                return
+            }
+            if (fillingTap) {
+                fillingTap = false
+                if (!cancelled && gestureMoved <= TAP_SLOP && event.eventTime - gestureStartTime < TAP_TIMEOUT_MS) continueFill(x, y)
                 return
             }
             if (draggedNode >= 0) {
