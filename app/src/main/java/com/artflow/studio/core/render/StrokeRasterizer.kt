@@ -98,22 +98,121 @@ class StrokeRasterizer(
         clear(buffer, reach)
         drawStrokeInto(buffer, stroke, params, points, alphaLock = false, mask = null, random = random, canvas = target)
         val dual = params.dual?.let { drawDual(target, stroke, it, reach) }
+        depositCoverage(target, buffer, reach, Deposit(params, strokeAlpha, mask, alphaLock, grainOrigin(params, points)), dual)
+        lastDabCount = dabCount.get()
+    }
+
+    /** How a stroke's coverage becomes paint on its layer. */
+    private class Deposit(
+        val params: BrushParams,
+        val strokeAlpha: Float,
+        val mask: SelectionMask?,
+        val alphaLock: Boolean,
+        val grain: Pair<Int, Int>,
+    ) {
         val texture = BrushTexture.from(params)
-        val (grainX, grainY) = grainOrigin(params, points)
         val wetEdges = params.wetEdges.coerceIn(0f, 1f)
+    }
+
+    /** Lays the stroke's coverage in [buffer] onto [target] within [reach]: grain, wet edges, opacity, blend. */
+    private fun depositCoverage(
+        target: PixelBuffer,
+        buffer: PixelBuffer,
+        reach: IntBounds,
+        how: Deposit,
+        dual: DualMarks? = null,
+    ) {
+        val grainX = how.grain.first
+        val grainY = how.grain.second
         for (y in reach.top..reach.bottom) {
             for (i in y * target.width + reach.left..y * target.width + reach.right) {
                 val source = dual?.combine(buffer.pixels[i], i, originX + i % target.width, originY + i / target.width) ?: buffer.pixels[i]
                 if ((source ushr 24) == 0) continue
-                val coverage = selectionCoverage(mask, target, i)
-                val grain = texture?.coverage(originX + i % target.width - grainX, originY + i / target.width - grainY) ?: 1f
-                val effective = strokeAlpha * coverage * grain * wetEdgeFactor(source, wetEdges)
+                val coverage = selectionCoverage(how.mask, target, i)
+                val grain = how.texture?.coverage(originX + i % target.width - grainX, originY + i / target.width - grainY) ?: 1f
+                val effective = how.strokeAlpha * coverage * grain * wetEdgeFactor(source, how.wetEdges)
                 if (effective <= 0f) continue
                 val paint = Channels.scaleAlpha(source, effective)
-                target.pixels[i] = deposit(target.pixels[i], paint, params, alphaLock)
+                target.pixels[i] = deposit(target.pixels[i], paint, how.params, how.alphaLock)
             }
         }
-        lastDabCount = dabCount.get()
+    }
+
+    // --- Live strokes ---------------------------------------------------------------------------
+
+    /**
+     * A stroke being drawn, kept from frame to frame: the dabs its points have produced so far stay
+     * in [coverage] (canvas coordinates), so each frame stamps only the dabs new points add. Drawing
+     * it gives exactly what [draw] gives for the stroke so far. Not thread-safe: callers serialise.
+     */
+    class LiveStroke internal constructor(
+        internal val coverage: PixelBuffer,
+        internal val random: ReplayableRandom,
+    ) {
+        internal var tip: Stamping.TipShape? = null
+        internal var next = 1
+        internal val walk = DabWalk()
+    }
+
+    /** Starts [stroke] live on a [width] × [height] canvas; check [canDrawLive] first. */
+    fun startLive(
+        stroke: Stroke,
+        width: Int,
+        height: Int,
+    ): LiveStroke = LiveStroke(PixelBuffer(width, height), ReplayableRandom(stroke.id))
+
+    /**
+     * Paints the live [stroke] (canvas coordinates) into [target], the layer's pixels starting at
+     * this rasterizer's origin, exactly as [draw] would paint the whole stroke so far. [canvas] is
+     * the whole layer being painted on, in canvas coordinates, for wet mix.
+     */
+    fun drawLive(
+        target: PixelBuffer,
+        live: LiveStroke,
+        stroke: Stroke,
+        canvas: PixelBuffer?,
+        alphaLock: Boolean = false,
+        mask: SelectionMask? = null,
+    ) {
+        val points = stroke.points
+        val strokeAlpha = strokeAlpha(stroke)
+        if (points.isEmpty() || strokeAlpha <= 0f) return
+        val params = stroke.brushParams.copy(opacity = 1f)
+        val tip = live.tip ?: tipFor(params, live.random).also { live.tip = it }
+        // New segments join the kept coverage; the stroke's own random sequence carries on.
+        walkSegments(DabContext(live.coverage, stroke, params, 0f, false, null, live.random, tip, canvas), points, live.next, live.walk)
+        live.next = max(live.next, points.size)
+
+        val coverage = live.coverage
+        val covered = StrokeReach.bounds(points, params, coverage.width, coverage.height)
+        val left = max(covered.left, originX)
+        val top = max(covered.top, originY)
+        val right = min(covered.right, originX + target.width - 1)
+        val bottom = min(covered.bottom, originY + target.height - 1)
+        if (right < left || bottom < top) return
+        // The closing dab belongs to this frame only: it is stamped where a full redraw stamps it,
+        // with a copy of the random, and the pixels it covered are put back afterwards.
+        val end = StrokeReach.bounds(listOf(points.last()), params, coverage.width, coverage.height)
+        // A closing dab far off the canvas reaches no pixels, and then there is nothing to keep.
+        val kept = if (end.isEmpty) null else coverage.crop(end)
+        stampEnd(DabContext(coverage, stroke, params, 0f, false, null, live.random.copy(), tip, canvas), points.takeLast(2), live.walk)
+        val reach = IntBounds(left - originX, top - originY, right - originX, bottom - originY)
+        val buffer = scratchFor(scratch, target.width, target.height)
+        for (y in top..bottom) {
+            System.arraycopy(
+                coverage.pixels,
+                y * coverage.width + left,
+                buffer.pixels,
+                (y - originY) * target.width + reach.left,
+                reach.width,
+            )
+        }
+        if (kept != null) {
+            for (y in end.top..end.bottom) {
+                System.arraycopy(kept.pixels, (y - end.top) * kept.width, coverage.pixels, y * coverage.width + end.left, kept.width)
+            }
+        }
+        depositCoverage(target, buffer, reach, Deposit(params, strokeAlpha, mask, alphaLock, grainOrigin(params, points)))
     }
 
     /** Merges [paint] into [backdrop] with the brush's blend mode; alpha lock keeps the backdrop's alpha. */
@@ -210,28 +309,50 @@ class StrokeRasterizer(
         val totalLength =
             if (params.taperStart > 0f || params.taperEnd > 0f) stroke.calculateLength() else 0f
 
-        // Spacing is expressed as a fraction of the brush size; a minimum of one dab per segment
-        // keeps single-point taps visible.
+        val context = DabContext(target, stroke, params, totalLength, alphaLock, mask, random, tipFor(params, random), canvas)
+        val walk = DabWalk()
+        walkSegments(context, points, 1, walk)
+        stampEnd(context, points, walk)
+    }
+
+    /** The dab outline; a randomized tip draws its angle first, as every stroke starts. */
+    private fun tipFor(
+        params: BrushParams,
+        random: Random,
+    ): Stamping.TipShape {
         val shape = CustomGrains.get(params.shapeId)
         // Randomized starts each stroke at its own angle; the stroke's seeded random keeps it repeatable.
         val angle = params.rotation + if (params.tipRandomized) random.nextFloat() * FULL_TURN else 0f
-        val tip =
-            Stamping.TipShape(
-                params.roundness,
-                angle,
-                shape?.let { tile ->
-                    { u, v -> tile.sample(if (params.tipFlipX) 1f - u else u, if (params.tipFlipY) 1f - v else v) }
-                },
-            )
-        val context = DabContext(target, stroke, params, totalLength, alphaLock, mask, random, tip, canvas)
-        val spacingPx = max(1f, params.size * params.spacing.coerceIn(0.01f, 4f))
+        return Stamping.TipShape(
+            params.roundness,
+            angle,
+            shape?.let { tile ->
+                { u, v -> tile.sample(if (params.tipFlipX) 1f - u else u, if (params.tipFlipY) 1f - v else v) }
+            },
+        )
+    }
+
+    /** Where the spacing grid stands after the segments stamped so far. */
+    internal class DabWalk {
         var carry = 0f
-        var accumulatedDistance = 0f
+        var accumulated = 0f
+
         // Travelled value of the most recently stamped dab, used to avoid stamping the path end
         // twice when the spacing grid already lands exactly on it.
         var lastDabTravelled = Float.NaN
+    }
 
-        for (i in 1 until points.size) {
+    /** Stamps the spacing grid along the segments ending at points [from] and later. */
+    private fun walkSegments(
+        context: DabContext,
+        points: List<StrokePoint>,
+        from: Int,
+        walk: DabWalk,
+    ) {
+        // Spacing is expressed as a fraction of the brush size; a minimum of one dab per segment
+        // keeps single-point taps visible.
+        val spacingPx = max(1f, context.params.size * context.params.spacing.coerceIn(0.01f, 4f))
+        for (i in from until points.size) {
             val previous = points[i - 1]
             val current = points[i]
             val dx = current.x - previous.x
@@ -240,54 +361,41 @@ class StrokeRasterizer(
 
             if (distance <= 0.0001f) {
                 // Duplicate sample: a single dab keeps a tap visible without double-darkening.
-                drawDabAt(
-                    context,
-                    previous,
-                    current,
-                    0f,
-                    distance,
-                    accumulatedDistance,
-                )
+                drawDabAt(context, previous, current, 0f, distance, walk.accumulated)
                 continue
             }
 
-            var travelled = carry
+            var travelled = walk.carry
             while (travelled <= distance) {
-                drawDabAt(
-                    context,
-                    previous,
-                    current,
-                    travelled / distance,
-                    distance,
-                    accumulatedDistance + travelled,
-                )
-                lastDabTravelled = travelled
+                drawDabAt(context, previous, current, travelled / distance, distance, walk.accumulated + travelled)
+                walk.lastDabTravelled = travelled
                 travelled += spacingPx
             }
-            carry = travelled - distance
-            accumulatedDistance += distance
+            walk.carry = travelled - distance
+            walk.accumulated += distance
         }
+    }
 
+    /**
+     * Finishes exactly at the stroke end once, after the whole path — not once per segment, and not
+     * at all when the final segment's spacing grid already stamped t = 1. A lone point is a tap.
+     */
+    private fun stampEnd(
+        context: DabContext,
+        points: List<StrokePoint>,
+        walk: DabWalk,
+    ) {
         if (points.size == 1) {
             drawDabAt(context, points.first(), points.first(), 0f, 0f, 0f)
             return
         }
-        // Finish exactly at the stroke end once, after the whole path — not once per segment, and
-        // not at all when the final segment's spacing grid already stamped t = 1.
         val lastPrevious = points[points.size - 2]
         val last = points.last()
         val endDx = last.x - lastPrevious.x
         val endDy = last.y - lastPrevious.y
         val endDistance = sqrt(endDx * endDx + endDy * endDy)
-        if (endDistance > 0.0001f && lastDabTravelled != endDistance) {
-            drawDabAt(
-                context,
-                lastPrevious,
-                last,
-                1f,
-                endDistance,
-                accumulatedDistance,
-            )
+        if (endDistance > 0.0001f && walk.lastDabTravelled != endDistance) {
+            drawDabAt(context, lastPrevious, last, 1f, endDistance, walk.accumulated)
         }
     }
 
@@ -341,7 +449,8 @@ class StrokeRasterizer(
         // Taper opacity fades the tapered ends as well, and fall off fades the stroke along its path.
         val dabOpacity = opacity * (1f - params.taperOpacity.coerceIn(0f, 1f) * (1f - taper)) * falloffFactor(params, accumulatedDistance)
 
-        val color = wetColor(params.applyColorJitter(stroke.color, pressure, velocity, random), context.canvas, x, y, params.wetMix)
+        val color =
+            wetColor(params.applyColorJitter(stroke.color, pressure, velocity, random), context.canvas, x, y, params.wetMix)
 
         // Scatter offsets each dab; count repeats it along a random perpendicular offset.
         val dabs = params.count.coerceIn(1, 32)
@@ -608,6 +717,18 @@ class StrokeRasterizer(
     fun release() {
         scratch.remove()
         dualScratch.remove()
+    }
+
+    companion object {
+        /**
+         * Whether [stroke] can be drawn live: dabs that never change once stamped. Taper depends on
+         * the finished length, a second brush and the eraser keep their own buffers, and a zero
+         * spacing straight line is drawn as one capsule.
+         */
+        fun canDrawLive(stroke: Stroke): Boolean {
+            val params = stroke.brushParams
+            return !stroke.isEraser && params.dual == null && params.taperStart <= 0f && params.taperEnd <= 0f && params.spacing > 0f
+        }
     }
 
     /**
