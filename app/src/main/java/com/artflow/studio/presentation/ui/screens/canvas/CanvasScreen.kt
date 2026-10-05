@@ -58,6 +58,7 @@ import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.FilterType
 import com.artflow.studio.domain.model.layer.Layer
 import com.artflow.studio.domain.model.settings.ThemeMode
+import com.artflow.studio.domain.model.settings.pressureAndSmoothing
 import com.artflow.studio.presentation.ui.components.brush.BrushStudioDialog
 import com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView
 import com.artflow.studio.presentation.ui.components.canvas.BrushCursor
@@ -793,8 +794,7 @@ fun CanvasScreen(
                             input.quickShape,
                             input.touchHoldEyedropper,
                             input.fingerPainting,
-                            settings.pressureCurve,
-                            settings.stabilization,
+                            settings.pressureAndSmoothing,
                             GestureControls(settings.scrubToClear, settings.swipeCopyPaste, settings.fourFingerFullScreen),
                             lightInterface = settings.themeMode == ThemeMode.LIGHT,
                             brushCursor = settings.brushCursor,

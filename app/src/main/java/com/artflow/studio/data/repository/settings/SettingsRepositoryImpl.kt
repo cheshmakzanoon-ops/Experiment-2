@@ -225,6 +225,9 @@ class SettingsRepositoryImpl
                 KEY_RIGHT_HANDED to settings.rightHandedInterface.toString(),
                 KEY_PRESSURE_CURVE to settings.pressureCurve.toString(),
                 KEY_STABILIZATION to settings.stabilization.toString(),
+                KEY_MOTION_FILTERING to settings.motionFiltering.toString(),
+                KEY_MOTION_EXPRESSION to settings.motionExpression.toString(),
+                KEY_PRESSURE_SMOOTHING to settings.pressureSmoothing.toString(),
                 KEY_SCRUB_CLEAR to settings.scrubToClear.toString(),
                 KEY_SWIPE_PASTE to settings.swipeCopyPaste.toString(),
                 KEY_FOUR_FINGER to settings.fourFingerFullScreen.toString(),
@@ -242,6 +245,8 @@ class SettingsRepositoryImpl
             )
 
         /** A stored true/false, or [default] when it is missing or unreadable. */
+        private fun Map<String, String>.unit(key: String): Float? = this[key]?.toFloatOrNull()?.takeIf { it.isFinite() }?.coerceIn(0f, 1f)
+
         private fun Map<String, String>.flag(
             key: String,
             default: Boolean,
@@ -291,6 +296,9 @@ class SettingsRepositoryImpl
                 stabilization =
                     stored[KEY_STABILIZATION]?.toFloatOrNull()?.takeIf { it.isFinite() }?.coerceIn(0f, 1f)
                         ?: defaults.stabilization,
+                motionFiltering = stored.unit(KEY_MOTION_FILTERING) ?: defaults.motionFiltering,
+                motionExpression = stored.unit(KEY_MOTION_EXPRESSION) ?: defaults.motionExpression,
+                pressureSmoothing = stored.unit(KEY_PRESSURE_SMOOTHING) ?: defaults.pressureSmoothing,
                 scrubToClear = stored.flag(KEY_SCRUB_CLEAR, defaults.scrubToClear),
                 swipeCopyPaste = stored.flag(KEY_SWIPE_PASTE, defaults.swipeCopyPaste),
                 fourFingerFullScreen = stored.flag(KEY_FOUR_FINGER, defaults.fourFingerFullScreen),
@@ -362,6 +370,9 @@ class SettingsRepositoryImpl
             private const val KEY_RIGHT_HANDED = "interface.rightHanded"
             private const val KEY_PRESSURE_CURVE = "input.pressureCurve"
             private const val KEY_STABILIZATION = "input.stabilization"
+            private const val KEY_MOTION_FILTERING = "input.motionFiltering"
+            private const val KEY_MOTION_EXPRESSION = "input.motionExpression"
+            private const val KEY_PRESSURE_SMOOTHING = "input.pressureSmoothing"
             private const val KEY_SCRUB_CLEAR = "gesture.scrubToClear"
             private const val KEY_SWIPE_PASTE = "gesture.swipeCopyPaste"
             private const val KEY_FOUR_FINGER = "gesture.fourFingerFullScreen"

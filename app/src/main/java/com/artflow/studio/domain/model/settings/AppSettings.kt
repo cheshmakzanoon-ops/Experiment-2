@@ -73,6 +73,12 @@ data class AppSettings(
     val pressureCurve: Float = 1f,
     /** Extra stroke steadying applied on top of every brush's own smoothing (0..1). */
     val stabilization: Float = 0f,
+    /** Motion filtering: takes the jitter out of slow, careful movement (0..1). */
+    val motionFiltering: Float = 0f,
+    /** How much of the filtered-out movement comes back (0..1). */
+    val motionExpression: Float = 0.5f,
+    /** Evens out sudden pressure changes (0..1). */
+    val pressureSmoothing: Float = 0f,
     /** Gesture controls: rubbing three fingers clears the layer. */
     val scrubToClear: Boolean = true,
     /** Gesture controls: swiping three fingers down opens Copy & Paste. */
@@ -104,3 +110,15 @@ data class AppSettings(
     /** True when a finger may paint. */
     val fingerPainting: Boolean get() = !stylusOnly
 }
+
+/** Prefs > Pressure and Smoothing, as one value the panel edits and the settings store. */
+data class PressureAndSmoothing(
+    val pressureCurve: Float = 1f,
+    val stabilization: Float = 0f,
+    val motionFiltering: Float = 0f,
+    val motionExpression: Float = 0.5f,
+    val pressureSmoothing: Float = 0f,
+)
+
+val AppSettings.pressureAndSmoothing: PressureAndSmoothing
+    get() = PressureAndSmoothing(pressureCurve, stabilization, motionFiltering, motionExpression, pressureSmoothing)

@@ -10,6 +10,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.artflow.studio.core.color.CmykProof
+import com.artflow.studio.domain.model.settings.PressureAndSmoothing
 import com.artflow.studio.presentation.ui.components.canvas.GestureControls
 import kotlin.math.exp
 import kotlin.math.ln
@@ -59,8 +60,7 @@ data class StudioPrefs(
     val quickShape: Boolean,
     val holdEyedropper: Boolean,
     val fingerPainting: Boolean,
-    val pressureCurve: Float = 1f,
-    val stabilization: Float = 0f,
+    val smoothing: PressureAndSmoothing = PressureAndSmoothing(),
     val gestures: GestureControls = GestureControls(),
     val lightInterface: Boolean = false,
     val brushCursor: Boolean = true,
@@ -74,8 +74,8 @@ data class PrefActions(
     val onFingerPainting: (Boolean) -> Unit,
     val onFullScreen: () -> Unit,
     val onMoreSettings: () -> Unit,
-    /** Pressure curve exponent and stabilization, saved together. */
-    val onPressureAndSmoothing: (Float, Float) -> Unit = { _, _ -> },
+    /** Prefs > Pressure and Smoothing, saved together. */
+    val onPressureAndSmoothing: (PressureAndSmoothing) -> Unit = {},
     val onGestures: (GestureControls) -> Unit = {},
     val onLightInterface: (Boolean) -> Unit = {},
     val onBrushCursor: (Boolean) -> Unit = {},
@@ -230,24 +230,32 @@ private fun PrefsTab(
     PrefSwitch("Paint with a finger", prefs.fingerPainting, actions.onFingerPainting)
     HorizontalDivider()
     Text("Pressure and Smoothing", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
-    PrefSlider(
-        label = "Stabilization",
-        value = prefs.stabilization,
-        range = 0f..1f,
-        readout = "${(prefs.stabilization * 100).toInt()}%",
-    ) { actions.onPressureAndSmoothing(prefs.pressureCurve, it) }
+    val smoothing = prefs.smoothing
+    val change = actions.onPressureAndSmoothing
+    PrefSlider("Stabilization", smoothing.stabilization, 0f..1f, percent(smoothing.stabilization)) {
+        change(smoothing.copy(stabilization = it))
+    }
+    PrefSlider("Motion filtering", smoothing.motionFiltering, 0f..1f, percent(smoothing.motionFiltering)) {
+        change(smoothing.copy(motionFiltering = it))
+    }
+    PrefSlider("Expression", smoothing.motionExpression, 0f..1f, percent(smoothing.motionExpression)) {
+        change(smoothing.copy(motionExpression = it))
+    }
+    PrefSlider("Pressure smoothing", smoothing.pressureSmoothing, 0f..1f, percent(smoothing.pressureSmoothing)) {
+        change(smoothing.copy(pressureSmoothing = it))
+    }
     // The slider reads soft (left) to firm (right) on a logarithmic scale centred on linear.
     PrefSlider(
         label = "Pressure",
-        value = ln(prefs.pressureCurve),
+        value = ln(smoothing.pressureCurve),
         range = ln(0.3f)..ln(3f),
         readout =
             when {
-                prefs.pressureCurve < 0.95f -> "Soft"
-                prefs.pressureCurve > 1.05f -> "Firm"
+                smoothing.pressureCurve < 0.95f -> "Soft"
+                smoothing.pressureCurve > 1.05f -> "Firm"
                 else -> "Linear"
             },
-    ) { actions.onPressureAndSmoothing(exp(it), prefs.stabilization) }
+    ) { change(smoothing.copy(pressureCurve = exp(it))) }
     HorizontalDivider()
     Text("Gesture controls", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
     val gestures = prefs.gestures
@@ -305,6 +313,8 @@ private fun ActionRow(
         Text(label, modifier = Modifier.fillMaxWidth())
     }
 }
+
+private fun percent(value: Float) = "${(value * 100).toInt()}%"
 
 @Composable
 private fun PrefSlider(

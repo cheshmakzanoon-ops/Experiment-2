@@ -10,8 +10,10 @@ import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.animation.DecelerateInterpolator
 import androidx.core.math.MathUtils
+import com.artflow.studio.core.canvas.MotionFilter
 import com.artflow.studio.core.canvas.PointerGestureRouter
 import com.artflow.studio.core.canvas.PointerPressure
+import com.artflow.studio.core.canvas.PressureSmoother
 import com.artflow.studio.core.canvas.QuickPinch
 import com.artflow.studio.core.canvas.QuickShape
 import com.artflow.studio.core.canvas.StrokePredictor
@@ -131,6 +133,10 @@ data class EditorInput(
     val pressureCurve: Float = 1f,
     /** Global stabilization from Prefs > Pressure and Smoothing (0..1). */
     val stabilization: Float = 0f,
+    /** Prefs > Pressure and Smoothing: motion filtering, its expression, and pressure smoothing (0..1). */
+    val motionFiltering: Float = 0f,
+    val motionExpression: Float = 0.5f,
+    val pressureSmoothing: Float = 0f,
     /** Outline the brush under a hovering stylus. */
     val brushCursor: Boolean = true,
     /** Gesture controls from Prefs; each can be switched off. */
@@ -267,6 +273,8 @@ class ArtFlowCanvasView
         private var drawing = false
         private var currentStrokeId = 0L
         private var stabilizer: StrokeStabilizer? = null
+        private var motionFilter: MotionFilter? = null
+        private var pressureSmoother: PressureSmoother? = null
         private val predictor = StrokePredictor()
         private val strokeRawPoints = mutableListOf<Pair<Float, Float>>()
         private var strokePressureSum = 0f
@@ -1394,17 +1402,20 @@ class ArtFlowCanvasView
                         adjustQuickShape(canvasX, canvasY)
                     } else if (drawing) {
                         trackQuickShapeHold(x, y, canvasX, canvasY, pressure)
-                        val (smoothX, smoothY) = stabilizer?.add(canvasX, canvasY) ?: (canvasX to canvasY)
+                        val time = if (history >= 0) event.getHistoricalEventTime(history) else event.eventTime
+                        // Prefs > Pressure and Smoothing first, then the brush's own steadying.
+                        val (filteredX, filteredY) = motionFilter?.add(canvasX, canvasY, time) ?: (canvasX to canvasY)
+                        val strokePressure = pressureSmoother?.add(pressure) ?: pressure
+                        val (smoothX, smoothY) = stabilizer?.add(filteredX, filteredY) ?: (filteredX to filteredY)
                         canvasRepository.continueStroke(
                             strokeId = currentStrokeId,
                             x = smoothX,
                             y = smoothY,
-                            pressure = pressure,
+                            pressure = strokePressure,
                             tiltX = axisOf(event, index, MotionEvent.AXIS_TILT, history),
                             tiltY = axisOf(event, index, MotionEvent.AXIS_ORIENTATION, history),
                         )
-                        val time = if (history >= 0) event.getHistoricalEventTime(history) else event.eventTime
-                        predict(tool, smoothX, smoothY, pressure, time)
+                        predict(tool, smoothX, smoothY, strokePressure, time)
                         updateLiveStroke()
                     }
                 }
@@ -1660,6 +1671,12 @@ class ArtFlowCanvasView
             clearPrediction()
             if (!drawing) onStatusMessage?.invoke("Choose an unlocked, visible layer with an editable destination")
             stabilizer = StrokeStabilizer(max(params.smoothing, input.stabilization)).takeIf { it.isActive }?.also { it.start(x, y) }
+            motionFilter =
+                MotionFilter(input.motionFiltering, input.motionExpression)
+                    .takeIf { it.isActive }
+                    ?.also { it.start(x, y, SystemClock.uptimeMillis()) }
+            pressureSmoother =
+                PressureSmoother(input.pressureSmoothing).takeIf { input.pressureSmoothing > 0f }?.also { it.start(pressure) }
             strokeRawPoints.clear()
             strokeRawPoints.add(x to y)
             strokePressureSum = pressure

@@ -40,6 +40,7 @@ import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.FilterType
 import com.artflow.studio.domain.model.layer.Layer
 import com.artflow.studio.domain.model.settings.AppSettings
+import com.artflow.studio.domain.model.settings.PressureAndSmoothing
 import com.artflow.studio.domain.repository.ProjectRepository
 import com.artflow.studio.domain.repository.canvas.CanvasInvalidationEvent
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
@@ -233,6 +234,9 @@ class CanvasViewModel
                             fingerPainting = stored.fingerPainting,
                             pressureCurve = stored.pressureCurve,
                             stabilization = stored.stabilization,
+                            motionFiltering = stored.motionFiltering,
+                            motionExpression = stored.motionExpression,
+                            pressureSmoothing = stored.pressureSmoothing,
                             brushCursor = stored.brushCursor,
                             gestures = GestureControls(stored.scrubToClear, stored.swipeCopyPaste, stored.fourFingerFullScreen),
                             dynamicBrushScaling = stored.dynamicBrushScaling,
@@ -591,13 +595,16 @@ class CanvasViewModel
             }
         }
 
-        fun setPressureAndSmoothing(
-            curve: Float,
-            stabilization: Float,
-        ) {
+        fun setPressureAndSmoothing(value: PressureAndSmoothing) {
             viewModelScope.launch(editorErrors) {
                 settingsRepository.update {
-                    it.copy(pressureCurve = curve.coerceIn(0.3f, 3f), stabilization = stabilization.coerceIn(0f, 1f))
+                    it.copy(
+                        pressureCurve = value.pressureCurve.coerceIn(0.3f, 3f),
+                        stabilization = value.stabilization.coerceIn(0f, 1f),
+                        motionFiltering = value.motionFiltering.coerceIn(0f, 1f),
+                        motionExpression = value.motionExpression.coerceIn(0f, 1f),
+                        pressureSmoothing = value.pressureSmoothing.coerceIn(0f, 1f),
+                    )
                 }
             }
         }
