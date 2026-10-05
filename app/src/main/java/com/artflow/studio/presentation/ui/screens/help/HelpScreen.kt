@@ -55,7 +55,8 @@ object Tutorials {
                 "Sample and snap",
                 "Touch and hold the canvas to pick a colour, or hold the square modify button for the QuickMenu. " +
                     "Hold the pen still at the end of a stroke to turn " +
-                    "it into a clean line, ellipse or polygon, and keep holding to adjust it before you lift.",
+                    "it into a clean line, ellipse or polygon, and keep holding to adjust it before you lift. " +
+                    "Tap Edit Shape on the banner afterwards to drag its points.",
                 "gesture.keepPainting",
             ),
         )

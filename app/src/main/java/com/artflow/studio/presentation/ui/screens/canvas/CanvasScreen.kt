@@ -64,6 +64,7 @@ import com.artflow.studio.presentation.ui.components.canvas.BrushCursor
 import com.artflow.studio.presentation.ui.components.canvas.DragPreview
 import com.artflow.studio.presentation.ui.components.canvas.EditorInput
 import com.artflow.studio.presentation.ui.components.canvas.GestureControls
+import com.artflow.studio.presentation.ui.components.canvas.ShapeEditState
 import com.artflow.studio.presentation.ui.components.canvas.imageDropTarget
 import com.artflow.studio.presentation.ui.components.color.ColorPanel
 import com.artflow.studio.presentation.ui.components.editor.ActionsPanel
@@ -103,6 +104,7 @@ import com.artflow.studio.presentation.ui.components.editor.ReferenceCompanion
 import com.artflow.studio.presentation.ui.components.editor.SelectionSheet
 import com.artflow.studio.presentation.ui.components.editor.SelectionToolbar
 import com.artflow.studio.presentation.ui.components.editor.SelectionToolbarActions
+import com.artflow.studio.presentation.ui.components.editor.ShapeNodesOverlay
 import com.artflow.studio.presentation.ui.components.editor.StudioBottomPanel
 import com.artflow.studio.presentation.ui.components.editor.StudioButton
 import com.artflow.studio.presentation.ui.components.editor.StudioPopover
@@ -201,6 +203,7 @@ fun CanvasScreen(
     var openMenu by remember { mutableStateOf<StudioButton?>(null) }
     var showCopyPaste by remember { mutableStateOf(false) }
     var transformQuad by remember { mutableStateOf<Quad?>(null) }
+    var shapeEdit by remember { mutableStateOf<ShapeEditState?>(null) }
     var warpMesh by remember { mutableStateOf<WarpMesh?>(null) }
     var brushCursor by remember { mutableStateOf<BrushCursor?>(null) }
     var colorDropThreshold by remember { mutableStateOf<Float?>(null) }
@@ -1045,6 +1048,7 @@ fun CanvasScreen(
                                 onCopyPasteMenuRequested = { showCopyPaste = true }
                                 onClearLayerRequested = { viewModel.clipboard.clear() }
                                 onTransformQuadChanged = { transformQuad = it }
+                                onShapeEditChanged = { shapeEdit = it }
                                 onWarpMeshChanged = { warpMesh = it }
                                 onBrushCursorChanged = { brushCursor = it }
                                 onViewChanged = { s, ox, oy, r -> viewModel.onViewChanged(s, ox, oy, r) }
@@ -1179,6 +1183,23 @@ fun CanvasScreen(
                     view = ViewTransform(viewScale, viewOffsetX, viewOffsetY, viewRotation),
                     modifier = Modifier.fillMaxSize(),
                     snapping = input.transformAssist.snapping,
+                )
+            }
+            shapeEdit?.let { edit ->
+                if (edit.editing && ready != null) {
+                    ShapeNodesOverlay(
+                        nodes = edit.nodes,
+                        canvasWidth = ready.width,
+                        canvasHeight = ready.height,
+                        view = ViewTransform(viewScale, viewOffsetX, viewOffsetY, viewRotation),
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+                ShapeEditBar(
+                    edit = edit,
+                    onEdit = { canvasView?.beginShapeEdit() },
+                    onDone = { canvasView?.dismissShapeEdit() },
+                    modifier = Modifier.align(Alignment.TopCenter).zIndex(4f),
                 )
             }
             colorDropThreshold?.let { threshold ->
@@ -1646,6 +1667,30 @@ private fun ColorDropThresholdBar(
                 modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
             )
             TextButton(onClick = onDone) { Text("Done") }
+        }
+    }
+}
+
+/** QuickShape's banner: offers Edit Shape after a shape snaps, then closes node editing. */
+@Composable
+private fun ShapeEditBar(
+    edit: ShapeEditState,
+    onEdit: () -> Unit,
+    onDone: () -> Unit,
+    modifier: Modifier,
+) {
+    Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 4.dp, modifier = modifier.padding(12.dp)) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+            val name = edit.label.replaceFirstChar { it.uppercase() }
+            Text(
+                if (edit.editing) "Drag the points to reshape the $name" else "$name created",
+                style = MaterialTheme.typography.labelMedium,
+            )
+            if (edit.editing) {
+                TextButton(onClick = onDone) { Text("Done") }
+            } else {
+                TextButton(onClick = onEdit) { Text("Edit Shape") }
+            }
         }
     }
 }

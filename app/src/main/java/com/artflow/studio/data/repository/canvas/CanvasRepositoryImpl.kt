@@ -232,6 +232,7 @@ class CanvasRepositoryImpl
             strokeErasers.clear()
             strokeDestinations.clear()
             undoStack.clear()
+            historyMark++
             redoStack.clear()
             dirtyRasters.clear()
             dirty = false
@@ -358,6 +359,7 @@ class CanvasRepositoryImpl
             strokeErasers.clear()
             strokeDestinations.clear()
             undoStack.clear()
+            historyMark++
             redoStack.clear()
             dirtyRasters.clear()
             dirty = false
@@ -522,6 +524,9 @@ class CanvasRepositoryImpl
         override fun hasUnsavedChanges(): Boolean = dirty
 
         override val undoDepth: Int get() = undoStack.size
+
+        override var historyMark: Long = 0L
+            private set
 
         override val redoDepth: Int get() = redoStack.size
 
@@ -2642,6 +2647,7 @@ class CanvasRepositoryImpl
         override fun undo(): Boolean {
             opacityRun = null
             val snapshot = undoStack.removeLastOrNull() ?: return false
+            historyMark++
             redoStack.addLast(currentSnapshot())
             restore(snapshot)
             dirty = true
@@ -2652,6 +2658,7 @@ class CanvasRepositoryImpl
         override fun redo(): Boolean {
             opacityRun = null
             val snapshot = redoStack.removeLastOrNull() ?: return false
+            historyMark++
             undoStack.addLast(currentSnapshot())
             restore(snapshot)
             dirty = true
@@ -2661,6 +2668,7 @@ class CanvasRepositoryImpl
 
         private fun pushUndo() {
             undoPushes++
+            historyMark++
             undoStack.addLast(currentSnapshot())
             while (undoStack.size > MAX_HISTORY) undoStack.removeFirst()
             // Trim by memory as well: a 4K layer is 32 MB, so 30 raster steps would be ~1 GB.
@@ -2919,6 +2927,7 @@ class CanvasRepositoryImpl
             strokeErasers.clear()
             strokeDestinations.clear()
             undoStack.clear()
+            historyMark++
             redoStack.clear()
         }
 

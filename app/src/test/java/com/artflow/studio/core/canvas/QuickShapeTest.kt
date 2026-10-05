@@ -86,4 +86,104 @@ class QuickShapeTest {
         val end = adjusted.points.last()
         assertEquals(0f, end.first, 0.5f)
     }
+
+    private fun roughCircle(
+        cx: Float,
+        cy: Float,
+        r: Float,
+    ): List<Pair<Float, Float>> =
+        List(80) { i ->
+            val t = 2 * PI * i / 79
+            (cx + (r + if (i % 3 == 0) 2 else -2) * cos(t)).toFloat() to (cy + (r + if (i % 3 == 0) 2 else -2) * sin(t)).toFloat()
+        }
+
+    private fun near(
+        expected: Pair<Float, Float>,
+        actual: Pair<Float, Float>,
+        tolerance: Float = 0.01f,
+    ) {
+        assertEquals("x of $actual", expected.first, actual.first, tolerance)
+        assertEquals("y of $actual", expected.second, actual.second, tolerance)
+    }
+
+    @Test fun recognisedShapesCarryTheirEditNodes() {
+        val line = QuickShape.recognize(List(50) { i -> i * 4f to 100f })!!
+        assertEquals(listOf(0f to 100f, 196f to 100f), line.nodes)
+        val circle = QuickShape.recognize(roughCircle(200f, 200f, 100f))!!
+        assertEquals(4, circle.nodes.size)
+        // Opposite nodes sit across the fitted centre, on the drawn outline; neighbours are a quarter turn apart.
+        val cx = (circle.nodes[0].first + circle.nodes[2].first) / 2
+        val cy = (circle.nodes[0].second + circle.nodes[2].second) / 2
+        near(200f to 200f, cx to cy, 3f)
+        val radius = hypot(circle.points[0].first - cx, circle.points[0].second - cy)
+        circle.nodes.forEach { assertEquals(radius, hypot(it.first - cx, it.second - cy), 0.01f) }
+        val a = circle.nodes[0].first - cx to circle.nodes[0].second - cy
+        val b = circle.nodes[1].first - cx to circle.nodes[1].second - cy
+        assertEquals(0f, a.first * b.first + a.second * b.second, 1f)
+    }
+
+    @Test fun movingALineEndRedrawsTheLine() {
+        val line = QuickShape.recognize(List(50) { i -> i * 4f to 100f })!!
+        val moved = QuickShape.moveNode(line, 1, 100f to 300f)
+        assertEquals(QuickShape.Kind.LINE, moved.kind)
+        assertEquals(0f to 100f, moved.points.first())
+        assertEquals(100f to 300f, moved.points.last())
+        assertEquals(listOf(0f to 100f, 100f to 300f), moved.nodes)
+    }
+
+    @Test fun movingAPolygonCornerKeepsItClosedThroughTheNewCorner() {
+        val square = QuickShape.Result(QuickShape.Kind.POLYGON, emptyList(), listOf(0f to 0f, 100f to 0f, 100f to 100f, 0f to 100f))
+        val moved = QuickShape.moveNode(square, 2, 150f to 160f)
+        assertEquals(moved.points.first(), moved.points.last())
+        assertTrue(moved.points.any { it == 150f to 160f })
+        // Every outline point lies on one of the four new sides.
+        val corners = moved.nodes + moved.nodes.first()
+        moved.points.forEach { p ->
+            val onSide =
+                corners.zipWithNext().any { (s, e) ->
+                    val cross = (e.first - s.first) * (p.second - s.second) - (e.second - s.second) * (p.first - s.first)
+                    kotlin.math.abs(cross) / hypot(e.first - s.first, e.second - s.second) < 0.01f
+                }
+            assertTrue("$p is off the outline", onSide)
+        }
+    }
+
+    @Test fun draggingAnEllipseNodeKeepsTheOppositeEndAndTheOtherAxis() {
+        val ellipse = QuickShape.Result(QuickShape.Kind.ELLIPSE, emptyList(), listOf(150f to 100f, 100f to 130f, 50f to 100f, 100f to 70f))
+        // Pull the right end of the long axis up and out: the shape grows and turns about its left end.
+        val moved = QuickShape.moveNode(ellipse, 0, 210f to 20f)
+        near(210f to 20f, moved.nodes[0])
+        near(50f to 100f, moved.nodes[2])
+        val cx = 130f
+        val cy = 60f
+        listOf(1, 3).forEach { assertEquals(30f, hypot(moved.nodes[it].first - cx, moved.nodes[it].second - cy), 0.01f) }
+        val u = moved.nodes[0].first - cx to moved.nodes[0].second - cy
+        val v = moved.nodes[1].first - cx to moved.nodes[1].second - cy
+        assertEquals(0f, u.first * v.first + u.second * v.second, 0.05f)
+        // Every outline point is on the new ellipse.
+        val ru = hypot(u.first, u.second)
+        moved.points.forEach { (x, y) ->
+            val along = ((x - cx) * u.first + (y - cy) * u.second) / ru
+            val across = ((x - cx) * v.first + (y - cy) * v.second) / 30f
+            assertEquals(1f, (along / ru) * (along / ru) + (across / 30f) * (across / 30f), 0.01f)
+        }
+        near(moved.nodes[0], moved.points.first(), 0.01f)
+    }
+
+    @Test fun nodesAreFoundWithinReachOnly() {
+        val line = QuickShape.Result(QuickShape.Kind.LINE, emptyList(), listOf(0f to 0f, 100f to 0f))
+        assertEquals(1, QuickShape.nodeAt(line, 92f to 4f, 12f))
+        assertEquals(0, QuickShape.nodeAt(line, 5f to -5f, 12f))
+        assertNull(QuickShape.nodeAt(line, 50f to 0f, 12f))
+    }
+
+    @Test fun adjustingWhileHoldingMovesTheNodesWithTheOutline() {
+        val circle = QuickShape.recognize(roughCircle(200f, 200f, 100f))!!
+        val adjusted = QuickShape.adjust(circle, 300f to 200f, 400f to 200f)
+        val cx = (adjusted.nodes[0].first + adjusted.nodes[2].first) / 2
+        val cy = (adjusted.nodes[0].second + adjusted.nodes[2].second) / 2
+        val radius = hypot(adjusted.points[0].first - cx, adjusted.points[0].second - cy)
+        assertTrue("doubled radius $radius", radius > 190f)
+        adjusted.nodes.forEach { assertEquals(radius, hypot(it.first - cx, it.second - cy), 0.05f) }
+    }
 }

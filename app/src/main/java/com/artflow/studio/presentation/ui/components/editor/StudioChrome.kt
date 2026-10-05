@@ -494,6 +494,34 @@ fun TransformOverlay(
     }
 }
 
+/** Edit Shape's draggable points over the artwork, glued to the pixels like the transform box. */
+@Composable
+fun ShapeNodesOverlay(
+    nodes: List<Pair<Float, Float>>,
+    canvasWidth: Int,
+    canvasHeight: Int,
+    view: ViewTransform,
+    modifier: Modifier = Modifier,
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    Canvas(modifier) {
+        val scale = view.scale.coerceAtLeast(0.01f)
+        withTransform({
+            translate(size.width / 2f + view.offsetX, size.height / 2f + view.offsetY)
+            rotate(view.rotationDegrees, pivot = Offset.Zero)
+            scale(scale, scale, pivot = Offset.Zero)
+            translate(-canvasWidth / 2f, -canvasHeight / 2f)
+        }) {
+            val line = 2f / scale
+            val handle = 9f / scale
+            nodes.forEach { (x, y) ->
+                drawCircle(Color.White, radius = handle, center = Offset(x, y))
+                drawCircle(accent, radius = handle, center = Offset(x, y), style = Stroke(line))
+            }
+        }
+    }
+}
+
 /** Warp's Bézier mesh: grid curves through the patch and its sixteen control points. */
 @Composable
 fun WarpOverlay(

@@ -24,9 +24,14 @@ object QuickShape {
         POLYGON("polygon"),
     }
 
+    /**
+     * A recognised shape: the outline to stroke and the nodes Edit Shape lets the artist drag (a
+     * line's ends, the corners of a polyline or polygon, and an ellipse's four axis ends in turn).
+     */
     data class Result(
         val kind: Kind,
         val points: List<Pair<Float, Float>>,
+        val nodes: List<Pair<Float, Float>> = emptyList(),
     )
 
     /** Returns the recognised shape, or null when the stroke is too short or too irregular. */
@@ -37,7 +42,7 @@ object QuickShape {
         val length = pathLength(points)
         if (length < MIN_LENGTH) return null
         val chord = hypot(last.first - first.first, last.second - first.second)
-        if (chord / length > LINE_STRAIGHTNESS) return Result(Kind.LINE, line(first, last))
+        if (chord / length > LINE_STRAIGHTNESS) return Result(Kind.LINE, line(first, last), listOf(first, last))
         if (chord < length * CLOSED_RATIO) return ellipse(points) ?: polygon(points, closed = true)
         return polygon(points, closed = false)
     }
@@ -52,7 +57,10 @@ object QuickShape {
         from: Pair<Float, Float>,
         to: Pair<Float, Float>,
     ): Result {
-        if (shape.kind == Kind.LINE) return Result(Kind.LINE, line(shape.points.first(), snapAngle(shape.points.first(), to)))
+        if (shape.kind == Kind.LINE) {
+            val end = snapAngle(shape.points.first(), to)
+            return Result(Kind.LINE, line(shape.points.first(), end), listOf(shape.points.first(), end))
+        }
         val points = shape.points
         val cx = points.sumOf { it.first.toDouble() }.toFloat() / points.size
         val cy = points.sumOf { it.second.toDouble() }.toFloat() / points.size
@@ -62,7 +70,95 @@ object QuickShape {
         val turn = atan2(to.second - cy, to.first - cx) - atan2(from.second - cy, from.first - cx)
         val c = cos(turn) * scale
         val s = sin(turn) * scale
-        return shape.copy(points = shape.points.map { (x, y) -> (cx + (x - cx) * c - (y - cy) * s) to (cy + (x - cx) * s + (y - cy) * c) })
+        val move = { (x, y): Pair<Float, Float> -> (cx + (x - cx) * c - (y - cy) * s) to (cy + (x - cx) * s + (y - cy) * c) }
+        return shape.copy(points = shape.points.map(move), nodes = shape.nodes.map(move))
+    }
+
+    /** The node of [shape] within [radius] of [point] (the nearest when several are), or null. */
+    fun nodeAt(
+        shape: Result,
+        point: Pair<Float, Float>,
+        radius: Float,
+    ): Int? =
+        shape.nodes.indices
+            .minByOrNull { hypot(shape.nodes[it].first - point.first, shape.nodes[it].second - point.second) }
+            ?.takeIf { hypot(shape.nodes[it].first - point.first, shape.nodes[it].second - point.second) <= radius }
+
+    /**
+     * Edit Shape: moves node [index] to [to] and redraws the outline through the nodes. An
+     * ellipse keeps the opposite end of the dragged axis in place, so the drag both resizes and
+     * turns it, and keeps the other axis's length.
+     */
+    fun moveNode(
+        shape: Result,
+        index: Int,
+        to: Pair<Float, Float>,
+    ): Result {
+        if (index !in shape.nodes.indices) return shape
+        val nodes = shape.nodes.toMutableList()
+        if (shape.kind == Kind.ELLIPSE && nodes.size == ELLIPSE_NODES) {
+            val fixed = nodes[(index + 2) % ELLIPSE_NODES]
+            val cx = (fixed.first + to.first) / 2f
+            val cy = (fixed.second + to.second) / 2f
+            val reach = hypot(to.first - cx, to.second - cy)
+            if (reach < MIN_RADIUS) return shape
+            val centre = (nodes[0].first + nodes[2].first) / 2f to (nodes[0].second + nodes[2].second) / 2f
+            val side = nodes[(index + 1) % ELLIPSE_NODES]
+            val other = hypot(side.first - centre.first, side.second - centre.second)
+            // The other axis is perpendicular, turning the same way the nodes are numbered.
+            val ux = (to.first - cx) / reach
+            val uy = (to.second - cy) / reach
+            nodes[index] = to
+            nodes[(index + 1) % ELLIPSE_NODES] = (cx - uy * other) to (cy + ux * other)
+            nodes[(index + 3) % ELLIPSE_NODES] = (cx + uy * other) to (cy - ux * other)
+        } else {
+            nodes[index] = to
+        }
+        return Result(shape.kind, outline(shape.kind, nodes), nodes)
+    }
+
+    /** The stroke path through [nodes] for a shape of [kind]. */
+    fun outline(
+        kind: Kind,
+        nodes: List<Pair<Float, Float>>,
+    ): List<Pair<Float, Float>> =
+        when {
+            nodes.isEmpty() -> emptyList()
+            kind == Kind.ELLIPSE && nodes.size == ELLIPSE_NODES -> ellipseThrough(nodes)
+            else -> {
+                val path = if (kind == Kind.POLYGON) nodes + nodes.first() else nodes
+                path.zipWithNext().flatMap { (a, b) -> line(a, b).dropLast(1) } + path.last()
+            }
+        }
+
+    /** An ellipse outline starting at the first node, from its four axis ends. */
+    private fun ellipseThrough(nodes: List<Pair<Float, Float>>): List<Pair<Float, Float>> {
+        val cx = (nodes[0].first + nodes[2].first) / 2.0
+        val cy = (nodes[0].second + nodes[2].second) / 2.0
+        val ru = hypot(nodes[0].first - cx, nodes[0].second - cy)
+        val rv = hypot(nodes[1].first - cx, nodes[1].second - cy)
+        val angle = atan2(nodes[0].second - cy, nodes[0].first - cx)
+        return ellipseOutline(cx, cy, ru, rv, angle, 0.0)
+    }
+
+    private fun ellipseOutline(
+        cx: Double,
+        cy: Double,
+        ru: Double,
+        rv: Double,
+        angle: Double,
+        start: Double,
+    ): List<Pair<Float, Float>> {
+        val cosA = cos(angle)
+        val sinA = sin(angle)
+        val circumference = PI * (3 * (ru + rv) - sqrt((3 * ru + rv) * (ru + 3 * rv)))
+        val steps = max(MIN_ELLIPSE_STEPS, (circumference / SAMPLE_SPACING).toInt())
+        return List(steps + 1) { i ->
+            val t = start + 2 * PI * i / steps
+            val u = ru * cos(t)
+            val v = rv * sin(t)
+            (cx + u * cosA - v * sinA).toFloat() to (cy + u * sinA + v * cosA).toFloat()
+        }
     }
 
     private fun snapAngle(
@@ -91,9 +187,8 @@ object QuickShape {
         if (closed) corners = corners.dropLast(1)
         if (corners.size !in 3..5 || !sharpCorners(corners, closed) || crosses(corners, closed)) return null
         if (closed && corners.size == 4) corners = squared(corners)
-        val outline = if (closed) corners + corners.first() else corners
-        val sampled = outline.zipWithNext().flatMap { (a, b) -> line(a, b).dropLast(1) } + outline.last()
-        return Result(if (closed) Kind.POLYGON else Kind.POLYLINE, sampled)
+        val kind = if (closed) Kind.POLYGON else Kind.POLYLINE
+        return Result(kind, outline(kind, corners), corners)
     }
 
     /** Ramer–Douglas–Peucker: keeps the points that stray more than [tolerance] from a straight path. */
@@ -276,17 +371,12 @@ object QuickShape {
             error += abs(sqrt(u * u + v * v) - 1.0)
         }
         if (error / n > MAX_ELLIPSE_ERROR) return null
-        val circumference = PI * (3 * (ru + rv) - sqrt((3 * ru + rv) * (ru + 3 * rv)))
-        val steps = max(24, (circumference / SAMPLE_SPACING).toInt())
         val start = atan2(points.first().second - cy, points.first().first - cx) - angle
-        val outline =
-            List(steps + 1) { i ->
-                val t = start + 2 * PI * i / steps
-                val u = ru * cos(t)
-                val v = rv * sin(t)
+        val nodes =
+            listOf(ru to 0.0, 0.0 to rv, -ru to 0.0, 0.0 to -rv).map { (u, v) ->
                 (cx + u * cosA - v * sinA).toFloat() to (cy + u * sinA + v * cosA).toFloat()
             }
-        return Result(Kind.ELLIPSE, outline)
+        return Result(Kind.ELLIPSE, ellipseOutline(cx, cy, ru, rv, angle, start), nodes)
     }
 
     private fun pathLength(points: List<Pair<Float, Float>>): Float =
@@ -296,6 +386,8 @@ object QuickShape {
     private const val LINE_STRAIGHTNESS = 0.9f
     private const val CLOSED_RATIO = 0.2f
     private const val MIN_RADIUS = 6.0
+    private const val ELLIPSE_NODES = 4
+    private const val MIN_ELLIPSE_STEPS = 24
     private const val CIRCLE_SNAP = 0.12
     private const val MAX_ELLIPSE_ERROR = 0.12
     private const val SAMPLE_SPACING = 3f

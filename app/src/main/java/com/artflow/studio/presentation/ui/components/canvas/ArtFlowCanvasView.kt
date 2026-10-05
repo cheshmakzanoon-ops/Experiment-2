@@ -160,6 +160,22 @@ data class DragPreview(
     val closed: Boolean = false,
 )
 
+/** Edit Shape as the editor shows it: the shape's kind, its nodes in canvas pixels, and whether they are being edited. */
+data class ShapeEditState(
+    val label: String,
+    val nodes: List<Pair<Float, Float>>,
+    val editing: Boolean,
+)
+
+/** What Edit Shape needs to redraw a QuickShape stroke, and the history step that stroke made. */
+private class ShapeEdit(
+    val shape: QuickShape.Result,
+    val pressure: Float,
+    val tool: ToolType,
+    val layerId: Long,
+    val mark: Long,
+)
+
 /**
  * The drawing surface.
  *
@@ -259,6 +275,12 @@ class ArtFlowCanvasView
         private var quickShapeResult: QuickShape.Result? = null
         private var quickShapeAnchor = 0f to 0f
         private var quickShapePressure = 1f
+        private var quickShapeShown: QuickShape.Result? = null
+        private var quickShapeTool = ToolType.BRUSH
+        private var shapeEdit: ShapeEdit? = null
+        private var editingShape = false
+        private var draggedNode = -1
+        private var shapeStrokeOpen = false
         private var holdAnchorX = 0f
         private var holdAnchorY = 0f
         private val quickShapeCheck = Runnable { applyQuickShape() }
@@ -411,6 +433,8 @@ class ArtFlowCanvasView
         }
 
         private fun cancelToolInteraction() {
+            // A node drag keeps the shape it has reached rather than losing the stroke.
+            if (draggedNode >= 0) dropShapeNode()
             gestureTool = null
             previewPoints.clear()
             shapeOrigin = null
@@ -640,6 +664,7 @@ class ArtFlowCanvasView
         }
 
         fun undo() {
+            dismissShapeEdit()
             if (canvasRepository.undo()) {
                 onionDirty = true
                 reportHistory()
@@ -647,6 +672,7 @@ class ArtFlowCanvasView
         }
 
         fun redo() {
+            dismissShapeEdit()
             if (canvasRepository.redo()) {
                 onionDirty = true
                 reportHistory()
@@ -835,6 +861,9 @@ class ArtFlowCanvasView
 
         /** Reports the box to draw (canvas coordinates), or null when no transform is active. */
         var onTransformQuadChanged: ((Quad?) -> Unit)? = null
+
+        /** Edit Shape: offered after a QuickShape stroke, with its nodes while they are being edited. */
+        var onShapeEditChanged: ((ShapeEditState?) -> Unit)? = null
 
         /** Reports the warp mesh to draw while Warp is the transform mode, or null. */
         var onWarpMeshChanged: ((WarpMesh?) -> Unit)? = null
@@ -1251,6 +1280,10 @@ class ArtFlowCanvasView
             gestureStartView = x to y
 
             onBrushCursorChanged?.invoke(null)
+            if (shapeEdit != null && grabShapeNode(x, y)) {
+                gestureTool = null
+                return true
+            }
             // The stylus side button samples colour, the usual Android pen shortcut.
             if (isStylus && (event.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY) != 0) {
                 val (canvasX, canvasY) = viewToCanvas(x, y)
@@ -1340,6 +1373,11 @@ class ArtFlowCanvasView
 
             lastPointerX = x
             lastPointerY = y
+            if (draggedNode >= 0) {
+                // Each redraw replaces the whole shape, so only the latest sample matters.
+                if (history < 0) dragShapeNode(x, y)
+                return true
+            }
             if (holdSampling) {
                 val (sampleX, sampleY) = viewToCanvas(x, y)
                 pickColor(sampleX, sampleY)
@@ -1415,6 +1453,10 @@ class ArtFlowCanvasView
             if (holdSampling) {
                 holdSampling = false
                 gestureTool = null
+                return
+            }
+            if (draggedNode >= 0) {
+                dropShapeNode()
                 return
             }
             val tool = gestureTool ?: return
@@ -1706,7 +1748,109 @@ class ArtFlowCanvasView
                     canvasRepository.continueStroke(currentStrokeId, px, py, strokeLastPressure)
                 }
             }
+            val markBefore = canvasRepository.historyMark
             canvasRepository.endStroke(currentStrokeId)
+            val shape = quickShapeShown?.takeIf { quickShapeApplied && it.nodes.isNotEmpty() }
+            if (shape != null && canvasRepository.historyMark != markBefore) {
+                shapeEdit = ShapeEdit(shape, quickShapePressure, quickShapeTool, activeLayerId, canvasRepository.historyMark)
+                editingShape = false
+                reportShapeEdit()
+            }
+        }
+
+        /** Edit Shape: shows the last QuickShape stroke's nodes so they can be dragged. */
+        fun beginShapeEdit() {
+            if (shapeEdit?.isLatest() != true) return dismissShapeEdit()
+            editingShape = true
+            reportShapeEdit()
+        }
+
+        /** Closes Edit Shape, or withdraws the offer, keeping the shape as drawn. */
+        fun dismissShapeEdit() {
+            if (draggedNode >= 0) dropShapeNode()
+            if (shapeEdit == null) return
+            shapeEdit = null
+            editingShape = false
+            onShapeEditChanged?.invoke(null)
+        }
+
+        private fun ShapeEdit.isLatest(): Boolean = mark == canvasRepository.historyMark && layerId == activeLayerId
+
+        private fun reportShapeEdit() {
+            val edit = shapeEdit ?: return
+            onShapeEditChanged?.invoke(ShapeEditState(edit.shape.kind.label, edit.shape.nodes, editingShape))
+        }
+
+        /**
+         * While Edit Shape is open, a touch on a node starts dragging it and a touch elsewhere
+         * closes it without drawing; otherwise any touch withdraws the offer. Returns whether the
+         * touch was used here.
+         */
+        private fun grabShapeNode(
+            viewX: Float,
+            viewY: Float,
+        ): Boolean {
+            val edit = shapeEdit ?: return false
+            val editing = editingShape
+            val reach = NODE_REACH_DP * resources.displayMetrics.density / scale
+            val node = if (editing && edit.isLatest()) QuickShape.nodeAt(edit.shape, viewToCanvas(viewX, viewY), reach) else null
+            if (node == null) {
+                dismissShapeEdit()
+                return editing
+            }
+            draggedNode = node
+            return true
+        }
+
+        /** Replaces the shape's stroke with one through the moved node; the first move takes the old stroke off. */
+        private fun dragShapeNode(
+            viewX: Float,
+            viewY: Float,
+        ) {
+            val edit = shapeEdit ?: return
+            if (shapeStrokeOpen) {
+                canvasRepository.cancelStroke(currentStrokeId)
+            } else if (!edit.isLatest() || !canvasRepository.undo()) {
+                draggedNode = -1
+                return dismissShapeEdit()
+            }
+            val moved = QuickShape.moveNode(edit.shape, draggedNode, viewToCanvas(viewX, viewY))
+            shapeEdit = ShapeEdit(moved, edit.pressure, edit.tool, edit.layerId, edit.mark)
+            shapeStrokeOpen = drawShape(moved, edit.pressure, edit.tool)
+            if (!shapeStrokeOpen) {
+                // The layer can no longer take the stroke: put the original back.
+                canvasRepository.redo()
+                draggedNode = -1
+                dismissShapeEdit()
+            }
+            reportShapeEdit()
+            reportHistory()
+        }
+
+        private fun drawShape(
+            shape: QuickShape.Result,
+            pressure: Float,
+            tool: ToolType,
+        ): Boolean {
+            val (x, y) = shape.points.firstOrNull() ?: return false
+            startStroke(x, y, pressure, tool)
+            if (!drawing) return false
+            shape.points.drop(1).forEach { (px, py) -> canvasRepository.continueStroke(currentStrokeId, px, py, pressure) }
+            updateLiveStroke()
+            return true
+        }
+
+        /** Commits the reshaped stroke, which then becomes the one Edit Shape follows. */
+        private fun dropShapeNode() {
+            draggedNode = -1
+            if (!shapeStrokeOpen) return
+            shapeStrokeOpen = false
+            drawing = false
+            canvasRepository.endStroke(currentStrokeId)
+            shapeEdit = shapeEdit?.let { ShapeEdit(it.shape, it.pressure, it.tool, it.layerId, canvasRepository.historyMark) }
+            onionDirty = true
+            reportHistory()
+            reportShapeEdit()
         }
 
         /** Restarts the QuickShape hold timer whenever the pen moves beyond a small radius. */
@@ -1742,6 +1886,8 @@ class ArtFlowCanvasView
             if (!drawing) return
             quickShapeApplied = true
             quickShapeResult = shape
+            quickShapeShown = shape
+            quickShapeTool = tool
             quickShapeAnchor = lastRaw
             quickShapePressure = pressure
             shape.points.drop(1).forEach { (px, py) -> canvasRepository.continueStroke(currentStrokeId, px, py, pressure) }
@@ -1763,6 +1909,7 @@ class ArtFlowCanvasView
             startStroke(startX, startY, quickShapePressure, tool)
             if (!drawing) return
             quickShapeApplied = true
+            quickShapeShown = adjusted
             adjusted.points.drop(1).forEach { (px, py) -> canvasRepository.continueStroke(currentStrokeId, px, py, quickShapePressure) }
             updateLiveStroke()
         }
@@ -2635,6 +2782,7 @@ class ArtFlowCanvasView
             private const val TAP_SLOP = 24f
             private const val QUICKSHAPE_HOLD_SLOP = 10f
             private const val QUICKSHAPE_HOLD_MS = 650L
+            private const val NODE_REACH_DP = 28f
             private const val HOLD_EYEDROPPER_MS = 500L
             private const val HANDLE_TOUCH_PX = 36f
             private const val MIN_SCALED_BRUSH = 0.5f

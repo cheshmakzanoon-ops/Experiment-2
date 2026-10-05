@@ -82,6 +82,12 @@ interface CanvasRepository {
     /** Total undo steps currently held. */
     val undoDepth: Int
 
+    /**
+     * Changes whenever the history does (a new step, an undo, a redo or a reset), so a tool can
+     * tell whether its own step is still the latest one even when old steps were trimmed.
+     */
+    val historyMark: Long get() = undoDepth.toLong()
+
     /** Total redo steps currently held. */
     val redoDepth: Int
 
