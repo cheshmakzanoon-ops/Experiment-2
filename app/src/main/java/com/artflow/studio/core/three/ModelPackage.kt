@@ -5,7 +5,7 @@ import java.io.ByteArrayOutputStream
 import java.util.zip.ZipInputStream
 
 /**
- * A 3D model as picked by the artist: plain OBJ text, or a zip holding the OBJ with its MTL
+ * A 3D model as picked by the artist: plain OBJ text, glTF, USD, or a zip holding the OBJ with its MTL
  * materials and texture images. From a zip, the diffuse texture (map_Kd) of the first material
  * the model uses comes along so painting starts from the model's own look.
  */
@@ -25,14 +25,12 @@ object ModelPackage {
     fun read(bytes: ByteArray): Contents {
         require(bytes.size <= MAX_BYTES) { "This 3D model is too large" }
         if (GltfReader.isGlb(bytes) || isGltfText(bytes)) return gltf(bytes, emptyMap())
-        if (UsdReader.isUsdc(bytes)) return contents(UsdReader.read(bytes))
+        if (UsdReader.isUsd(bytes)) return contents(UsdReader.read(bytes))
         if (!isZip(bytes)) return Contents(bytes.decodeToString())
         val files = unzip(bytes)
         // A .usdz is a zip whose first USD file is the scene.
         files.keys.firstOrNull { it.endsWith(".usdc") || it.endsWith(".usda") || it.endsWith(".usd") }?.let { name ->
-            val layer = requireNotNull(files[name])
-            require(UsdReader.isUsdc(layer)) { "This USDZ stores its scene as text USD, which is not supported yet" }
-            return contents(UsdReader.read(layer, files))
+            return contents(UsdReader.read(requireNotNull(files[name]), files))
         }
         files.keys.firstOrNull { it.endsWith(".obj") }?.let { name ->
             val objText = requireNotNull(files[name]).decodeToString()

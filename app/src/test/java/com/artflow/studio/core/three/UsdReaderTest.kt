@@ -66,6 +66,45 @@ class UsdReaderTest {
     }
 
     @Test
+    fun textUsdReadsLikeItsBinaryForm() {
+        for (name in listOf("ops", "orient")) {
+            assertEquals(name, ModelPackage.read(fixture("$name.usdc")).objText, ModelPackage.read(fixture("$name.usda")).objText)
+        }
+        val binary = ModelPackage.read(fixture("two.usdz"))
+        val text = ModelPackage.read(fixture("two_text.usdz"))
+        assertEquals(binary.objText, text.objText)
+        assertEquals(binary.textures.keys, text.textures.keys)
+        binary.textures.forEach { (material, image) -> assertArrayEquals(material, image, text.textures[material]) }
+    }
+
+    @Test
+    fun textUsdFollowsVariantsActivationTimeSamplesAndRelativePaths() {
+        val contents = ModelPackage.read(fixture("scene.usdz"))
+        val vertices = records(contents.objText, "v")
+        // Only the selected variant's quad: the class, the inactive mesh and the other variant are left out.
+        assertEquals(4, vertices.size)
+        // Turned a quarter about Z by the orient, moved by the earliest translate sample, then made Y-up.
+        assertNear(listOf(1f, 3f, -2f), vertices[0])
+        assertNear(listOf(1f, 3f, -3f), vertices[1])
+        assertNear(listOf(0f, 3f, -3f), vertices[2])
+        assertNear(listOf(0f, 1f), records(contents.objText, "vt")[0])
+        assertNear(listOf(0f, 1f, 0f), records(contents.objText, "vn")[0])
+        assertEquals(2, ObjParser.parse(contents.objText).triangleCount)
+        // The binding and the diffuse connection are relative paths.
+        assertArrayEquals(entry(fixture("scene.usdz"), "textures/wood.png"), contents.texture)
+        assertEquals(setOf("/World/Looks/Wood"), contents.textures.keys)
+    }
+
+    @Test
+    fun aTruncatedTextFileIsRefused() {
+        val bytes = entry(fixture("scene.usdz"), "scene.usda")
+        for (length in listOf(10, bytes.size / 3, bytes.size / 2, bytes.size - 3)) {
+            val failure = runCatching { ModelPackage.read(bytes.copyOf(length)) }.exceptionOrNull()
+            assertTrue("length $length was read: $failure", failure is IllegalArgumentException)
+        }
+    }
+
+    @Test
     fun aTruncatedFileIsRefused() {
         val bytes = fixture("ops.usdc")
         for (length in listOf(40, bytes.size / 2, bytes.size - 9)) {

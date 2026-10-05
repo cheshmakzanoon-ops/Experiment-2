@@ -7,8 +7,8 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * Reads binary USD ("crate", the .usdc layer inside a .usdz) into the OBJ form the 3D workflow
- * stores: every mesh with its transforms, texture coordinates and normals, Z-up scenes turned
+ * Reads USD (binary "crate" .usdc, or text .usda, the layer inside a .usdz) into the OBJ form the
+ * 3D workflow stores: every mesh with its transforms, texture coordinates and normals, Z-up scenes turned
  * Y-up, and the image of the texture feeding the material's diffuse colour.
  */
 object UsdReader {
@@ -16,12 +16,35 @@ object UsdReader {
 
     fun isUsdc(bytes: ByteArray): Boolean = bytes.size > MAGIC.size && MAGIC.indices.all { bytes[it] == MAGIC[it] }
 
+    fun isUsd(bytes: ByteArray): Boolean = isUsdc(bytes) || UsdaParser.isUsda(bytes)
+
+    /** Typed access to a layer's field values ([rep]), however the layer stores them. */
+    internal interface Values<F> {
+        fun token(rep: F?): String?
+
+        fun tokens(rep: F): List<String>
+
+        fun assetPath(rep: F): String?
+
+        fun paths(rep: F): List<String>
+
+        fun ints(rep: F): IntArray?
+
+        fun floats(rep: F): FloatArray
+    }
+
     /** [files] holds the package's other files by lower-case name, for the texture. */
     fun read(
         bytes: ByteArray,
         files: Map<String, ByteArray> = emptyMap(),
     ): GltfReader.Result {
-        val scene = Scene(Crate(bytes))
+        require(isUsd(bytes)) { "This USD file is not supported" }
+        val scene =
+            if (isUsdc(bytes)) {
+                Crate(bytes).let { Scene(it.specs(), it) }
+            } else {
+                Scene(UsdaParser.parse(bytes.decodeToString()), UsdaParser)
+            }
         val out = StringBuilder()
         var vertices = 0
         var triangles = 0
@@ -53,24 +76,24 @@ object UsdReader {
             .lowercase()
 
     /** The scene graph: prims by path with their fields, and attributes as "prim.name". */
-    private class Scene(
-        val crate: Crate,
+    private class Scene<F>(
+        private val specs: Map<String, Map<String, F>>,
+        private val layer: Values<F>,
     ) {
-        private val specs: Map<String, Map<String, Long>> = crate.specs()
-        private val zUp = crate.token(specs["/"]?.get("upAxis")) == "Z"
+        private val zUp = layer.token(specs["/"]?.get("upAxis")) == "Z"
 
         fun meshes(): List<String> =
-            specs.keys.filter { path -> !path.contains('.') && crate.token(specs[path]?.get("typeName")) == "Mesh" }.sorted()
+            specs.keys.filter { path -> !path.contains('.') && layer.token(specs[path]?.get("typeName")) == "Mesh" }.sorted()
 
         private fun attribute(
             prim: String,
             name: String,
-        ): Map<String, Long>? = specs["$prim.$name"]
+        ): Map<String, F>? = specs["$prim.$name"]
 
         private fun value(
             prim: String,
             name: String,
-        ): Long? = attribute(prim, name)?.get("default")
+        ): F? = attribute(prim, name)?.get("default")
 
         /** Writes [prim]'s triangles as OBJ records numbered after [offset]; returns (vertices, triangles). */
         fun writeMesh(
@@ -78,9 +101,9 @@ object UsdReader {
             out: StringBuilder,
             offset: Int,
         ): Pair<Int, Int> {
-            val points = value(prim, "points")?.let(crate::floats) ?: return 0 to 0
-            val counts = value(prim, "faceVertexCounts")?.let(crate::ints) ?: return 0 to 0
-            val indices = value(prim, "faceVertexIndices")?.let(crate::ints) ?: return 0 to 0
+            val points = value(prim, "points")?.let(layer::floats) ?: return 0 to 0
+            val counts = value(prim, "faceVertexCounts")?.let(layer::ints) ?: return 0 to 0
+            val indices = value(prim, "faceVertexIndices")?.let(layer::ints) ?: return 0 to 0
             val uvs = primvar(prim, uvName(prim) ?: return 0 to 0, indices, 2) ?: return 0 to 0
             val normals = primvar(prim, "normals", indices, 3)
             val world = worldMatrix(prim)
@@ -158,7 +181,7 @@ object UsdReader {
             if (attribute(prim, "primvars:st") != null) return "primvars:st"
             return specs.keys
                 .filter { it.startsWith("$prim.primvars:") && !it.endsWith(":indices") }
-                .firstOrNull { crate.token(specs[it]?.get("typeName"))?.startsWith("texCoord2") == true }
+                .firstOrNull { layer.token(specs[it]?.get("typeName"))?.startsWith("texCoord2") == true }
                 ?.substringAfter("$prim.")
         }
 
@@ -169,9 +192,9 @@ object UsdReader {
             corners: IntArray,
             width: Int,
         ): FloatArray? {
-            val values = value(prim, name)?.let(crate::floats) ?: return null
-            val lookup = value(prim, "$name:indices")?.let(crate::ints)
-            val interpolation = crate.token(attribute(prim, name)?.get("interpolation")) ?: "vertex"
+            val values = value(prim, name)?.let(layer::floats) ?: return null
+            val lookup = value(prim, "$name:indices")?.let(layer::ints)
+            val interpolation = layer.token(attribute(prim, name)?.get("interpolation")) ?: "vertex"
             val faceVarying = interpolation == "faceVarying"
             if (!faceVarying && interpolation != "vertex" && interpolation != "varying") return null
             val out = FloatArray(corners.size * width)
@@ -191,7 +214,7 @@ object UsdReader {
             var world = Matrix4.IDENTITY
             var path = prim
             while (path.isNotEmpty() && path != "/") {
-                val order = value(path, "xformOpOrder")?.let(crate::tokens).orEmpty()
+                val order = value(path, "xformOpOrder")?.let(layer::tokens).orEmpty()
                 world = Matrix4.multiply(local(path, order), world)
                 if ("!resetXformStack!" in order) break
                 path = path.substringBeforeLast('/')
@@ -210,19 +233,19 @@ object UsdReader {
 
         private fun operation(
             op: String,
-            rep: Long,
+            rep: F,
         ): FloatArray {
             val kind = op.removePrefix("xformOp:").substringBefore(':')
             return when (kind) {
-                "transform" -> crate.floats(rep).also { require(it.size == MATRIX) { "Invalid transform" } }
-                "translate" -> crate.floats(rep).let { Matrix4.compose(it, NO_ROTATION, ONES) }
-                "scale" -> crate.floats(rep).let { Matrix4.compose(ZEROS, NO_ROTATION, it) }
-                "rotateX", "rotateY", "rotateZ" -> axisRotation(kind.last(), crate.floats(rep).first())
+                "transform" -> layer.floats(rep).also { require(it.size == MATRIX) { "Invalid transform" } }
+                "translate" -> layer.floats(rep).let { Matrix4.compose(it, NO_ROTATION, ONES) }
+                "scale" -> layer.floats(rep).let { Matrix4.compose(ZEROS, NO_ROTATION, it) }
+                "rotateX", "rotateY", "rotateZ" -> axisRotation(kind.last(), layer.floats(rep).first())
                 "rotateXYZ" ->
-                    crate.floats(rep).let { (x, y, z) ->
+                    layer.floats(rep).let { (x, y, z) ->
                         Matrix4.multiply(axisRotation('Z', z), Matrix4.multiply(axisRotation('Y', y), axisRotation('X', x)))
                     }
-                "orient" -> Matrix4.compose(ZEROS, crate.floats(rep), ONES)
+                "orient" -> Matrix4.compose(ZEROS, layer.floats(rep), ONES)
                 else -> Matrix4.IDENTITY
             }
         }
@@ -233,7 +256,7 @@ object UsdReader {
             while (path.isNotEmpty() && path != "/") {
                 specs["$path.material:binding"]
                     ?.get("targetPaths")
-                    ?.let(crate::paths)
+                    ?.let(layer::paths)
                     ?.firstOrNull()
                     ?.let { return it }
                 path = path.substringBeforeLast('/')
@@ -250,13 +273,13 @@ object UsdReader {
             fun inside(path: String) = material == null || path.startsWith("$material/")
             val textures =
                 specs.keys
-                    .filter { !it.contains('.') && inside(it) && crate.token(value(it, "info:id")) == "UsdUVTexture" }
-                    .associateWith { prim -> value(prim, "inputs:file")?.let(crate::assetPath) }
+                    .filter { !it.contains('.') && inside(it) && layer.token(value(it, "info:id")) == "UsdUVTexture" }
+                    .associateWith { prim -> value(prim, "inputs:file")?.let(layer::assetPath) }
                     .filterValues { it != null }
             val connected =
                 specs.entries
                     .filter { (path, _) -> path.endsWith(".inputs:diffuseColor") && inside(path) }
-                    .flatMap { (_, fields) -> fields["connectionPaths"]?.let(crate::paths).orEmpty() }
+                    .flatMap { (_, fields) -> fields["connectionPaths"]?.let(layer::paths).orEmpty() }
                     .map { it.substringBefore('.') }
             val chosen =
                 connected.firstOrNull { it in textures }
@@ -301,7 +324,7 @@ object UsdReader {
      */
     private class Crate(
         val data: ByteArray,
-    ) {
+    ) : Values<Long> {
         private val buffer = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
         private val minor = data[MAGIC.size + 1].toInt()
         private val sections = HashMap<String, Int>()
@@ -392,10 +415,11 @@ object UsdReader {
 
         // --- Values -------------------------------------------------------------------------
 
-        fun token(rep: Long?): String? = rep?.takeIf { type(it) == TOKEN && inlined(it) }?.let { tokens.getOrNull(payload(it).toInt()) }
+        override fun token(rep: Long?): String? =
+            rep?.takeIf { type(it) == TOKEN && inlined(it) }?.let { tokens.getOrNull(payload(it).toInt()) }
 
         /** A token list: a token[] attribute value, or a token vector field. */
-        fun tokens(rep: Long): List<String> {
+        override fun tokens(rep: Long): List<String> {
             val tokenArray = type(rep) == TOKEN && array(rep)
             if (inlined(rep) || (!tokenArray && type(rep) != TOKEN_VECTOR)) return emptyList()
             val at = position(payload(rep))
@@ -404,7 +428,7 @@ object UsdReader {
             return List(count) { tokens.getOrElse(buffer.getInt(start + it * 4)) { "" } }
         }
 
-        fun assetPath(rep: Long): String? =
+        override fun assetPath(rep: Long): String? =
             when {
                 type(rep) != ASSET_PATH -> null
                 inlined(rep) -> tokens.getOrNull(payload(rep).toInt())
@@ -412,7 +436,7 @@ object UsdReader {
             }
 
         /** The added and explicit items of a path list (connections), as path strings. */
-        fun paths(rep: Long): List<String> {
+        override fun paths(rep: Long): List<String> {
             if (type(rep) != PATH_LIST_OP || inlined(rep)) return emptyList()
             var at = position(payload(rep))
             val header = data[at++].toInt()
@@ -426,7 +450,7 @@ object UsdReader {
             return found
         }
 
-        fun ints(rep: Long): IntArray? {
+        override fun ints(rep: Long): IntArray? {
             if (type(rep) != INT || !array(rep)) return null
             val at = position(payload(rep))
             val count = arrayCount(at)
@@ -435,7 +459,7 @@ object UsdReader {
         }
 
         /** Float-based values (scalars, vectors, matrices and their arrays) flattened to floats. */
-        fun floats(rep: Long): FloatArray {
+        override fun floats(rep: Long): FloatArray {
             val type = type(rep)
             val width = WIDTH[type] ?: error("Unsupported USD value type $type")
             val double = type in DOUBLES
