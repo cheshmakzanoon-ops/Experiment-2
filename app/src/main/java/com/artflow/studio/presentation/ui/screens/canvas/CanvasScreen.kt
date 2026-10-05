@@ -64,6 +64,7 @@ import com.artflow.studio.presentation.ui.components.canvas.BrushCursor
 import com.artflow.studio.presentation.ui.components.canvas.DragPreview
 import com.artflow.studio.presentation.ui.components.canvas.EditorInput
 import com.artflow.studio.presentation.ui.components.canvas.GestureControls
+import com.artflow.studio.presentation.ui.components.canvas.imageDropTarget
 import com.artflow.studio.presentation.ui.components.color.ColorPanel
 import com.artflow.studio.presentation.ui.components.editor.ActionsPanel
 import com.artflow.studio.presentation.ui.components.editor.AddActions
@@ -270,19 +271,23 @@ fun CanvasScreen(
             referenceImportProject = null
         }
     val context = androidx.compose.ui.platform.LocalContext.current
+    // Picked or dropped pictures become a new layer.
+    val insertImageFrom = { uri: android.net.Uri ->
+        scope.launch {
+            val image =
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching {
+                        com.artflow.studio.data.renderer.BitmapPixelBridge
+                            .decodeUri(context.contentResolver, uri)
+                    }.getOrNull()
+                }
+            if (image == null) viewModel.notify("That image could not be opened") else viewModel.insertImageLayer(image)
+        }
+        Unit
+    }
     val photoPicker =
         rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-            if (uri == null) return@rememberLauncherForActivityResult
-            scope.launch {
-                val image =
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        runCatching {
-                            com.artflow.studio.data.renderer.BitmapPixelBridge
-                                .decodeUri(context.contentResolver, uri)
-                        }.getOrNull()
-                    }
-                if (image == null) viewModel.notify("That image could not be opened") else viewModel.insertImageLayer(image)
-            }
+            if (uri != null) insertImageFrom(uri)
         }
     val takePhoto = rememberCameraCapture(onImage = viewModel::insertImageLayer, onError = viewModel::notify)
     val paletteImports = rememberPaletteImports(onPalette = viewModel::addPaletteFromColors, onError = viewModel::notify)
@@ -990,6 +995,7 @@ fun CanvasScreen(
             modifier =
                 Modifier
                     .fillMaxSize()
+                    .imageDropTarget(insertImageFrom)
                     .padding(padding)
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
                     .onGloballyPositioned { contentOrigin = it.positionInWindow() },
