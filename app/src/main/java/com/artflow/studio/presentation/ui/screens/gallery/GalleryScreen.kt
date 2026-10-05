@@ -35,6 +35,7 @@ import com.artflow.studio.core.three.ModelPackage
 import com.artflow.studio.core.three.ObjParser
 import com.artflow.studio.core.three.TextureAtlas
 import com.artflow.studio.data.export.PendingImports
+import com.artflow.studio.data.export.ProcreateImport
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.Project
 import com.artflow.studio.domain.model.settings.GallerySort
@@ -87,6 +88,7 @@ fun GalleryScreen(
     val context = LocalContext.current
     val photoImport = rememberPhotoImport(viewModel, snackbarHostState, onNavigateToCanvas)
     val psdImport = rememberPsdImport(viewModel, snackbarHostState, onNavigateToCanvas)
+    val procreateImport = rememberProcreateImport(viewModel, snackbarHostState, onNavigateToCanvas)
     val packageImport = rememberPackageImport(viewModel, snackbarHostState, onNavigateToCanvas)
     val modelImport = rememberModelImport(viewModel, snackbarHostState, onNavigateToCanvas)
 
@@ -148,7 +150,7 @@ fun GalleryScreen(
                         }
                         SortMenu(settings.gallerySort, viewModel::setSort)
                         TextButton(onClick = { selection = emptySet() }) { Text("Select") }
-                        ImportMenu(ImportChoices(photoImport, psdImport, packageImport, modelImport))
+                        ImportMenu(ImportChoices(photoImport, psdImport, procreateImport, packageImport, modelImport))
                         IconButton(onClick = onOpenHelp) {
                             Icon(Icons.Default.HelpOutline, contentDescription = "Help")
                         }
@@ -312,10 +314,61 @@ private fun rememberPsdImport(
     return { runCatching { launcher.launch(arrayOf("image/vnd.adobe.photoshop", "application/octet-stream")) } }
 }
 
+/**
+ * Opens a Procreate document as a new artwork of the same size, with its layers, groups, blend
+ * modes, masks and background colour.
+ */
+@Composable
+private fun rememberProcreateImport(
+    viewModel: MainViewModel,
+    snackbarHostState: SnackbarHostState,
+    onNavigateToCanvas: (Long) -> Unit,
+): () -> Unit {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val launcher =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            scope.launch {
+                val opened =
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            requireNotNull(context.contentResolver.openInputStream(uri)) { "That file could not be opened" }.use { input ->
+                                ProcreateImport.open(input, context.cacheDir)
+                            }
+                        }
+                    }
+                val document =
+                    opened.getOrElse { failure ->
+                        // Our own checks explain themselves; anything else means a damaged or unusual file.
+                        val explained = failure is IllegalArgumentException && failure !is NumberFormatException
+                        snackbarHostState.showSnackbar(
+                            failure.message?.takeIf { explained } ?: "That file is not a Procreate document ArtFlow can read",
+                        )
+                        return@launch
+                    }
+                val size = document.document
+                if (!CanvasOperations.isSizeSafe(size.width, size.height)) {
+                    document.close()
+                    snackbarHostState.showSnackbar("This Procreate canvas is too large for this device")
+                    return@launch
+                }
+                val name = size.name?.takeIf { it.isNotBlank() } ?: "Imported Procreate"
+                val dpi = size.dpi.coerceIn(CanvasOperations.MIN_DPI, CanvasOperations.MAX_DPI)
+                viewModel.createProject(name, null, size.width, size.height, dpi) { id ->
+                    PendingImports.putProcreate(id, document)
+                    scope.launch { onNavigateToCanvas(id) }
+                }
+            }
+        }
+    return { runCatching { launcher.launch(arrayOf("application/octet-stream", "application/zip", "*/*")) } }
+}
+
 /** What the gallery's Import menu can bring in, each as a new artwork. */
 private class ImportChoices(
     val photo: () -> Unit,
     val psd: () -> Unit,
+    val procreate: () -> Unit,
     val artwork: () -> Unit,
     val model: () -> Unit,
 )
@@ -440,6 +493,10 @@ private fun ImportMenu(choices: ImportChoices) {
             DropdownMenuItem(text = { Text("Photoshop file (PSD)") }, onClick = {
                 open = false
                 choices.psd()
+            })
+            DropdownMenuItem(text = { Text("Procreate document (.procreate)") }, onClick = {
+                open = false
+                choices.procreate()
             })
             DropdownMenuItem(text = { Text("ArtFlow artwork (.artflow)") }, onClick = {
                 open = false

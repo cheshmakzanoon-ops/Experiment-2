@@ -1,5 +1,6 @@
 package com.artflow.studio.core.three
 
+import com.artflow.studio.core.export.Lz4
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.abs
@@ -615,50 +616,3 @@ object UsdReader {
 }
 
 /** Raw LZ4 block decompression, as used inside USD files. */
-internal object Lz4 {
-    /** Decodes [length] bytes of [source] at [offset] into [target] at [at]; returns the bytes written. */
-    fun decompress(
-        source: ByteArray,
-        offset: Int,
-        length: Int,
-        target: ByteArray,
-        at: Int,
-    ): Int {
-        var s = offset
-        val end = offset + length
-        var d = at
-        while (s < end) {
-            val token = source[s++].toInt() and 0xFF
-            var literals = token ushr 4
-            if (literals == LONG) {
-                var extra: Int
-                do {
-                    extra = source[s++].toInt() and 0xFF
-                    literals += extra
-                } while (extra == 255)
-            }
-            System.arraycopy(source, s, target, d, literals)
-            s += literals
-            d += literals
-            if (s >= end) break
-            val distance = (source[s].toInt() and 0xFF) or ((source[s + 1].toInt() and 0xFF) shl 8)
-            s += 2
-            var match = token and LONG
-            if (match == LONG) {
-                var extra: Int
-                do {
-                    extra = source[s++].toInt() and 0xFF
-                    match += extra
-                } while (extra == 255)
-            }
-            match += MIN_MATCH
-            require(distance in 1..d - at && d + match <= target.size) { "The compressed data is damaged" }
-            var from = d - distance
-            repeat(match) { target[d++] = target[from++] }
-        }
-        return d - at
-    }
-
-    private const val LONG = 15
-    private const val MIN_MATCH = 4
-}

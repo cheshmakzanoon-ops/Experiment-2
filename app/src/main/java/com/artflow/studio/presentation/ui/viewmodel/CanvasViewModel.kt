@@ -30,6 +30,7 @@ import com.artflow.studio.data.export.ArtworkExporter
 import com.artflow.studio.data.export.LayerImports
 import com.artflow.studio.data.export.LayerRaster
 import com.artflow.studio.data.export.PendingImports
+import com.artflow.studio.data.export.ProcreateImport
 import com.artflow.studio.data.export.TimelapseRecorder
 import com.artflow.studio.domain.model.Project
 import com.artflow.studio.domain.model.animation.AnimationSettings
@@ -287,6 +288,7 @@ class CanvasViewModel
                         PendingImports.take(projectId)?.let(::insertImageLayer)
                         PendingImports.takeModel(projectId)?.let(model::attach) ?: model.load()
                         PendingImports.takePsd(projectId)?.let(::importPsd)
+                        PendingImports.takeProcreate(projectId)?.let(::importProcreate)
                         Timber.d("Opened project $projectId (${state.width}x${state.height})")
                     } catch (cancelled: CancellationException) {
                         throw cancelled
@@ -773,6 +775,23 @@ class CanvasViewModel
         /** Adds every layer of a Photoshop document as new layers, centred on the canvas. */
         fun importPsd(bytes: ByteArray) =
             layerOp { notify("Imported ${LayerImports.importPsd(canvasRepository, bytes)} layer(s) from PSD") }
+
+        /** Rebuilds a Procreate document's layers in this (new) canvas, then lets the file go. */
+        private fun importProcreate(document: ProcreateImport) =
+            layerOp {
+                document.use {
+                    val result = LayerImports.importProcreate(canvasRepository, it.document)
+                    // The document's background colour is part of the canvas state.
+                    refreshUiStateFrames()
+                    notify(
+                        if (result.flattened) {
+                            "This Procreate document has too many layers for this device's memory, so it came in flattened"
+                        } else {
+                            "Imported ${result.layers} layer(s) from Procreate"
+                        },
+                    )
+                }
+            }
 
         /** Groups [layerId] with the layer directly beneath it (or groups it alone at the bottom). */
         fun groupWithLayerBelow(layerId: Long) =

@@ -29,6 +29,18 @@ object PendingImports {
 
     fun takePsd(projectId: Long): ByteArray? = documents.remove(projectId)
 
+    private val procreate = ConcurrentHashMap<Long, ProcreateImport>()
+
+    /** An opened Procreate document whose layers fill the new canvas; the taker closes it. */
+    fun putProcreate(
+        projectId: Long,
+        document: ProcreateImport,
+    ) {
+        procreate.put(projectId, document)?.close()
+    }
+
+    fun takeProcreate(projectId: Long): ProcreateImport? = procreate.remove(projectId)
+
     private val models = ConcurrentHashMap<Long, String>()
 
     /** A 3D model (OBJ text) whose texture the new canvas becomes. */
