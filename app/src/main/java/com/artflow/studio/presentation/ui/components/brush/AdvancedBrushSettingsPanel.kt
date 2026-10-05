@@ -486,6 +486,13 @@ private fun BrushWetSettings(
             valueRange = 0f..1f,
             valueDisplay = "%.0f%%".format(brushParams.wetEdges * 100),
         )
+        BrushParameterSlider(
+            label = "Burnt edges",
+            value = brushParams.burntEdges,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(burntEdges = it.coerceIn(0f, 1f))) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.burntEdges * 100),
+        )
         ShapeSwitch("Build up within a stroke", brushParams.buildUp) { onBrushParamsChanged(brushParams.copy(buildUp = it)) }
         Text("Blend mode", style = MaterialTheme.typography.labelLarge)
         Row(

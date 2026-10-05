@@ -38,6 +38,7 @@ class SecondaryColourTest {
     fun strokesCarryTheirSecondaryColourIntoThePixels() {
         val points = (0..20).map { StrokePoint(5f + it * 2f, 10f, pressure = 1f, timestamp = it.toLong()) }
         val params = BrushParams(size = 6f, spacing = 0.1f, pressureToSize = 0f, pressureToOpacity = 0f, secondaryPressure = 1f)
+
         fun paint(secondary: Int?): Int {
             val target = PixelBuffer(60, 20)
             val stroke = Stroke(points = points, brushParams = params, layerId = 1, color = red, secondaryColor = secondary)
@@ -55,3 +56,34 @@ private fun assertEquals(
     actual: Int,
     delta: Float,
 ) = assertEquals(expected.toFloat(), actual.toFloat(), delta)
+
+class BurntEdgesTest {
+    private val red = 0xFFFF0000.toInt()
+    private val points = (0..20).map { StrokePoint(5f + it * 2f, 10.4f, pressure = 1f, timestamp = it.toLong()) }
+
+    private fun paint(
+        flow: Float,
+        burnt: Float,
+    ): PixelBuffer =
+        PixelBuffer(60, 20).also { target ->
+            val params =
+                BrushParams(size = 12f, spacing = 0.1f, flow = flow, pressureToSize = 0f, pressureToOpacity = 0f, burntEdges = burnt)
+            StrokeRasterizer().draw(target, Stroke(points = points, brushParams = params, layerId = 1, color = red))
+        }
+
+    @Test
+    fun burntEdgesDarkenPartlyCoveredPaint() {
+        // Low flow gives the tip a soft edge, so pixels there are only partly covered.
+        val plain = paint(0.2f, 0f)
+        val burnt = paint(0.2f, 1f)
+        val partial = plain.pixels.indices.filter { (plain.pixels[it] ushr 24) in 10..245 }
+        assertTrue("the stroke has a soft edge", partial.isNotEmpty())
+        assertTrue(partial.all { ((burnt.pixels[it] shr 16) and 0xFF) < ((plain.pixels[it] shr 16) and 0xFF) })
+    }
+
+    @Test
+    fun fullyCoveredPaintKeepsItsColour() {
+        // A hard tip covers each pixel fully or not at all, so nothing burns.
+        assertTrue(paint(1f, 0f).pixels.contentEquals(paint(1f, 1f).pixels))
+    }
+}

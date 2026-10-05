@@ -70,6 +70,7 @@ object ProcreateBrush {
                 roundness = (number("shapeRoundness") ?: 1f).coerceIn(MIN_ROUNDNESS, 1f),
                 blendMode = mode ?: BlendMode.NORMAL,
                 wetEdges = unit("wetEdgesAmount"),
+                burntEdges = unit("burntEdgesAmount"),
                 falloff = unit("dynamicsFalloff"),
                 tipFlipX = flag("shapeFlipXJitter"),
                 tipFlipY = flag("shapeFlipYJitter"),

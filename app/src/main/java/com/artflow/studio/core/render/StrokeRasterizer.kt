@@ -112,6 +112,7 @@ class StrokeRasterizer(
     ) {
         val texture = BrushTexture.from(params)
         val wetEdges = params.wetEdges.coerceIn(0f, 1f)
+        val burntEdges = params.burntEdges.coerceIn(0f, 1f)
     }
 
     /** Lays the stroke's coverage in [buffer] onto [target] within [reach]: grain, wet edges, opacity, blend. */
@@ -132,7 +133,7 @@ class StrokeRasterizer(
                 val grain = how.texture?.coverage(originX + i % target.width - grainX, originY + i / target.width - grainY) ?: 1f
                 val effective = how.strokeAlpha * coverage * grain * wetEdgeFactor(source, how.wetEdges)
                 if (effective <= 0f) continue
-                val paint = Channels.scaleAlpha(source, effective)
+                val paint = Channels.scaleAlpha(burnt(source, how.burntEdges), effective)
                 target.pixels[i] = deposit(target.pixels[i], paint, how.params, how.alphaLock)
             }
         }
@@ -242,6 +243,22 @@ class StrokeRasterizer(
         val a = (source ushr 24) / 255f
         val rim = 4f * a * (1f - a)
         return ((1f - 0.5f * wetEdges) + wetEdges * rim * 0.75f / a.coerceAtLeast(0.01f)).coerceIn(0f, 1f / a.coerceAtLeast(0.01f))
+    }
+
+    /**
+     * Burnt edges darken the paint where the stroke's coverage falls off, multiplying the colour
+     * into itself toward its rim (Procreate's Burnt Edges, in its default Multiply mode).
+     */
+    private fun burnt(
+        source: Int,
+        burntEdges: Float,
+    ): Int {
+        if (burntEdges <= 0f) return source
+        val a = (source ushr 24) / 255f
+        val darken = 1f - burntEdges * BURNT_DEPTH * 4f * a * (1f - a)
+
+        fun channel(shift: Int) = (((source shr shift) and 0xFF) * darken + 0.5f).toInt().coerceIn(0, 255)
+        return (source and 0xFF000000.toInt()) or (channel(16) shl 16) or (channel(8) shl 8) or channel(0)
     }
 
     /**
@@ -776,6 +793,9 @@ class StrokeRasterizer(
 
 /** Offsets a dual brush's random seed so its jitter differs from the main brush's. */
 private const val DUAL_SEED = 7919L
+
+/** How dark a burnt rim gets at full Burnt Edges, as a share of the colour. */
+private const val BURNT_DEPTH = 0.6f
 
 /** How much of the paint under a dab a fully wet brush picks up. */
 private const val WET_PICKUP = 0.6f
