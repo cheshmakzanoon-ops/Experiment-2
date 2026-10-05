@@ -2162,6 +2162,9 @@ class CanvasRepositoryImpl
          */
         private fun belowKey(): List<Any?>? {
             val stroke = activeStrokes.keys.singleOrNull() ?: return null
+            // The cache is a canvas-sized image; skip it where that would crowd the heap.
+            val cacheBytes = canvasWidth.toLong() * canvasHeight * BYTES_PER_PIXEL
+            if (cacheBytes > Runtime.getRuntime().maxMemory() / BELOW_CACHE_HEAP_SHARE) return null
             if ((strokeDestinations[stroke] ?: StrokeDestination.LAYER) != StrokeDestination.LAYER) return null
             val layerId = strokeLayerIds[stroke] ?: return null
             val layers = currentLayers()
@@ -2996,6 +2999,8 @@ class CanvasRepositoryImpl
         )
 
         companion object {
+            private const val BYTES_PER_PIXEL = 4L
+            private const val BELOW_CACHE_HEAP_SHARE = 8L
             private const val MAX_HISTORY = 30
             private val NO_SYMMETRY = SymmetryEngine.Settings()
             private const val OPACITY_MERGE_MS = 1_500L
