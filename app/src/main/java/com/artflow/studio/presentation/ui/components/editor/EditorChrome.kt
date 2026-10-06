@@ -159,6 +159,12 @@ fun ToolStrip(
     }
 }
 
+/** The brush's own size and opacity limits, which the size and opacity sliders span. */
+data class SliderRanges(
+    val size: ClosedFloatingPointRange<Float> = 1f..400f,
+    val opacity: ClosedFloatingPointRange<Float> = 0.01f..1f,
+)
+
 /** Size / opacity controls, shown for the tools where they mean something. */
 @Composable
 fun BrushOptionsRow(
@@ -172,8 +178,7 @@ fun BrushOptionsRow(
     onEraserSizeChanged: (Float) -> Unit,
     onToleranceChanged: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    sizeRange: ClosedFloatingPointRange<Float> = 1f..400f,
-    opacityRange: ClosedFloatingPointRange<Float> = 0.01f..1f,
+    ranges: SliderRanges = SliderRanges(),
 ) {
     Row(
         modifier =
@@ -195,7 +200,7 @@ fun BrushOptionsRow(
                 LabeledSlider(
                     label = "Size",
                     value = size,
-                    range = sizeRange,
+                    range = ranges.size,
                     onChange = onSizeChanged,
                     modifier = Modifier.weight(1f),
                 )
@@ -203,7 +208,7 @@ fun BrushOptionsRow(
                 LabeledSlider(
                     label = "Opacity",
                     value = opacity,
-                    range = opacityRange,
+                    range = ranges.opacity,
                     onChange = onOpacityChanged,
                     modifier = Modifier.weight(1f),
                 )

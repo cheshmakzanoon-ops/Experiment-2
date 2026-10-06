@@ -118,6 +118,7 @@ import com.artflow.studio.presentation.ui.components.editor.SelectionSheet
 import com.artflow.studio.presentation.ui.components.editor.SelectionToolbar
 import com.artflow.studio.presentation.ui.components.editor.SelectionToolbarActions
 import com.artflow.studio.presentation.ui.components.editor.ShapeNodesOverlay
+import com.artflow.studio.presentation.ui.components.editor.SliderRanges
 import com.artflow.studio.presentation.ui.components.editor.StudioBottomPanel
 import com.artflow.studio.presentation.ui.components.editor.StudioButton
 import com.artflow.studio.presentation.ui.components.editor.StudioPopover
@@ -319,7 +320,7 @@ fun CanvasScreen(
             if (uri != null) insertImageFrom(uri)
         }
     val takePhoto = rememberCameraCapture(onImage = viewModel::insertImageLayer, onError = viewModel::notify)
-    val paletteImports = rememberPaletteImports(onPalette = viewModel::addPaletteFromColors, onError = viewModel::notify)
+    val paletteImports = rememberPaletteImports(onPalette = viewModel.paletteActions::addFromColors, onError = viewModel::notify)
     var importedFonts by remember { mutableStateOf(FontLibrary.families(context)) }
     val fontPicker =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -531,8 +532,11 @@ fun CanvasScreen(
                     onOpacityChanged = viewModel::setBrushOpacity,
                     onEraserSizeChanged = viewModel::setEraserSize,
                     onToleranceChanged = { viewModel.setFillSettings(it, input.fillContiguous) },
-                    sizeRange = (input.smudgeParams?.takeIf { input.tool == ToolType.SMUDGE } ?: input.brushParams).sizeLimits,
-                    opacityRange = input.brushParams.opacityLimits,
+                    ranges =
+                        SliderRanges(
+                            (input.smudgeParams?.takeIf { input.tool == ToolType.SMUDGE } ?: input.brushParams).sizeLimits,
+                            input.brushParams.opacityLimits,
+                        ),
                 )
                 ToolOptionsPanel(viewModel, input, canvasView)
             }
@@ -544,16 +548,16 @@ fun CanvasScreen(
                     palettes = palettes,
                     onColorSelected = { viewModel.setColor(it) },
                     onClearRecents = { scope.launch { viewModel.clearRecentColors() } },
-                    onSavePalette = { name, colors -> viewModel.addPaletteFromColors(name, colors) },
+                    onSavePalette = viewModel.paletteActions::addFromColors,
                     onImportPalette = paletteImports.fromFile,
                     onPaletteFromPhoto = paletteImports.fromPhoto,
                     onPaletteFromCamera = paletteImports.fromCamera,
                     palettesEdit =
                         PaletteEdits(
-                            viewModel::removePalette,
-                            viewModel::updatePalette,
+                            viewModel.paletteActions::remove,
+                            viewModel.paletteActions::update,
                             paletteImports.share,
-                            viewModel::toggleDefaultPalette,
+                            viewModel.paletteActions::toggleDefault,
                             settings.defaultPaletteName,
                         ),
                     secondary = SecondarySwatch(input.secondaryColor, viewModel::swapColors),

@@ -1478,42 +1478,7 @@ class CanvasViewModel
         fun palettesFor(category: String? = null): List<Palette> =
             if (category == null) _palettes.value else _palettes.value.filter { it.category == category }
 
-        fun addPaletteFromColors(
-            name: String,
-            colors: List<Int>,
-        ) {
-            viewModelScope.launch(editorErrors) {
-                val palette =
-                    Palette(
-                        id = System.currentTimeMillis(),
-                        name = name,
-                        colors = colors,
-                        category = "Custom",
-                    )
-                settingsRepository.addPalette(palette)
-                notify("Palette saved")
-            }
-        }
-
-        /** Shows [name]'s palette under the colour pickers, or none when it is already the default. */
-        fun toggleDefaultPalette(name: String) {
-            viewModelScope.launch(editorErrors) {
-                settingsRepository.update { it.copy(defaultPaletteName = if (it.defaultPaletteName == name) "" else name) }
-            }
-        }
-
-        /** Replaces a custom palette with its edited version. */
-        fun updatePalette(palette: Palette) {
-            viewModelScope.launch(editorErrors) {
-                settingsRepository.update { settings ->
-                    settings.copy(customPalettes = settings.customPalettes.map { if (it.id == palette.id) palette else it })
-                }
-            }
-        }
-
-        fun removePalette(paletteId: Long) {
-            viewModelScope.launch(editorErrors) { settingsRepository.removePalette(paletteId) }
-        }
+        val paletteActions by lazy { PaletteActions(settingsRepository, viewModelScope, editorErrors, ::notify) }
 
         fun harmonyFor(
             baseColor: Int,
