@@ -24,7 +24,7 @@ class WarpMeshTest {
     ): PixelBuffer {
         val bounds = LayerTransform.floatingBounds(source, null)!!
         return PixelBuffer(source.width, source.height).also {
-            WarpMesh.render(source, it, bounds, change(WarpMesh.fromBounds(bounds)), null, highQuality = false)
+            WarpMesh.render(source, it, bounds, change(WarpMesh.fromBounds(bounds)), null, TransformQuad.Interpolation.NEAREST)
         }
     }
 
@@ -32,7 +32,7 @@ class WarpMeshTest {
         val source = block(24, 5, 6, 8)
         val bounds = LayerTransform.floatingBounds(source, null)!!
         val out = PixelBuffer(24, 24)
-        WarpMesh.render(source, out, bounds, WarpMesh.fromBounds(bounds, WarpMesh.ADVANCED_SIDE), null, highQuality = false)
+        WarpMesh.render(source, out, bounds, WarpMesh.fromBounds(bounds, WarpMesh.ADVANCED_SIDE), null, TransformQuad.Interpolation.NEAREST)
         assertTrue(source.pixels.contentEquals(out.pixels))
     }
 

@@ -20,11 +20,12 @@ class TransformQuadTest {
 
     private fun render(
         source: PixelBuffer,
+        interpolation: TransformQuad.Interpolation = TransformQuad.Interpolation.NEAREST,
         quad: (Quad) -> Quad,
     ): PixelBuffer {
         val bounds = LayerTransform.floatingBounds(source, null)!!
         return PixelBuffer(source.width, source.height).also {
-            TransformQuad.render(source, it, bounds, quad(Quad.fromBounds(bounds)), null, highQuality = false)
+            TransformQuad.render(source, it, bounds, quad(Quad.fromBounds(bounds)), null, interpolation)
         }
     }
 
@@ -121,5 +122,19 @@ class TransformQuadTest {
         assertEquals(1f to 0f, TransformQuad.nudgeToward(box, 60f, 22f))
         assertEquals(0f to -1f, TransformQuad.nudgeToward(box, 18f, -40f))
         assertEquals(-1f to 0f, TransformQuad.nudgeToward(box, 0f, 15f))
+    }
+
+    @Test fun bicubicIdentityKeepsExactPixels() {
+        val source = block(16, 4, 4, 4)
+        val out = render(source, TransformQuad.Interpolation.BICUBIC) { it }
+        assertTrue(source.pixels.contentEquals(out.pixels))
+    }
+
+    @Test fun bicubicHalfPixelShiftStaysWithinTheSourceColour() {
+        val out = render(block(16, 4, 4, 4), TransformQuad.Interpolation.BICUBIC) { TransformQuad.translate(it, 0.5f, 0f) }
+        for (pixel in out.pixels) {
+            if (pixel != 0) assertEquals(0xFF0000, pixel and 0xFFFFFF)
+        }
+        assertEquals(0xFF, out.pixels[5 * 16 + 6] ushr 24)
     }
 }

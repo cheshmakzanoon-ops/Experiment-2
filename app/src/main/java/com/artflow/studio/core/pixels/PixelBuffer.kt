@@ -133,6 +133,42 @@ class PixelBuffer(
         return mix4(p00, p10, p01, p11, fx, fy)
     }
 
+    /**
+     * Catmull-Rom bicubic sample in buffer space, sharper than [sampleBilinear] when enlarging.
+     * Colour is weighted by alpha so hidden RGB cannot bleed, and grid points return exact texels.
+     */
+    fun sampleBicubic(
+        xf: Float,
+        yf: Float,
+    ): Int {
+        require(xf.isFinite() && yf.isFinite()) { "Sampling coordinates must be finite" }
+        if (xf <= -1.5f || xf >= width + 1.5f) return 0
+        if (yf <= -1.5f || yf >= height + 1.5f) return 0
+        val x = xf - 0.5f
+        val y = yf - 0.5f
+        val x0 = floor(x).toInt()
+        val y0 = floor(y).toInt()
+        val fx = x - x0
+        val fy = y - y0
+        if (fx == 0f && fy == 0f) return getSafe(x0, y0)
+        var alpha = 0f
+        var red = 0f
+        var green = 0f
+        var blue = 0f
+        for (j in 0..3) {
+            for (i in 0..3) {
+                val pixel = getSafe(x0 + i - 1, y0 + j - 1)
+                val weight = catmullRom(i, fx) * catmullRom(j, fy) * Channels.alpha(pixel)
+                alpha += weight
+                red += weight * Channels.red(pixel)
+                green += weight * Channels.green(pixel)
+                blue += weight * Channels.blue(pixel)
+            }
+        }
+        if (alpha < 0.5f) return 0
+        return Channels.fromFloats(alpha, red / alpha, green / alpha, blue / alpha)
+    }
+
     /** Draw [src] into this buffer at ([dx], [dy]) with source-over compositing. */
     fun drawInto(
         src: PixelBuffer,
@@ -345,6 +381,21 @@ class PixelBuffer(
         ): PixelBuffer = PixelBuffer(width, height).also { it.fill(argb) }
 
         /** Bilinear factors are in 0..1; alpha-weighted RGB is unpremultiplied exactly once. */
+        /** Catmull-Rom weight of tap [tap] (0..3, covering offsets -1..2) at fraction [t]; the four sum to one. */
+        fun catmullRom(
+            tap: Int,
+            t: Float,
+        ): Float {
+            val t2 = t * t
+            val t3 = t2 * t
+            return when (tap) {
+                0 -> (-t3 + 2f * t2 - t) / 2f
+                1 -> (3f * t3 - 5f * t2 + 2f) / 2f
+                2 -> (-3f * t3 + 4f * t2 + t) / 2f
+                else -> (t3 - t2) / 2f
+            }
+        }
+
         fun mix4(
             p00: Int,
             p10: Int,

@@ -110,6 +110,19 @@ object TransformQuad {
     ) {
         NEAREST("Nearest neighbour"),
         BILINEAR("Bilinear"),
+        BICUBIC("Bicubic"),
+        ;
+
+        fun sample(
+            buffer: PixelBuffer,
+            x: Float,
+            y: Float,
+        ): Int =
+            when (this) {
+                NEAREST -> buffer.sampleNearest(x, y)
+                BILINEAR -> buffer.sampleBilinear(x, y)
+                BICUBIC -> buffer.sampleBicubic(x, y)
+            }
     }
 
     fun translate(
@@ -513,7 +526,7 @@ object TransformQuad {
         bounds: IntBounds,
         quad: Quad,
         selection: SelectionMask?,
-        highQuality: Boolean,
+        interpolation: Interpolation,
     ) {
         require(source.width == target.width && source.height == target.height) { "Buffer sizes differ" }
         val (floating, blend) = LayerTransform.split(source, target, selection)
@@ -522,7 +535,7 @@ object TransformQuad {
         val x1 = min(target.width - 1, ceil(max(max(quad.x0, quad.x1), max(quad.x2, quad.x3))).toInt() + 1)
         val y0 = max(0, floor(min(min(quad.y0, quad.y1), min(quad.y2, quad.y3))).toInt() - 1)
         val y1 = min(target.height - 1, ceil(max(max(quad.y0, quad.y1), max(quad.y2, quad.y3))).toInt() + 1)
-        val sampler = Sampler(floating, inverse, bounds, highQuality)
+        val sampler = Sampler(floating, inverse, bounds, interpolation)
         for (y in y0..y1) {
             for (x in x0..x1) {
                 val sample = sampler.sample(x + 0.5f, y + 0.5f)
@@ -541,12 +554,12 @@ object TransformQuad {
         quad: Quad,
         mesh: WarpMesh?,
         selection: SelectionMask?,
-        highQuality: Boolean,
+        interpolation: Interpolation,
     ) {
         if (mesh != null) {
-            WarpMesh.render(source, target, bounds, mesh, selection, highQuality)
+            WarpMesh.render(source, target, bounds, mesh, selection, interpolation)
         } else {
-            render(source, target, bounds, quad, selection, highQuality)
+            render(source, target, bounds, quad, selection, interpolation)
         }
     }
 
@@ -555,7 +568,7 @@ object TransformQuad {
         private val floating: PixelBuffer,
         private val inverse: FloatArray,
         private val bounds: IntBounds,
-        private val highQuality: Boolean,
+        private val interpolation: Interpolation,
     ) {
         private val srcW = bounds.width.toFloat()
         private val srcH = bounds.height.toFloat()
@@ -572,7 +585,7 @@ object TransformQuad {
             if (u !in inside || v !in inside) return 0
             val sx = bounds.left + u * srcW
             val sy = bounds.top + v * srcH
-            return if (highQuality) floating.sampleBilinear(sx, sy) else floating.sampleNearest(sx, sy)
+            return interpolation.sample(floating, sx, sy)
         }
     }
 

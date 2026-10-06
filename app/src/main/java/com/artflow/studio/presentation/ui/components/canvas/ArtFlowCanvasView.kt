@@ -1123,8 +1123,9 @@ class ArtFlowCanvasView
             lastTransformPreview = now
             val quad = transformPreviewQuad ?: session.quad
             val mesh = transformPreviewMesh
-            TransformQuad.renderShape(session.base, buffer, session.bounds, quad, mesh, session.selection, highQuality = false)
-            companions.render(session.bounds, quad, mesh, highQuality = false)
+            val preview = TransformQuad.Interpolation.NEAREST
+            TransformQuad.renderShape(session.base, buffer, session.bounds, quad, mesh, session.selection, preview)
+            companions.render(session.bounds, quad, mesh, preview)
         }
 
         private fun applyTransformQuad(
@@ -1134,7 +1135,7 @@ class ArtFlowCanvasView
             ensureTransformSession { session ->
                 val quad = if (warping) session.quad else change(session)
                 val mesh = if (warping) changeMesh(session.meshOrBox(meshSide())) else null
-                val highQuality = input.transformInterpolation == TransformQuad.Interpolation.BILINEAR
+                val interpolation = input.transformInterpolation
                 transformCommitting = true
                 coroutineScope.launch {
                     try {
@@ -1144,7 +1145,7 @@ class ArtFlowCanvasView
                                 val companion = session.companions.firstOrNull { it.layerId == id }
                                 val source = companion?.base ?: session.base
                                 val selection = if (companion == null) session.selection else null
-                                TransformQuad.renderShape(source, buffer, session.bounds, quad, mesh, selection, highQuality)
+                                TransformQuad.renderShape(source, buffer, session.bounds, quad, mesh, selection, interpolation)
                             }
                         if (placed) {
                             session.quad = quad
@@ -2461,7 +2462,6 @@ class ArtFlowCanvasView
                         if (transform != null) {
                             // Previews are throttled and nearest-neighbour; commit the exact final placement.
                             withContext(Dispatchers.Default) {
-                                val highQuality = interpolation == TransformQuad.Interpolation.BILINEAR
                                 val quad = finalQuad ?: transform.quad
                                 TransformQuad.renderShape(
                                     transform.base,
@@ -2470,9 +2470,9 @@ class ArtFlowCanvasView
                                     quad,
                                     finalMesh,
                                     transform.selection,
-                                    highQuality,
+                                    interpolation,
                                 )
-                                companions.render(transform.bounds, quad, finalMesh, highQuality)
+                                companions.render(transform.bounds, quad, finalMesh, interpolation)
                             }
                         }
                         if (finalLiquify != null && original != null) {

@@ -502,16 +502,12 @@ fun TransformToolbar(
         AssistChip(onClick = { actions.onRotate(45f) }, label = { Text("Rotate 45°") })
         AssistChip(onClick = actions.onFit, label = { Text("Fit to Screen") })
         AssistChip(onClick = actions.onReset, label = { Text("Reset") })
+        // Tapping cycles Nearest neighbour, Bilinear and Bicubic.
         FilterChip(
-            selected = interpolation == TransformQuad.Interpolation.BILINEAR,
+            selected = interpolation != TransformQuad.Interpolation.NEAREST,
             onClick = {
-                actions.onInterpolation(
-                    if (interpolation == TransformQuad.Interpolation.BILINEAR) {
-                        TransformQuad.Interpolation.NEAREST
-                    } else {
-                        TransformQuad.Interpolation.BILINEAR
-                    },
-                )
+                val all = TransformQuad.Interpolation.entries
+                actions.onInterpolation(all[(interpolation.ordinal + 1) % all.size])
             },
             label = { Text("Interpolation: ${interpolation.displayName}") },
         )

@@ -291,11 +291,11 @@ class WarpMesh(
             bounds: IntBounds,
             mesh: WarpMesh,
             selection: SelectionMask?,
-            highQuality: Boolean,
+            interpolation: TransformQuad.Interpolation,
         ) {
             require(source.width == target.width && source.height == target.height) { "Buffer sizes differ" }
             val (floating, blend) = LayerTransform.split(source, target, selection)
-            val raster = TriangleRaster(floating, target, bounds, blend, highQuality)
+            val raster = TriangleRaster(floating, target, bounds, blend, interpolation)
             val n = SUBDIVISIONS
             for (j in 0..n) {
                 for (i in 0..n) {
@@ -360,7 +360,7 @@ class WarpMesh(
         private val target: PixelBuffer,
         private val bounds: IntBounds,
         private val blend: Boolean,
-        private val highQuality: Boolean,
+        private val interpolation: TransformQuad.Interpolation,
     ) {
         private val count = (SUBDIVISIONS + 1) * (SUBDIVISIONS + 1)
         private val vx = FloatArray(count)
@@ -415,7 +415,7 @@ class WarpMesh(
             written.set(index)
             val sx = bounds.left + u.coerceIn(0f, 1f) * bounds.width
             val sy = bounds.top + v.coerceIn(0f, 1f) * bounds.height
-            val sample = if (highQuality) floating.sampleBilinear(sx, sy) else floating.sampleNearest(sx, sy)
+            val sample = interpolation.sample(floating, sx, sy)
             if ((sample ushr 24) == 0) return
             target.pixels[index] = if (blend) BlendModes.sourceOver(target.pixels[index], sample) else sample
         }
