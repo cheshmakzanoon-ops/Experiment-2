@@ -232,8 +232,8 @@ private fun CurvesEditor(
             val tallest = bins.maxOrNull()?.takeIf { it > 0 } ?: return@let
             val bar = size.width / bins.size
             bins.forEachIndexed { i, count ->
-                val height = count.toFloat() / tallest * size.height
-                drawRect(grid, Offset(i * bar, size.height - height), Size(bar, height))
+                val barHeight = count.toFloat() / tallest * size.height
+                drawRect(grid, Offset(i * bar, size.height - barHeight), Size(bar, barHeight))
             }
         }
         for (k in 1..3) {
