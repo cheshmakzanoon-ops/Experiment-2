@@ -62,7 +62,8 @@ def is_retryable(results_root: Path) -> bool:
 
     reference_queue = any(_contains_reference_queue_crash(text) for text in logs)
     if reference_queue:
-        return all(_contains_reference_queue_crash(text) for text in failures)
+        # When system_server itself dies, the app's interrupted test has an empty failure element.
+        return all(not text.strip() or _contains_reference_queue_crash(text) for text in failures)
 
     art_sigsegv = any(_contains_art_sigsegv(text) for text in logs)
     if not art_sigsegv:

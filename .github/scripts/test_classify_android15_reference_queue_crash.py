@@ -34,6 +34,12 @@ class Android15RuntimeClassifierTest(unittest.TestCase):
     def test_reference_queue_framework_crash_is_retryable(self):
         self.assertTrue(is_retryable(self.fixture()))
 
+    def test_reference_queue_system_crash_with_empty_process_failure_is_retryable(self):
+        self.assertTrue(is_retryable(self.fixture(failure="")))
+
+    def test_app_assertion_is_never_retryable_even_with_reference_queue_crash(self):
+        self.assertFalse(is_retryable(self.fixture(failure="java.lang.AssertionError: pixels changed")))
+
     def test_android15_16k_libart_sigsegv_with_empty_process_failure_is_retryable(self):
         self.assertTrue(is_retryable(self.fixture(failure="", log=ART_SIGSEGV)))
 
