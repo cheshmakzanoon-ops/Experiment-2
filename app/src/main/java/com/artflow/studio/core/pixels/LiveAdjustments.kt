@@ -3,6 +3,7 @@ package com.artflow.studio.core.pixels
 import com.artflow.studio.domain.model.Color
 import com.artflow.studio.domain.model.layer.AdjustmentType
 import kotlin.math.PI
+import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -147,8 +148,10 @@ object LiveAdjustments {
     }
 
     /**
-     * Procreate's positional Perspective Blur: everything streaks toward the focus point (`x`, `y`
-     * parameters, the centre by default), more strongly the farther it is from it.
+     * Procreate's Perspective Blur. Positional: everything streaks toward the focus point (`x`, `y`
+     * parameters, the centre by default), more strongly the farther it is from it. Directional
+     * ([PERSPECTIVE_DIRECTIONAL] set): only what lies ahead of the point along [PERSPECTIVE_ANGLE]
+     * streaks, straight back along that direction, so the picture seems to rush one way.
      */
     fun perspectiveBlur(
         source: PixelBuffer,
@@ -159,10 +162,22 @@ object LiveAdjustments {
         val cx = settings.parameters[RECOLOR_X] ?: (source.width / 2f)
         val cy = settings.parameters[RECOLOR_Y] ?: (source.height / 2f)
         val reach = amount * MAX_PERSPECTIVE_PULL
+        val directional = (settings.parameters[PERSPECTIVE_DIRECTIONAL] ?: 0f) >= 0.5f
+        val radians = Math.toRadians((settings.parameters[PERSPECTIVE_ANGLE] ?: 0f).toDouble())
+        val ux = cos(radians).toFloat()
+        val uy = sin(radians).toFloat()
         val out = PixelBuffer(source.width, source.height)
         for (y in 0 until source.height) {
             for (x in 0 until source.width) {
-                out.pixels[y * source.width + x] = streak(source, x + 0.5f, y + 0.5f, (cx - x - 0.5f) * reach, (cy - y - 0.5f) * reach)
+                val px = x + 0.5f
+                val py = y + 0.5f
+                out.pixels[y * source.width + x] =
+                    if (directional) {
+                        val ahead = max(0f, (px - cx) * ux + (py - cy) * uy) * reach
+                        if (ahead <= 0f) source.pixels[y * source.width + x] else streak(source, px, py, -ux * ahead, -uy * ahead)
+                    } else {
+                        streak(source, px, py, (cx - px) * reach, (cy - py) * reach)
+                    }
             }
         }
         return out
@@ -217,6 +232,12 @@ object LiveAdjustments {
     const val BLOOM_SIZE = "bloom_size"
     const val BLOOM_BURN = "bloom_burn"
     const val DEFAULT_BLOOM_TRANSITION = 0.6f
+
+    /** Perspective Blur: 1 for Directional, 0 (the default) for Positional. */
+    const val PERSPECTIVE_DIRECTIONAL = "perspective_directional"
+
+    /** Perspective Blur: the Directional mode's direction in degrees (0 points right, 90 down). */
+    const val PERSPECTIVE_ANGLE = "perspective_angle"
 
     /** Glitch: which [GlitchStyle] (by ordinal). */
     const val GLITCH_STYLE = "glitch_style"

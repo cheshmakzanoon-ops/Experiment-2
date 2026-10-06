@@ -125,4 +125,16 @@ class LiveAdjustmentsTest {
         assertTrue("The edge streaks along the line to the focus", (out.pixels[20 * 40 + 31] ushr 24) < 255)
         assertEquals("The focus point stays sharp", source.pixels[20 * 40 + 20], out.pixels[20 * 40 + 20])
     }
+
+    @Test fun directionalPerspectiveBlurStreaksOnlyAheadOfThePoint() {
+        val source = PixelBuffer(40, 40)
+        for (y in 0 until 40) for (x in 30 until 40) source.pixels[y * 40 + x] = 0xFF000000.toInt()
+
+        fun blurred(angle: Float): PixelBuffer {
+            val parameters = mapOf(LiveAdjustments.PERSPECTIVE_DIRECTIONAL to 1f, LiveAdjustments.PERSPECTIVE_ANGLE to angle)
+            return LiveAdjustments.apply(Kind.PERSPECTIVE_BLUR, source, Settings(1f, parameters))
+        }
+        assertTrue("Ahead of the point the edge streaks back", (blurred(0f).pixels[20 * 40 + 31] ushr 24) < 255)
+        assertTrue("Behind the point nothing moves", blurred(180f).pixels.contentEquals(source.pixels))
+    }
 }

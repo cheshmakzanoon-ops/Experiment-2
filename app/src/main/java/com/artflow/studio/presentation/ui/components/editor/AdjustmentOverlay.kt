@@ -111,6 +111,7 @@ fun AdjustmentOverlay(
                 if (state.kind == LiveAdjustments.Kind.HALFTONE) HalftoneOptions(state, actions.onParameter)
                 if (state.kind == LiveAdjustments.Kind.BLOOM) BloomOptions(state, actions.onParameter)
                 if (state.kind == LiveAdjustments.Kind.GLITCH) GlitchOptions(state, actions.onParameter)
+                if (state.kind == LiveAdjustments.Kind.PERSPECTIVE_BLUR) PerspectiveOptions(state, actions.onParameter)
                 if (state.kind.adjustmentType != null) ParameterSliders(state, actions.onParameter)
                 if ((state.kind.slidesAmount && state.pencil) || state.kind.usesPoint) {
                     val label = if (state.kind == LiveAdjustments.Kind.RECOLOR) "Flood" else "Amount"
@@ -307,6 +308,35 @@ private fun GlitchOptions(
                 label = { Text(entry.displayName) },
             )
         }
+    }
+}
+
+/** Perspective Blur: Positional or Directional, with the Directional mode's angle. */
+@Composable
+private fun PerspectiveOptions(
+    state: AdjustmentSessionController.State,
+    onParameter: (String, Float) -> Unit,
+) {
+    val parameters = state.settings.parameters
+    val directional = (parameters[LiveAdjustments.PERSPECTIVE_DIRECTIONAL] ?: 0f) >= 0.5f
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        listOf("Positional" to false, "Directional" to true).forEach { (label, value) ->
+            FilterChip(
+                selected = directional == value,
+                onClick = { onParameter(LiveAdjustments.PERSPECTIVE_DIRECTIONAL, if (value) 1f else 0f) },
+                label = { Text(label) },
+            )
+        }
+    }
+    if (directional) {
+        val angle = parameters[LiveAdjustments.PERSPECTIVE_ANGLE] ?: 0f
+        Text("Direction ${angle.toInt()}°", style = MaterialTheme.typography.labelMedium)
+        Slider(
+            value = angle,
+            onValueChange = { onParameter(LiveAdjustments.PERSPECTIVE_ANGLE, it) },
+            valueRange = 0f..360f,
+            modifier = Modifier.semantics { contentDescription = "Blur direction" },
+        )
     }
 }
 
