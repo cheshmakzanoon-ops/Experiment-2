@@ -497,9 +497,19 @@ class CanvasViewModel
                 }
             }
 
-        /** Sets the brush size within the brush's own size limits. */
+        /** Sets the brush size within the brush's own size limits (Smudge's own brush while smudging with one). */
         fun setBrushSize(size: Float) =
-            updateInput { it.copy(brushParams = it.brushParams.copy(size = size.coerceIn(it.brushParams.sizeLimits))) }
+            updateInput { current ->
+                val smudge = current.smudgeParams?.takeIf { current.tool == ToolType.SMUDGE }
+                if (smudge != null) {
+                    current.copy(smudgeParams = smudge.copy(size = size.coerceIn(smudge.sizeLimits)))
+                } else {
+                    current.copy(brushParams = current.brushParams.copy(size = size.coerceIn(current.brushParams.sizeLimits)))
+                }
+            }
+
+        /** Gives Smudge its own brush; null smudges with the paint brush. */
+        fun setSmudgeParams(params: com.artflow.studio.domain.model.brush.BrushParams?) = updateInput { it.copy(smudgeParams = params) }
 
         /** Sets the brush opacity within the brush's own opacity limits. */
         fun setBrushOpacity(opacity: Float) =

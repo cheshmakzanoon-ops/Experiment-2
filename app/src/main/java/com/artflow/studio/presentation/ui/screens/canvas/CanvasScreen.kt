@@ -55,6 +55,7 @@ import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.data.local.FontLibrary
 import com.artflow.studio.data.local.ReferenceImages
 import com.artflow.studio.data.renderer.BitmapPixelBridge
+import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.MAX_BRUSH_SIZE
 import com.artflow.studio.domain.model.brush.MIN_BRUSH_SIZE
 import com.artflow.studio.domain.model.brush.StrokeDestination
@@ -1180,7 +1181,12 @@ fun CanvasScreen(
                 StudioSidebar(
                     state =
                         StudioSidebarState(
-                            size = if (input.tool == ToolType.ERASER) input.eraserSize else input.brushParams.size,
+                            size =
+                                when {
+                                    input.tool == ToolType.ERASER -> input.eraserSize
+                                    input.tool == ToolType.SMUDGE -> (input.smudgeParams ?: input.brushParams).size
+                                    else -> input.brushParams.size
+                                },
                             opacity = input.brushParams.opacity,
                             canUndo = history.canUndo,
                             canRedo = history.canRedo,
@@ -1641,12 +1647,15 @@ private fun ToolOptionsPanel(
             }
         }
 
-        if (input.tool == ToolType.ERASER) EraserBrushOptions(viewModel, input)
+        if (input.tool == ToolType.ERASER) {
+            OwnBrushOptions("Erasing", "eraser", input.eraserParams, input.brushParams, viewModel::setEraserParams)
+        }
         if (input.tool == ToolType.SMUDGE) {
             Text(
                 "Smudge strength ${(input.smudge.strength * 100).toInt()}% · hardness ${(input.smudge.hardness * 100).toInt()}%",
                 style = MaterialTheme.typography.bodySmall,
             )
+            OwnBrushOptions("Smudging", "smudge", input.smudgeParams, input.brushParams, viewModel::setSmudgeParams)
         }
         if (input.tool == ToolType.LIQUIFY) {
             Text("Liquify mode: ${input.liquify.mode.displayName}", style = MaterialTheme.typography.bodySmall)
@@ -1714,25 +1723,31 @@ private fun ToolOptionsPanel(
     }
 }
 
-/** Procreate lets the eraser keep a brush of its own; until one is chosen it erases with the paint brush. */
+/**
+ * Procreate lets the eraser and Smudge each keep a brush of their own; until one is chosen they use
+ * the paint brush. [doing] names the action ("Erasing") and [tool] the tool ("eraser").
+ */
 @Composable
-private fun EraserBrushOptions(
-    viewModel: CanvasViewModel,
-    input: EditorInput,
+private fun OwnBrushOptions(
+    doing: String,
+    tool: String,
+    own: BrushParams?,
+    paintBrush: BrushParams,
+    onChoose: (BrushParams?) -> Unit,
 ) {
     var choosing by remember { mutableStateOf(false) }
     Text(
-        if (input.eraserParams == null) "Erasing with the paint brush" else "Erasing with its own brush",
+        if (own == null) "$doing with the paint brush" else "$doing with its own brush",
         style = MaterialTheme.typography.bodySmall,
     )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(onClick = { choosing = true }) { Text("Choose eraser brush") }
-        if (input.eraserParams != null) TextButton(onClick = { viewModel.setEraserParams(null) }) { Text("Use the paint brush") }
+        OutlinedButton(onClick = { choosing = true }) { Text("Choose $tool brush") }
+        if (own != null) TextButton(onClick = { onChoose(null) }) { Text("Use the paint brush") }
     }
     if (choosing) {
         BrushStudioDialog(
-            initial = input.eraserParams ?: input.brushParams,
-            onApply = viewModel::setEraserParams,
+            initial = own ?: paintBrush,
+            onApply = onChoose,
             onDismiss = { choosing = false },
         )
     }

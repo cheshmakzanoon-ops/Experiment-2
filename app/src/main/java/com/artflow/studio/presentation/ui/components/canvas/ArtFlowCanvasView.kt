@@ -115,6 +115,8 @@ data class EditorInput(
     val eraserSize: Float = 48f,
     /** The eraser's own brush, as in Procreate; null erases with the paint brush. */
     val eraserParams: BrushParams? = null,
+    /** Smudge's own brush, as in Procreate; null smudges with the paint brush. */
+    val smudgeParams: BrushParams? = null,
     val symmetry: SymmetryEngine.Settings = SymmetryEngine.Settings(),
     val perspective: PerspectiveGuide.Settings = PerspectiveGuide.Settings(),
     val snapToGuides: Boolean = false,
@@ -2259,10 +2261,10 @@ class ArtFlowCanvasView
                             x,
                             y,
                             gestureInput.smudge.copy(
-                                size = gestureInput.brushParams.size,
+                                size = (gestureInput.smudgeParams ?: gestureInput.brushParams).size,
                                 mask = selection,
                                 alphaLock = alphaLocked,
-                                texture = BrushPatch.texture(gestureInput.brushParams),
+                                texture = BrushPatch.texture(gestureInput.smudgeParams ?: gestureInput.brushParams),
                             ),
                         )
                 }

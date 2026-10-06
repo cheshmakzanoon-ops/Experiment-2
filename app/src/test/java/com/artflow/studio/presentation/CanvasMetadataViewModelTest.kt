@@ -58,6 +58,28 @@ class CanvasMetadataViewModelTest {
         }
 
     @Test
+    fun smudgeKeepsItsOwnBrushSizeWithinItsLimits() =
+        runTest {
+            Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+            val fixture = Fixture()
+            try {
+                val vm = fixture.viewModel
+                val paintSize = vm.input.value.brushParams.size
+                vm.setTool(com.artflow.studio.core.tool.ToolType.SMUDGE)
+                vm.setSmudgeParams(com.artflow.studio.domain.model.brush.BrushParams(size = 30f, maxSize = 60f))
+                vm.setBrushSize(100f)
+                assertEquals(60f, vm.input.value.smudgeParams?.size)
+                assertEquals(paintSize, vm.input.value.brushParams.size)
+                vm.setSmudgeParams(null)
+                vm.setBrushSize(40f)
+                assertEquals(40f, vm.input.value.brushParams.size)
+            } finally {
+                fixture.close()
+                Dispatchers.resetMain()
+            }
+        }
+
+    @Test
     fun durationOnlyEditEnablesSaveWarningAndUndoWithoutAPixelEdit() =
         runTest {
             Dispatchers.setMain(StandardTestDispatcher(testScheduler))
