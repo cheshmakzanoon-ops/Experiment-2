@@ -23,6 +23,7 @@ import com.artflow.studio.core.canvas.QuickShape
 import com.artflow.studio.core.canvas.StrokePredictor
 import com.artflow.studio.core.canvas.StrokeStabilizer
 import com.artflow.studio.core.color.CmykProof
+import com.artflow.studio.core.color.ViewFilter
 import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.Channels
 import com.artflow.studio.core.pixels.IntBounds
@@ -654,6 +655,12 @@ class ArtFlowCanvasView
 
         fun setProof(mode: CmykProof.Mode) {
             renderer.setProof(mode.ordinal)
+            requestRender()
+        }
+
+        /** Shows the canvas in greyscale or as a colour-vision deficiency sees it; the artwork is unchanged. */
+        fun setViewFilter(filter: ViewFilter) {
+            renderer.setViewFilter(filter.takeIf { it != ViewFilter.OFF }?.columnMajor())
             requestRender()
         }
 

@@ -1,5 +1,6 @@
 package com.artflow.studio.presentation.ui.components.editor
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -10,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.artflow.studio.core.color.CmykProof
+import com.artflow.studio.core.color.ViewFilter
 import com.artflow.studio.domain.model.brush.PressureResponse
 import com.artflow.studio.domain.model.settings.PressureAndSmoothing
 import com.artflow.studio.presentation.ui.components.canvas.GestureControls
@@ -44,6 +46,9 @@ data class CanvasActions(
     /** On-screen print proof; a view setting that never changes the artwork. */
     val proof: CmykProof.Mode = CmykProof.Mode.OFF,
     val onProof: (CmykProof.Mode) -> Unit = {},
+    /** On-screen greyscale or colour-vision check; never changes the artwork. */
+    val viewFilter: ViewFilter = ViewFilter.OFF,
+    val onViewFilter: (ViewFilter) -> Unit = {},
     /** Reopens the 3D window; null when the artwork has no model. */
     val onModelView: (() -> Unit)? = null,
 )
@@ -205,6 +210,16 @@ private fun CanvasTab(
     if (canvas.proof != CmykProof.Mode.OFF) {
         PrefSwitch("Grey out colours that won't print", canvas.proof == CmykProof.Mode.GAMUT_WARNING) { on ->
             canvas.onProof(if (on) CmykProof.Mode.GAMUT_WARNING else CmykProof.Mode.PROOF)
+        }
+    }
+    Text("View check", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 8.dp))
+    Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        ViewFilter.entries.forEach { filter ->
+            FilterChip(
+                selected = canvas.viewFilter == filter,
+                onClick = { canvas.onViewFilter(filter) },
+                label = { Text(filter.displayName) },
+            )
         }
     }
     HorizontalDivider()

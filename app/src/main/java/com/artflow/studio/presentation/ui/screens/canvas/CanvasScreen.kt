@@ -45,6 +45,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.artflow.studio.core.canvas.CropBox
 import com.artflow.studio.core.color.CmykProof
 import com.artflow.studio.core.color.ColorProfile
+import com.artflow.studio.core.color.ViewFilter
 import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.LiveAdjustments
 import com.artflow.studio.core.pixels.Quad
@@ -264,6 +265,7 @@ fun CanvasScreen(
     val modelMesh by viewModel.model.mesh.collectAsState()
     var showModel by rememberSaveable(projectId) { mutableStateOf(true) }
     var proof by rememberSaveable(projectId) { mutableStateOf(CmykProof.Mode.OFF) }
+    var viewFilter by rememberSaveable(projectId) { mutableStateOf(ViewFilter.OFF) }
     LaunchedEffect(showReference, referenceCanvas, history, modelMesh, showModel) {
         val referenceShowsCanvas = showReference && referenceCanvas
         val modelShown = modelMesh != null && showModel
@@ -884,6 +886,8 @@ fun CanvasScreen(
                             },
                             proof = proof,
                             onProof = { proof = it },
+                            viewFilter = viewFilter,
+                            onViewFilter = { viewFilter = it },
                             onCropResize = {
                                 // Crop & Resize starts with the box on the canvas; Settings has the exact sizes.
                                 panel = EditorPanel.NONE
@@ -1126,6 +1130,7 @@ fun CanvasScreen(
                             view.setCheckerboardVisible(settings.checkerboard)
                             view.setWideColor(state.colorProfile == ColorProfile.DISPLAY_P3)
                             view.setProof(proof)
+                            view.setViewFilter(viewFilter)
                         },
                         modifier = Modifier.fillMaxSize(),
                     )
