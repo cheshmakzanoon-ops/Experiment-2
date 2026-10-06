@@ -112,8 +112,8 @@ object GifEncoder {
         out.write(0xF9)
         out.write(0x04)
         val transparencyFlag = if (transparentIndex >= 0) 0x01 else 0x00
-        // Disposal method 2 (restore to background) keeps transparent areas clean between frames.
-        out.write(0x04 or transparencyFlag)
+        // Disposal method 2 (restore to background, bits 2-4) keeps transparent areas clean between frames.
+        out.write(0x08 or transparencyFlag)
         writeShort(out, (delayMs / 10).coerceAtLeast(2)) // GIF delays are in centiseconds
         out.write(if (transparentIndex >= 0) transparentIndex else 0)
         out.write(0x00)
@@ -440,9 +440,9 @@ object GifEncoder {
                     writeCode(prefix)
                     if (nextCode < MAX_CODE) {
                         dictionary[key] = nextCode++
-                        // Standard GIF rule: widen as soon as the next code would not fit in the
-                        // current width. The decoder widens at exactly the same point.
-                        if (nextCode > (1 shl codeSize) - 1 && codeSize < MAX_CODE_SIZE) codeSize++
+                        // The decoder adds its entry one code later than the encoder, so it widens
+                        // once the code after next would not fit; widen at that same point.
+                        if (nextCode > (1 shl codeSize) && codeSize < MAX_CODE_SIZE) codeSize++
                     } else {
                         // The dictionary is full: tell the decoder to start over.
                         writeCode(clearCode)
