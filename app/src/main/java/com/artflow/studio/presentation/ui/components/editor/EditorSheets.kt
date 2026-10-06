@@ -1058,6 +1058,22 @@ fun GuidesSheet(
             Spacer(Modifier.width(8.dp))
             Text("Second axis (kaleidoscope)", style = MaterialTheme.typography.bodySmall)
         }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(
+                checked = symmetry.rotational,
+                onCheckedChange = { onSymmetry(symmetry.copy(rotational = it)) },
+            )
+            Spacer(Modifier.width(8.dp))
+            Text("Rotational symmetry", style = MaterialTheme.typography.bodySmall)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(
+                checked = symmetry.mirroredSegments,
+                onCheckedChange = { onSymmetry(symmetry.copy(mirroredSegments = it)) },
+            )
+            Spacer(Modifier.width(8.dp))
+            Text("Mirror radial segments", style = MaterialTheme.typography.bodySmall)
+        }
         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             items(SymmetryEngine.PRESETS) { preset ->
                 AssistChip(
