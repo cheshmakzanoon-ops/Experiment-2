@@ -978,6 +978,11 @@ fun AnimationSheet(
             Spacer(Modifier.width(8.dp))
             Text("Color secondary frames", style = MaterialTheme.typography.bodySmall)
         }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(checked = settings.blendPrimaryFrame, onCheckedChange = { onSettings(settings.copy(blendPrimaryFrame = it)) })
+            Spacer(Modifier.width(8.dp))
+            Text("Blend primary frame", style = MaterialTheme.typography.bodySmall)
+        }
     }
 }
 

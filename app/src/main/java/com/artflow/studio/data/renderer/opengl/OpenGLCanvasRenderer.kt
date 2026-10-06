@@ -236,7 +236,9 @@ class OpenGLCanvasRenderer
                     updateBitmap(compositeTexture, bitmap)
                 }
                 GLES20.glUniform4f(quadTintHandle, 1f, 1f, 1f, 1f)
+                GLES20.glUniform1f(quadAlphaHandle, primaryAlpha)
                 drawQuad(compositeTexture, textureRepeat = false)
+                GLES20.glUniform1f(quadAlphaHandle, 1f)
             }
             prediction?.let { drawPrediction(it, matrix) }
         }
@@ -375,7 +377,15 @@ class OpenGLCanvasRenderer
             return direct
         }
 
-        fun setOnionSkins(frames: List<Pair<PixelBuffer, Float>>) {
+        /** Animation Assist's Blend Primary Frame: the frame being drawn shows the ghosts through it. */
+        @Volatile
+        private var primaryAlpha = 1f
+
+        fun setOnionSkins(
+            frames: List<Pair<PixelBuffer, Float>>,
+            primaryAlpha: Float = 1f,
+        ) {
+            this.primaryAlpha = if (frames.isEmpty()) 1f else primaryAlpha.coerceIn(0f, 1f)
             val bitmaps = mutableListOf<Pair<Bitmap, Float>>()
             var published = false
             try {
@@ -389,6 +399,7 @@ class OpenGLCanvasRenderer
         }
 
         fun clearOnionSkins() {
+            primaryAlpha = 1f
             pendingOnionSkins.getAndSet(emptyList())?.forEach { it.first.recycle() }
         }
 

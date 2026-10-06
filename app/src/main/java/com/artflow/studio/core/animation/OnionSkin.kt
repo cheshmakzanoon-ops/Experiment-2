@@ -12,6 +12,9 @@ object OnionSkin {
         offset: Int,
     ): Float = if (offset == 0) 0f else settings.onionSkinOpacity.coerceIn(0f, 1f) / abs(offset)
 
+    /** Opacity of the frame being drawn while ghosts show: see-through when it blends with them. */
+    fun primaryOpacity(settings: AnimationSettings): Float = if (settings.blendPrimaryFrame) BLENDED_PRIMARY else 1f
+
     /** The tint for a ghost [offset] frames away, or null when ghosts keep their own colours. */
     fun tint(
         settings: AnimationSettings,
@@ -36,4 +39,6 @@ object OnionSkin {
         }
         return frame
     }
+
+    private const val BLENDED_PRIMARY = 0.5f
 }

@@ -26,6 +26,12 @@ class OnionSkinTest {
     }
 
     @Test
+    fun aBlendedPrimaryFrameIsSeeThrough() {
+        assertEquals(1f, OnionSkin.primaryOpacity(AnimationSettings()), 0f)
+        assertEquals(0.5f, OnionSkin.primaryOpacity(AnimationSettings(blendPrimaryFrame = true)), 0f)
+    }
+
+    @Test
     fun tintingKeepsCoverageAndReplacesColour() {
         val frame = PixelBuffer(3, 1, intArrayOf(0x00000000, 0x80123456.toInt(), 0xFF00FF00.toInt()))
         OnionSkin.tinted(frame, 0xFFFF0000.toInt())

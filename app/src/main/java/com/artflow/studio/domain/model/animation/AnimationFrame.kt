@@ -50,6 +50,8 @@ data class AnimationSettings(
     val onionSkinNextColor: Int = 0xFF00FF00.toInt(),
     /** Animation Assist's Color Secondary Frames: ghosts are shown in the tints above instead of their own colours. */
     val onionSkinTinted: Boolean = false,
+    /** Animation Assist's Blend Primary Frame: the frame being drawn is see-through, so ghosts show through it. */
+    val blendPrimaryFrame: Boolean = false,
     /** Inclusive playback range; `playbackRangeEnd < 0` means "to the last frame". */
     val playbackRangeStart: Int = 0,
     val playbackRangeEnd: Int = -1,

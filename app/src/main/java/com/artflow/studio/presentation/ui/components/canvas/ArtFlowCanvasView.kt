@@ -1193,7 +1193,7 @@ class ArtFlowCanvasView
                             } ?: preview
                         ghosts += ghost to OnionSkin.opacity(state.settings, offset)
                     }
-                    renderer.setOnionSkins(ghosts)
+                    renderer.setOnionSkins(ghosts, OnionSkin.primaryOpacity(state.settings))
                     requestRender()
                 }
         }
