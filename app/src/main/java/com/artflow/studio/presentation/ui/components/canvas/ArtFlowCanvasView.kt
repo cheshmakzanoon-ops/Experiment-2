@@ -877,6 +877,12 @@ class ArtFlowCanvasView
             },
         )
 
+        /** Moves the transformed content by ([dx], [dy]) pixels, as one step (Procreate's nudge). */
+        private fun nudgeTransform(
+            dx: Float,
+            dy: Float,
+        ) = applyTransformQuad({ TransformQuad.translate(it.quad, dx, dy) }, { it.translate(dx, dy) })
+
         /** Fit to Screen: the largest centred placement inside the canvas. */
         fun fitTransformToCanvas() =
             applyTransformQuad({ TransformQuad.fitTo(it.quad, canvasWidth, canvasHeight) }, { it.fitTo(canvasWidth, canvasHeight) })
@@ -1578,8 +1584,22 @@ class ArtFlowCanvasView
                     reportHistory()
                 }
 
+                ToolType.TRANSFORM -> {
+                    // A tap outside the box nudges it one pixel toward the tap.
+                    val nudge =
+                        transformSession?.takeIf { wasTap && !cancelled && !warping }?.let {
+                            TransformQuad.nudgeToward(
+                                it.quad,
+                                canvasX,
+                                canvasY,
+                            )
+                        }
+                    endPixelGesture(cancelled || nudge != null)
+                    nudge?.let { (dx, dy) -> nudgeTransform(dx, dy) }
+                }
+
                 ToolType.SMUDGE, ToolType.HEALING, ToolType.LIQUIFY,
-                ToolType.MOVE, ToolType.TRANSFORM,
+                ToolType.MOVE,
                 -> {
                     endPixelGesture(cancelled)
                 }

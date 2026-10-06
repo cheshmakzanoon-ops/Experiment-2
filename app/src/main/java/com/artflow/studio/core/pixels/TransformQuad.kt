@@ -9,6 +9,7 @@ import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sign
 import kotlin.math.sin
 
 /**
@@ -116,6 +117,37 @@ object TransformQuad {
         dx: Float,
         dy: Float,
     ): Quad = q.map { x, y -> (x + dx) to (y + dy) }
+
+    /** Whether ([x], [y]) lies inside [q], by counting how many edges a ray from it crosses. */
+    fun contains(
+        q: Quad,
+        x: Float,
+        y: Float,
+    ): Boolean {
+        var inside = false
+        for (i in 0 until CORNERS) {
+            val j = (i + CORNERS - 1) % CORNERS
+            val (xi, yi) = q.x(i) to q.y(i)
+            val (xj, yj) = q.x(j) to q.y(j)
+            if ((yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside
+        }
+        return inside
+    }
+
+    /**
+     * Procreate's nudge: a tap outside the box moves it one pixel toward the tap, along whichever
+     * axis the tap lies further out on. Null for a tap inside the box.
+     */
+    fun nudgeToward(
+        q: Quad,
+        x: Float,
+        y: Float,
+    ): Pair<Float, Float>? {
+        if (contains(q, x, y)) return null
+        val dx = x - q.centerX
+        val dy = y - q.centerY
+        return if (abs(dx) >= abs(dy)) sign(dx) to 0f else 0f to sign(dy)
+    }
 
     fun rotate(
         q: Quad,
@@ -547,4 +579,5 @@ object TransformQuad {
     private const val MIN_FACTOR = 0.02f
     private const val ROTATION_STEP = 15f
     private const val GUIDE_EPSILON = 0.5f
+    private const val CORNERS = 4
 }

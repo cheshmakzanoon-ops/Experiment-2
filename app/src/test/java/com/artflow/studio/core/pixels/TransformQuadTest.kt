@@ -113,4 +113,13 @@ class TransformQuadTest {
         assertEquals(listOf(50f), columns)
         assertTrue(rows.isEmpty())
     }
+
+    @Test
+    fun aTapOutsideTheBoxNudgesItOnePixelTowardTheTap() {
+        val box = Quad.fromBounds(IntBounds(10, 10, 29, 29))
+        assertEquals(null, TransformQuad.nudgeToward(box, 20f, 20f))
+        assertEquals(1f to 0f, TransformQuad.nudgeToward(box, 60f, 22f))
+        assertEquals(0f to -1f, TransformQuad.nudgeToward(box, 18f, -40f))
+        assertEquals(-1f to 0f, TransformQuad.nudgeToward(box, 0f, 15f))
+    }
 }
