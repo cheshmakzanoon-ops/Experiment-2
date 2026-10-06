@@ -487,6 +487,20 @@ private fun BrushWetSettings(
             valueDisplay = "%.0f%%".format(brushParams.wetMix * 100),
         )
         BrushParameterSlider(
+            label = "Dilution",
+            value = brushParams.dilution,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(dilution = it.coerceIn(0f, 1f))) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.dilution * 100),
+        )
+        BrushParameterSlider(
+            label = "Pull",
+            value = brushParams.pull,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(pull = it.coerceIn(0f, 1f))) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.pull * 100),
+        )
+        BrushParameterSlider(
             label = "Wet edges",
             value = brushParams.wetEdges,
             onValueChange = { onBrushParamsChanged(brushParams.copy(wetEdges = it.coerceIn(0f, 1f))) },

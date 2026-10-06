@@ -63,6 +63,8 @@ data class BrushParams(
     val secondaryJitter: Float = 0f, // 0..1: each dab blends a random amount toward the secondary colour
     val burntEdges: Float = 0f, // 0..1: paint darkens where the stroke's coverage falls off, like a scorched rim
     val grainDepth: Float = 1f, // 0..1: how strongly the grain shows; 0 paints as if there were no grain
+    val dilution: Float = 0f, // 0..1: water in the paint; thins each dab and lets it pick up more of the layer
+    val pull: Float = 0f, // 0..1: how far the brush drags the colour it carries along the stroke
 ) {
     /** Imported grain and shape images this brush (and its second brush) paints with. */
     val imageIds: List<String>
