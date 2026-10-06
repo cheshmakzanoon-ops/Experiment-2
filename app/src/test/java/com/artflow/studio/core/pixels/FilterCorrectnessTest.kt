@@ -28,4 +28,14 @@ class FilterCorrectnessTest {
         val out = AdjustmentProcessor.apply(source, AdjustmentType.SELECTIVE_COLOR, mapOf("reds_black" to 100f))
         assertTrue(red(out.getSafe(0, 0)) < red(source.getSafe(0, 0)))
     }
+
+    @Test
+    fun theOpacityAdjustmentFadesAsYouSlide() {
+        val source = PixelBuffer.filled(2, 2, 0xFF336699.toInt())
+        val half = LiveAdjustments.apply(LiveAdjustments.Kind.OPACITY, source, LiveAdjustments.Settings(amount = 0.5f))
+        assertEquals(0x336699, half.getSafe(0, 0) and 0xFFFFFF)
+        assertTrue((half.getSafe(0, 0) ushr 24) in 126..129)
+        val untouched = LiveAdjustments.apply(LiveAdjustments.Kind.OPACITY, source, LiveAdjustments.Settings(amount = 0f))
+        assertEquals(source.getSafe(0, 0), untouched.getSafe(0, 0))
+    }
 }
