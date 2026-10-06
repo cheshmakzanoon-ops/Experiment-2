@@ -313,10 +313,10 @@ object AdjustmentProcessor {
         var g = Channels.green(pixel) / 255f
         var b = Channels.blue(pixel) / 255f
 
-        // CMYK-style shifts: increasing cyan removes red, and so on.
-        r = (r - normalizedCyan + normalizedBlack * 0.5f).coerceIn(0f, 1f)
-        g = (g - normalizedMagenta + normalizedBlack * 0.5f).coerceIn(0f, 1f)
-        b = (b - normalizedYellow + normalizedBlack * 0.5f).coerceIn(0f, 1f)
+        // CMYK-style shifts: increasing cyan removes red, and so on; more black darkens.
+        r = (r - normalizedCyan - normalizedBlack * 0.5f).coerceIn(0f, 1f)
+        g = (g - normalizedMagenta - normalizedBlack * 0.5f).coerceIn(0f, 1f)
+        b = (b - normalizedYellow - normalizedBlack * 0.5f).coerceIn(0f, 1f)
 
         return Channels.argb(
             Channels.alpha(pixel).toInt(),

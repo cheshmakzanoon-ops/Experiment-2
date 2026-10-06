@@ -280,7 +280,7 @@ object ImageFilters {
         return out
     }
 
-    /** 3x3 emboss. */
+    /** 3x3 emboss: flat areas become mid grey and edges catch light from the top left; [strength] deepens the relief. */
     fun emboss(
         source: PixelBuffer,
         strength: Float = 1f,
@@ -291,7 +291,7 @@ object ImageFilters {
                 -1f,
                 0f,
                 -1f,
-                1f,
+                0f,
                 1f,
                 0f,
                 1f,
@@ -300,7 +300,10 @@ object ImageFilters {
         return convolve3x3(source, kernel)
     }
 
-    /** General 3x3 convolution with a normalised bias of 128 (matches Photoshop's style filters). */
+    /**
+     * 3x3 convolution of colour weighted by each sample's coverage, plus a bias of 128, for kernels
+     * that sum to zero (Photoshop's style filters). Alpha is kept from the centre pixel.
+     */
     fun convolve3x3(
         source: PixelBuffer,
         kernel: FloatArray,
@@ -309,7 +312,6 @@ object ImageFilters {
         val out = PixelBuffer(source.width, source.height)
         for (y in 0 until source.height) {
             for (x in 0 until source.width) {
-                var a = 0f
                 var r = 0f
                 var g = 0f
                 var b = 0f
@@ -319,7 +321,6 @@ object ImageFilters {
                         val sample = source.getSafe(x + kx, y + ky)
                         val weight = kernel[k]
                         val sa = Channels.alpha(sample) / 255f
-                        a += Channels.alpha(sample) * weight
                         r += Channels.red(sample) * weight * sa
                         g += Channels.green(sample) * weight * sa
                         b += Channels.blue(sample) * weight * sa
@@ -332,7 +333,7 @@ object ImageFilters {
                     out.pixels[y * source.width + x] = 0
                     continue
                 }
-                val sumA = (a / 255f).coerceAtLeast(0.0001f)
+                val sumA = alpha / 255f
                 out.pixels[y * source.width + x] =
                     Channels.argb(
                         alpha,
