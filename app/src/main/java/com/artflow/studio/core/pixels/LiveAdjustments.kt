@@ -25,6 +25,7 @@ object LiveAdjustments {
         COLOR_BALANCE("Color Balance", false, AdjustmentType.COLOR_BALANCE),
         CURVES("Curves", false, AdjustmentType.CURVES),
         GRADIENT_MAP("Gradient Map", false, AdjustmentType.GRADIENT_MAP),
+
         /** Fades the layer: sliding further makes it more transparent. */
         OPACITY("Opacity", true),
         GAUSSIAN_BLUR("Gaussian Blur", true),
