@@ -5,6 +5,7 @@ import com.artflow.studio.core.color.PaletteCodec
 import com.artflow.studio.data.local.dao.SettingsDao
 import com.artflow.studio.data.local.entity.SettingsEntity
 import com.artflow.studio.data.repository.settings.SettingsRepositoryImpl
+import com.artflow.studio.domain.model.brush.PressureResponse
 import com.artflow.studio.domain.model.settings.ThemeMode
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -52,6 +53,16 @@ class SettingsRepositoryTest {
             assertEquals(ThemeMode.DARK, repository.current().themeMode)
             assertTrue(repository.current().highContrast)
             assertEquals(1, dao.reads)
+        }
+
+    @Test
+    fun pressureCurvePersistsAndIgnoresDamagedValues() =
+        runTest {
+            val dao = MemorySettingsDao(mapOf("input.pressureResponse" to "0.9,0.2,0.5"))
+            val repository = SettingsRepositoryImpl(dao)
+            assertEquals(PressureResponse(), repository.settings.first().pressureResponse)
+            repository.update { it.copy(pressureResponse = PressureResponse(0.1f, 0.3f, 0.6f)) }
+            assertEquals(PressureResponse(0.1f, 0.3f, 0.6f), SettingsRepositoryImpl(dao).settings.first().pressureResponse)
         }
 
     @Test

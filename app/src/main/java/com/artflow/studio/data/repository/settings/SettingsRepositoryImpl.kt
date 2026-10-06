@@ -4,6 +4,7 @@ import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.color.PaletteCodec
 import com.artflow.studio.data.local.dao.SettingsDao
 import com.artflow.studio.data.local.entity.SettingsEntity
+import com.artflow.studio.domain.model.brush.PressureResponse
 import com.artflow.studio.domain.model.settings.AccentChoice
 import com.artflow.studio.domain.model.settings.AppSettings
 import com.artflow.studio.domain.model.settings.GallerySort
@@ -229,6 +230,7 @@ class SettingsRepositoryImpl
                 KEY_MOTION_EXPRESSION to settings.motionExpression.toString(),
                 KEY_PRESSURE_SMOOTHING to settings.pressureSmoothing.toString(),
                 KEY_PULLED_STRING to settings.pulledString.toString(),
+                KEY_PRESSURE_RESPONSE to settings.pressureResponse.let { "${it.low},${it.middle},${it.high}" },
                 KEY_SCRUB_CLEAR to settings.scrubToClear.toString(),
                 KEY_SWIPE_PASTE to settings.swipeCopyPaste.toString(),
                 KEY_FOUR_FINGER to settings.fourFingerFullScreen.toString(),
@@ -247,6 +249,13 @@ class SettingsRepositoryImpl
                 KEY_RECENT_COLORS to settings.recentColors.joinToString(","),
                 KEY_PALETTES to PaletteCodec.exportJson(settings.customPalettes),
             )
+
+        /** Three increasing values in 0..1, or null when the stored curve is missing or damaged. */
+        private fun Map<String, String>.pressureResponse(key: String): PressureResponse? {
+            val values = this[key]?.split(',')?.map { it.toFloatOrNull() ?: return null } ?: return null
+            if (values.size != PRESSURE_POINTS) return null
+            return runCatching { PressureResponse(values[0], values[1], values[2]) }.getOrNull()
+        }
 
         /** A stored true/false, or [default] when it is missing or unreadable. */
         private fun Map<String, String>.unit(key: String): Float? = this[key]?.toFloatOrNull()?.takeIf { it.isFinite() }?.coerceIn(0f, 1f)
@@ -304,6 +313,7 @@ class SettingsRepositoryImpl
                 motionExpression = stored.unit(KEY_MOTION_EXPRESSION) ?: defaults.motionExpression,
                 pressureSmoothing = stored.unit(KEY_PRESSURE_SMOOTHING) ?: defaults.pressureSmoothing,
                 pulledString = stored.unit(KEY_PULLED_STRING) ?: defaults.pulledString,
+                pressureResponse = stored.pressureResponse(KEY_PRESSURE_RESPONSE) ?: defaults.pressureResponse,
                 scrubToClear = stored.flag(KEY_SCRUB_CLEAR, defaults.scrubToClear),
                 swipeCopyPaste = stored.flag(KEY_SWIPE_PASTE, defaults.swipeCopyPaste),
                 fourFingerFullScreen = stored.flag(KEY_FOUR_FINGER, defaults.fourFingerFullScreen),
@@ -384,6 +394,8 @@ class SettingsRepositoryImpl
             private const val KEY_MOTION_EXPRESSION = "input.motionExpression"
             private const val KEY_PRESSURE_SMOOTHING = "input.pressureSmoothing"
             private const val KEY_PULLED_STRING = "input.pulledString"
+            private const val KEY_PRESSURE_RESPONSE = "input.pressureResponse"
+            private const val PRESSURE_POINTS = 3
             private const val KEY_SCRUB_CLEAR = "gesture.scrubToClear"
             private const val KEY_SWIPE_PASTE = "gesture.swipeCopyPaste"
             private const val KEY_FOUR_FINGER = "gesture.fourFingerFullScreen"

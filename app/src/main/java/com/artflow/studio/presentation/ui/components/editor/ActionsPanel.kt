@@ -10,6 +10,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.artflow.studio.core.color.CmykProof
+import com.artflow.studio.domain.model.brush.PressureResponse
 import com.artflow.studio.domain.model.settings.PressureAndSmoothing
 import com.artflow.studio.presentation.ui.components.canvas.GestureControls
 import kotlin.math.exp
@@ -274,6 +275,17 @@ private fun PrefsTab(
                 else -> "Linear"
             },
     ) { change(smoothing.copy(pressureCurve = exp(it))) }
+    // The curve's three points stay in order: moving one pushes its neighbours along.
+    val response = smoothing.pressureResponse
+    PrefSlider("Light press", response.low, 0f..1f, percent(response.low)) { value ->
+        change(smoothing.copy(pressureResponse = PressureResponse(value, maxOf(value, response.middle), maxOf(value, response.high))))
+    }
+    PrefSlider("Medium press", response.middle, 0f..1f, percent(response.middle)) { value ->
+        change(smoothing.copy(pressureResponse = PressureResponse(minOf(response.low, value), value, maxOf(value, response.high))))
+    }
+    PrefSlider("Firm press", response.high, 0f..1f, percent(response.high)) { value ->
+        change(smoothing.copy(pressureResponse = PressureResponse(minOf(response.low, value), minOf(response.middle, value), value)))
+    }
     HorizontalDivider()
     Text("Gesture controls", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
     val gestures = prefs.gestures

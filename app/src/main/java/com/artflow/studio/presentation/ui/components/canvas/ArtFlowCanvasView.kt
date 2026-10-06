@@ -42,6 +42,7 @@ import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.data.renderer.opengl.OpenGLCanvasRenderer
 import com.artflow.studio.domain.model.animation.AnimationSettings
 import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.PressureResponse
 import com.artflow.studio.domain.model.brush.StrokeDestination
 import com.artflow.studio.domain.repository.canvas.CanvasInvalidationEvent
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
@@ -145,6 +146,8 @@ data class EditorInput(
     val pressureSmoothing: Float = 0f,
     /** Pulled string from Prefs > Pressure and Smoothing (0..1 of 60 dp on screen). */
     val pulledString: Float = 0f,
+    /** Prefs > Pressure and Smoothing curve, applied after [pressureCurve]. */
+    val pressureResponse: PressureResponse = PressureResponse(),
     /** Settings > Haptics: a short buzz confirms QuickShape and the touch-and-hold eyedropper. */
     val haptics: Boolean = true,
     /** Outline the brush under a hovering stylus. */
@@ -2862,7 +2865,7 @@ class ArtFlowCanvasView
             val pressure = if (history < 0) event.getPressure(index) else event.getHistoricalPressure(index, history)
             val size = if (history < 0) event.getSize(index) else event.getHistoricalSize(index, history)
             val stylus = toolType == MotionEvent.TOOL_TYPE_STYLUS || toolType == MotionEvent.TOOL_TYPE_ERASER
-            return PointerPressure.curve(PointerPressure.normalize(stylus, pressure, size), input.pressureCurve)
+            return input.pressureResponse.map(PointerPressure.curve(PointerPressure.normalize(stylus, pressure, size), input.pressureCurve))
         }
 
         private fun axisOf(

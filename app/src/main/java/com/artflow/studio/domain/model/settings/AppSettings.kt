@@ -1,6 +1,7 @@
 package com.artflow.studio.domain.model.settings
 
 import com.artflow.studio.core.color.Palette
+import com.artflow.studio.domain.model.brush.PressureResponse
 
 /** Which theme the app follows. */
 enum class ThemeMode(
@@ -81,6 +82,8 @@ data class AppSettings(
     val pressureSmoothing: Float = 0f,
     /** Pulled string: the brush trails the pen on a string this long (0..1 of its longest reach). */
     val pulledString: Float = 0f,
+    /** Pressure curve: what a light, medium and firm press give, applied after [pressureCurve]. */
+    val pressureResponse: PressureResponse = PressureResponse(),
     /** Gesture controls: rubbing three fingers clears the layer. */
     val scrubToClear: Boolean = true,
     /** Gesture controls: swiping three fingers down opens Copy & Paste. */
@@ -128,7 +131,18 @@ data class PressureAndSmoothing(
     val pressureSmoothing: Float = 0f,
     /** Pulled string: the brush trails the pen on a string this long (0..1 of its longest reach). */
     val pulledString: Float = 0f,
+    /** Pressure curve: what a light, medium and firm press give, applied after [pressureCurve]. */
+    val pressureResponse: PressureResponse = PressureResponse(),
 )
 
 val AppSettings.pressureAndSmoothing: PressureAndSmoothing
-    get() = PressureAndSmoothing(pressureCurve, stabilization, motionFiltering, motionExpression, pressureSmoothing, pulledString)
+    get() =
+        PressureAndSmoothing(
+            pressureCurve,
+            stabilization,
+            motionFiltering,
+            motionExpression,
+            pressureSmoothing,
+            pulledString,
+            pressureResponse,
+        )
