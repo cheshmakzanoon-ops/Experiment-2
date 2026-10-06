@@ -996,6 +996,8 @@ data class GuideAssist(
     val onSnap: (Boolean) -> Unit,
     val assisted: Boolean = false,
     val onAssisted: (Boolean) -> Unit = {},
+    /** Opens Edit Drawing Guide, where the vanishing points are dragged on the canvas. */
+    val onEditPoints: () -> Unit = {},
 )
 
 @Composable
@@ -1110,6 +1112,9 @@ fun GuidesSheet(
                 range = 8f..512f,
                 onChange = { onPerspective(perspective.copy(gridSpacing = it.roundToInt())) },
             )
+        }
+        if (perspective.activePointCount() > 0) {
+            OutlinedButton(onClick = assist.onEditPoints) { Text("Edit vanishing points") }
         }
         LabeledSlider(
             label = "Horizon",

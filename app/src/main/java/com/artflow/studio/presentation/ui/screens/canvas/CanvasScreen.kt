@@ -129,6 +129,7 @@ import com.artflow.studio.presentation.ui.components.editor.TimelapseReplay
 import com.artflow.studio.presentation.ui.components.editor.TransformOverlay
 import com.artflow.studio.presentation.ui.components.editor.TransformToolbar
 import com.artflow.studio.presentation.ui.components.editor.TransformToolbarActions
+import com.artflow.studio.presentation.ui.components.editor.VanishingPointEditor
 import com.artflow.studio.presentation.ui.components.editor.VideoActions
 import com.artflow.studio.presentation.ui.components.editor.ViewTransform
 import com.artflow.studio.presentation.ui.components.editor.WarpOverlay
@@ -244,6 +245,7 @@ fun CanvasScreen(
     var opacityLayer by remember { mutableStateOf<Long?>(null) }
     var quickMenu by remember { mutableStateOf(false) }
     var showHistory by remember { mutableStateOf(false) }
+    var editingGuide by remember { mutableStateOf(false) }
     val pageThumbnails by viewModel.pageThumbnails.pages.collectAsState()
     val pageImages =
         remember(pageThumbnails) {
@@ -693,6 +695,10 @@ fun CanvasScreen(
                             onSnap = { viewModel.setSnapToGuides(it) },
                             assisted = layers.firstOrNull { it.id == activeLayerId }?.drawingAssist == true,
                             onAssisted = { viewModel.setLayerDrawingAssist(activeLayerId, it) },
+                            onEditPoints = {
+                                panel = EditorPanel.NONE
+                                editingGuide = true
+                            },
                         ),
                 )
             }
@@ -1119,6 +1125,17 @@ fun CanvasScreen(
                         preview = dragPreview,
                         modifier = Modifier.fillMaxSize(),
                     )
+                    if (editingGuide) {
+                        VanishingPointEditor(
+                            perspective = input.perspective,
+                            canvasWidth = state.width,
+                            canvasHeight = state.height,
+                            view = ViewTransform(viewScale, viewOffsetX, viewOffsetY, viewRotation),
+                            onChange = viewModel::setPerspectiveSettings,
+                            onDone = { editingGuide = false },
+                            modifier = Modifier.fillMaxSize().zIndex(7f),
+                        )
+                    }
 
                     if (!focusMode && (settings.showSymmetryGuides || settings.showPerspectiveGuides)) {
                         // Guides are always available from the quick menu; the chip is a reminder.

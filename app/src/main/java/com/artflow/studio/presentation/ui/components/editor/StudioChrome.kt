@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
@@ -39,6 +40,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.Quad
 import com.artflow.studio.core.pixels.TransformQuad
 import com.artflow.studio.core.pixels.WarpMesh
@@ -645,6 +647,88 @@ data class ViewTransform(
         val s = sin(radians).toFloat()
         val factor = scale.coerceAtLeast(0.01f)
         return Offset((dx * c - dy * s) / factor + canvasWidth / 2f, (dx * s + dy * c) / factor + canvasHeight / 2f)
+    }
+
+    /** Where canvas pixel [point] appears in a view [viewWidth] × [viewHeight]; the inverse of [toCanvas]. */
+    fun toView(
+        point: Offset,
+        viewWidth: Float,
+        viewHeight: Float,
+        canvasWidth: Int,
+        canvasHeight: Int,
+    ): Offset {
+        val dx = (point.x - canvasWidth / 2f) * scale
+        val dy = (point.y - canvasHeight / 2f) * scale
+        val radians = Math.toRadians(rotationDegrees.toDouble())
+        val c = cos(radians).toFloat()
+        val s = sin(radians).toFloat()
+        return Offset(dx * c - dy * s + viewWidth / 2f + offsetX, dx * s + dy * c + viewHeight / 2f + offsetY)
+    }
+}
+
+/**
+ * Procreate's Edit Drawing Guide: while open, the perspective guide's vanishing points are handles
+ * to drag (one on the horizon carries the horizon with it). Painting resumes after Done.
+ */
+@Composable
+fun VanishingPointEditor(
+    perspective: PerspectiveGuide.Settings,
+    canvasWidth: Int,
+    canvasHeight: Int,
+    view: ViewTransform,
+    onChange: (PerspectiveGuide.Settings) -> Unit,
+    onDone: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val latest by rememberUpdatedState(perspective)
+    val handle = MaterialTheme.colorScheme.primary
+    Box(modifier) {
+        Canvas(
+            Modifier
+                .fillMaxSize()
+                .pointerInput(canvasWidth, canvasHeight, view) {
+                    var grabbed = -1
+                    detectDragGestures(
+                        onDragStart = { at ->
+                            grabbed =
+                                (0 until latest.activePointCount()).minByOrNull { i ->
+                                    val (x, y) = PerspectiveGuide.pointPosition(latest, i, canvasWidth, canvasHeight)
+                                    val shown =
+                                        view.toView(
+                                            Offset(x, y),
+                                            size.width.toFloat(),
+                                            size.height.toFloat(),
+                                            canvasWidth,
+                                            canvasHeight,
+                                        )
+                                    (shown - at).getDistance()
+                                } ?: -1
+                        },
+                    ) { change, _ ->
+                        change.consume()
+                        if (grabbed < 0) return@detectDragGestures
+                        val at = view.toCanvas(change.position, size.width.toFloat(), size.height.toFloat(), canvasWidth, canvasHeight)
+                        onChange(PerspectiveGuide.dragPoint(latest, grabbed, at.x, at.y, canvasWidth, canvasHeight))
+                    }
+                },
+        ) {
+            for (i in 0 until perspective.activePointCount()) {
+                val (x, y) = PerspectiveGuide.pointPosition(perspective, i, canvasWidth, canvasHeight)
+                val shown = view.toView(Offset(x, y), size.width, size.height, canvasWidth, canvasHeight)
+                drawCircle(handle, radius = 14.dp.toPx(), center = shown, style = Stroke(width = 3.dp.toPx()))
+                drawCircle(handle, radius = 4.dp.toPx(), center = shown)
+            }
+        }
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            tonalElevation = 4.dp,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp),
+        ) {
+            Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Drag the vanishing points", style = MaterialTheme.typography.labelMedium)
+                TextButton(onClick = onDone) { Text("Done") }
+            }
+        }
     }
 }
 

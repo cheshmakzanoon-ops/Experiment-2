@@ -342,6 +342,25 @@ object PerspectiveGuide {
         horizonY: Float,
     ): Settings = settings.copy(horizonY = horizonY.coerceIn(-1f, 2f))
 
+    /**
+     * Drags vanishing point [index] to canvas pixel ([x], [y]). Points on the horizon carry the
+     * horizon with them; the third point of a three-point guide moves freely.
+     */
+    fun dragPoint(
+        settings: Settings,
+        index: Int,
+        x: Float,
+        y: Float,
+        width: Int,
+        height: Int,
+    ): Settings {
+        val fx = x / width.coerceAtLeast(1)
+        val fy = y / height.coerceAtLeast(1)
+        val onHorizon = !(settings.type == GuideType.THREE_POINT && index == settings.activePointCount() - 1)
+        val moved = movePoint(settings, index, fx, fy)
+        return if (onHorizon) withHorizon(moved, fy) else moved
+    }
+
     /** Moves vanishing point [index] to a normalised position. */
     fun movePoint(
         settings: Settings,
