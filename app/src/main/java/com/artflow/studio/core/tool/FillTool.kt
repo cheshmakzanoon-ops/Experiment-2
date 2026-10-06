@@ -103,6 +103,23 @@ object FillTool {
         return applyFill(target, coverage, color, settings)
     }
 
+    /**
+     * Lasso Fill: fills the closed shape traced by [points] (canvas pixels) with [color] in one go,
+     * inside any selection in [Settings.mask]. Fewer than three points enclose nothing.
+     */
+    fun lassoFill(
+        target: PixelBuffer,
+        points: List<Pair<Float, Float>>,
+        color: Int,
+        settings: Settings = Settings(),
+    ): Result {
+        if (points.size < 3) return Result(0, null, changed = false)
+        val shape = SelectionMask.polygon(target.width, target.height, points)
+        val mask = settings.mask?.let { SelectionMask.intersect(shape, it) } ?: shape
+        // The polygon is already anti-aliased along its edge, so it is not softened again.
+        return fillAll(target, color, settings.copy(mask = mask, antiAlias = false))
+    }
+
     /** Fill the mask itself: paints the selection outline (Phase 13: "stroke selection"). */
     fun strokeSelection(
         target: PixelBuffer,

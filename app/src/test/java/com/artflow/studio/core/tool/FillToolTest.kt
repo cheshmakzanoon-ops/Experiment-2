@@ -90,6 +90,23 @@ class FillToolTest {
     }
 
     @Test
+    fun lassoFillPaintsInsideTheTracedShapeAndTheSelection() {
+        val target = PixelBuffer.filled(20, 20, white)
+        val square = listOf(4f to 4f, 16f to 4f, 16f to 16f, 4f to 16f)
+        assertTrue(FillTool.lassoFill(target, square, red).changed)
+        assertEquals(red, target.getSafe(10, 10))
+        assertEquals(white, target.getSafe(1, 1))
+        // Inside a selection that covers only the left half, the right half stays as it was.
+        val half = PixelBuffer.filled(20, 20, white)
+        val left = SelectionMask.rectangle(20, 20, 0f, 0f, 10f, 20f)
+        FillTool.lassoFill(half, square, red, FillTool.Settings(mask = left))
+        assertEquals(red, half.getSafe(6, 10))
+        assertEquals(white, half.getSafe(14, 10))
+        // A line encloses nothing.
+        assertEquals(false, FillTool.lassoFill(half, listOf(1f to 1f, 9f to 9f), red).changed)
+    }
+
+    @Test
     fun zeroGapClosingStillFollowsConnectedPixelsThroughAnOpening() {
         val target = boxWithGap()
         FillTool.floodFill(target, 7, 7, red, FillTool.Settings(tolerance = 0, gapClose = 0, antiAlias = false))

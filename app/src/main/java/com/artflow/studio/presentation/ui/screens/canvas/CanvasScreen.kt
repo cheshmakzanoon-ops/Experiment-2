@@ -1577,6 +1577,10 @@ private fun ToolOptionsPanel(
                     "Drag to set the gradient axis; the ramp is chosen in the colour panel."
                 }
 
+                ToolType.LASSO_FILL -> {
+                    "Trace a shape; it fills with the current colour when you lift."
+                }
+
                 ToolType.TEXT -> {
                     "Tap the canvas to place the current text."
                 }

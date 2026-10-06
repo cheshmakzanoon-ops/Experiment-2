@@ -23,6 +23,7 @@ enum class ToolType(
     LIQUIFY("Liquify", ToolGroup.PAINT, isPixelTool = true),
     PAINT_BUCKET("Paint Bucket", ToolGroup.FILL, isPixelTool = true),
     GRADIENT("Gradient", ToolGroup.FILL, isPixelTool = true),
+    LASSO_FILL("Lasso Fill", ToolGroup.FILL, isPixelTool = true),
     TEXT("Text", ToolGroup.VECTOR, requiresDrag = false),
     SHAPE("Shape", ToolGroup.VECTOR),
     SELECT_RECTANGLE("Rectangle Select", ToolGroup.SELECTION),

@@ -1436,7 +1436,7 @@ class ArtFlowCanvasView
                 }
 
                 ToolType.SELECT_RECTANGLE, ToolType.SELECT_ELLIPSE,
-                ToolType.SELECT_LASSO, ToolType.SELECT_FREEHAND,
+                ToolType.SELECT_LASSO, ToolType.SELECT_FREEHAND, ToolType.LASSO_FILL,
                 -> {
                     previewPoints = mutableListOf(canvasX to canvasY)
                 }
@@ -1519,9 +1519,9 @@ class ArtFlowCanvasView
                     emitDragPreview(tool)
                 }
 
-                ToolType.SELECT_FREEHAND, ToolType.SELECT_LASSO -> {
+                ToolType.SELECT_FREEHAND, ToolType.SELECT_LASSO, ToolType.LASSO_FILL -> {
                     previewPoints.add(canvasX to canvasY)
-                    emitDragPreview(tool, closed = tool == ToolType.SELECT_LASSO)
+                    emitDragPreview(tool, closed = tool != ToolType.SELECT_FREEHAND)
                 }
 
                 else -> {
@@ -1594,6 +1594,11 @@ class ArtFlowCanvasView
 
                 ToolType.PAINT_BUCKET -> {
                     if (!cancelled && wasTap) bucketFill(canvasX, canvasY)
+                }
+
+                ToolType.LASSO_FILL -> {
+                    onDragPreview?.invoke(null)
+                    if (!cancelled && selectionPoints.size >= 3) lassoFill(selectionPoints)
                 }
 
                 ToolType.GRADIENT -> {
@@ -2406,6 +2411,14 @@ class ArtFlowCanvasView
             if (now - lastPreviewRequest < PREVIEW_INTERVAL_MS) return
             lastPreviewRequest = now
             canvasRepository.requestPreviewRefresh()
+        }
+
+        /** Fills the shape just traced with the brush colour, as one undo step. */
+        private fun lassoFill(shape: List<Pair<Float, Float>>) {
+            val color = input.brushColor
+            applyFillEdit("Lasso fill") { target, selection, alphaLocked ->
+                FillTool.lassoFill(target, shape, color, FillTool.Settings(mask = selection, alphaLock = alphaLocked)).changed
+            }
         }
 
         private fun bucketFill(

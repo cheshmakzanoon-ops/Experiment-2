@@ -48,6 +48,7 @@ fun ToolType.icon(): androidx.compose.ui.graphics.vector.ImageVector =
         ToolType.LIQUIFY -> Icons.Default.Waves
         ToolType.PAINT_BUCKET -> Icons.Default.FormatColorFill
         ToolType.GRADIENT -> Icons.Default.Gradient
+        ToolType.LASSO_FILL -> Icons.Default.FormatShapes
         ToolType.TEXT -> Icons.Default.TextFields
         ToolType.SHAPE -> Icons.Default.Category
         ToolType.SELECT_RECTANGLE -> Icons.Default.CropSquare
@@ -73,7 +74,7 @@ private val TOOL_GROUPS: List<Pair<String, List<ToolType>>> =
                 ToolType.HEALING,
                 ToolType.LIQUIFY,
             ),
-        "Fill" to listOf(ToolType.PAINT_BUCKET, ToolType.GRADIENT),
+        "Fill" to listOf(ToolType.PAINT_BUCKET, ToolType.GRADIENT, ToolType.LASSO_FILL),
         "Vector" to listOf(ToolType.TEXT, ToolType.SHAPE),
         "Select" to
             listOf(
@@ -387,7 +388,7 @@ fun GuidesOverlay(
                                 )
                             }
                         }
-                    ToolType.SELECT_FREEHAND, ToolType.SELECT_LASSO -> {
+                    ToolType.SELECT_FREEHAND, ToolType.SELECT_LASSO, ToolType.LASSO_FILL -> {
                         for (i in 1 until points.size) {
                             drawLine(
                                 color = Color.White,
