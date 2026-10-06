@@ -117,42 +117,7 @@ object GradientTool {
                 val destinationAlpha = existing ushr 24
                 if (settings.alphaLock && destinationAlpha == 0) continue
 
-                val positionX = x + 0.5f
-                val positionY = y + 0.5f
-
-                var t =
-                    when (settings.gradient.type) {
-                        GradientType.LINEAR -> {
-                            // Projection of the pixel onto the drag axis.
-                            (((positionX - startX) * dx + (positionY - startY) * dy) / (length * length))
-                                .coerceIn(0f, 1f)
-                        }
-                        GradientType.RADIAL -> {
-                            val distance =
-                                sqrt(
-                                    (positionX - startX) * (positionX - startX) +
-                                        (positionY - startY) * (positionY - startY),
-                                )
-                            (distance / length).coerceIn(0f, 1f)
-                        }
-                        GradientType.ANGULAR -> {
-                            val angle = atan2((positionY - startY).toDouble(), (positionX - startX).toDouble())
-                            val sweepStart = atan2(dy.toDouble(), dx.toDouble())
-                            var degrees = Math.toDegrees(angle - sweepStart).toFloat()
-                            if (degrees < 0f) degrees += 360f
-                            (degrees / 360f).coerceIn(0f, 1f)
-                        }
-                        GradientType.REFLECTED -> {
-                            // The linear ramp mirrored about the start, so both sides fade outwards.
-                            (abs((positionX - startX) * dx + (positionY - startY) * dy) / (length * length))
-                                .coerceIn(0f, 1f)
-                        }
-                        GradientType.DIAMOND -> {
-                            val normalizedX = abs(positionX - startX) / length
-                            val normalizedY = abs(positionY - startY) / length
-                            (normalizedX + normalizedY).coerceIn(0f, 1f)
-                        }
-                    }
+                var t = position(settings.gradient.type, x + 0.5f - startX, y + 0.5f - startY, dx, dy, length)
 
                 if (settings.dither) {
                     val matrix = bayer[(y and 3) * 4 + (x and 3)] / 16f - 0.5f
@@ -184,6 +149,39 @@ object GradientTool {
         x: Float,
         y: Float,
     ): Boolean = x.isFinite() && y.isFinite()
+
+    /** Where a pixel at offset ([px], [py]) from the start falls along the gradient, `0..1`. */
+    private fun position(
+        type: GradientType,
+        px: Float,
+        py: Float,
+        dx: Float,
+        dy: Float,
+        length: Float,
+    ): Float =
+        when (type) {
+            GradientType.LINEAR -> {
+                // Projection of the pixel onto the drag axis.
+                ((px * dx + py * dy) / (length * length)).coerceIn(0f, 1f)
+            }
+            GradientType.RADIAL -> {
+                (sqrt(px * px + py * py) / length).coerceIn(0f, 1f)
+            }
+            GradientType.ANGULAR -> {
+                val angle = atan2(py.toDouble(), px.toDouble())
+                val sweepStart = atan2(dy.toDouble(), dx.toDouble())
+                var degrees = Math.toDegrees(angle - sweepStart).toFloat()
+                if (degrees < 0f) degrees += 360f
+                (degrees / 360f).coerceIn(0f, 1f)
+            }
+            GradientType.REFLECTED -> {
+                // The linear ramp mirrored about the start, so both sides fade outwards.
+                (abs(px * dx + py * dy) / (length * length)).coerceIn(0f, 1f)
+            }
+            GradientType.DIAMOND -> {
+                (abs(px) / length + abs(py) / length).coerceIn(0f, 1f)
+            }
+        }
 
     /** Reject invalid coordinates and overflowing axes before any pixel is touched. */
     private fun dragLength(
