@@ -93,6 +93,7 @@ import com.artflow.studio.presentation.ui.components.editor.CropOverlay
 import com.artflow.studio.presentation.ui.components.editor.GuideAssist
 import com.artflow.studio.presentation.ui.components.editor.GuidesOverlay
 import com.artflow.studio.presentation.ui.components.editor.GuidesSheet
+import com.artflow.studio.presentation.ui.components.editor.HistoryScrubber
 import com.artflow.studio.presentation.ui.components.editor.LayerEffectsDialog
 import com.artflow.studio.presentation.ui.components.editor.LayerMaskActions
 import com.artflow.studio.presentation.ui.components.editor.LayerOpacityOverlay
@@ -241,6 +242,7 @@ fun CanvasScreen(
     var cropBox by remember { mutableStateOf<CropBox.Box?>(null) }
     var opacityLayer by remember { mutableStateOf<Long?>(null) }
     var quickMenu by remember { mutableStateOf(false) }
+    var showHistory by remember { mutableStateOf(false) }
     val pageThumbnails by viewModel.pageThumbnails.pages.collectAsState()
     val pageImages =
         remember(pageThumbnails) {
@@ -1177,6 +1179,10 @@ fun CanvasScreen(
                                 canvasView?.cancelActiveGesture()
                                 quickMenu = true
                             },
+                            onHistory = {
+                                canvasView?.cancelActiveGesture()
+                                showHistory = true
+                            },
                         ),
                     modifier =
                         if (settings.rightHandedInterface) {
@@ -1271,6 +1277,15 @@ fun CanvasScreen(
                     canvasHeight = ready.height,
                     view = ViewTransform(viewScale, viewOffsetX, viewOffsetY, viewRotation),
                     modifier = Modifier.fillMaxSize(),
+                )
+            }
+            if (showHistory) {
+                HistoryScrubber(
+                    undoDepth = history.undoDepth,
+                    redoDepth = history.redoDepth,
+                    onStep = viewModel::jumpToHistory,
+                    onDone = { showHistory = false },
+                    modifier = Modifier.align(Alignment.BottomCenter).zIndex(6f),
                 )
             }
             if (quickMenu) {

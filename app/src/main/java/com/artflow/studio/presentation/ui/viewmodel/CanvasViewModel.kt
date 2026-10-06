@@ -670,24 +670,22 @@ class CanvasViewModel
         // History
         // -----------------------------------------------------------------------------------------
 
-        fun undo() {
-            if (canvasRepository.undo()) {
-                refreshLayers()
-                refreshHistory()
-                refreshSelection()
-            } else {
-                notify("Nothing to undo")
-            }
+        fun undo() = if (canvasRepository.undo()) afterHistoryMove() else notify("Nothing to undo")
+
+        fun redo() = if (canvasRepository.redo()) afterHistoryMove() else notify("Nothing to redo")
+
+        /** Undoes or redoes until [step] steps of history lie behind the artwork, for the History scrubber. */
+        fun jumpToHistory(step: Int) {
+            var moved = false
+            while (canvasRepository.undoDepth > step && canvasRepository.undo()) moved = true
+            while (canvasRepository.undoDepth < step && canvasRepository.redo()) moved = true
+            if (moved) afterHistoryMove()
         }
 
-        fun redo() {
-            if (canvasRepository.redo()) {
-                refreshLayers()
-                refreshHistory()
-                refreshSelection()
-            } else {
-                notify("Nothing to redo")
-            }
+        private fun afterHistoryMove() {
+            refreshLayers()
+            refreshHistory()
+            refreshSelection()
         }
 
         // -----------------------------------------------------------------------------------------

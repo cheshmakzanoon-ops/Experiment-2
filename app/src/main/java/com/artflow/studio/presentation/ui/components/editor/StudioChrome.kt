@@ -46,6 +46,7 @@ import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.presentation.ui.components.canvas.SelectionCombineMode
 import kotlinx.coroutines.delay
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -194,6 +195,8 @@ data class StudioSidebarActions(
     val onRedo: () -> Unit,
     /** Touch and hold the modify button: Procreate's QuickMenu. */
     val onQuickMenu: () -> Unit = {},
+    /** Touch and hold undo or redo: scrub through the history. */
+    val onHistory: () -> Unit = {},
 )
 
 /** Brush size slider, modify (eyedropper) button, opacity slider, undo and redo. */
@@ -249,12 +252,58 @@ private fun StudioSidebarContent(
                 label = "Opacity ${(state.opacity * 100).toInt()}%",
                 height = sliderHeight,
             )
-            IconButton(onClick = actions.onUndo, enabled = state.canUndo, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Default.Undo, contentDescription = "Undo")
-            }
-            IconButton(onClick = actions.onRedo, enabled = state.canRedo, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Default.Redo, contentDescription = "Redo")
-            }
+            HistoryButton(Icons.Default.Undo, "Undo", state.canUndo, actions.onUndo, actions.onHistory)
+            HistoryButton(Icons.Default.Redo, "Redo", state.canRedo, actions.onRedo, actions.onHistory)
+        }
+    }
+}
+
+/** Undo or redo; touch and hold either one to scrub through the whole history. */
+@Composable
+private fun HistoryButton(
+    icon: ImageVector,
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    onHistory: () -> Unit,
+) {
+    val tint = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+    Box(
+        Modifier
+            .size(36.dp)
+            .combinedClickable(enabled = enabled, onClick = onClick, onLongClick = onHistory, onLongClickLabel = "History")
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = tint)
+    }
+}
+
+/**
+ * The History scrubber: slide to any point between the oldest kept step and the newest redo,
+ * watching the canvas change as you go. Procreate has only one-step-at-a-time undo.
+ */
+@Composable
+fun HistoryScrubber(
+    undoDepth: Int,
+    redoDepth: Int,
+    onStep: (Int) -> Unit,
+    onDone: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val total = undoDepth + redoDepth
+    Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 4.dp, modifier = modifier.padding(12.dp).widthIn(max = 480.dp)) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("History $undoDepth / $total", style = MaterialTheme.typography.labelMedium)
+            Slider(
+                value = undoDepth.toFloat(),
+                onValueChange = { onStep(it.roundToInt()) },
+                valueRange = 0f..total.coerceAtLeast(1).toFloat(),
+                steps = (total - 1).coerceAtLeast(0),
+                enabled = total > 0,
+                modifier = Modifier.weight(1f).padding(horizontal = 8.dp).semantics { contentDescription = "History" },
+            )
+            TextButton(onClick = onDone) { Text("Done") }
         }
     }
 }
