@@ -480,7 +480,7 @@ class StrokeRasterizer(
         val colorRandom = if (params.colorJitterPerStroke) Random(stroke.id) else random
         val fresh = params.applyColorJitter(stroke.color, pressure, velocity, colorRandom, stroke.secondaryColor)
         val loaded = walk.carried?.let { carried -> carriedColor(fresh, carried, params) } ?: fresh
-        val color = wetColor(loaded, context.canvas, x, y, wetPickup(params))
+        val color = wetColor(loaded, context.canvas, x, y, wetPickup(params), params.wetBlur.coerceIn(0f, 1f) * params.size / 2f)
         walk.carried = color
 
         // Scatter offsets each dab; count repeats it along a random perpendicular offset.
@@ -550,13 +550,38 @@ class StrokeRasterizer(
         x: Float,
         y: Float,
         wetMix: Float,
+        blurReach: Float = 0f,
     ): Int {
         if (canvas == null || wetMix <= 0f) return color
-        val under = canvas.getSafe(floor(x).toInt(), floor(y).toInt())
+        val under = if (blurReach >= 1f) blurredUnder(canvas, x, y, blurReach) else canvas.getSafe(floor(x).toInt(), floor(y).toInt())
         val pickup = wetMix.coerceIn(0f, 1f) * WET_PICKUP * ((under ushr 24) / 255f)
         if (pickup <= 0f) return color
         val mixed = ImageFilters.lerpArgb(color or 0xFF000000.toInt(), under or 0xFF000000.toInt(), pickup)
         return (color and 0xFF000000.toInt()) or (mixed and 0x00FFFFFF)
+    }
+
+    /** Wet Mix Blur: the paint under the dab averaged with four points [reach] pixels around it. */
+    private fun blurredUnder(
+        canvas: PixelBuffer,
+        x: Float,
+        y: Float,
+        reach: Float,
+    ): Int {
+        var a = 0f
+        var r = 0f
+        var g = 0f
+        var b = 0f
+        for ((dx, dy) in BLUR_TAPS) {
+            val p = canvas.getSafe(floor(x + dx * reach).toInt(), floor(y + dy * reach).toInt())
+            val alpha = (p ushr 24) / 255f
+            a += alpha
+            r += ((p shr 16) and 0xFF) * alpha
+            g += ((p shr 8) and 0xFF) * alpha
+            b += (p and 0xFF) * alpha
+        }
+        if (a <= 0f) return 0
+        val count = BLUR_TAPS.size
+        return Channels.argb((a / count * 255f).roundToInt(), (r / a).roundToInt(), (g / a).roundToInt(), (b / a).roundToInt())
     }
 
     private fun canUseCapsule(
@@ -854,3 +879,6 @@ private const val FALLOFF_RANGE = 39f
 
 /** Degrees in a full turn, for a randomized tip angle. */
 private const val FULL_TURN = 360f
+
+/** Where Wet Mix Blur samples the layer: the dab's centre and four points around it. */
+private val BLUR_TAPS = listOf(0f to 0f, 1f to 0f, -1f to 0f, 0f to 1f, 0f to -1f)

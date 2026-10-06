@@ -507,6 +507,13 @@ private fun BrushWetSettings(
             valueDisplay = "%.0f%%".format(brushParams.dilution * 100),
         )
         BrushParameterSlider(
+            label = "Blur",
+            value = brushParams.wetBlur,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(wetBlur = it.coerceIn(0f, 1f))) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.wetBlur * 100),
+        )
+        BrushParameterSlider(
             label = "Pull",
             value = brushParams.pull,
             onValueChange = { onBrushParamsChanged(brushParams.copy(pull = it.coerceIn(0f, 1f))) },

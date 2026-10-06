@@ -68,6 +68,21 @@ class WetPaintTest {
     }
 
     @Test
+    fun wetBlurPicksUpPaintFromAroundTheDab() {
+        // A blue band above the stroke's centre line: a sharp pickup only ever samples the line itself.
+        fun painted(params: BrushParams): PixelBuffer {
+            val layer = PixelBuffer(width, height)
+            for (y in 6..9) for (x in 0 until width) layer.pixels[y * width + x] = 0xFF1030C0.toInt()
+            return layer.also { StrokeRasterizer().draw(it, strokeOf(params)) }
+        }
+        val wide = base.copy(size = 24f)
+        val sharp = painted(wide)
+        val blurred = painted(wide.copy(wetBlur = 1f))
+        assertTrue(blue(blurred.getSafe(100, 20)) > blue(sharp.getSafe(100, 20)) + 3)
+        assertArrayEquals(sharp.pixels, painted(wide.copy(wetBlur = 0f)).pixels)
+    }
+
+    @Test
     fun perStrokeColourJitterKeepsOneColourAlongTheStroke() {
         val jitter = BrushParams(size = 12f, spacing = 0.3f, pressureToSize = 0f, pressureToOpacity = 0f, hueJitter = 1f)
 
