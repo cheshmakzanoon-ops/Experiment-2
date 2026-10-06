@@ -471,9 +471,12 @@ class StrokeRasterizer(
         val taper = taperFactor(params, accumulatedDistance, totalLength)
         val radius = max(0.35f, size * taper / 2f)
         // Taper opacity fades the tapered ends as well, and fall off fades the stroke along its path.
-        val dabOpacity =
+        val plainOpacity =
             opacity * (1f - params.taperOpacity.coerceIn(0f, 1f) * (1f - taper)) * falloffFactor(params, accumulatedDistance) *
                 (1f - DILUTION_THINNING * params.dilution.coerceIn(0f, 1f))
+        val rendering = params.rendering
+        // Intense rendering lays down more paint per dab: twice as much of what is left to cover.
+        val dabOpacity = if (rendering.intense) 1f - (1f - plainOpacity).let { it * it } else plainOpacity
 
         // Pull keeps some of the paint the brush already carries instead of reloading the fresh colour.
         // Per-stroke jitter draws from a sequence that restarts at every dab, so each dab gets the same colour.
@@ -503,8 +506,8 @@ class StrokeRasterizer(
                 color = Channels.withAlpha(color, (Channels.alpha(color) * dabOpacity).roundToInt().coerceIn(0, 255)),
                 strength = 1f,
                 // Flow controls deposited coverage. Glazing caps it within a stroke; blending builds it up.
-                hardness = hardnessForFlow(params),
-                mode = if (params.buildUp) Stamping.Mode.SOURCE_OVER else Stamping.Mode.MAX_COVERAGE,
+                hardness = if (rendering.uniformEdges) 1f else hardnessForFlow(params),
+                mode = if (rendering.blending) Stamping.Mode.SOURCE_OVER else Stamping.Mode.MAX_COVERAGE,
                 alphaLock = alphaLock,
                 mask = mask,
                 tip = tipFor(context.tip, params, current),

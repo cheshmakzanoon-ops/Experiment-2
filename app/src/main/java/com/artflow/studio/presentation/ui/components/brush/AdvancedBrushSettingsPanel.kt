@@ -37,6 +37,7 @@ import com.artflow.studio.domain.model.brush.MAX_BRUSH_SIZE
 import com.artflow.studio.domain.model.brush.MIN_BRUSH_OPACITY
 import com.artflow.studio.domain.model.brush.MIN_BRUSH_SIZE
 import com.artflow.studio.domain.model.brush.PressureResponse
+import com.artflow.studio.domain.model.brush.RenderingMode
 import com.artflow.studio.domain.model.brush.StudioBrushes
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.presentation.ui.theme.LocalArtFlowFlags
@@ -579,7 +580,16 @@ private fun BrushWetSettings(
             valueRange = 0f..1f,
             valueDisplay = "%.0f%%".format(brushParams.burntEdges * 100),
         )
-        ShapeSwitch("Build up within a stroke", brushParams.buildUp) { onBrushParamsChanged(brushParams.copy(buildUp = it)) }
+        Text("Rendering", style = MaterialTheme.typography.labelMedium)
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            RenderingMode.entries.forEach { mode ->
+                FilterChip(
+                    selected = brushParams.rendering == mode,
+                    onClick = { onBrushParamsChanged(brushParams.copy(renderingMode = mode, buildUp = mode.blending)) },
+                    label = { Text(mode.displayName, style = MaterialTheme.typography.labelSmall) },
+                )
+            }
+        }
         Text("Blend mode", style = MaterialTheme.typography.labelLarge)
         Row(
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag("brush-blend-modes"),

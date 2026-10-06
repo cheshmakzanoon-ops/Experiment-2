@@ -2,6 +2,7 @@ package com.artflow.studio.core.render
 
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.RenderingMode
 import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.model.brush.StrokePoint
 import org.junit.Assert.assertArrayEquals
@@ -108,6 +109,19 @@ class WetPaintTest {
         val jittered = stamps(many.copy(countJitter = 1f))
         assertTrue("Jitter leaves out some copies ($jittered of $full)", jittered < full)
         assertTrue("Every dab keeps at least one copy ($jittered of $full)", jittered >= full / 4)
+    }
+
+    @Test
+    fun renderingModesKeepOldBrushesAndIntensifyPaint() {
+        val soft = BrushParams(size = 12f, spacing = 0.3f, pressureToSize = 0f, pressureToOpacity = 0f, opacity = 0.5f, flow = 0.4f)
+
+        fun painted(params: BrushParams) = PixelBuffer(width, height).also { StrokeRasterizer().draw(it, strokeOf(params)) }
+        assertArrayEquals(painted(soft).pixels, painted(soft.copy(renderingMode = RenderingMode.LIGHT_GLAZE)).pixels)
+        val built = soft.copy(buildUp = true)
+        assertArrayEquals(painted(built).pixels, painted(built.copy(renderingMode = RenderingMode.UNIFORM_BLENDING)).pixels)
+        val light = alpha(painted(soft).getSafe(80, 20))
+        val intense = alpha(painted(soft.copy(renderingMode = RenderingMode.INTENSE_GLAZE)).getSafe(80, 20))
+        assertTrue("Intense glaze lays more paint ($intense vs $light)", intense > light)
     }
 
     private fun strokeOf(params: BrushParams): Stroke =

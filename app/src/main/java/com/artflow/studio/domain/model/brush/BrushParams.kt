@@ -75,8 +75,14 @@ data class BrushParams(
     val countJitter: Float = 0f, // 0..1: each dab stamps a random number of copies, from count down to one at 1
     val colorJitterPerStroke: Boolean = false,
     /** Procreate's Colour Pressure (0..1 each): lighter presses drift the hue, wash out saturation, darken. */
-    val colorDynamics: ColorDynamics = ColorDynamics(), // Colour jitter picks one colour per stroke instead of varying each dab
+    val colorDynamics: ColorDynamics = ColorDynamics(),
+    /** Procreate's rendering mode; null keeps the older [buildUp] switch (Light glaze or Uniform blending). */
+    val renderingMode: RenderingMode? = null, // Colour jitter picks one colour per stroke instead of varying each dab
 ) {
+    /** How dabs accumulate within one stroke. */
+    val rendering: RenderingMode
+        get() = renderingMode ?: if (buildUp) RenderingMode.UNIFORM_BLENDING else RenderingMode.LIGHT_GLAZE
+
     /** The sizes the sidebar offers for this brush (Procreate's Min and Max size). */
     val sizeLimits: ClosedFloatingPointRange<Float>
         get() = limits(minSize, maxSize, MIN_BRUSH_SIZE, MAX_BRUSH_SIZE)
@@ -347,4 +353,24 @@ data class ColorDynamics(
         const val HALF_TURN = 180f
         const val FULL_TURN = 360f
     }
+}
+
+/**
+ * Procreate's rendering modes. Glazes cap the paint a stroke lays down at its strongest dab; blendings
+ * let overlapping dabs build up. Intense modes lay more paint per dab; uniform and heavy modes keep
+ * the dab's edge as hard at low flow as at full flow.
+ */
+@Serializable
+enum class RenderingMode(
+    val displayName: String,
+    val blending: Boolean,
+    val intense: Boolean,
+    val uniformEdges: Boolean,
+) {
+    LIGHT_GLAZE("Light glaze", blending = false, intense = false, uniformEdges = false),
+    UNIFORM_GLAZE("Uniform glaze", blending = false, intense = false, uniformEdges = true),
+    INTENSE_GLAZE("Intense glaze", blending = false, intense = true, uniformEdges = false),
+    HEAVY_GLAZE("Heavy glaze", blending = false, intense = true, uniformEdges = true),
+    UNIFORM_BLENDING("Uniform blending", blending = true, intense = false, uniformEdges = false),
+    INTENSE_BLENDING("Intense blending", blending = true, intense = true, uniformEdges = false),
 }
