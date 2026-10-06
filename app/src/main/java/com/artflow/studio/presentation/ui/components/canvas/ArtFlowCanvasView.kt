@@ -10,6 +10,7 @@ import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.animation.DecelerateInterpolator
 import androidx.core.math.MathUtils
+import com.artflow.studio.core.animation.OnionSkin
 import com.artflow.studio.core.canvas.MotionFilter
 import com.artflow.studio.core.canvas.PointerGestureRouter
 import com.artflow.studio.core.canvas.PointerPressure
@@ -39,6 +40,7 @@ import com.artflow.studio.core.tool.PixelBrushes
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.data.renderer.opengl.OpenGLCanvasRenderer
+import com.artflow.studio.domain.model.animation.AnimationSettings
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.StrokeDestination
 import com.artflow.studio.domain.repository.canvas.CanvasInvalidationEvent
@@ -1085,6 +1087,8 @@ class ArtFlowCanvasView
                                 cancelActiveGesture()
                                 onionDirty = true
                             }
+                            // Ghost count, opacity and tints live in the animation settings.
+                            if (onionEnabled && canvasRepository.timeline.value.settings != onionSettings) onionDirty = true
                         }.conflate()
                         .collect {
                             // A busy renderer must complete frames instead of cancelling each one
@@ -1141,6 +1145,9 @@ class ArtFlowCanvasView
 
         private var onionJob: Job? = null
 
+        /** The animation settings the current ghosts were made with. */
+        private var onionSettings: AnimationSettings? = null
+
         private fun refreshOnionSkins() {
             if (onionEnabled && !onionDirty) return
             onionJob?.cancel()
@@ -1154,9 +1161,9 @@ class ArtFlowCanvasView
             onionJob =
                 coroutineScope.launch {
                     val state = canvasRepository.timeline.value
+                    onionSettings = state.settings
                     val active = state.activeIndex
                     val range = state.settings.onionSkinFrames.coerceIn(0, 5)
-                    val opacity = state.settings.onionSkinOpacity
                     val ghosts = mutableListOf<Pair<PixelBuffer, Float>>()
                     for (offset in -range..range) {
                         if (offset == 0) continue
@@ -1175,7 +1182,14 @@ class ArtFlowCanvasView
                             } else {
                                 frame
                             }
-                        ghosts += preview to opacity / abs(offset).toFloat()
+                        // Colour Secondary Frames: earlier frames in one tint, later frames in another.
+                        val ghost =
+                            OnionSkin.tint(state.settings, offset)?.let { tint ->
+                                withContext(Dispatchers.Default) {
+                                    OnionSkin.tinted(if (preview === frame) frame.copy() else preview, tint)
+                                }
+                            } ?: preview
+                        ghosts += ghost to OnionSkin.opacity(state.settings, offset)
                     }
                     renderer.setOnionSkins(ghosts)
                     requestRender()

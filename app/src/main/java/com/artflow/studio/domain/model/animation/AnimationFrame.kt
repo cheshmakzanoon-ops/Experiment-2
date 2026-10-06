@@ -48,6 +48,8 @@ data class AnimationSettings(
     val onionSkinPreviousColor: Int = 0xFFFF0000.toInt(),
     /** Tint used for following frames (default green). */
     val onionSkinNextColor: Int = 0xFF00FF00.toInt(),
+    /** Animation Assist's Color Secondary Frames: ghosts are shown in the tints above instead of their own colours. */
+    val onionSkinTinted: Boolean = false,
     /** Inclusive playback range; `playbackRangeEnd < 0` means "to the last frame". */
     val playbackRangeStart: Int = 0,
     val playbackRangeEnd: Int = -1,

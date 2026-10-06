@@ -972,6 +972,11 @@ fun AnimationSheet(
             range = 0.05f..1f,
             onChange = { onSettings(settings.copy(onionSkinOpacity = it)) },
         )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(checked = settings.onionSkinTinted, onCheckedChange = { onSettings(settings.copy(onionSkinTinted = it)) })
+            Spacer(Modifier.width(8.dp))
+            Text("Color secondary frames", style = MaterialTheme.typography.bodySmall)
+        }
     }
 }
 
