@@ -80,6 +80,21 @@ class WetPaintTest {
         assertTrue("Per-stroke jitter keeps one colour", hueSpread(jitter.copy(colorJitterPerStroke = true)) <= 2)
     }
 
+    @Test
+    fun countJitterStampsBetweenOneAndCountCopies() {
+        val many = BrushParams(size = 12f, spacing = 0.3f, pressureToSize = 0f, pressureToOpacity = 0f, count = 4)
+
+        fun stamps(params: BrushParams): Int {
+            val rasterizer = StrokeRasterizer()
+            rasterizer.draw(PixelBuffer(width, height), strokeOf(params))
+            return rasterizer.lastDabCount
+        }
+        val full = stamps(many)
+        val jittered = stamps(many.copy(countJitter = 1f))
+        assertTrue("Jitter leaves out some copies ($jittered of $full)", jittered < full)
+        assertTrue("Every dab keeps at least one copy ($jittered of $full)", jittered >= full / 4)
+    }
+
     private fun strokeOf(params: BrushParams): Stroke =
         Stroke(
             id = 77L,

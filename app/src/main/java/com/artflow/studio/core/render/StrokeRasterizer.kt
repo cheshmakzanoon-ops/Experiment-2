@@ -484,7 +484,9 @@ class StrokeRasterizer(
         walk.carried = color
 
         // Scatter offsets each dab; count repeats it along a random perpendicular offset.
-        val dabs = params.count.coerceIn(1, 32)
+        val most = params.count.coerceIn(1, 32)
+        val jitter = params.countJitter.coerceIn(0f, 1f)
+        val dabs = if (jitter > 0f && most > 1) most - (random.nextFloat() * jitter * most).toInt().coerceAtMost(most - 1) else most
         repeat(dabs) { index ->
             val scatter = params.scatter.coerceIn(0f, 4f) * params.size
             val jitterX = if (scatter > 0f) ((random.nextFloat() * 2f - 1f) * scatter / 2f) else 0f

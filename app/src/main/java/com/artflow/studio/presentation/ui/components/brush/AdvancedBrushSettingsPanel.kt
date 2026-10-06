@@ -309,6 +309,15 @@ private fun BrushScatterSettings(
             valueDisplay = "%d".format(brushParams.count),
             isInteger = true,
         )
+        if (brushParams.count > 1) {
+            BrushParameterSlider(
+                label = "Count Jitter",
+                value = brushParams.countJitter,
+                onValueChange = { onBrushParamsChanged(brushParams.copy(countJitter = it.coerceIn(0f, 1f))) },
+                valueRange = 0f..1f,
+                valueDisplay = "%.0f%%".format(brushParams.countJitter * 100),
+            )
+        }
     }
 }
 

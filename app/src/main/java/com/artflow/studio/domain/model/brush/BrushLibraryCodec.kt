@@ -76,6 +76,7 @@ object BrushLibraryCodec {
                 params.wetMix,
                 params.dilution,
                 params.pull,
+                params.countJitter,
                 params.flow,
                 params.tiltInfluence,
                 params.velocityToSize,
