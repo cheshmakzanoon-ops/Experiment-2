@@ -228,6 +228,7 @@ class SettingsRepositoryImpl
                 KEY_MOTION_FILTERING to settings.motionFiltering.toString(),
                 KEY_MOTION_EXPRESSION to settings.motionExpression.toString(),
                 KEY_PRESSURE_SMOOTHING to settings.pressureSmoothing.toString(),
+                KEY_PULLED_STRING to settings.pulledString.toString(),
                 KEY_SCRUB_CLEAR to settings.scrubToClear.toString(),
                 KEY_SWIPE_PASTE to settings.swipeCopyPaste.toString(),
                 KEY_FOUR_FINGER to settings.fourFingerFullScreen.toString(),
@@ -302,6 +303,7 @@ class SettingsRepositoryImpl
                 motionFiltering = stored.unit(KEY_MOTION_FILTERING) ?: defaults.motionFiltering,
                 motionExpression = stored.unit(KEY_MOTION_EXPRESSION) ?: defaults.motionExpression,
                 pressureSmoothing = stored.unit(KEY_PRESSURE_SMOOTHING) ?: defaults.pressureSmoothing,
+                pulledString = stored.unit(KEY_PULLED_STRING) ?: defaults.pulledString,
                 scrubToClear = stored.flag(KEY_SCRUB_CLEAR, defaults.scrubToClear),
                 swipeCopyPaste = stored.flag(KEY_SWIPE_PASTE, defaults.swipeCopyPaste),
                 fourFingerFullScreen = stored.flag(KEY_FOUR_FINGER, defaults.fourFingerFullScreen),
@@ -381,6 +383,7 @@ class SettingsRepositoryImpl
             private const val KEY_MOTION_FILTERING = "input.motionFiltering"
             private const val KEY_MOTION_EXPRESSION = "input.motionExpression"
             private const val KEY_PRESSURE_SMOOTHING = "input.pressureSmoothing"
+            private const val KEY_PULLED_STRING = "input.pulledString"
             private const val KEY_SCRUB_CLEAR = "gesture.scrubToClear"
             private const val KEY_SWIPE_PASTE = "gesture.swipeCopyPaste"
             private const val KEY_FOUR_FINGER = "gesture.fourFingerFullScreen"

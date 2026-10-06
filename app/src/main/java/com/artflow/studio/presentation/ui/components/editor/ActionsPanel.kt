@@ -259,6 +259,9 @@ private fun PrefsTab(
     PrefSlider("Pressure smoothing", smoothing.pressureSmoothing, 0f..1f, percent(smoothing.pressureSmoothing)) {
         change(smoothing.copy(pressureSmoothing = it))
     }
+    PrefSlider("Pulled string", smoothing.pulledString, 0f..1f, percent(smoothing.pulledString)) {
+        change(smoothing.copy(pulledString = it))
+    }
     // The slider reads soft (left) to firm (right) on a logarithmic scale centred on linear.
     PrefSlider(
         label = "Pressure",

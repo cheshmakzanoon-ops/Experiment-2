@@ -238,6 +238,7 @@ class CanvasViewModel
                             motionFiltering = stored.motionFiltering,
                             motionExpression = stored.motionExpression,
                             pressureSmoothing = stored.pressureSmoothing,
+                            pulledString = stored.pulledString,
                             brushCursor = stored.brushCursor,
                             gestures =
                                 GestureControls(
@@ -616,6 +617,7 @@ class CanvasViewModel
                         motionFiltering = value.motionFiltering.coerceIn(0f, 1f),
                         motionExpression = value.motionExpression.coerceIn(0f, 1f),
                         pressureSmoothing = value.pressureSmoothing.coerceIn(0f, 1f),
+                        pulledString = value.pulledString.coerceIn(0f, 1f),
                     )
                 }
             }

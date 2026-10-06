@@ -143,6 +143,8 @@ data class EditorInput(
     val motionFiltering: Float = 0f,
     val motionExpression: Float = 0.5f,
     val pressureSmoothing: Float = 0f,
+    /** Pulled string from Prefs > Pressure and Smoothing (0..1 of 60 dp on screen). */
+    val pulledString: Float = 0f,
     /** Outline the brush under a hovering stylus. */
     val brushCursor: Boolean = true,
     /** Gesture controls from Prefs; each can be switched off. */
@@ -1743,7 +1745,12 @@ class ArtFlowCanvasView
             drawing = currentStrokeId != 0L
             clearPrediction()
             if (!drawing) onStatusMessage?.invoke("Choose an unlocked, visible layer with an editable destination")
-            stabilizer = StrokeStabilizer(max(params.smoothing, input.stabilization)).takeIf { it.isActive }?.also { it.start(x, y) }
+            // The string keeps the same length on screen whatever the zoom.
+            val string = input.pulledString.coerceIn(0f, 1f) * MAX_STRING_DP * resources.displayMetrics.density / scale
+            stabilizer =
+                StrokeStabilizer(max(params.smoothing, input.stabilization), string)
+                    .takeIf { it.isActive }
+                    ?.also { it.start(x, y) }
             motionFilter =
                 MotionFilter(input.motionFiltering, input.motionExpression)
                     .takeIf { it.isActive }
@@ -2902,6 +2909,7 @@ class ArtFlowCanvasView
             private const val MIN_SCALED_BRUSH = 0.5f
             private const val MAX_SCALED_BRUSH = 1_000f
             private const val RAPID_HISTORY_REPEAT_MS = 220L
+            private const val MAX_STRING_DP = 60f
             private const val KNOB_DISTANCE_PX = 48f
             private const val SNAP_DISTANCE_PX = 12f
             private const val TRANSFORM_PREVIEW_INTERVAL_MS = 33L
