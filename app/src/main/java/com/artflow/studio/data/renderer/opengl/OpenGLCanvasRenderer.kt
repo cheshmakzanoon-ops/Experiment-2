@@ -62,6 +62,10 @@ class OpenGLCanvasRenderer
         @Volatile
         private var viewMatrix: FloatArray? = null
 
+        /** Notan's number of flat values; 0 keeps the view continuous. */
+        @Volatile
+        private var viewLevels = 0
+
         /** Predicted pen positions ahead of the live stroke: x, y pairs in canvas pixels. */
         @Volatile
         private var prediction: Prediction? = null
@@ -89,6 +93,7 @@ class OpenGLCanvasRenderer
         private var quadProofHandle = 0
         private var quadViewHandle = 0
         private var quadViewMatrixHandle = 0
+        private var quadViewLevelsHandle = 0
 
         // --- Textures ------------------------------------------------------------------------------
 
@@ -166,6 +171,7 @@ class OpenGLCanvasRenderer
             quadProofHandle = GLES20.glGetUniformLocation(quadProgram, "uProof")
             quadViewHandle = GLES20.glGetUniformLocation(quadProgram, "uView")
             quadViewMatrixHandle = GLES20.glGetUniformLocation(quadProgram, "uViewMatrix")
+            quadViewLevelsHandle = GLES20.glGetUniformLocation(quadProgram, "uViewLevels")
             dabProgram = createProgram(DAB_VERTEX_SHADER, DAB_FRAGMENT_SHADER)
 
             checkerTexture = createCheckerboardTexture()
@@ -204,6 +210,7 @@ class OpenGLCanvasRenderer
             val filter = viewMatrix
             GLES20.glUniform1f(quadViewHandle, if (filter == null) 0f else 1f)
             GLES20.glUniformMatrix3fv(quadViewMatrixHandle, 1, false, filter ?: IDENTITY_3, 0)
+            GLES20.glUniform1f(quadViewLevelsHandle, viewLevels.toFloat())
 
             if (showCheckerboard) {
                 GLES20.glUniform1f(quadUseTextureHandle, 1f)
@@ -460,8 +467,12 @@ class OpenGLCanvasRenderer
         }
 
         /** Greyscale or a colour-vision check on screen: a column-major 3×3 matrix on linear sRGB, or null for none. */
-        fun setViewFilter(columnMajor: FloatArray?) {
+        fun setViewFilter(
+            columnMajor: FloatArray?,
+            levels: Int = 0,
+        ) {
             viewMatrix = columnMajor
+            viewLevels = levels
         }
 
         /** Called only AFTER GLSurfaceView has stopped its GL thread and destroyed the surface. */
@@ -728,6 +739,7 @@ class OpenGLCanvasRenderer
             uniform float uProof;
             uniform float uView;
             uniform mat3 uViewMatrix;
+            uniform float uViewLevels;
             varying vec2 vTexCoord;
             // Printed process inks on white paper, as encoded sRGB (see CmykProof).
             const vec3 INK_C = vec3(0.0, 0.682, 0.937);
@@ -766,7 +778,9 @@ class OpenGLCanvasRenderer
                 }
                 if (uView > 0.5 && color.a > 0.0) {
                     vec3 seen = clamp(uViewMatrix * toLinear(clamp(color.rgb / color.a, 0.0, 1.0)), 0.0, 1.0);
-                    color.rgb = toEncoded(seen) * color.a;
+                    vec3 shown = toEncoded(seen);
+                    if (uViewLevels > 1.5) shown = min(floor(shown * uViewLevels), uViewLevels - 1.0) / (uViewLevels - 1.0);
+                    color.rgb = shown * color.a;
                 }
                 gl_FragColor = color;
             }

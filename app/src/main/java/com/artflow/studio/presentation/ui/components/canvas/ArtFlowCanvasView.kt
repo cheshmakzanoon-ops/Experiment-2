@@ -660,7 +660,7 @@ class ArtFlowCanvasView
 
         /** Shows the canvas in greyscale or as a colour-vision deficiency sees it; the artwork is unchanged. */
         fun setViewFilter(filter: ViewFilter) {
-            renderer.setViewFilter(filter.takeIf { it != ViewFilter.OFF }?.columnMajor())
+            renderer.setViewFilter(filter.takeIf { it != ViewFilter.OFF }?.columnMajor(), filter.levels)
             requestRender()
         }
 

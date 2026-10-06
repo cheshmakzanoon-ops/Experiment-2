@@ -41,4 +41,10 @@ class ViewFilterTest {
         assertEquals(m[3], c[1], 0f)
         assertArrayEquals(floatArrayOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f), ViewFilter.OFF.columnMajor(), 0f)
     }
+
+    @Test
+    fun notanShowsThreeFlatValues() {
+        val values = (0..20).map { ViewFilter.NOTAN.apply(it / 20f, it / 20f, it / 20f)[0] }.toSet()
+        assertEquals(setOf(0f, 0.5f, 1f), values)
+    }
 }

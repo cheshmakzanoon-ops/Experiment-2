@@ -9,9 +9,12 @@ package com.artflow.studio.core.color
 enum class ViewFilter(
     val displayName: String,
     val matrix: FloatArray?,
+    /** Notan: the greyscale is cut into this many flat values (0 keeps it continuous). */
+    val levels: Int = 0,
 ) {
     OFF("Off", null),
     GREYSCALE("Greyscale", GREY),
+    NOTAN("Notan", GREY, levels = 3),
     PROTANOPIA("Protanopia", PROTAN),
     DEUTERANOPIA("Deuteranopia", DEUTAN),
     TRITANOPIA("Tritanopia", TRITAN),
@@ -27,8 +30,15 @@ enum class ViewFilter(
         val linear = floatArrayOf(ColorProfiles.toLinear(r), ColorProfiles.toLinear(g), ColorProfiles.toLinear(b))
         return FloatArray(3) { row ->
             val value = m[row * 3] * linear[0] + m[row * 3 + 1] * linear[1] + m[row * 3 + 2] * linear[2]
-            ColorProfiles.fromLinear(value.coerceIn(0f, 1f))
+            posterized(ColorProfiles.fromLinear(value.coerceIn(0f, 1f)))
         }
+    }
+
+    /** [value] (encoded, 0..1) snapped to one of [levels] evenly spaced values; unchanged without levels. */
+    fun posterized(value: Float): Float {
+        if (levels < 2) return value
+        val step = (value * levels).toInt().coerceAtMost(levels - 1)
+        return step / (levels - 1f)
     }
 
     /** [matrix] in the column-major order OpenGL expects, or the identity when off. */
