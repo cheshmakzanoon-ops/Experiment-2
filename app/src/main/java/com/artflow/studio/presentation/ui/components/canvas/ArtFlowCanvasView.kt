@@ -109,6 +109,8 @@ data class EditorInput(
     /** Procreate's secondary colour: brushes with secondary colour dynamics blend toward it. */
     val secondaryColor: Int = 0xFFFFFFFF.toInt(),
     val eraserSize: Float = 48f,
+    /** The eraser's own brush, as in Procreate; null erases with the paint brush. */
+    val eraserParams: BrushParams? = null,
     val symmetry: SymmetryEngine.Settings = SymmetryEngine.Settings(),
     val perspective: PerspectiveGuide.Settings = PerspectiveGuide.Settings(),
     val snapToGuides: Boolean = false,
@@ -1736,7 +1738,7 @@ class ArtFlowCanvasView
         ) {
             val chosen =
                 if (tool == ToolType.ERASER) {
-                    input.brushParams.copy(size = input.eraserSize)
+                    (input.eraserParams ?: input.brushParams).copy(size = input.eraserSize)
                 } else {
                     input.brushParams
                 }

@@ -1545,71 +1545,7 @@ private fun ToolOptionsPanel(
     ) {
         Text(input.tool.displayName, style = MaterialTheme.typography.titleMedium)
         Text(
-            when (input.tool) {
-                ToolType.BRUSH -> {
-                    "Pressure controls size and opacity; tap Brush for the full dynamics panel."
-                }
-
-                ToolType.ERASER -> {
-                    "Erases to transparency on the active layer. Two fingers to navigate; the stylus keeps painting."
-                }
-
-                ToolType.SMUDGE -> {
-                    "Pull colour along the stroke. Lower strength gives a softer blend."
-                }
-
-                ToolType.CLONE_STAMP -> {
-                    "Tap once to set the source, then drag to stamp."
-                }
-
-                ToolType.HEALING -> {
-                    "Spot-heals blemishes by matching the surrounding texture."
-                }
-
-                ToolType.LIQUIFY -> {
-                    "Push, twirl, pinch or bloat pixels with a displacement map."
-                }
-
-                ToolType.PAINT_BUCKET -> {
-                    "Flood fills the area under the tap within the tolerance."
-                }
-
-                ToolType.GRADIENT -> {
-                    "Drag to set the gradient axis; the ramp is chosen in the colour panel."
-                }
-
-                ToolType.LASSO_FILL -> {
-                    "Trace a shape; it fills with the current colour when you lift."
-                }
-
-                ToolType.TEXT -> {
-                    "Tap the canvas to place the current text."
-                }
-
-                ToolType.SHAPE -> {
-                    "Drag to draw the selected shape."
-                }
-
-                ToolType.SELECT_MAGIC_WAND -> {
-                    "Tap to select a colour region."
-                }
-
-                ToolType.EYEDROPPER -> {
-                    "Tap to pick a colour from the artwork."
-                }
-
-                ToolType.MOVE -> {
-                    "Drag to move the active layer's pixels."
-                }
-
-                ToolType.TRANSFORM -> {
-                    "Drag to move, scale or rotate the active layer — or only the selection when one is active."
-                }
-
-                else -> {
-                    "Drag on the canvas to use this tool."
-                }
-            },
+            toolHint(input.tool),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -1685,6 +1621,7 @@ private fun ToolOptionsPanel(
             }
         }
 
+        if (input.tool == ToolType.ERASER) EraserBrushOptions(viewModel, input)
         if (input.tool == ToolType.SMUDGE) {
             Text(
                 "Smudge strength ${(input.smudge.strength * 100).toInt()}% · hardness ${(input.smudge.hardness * 100).toInt()}%",
@@ -1745,6 +1682,98 @@ private fun ToolOptionsPanel(
         }
     }
 }
+
+/** Procreate lets the eraser keep a brush of its own; until one is chosen it erases with the paint brush. */
+@Composable
+private fun EraserBrushOptions(
+    viewModel: CanvasViewModel,
+    input: EditorInput,
+) {
+    var choosing by remember { mutableStateOf(false) }
+    Text(
+        if (input.eraserParams == null) "Erasing with the paint brush" else "Erasing with its own brush",
+        style = MaterialTheme.typography.bodySmall,
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = { choosing = true }) { Text("Choose eraser brush") }
+        if (input.eraserParams != null) TextButton(onClick = { viewModel.setEraserParams(null) }) { Text("Use the paint brush") }
+    }
+    if (choosing) {
+        BrushStudioDialog(
+            initial = input.eraserParams ?: input.brushParams,
+            onApply = viewModel::setEraserParams,
+            onDismiss = { choosing = false },
+        )
+    }
+}
+
+/** What the active tool does, shown at the top of its options. */
+private fun toolHint(tool: ToolType): String =
+    when (tool) {
+        ToolType.BRUSH -> {
+            "Pressure controls size and opacity; tap Brush for the full dynamics panel."
+        }
+
+        ToolType.ERASER -> {
+            "Erases to transparency on the active layer. Two fingers to navigate; the stylus keeps painting."
+        }
+
+        ToolType.SMUDGE -> {
+            "Pull colour along the stroke. Lower strength gives a softer blend."
+        }
+
+        ToolType.CLONE_STAMP -> {
+            "Tap once to set the source, then drag to stamp."
+        }
+
+        ToolType.HEALING -> {
+            "Spot-heals blemishes by matching the surrounding texture."
+        }
+
+        ToolType.LIQUIFY -> {
+            "Push, twirl, pinch or bloat pixels with a displacement map."
+        }
+
+        ToolType.PAINT_BUCKET -> {
+            "Flood fills the area under the tap within the tolerance."
+        }
+
+        ToolType.GRADIENT -> {
+            "Drag to set the gradient axis; the ramp is chosen in the colour panel."
+        }
+
+        ToolType.LASSO_FILL -> {
+            "Trace a shape; it fills with the current colour when you lift."
+        }
+
+        ToolType.TEXT -> {
+            "Tap the canvas to place the current text."
+        }
+
+        ToolType.SHAPE -> {
+            "Drag to draw the selected shape."
+        }
+
+        ToolType.SELECT_MAGIC_WAND -> {
+            "Tap to select a colour region."
+        }
+
+        ToolType.EYEDROPPER -> {
+            "Tap to pick a colour from the artwork."
+        }
+
+        ToolType.MOVE -> {
+            "Drag to move the active layer's pixels."
+        }
+
+        ToolType.TRANSFORM -> {
+            "Drag to move, scale or rotate the active layer — or only the selection when one is active."
+        }
+
+        else -> {
+            "Drag on the canvas to use this tool."
+        }
+    }
 
 private const val MAX_PSD_IMPORT_BYTES = 256 * 1024 * 1024
 

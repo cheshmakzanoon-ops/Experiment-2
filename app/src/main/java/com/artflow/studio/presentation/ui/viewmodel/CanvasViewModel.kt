@@ -511,6 +511,10 @@ class CanvasViewModel
 
         fun setEraserSize(size: Float) = updateInput { it.copy(eraserSize = size.coerceIn(1f, 512f)) }
 
+        /** Gives the eraser its own brush (at that brush's size); null erases with the paint brush. */
+        fun setEraserParams(params: com.artflow.studio.domain.model.brush.BrushParams?) =
+            updateInput { it.copy(eraserParams = params, eraserSize = params?.size?.coerceIn(1f, 512f) ?: it.eraserSize) }
+
         /** Swaps the primary and secondary colours, as tapping Procreate's secondary swatch does. */
         fun swapColors() = updateInput { it.copy(brushColor = it.secondaryColor, secondaryColor = it.brushColor) }
 
