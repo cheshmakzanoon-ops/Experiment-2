@@ -169,6 +169,33 @@ private fun BrushTaperSettings(
             valueRange = 0f..1f,
             valueDisplay = "%.0f%%".format(brushParams.taperOpacity * 100),
         )
+        ShapeSwitch("Separate taper for finger strokes", brushParams.touchTaperStart != null || brushParams.touchTaperEnd != null) { on ->
+            onBrushParamsChanged(
+                if (on) {
+                    brushParams.copy(touchTaperStart = brushParams.taperStart, touchTaperEnd = brushParams.taperEnd)
+                } else {
+                    brushParams.copy(touchTaperStart = null, touchTaperEnd = null)
+                },
+            )
+        }
+        brushParams.touchTaperStart?.let { start ->
+            BrushParameterSlider(
+                label = "Touch start taper",
+                value = start,
+                onValueChange = { onBrushParamsChanged(brushParams.copy(touchTaperStart = it.coerceIn(0f, 1f))) },
+                valueRange = 0f..1f,
+                valueDisplay = "%.0f%%".format(start * 100),
+            )
+        }
+        brushParams.touchTaperEnd?.let { end ->
+            BrushParameterSlider(
+                label = "Touch end taper",
+                value = end,
+                onValueChange = { onBrushParamsChanged(brushParams.copy(touchTaperEnd = it.coerceIn(0f, 1f))) },
+                valueRange = 0f..1f,
+                valueDisplay = "%.0f%%".format(end * 100),
+            )
+        }
         BrushParameterSlider(
             label = "Tip sharpness",
             value = brushParams.tipSharpness,

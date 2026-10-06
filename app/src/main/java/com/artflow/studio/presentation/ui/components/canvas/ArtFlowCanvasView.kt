@@ -1446,6 +1446,7 @@ class ArtFlowCanvasView
             }
 
             gestureTool = tool
+            strokeFromTouch = !isStylus
             val (canvasX, canvasY) = snapped(event, x, y, index)
             val pressure = pressureOf(event, index)
             if (tool == ToolType.EYEDROPPER) {
@@ -1807,6 +1808,9 @@ class ArtFlowCanvasView
         // Brush strokes
         // -----------------------------------------------------------------------------------------
 
+        /** True while the current gesture is a finger, so brushes use their Touch taper. */
+        private var strokeFromTouch = false
+
         private fun startStroke(
             x: Float,
             y: Float,
@@ -1818,7 +1822,7 @@ class ArtFlowCanvasView
                     (input.eraserParams ?: input.brushParams).copy(size = input.eraserSize)
                 } else {
                     input.brushParams
-                }
+                }.let { if (strokeFromTouch) it.forTouch() else it }
             // Dynamic brush scaling keeps the brush the same size on screen at any zoom, as in Procreate.
             val params =
                 if (input.dynamicBrushScaling && scale > 0f) {

@@ -81,11 +81,22 @@ data class BrushParams(
     /** Procreate's taper Tip sharpness, 0..1: higher keeps the tapered end thin for longer, a finer point. */
     val tipSharpness: Float = 0f,
     /** Procreate's Pressure → Flow, 0..1: lighter presses lay thinner paint, on top of pressure → opacity. */
-    val pressureToFlow: Float = 0f, // Colour jitter picks one colour per stroke instead of varying each dab
+    val pressureToFlow: Float = 0f,
+    /** Procreate's Touch taper: start and end tapers for finger strokes; null uses the stylus tapers. */
+    val touchTaperStart: Float? = null,
+    val touchTaperEnd: Float? = null, // Colour jitter picks one colour per stroke instead of varying each dab
 ) {
     /** Flow at [pressure], after Pressure → Flow thins it for lighter presses. */
     fun flowAt(pressure: Float): Float =
         flow.coerceIn(0f, 1f) * (1f - pressureToFlow.coerceIn(0f, 1f) * (1f - pressureResponse(pressure)))
+
+    /** These settings for a finger stroke: the Touch taper replaces the stylus (pressure) taper. */
+    fun forTouch(): BrushParams =
+        if (touchTaperStart == null && touchTaperEnd == null) {
+            this
+        } else {
+            copy(taperStart = touchTaperStart ?: taperStart, taperEnd = touchTaperEnd ?: taperEnd)
+        }
 
     /** How dabs accumulate within one stroke. */
     val rendering: RenderingMode

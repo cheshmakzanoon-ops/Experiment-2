@@ -80,6 +80,8 @@ object BrushLibraryCodec {
                 params.minOpacity,
                 params.tipSharpness,
                 params.pressureToFlow,
+                params.touchTaperStart ?: 0f,
+                params.touchTaperEnd ?: 0f,
                 params.maxOpacity,
                 params.wetBlur,
                 params.flow,

@@ -26,4 +26,13 @@ class BrushLimitsTest {
         assertEquals(0f, brush.flowAt(0f), 1e-5f)
         assertEquals(0.8f, BrushParams(flow = 0.8f).flowAt(0f), 1e-5f)
     }
+
+    @Test
+    fun fingerStrokesUseTheTouchTaper() {
+        val brush = BrushParams(taperStart = 0.1f, taperEnd = 0.2f)
+        assertEquals(brush, brush.forTouch())
+        val touch = brush.copy(touchTaperStart = 0.5f).forTouch()
+        assertEquals(0.5f, touch.taperStart, 0f)
+        assertEquals(0.2f, touch.taperEnd, 0f)
+    }
 }
