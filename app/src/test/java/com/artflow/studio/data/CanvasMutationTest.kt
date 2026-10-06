@@ -690,6 +690,27 @@ class CanvasMutationTest {
         }
 
     @Test
+    fun duplicatingAGroupOrAFrameKeepsItsMembersInTheCopiedGroup() =
+        runTest {
+            val bottom = open()
+            val top = repository.addLayer("Top").id
+            val group = requireNotNull(repository.groupLayers(listOf(bottom, top)))
+            val copy = requireNotNull(repository.duplicateLayer(group))
+            val layers = repository.getAllLayers()
+            val copiedMembers = layers.filter { it.parentGroupId == copy }
+            assertEquals(2, copiedMembers.size)
+            assertEquals(2, layers.count { it.parentGroupId == group })
+            assertTrue(layers.first { it.id == copy }.isGroup)
+
+            repository.addFrame(duplicateCurrent = true)
+            val frame = repository.getAllLayers()
+            val groups = frame.filter { it.isGroup }.map { it.id }.toSet()
+            // Every grouped layer in the copied frame belongs to a group in that frame.
+            assertTrue(frame.filter { it.parentGroupId != null }.all { it.parentGroupId in groups })
+            assertTrue(frame.none { it.id == group || it.id == copy })
+        }
+
+    @Test
     fun theColourProfileIsAssignedAndUndone() =
         runTest {
             open()

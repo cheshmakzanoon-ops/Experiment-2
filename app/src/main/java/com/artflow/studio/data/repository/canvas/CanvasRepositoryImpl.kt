@@ -1051,17 +1051,21 @@ class CanvasRepositoryImpl
             withState {
                 val layers = currentLayers()
                 val position = layers.indexOfFirst { it.id == layerId }
-                if (position == -1 || !hasLayerCapacity(1)) return@withState null
+                if (position == -1) return@withState null
+                // A group is duplicated with everything inside it.
+                val members = if (layers[position].isGroup) subtreeIds(layers, layerId) else setOf(layerId)
+                val block = layers.filter { it.id in members }
+                if (!hasLayerCapacity(block.size)) return@withState null
 
                 pushUndo()
-                val source = layers[position]
-                val newId = nextLayerId++
                 // Copy-on-write means the duplicate can share pixel buffers with the original until one of
                 // them is edited, so duplicating a 4K layer is instant.
-                val duplicate = source.duplicate(newId, "${source.name} copy") { nextStrokeId++ }
-                layers.add(position + 1, duplicate)
+                val copies = duplicateBlock(block) { if (it.id == layerId) "${it.name} copy" else it.name }
+                val newId = copies[block.indexOfFirst { it.id == layerId }].id
+                // Layers sit bottom first; the copy goes just above the original block.
+                val above = layers.indexOfLast { it.id in members } + 1
+                layers.addAll(above, copies)
                 setActiveLayerId(newId)
-                dirtyRasters += newId
                 markRastersShared()
                 dirty = true
                 emit(CanvasInvalidationEvent.LayersChanged)
@@ -1458,6 +1462,24 @@ class CanvasRepositoryImpl
                 emit(CanvasInvalidationEvent.LayersChanged)
                 removing.size
             }
+
+        /**
+         * Copies [block] with fresh ids, in order. Groups inside the block are remapped to their
+         * copies, so the copied children stay in the copied groups rather than the originals.
+         */
+        private fun duplicateBlock(
+            block: List<LayerData>,
+            name: (LayerData) -> String,
+        ): List<LayerData> {
+            val ids = block.associate { it.id to nextLayerId++ }
+            return block.map { layer ->
+                val newId = ids.getValue(layer.id)
+                layer.duplicate(newId, name(layer)) { nextStrokeId++ }.also { copy ->
+                    copy.parentGroupId = layer.parentGroupId?.let { ids[it] ?: it }
+                    dirtyRasters += newId
+                }
+            }
+        }
 
         /** [groupId] and every layer inside it, at any depth. */
         private fun subtreeIds(
@@ -2067,14 +2089,7 @@ class CanvasRepositoryImpl
                             name = "${source.name} copy",
                             durationMs = source.durationMs,
                             isKeyframe = source.isKeyframe,
-                            layers =
-                                source.layers
-                                    .map { layer ->
-                                        val newId = nextLayerId++
-                                        layer
-                                            .duplicate(newId, layer.name) { nextStrokeId++ }
-                                            .also { dirtyRasters += newId }
-                                    }.toMutableList(),
+                            layers = duplicateBlock(source.layers) { it.name }.toMutableList(),
                         )
                     } else {
                         FrameData(
