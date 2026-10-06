@@ -296,6 +296,9 @@ private fun PrefsTab(
     PrefSwitch("Four-finger tap toggles full screen", gestures.fourFingerFullScreen) {
         actions.onGestures(gestures.copy(fourFingerFullScreen = it))
     }
+    PrefSwitch("Touch and hold selects the layer under your finger", gestures.holdSelectsLayer) {
+        actions.onGestures(gestures.copy(holdSelectsLayer = it))
+    }
     PrefSlider(
         label = "Rapid undo delay",
         value = gestures.rapidUndoDelayMs.toFloat(),

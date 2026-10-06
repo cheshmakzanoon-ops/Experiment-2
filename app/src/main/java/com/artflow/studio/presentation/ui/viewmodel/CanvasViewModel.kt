@@ -613,6 +613,7 @@ class CanvasViewModel
                         rapidUndoDelayMs = controls.rapidUndoDelayMs,
                         eyedropperDelayMs = controls.eyedropperDelayMs,
                         quickShapeDelayMs = controls.quickShapeDelayMs,
+                        holdSelectsLayer = controls.holdSelectsLayer,
                     )
                 }
             }

@@ -181,6 +181,12 @@ interface CanvasRepository {
     /** A caller-owned copy of the layer's committed pixels. */
     suspend fun layerPixels(layerId: Long): PixelBuffer?
 
+    /** The topmost visible layer with paint at canvas pixel ([x], [y]), for Layer Select; null when none. */
+    suspend fun layerAt(
+        x: Int,
+        y: Int,
+    ): Long? = null
+
     /** Starts a provisional edit. Exactly one undo entry is created only on a successful commit. */
     suspend fun beginRasterEdit(layerId: Long): RasterEditSession?
 

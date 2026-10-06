@@ -1077,6 +1077,7 @@ fun CanvasScreen(
                                 attachToCanvas(state.width, state.height, state.dpi, state.backgroundColor)
 
                                 onColorPicked = { viewModel.onColorPicked(it) }
+                                onLayerSelected = { viewModel.setActiveLayer(it) }
                                 onSelectionChanged = { mask, count -> viewModel.selectionChanged(mask, count) }
                                 onDragPreview = { dragPreview = it }
                                 onHistoryChanged = { _, _ -> }

@@ -177,11 +177,21 @@ data class GestureControls(
     val rapidUndoDelayMs: Int = 650,
     val eyedropperDelayMs: Int = 500,
     val quickShapeDelayMs: Int = 650,
+    /** Procreate's Layer Select: touch and hold picks the topmost layer painted under the finger. */
+    val holdSelectsLayer: Boolean = false,
 )
 
 /** The gesture preferences the canvas reads, from the stored settings. */
 fun AppSettings.gestureControls(): GestureControls =
-    GestureControls(scrubToClear, swipeCopyPaste, fourFingerFullScreen, rapidUndoDelayMs, eyedropperDelayMs, quickShapeDelayMs)
+    GestureControls(
+        scrubToClear,
+        swipeCopyPaste,
+        fourFingerFullScreen,
+        rapidUndoDelayMs,
+        eyedropperDelayMs,
+        quickShapeDelayMs,
+        holdSelectsLayer,
+    )
 
 /** Brush outline under a hovering stylus, in view pixels. */
 data class BrushCursor(
@@ -413,6 +423,9 @@ class ArtFlowCanvasView
         // --- Callbacks ----------------------------------------------------------------------------
 
         var onColorPicked: ((Int) -> Unit)? = null
+
+        /** Layer Select chose this layer. */
+        var onLayerSelected: ((Long) -> Unit)? = null
 
         /** The eyedropper loupe while colour is being sampled, then null. */
         var onEyedropperChanged: ((EyedropperLoupe?) -> Unit)? = null
@@ -1862,9 +1875,28 @@ class ArtFlowCanvasView
             cancelPixelInteraction()
             previewPoints.clear()
             onDragPreview?.invoke(null)
-            startSampling()
             if (input.haptics) performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+            if (input.gestures.holdSelectsLayer) {
+                gestureTool = null // The rest of this touch does nothing.
+                selectLayerAt(holdCanvasX, holdCanvasY)
+                return
+            }
+            startSampling()
             pickColor(holdCanvasX, holdCanvasY)
+        }
+
+        /** Layer Select: makes the topmost visible layer with paint at the point the active one. */
+        private fun selectLayerAt(
+            x: Float,
+            y: Float,
+        ) {
+            coroutineScope.launch {
+                val layerId = canvasRepository.layerAt(x.roundToInt(), y.roundToInt())
+                when {
+                    layerId == null -> onStatusMessage?.invoke("No layer has paint here")
+                    layerId != activeLayerId -> onLayerSelected?.invoke(layerId)
+                }
+            }
         }
 
         /**

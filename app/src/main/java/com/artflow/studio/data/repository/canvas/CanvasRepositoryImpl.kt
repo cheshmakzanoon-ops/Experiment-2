@@ -770,6 +770,27 @@ class CanvasRepositoryImpl
         override suspend fun layerPixels(layerId: Long): PixelBuffer? =
             withState { layerById(layerId)?.let { rawLayerPixels(it, canvasWidth, canvasHeight)?.copy() } }
 
+        override suspend fun layerAt(
+            x: Int,
+            y: Int,
+        ): Long? =
+            withState {
+                if (x !in 0 until canvasWidth || y !in 0 until canvasHeight) return@withState null
+                val layers = currentLayers()
+                val byId = layers.associateBy { it.id }
+
+                fun shown(layer: LayerData): Boolean =
+                    generateSequence(layer) { it.parentGroupId?.let(byId::get) }.take(layers.size + 1).all { it.isVisible }
+                layers.asReversed().firstOrNull { layer ->
+                    !layer.isGroup &&
+                        !layer.isInternal &&
+                        layer.adjustmentType == null &&
+                        layer.filterType == null &&
+                        shown(layer) &&
+                        rawLayerPixels(layer, canvasWidth, canvasHeight)?.let { (it.getSafe(x, y) ushr 24) != 0 } == true
+                }?.id
+            }
+
         override suspend fun beginRasterEdit(layerId: Long): CanvasRepository.RasterEditSession? =
             withState {
                 val layer = layerById(layerId) ?: return@withState null

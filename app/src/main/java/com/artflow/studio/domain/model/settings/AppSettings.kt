@@ -96,6 +96,8 @@ data class AppSettings(
     val eyedropperDelayMs: Int = 500,
     /** Gesture controls: how long the pen must rest at the end of a stroke before QuickShape snaps. */
     val quickShapeDelayMs: Int = 650,
+    /** Gesture controls: a finger held still selects the layer under it instead of sampling colour. */
+    val holdSelectsLayer: Boolean = false,
     /** Longest side, in pixels, of recorded time-lapse frames (720p, 1080p or 1440p). */
     val timelapseMaxSide: Int = 1280,
     /** Brush size follows the zoom so the brush looks the same size on screen. */
