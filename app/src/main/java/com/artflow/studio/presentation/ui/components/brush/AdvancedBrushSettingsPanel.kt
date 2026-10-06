@@ -202,6 +202,13 @@ private fun BrushPressureSettings(
             valueRange = 0f..1f,
             valueDisplay = "%.0f%%".format(brushParams.pressureToOpacity * 100),
         )
+        BrushParameterSlider(
+            label = "Pressure → Flow",
+            value = brushParams.pressureToFlow,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(pressureToFlow = it.coerceIn(0f, 1f))) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.pressureToFlow * 100),
+        )
 
         // Pressure Curve Selection
         PressureCurveSelector(

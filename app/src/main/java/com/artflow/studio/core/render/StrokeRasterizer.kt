@@ -9,6 +9,7 @@ import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.pixels.Stamping
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.DualBrush
+import com.artflow.studio.domain.model.brush.RenderingMode
 import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.model.brush.StrokePoint
 import com.artflow.studio.domain.model.layer.BlendMode
@@ -464,7 +465,7 @@ class StrokeRasterizer(
         val tilt = ((previous.tiltX + (current.tiltX - previous.tiltX) * t) / HALF_PI).coerceIn(0f, 1f)
         val tiltEffect = params.tiltInfluence.coerceIn(0f, 1f) * tilt
         val size = params.calculateEffectiveSize(pressure, velocity, random) * (1f + TILT_SIZE_GAIN * tiltEffect)
-        val baseOpacity = params.calculateEffectiveOpacity(pressure, velocity, random) * params.flow.coerceIn(0f, 1f)
+        val baseOpacity = params.calculateEffectiveOpacity(pressure, velocity, random) * params.flowAt(pressure)
         val opacity = baseOpacity * (1f - TILT_OPACITY_LOSS * tiltEffect)
 
         // Tapering thins the stroke over the first and last portion of its length.
@@ -597,6 +598,9 @@ class StrokeRasterizer(
             params.dilution <= 0f &&
             params.pull <= 0f &&
             params.tiltInfluence <= 0f &&
+            // The capsule paints one plain coverage in the chosen colour; other renderings and tilt colour need dabs.
+            params.rendering in CAPSULE_RENDERINGS &&
+            !params.colorDynamics.isActive &&
             CustomGrains.get(params.shapeId) == null &&
             points.size <= 2 &&
             params.count == 1 &&
@@ -616,6 +620,7 @@ class StrokeRasterizer(
                 params.velocityToHue,
                 params.secondaryPressure,
                 params.secondaryJitter,
+                params.pressureToFlow,
             ).all { it == 0f }
 
     private fun drawSegment(
@@ -891,3 +896,6 @@ private val BLUR_TAPS = listOf(0f to 0f, 1f to 0f, -1f to 0f, 0f to 1f, 0f to -1
 
 /** Tip sharpness at full raises the taper ramp to this extra power. */
 private const val SHARPNESS_CURVE = 3f
+
+/** Renderings the single-capsule fast path reproduces exactly. */
+private val CAPSULE_RENDERINGS = setOf(RenderingMode.LIGHT_GLAZE, RenderingMode.UNIFORM_BLENDING)

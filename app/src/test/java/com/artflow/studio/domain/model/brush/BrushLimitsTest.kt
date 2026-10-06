@@ -18,4 +18,12 @@ class BrushLimitsTest {
         assertEquals(MIN_BRUSH_SIZE..MAX_BRUSH_SIZE, BrushParams(minSize = Float.NaN, maxSize = 9000f).sizeLimits)
         assertEquals(0.2f..0.6f, BrushParams(minOpacity = 0.2f, maxOpacity = 0.6f).opacityLimits)
     }
+
+    @Test
+    fun pressureToFlowThinsLightPresses() {
+        val brush = BrushParams(flow = 0.8f, pressureToFlow = 1f)
+        assertEquals(0.8f, brush.flowAt(1f), 1e-5f)
+        assertEquals(0f, brush.flowAt(0f), 1e-5f)
+        assertEquals(0.8f, BrushParams(flow = 0.8f).flowAt(0f), 1e-5f)
+    }
 }

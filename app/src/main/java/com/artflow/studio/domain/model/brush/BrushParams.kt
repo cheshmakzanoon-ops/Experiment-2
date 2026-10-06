@@ -79,8 +79,14 @@ data class BrushParams(
     /** Procreate's rendering mode; null keeps the older [buildUp] switch (Light glaze or Uniform blending). */
     val renderingMode: RenderingMode? = null,
     /** Procreate's taper Tip sharpness, 0..1: higher keeps the tapered end thin for longer, a finer point. */
-    val tipSharpness: Float = 0f, // Colour jitter picks one colour per stroke instead of varying each dab
+    val tipSharpness: Float = 0f,
+    /** Procreate's Pressure → Flow, 0..1: lighter presses lay thinner paint, on top of pressure → opacity. */
+    val pressureToFlow: Float = 0f, // Colour jitter picks one colour per stroke instead of varying each dab
 ) {
+    /** Flow at [pressure], after Pressure → Flow thins it for lighter presses. */
+    fun flowAt(pressure: Float): Float =
+        flow.coerceIn(0f, 1f) * (1f - pressureToFlow.coerceIn(0f, 1f) * (1f - pressureResponse(pressure)))
+
     /** How dabs accumulate within one stroke. */
     val rendering: RenderingMode
         get() = renderingMode ?: if (buildUp) RenderingMode.UNIFORM_BLENDING else RenderingMode.LIGHT_GLAZE
