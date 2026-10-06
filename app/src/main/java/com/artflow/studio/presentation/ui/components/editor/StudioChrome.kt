@@ -496,6 +496,15 @@ fun TransformToolbar(
             onClick = { actions.onAssist(assist.copy(snapping = !assist.snapping)) },
             label = { Text("Snapping") },
         )
+        if (assist.snapping) {
+            Text("Distance ${assist.snapDistance.toInt()}", style = MaterialTheme.typography.labelMedium)
+            Slider(
+                value = assist.snapDistance,
+                onValueChange = { actions.onAssist(assist.copy(snapDistance = it)) },
+                valueRange = 1f..TransformQuad.Assist.MAX_SNAP_DISTANCE,
+                modifier = Modifier.width(140.dp).semantics { contentDescription = "Snapping distance" },
+            )
+        }
         VerticalDivider(Modifier.height(24.dp))
         AssistChip(onClick = { actions.onFlip(true) }, label = { Text("Flip Horizontal") })
         AssistChip(onClick = { actions.onFlip(false) }, label = { Text("Flip Vertical") })

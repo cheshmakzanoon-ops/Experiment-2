@@ -115,6 +115,15 @@ class TransformQuadTest {
         assertTrue(rows.isEmpty())
     }
 
+    @Test fun aLargerSnappingDistanceReachesFartherLines() {
+        val box = Quad(10f, 10f, 30f, 10f, 30f, 30f, 10f, 30f)
+        val assist = TransformQuad.Assist(snapping = true, snapDistance = 10f)
+        // The bottom edge ends at 71, 9 pixels above the canvas edge: within 10, so it snaps there.
+        val area = TransformQuad.SnapArea(100, 80, assist.snapDistance)
+        val moved = TransformQuad.drag(box, Target.Body, TransformQuad.Mode.FREEFORM, 0f to 0f, 28f to 41f, assist, area)
+        assertEquals(70f, moved.centerY, 1e-3f)
+    }
+
     @Test
     fun aTapOutsideTheBoxNudgesItOnePixelTowardTheTap() {
         val box = Quad.fromBounds(IntBounds(10, 10, 29, 29))

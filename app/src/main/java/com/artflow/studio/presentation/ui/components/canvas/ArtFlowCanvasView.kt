@@ -1105,7 +1105,7 @@ class ArtFlowCanvasView
                 transformPreviewMesh = (warpStartMesh ?: return).drag(warpTarget, x - moveOriginX(), y - moveOriginY())
             } else {
                 val start = transformStartQuad ?: return
-                val area = TransformQuad.SnapArea(session.base.width, session.base.height, SNAP_DISTANCE_PX / scale)
+                val area = TransformQuad.SnapArea(session.base.width, session.base.height, input.transformAssist.snapDistance / scale)
                 transformPreviewQuad =
                     TransformQuad.drag(
                         start,
@@ -3091,7 +3091,6 @@ class ArtFlowCanvasView
             private const val RAPID_HISTORY_REPEAT_MS = 220L
             private const val MAX_STRING_DP = 60f
             private const val KNOB_DISTANCE_PX = 48f
-            private const val SNAP_DISTANCE_PX = 12f
             private const val TRANSFORM_PREVIEW_INTERVAL_MS = 33L
             private const val TAP_TIMEOUT_MS = 320L
             private const val SNAP_TOLERANCE = 12f

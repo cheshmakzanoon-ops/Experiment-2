@@ -280,7 +280,14 @@ object TransformQuad {
         val magnetics: Boolean = false,
         /** The box's edges and centre snap to the canvas edges and centre lines. */
         val snapping: Boolean = false,
-    )
+        /** Snapping's Distance: how close (screen pixels) the box must come before it snaps. */
+        val snapDistance: Float = DEFAULT_SNAP_DISTANCE,
+    ) {
+        companion object {
+            const val DEFAULT_SNAP_DISTANCE = 12f
+            const val MAX_SNAP_DISTANCE = 60f
+        }
+    }
 
     /** Canvas size and snap distance (canvas pixels) for [Assist.snapping]. */
     data class SnapArea(
