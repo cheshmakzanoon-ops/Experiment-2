@@ -65,6 +65,7 @@ import com.artflow.studio.domain.model.settings.pressureAndSmoothing
 import com.artflow.studio.presentation.ui.components.brush.BrushStudioDialog
 import com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView
 import com.artflow.studio.presentation.ui.components.canvas.BrushCursor
+import com.artflow.studio.presentation.ui.components.canvas.CanvasProjection
 import com.artflow.studio.presentation.ui.components.canvas.DragPreview
 import com.artflow.studio.presentation.ui.components.canvas.EditorInput
 import com.artflow.studio.presentation.ui.components.canvas.EyedropperLoupe
@@ -828,6 +829,7 @@ fun CanvasScreen(
                             brushCursor = settings.brushCursor,
                             dynamicBrushScaling = settings.dynamicBrushScaling,
                             selectionMaskVisibility = settings.selectionMaskVisibility,
+                            projectCanvas = settings.projectCanvas,
                         ),
                     add =
                         AddActions(
@@ -909,6 +911,7 @@ fun CanvasScreen(
                             onBrushCursor = { on -> viewModel.updateSettings { it.copy(brushCursor = on) } },
                             onDynamicBrushScaling = { on -> viewModel.updateSettings { it.copy(dynamicBrushScaling = on) } },
                             onSelectionMaskVisibility = { v -> viewModel.updateSettings { it.copy(selectionMaskVisibility = v) } },
+                            onProjectCanvas = { on -> viewModel.updateSettings { it.copy(projectCanvas = on) } },
                         ),
                     onShare = { panel = EditorPanel.EXPORT },
                     canPaste = hasClipboard,
@@ -1445,6 +1448,11 @@ fun CanvasScreen(
             },
             onDismiss = { showBrushEditor = false },
         )
+    }
+
+    val projected by viewModel.projection.image.collectAsState()
+    CanvasProjection(settings.projectCanvas, projected) { side ->
+        if (side == null) viewModel.projection.stop() else viewModel.projection.start(side)
     }
 
     layers.firstOrNull { it.id == effectsLayerId }?.let { layer ->

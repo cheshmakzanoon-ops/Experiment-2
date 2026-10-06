@@ -807,6 +807,9 @@ class CanvasViewModel
 
         val layerThumbnails = LayerThumbnailController(canvasRepository, viewModelScope)
 
+        /** The artwork for an external display, while Project Canvas is showing it. */
+        val projection = CanvasProjectionController(canvasRepository, viewModelScope)
+
         fun duplicateActiveLayer() = duplicateLayer(canvasRepository.getActiveLayerId())
 
         /** Adds every layer of a Photoshop document as new layers, centred on the canvas. */

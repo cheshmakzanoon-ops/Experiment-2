@@ -68,6 +68,7 @@ data class StudioPrefs(
     val brushCursor: Boolean = true,
     val dynamicBrushScaling: Boolean = false,
     val selectionMaskVisibility: Float = 0.28f,
+    val projectCanvas: Boolean = false,
 )
 
 data class PrefActions(
@@ -84,6 +85,7 @@ data class PrefActions(
     val onBrushCursor: (Boolean) -> Unit = {},
     val onDynamicBrushScaling: (Boolean) -> Unit = {},
     val onSelectionMaskVisibility: (Float) -> Unit = {},
+    val onProjectCanvas: (Boolean) -> Unit = {},
 )
 
 /** Canvas facts shown under Canvas > Canvas information. */
@@ -233,6 +235,7 @@ private fun PrefsTab(
     PrefSwitch("QuickShape (hold at the end of a stroke)", prefs.quickShape, actions.onQuickShape)
     PrefSwitch("Touch and hold for eyedropper", prefs.holdEyedropper, actions.onHoldEyedropper)
     PrefSwitch("Paint with a finger", prefs.fingerPainting, actions.onFingerPainting)
+    PrefSwitch("Project canvas on a second screen", prefs.projectCanvas, actions.onProjectCanvas)
     PrefSlider(
         label = "Selection mask",
         value = prefs.selectionMaskVisibility,

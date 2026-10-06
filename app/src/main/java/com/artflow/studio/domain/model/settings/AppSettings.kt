@@ -93,6 +93,8 @@ data class AppSettings(
     val dynamicBrushScaling: Boolean = false,
     /** Prefs > Selection mask visibility: how strongly the selected area is tinted (0..1). */
     val selectionMaskVisibility: Float = 0.28f,
+    /** Prefs > Project canvas: a second screen shows the artwork alone, without the interface. */
+    val projectCanvas: Boolean = false,
     /** The QuickMenu's six actions, by label, clockwise from the top; touch and hold a slot to change it. */
     val quickMenu: List<String> = listOf("New layer", "Merge down", "Flip horizontal", "Clear layer", "Copy", "Paste"),
     // Saving

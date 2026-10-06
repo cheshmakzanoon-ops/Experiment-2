@@ -235,6 +235,7 @@ class SettingsRepositoryImpl
                 KEY_TIMELAPSE_SIDE to settings.timelapseMaxSide.toString(),
                 KEY_DYNAMIC_BRUSH to settings.dynamicBrushScaling.toString(),
                 KEY_SELECTION_VISIBILITY to settings.selectionMaskVisibility.toString(),
+                KEY_PROJECT_CANVAS to settings.projectCanvas.toString(),
                 KEY_QUICK_MENU to settings.quickMenu.joinToString("|"),
                 KEY_AUTOSAVE to settings.autosaveEnabled.toString(),
                 KEY_AUTOSAVE_INTERVAL to settings.autosaveIntervalMs.toString(),
@@ -311,6 +312,7 @@ class SettingsRepositoryImpl
                     stored[KEY_TIMELAPSE_SIDE]?.toIntOrNull()?.takeIf { it in TIMELAPSE_SIDES } ?: defaults.timelapseMaxSide,
                 dynamicBrushScaling = stored.flag(KEY_DYNAMIC_BRUSH, defaults.dynamicBrushScaling),
                 selectionMaskVisibility = stored.unit(KEY_SELECTION_VISIBILITY) ?: defaults.selectionMaskVisibility,
+                projectCanvas = stored.flag(KEY_PROJECT_CANVAS, defaults.projectCanvas),
                 quickMenu = stored.slots(KEY_QUICK_MENU, defaults.quickMenu),
                 autosaveEnabled = stored.flag(KEY_AUTOSAVE, defaults.autosaveEnabled),
                 autosaveIntervalMs =
@@ -388,6 +390,7 @@ class SettingsRepositoryImpl
             private const val KEY_TIMELAPSE_SIDE = "timelapse.maxSide"
             private const val KEY_DYNAMIC_BRUSH = "brush.dynamicScaling"
             private const val KEY_SELECTION_VISIBILITY = "canvas.selectionMaskVisibility"
+            private const val KEY_PROJECT_CANVAS = "canvas.project"
 
             /** Time-lapse recording sizes offered in Prefs: 720p, 1080p and 1440p. */
             val TIMELAPSE_SIDES = listOf(1280, 1920, 2560)
