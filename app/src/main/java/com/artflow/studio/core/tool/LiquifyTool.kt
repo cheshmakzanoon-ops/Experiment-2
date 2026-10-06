@@ -89,6 +89,17 @@ object LiquifyTool {
             dirtyBounds = null
         }
 
+        /** The same field with every offset multiplied by [factor] (Liquify's Adjust). */
+        fun scaled(factor: Float): DisplacementMap {
+            val out = DisplacementMap(width, height)
+            if (isEmpty()) return out
+            for (index in 0 until count) {
+                if (!touched[index]) continue
+                out.add(index % width, index / width, offsetX[index] * factor, offsetY[index] * factor)
+            }
+            return out
+        }
+
         /** Bilinear resample of [source] through this field. */
         fun apply(source: PixelBuffer): PixelBuffer {
             require(source.width == width && source.height == height) { "Displacement dimensions must match the layer" }
@@ -380,6 +391,18 @@ object LiquifyTool {
                     reconstructionBounds = reconstructionBounds?.union(pixel) ?: pixel
                 }
             }
+        }
+
+        /**
+         * Liquify's Adjust: [source] (the pixels before this gesture) distorted by [strength] times
+         * the gesture's distortion, from none at 0 to the full gesture at 1.
+         */
+        fun renderAdjusted(
+            source: PixelBuffer,
+            strength: Float,
+        ): PixelBuffer {
+            if (settings.mode == Mode.RECONSTRUCT) return render(source)
+            return retainCoverage(map.scaled(strength.coerceIn(0f, 1f)).apply(source), source)
         }
 
         /** Reconstruct always reads a fixed pre-liquify reference, never its own previous preview. */

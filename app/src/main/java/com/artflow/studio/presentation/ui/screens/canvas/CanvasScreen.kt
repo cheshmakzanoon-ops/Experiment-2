@@ -1683,6 +1683,17 @@ private fun ToolOptionsPanel(
                     modifier = Modifier.semantics { contentDescription = "Liquify pressure" },
                 )
             }
+            canvasView?.liquifyAdjustGesture?.takeIf { it != 0L }?.let { gesture ->
+                // Adjust re-renders the last gesture at a fraction of its distortion when released.
+                var amount by remember(gesture) { mutableFloatStateOf(1f) }
+                Text("Adjust last gesture ${(amount * 100).toInt()}%", style = MaterialTheme.typography.labelSmall)
+                Slider(
+                    value = amount,
+                    onValueChange = { amount = it },
+                    onValueChangeFinished = { canvasView?.adjustLiquify(amount) },
+                    modifier = Modifier.semantics { contentDescription = "Adjust last liquify gesture" },
+                )
+            }
             TextButton(onClick = viewModel::resetLiquify) { Text("Reset liquify") }
         }
         if (input.tool == ToolType.TRANSFORM) TransformOptions(viewModel, input, canvasView)

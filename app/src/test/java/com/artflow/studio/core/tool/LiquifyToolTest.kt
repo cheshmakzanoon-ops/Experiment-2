@@ -273,6 +273,16 @@ class LiquifyToolTest {
         assertTrue(channel(drag(usePressure = false), 32, 32) < channel(source, 32, 32))
     }
 
+    @Test
+    fun adjustScalesTheGestureFromNoneToFull() {
+        val source = ramp(horizontal = true)
+        val push = session(LiquifyTool.Mode.PUSH).apply { dragTo(center + 6f, center) }
+        assertArrayEquals(source.pixels, push.renderAdjusted(source, 0f).pixels)
+        assertArrayEquals(push.render(source).pixels, push.renderAdjusted(source, 1f).pixels)
+        val half = channel(push.renderAdjusted(source, 0.5f), 32, 32)
+        assertTrue(half < channel(source, 32, 32) && half > channel(push.render(source), 32, 32))
+    }
+
     private fun session(
         mode: LiquifyTool.Mode,
         strength: Float = 1f,

@@ -9,6 +9,9 @@ import android.os.SystemClock
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.animation.DecelerateInterpolator
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.math.MathUtils
 import com.artflow.studio.core.animation.OnionSkin
 import com.artflow.studio.core.canvas.MotionFilter
@@ -378,9 +381,30 @@ class ArtFlowCanvasView
         private fun resetLiquifyReference() {
             liquifyContextVersion++
             liquifyReference = null
+            clearLiquifyAdjust()
         }
 
         private var gestureLiquifyReference: LiquifyReference? = null
+
+        /** The last committed liquify gesture, kept so Adjust can re-render it at another strength. */
+        private class AdjustableLiquify(
+            val session: LiquifyTool.Session,
+            val original: PixelBuffer,
+            val layerId: Long,
+            var historyMark: Long,
+        )
+
+        private var adjustableLiquify: AdjustableLiquify? = null
+        private var liquifyAdjustJob: Job? = null
+
+        /** Counts liquify gestures that Adjust can still change; 0 when there is none. */
+        var liquifyAdjustGesture by mutableLongStateOf(0L)
+            private set
+
+        private fun clearLiquifyAdjust() {
+            adjustableLiquify = null
+            liquifyAdjustGesture = 0L
+        }
         private var cloneSource: Pair<Float, Float>? = null
         private var cloneDragStarted = false
         private var lastPreviewRequest = 0L
@@ -2416,6 +2440,7 @@ class ArtFlowCanvasView
                                 if (finalLiquify != null && reference != null && reference.contextVersion == liquifyContextVersion) {
                                     liquifyReference = reference.copy(revision = canvasRepository.contentRevision)
                                 }
+                                if (finalLiquify != null && original != null) rememberForAdjust(finalLiquify, original, session.layerId)
                                 reportHistory()
                             } else {
                                 onStatusMessage?.invoke("The layer changed; this gesture was discarded")
@@ -2433,6 +2458,48 @@ class ArtFlowCanvasView
                     }
                 }
             }
+        }
+
+        private fun rememberForAdjust(
+            gesture: LiquifyTool.Session,
+            original: PixelBuffer,
+            layerId: Long,
+        ) {
+            if (gesture.settings.mode == LiquifyTool.Mode.RECONSTRUCT) return
+            adjustableLiquify = AdjustableLiquify(gesture, original, layerId, canvasRepository.historyMark)
+            liquifyAdjustGesture++
+        }
+
+        /**
+         * Liquify's Adjust: replaces the last liquify gesture with the same gesture at [strength]
+         * (0 to 1) of its distortion, as the same single undo step. Does nothing once anything else
+         * has changed the history since.
+         */
+        fun adjustLiquify(strength: Float) {
+            val previous = liquifyAdjustJob
+            liquifyAdjustJob =
+                coroutineScope.launch {
+                    previous?.join()
+                    val last = adjustableLiquify ?: return@launch
+                    val revision = canvasRepository.contentRevision
+                    if (rasterSession != null || canvasRepository.historyMark != last.historyMark || !canvasRepository.undo()) {
+                        clearLiquifyAdjust()
+                        onStatusMessage?.invoke("Adjust only changes the latest liquify gesture")
+                        return@launch
+                    }
+                    val adjusted = withContext(Dispatchers.Default) { last.session.renderAdjusted(last.original, strength) }
+                    val reference = liquifyReference
+                    if (canvasRepository.applyRasterEdit(last.layerId, "Liquify") { adjusted.pixels.copyInto(it.pixels) }) {
+                        last.historyMark = canvasRepository.historyMark
+                        if (reference != null && reference.revision == revision) {
+                            liquifyReference = reference.copy(revision = canvasRepository.contentRevision)
+                        }
+                    } else {
+                        canvasRepository.redo()
+                        clearLiquifyAdjust()
+                    }
+                    reportHistory()
+                }
         }
 
         private fun requestPreviewRefresh() {
