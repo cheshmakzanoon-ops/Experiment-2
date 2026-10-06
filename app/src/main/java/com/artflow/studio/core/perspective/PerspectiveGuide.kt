@@ -58,6 +58,10 @@ object PerspectiveGuide {
         /** Isometric grid: grid cell size in pixels. */
         val gridSpacing: Int = 64,
         val showHorizon: Boolean = true,
+        /** Procreate's guide appearance: the lines' colour (RGB), opacity (0 to 1) and thickness (times a hairline). */
+        val lineColor: Int = DEFAULT_LINE_COLOR,
+        val lineOpacity: Float = 0.6f,
+        val lineThickness: Float = 1f,
     ) {
         fun isActive(): Boolean = type != GuideType.NONE
 
@@ -80,6 +84,12 @@ object PerspectiveGuide {
         /** Vanishing point index this ray belongs to, or -1 for the horizon / isometric grid. */
         val pointIndex: Int = -1,
     )
+
+    /** The guide's default line colour, a soft green. */
+    const val DEFAULT_LINE_COLOR = 0xFF88CC66.toInt()
+
+    /** Thickest guide line, in hairlines. */
+    const val MAX_LINE_THICKNESS = 4f
 
     val DEFAULT_POINTS: List<VanishingPoint> =
         listOf(

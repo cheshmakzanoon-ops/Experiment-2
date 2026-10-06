@@ -328,10 +328,10 @@ fun GuidesOverlay(
                 PerspectiveGuide.guideLines(perspective, canvasWidth, canvasHeight).forEach { line ->
                     val clipped = PerspectiveGuide.clipToCanvas(line, canvasWidth, canvasHeight) ?: return@forEach
                     drawLine(
-                        color = Color(0x9988CC66),
+                        color = Color(perspective.lineColor).copy(alpha = perspective.lineOpacity.coerceIn(0.05f, 1f)),
                         start = Offset(clipped.startX, clipped.startY),
                         end = Offset(clipped.endX, clipped.endY),
-                        strokeWidth = hairline,
+                        strokeWidth = hairline * perspective.lineThickness.coerceIn(0.5f, PerspectiveGuide.MAX_LINE_THICKNESS),
                     )
                 }
             }

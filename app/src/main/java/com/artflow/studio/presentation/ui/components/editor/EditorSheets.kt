@@ -1119,6 +1119,7 @@ fun GuidesSheet(
         if (perspective.activePointCount() > 0) {
             OutlinedButton(onClick = assist.onEditPoints) { Text("Edit vanishing points") }
         }
+        GuideAppearance(perspective, onPerspective)
         LabeledSlider(
             label = "Horizon",
             value = perspective.horizonY,
@@ -1380,6 +1381,52 @@ private fun LabeledSlider(
         )
     }
 }
+
+/** Procreate's guide appearance: line colour, opacity and thickness. */
+@Composable
+private fun GuideAppearance(
+    perspective: PerspectiveGuide.Settings,
+    onPerspective: (PerspectiveGuide.Settings) -> Unit,
+) {
+    Text("Guide colour", style = MaterialTheme.typography.labelMedium)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        GUIDE_SWATCHES.forEach { (name, swatch) ->
+            ColorChip(
+                swatch,
+                onClick = { onPerspective(perspective.copy(lineColor = swatch)) },
+                modifier =
+                    Modifier
+                        .border(if (swatch == perspective.lineColor) 3.dp else 1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                        .semantics {
+                            contentDescription = "$name guide"
+                            selected = swatch == perspective.lineColor
+                        },
+            )
+        }
+    }
+    LabeledSlider(
+        label = "Guide opacity",
+        value = perspective.lineOpacity,
+        range = 0.05f..1f,
+        onChange = { onPerspective(perspective.copy(lineOpacity = it)) },
+    )
+    LabeledSlider(
+        label = "Guide thickness",
+        value = perspective.lineThickness,
+        range = 0.5f..PerspectiveGuide.MAX_LINE_THICKNESS,
+        onChange = { onPerspective(perspective.copy(lineThickness = it)) },
+    )
+}
+
+private val GUIDE_SWATCHES =
+    listOf(
+        "Green" to PerspectiveGuide.DEFAULT_LINE_COLOR,
+        "Blue" to 0xFF2D9CDB.toInt(),
+        "Red" to 0xFFE53935.toInt(),
+        "Purple" to 0xFF8E24AA.toInt(),
+        "Black" to 0xFF111111.toInt(),
+        "White" to 0xFFFFFFFF.toInt(),
+    )
 
 /** Quick text colours; any other comes from the Colour panel. */
 private val TEXT_SWATCHES =
