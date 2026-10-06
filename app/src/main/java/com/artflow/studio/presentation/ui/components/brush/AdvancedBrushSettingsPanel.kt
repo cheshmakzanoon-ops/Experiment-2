@@ -278,6 +278,20 @@ private fun BrushGrainSettings(
                 valueRange = 0f..1f,
                 valueDisplay = "%.0f%%".format(brushParams.grainDepth * 100),
             )
+            BrushParameterSlider(
+                label = "Grain brightness",
+                value = brushParams.grainBrightness.coerceIn(-1f, 1f),
+                onValueChange = { onBrushParamsChanged(brushParams.copy(grainBrightness = it)) },
+                valueRange = -1f..1f,
+                valueDisplay = "%+.0f%%".format(brushParams.grainBrightness * 100),
+            )
+            BrushParameterSlider(
+                label = "Grain contrast",
+                value = brushParams.grainContrast.coerceIn(-1f, 1f),
+                onValueChange = { onBrushParamsChanged(brushParams.copy(grainContrast = it)) },
+                valueRange = -1f..1f,
+                valueDisplay = "%+.0f%%".format(brushParams.grainContrast * 100),
+            )
             ShapeSwitch("Moving grain (starts with each stroke)", brushParams.grainMoving) {
                 onBrushParamsChanged(brushParams.copy(grainMoving = it))
             }

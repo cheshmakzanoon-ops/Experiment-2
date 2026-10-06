@@ -39,6 +39,20 @@ class CustomGrainsTest {
         assertFalse(CustomGrains.isCustom("paper"))
     }
 
+    @Test fun grainBrightnessAndContrastFilterTheGrain() {
+        val paper = BrushParams(textureId = "paper", blendTexture = true)
+        val plain = BrushTexture.from(paper)!!
+        val points = (0 until 64).map { it to it * 3 }
+
+        fun mean(texture: BrushTexture) = points.sumOf { (x, y) -> texture.coverage(x, y).toDouble() } / points.size
+
+        fun spread(texture: BrushTexture) = points.map { (x, y) -> texture.coverage(x, y) }.let { it.max() - it.min() }
+        assertTrue(mean(BrushTexture.from(paper.copy(grainBrightness = 0.5f))!!) > mean(plain))
+        assertTrue(mean(BrushTexture.from(paper.copy(grainBrightness = -0.5f))!!) < mean(plain))
+        assertTrue(spread(BrushTexture.from(paper.copy(grainContrast = -0.8f))!!) < spread(plain))
+        assertEquals(plain.coverage(7, 9), BrushTexture.from(paper.copy(grainBrightness = 0f, grainContrast = 0f))!!.coverage(7, 9), 0f)
+    }
+
     @Test fun importedShapeStampsItsImage() {
         // A tile that is white on its left half only: the dab paints only left of centre.
         val values = ByteArray(16 * 16) { (if (it % 16 < 8) -1 else 0).toByte() }

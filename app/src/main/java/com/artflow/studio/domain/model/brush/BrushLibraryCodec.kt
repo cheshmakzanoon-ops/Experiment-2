@@ -85,6 +85,9 @@ object BrushLibraryCodec {
                 params.velocityToHue,
             )
         require(unitValues.all { it in 0f..1f }) { "Brush dynamics must be finite values between zero and one" }
+        require(listOf(params.grainBrightness, params.grainContrast).all { it in -1f..1f }) {
+            "Grain brightness and contrast must be within -1 and 1"
+        }
         // PressureResponse validates finite, monotone control points during deserialization.
     }
 }

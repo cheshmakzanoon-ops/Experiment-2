@@ -18,6 +18,10 @@ class BrushTexture private constructor(
     rotation: Float,
     /** Procreate's grain Depth: 1 shows the grain fully, 0 not at all. */
     private val depth: Float = 1f,
+    /** Grain Brightness, -1 to 1: lifts or darkens the whole grain. */
+    private val brightness: Float = 0f,
+    /** Grain Contrast, -1 to 1: flattens the grain toward grey or pushes it toward black and white. */
+    private val contrast: Float = 0f,
 ) {
     enum class Kind(
         val id: String,
@@ -41,7 +45,15 @@ class BrushTexture private constructor(
     fun coverage(
         x: Int,
         y: Int,
-    ): Float = if (depth >= 1f) grain(x, y) else 1f - depth * (1f - grain(x, y))
+    ): Float {
+        val grain = filtered(grain(x, y))
+        return if (depth >= 1f) grain else 1f - depth * (1f - grain)
+    }
+
+    private fun filtered(grain: Float): Float {
+        if (brightness == 0f && contrast == 0f) return grain
+        return ((grain - HALF) * (1f + contrast) + HALF + brightness * HALF).coerceIn(0f, 1f)
+    }
 
     private fun grain(
         x: Int,
@@ -118,6 +130,7 @@ class BrushTexture private constructor(
         private const val BLOTCH_CELL = 14f
         private const val HALFTONE_CELL = 6
         private const val HALFTONE_RADIUS = 2.2f
+        private const val HALF = 0.5f
 
         fun from(params: BrushParams): BrushTexture? {
             if (!params.blendTexture) return null
@@ -125,7 +138,17 @@ class BrushTexture private constructor(
             val tile = if (kind == null) CustomGrains.get(params.textureId) ?: return null else null
             require(params.textureScale.isFinite() && params.textureRotation.isFinite()) { "Texture settings must be finite" }
             val depth = if (params.grainDepth.isFinite()) params.grainDepth.coerceIn(0f, 1f) else 1f
-            return BrushTexture(kind, tile, params.textureScale.coerceIn(0.25f, 8f), params.textureRotation % 360f, depth)
+            return BrushTexture(
+                kind,
+                tile,
+                params.textureScale.coerceIn(0.25f, 8f),
+                params.textureRotation % 360f,
+                depth,
+                signedUnit(params.grainBrightness),
+                signedUnit(params.grainContrast),
+            )
         }
+
+        private fun signedUnit(value: Float): Float = if (value.isFinite()) value.coerceIn(-1f, 1f) else 0f
     }
 }
