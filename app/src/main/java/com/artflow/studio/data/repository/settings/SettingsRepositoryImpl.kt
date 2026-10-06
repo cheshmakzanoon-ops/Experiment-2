@@ -3,6 +3,7 @@ package com.artflow.studio.data.repository.settings
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.color.PaletteCodec
+import com.artflow.studio.core.pixels.AreaSample
 import com.artflow.studio.data.local.dao.SettingsDao
 import com.artflow.studio.data.local.entity.SettingsEntity
 import com.artflow.studio.domain.model.brush.PressureResponse
@@ -239,6 +240,7 @@ class SettingsRepositoryImpl
                 KEY_EYEDROPPER_DELAY to settings.eyedropperDelayMs.toString(),
                 KEY_QUICKSHAPE_DELAY to settings.quickShapeDelayMs.toString(),
                 KEY_HOLD_SELECTS_LAYER to settings.holdSelectsLayer.toString(),
+                KEY_EYEDROPPER_SAMPLE to settings.eyedropperSample.toString(),
                 KEY_TIMELAPSE_SIDE to settings.timelapseMaxSide.toString(),
                 KEY_DYNAMIC_BRUSH to settings.dynamicBrushScaling.toString(),
                 KEY_SELECTION_VISIBILITY to settings.selectionMaskVisibility.toString(),
@@ -333,6 +335,8 @@ class SettingsRepositoryImpl
                 eyedropperDelayMs = stored.delay(KEY_EYEDROPPER_DELAY) ?: defaults.eyedropperDelayMs,
                 quickShapeDelayMs = stored.delay(KEY_QUICKSHAPE_DELAY) ?: defaults.quickShapeDelayMs,
                 holdSelectsLayer = stored.flag(KEY_HOLD_SELECTS_LAYER, defaults.holdSelectsLayer),
+                eyedropperSample =
+                    stored[KEY_EYEDROPPER_SAMPLE]?.toIntOrNull()?.takeIf { it in AreaSample.SIZES } ?: defaults.eyedropperSample,
                 timelapseMaxSide =
                     stored[KEY_TIMELAPSE_SIDE]?.toIntOrNull()?.takeIf { it in TIMELAPSE_SIDES } ?: defaults.timelapseMaxSide,
                 dynamicBrushScaling = stored.flag(KEY_DYNAMIC_BRUSH, defaults.dynamicBrushScaling),
@@ -418,6 +422,7 @@ class SettingsRepositoryImpl
             private const val KEY_EYEDROPPER_DELAY = "gesture.eyedropperDelayMs"
             private const val KEY_QUICKSHAPE_DELAY = "gesture.quickShapeDelayMs"
             private const val KEY_HOLD_SELECTS_LAYER = "gesture.holdSelectsLayer"
+            private const val KEY_EYEDROPPER_SAMPLE = "gesture.eyedropperSample"
             private const val MIN_RAPID_UNDO_DELAY_MS = 200
             private const val MAX_RAPID_UNDO_DELAY_MS = 1500
             private const val KEY_TIMELAPSE_SIDE = "timelapse.maxSide"

@@ -99,6 +99,8 @@ data class AppSettings(
     val quickShapeDelayMs: Int = 650,
     /** Gesture controls: a finger held still selects the layer under it instead of sampling colour. */
     val holdSelectsLayer: Boolean = false,
+    /** Gesture controls: the eyedropper samples 1 pixel or averages a 3, 5 or 11 pixel square. */
+    val eyedropperSample: Int = 1,
     /** Longest side, in pixels, of recorded time-lapse frames (720p, 1080p or 1440p). */
     val timelapseMaxSide: Int = 1280,
     /** Brush size follows the zoom so the brush looks the same size on screen. */

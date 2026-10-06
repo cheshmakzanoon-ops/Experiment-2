@@ -627,6 +627,7 @@ class CanvasViewModel
                         eyedropperDelayMs = controls.eyedropperDelayMs,
                         quickShapeDelayMs = controls.quickShapeDelayMs,
                         holdSelectsLayer = controls.holdSelectsLayer,
+                        eyedropperSample = controls.eyedropperSample,
                     )
                 }
             }

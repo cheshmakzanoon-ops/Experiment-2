@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.artflow.studio.core.color.CmykProof
 import com.artflow.studio.core.color.ViewFilter
+import com.artflow.studio.core.pixels.AreaSample
 import com.artflow.studio.domain.model.brush.PressureResponse
 import com.artflow.studio.domain.model.settings.PressureAndSmoothing
 import com.artflow.studio.presentation.ui.components.canvas.GestureControls
@@ -326,6 +327,16 @@ private fun PrefsTab(
         range = 200f..1500f,
         readout = "%.2f s".format(gestures.eyedropperDelayMs / 1000f),
     ) { actions.onGestures(gestures.copy(eyedropperDelayMs = (it / 50f).roundToInt() * 50)) }
+    Text("Eyedropper sample", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 8.dp))
+    Row(Modifier.padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        AreaSample.SIZES.forEach { size ->
+            FilterChip(
+                selected = gestures.eyedropperSample == size,
+                onClick = { actions.onGestures(gestures.copy(eyedropperSample = size)) },
+                label = { Text(if (size == 1) "1 px" else "$size×$size") },
+            )
+        }
+    }
     PrefSlider(
         label = "QuickShape delay",
         value = gestures.quickShapeDelayMs.toFloat(),

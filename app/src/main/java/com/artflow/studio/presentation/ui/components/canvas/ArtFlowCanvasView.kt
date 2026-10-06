@@ -25,6 +25,7 @@ import com.artflow.studio.core.canvas.StrokeStabilizer
 import com.artflow.studio.core.color.CmykProof
 import com.artflow.studio.core.color.ViewFilter
 import com.artflow.studio.core.perspective.PerspectiveGuide
+import com.artflow.studio.core.pixels.AreaSample
 import com.artflow.studio.core.pixels.Channels
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.LayerTransform
@@ -184,6 +185,8 @@ data class GestureControls(
     val quickShapeDelayMs: Int = 650,
     /** Procreate's Layer Select: touch and hold picks the topmost layer painted under the finger. */
     val holdSelectsLayer: Boolean = false,
+    /** The eyedropper's sample: 1 pixel, or the average of a 3, 5 or 11 pixel square. */
+    val eyedropperSample: Int = 1,
 )
 
 /** The gesture preferences the canvas reads, from the stored settings. */
@@ -196,6 +199,7 @@ fun AppSettings.gestureControls(): GestureControls =
         eyedropperDelayMs,
         quickShapeDelayMs,
         holdSelectsLayer,
+        eyedropperSample,
     )
 
 /** Brush outline under a hovering stylus, in view pixels. */
@@ -2682,6 +2686,7 @@ class ArtFlowCanvasView
         ) {
             val source = samplingSource
             val (viewX, viewY) = canvasToView(x, y)
+            val sampleSize = input.gestures.eyedropperSample
             coroutineScope.launch {
                 val color =
                     withContext(Dispatchers.Default) {
@@ -2691,7 +2696,7 @@ class ArtFlowCanvasView
                         if (buffer == null || !buffer.contains(px, py)) {
                             null
                         } else {
-                            buffer.getSafe(px, py).takeIf { (it ushr 24) != 0 }
+                            AreaSample.average(buffer, px, py, sampleSize).takeIf { (it ushr 24) != 0 }
                         }
                     }
                 if (color != null) {
