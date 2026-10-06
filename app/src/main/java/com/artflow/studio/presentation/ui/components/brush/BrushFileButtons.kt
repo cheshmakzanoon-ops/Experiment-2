@@ -124,6 +124,22 @@ private fun importBrushes(
     }
 }
 
+/** Shares [brushes] as one `.artbrush` file named after [name], such as a whole brush set. */
+internal suspend fun shareBrushes(
+    context: Context,
+    name: String,
+    brushes: List<SavedBrush>,
+): Boolean {
+    val file =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val directory = File(context.filesDir, "exports/brushes").apply { mkdirs() }
+                File(directory, BrushFiles.fileName(name)).apply { writeText(BrushFiles.encode(brushes)) }
+            }.getOrNull()
+        }
+    return file != null && runCatching { share(context, file) }.isSuccess
+}
+
 private fun share(
     context: Context,
     file: File,

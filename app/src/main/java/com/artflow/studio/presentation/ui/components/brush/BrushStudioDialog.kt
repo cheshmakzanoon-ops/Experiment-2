@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -30,8 +31,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.SavedBrush
 import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.model.brush.StudioBrushes
+import kotlinx.coroutines.launch
 
 /** Draft settings stay local. Dismiss/Back never publishes a half-edited brush to the canvas. */
 @Composable
@@ -139,6 +142,9 @@ fun StudioBrushLibrary(
     val sets = library?.state?.sets.orEmpty()
     val recent = library?.state?.recent.orEmpty()
     var naming by remember { mutableStateOf(false) }
+    var shareFailed by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val matches =
         remember(query, category, saved, favourites, sets, recent) {
             // Recent, Favourites and the artist's own sets gather brushes from every category.
@@ -190,10 +196,17 @@ fun StudioBrushLibrary(
             if (library != null) AssistChip(onClick = { naming = true }, label = { Text("New set") })
         }
         if (library != null && category in sets) {
-            TextButton(onClick = {
-                library.deleteSet(category)
-                category = "All"
-            }) { Text("Delete the set $category") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = {
+                    val brushes = matches.map { SavedBrush(it.id, it.name, it.parameters) }
+                    scope.launch { if (!shareBrushes(context, category, brushes)) shareFailed = true }
+                }, enabled = matches.isNotEmpty()) { Text("Share the set") }
+                TextButton(onClick = {
+                    library.deleteSet(category)
+                    category = "All"
+                }) { Text("Delete the set $category") }
+            }
+            if (shareFailed) Text("The set could not be shared", color = MaterialTheme.colorScheme.error)
         }
         if (naming && library != null) {
             NewSetDialog(taken = categories.toSet(), onDismiss = { naming = false }) { name ->
