@@ -5,6 +5,7 @@
 
 package com.artflow.studio.presentation.ui.components.editor
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
@@ -12,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -23,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -1328,11 +1331,21 @@ fun TextSheet(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            ColorChip(0xFF111111.toInt(), onClick = { onColorChange(0xFF111111.toInt()) })
-            ColorChip(0xFFFFFFFF.toInt(), onClick = { onColorChange(0xFFFFFFFF.toInt()) })
-            ColorChip(color, onClick = { })
+            TEXT_SWATCHES.forEach { (name, swatch) ->
+                ColorChip(
+                    swatch,
+                    onClick = { onColorChange(swatch) },
+                    modifier =
+                        Modifier
+                            .border(if (swatch == color) 3.dp else 1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                            .semantics {
+                                contentDescription = name
+                                selected = swatch == color
+                            },
+                )
+            }
             Text(
-                "Tap the colour chip in the toolbar for the full picker.",
+                "Any other colour: pick it in the Colour panel; the text uses the current colour.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1367,3 +1380,17 @@ private fun LabeledSlider(
         )
     }
 }
+
+/** Quick text colours; any other comes from the Colour panel. */
+private val TEXT_SWATCHES =
+    listOf(
+        "Black" to 0xFF111111.toInt(),
+        "White" to 0xFFFFFFFF.toInt(),
+        "Red" to 0xFFD32F2F.toInt(),
+        "Orange" to 0xFFF57C00.toInt(),
+        "Yellow" to 0xFFFBC02D.toInt(),
+        "Green" to 0xFF388E3C.toInt(),
+        "Blue" to 0xFF1976D2.toInt(),
+        "Purple" to 0xFF7B1FA2.toInt(),
+    )
+
