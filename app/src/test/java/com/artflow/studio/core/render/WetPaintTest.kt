@@ -66,4 +66,27 @@ class WetPaintTest {
         val watery = paint(base.copy(wetMix = 0f, dilution = 1f))
         assertTrue(blue(watery.getSafe(x, 20)) > blue(thick.getSafe(x, 20)))
     }
+
+    @Test
+    fun perStrokeColourJitterKeepsOneColourAlongTheStroke() {
+        val jitter = BrushParams(size = 12f, spacing = 0.3f, pressureToSize = 0f, pressureToOpacity = 0f, hueJitter = 1f)
+
+        fun hueSpread(params: BrushParams): Int {
+            val painted = PixelBuffer(width, height).also { canvas -> StrokeRasterizer().draw(canvas, strokeOf(params)) }
+            val reds = (40..120).map { painted.getSafe(it, 20) }.filter { alpha(it) >= 200 }.map { (it shr 16) and 0xFF }
+            return reds.max() - reds.min()
+        }
+        assertTrue("Per-dab jitter varies the colour", hueSpread(jitter) > 20)
+        assertTrue("Per-stroke jitter keeps one colour", hueSpread(jitter.copy(colorJitterPerStroke = true)) <= 2)
+    }
+
+    private fun strokeOf(params: BrushParams): Stroke =
+        Stroke(
+            id = 77L,
+            points = (0..28).map { i -> StrokePoint(x = 10f + i * 5f, y = 20f, pressure = 1f, timestamp = i * 8L) },
+            brushParams = params,
+            layerId = 0L,
+            color = 0xFFF0E020.toInt(),
+            timestamp = 0L,
+        )
 }

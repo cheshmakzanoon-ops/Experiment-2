@@ -476,7 +476,9 @@ class StrokeRasterizer(
                 (1f - DILUTION_THINNING * params.dilution.coerceIn(0f, 1f))
 
         // Pull keeps some of the paint the brush already carries instead of reloading the fresh colour.
-        val fresh = params.applyColorJitter(stroke.color, pressure, velocity, random, stroke.secondaryColor)
+        // Per-stroke jitter draws from a sequence that restarts at every dab, so each dab gets the same colour.
+        val colorRandom = if (params.colorJitterPerStroke) Random(stroke.id) else random
+        val fresh = params.applyColorJitter(stroke.color, pressure, velocity, colorRandom, stroke.secondaryColor)
         val loaded = walk.carried?.let { carried -> carriedColor(fresh, carried, params) } ?: fresh
         val color = wetColor(loaded, context.canvas, x, y, wetPickup(params))
         walk.carried = color

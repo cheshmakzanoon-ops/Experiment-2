@@ -65,6 +65,7 @@ data class BrushParams(
     val grainDepth: Float = 1f, // 0..1: how strongly the grain shows; 0 paints as if there were no grain
     val dilution: Float = 0f, // 0..1: water in the paint; thins each dab and lets it pick up more of the layer
     val pull: Float = 0f, // 0..1: how far the brush drags the colour it carries along the stroke
+    val colorJitterPerStroke: Boolean = false, // Colour jitter picks one colour per stroke instead of varying each dab
 ) {
     /** Imported grain and shape images this brush (and its second brush) paints with. */
     val imageIds: List<String>

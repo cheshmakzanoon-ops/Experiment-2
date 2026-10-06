@@ -336,6 +336,10 @@ private fun BrushJitterSettings(
             valueDisplay = "%.0f%%".format(brushParams.opacityJitter * 100),
         )
 
+        ShapeSwitch("Colour jitter once per stroke", brushParams.colorJitterPerStroke) {
+            onBrushParamsChanged(brushParams.copy(colorJitterPerStroke = it))
+        }
+
         // Hue Jitter
         BrushParameterSlider(
             label = "Hue Jitter",
