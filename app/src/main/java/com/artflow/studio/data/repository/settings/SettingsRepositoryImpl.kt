@@ -242,6 +242,7 @@ class SettingsRepositoryImpl
                 KEY_HOLD_SELECTS_LAYER to settings.holdSelectsLayer.toString(),
                 KEY_EYEDROPPER_SAMPLE to settings.eyedropperSample.toString(),
                 KEY_TIMELAPSE_SIDE to settings.timelapseMaxSide.toString(),
+                KEY_RECORD_TIMELAPSE to settings.recordTimelapse.toString(),
                 KEY_DYNAMIC_BRUSH to settings.dynamicBrushScaling.toString(),
                 KEY_SELECTION_VISIBILITY to settings.selectionMaskVisibility.toString(),
                 KEY_PROJECT_CANVAS to settings.projectCanvas.toString(),
@@ -339,6 +340,7 @@ class SettingsRepositoryImpl
                     stored[KEY_EYEDROPPER_SAMPLE]?.toIntOrNull()?.takeIf { it in AreaSample.SIZES } ?: defaults.eyedropperSample,
                 timelapseMaxSide =
                     stored[KEY_TIMELAPSE_SIDE]?.toIntOrNull()?.takeIf { it in TIMELAPSE_SIDES } ?: defaults.timelapseMaxSide,
+                recordTimelapse = stored.flag(KEY_RECORD_TIMELAPSE, defaults.recordTimelapse),
                 dynamicBrushScaling = stored.flag(KEY_DYNAMIC_BRUSH, defaults.dynamicBrushScaling),
                 selectionMaskVisibility = stored.unit(KEY_SELECTION_VISIBILITY) ?: defaults.selectionMaskVisibility,
                 projectCanvas = stored.flag(KEY_PROJECT_CANVAS, defaults.projectCanvas),
@@ -426,6 +428,7 @@ class SettingsRepositoryImpl
             private const val MIN_RAPID_UNDO_DELAY_MS = 200
             private const val MAX_RAPID_UNDO_DELAY_MS = 1500
             private const val KEY_TIMELAPSE_SIDE = "timelapse.maxSide"
+            private const val KEY_RECORD_TIMELAPSE = "timelapse.record"
             private const val KEY_DYNAMIC_BRUSH = "brush.dynamicScaling"
             private const val KEY_SELECTION_VISIBILITY = "canvas.selectionMaskVisibility"
             private const val KEY_PROJECT_CANVAS = "canvas.project"

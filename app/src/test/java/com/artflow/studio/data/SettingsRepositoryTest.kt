@@ -86,6 +86,16 @@ class SettingsRepositoryTest {
         }
 
     @Test
+    fun timelapseRecordingSwitchPersists() =
+        runTest {
+            val dao = MemorySettingsDao(emptyMap())
+            val repository = SettingsRepositoryImpl(dao)
+            assertTrue(repository.settings.first().recordTimelapse)
+            repository.update { it.copy(recordTimelapse = false) }
+            assertFalse(SettingsRepositoryImpl(dao).settings.first().recordTimelapse)
+        }
+
+    @Test
     fun quickMenuSlotsPersistAndIgnoreDamagedValues() =
         runTest {
             val dao = MemorySettingsDao(mapOf("studio.quickMenu" to "Copy|Paste"))

@@ -916,6 +916,8 @@ fun CanvasScreen(
                             onClear = viewModel::clearTimelapse,
                             quality = settings.timelapseMaxSide,
                             onQuality = { side -> viewModel.updateSettings { it.copy(timelapseMaxSide = side) } },
+                            recording = settings.recordTimelapse,
+                            onRecording = { on -> viewModel.updateSettings { it.copy(recordTimelapse = on) } },
                         ),
                     prefActions =
                         PrefActions(

@@ -103,6 +103,8 @@ data class AppSettings(
     val eyedropperSample: Int = 1,
     /** Longest side, in pixels, of recorded time-lapse frames (720p, 1080p or 1440p). */
     val timelapseMaxSide: Int = 1280,
+    /** Actions > Video > Time-lapse Recording: whether edits are recorded at all. */
+    val recordTimelapse: Boolean = true,
     /** Brush size follows the zoom so the brush looks the same size on screen. */
     val dynamicBrushScaling: Boolean = false,
     /** Prefs > Selection mask visibility: how strongly the selected area is tinted (0..1). */

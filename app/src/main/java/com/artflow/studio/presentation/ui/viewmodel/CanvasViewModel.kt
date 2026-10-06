@@ -341,7 +341,7 @@ class CanvasViewModel
             timelapseJob =
                 viewModelScope.launch {
                     timelapseRequests.collect {
-                        if (!timelapse.isEnabled) return@collect
+                        if (!timelapse.isEnabled || !_settings.value.recordTimelapse) return@collect
                         // Let the edit settle so a burst of changes yields one frame.
                         delay(TIMELAPSE_INTERVAL_MS)
                         val projectId = currentProjectId
