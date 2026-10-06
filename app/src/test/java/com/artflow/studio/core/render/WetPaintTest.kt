@@ -126,7 +126,8 @@ class WetPaintTest {
 
     @Test
     fun tipSharpnessThinsTheTaper() {
-        val tapered = BrushParams(size = 16f, spacing = 0.1f, pressureToSize = 0f, pressureToOpacity = 0f, taperStart = 0.5f, taperEnd = 0.5f)
+        val tapered =
+            BrushParams(size = 16f, spacing = 0.1f, pressureToSize = 0f, pressureToOpacity = 0f, taperStart = 0.5f, taperEnd = 0.5f)
 
         fun inked(params: BrushParams) =
             PixelBuffer(width, height).also { StrokeRasterizer().draw(it, strokeOf(params)) }.pixels.count { alpha(it) > 0 }
