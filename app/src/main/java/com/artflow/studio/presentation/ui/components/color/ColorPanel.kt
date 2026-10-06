@@ -18,6 +18,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -279,6 +280,7 @@ private fun HexField(
 data class PaletteEdits(
     val onRemove: (Long) -> Unit,
     val onEdit: (Palette) -> Unit,
+    val onShare: (Palette) -> Unit = {},
 )
 
 /** Procreate's secondary colour swatch: its colour, and swapping it with the primary. */
@@ -323,7 +325,10 @@ private fun PaletteList(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(palette.name, style = MaterialTheme.typography.bodyMedium)
+                        Text(palette.name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { edits.onShare(palette) }) {
+                            Icon(Icons.Default.Share, contentDescription = "Share ${palette.name}")
+                        }
                         if (palette.category == "Custom") {
                             IconButton(onClick = { edits.onRemove(palette.id) }) {
                                 Icon(Icons.Default.Delete, contentDescription = "Remove ${palette.name}")

@@ -1,6 +1,9 @@
 package com.artflow.studio.presentation.ui.screens.canvas
 
 import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -8,17 +11,21 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.FileProvider
+import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.color.PaletteCodec
 import com.artflow.studio.core.color.PaletteExtractor
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
-/** The Palettes tab's ways to add a palette: from a swatch file, or from a photo's colours. */
+/** The Palettes tab's ways to add a palette (from a swatch file or a photo's colours) and to share one. */
 class PaletteImports(
     val fromFile: () -> Unit,
     val fromPhoto: () -> Unit,
+    val share: (Palette) -> Unit,
 )
 
 @Composable
@@ -64,8 +71,45 @@ fun rememberPaletteImports(
     return PaletteImports(
         fromFile = { launchSafely(onError) { file.launch(arrayOf("*/*")) } },
         fromPhoto = { launchSafely(onError) { photo.launch("image/*") } },
+        share = { palette ->
+            scope.launch {
+                val shared =
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            val directory = File(context.filesDir, "exports/palettes").apply { mkdirs() }
+                            File(directory, paletteFileName(palette.name)).apply { writeBytes(PaletteCodec.exportAse(palette)) }
+                        }.getOrNull()
+                    }
+                if (shared == null) onError("The palette could not be shared") else sharePaletteFile(context, shared, onError)
+            }
+        },
     )
 }
+
+/** Sends [file] to another app as Adobe Swatch Exchange, which Procreate and most art apps import. */
+private fun sharePaletteFile(
+    context: Context,
+    file: File,
+    onError: (String) -> Unit,
+) {
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    val send =
+        Intent(Intent.ACTION_SEND).apply {
+            type = "application/octet-stream"
+            clipData = ClipData.newRawUri(file.name, uri)
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+    launchSafely(onError) { context.startActivity(Intent.createChooser(send, "Share palette")) }
+}
+
+/** A file name for the palette called [name] that is safe on every platform. */
+internal fun paletteFileName(name: String): String =
+    name
+        .filter { it.isLetterOrDigit() || it in " -_" }
+        .trim()
+        .ifEmpty { "Palette" }
+        .take(MAX_NAME) + ".ase"
 
 private fun launchSafely(
     onError: (String) -> Unit,
@@ -79,7 +123,7 @@ private fun launchSafely(
 }
 
 private fun displayName(
-    context: android.content.Context,
+    context: Context,
     uri: Uri,
 ): String =
     context.contentResolver
