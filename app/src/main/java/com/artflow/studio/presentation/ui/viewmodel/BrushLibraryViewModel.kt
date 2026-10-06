@@ -29,6 +29,7 @@ class BrushLibraryViewModel
             val revision: Long = 0L,
             val favourites: Set<String> = emptySet(),
             val sets: Map<String, List<String>> = emptyMap(),
+            val recent: List<String> = emptyList(),
         )
 
         private val mutableState = MutableStateFlow(State())
@@ -53,6 +54,9 @@ class BrushLibraryViewModel
             viewModelScope.launch(errors) {
                 store.sets.collect { mutableState.value = mutableState.value.copy(sets = it) }
             }
+            viewModelScope.launch(errors) {
+                store.recent.collect { mutableState.value = mutableState.value.copy(recent = it) }
+            }
         }
 
         fun createSet(name: String) = editSets { sets -> if (name.trim() in sets) sets else sets + (name.trim() to emptyList()) }
@@ -70,6 +74,11 @@ class BrushLibraryViewModel
 
         private fun editSets(change: (Map<String, List<String>>) -> Map<String, List<String>>) {
             viewModelScope.launch(errors) { store.editSets(change) }
+        }
+
+        /** Puts a chosen brush at the front of the Recent set. */
+        fun markUsed(id: String) {
+            viewModelScope.launch(errors) { store.markUsed(id) }
         }
 
         /** Stars or unstars a brush in the Favourites set. */

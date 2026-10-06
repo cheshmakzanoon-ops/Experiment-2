@@ -20,6 +20,7 @@ data class BrushLibraryControls(
     val createSet: (String) -> Unit = {},
     val deleteSet: (String) -> Unit = {},
     val toggleInSet: (String, String) -> Unit = { _, _ -> },
+    val markUsed: (String) -> Unit = {},
 )
 
 /** Production entry point: saved presets share the navigation entry's lifecycle, not a dialog's. */
@@ -47,6 +48,7 @@ fun BrushStudioDialog(
                 viewModel::createSet,
                 viewModel::deleteSet,
                 viewModel::toggleInSet,
+                viewModel::markUsed,
             ),
     )
 }

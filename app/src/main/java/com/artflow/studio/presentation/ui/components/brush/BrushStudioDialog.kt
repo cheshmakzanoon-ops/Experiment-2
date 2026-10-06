@@ -137,11 +137,17 @@ fun StudioBrushLibrary(
     val saved = library?.state?.brushes.orEmpty()
     val favourites = library?.state?.favourites.orEmpty()
     val sets = library?.state?.sets.orEmpty()
+    val recent = library?.state?.recent.orEmpty()
     var naming by remember { mutableStateOf(false) }
     val matches =
-        remember(query, category, saved, favourites, sets) {
-            // Favourites and the artist's own sets gather brushes from every category.
-            val chosen = if (category == FAVOURITES) favourites else sets[category]?.toSet()
+        remember(query, category, saved, favourites, sets, recent) {
+            // Recent, Favourites and the artist's own sets gather brushes from every category.
+            val chosen =
+                when (category) {
+                    RECENT -> recent.toSet()
+                    FAVOURITES -> favourites
+                    else -> sets[category]?.toSet()
+                }
             val originals = StudioBrushes.search(query, if (chosen != null) "All" else category)
             val words = query.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
             val own =
@@ -150,13 +156,15 @@ fun StudioBrushLibrary(
                         val shown = category == "All" || category == "Saved" || chosen != null
                         shown && words.all { brush.name.contains(it, ignoreCase = true) }
                     }.map { StudioBrushes.Preset("saved-${it.id}", it.name, "Saved", "Your saved brush", it.parameters) }
-            (own + originals).filter { chosen == null || it.id in chosen }
+            val found = (own + originals).filter { chosen == null || it.id in chosen }
+            // Recent lists the brush used last first.
+            if (category == RECENT) found.sortedBy { recent.indexOf(it.id) } else found
         }
     val categories =
         if (library == null) {
             StudioBrushes.categories
         } else {
-            listOf("All", FAVOURITES, "Saved") + sets.keys + StudioBrushes.categories.drop(1).filter { it !in sets }
+            listOf("All", RECENT, FAVOURITES, "Saved") + sets.keys + StudioBrushes.categories.drop(1).filter { it !in sets }
         }
     Column(
         modifier.focusRequester(focusSink).focusable().padding(horizontal = 16.dp),
@@ -211,6 +219,7 @@ fun StudioBrushLibrary(
                         Modifier.fillMaxWidth().selectable(selected, role = Role.RadioButton) {
                             focusSink.requestFocus()
                             onSelect(preset.parameters)
+                            library?.markUsed?.invoke(preset.id)
                         },
                 ) {
                     Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
@@ -299,4 +308,5 @@ private fun NewSetDialog(
 }
 
 private const val FAVOURITES = "Favourites"
+private const val RECENT = "Recent"
 private const val MAX_SET_NAME = 40

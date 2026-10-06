@@ -78,6 +78,40 @@ class BrushLibraryStore
                 .also { favouriteIds.value = it }
         }
 
+        private val recentIds = MutableStateFlow<List<String>?>(null)
+
+        /** Brushes chosen most recently, newest first, as in Procreate's Recent set. */
+        val recent: Flow<List<String>> =
+            flow {
+                mutex.withLock { loadRecent() }
+                emitAll(recentIds.map { it.orEmpty() })
+            }
+
+        /** Moves [id] to the front of the Recent set, keeping at most [MAX_RECENT] brushes. */
+        suspend fun markUsed(id: String) {
+            require(id.matches(FAVOURITE_ID)) { "Unsupported brush identity" }
+            mutex.withLock {
+                val current = loadRecent()
+                val updated = (listOf(id) + (current - id)).take(MAX_RECENT)
+                if (updated == current) return@withLock
+                withContext(NonCancellable) {
+                    dao.insertSetting(SettingsEntity(key = RECENT_KEY, value = updated.joinToString("\n"), category = "brush"))
+                    recentIds.value = updated
+                }
+            }
+        }
+
+        private suspend fun loadRecent(): List<String> {
+            recentIds.value?.let { return it }
+            val stored = dao.getSettingByKey(RECENT_KEY)?.value.orEmpty()
+            return stored
+                .lines()
+                .filter { it.matches(FAVOURITE_ID) }
+                .distinct()
+                .take(MAX_RECENT)
+                .also { recentIds.value = it }
+        }
+
         private val brushSets = MutableStateFlow<Map<String, List<String>>?>(null)
 
         /** The artist's own brush sets, by name, in creation order. */
@@ -184,6 +218,8 @@ class BrushLibraryStore
             const val STORAGE_KEY = "brush.savedLibrary.v1"
             const val FAVOURITES_KEY = "brush.favourites.v1"
             const val SETS_KEY = "brush.sets.v1"
+            const val RECENT_KEY = "brush.recent.v1"
+            private const val MAX_RECENT = 12
             private const val MAX_SETS = 32
             private const val MAX_SET_NAME = 40
             private val setsJson = Json { ignoreUnknownKeys = true }
