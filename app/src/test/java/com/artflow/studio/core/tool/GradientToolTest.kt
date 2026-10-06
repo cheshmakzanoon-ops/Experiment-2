@@ -131,4 +131,21 @@ class GradientToolTest {
             }
         }
     }
+
+    @Test
+    fun reflectedGradientMirrorsAboutTheStart() {
+        val ramp =
+            GradientTool.Gradient(
+                "Ramp",
+                GradientTool.GradientType.REFLECTED,
+                listOf(GradientTool.Stop(0f, 0xFF000000.toInt()), GradientTool.Stop(1f, 0xFFFFFFFF.toInt())),
+            )
+        val target = PixelBuffer(9, 1)
+        GradientTool.draw(target, 4.5f, 0.5f, 8.5f, 0.5f, GradientTool.Settings(ramp, dither = false))
+        for (offset in 1..4) {
+            assertEquals(target.pixels[4 - offset], target.pixels[4 + offset])
+        }
+        assertEquals(0xFF000000.toInt(), target.pixels[4])
+        assertEquals(0xFFFFFFFF.toInt(), target.pixels[8])
+    }
 }

@@ -27,6 +27,7 @@ object GradientTool {
         RADIAL("Radial"),
         ANGULAR("Angular"),
         DIAMOND("Diamond"),
+        REFLECTED("Reflected"),
     }
 
     /**
@@ -140,6 +141,11 @@ object GradientTool {
                             var degrees = Math.toDegrees(angle - sweepStart).toFloat()
                             if (degrees < 0f) degrees += 360f
                             (degrees / 360f).coerceIn(0f, 1f)
+                        }
+                        GradientType.REFLECTED -> {
+                            // The linear ramp mirrored about the start, so both sides fade outwards.
+                            (abs((positionX - startX) * dx + (positionY - startY) * dy) / (length * length))
+                                .coerceIn(0f, 1f)
                         }
                         GradientType.DIAMOND -> {
                             val normalizedX = abs(positionX - startX) / length
