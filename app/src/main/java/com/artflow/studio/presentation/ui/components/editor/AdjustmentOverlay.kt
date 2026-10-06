@@ -108,6 +108,7 @@ fun AdjustmentOverlay(
                 if (state.kind == LiveAdjustments.Kind.GRADIENT_MAP) GradientRamps(state, actions.onParameters)
                 if (state.kind == LiveAdjustments.Kind.CURVES) CurvesEditor(state, actions.onParameters)
                 if (state.kind == LiveAdjustments.Kind.NOISE) NoiseOptions(state, actions.onParameter)
+                if (state.kind == LiveAdjustments.Kind.HALFTONE) HalftoneOptions(state, actions.onParameter)
                 if (state.kind.adjustmentType != null) ParameterSliders(state, actions.onParameter)
                 if ((state.kind.slidesAmount && state.pencil) || state.kind.usesPoint) {
                     val label = if (state.kind == LiveAdjustments.Kind.RECOLOR) "Flood" else "Amount"
@@ -246,6 +247,24 @@ private fun NoiseOptions(
             valueRange = FractalNoise.MIN_SCALE..FractalNoise.MAX_SCALE,
             modifier = Modifier.semantics { contentDescription = "Noise size" },
         )
+    }
+}
+
+/** Halftone style: dots in each area's colour, CMY screen print, or black newspaper dots. */
+@Composable
+private fun HalftoneOptions(
+    state: AdjustmentSessionController.State,
+    onParameter: (String, Float) -> Unit,
+) {
+    val style = LiveAdjustments.halftoneStyle(state.settings.parameters)
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        LiveAdjustments.HalftoneStyle.entries.forEach { entry ->
+            FilterChip(
+                selected = style == entry,
+                onClick = { onParameter(LiveAdjustments.HALFTONE_STYLE, entry.ordinal.toFloat()) },
+                label = { Text(entry.displayName) },
+            )
+        }
     }
 }
 

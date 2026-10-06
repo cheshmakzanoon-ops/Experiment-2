@@ -62,7 +62,7 @@ object LiveAdjustments {
                 kind == Kind.PERSPECTIVE_BLUR -> perspectiveBlur(source, settings)
                 amount <= 0f -> source.copy()
                 kind == Kind.NOISE -> noise(source, amount, settings.parameters)
-                else -> filter(kind, source, amount, settings.angleDegrees)
+                else -> filter(kind, source, amount, settings.angleDegrees, halftoneStyle(settings.parameters))
             }
         val mask = selection?.takeIf { it.width == source.width && it.height == source.height && it.isActive() } ?: return filtered
         for (i in filtered.pixels.indices) {
@@ -76,6 +76,7 @@ object LiveAdjustments {
         source: PixelBuffer,
         amount: Float,
         angle: Float,
+        style: HalftoneStyle = HalftoneStyle.FULL_COLOUR,
     ): PixelBuffer =
         when (kind) {
             Kind.OPACITY -> faded(source, 1f - amount)
@@ -86,7 +87,7 @@ object LiveAdjustments {
                 ImageFilters.chromaticAberration(source, amount * MAX_ABERRATION, source.width / 2f, source.height / 2f)
             Kind.BLOOM -> bloom(source, amount)
             Kind.GLITCH -> glitch(source, amount)
-            Kind.HALFTONE -> halftone(source, amount)
+            Kind.HALFTONE -> halftone(source, amount, style)
             else -> source.copy()
         }
 
@@ -199,6 +200,12 @@ object LiveAdjustments {
     const val NOISE_SCALE = "noise_scale"
     const val DEFAULT_NOISE_SCALE = 48f
 
+    /** Halftone: which [HalftoneStyle] (by ordinal). */
+    const val HALFTONE_STYLE = "halftone_style"
+
+    /** Dots grow a little past the cell's inscribed circle so fully inked cells join up. */
+    private const val DOT_REACH = 1.15f
+
     /** Bright areas glow: a blurred bright pass is screened back over the image. */
     fun bloom(
         source: PixelBuffer,
@@ -255,12 +262,26 @@ object LiveAdjustments {
         return out
     }
 
-    /** Newsprint dots: each cell becomes a dot whose size follows the cell's darkness. */
+    /** Procreate's Halftone styles: dots in each area's colour, CMY screen print, or black newspaper dots. */
+    enum class HalftoneStyle(
+        val displayName: String,
+    ) {
+        FULL_COLOUR("Full colour"),
+        SCREEN_PRINT("Screen print"),
+        NEWSPAPER("Newspaper"),
+    }
+
+    fun halftoneStyle(parameters: Map<String, Float>): HalftoneStyle =
+        HalftoneStyle.entries.getOrElse(parameters[HALFTONE_STYLE]?.toInt() ?: 0) { HalftoneStyle.FULL_COLOUR }
+
+    /** Halftone dots: each cell becomes a dot whose size follows the cell's darkness. */
     fun halftone(
         source: PixelBuffer,
         amount: Float,
+        style: HalftoneStyle = HalftoneStyle.FULL_COLOUR,
     ): PixelBuffer {
         val cell = (4 + amount * 16f).roundToInt().coerceAtLeast(2)
+        if (style != HalftoneStyle.FULL_COLOUR) return printedHalftone(source, cell, style)
         val out = PixelBuffer(source.width, source.height)
         for (cy in 0 until source.height step cell) {
             for (cx in 0 until source.width step cell) {
@@ -268,6 +289,92 @@ object LiveAdjustments {
             }
         }
         return out
+    }
+
+    /**
+     * Ink on paper: white wherever the layer has paint, then one screen of dots per ink, each
+     * multiplied over the paper. Screen print uses cyan, magenta and yellow screens offset from
+     * one another, as separations are; Newspaper prints black dots sized by darkness.
+     */
+    private fun printedHalftone(
+        source: PixelBuffer,
+        cell: Int,
+        style: HalftoneStyle,
+    ): PixelBuffer {
+        val out = PixelBuffer(source.width, source.height)
+        for (i in source.pixels.indices) {
+            val alpha = source.pixels[i] ushr 24
+            if (alpha != 0) out.pixels[i] = (alpha shl 24) or 0xFFFFFF
+        }
+        val inks =
+            if (style == HalftoneStyle.NEWSPAPER) {
+                listOf(Ink(0x000000, 0f) { 1f - Channels.luminance(it) })
+            } else {
+                listOf(
+                    Ink(0x00FFFF, 0f) { 1f - Channels.red(it) / 255f },
+                    Ink(0xFF00FF, 1f / 3f) { 1f - Channels.green(it) / 255f },
+                    Ink(0xFFFF00, 2f / 3f) { 1f - Channels.blue(it) / 255f },
+                )
+            }
+        for (ink in inks) {
+            val offset = (cell * ink.offset).roundToInt()
+            for (cy in -offset until source.height step cell) {
+                for (cx in -offset until source.width step cell) {
+                    inkCell(source, out, cx, cy, cell, ink)
+                }
+            }
+        }
+        return out
+    }
+
+    /** One ink of a printed halftone: its colour, how far its screen is shifted, and its coverage of a colour. */
+    private class Ink(
+        val rgb: Int,
+        val offset: Float,
+        val coverage: (Int) -> Float,
+    )
+
+    private fun inkCell(
+        source: PixelBuffer,
+        out: PixelBuffer,
+        cx: Int,
+        cy: Int,
+        cell: Int,
+        ink: Ink,
+    ) {
+        val x0 = max(0, cx)
+        val y0 = max(0, cy)
+        val x1 = min(source.width, cx + cell)
+        val y1 = min(source.height, cy + cell)
+        if (x1 <= x0 || y1 <= y0) return
+        var total = 0f
+        var count = 0
+        for (y in y0 until y1) {
+            for (x in x0 until x1) {
+                val p = source.pixels[y * source.width + x]
+                if ((p ushr 24) == 0) continue
+                total += ink.coverage(p)
+                count++
+            }
+        }
+        if (count == 0) return
+        val radius = cell * 0.5f * sqrt((total / count).coerceIn(0f, 1f)) * DOT_REACH
+        val centerX = cx + cell / 2f
+        val centerY = cy + cell / 2f
+        for (y in y0 until y1) {
+            for (x in x0 until x1) {
+                val i = y * source.width + x
+                val paper = out.pixels[i]
+                val dx = x + 0.5f - centerX
+                val dy = y + 0.5f - centerY
+                if ((paper ushr 24) == 0 || dx * dx + dy * dy > radius * radius) continue
+                // Inks multiply over the paper and over each other.
+                val r = ((paper shr 16) and 0xFF) * ((ink.rgb shr 16) and 0xFF) / 255
+                val g = ((paper shr 8) and 0xFF) * ((ink.rgb shr 8) and 0xFF) / 255
+                val b = (paper and 0xFF) * (ink.rgb and 0xFF) / 255
+                out.pixels[i] = (paper and 0xFF000000.toInt()) or (r shl 16) or (g shl 8) or b
+            }
+        }
     }
 
     private fun halftoneCell(
