@@ -417,6 +417,7 @@ class ArtFlowCanvasView
             adjustableLiquify = null
             liquifyAdjustGesture = 0L
         }
+
         private var cloneSource: Pair<Float, Float>? = null
         private var cloneDragStarted = false
         private var lastPreviewRequest = 0L

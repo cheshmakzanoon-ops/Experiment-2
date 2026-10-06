@@ -781,14 +781,16 @@ class CanvasRepositoryImpl
 
                 fun shown(layer: LayerData): Boolean =
                     generateSequence(layer) { it.parentGroupId?.let(byId::get) }.take(layers.size + 1).all { it.isVisible }
-                layers.asReversed().firstOrNull { layer ->
-                    !layer.isGroup &&
-                        !layer.isInternal &&
-                        layer.adjustmentType == null &&
-                        layer.filterType == null &&
-                        shown(layer) &&
-                        rawLayerPixels(layer, canvasWidth, canvasHeight)?.let { (it.getSafe(x, y) ushr 24) != 0 } == true
-                }?.id
+                layers
+                    .asReversed()
+                    .firstOrNull { layer ->
+                        !layer.isGroup &&
+                            !layer.isInternal &&
+                            layer.adjustmentType == null &&
+                            layer.filterType == null &&
+                            shown(layer) &&
+                            rawLayerPixels(layer, canvasWidth, canvasHeight)?.let { (it.getSafe(x, y) ushr 24) != 0 } == true
+                    }?.id
             }
 
         override suspend fun beginRasterEdit(layerId: Long): CanvasRepository.RasterEditSession? =

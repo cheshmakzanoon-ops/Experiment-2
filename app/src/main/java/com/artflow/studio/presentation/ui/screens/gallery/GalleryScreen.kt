@@ -901,7 +901,7 @@ private fun NewProjectDialog(
                     )
                     val custom =
                         CanvasOperations.Preset(
-                            CanvasOperations.presetName(name).ifEmpty { "${customWidth}×$customHeight" },
+                            CanvasOperations.presetName(name).ifEmpty { "$customWidth×$customHeight" },
                             customWidth.toIntOrNull() ?: 0,
                             customHeight.toIntOrNull() ?: 0,
                             customDpi.toIntOrNull() ?: 0,
