@@ -56,9 +56,7 @@ fun ColorPanel(
     onSavePalette: (String, List<Int>) -> Unit,
     palettesEdit: PaletteEdits,
     modifier: Modifier = Modifier,
-    onImportPalette: (() -> Unit)? = null,
-    onPaletteFromPhoto: (() -> Unit)? = null,
-    onPaletteFromCamera: (() -> Unit)? = null,
+    sources: PaletteSources = PaletteSources(),
     /** The secondary colour and swapping it with the primary; null hides the swatch. */
     secondary: SecondarySwatch? = null,
 ) {
@@ -104,9 +102,9 @@ fun ColorPanel(
             ColorTab.VALUE -> ValueTab(color, mode, { mode = it }, onColorSelected)
             ColorTab.PALETTES -> {
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    onImportPalette?.let { OutlinedButton(onClick = it) { Text("Import palette") } }
-                    onPaletteFromPhoto?.let { OutlinedButton(onClick = it) { Text("New from photo") } }
-                    onPaletteFromCamera?.let { OutlinedButton(onClick = it) { Text("From camera") } }
+                    sources.fromFile?.let { OutlinedButton(onClick = it) { Text("Import palette") } }
+                    sources.fromPhoto?.let { OutlinedButton(onClick = it) { Text("New from photo") } }
+                    sources.fromCamera?.let { OutlinedButton(onClick = it) { Text("From camera") } }
                     OutlinedButton(onClick = {
                         val number = palettes.count { it.category == "Custom" } + 1
                         onSavePalette("Palette $number", listOf(color))
@@ -288,6 +286,13 @@ private fun HexField(
 }
 
 /** Removing a custom palette, and saving one after a swatch is added or removed. */
+/** Where a new palette can come from: a swatch file, a photo, or the camera; null hides that button. */
+data class PaletteSources(
+    val fromFile: (() -> Unit)? = null,
+    val fromPhoto: (() -> Unit)? = null,
+    val fromCamera: (() -> Unit)? = null,
+)
+
 data class PaletteEdits(
     val onRemove: (Long) -> Unit,
     val onEdit: (Palette) -> Unit,

@@ -8,6 +8,7 @@ import com.artflow.studio.domain.model.brush.StrokePoint
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Random
 
 class WetPaintTest {
     private val width = 160
@@ -98,7 +99,7 @@ class WetPaintTest {
 
     @Test
     fun consecutiveStrokesGetDifferentPerStrokeColours() {
-        val firsts = (1L..10L).map { java.util.Random(strokeColorSeed(it)).nextFloat() }
+        val firsts = (1L..10L).map { Random(strokeColorSeed(it)).nextFloat() }
         assertTrue("Neighbouring stroke ids must not share a colour ($firsts)", firsts.max() - firsts.min() > 0.3f)
     }
 

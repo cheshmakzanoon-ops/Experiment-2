@@ -78,6 +78,7 @@ import com.artflow.studio.presentation.ui.components.canvas.gestureControls
 import com.artflow.studio.presentation.ui.components.canvas.imageDropTarget
 import com.artflow.studio.presentation.ui.components.color.ColorPanel
 import com.artflow.studio.presentation.ui.components.color.PaletteEdits
+import com.artflow.studio.presentation.ui.components.color.PaletteSources
 import com.artflow.studio.presentation.ui.components.color.SecondarySwatch
 import com.artflow.studio.presentation.ui.components.editor.ActionsPanel
 import com.artflow.studio.presentation.ui.components.editor.AddActions
@@ -551,9 +552,7 @@ fun CanvasScreen(
                     onColorSelected = { viewModel.setColor(it) },
                     onClearRecents = { scope.launch { viewModel.clearRecentColors() } },
                     onSavePalette = viewModel.paletteActions::addFromColors,
-                    onImportPalette = paletteImports.fromFile,
-                    onPaletteFromPhoto = paletteImports.fromPhoto,
-                    onPaletteFromCamera = paletteImports.fromCamera,
+                    sources = PaletteSources(paletteImports.fromFile, paletteImports.fromPhoto, paletteImports.fromCamera),
                     palettesEdit =
                         PaletteEdits(
                             viewModel.paletteActions::remove,

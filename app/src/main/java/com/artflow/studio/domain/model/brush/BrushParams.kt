@@ -69,36 +69,25 @@ data class BrushParams(
     val maxSize: Float = MAX_BRUSH_SIZE, // ...to this, in pixels
     val minOpacity: Float = MIN_BRUSH_OPACITY, // and its opacity slider from this...
     val maxOpacity: Float = 1f, // ...to this
-    /** How the grain combines with the brush's coverage, as Procreate's grain blend mode. */
-    val grainBlend: GrainBlend = GrainBlend.MULTIPLY,
+    val grainBlend: GrainBlend = GrainBlend.MULTIPLY, // How the grain combines with the coverage (Procreate's grain blend)
     val grainBrightness: Float = 0f, // -1..1: lightens or darkens the grain
     val grainContrast: Float = 0f, // -1..1: flattens the grain or sharpens it toward black and white
     val wetBlur: Float = 0f, // 0..1: Wet Mix Blur; the paint picked up is averaged over this share of the brush
     val countJitter: Float = 0f, // 0..1: each dab stamps a random number of copies, from count down to one at 1
-    val colorJitterPerStroke: Boolean = false,
-    /** Procreate's Colour Pressure (0..1 each): lighter presses drift the hue, wash out saturation, darken. */
-    val colorDynamics: ColorDynamics = ColorDynamics(),
-    /** Procreate's rendering mode; null keeps the older [buildUp] switch (Light glaze or Uniform blending). */
-    val renderingMode: RenderingMode? = null,
-    /** Procreate's taper Tip sharpness, 0..1: higher keeps the tapered end thin for longer, a finer point. */
-    val tipSharpness: Float = 0f,
-    /** Procreate's Pressure → Flow, 0..1: lighter presses lay thinner paint, on top of pressure → opacity. */
-    val pressureToFlow: Float = 0f,
-    /** Procreate's Touch taper: start and end tapers for finger strokes; null uses the stylus tapers. */
-    val touchTaperStart: Float? = null,
-    val touchTaperEnd: Float? = null, // Colour jitter picks one colour per stroke instead of varying each dab
+    val colorJitterPerStroke: Boolean = false, // Colour jitter picks one colour per stroke instead of varying each dab
+    val colorDynamics: ColorDynamics = ColorDynamics(), // Colour Pressure and Colour Tilt (0..1 each)
+    val renderingMode: RenderingMode? = null, // Procreate's rendering mode; null keeps the older buildUp switch
+    val tipSharpness: Float = 0f, // 0..1: taper Tip sharpness; higher keeps the tapered end thin for longer
+    val pressureToFlow: Float = 0f, // 0..1: lighter presses lay thinner paint, on top of pressure to opacity
+    val touchTaperStart: Float? = null, // Touch taper for finger strokes; null uses the stylus (pressure) taper
+    val touchTaperEnd: Float? = null,
 ) {
     /** Flow at [pressure], after Pressure → Flow thins it for lighter presses. */
     fun flowAt(pressure: Float): Float =
         flow.coerceIn(0f, 1f) * (1f - pressureToFlow.coerceIn(0f, 1f) * (1f - pressureResponse(pressure)))
 
     /** These settings for a finger stroke: the Touch taper replaces the stylus (pressure) taper. */
-    fun forTouch(): BrushParams =
-        if (touchTaperStart == null && touchTaperEnd == null) {
-            this
-        } else {
-            copy(taperStart = touchTaperStart ?: taperStart, taperEnd = touchTaperEnd ?: taperEnd)
-        }
+    fun forTouch(): BrushParams = copy(taperStart = touchTaperStart ?: taperStart, taperEnd = touchTaperEnd ?: taperEnd)
 
     /** How dabs accumulate within one stroke. */
     val rendering: RenderingMode
