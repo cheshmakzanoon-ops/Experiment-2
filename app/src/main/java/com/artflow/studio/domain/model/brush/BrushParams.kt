@@ -69,6 +69,8 @@ data class BrushParams(
     val maxSize: Float = MAX_BRUSH_SIZE, // ...to this, in pixels
     val minOpacity: Float = MIN_BRUSH_OPACITY, // and its opacity slider from this...
     val maxOpacity: Float = 1f, // ...to this
+    /** How the grain combines with the brush's coverage, as Procreate's grain blend mode. */
+    val grainBlend: GrainBlend = GrainBlend.MULTIPLY,
     val grainBrightness: Float = 0f, // -1..1: lightens or darkens the grain
     val grainContrast: Float = 0f, // -1..1: flattens the grain or sharpens it toward black and white
     val wetBlur: Float = 0f, // 0..1: Wet Mix Blur; the paint picked up is averaged over this share of the brush
@@ -392,4 +394,31 @@ enum class RenderingMode(
     HEAVY_GLAZE("Heavy glaze", blending = false, intense = true, uniformEdges = true),
     UNIFORM_BLENDING("Uniform blending", blending = true, intense = false, uniformEdges = false),
     INTENSE_BLENDING("Intense blending", blending = true, intense = true, uniformEdges = false),
+}
+
+/** Procreate's grain blend modes: how the grain value combines with the stroke's own coverage. */
+@Serializable
+enum class GrainBlend(
+    val displayName: String,
+) {
+    /** Grain scales the coverage: the classic look. */
+    MULTIPLY("Multiply"),
+
+    /** Grain is taken away from the coverage, eating into soft edges first. */
+    SUBTRACT("Subtract"),
+
+    /** Coverage and grain together either paint fully or not at all: crisp, printed texture. */
+    HARD_MIX("Hard mix"),
+    ;
+
+    /** The stroke's [coverage] (0..1) after the grain value [grain] (0..1). */
+    fun combine(
+        coverage: Float,
+        grain: Float,
+    ): Float =
+        when (this) {
+            MULTIPLY -> coverage * grain
+            SUBTRACT -> (coverage - (1f - grain)).coerceAtLeast(0f)
+            HARD_MIX -> if (coverage + grain > 1f) 1f else 0f
+        }
 }

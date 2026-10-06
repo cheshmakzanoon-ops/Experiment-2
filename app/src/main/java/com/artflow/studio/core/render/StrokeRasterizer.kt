@@ -9,6 +9,7 @@ import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.pixels.Stamping
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.DualBrush
+import com.artflow.studio.domain.model.brush.GrainBlend
 import com.artflow.studio.domain.model.brush.RenderingMode
 import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.model.brush.StrokePoint
@@ -133,7 +134,7 @@ class StrokeRasterizer(
                 if ((source ushr 24) == 0) continue
                 val coverage = selectionCoverage(how.mask, target, i)
                 val grain = how.texture?.coverage(originX + i % target.width - grainX, originY + i / target.width - grainY) ?: 1f
-                val effective = how.strokeAlpha * coverage * grain * wetEdgeFactor(source, how.wetEdges)
+                val effective = how.strokeAlpha * coverage * grainFactor(source, grain, how.params) * wetEdgeFactor(source, how.wetEdges)
                 if (effective <= 0f) continue
                 val paint = Channels.scaleAlpha(burnt(source, how.burntEdges), effective)
                 target.pixels[i] = deposit(target.pixels[i], paint, how.params, how.alphaLock)
@@ -294,7 +295,7 @@ class StrokeRasterizer(
                 val selectionCoverage = selectionCoverage(mask, target, i)
                 if (selectionCoverage <= 0f) continue
                 val grain = texture?.coverage(originX + i % target.width - grainX, originY + i / target.width - grainY) ?: 1f
-                val erase = (strokeAlpha * sourceCoverage * selectionCoverage * grain).coerceIn(0f, 1f)
+                val erase = (strokeAlpha * sourceCoverage * selectionCoverage * grainFactor(source, grain, params)).coerceIn(0f, 1f)
                 val destination = target.pixels[i]
                 val destinationAlpha = (destination ushr 24) and 0xFF
                 if (destinationAlpha == 0) continue
@@ -586,6 +587,20 @@ class StrokeRasterizer(
         if (a <= 0f) return 0
         val count = BLUR_TAPS.size
         return Channels.argb((a / count * 255f).roundToInt(), (r / a).roundToInt(), (g / a).roundToInt(), (b / a).roundToInt())
+    }
+
+    /**
+     * What the grain leaves of the coverage in [source]'s alpha, as a factor on that alpha, so
+     * Multiply is exactly the grain value and other grain blends reshape the coverage first.
+     */
+    private fun grainFactor(
+        source: Int,
+        grain: Float,
+        params: BrushParams,
+    ): Float {
+        if (params.grainBlend == GrainBlend.MULTIPLY) return grain
+        val coverage = (source ushr 24) / 255f
+        return if (coverage <= 0f) 0f else params.grainBlend.combine(coverage, grain) / coverage
     }
 
     private fun canUseCapsule(

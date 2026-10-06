@@ -33,6 +33,7 @@ import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.ColorDynamics
 import com.artflow.studio.domain.model.brush.DualBrush
+import com.artflow.studio.domain.model.brush.GrainBlend
 import com.artflow.studio.domain.model.brush.MAX_BRUSH_SIZE
 import com.artflow.studio.domain.model.brush.MIN_BRUSH_OPACITY
 import com.artflow.studio.domain.model.brush.MIN_BRUSH_SIZE
@@ -338,6 +339,16 @@ private fun BrushGrainSettings(
                 valueRange = -1f..1f,
                 valueDisplay = "%+.0f%%".format(brushParams.grainContrast * 100),
             )
+            Text("Grain blend", style = MaterialTheme.typography.labelMedium)
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                GrainBlend.entries.forEach { blend ->
+                    FilterChip(
+                        selected = brushParams.grainBlend == blend,
+                        onClick = { onBrushParamsChanged(brushParams.copy(grainBlend = blend)) },
+                        label = { Text(blend.displayName, style = MaterialTheme.typography.labelSmall) },
+                    )
+                }
+            }
             ShapeSwitch("Moving grain (starts with each stroke)", brushParams.grainMoving) {
                 onBrushParamsChanged(brushParams.copy(grainMoving = it))
             }
