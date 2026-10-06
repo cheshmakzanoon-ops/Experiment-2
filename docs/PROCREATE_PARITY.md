@@ -45,6 +45,22 @@ A layer marked **Reference** in its options is Procreate's fill reference: Color
 bucket on other layers stop at its lines, and only one layer is the reference at a time. The older
 "Exclude from export" option keeps a layer out of exports and is a separate ArtFlow feature.
 
+## Correctness fixes, 6 October 2026
+
+An audit of the engine against what each control promises found and fixed these, each with a
+regression test that fails on the old code:
+
+- **Symmetry** copied strokes by moving them instead of reflecting them: with Vertical symmetry a
+  stroke heading right was copied heading right. Every point is now transformed.
+- **GIF export** widened its LZW code size one code early, so decoders misread most of a busy
+  image (149,727 of 160,000 pixels wrong in the test image), and transparent animations used the
+  wrong disposal method and left trails.
+- **Emboss** washed out to white and ignored its strength; **Selective Color** Black lightened.
+- **2D grid** and **isometric** snapping pulled the pen to lines other than the ones drawn.
+- **Tints** of fully bright colours were all the same colour.
+- **Liquify's Size slider** and **Settings > Haptics** did nothing; onion skin settings only
+  applied after changing frame.
+
 ## Implemented milestones and their boundaries
 
 ### Compact workspace and connected editor controls
