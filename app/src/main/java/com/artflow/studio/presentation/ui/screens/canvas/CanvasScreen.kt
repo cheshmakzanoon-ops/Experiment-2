@@ -523,7 +523,7 @@ fun CanvasScreen(
                 )
                 BrushOptionsRow(
                     tool = input.tool,
-                    size = input.brushParams.size,
+                    size = (input.smudgeParams?.takeIf { input.tool == ToolType.SMUDGE } ?: input.brushParams).size,
                     opacity = input.brushParams.opacity,
                     eraserSize = input.eraserSize,
                     tolerance = input.fillTolerance,
@@ -531,7 +531,7 @@ fun CanvasScreen(
                     onOpacityChanged = viewModel::setBrushOpacity,
                     onEraserSizeChanged = viewModel::setEraserSize,
                     onToleranceChanged = { viewModel.setFillSettings(it, input.fillContiguous) },
-                    sizeRange = input.brushParams.sizeLimits,
+                    sizeRange = (input.smudgeParams?.takeIf { input.tool == ToolType.SMUDGE } ?: input.brushParams).sizeLimits,
                     opacityRange = input.brushParams.opacityLimits,
                 )
                 ToolOptionsPanel(viewModel, input, canvasView)
@@ -1199,7 +1199,12 @@ fun CanvasScreen(
                             canUndo = history.canUndo,
                             canRedo = history.canRedo,
                             eyedropperActive = input.tool == ToolType.EYEDROPPER,
-                            sizeRange = if (input.tool == ToolType.ERASER) MIN_BRUSH_SIZE..MAX_BRUSH_SIZE else input.brushParams.sizeLimits,
+                            sizeRange =
+                                when (input.tool) {
+                                    ToolType.ERASER -> MIN_BRUSH_SIZE..MAX_BRUSH_SIZE
+                                    ToolType.SMUDGE -> (input.smudgeParams ?: input.brushParams).sizeLimits
+                                    else -> input.brushParams.sizeLimits
+                                },
                             opacityRange = input.brushParams.opacityLimits,
                         ),
                     actions =

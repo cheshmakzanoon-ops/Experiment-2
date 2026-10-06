@@ -2530,13 +2530,14 @@ class ArtFlowCanvasView
                 coroutineScope.launch {
                     previous?.join()
                     val last = adjustableLiquify ?: return@launch
+                    // Render first: undo and re-apply then happen back to back, so no edit can land between them.
+                    val adjusted = withContext(Dispatchers.Default) { last.session.renderAdjusted(last.original, strength) }
                     val revision = canvasRepository.contentRevision
                     if (rasterSession != null || canvasRepository.historyMark != last.historyMark || !canvasRepository.undo()) {
                         clearLiquifyAdjust()
                         onStatusMessage?.invoke("Adjust only changes the latest liquify gesture")
                         return@launch
                     }
-                    val adjusted = withContext(Dispatchers.Default) { last.session.renderAdjusted(last.original, strength) }
                     val reference = liquifyReference
                     if (canvasRepository.applyRasterEdit(last.layerId, "Liquify") { adjusted.pixels.copyInto(it.pixels) }) {
                         last.historyMark = canvasRepository.historyMark

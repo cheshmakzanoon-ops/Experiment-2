@@ -97,6 +97,12 @@ class WetPaintTest {
     }
 
     @Test
+    fun consecutiveStrokesGetDifferentPerStrokeColours() {
+        val firsts = (1L..10L).map { java.util.Random(strokeColorSeed(it)).nextFloat() }
+        assertTrue("Neighbouring stroke ids must not share a colour ($firsts)", firsts.max() - firsts.min() > 0.3f)
+    }
+
+    @Test
     fun countJitterStampsBetweenOneAndCountCopies() {
         val many = BrushParams(size = 12f, spacing = 0.3f, pressureToSize = 0f, pressureToOpacity = 0f, count = 4)
 

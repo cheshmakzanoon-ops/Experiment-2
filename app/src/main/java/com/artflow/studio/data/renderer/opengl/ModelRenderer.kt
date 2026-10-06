@@ -41,6 +41,9 @@ class ModelRenderer : GLSurfaceView.Renderer {
     private val wireBuffer = IntArray(1)
     private var wireVertices = 0
     private var wireSource: Mesh? = null
+
+    /** The mesh whose buffers are on the GPU now (set on the GL thread). */
+    private var uploadedMesh: Mesh? = null
     private var texture = 0
     private var width = 1
     private var height = 1
@@ -85,6 +88,7 @@ class ModelRenderer : GLSurfaceView.Renderer {
         GLES20.glEnable(GLES20.GL_DEPTH_TEST)
         // A recreated context lost every upload, so the mesh is sent again.
         corners = 0
+        uploadedMesh = null
         lastMesh?.let { pendingMesh.compareAndSet(null, it) }
     }
 
@@ -147,7 +151,7 @@ class ModelRenderer : GLSurfaceView.Renderer {
     }
 
     private fun drawWire() {
-        val mesh = lastMesh ?: return
+        val mesh = uploadedMesh ?: return
         if (wireSource !== mesh) {
             val edges = edgeVertices(mesh.positions, corners)
             GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, wireBuffer[0])
@@ -167,6 +171,7 @@ class ModelRenderer : GLSurfaceView.Renderer {
             GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, values.size * 4, floats(values), GLES20.GL_STATIC_DRAW)
         }
         corners = mesh.triangleCount * 3
+        uploadedMesh = mesh
     }
 
     private fun attribute(

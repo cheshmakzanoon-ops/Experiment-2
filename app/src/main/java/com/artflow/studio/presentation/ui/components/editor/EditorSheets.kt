@@ -1440,4 +1440,3 @@ private val TEXT_SWATCHES =
         "Blue" to 0xFF1976D2.toInt(),
         "Purple" to 0xFF7B1FA2.toInt(),
     )
-

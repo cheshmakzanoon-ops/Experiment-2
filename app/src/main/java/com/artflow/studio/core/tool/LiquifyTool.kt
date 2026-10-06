@@ -92,11 +92,15 @@ object LiquifyTool {
         /** The same field with every offset multiplied by [factor] (Liquify's Adjust). */
         fun scaled(factor: Float): DisplacementMap {
             val out = DisplacementMap(width, height)
-            if (isEmpty()) return out
+            if (isEmpty() || factor == 0f || !factor.isFinite()) return out
+            // Copied array to array: no per-pixel bounds objects on a large canvas.
             for (index in 0 until count) {
                 if (!touched[index]) continue
-                out.add(index % width, index / width, offsetX[index] * factor, offsetY[index] * factor)
+                out.offsetX[index] = offsetX[index] * factor
+                out.offsetY[index] = offsetY[index] * factor
+                out.touched[index] = true
             }
+            out.dirtyBounds = dirtyBounds
             return out
         }
 

@@ -482,7 +482,7 @@ class StrokeRasterizer(
 
         // Pull keeps some of the paint the brush already carries instead of reloading the fresh colour.
         // Per-stroke jitter draws from a sequence that restarts at every dab, so each dab gets the same colour.
-        val colorRandom = if (params.colorJitterPerStroke) Random(stroke.id) else random
+        val colorRandom = if (params.colorJitterPerStroke) Random(strokeColorSeed(stroke.id)) else random
         val fresh = params.applyColorJitter(stroke.color, pressure, velocity, colorRandom, stroke.secondaryColor, tilt)
         val loaded = walk.carried?.let { carried -> carriedColor(fresh, carried, params) } ?: fresh
         val color = wetColor(loaded, context.canvas, x, y, wetPickup(params), params.wetBlur.coerceIn(0f, 1f) * params.size / 2f)
@@ -598,7 +598,8 @@ class StrokeRasterizer(
         grain: Float,
         params: BrushParams,
     ): Float {
-        if (params.grainBlend == GrainBlend.MULTIPLY) return grain
+        // Without grain (none, or depth 0) there is nothing to blend, whatever the mode.
+        if (params.grainBlend == GrainBlend.MULTIPLY || grain >= 1f) return grain
         val coverage = (source ushr 24) / 255f
         return if (coverage <= 0f) 0f else params.grainBlend.combine(coverage, grain) / coverage
     }
@@ -914,3 +915,14 @@ private const val SHARPNESS_CURVE = 3f
 
 /** Renderings the single-capsule fast path reproduces exactly. */
 private val CAPSULE_RENDERINGS = setOf(RenderingMode.LIGHT_GLAZE, RenderingMode.UNIFORM_BLENDING)
+
+/**
+ * A well-mixed seed for a stroke's own colour sequence (SplitMix64's finaliser). Stroke ids count
+ * up by one, and java.util.Random gives nearly the same first value for neighbouring seeds.
+ */
+internal fun strokeColorSeed(id: Long): Long {
+    var z = id + -0x61c8864680b583ebL
+    z = (z xor (z ushr 30)) * -0x40a7b892e31b1a47L
+    z = (z xor (z ushr 27)) * -0x6b2fb644ecceee15L
+    return z xor (z ushr 31)
+}
