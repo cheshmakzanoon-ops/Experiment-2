@@ -357,8 +357,20 @@ object ColorHarmony {
         val result = mutableListOf<Int>()
         for (i in steps downTo 1) result += adjustLightness(argb, i * -0.16f)
         result += argb
-        for (i in 1..steps) result += adjustLightness(argb, i * 0.16f)
+        for (i in 1..steps) result += towardWhite(argb, i * 0.16f)
         return result
+    }
+
+    /** Mixes [argb] with white by [amount], so even a fully bright colour gets lighter. */
+    private fun towardWhite(
+        argb: Int,
+        amount: Float,
+    ): Int {
+        fun channel(shift: Int): Int {
+            val c = (argb shr shift) and 0xFF
+            return (c + (255 - c) * amount.coerceIn(0f, 1f) + 0.5f).toInt().coerceIn(0, 255)
+        }
+        return (argb and 0xFF000000.toInt()) or (channel(16) shl 16) or (channel(8) shl 8) or channel(0)
     }
 
     /** Deduplicates a recent-colour list while preserving order (most recent first). */
