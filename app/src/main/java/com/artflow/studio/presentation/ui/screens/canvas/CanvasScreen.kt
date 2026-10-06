@@ -69,8 +69,8 @@ import com.artflow.studio.presentation.ui.components.canvas.CanvasProjection
 import com.artflow.studio.presentation.ui.components.canvas.DragPreview
 import com.artflow.studio.presentation.ui.components.canvas.EditorInput
 import com.artflow.studio.presentation.ui.components.canvas.EyedropperLoupe
-import com.artflow.studio.presentation.ui.components.canvas.GestureControls
 import com.artflow.studio.presentation.ui.components.canvas.ShapeEditState
+import com.artflow.studio.presentation.ui.components.canvas.gestureControls
 import com.artflow.studio.presentation.ui.components.canvas.imageDropTarget
 import com.artflow.studio.presentation.ui.components.color.ColorPanel
 import com.artflow.studio.presentation.ui.components.color.PaletteEdits
@@ -822,12 +822,7 @@ fun CanvasScreen(
                             input.touchHoldEyedropper,
                             input.fingerPainting,
                             settings.pressureAndSmoothing,
-                            GestureControls(
-                                settings.scrubToClear,
-                                settings.swipeCopyPaste,
-                                settings.fourFingerFullScreen,
-                                settings.rapidUndoDelayMs,
-                            ),
+                            settings.gestureControls(),
                             lightInterface = settings.themeMode == ThemeMode.LIGHT,
                             brushCursor = settings.brushCursor,
                             dynamicBrushScaling = settings.dynamicBrushScaling,

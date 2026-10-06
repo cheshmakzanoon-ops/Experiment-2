@@ -44,6 +44,7 @@ import com.artflow.studio.domain.model.animation.AnimationSettings
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.PressureResponse
 import com.artflow.studio.domain.model.brush.StrokeDestination
+import com.artflow.studio.domain.model.settings.AppSettings
 import com.artflow.studio.domain.repository.canvas.CanvasInvalidationEvent
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import dagger.hilt.android.AndroidEntryPoint
@@ -171,7 +172,13 @@ data class GestureControls(
     val fourFingerFullScreen: Boolean = true,
     /** How long two or three resting fingers wait before undo or redo starts repeating. */
     val rapidUndoDelayMs: Int = 650,
+    val eyedropperDelayMs: Int = 500,
+    val quickShapeDelayMs: Int = 650,
 )
+
+/** The gesture preferences the canvas reads, from the stored settings. */
+fun AppSettings.gestureControls(): GestureControls =
+    GestureControls(scrubToClear, swipeCopyPaste, fourFingerFullScreen, rapidUndoDelayMs, eyedropperDelayMs, quickShapeDelayMs)
 
 /** Brush outline under a hovering stylus, in view pixels. */
 data class BrushCursor(
@@ -1820,7 +1827,7 @@ class ArtFlowCanvasView
             val (canvasX, canvasY) = viewToCanvas(x, y)
             holdCanvasX = canvasX
             holdCanvasY = canvasY
-            postDelayed(holdEyedropper, HOLD_EYEDROPPER_MS)
+            postDelayed(holdEyedropper, input.gestures.eyedropperDelayMs.toLong())
         }
 
         private fun startHoldEyedropper() {
@@ -2003,7 +2010,7 @@ class ArtFlowCanvasView
                 holdAnchorX = viewX
                 holdAnchorY = viewY
                 removeCallbacks(quickShapeCheck)
-                postDelayed(quickShapeCheck, QUICKSHAPE_HOLD_MS)
+                postDelayed(quickShapeCheck, input.gestures.quickShapeDelayMs.toLong())
             }
         }
 
@@ -2948,9 +2955,7 @@ class ArtFlowCanvasView
             private const val MAX_SCALE = 32f
             private const val TAP_SLOP = 24f
             private const val QUICKSHAPE_HOLD_SLOP = 10f
-            private const val QUICKSHAPE_HOLD_MS = 650L
             private const val NODE_REACH_DP = 28f
-            private const val HOLD_EYEDROPPER_MS = 500L
             private const val HANDLE_TOUCH_PX = 36f
             private const val MIN_SCALED_BRUSH = 0.5f
             private const val MAX_SCALED_BRUSH = 1_000f

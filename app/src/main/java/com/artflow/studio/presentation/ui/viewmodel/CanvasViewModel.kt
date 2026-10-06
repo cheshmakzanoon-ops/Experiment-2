@@ -50,6 +50,7 @@ import com.artflow.studio.presentation.ui.components.canvas.EditorInput
 import com.artflow.studio.presentation.ui.components.canvas.GestureControls
 import com.artflow.studio.presentation.ui.components.canvas.SelectionCombineMode
 import com.artflow.studio.presentation.ui.components.canvas.ShapeKind
+import com.artflow.studio.presentation.ui.components.canvas.gestureControls
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -243,13 +244,7 @@ class CanvasViewModel
                             haptics = stored.haptics,
                             reduceMotion = stored.reduceMotion,
                             brushCursor = stored.brushCursor,
-                            gestures =
-                                GestureControls(
-                                    stored.scrubToClear,
-                                    stored.swipeCopyPaste,
-                                    stored.fourFingerFullScreen,
-                                    stored.rapidUndoDelayMs,
-                                ),
+                            gestures = stored.gestureControls(),
                             dynamicBrushScaling = stored.dynamicBrushScaling,
                         )
                 }
@@ -616,6 +611,8 @@ class CanvasViewModel
                         swipeCopyPaste = controls.swipeCopyPaste,
                         fourFingerFullScreen = controls.fourFingerFullScreen,
                         rapidUndoDelayMs = controls.rapidUndoDelayMs,
+                        eyedropperDelayMs = controls.eyedropperDelayMs,
+                        quickShapeDelayMs = controls.quickShapeDelayMs,
                     )
                 }
             }

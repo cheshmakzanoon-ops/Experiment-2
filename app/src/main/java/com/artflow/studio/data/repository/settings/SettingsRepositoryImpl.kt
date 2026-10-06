@@ -235,6 +235,8 @@ class SettingsRepositoryImpl
                 KEY_SWIPE_PASTE to settings.swipeCopyPaste.toString(),
                 KEY_FOUR_FINGER to settings.fourFingerFullScreen.toString(),
                 KEY_RAPID_UNDO_DELAY to settings.rapidUndoDelayMs.toString(),
+                KEY_EYEDROPPER_DELAY to settings.eyedropperDelayMs.toString(),
+                KEY_QUICKSHAPE_DELAY to settings.quickShapeDelayMs.toString(),
                 KEY_TIMELAPSE_SIDE to settings.timelapseMaxSide.toString(),
                 KEY_DYNAMIC_BRUSH to settings.dynamicBrushScaling.toString(),
                 KEY_SELECTION_VISIBILITY to settings.selectionMaskVisibility.toString(),
@@ -249,6 +251,10 @@ class SettingsRepositoryImpl
                 KEY_RECENT_COLORS to settings.recentColors.joinToString(","),
                 KEY_PALETTES to PaletteCodec.exportJson(settings.customPalettes),
             )
+
+        /** A stored hold delay in milliseconds, within the range the gesture sliders offer. */
+        private fun Map<String, String>.delay(key: String): Int? =
+            this[key]?.toIntOrNull()?.coerceIn(MIN_RAPID_UNDO_DELAY_MS, MAX_RAPID_UNDO_DELAY_MS)
 
         /** Three increasing values in 0..1, or null when the stored curve is missing or damaged. */
         private fun Map<String, String>.pressureResponse(key: String): PressureResponse? {
@@ -320,6 +326,8 @@ class SettingsRepositoryImpl
                 rapidUndoDelayMs =
                     stored[KEY_RAPID_UNDO_DELAY]?.toIntOrNull()?.coerceIn(MIN_RAPID_UNDO_DELAY_MS, MAX_RAPID_UNDO_DELAY_MS)
                         ?: defaults.rapidUndoDelayMs,
+                eyedropperDelayMs = stored.delay(KEY_EYEDROPPER_DELAY) ?: defaults.eyedropperDelayMs,
+                quickShapeDelayMs = stored.delay(KEY_QUICKSHAPE_DELAY) ?: defaults.quickShapeDelayMs,
                 timelapseMaxSide =
                     stored[KEY_TIMELAPSE_SIDE]?.toIntOrNull()?.takeIf { it in TIMELAPSE_SIDES } ?: defaults.timelapseMaxSide,
                 dynamicBrushScaling = stored.flag(KEY_DYNAMIC_BRUSH, defaults.dynamicBrushScaling),
@@ -400,6 +408,8 @@ class SettingsRepositoryImpl
             private const val KEY_SWIPE_PASTE = "gesture.swipeCopyPaste"
             private const val KEY_FOUR_FINGER = "gesture.fourFingerFullScreen"
             private const val KEY_RAPID_UNDO_DELAY = "gesture.rapidUndoDelayMs"
+            private const val KEY_EYEDROPPER_DELAY = "gesture.eyedropperDelayMs"
+            private const val KEY_QUICKSHAPE_DELAY = "gesture.quickShapeDelayMs"
             private const val MIN_RAPID_UNDO_DELAY_MS = 200
             private const val MAX_RAPID_UNDO_DELAY_MS = 1500
             private const val KEY_TIMELAPSE_SIDE = "timelapse.maxSide"

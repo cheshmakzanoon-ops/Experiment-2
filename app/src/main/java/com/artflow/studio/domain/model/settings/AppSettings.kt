@@ -92,6 +92,10 @@ data class AppSettings(
     val fourFingerFullScreen: Boolean = true,
     /** Gesture controls: how long two or three fingers must rest before undo or redo starts repeating. */
     val rapidUndoDelayMs: Int = 650,
+    /** Gesture controls: how long a touch must rest before the eyedropper appears. */
+    val eyedropperDelayMs: Int = 500,
+    /** Gesture controls: how long the pen must rest at the end of a stroke before QuickShape snaps. */
+    val quickShapeDelayMs: Int = 650,
     /** Longest side, in pixels, of recorded time-lapse frames (720p, 1080p or 1440p). */
     val timelapseMaxSide: Int = 1280,
     /** Brush size follows the zoom so the brush looks the same size on screen. */

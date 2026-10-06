@@ -302,6 +302,18 @@ private fun PrefsTab(
         range = 200f..1500f,
         readout = "%.2f s".format(gestures.rapidUndoDelayMs / 1000f),
     ) { actions.onGestures(gestures.copy(rapidUndoDelayMs = (it / 50f).roundToInt() * 50)) }
+    PrefSlider(
+        label = "Eyedropper delay",
+        value = gestures.eyedropperDelayMs.toFloat(),
+        range = 200f..1500f,
+        readout = "%.2f s".format(gestures.eyedropperDelayMs / 1000f),
+    ) { actions.onGestures(gestures.copy(eyedropperDelayMs = (it / 50f).roundToInt() * 50)) }
+    PrefSlider(
+        label = "QuickShape delay",
+        value = gestures.quickShapeDelayMs.toFloat(),
+        range = 200f..1500f,
+        readout = "%.2f s".format(gestures.quickShapeDelayMs / 1000f),
+    ) { actions.onGestures(gestures.copy(quickShapeDelayMs = (it / 50f).roundToInt() * 50)) }
     HorizontalDivider()
     ActionRow("Full screen", actions.onFullScreen)
     ActionRow("More preferences…", actions.onMoreSettings)
