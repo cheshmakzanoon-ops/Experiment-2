@@ -77,7 +77,9 @@ data class BrushParams(
     /** Procreate's Colour Pressure (0..1 each): lighter presses drift the hue, wash out saturation, darken. */
     val colorDynamics: ColorDynamics = ColorDynamics(),
     /** Procreate's rendering mode; null keeps the older [buildUp] switch (Light glaze or Uniform blending). */
-    val renderingMode: RenderingMode? = null, // Colour jitter picks one colour per stroke instead of varying each dab
+    val renderingMode: RenderingMode? = null,
+    /** Procreate's taper Tip sharpness, 0..1: higher keeps the tapered end thin for longer, a finer point. */
+    val tipSharpness: Float = 0f, // Colour jitter picks one colour per stroke instead of varying each dab
 ) {
     /** How dabs accumulate within one stroke. */
     val rendering: RenderingMode

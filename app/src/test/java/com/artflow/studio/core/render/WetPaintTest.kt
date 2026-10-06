@@ -124,6 +124,19 @@ class WetPaintTest {
         assertTrue("Intense glaze lays more paint ($intense vs $light)", intense > light)
     }
 
+    @Test
+    fun tipSharpnessThinsTheTaper() {
+        val tapered = BrushParams(size = 16f, spacing = 0.1f, pressureToSize = 0f, pressureToOpacity = 0f, taperStart = 0.5f, taperEnd = 0.5f)
+
+        fun inked(params: BrushParams) =
+            PixelBuffer(width, height).also { StrokeRasterizer().draw(it, strokeOf(params)) }.pixels.count { alpha(it) > 0 }
+        assertArrayEquals(
+            PixelBuffer(width, height).also { StrokeRasterizer().draw(it, strokeOf(tapered)) }.pixels,
+            PixelBuffer(width, height).also { StrokeRasterizer().draw(it, strokeOf(tapered.copy(tipSharpness = 0f))) }.pixels,
+        )
+        assertTrue(inked(tapered.copy(tipSharpness = 1f)) < inked(tapered))
+    }
+
     private fun strokeOf(params: BrushParams): Stroke =
         Stroke(
             id = 77L,

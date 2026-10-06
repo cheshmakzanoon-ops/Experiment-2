@@ -700,7 +700,10 @@ class StrokeRasterizer(
         val startFactor = if (startRamp <= 0f) 1f else (travelled / startRamp).coerceIn(0.05f, 1f)
         val remaining = totalLength - travelled
         val endFactor = if (endRamp <= 0f) 1f else (remaining / endRamp).coerceIn(0.05f, 1f)
-        return min(startFactor, endFactor)
+        val factor = min(startFactor, endFactor)
+        val sharpness = params.tipSharpness.coerceIn(0f, 1f)
+        // A sharper tip bends the straight ramp into a curve that stays thin near the end.
+        return if (sharpness > 0f) factor.pow(1f + SHARPNESS_CURVE * sharpness) else factor
     }
 
     /** Moving grain is anchored where the stroke starts; texturized grain stays fixed to the canvas. */
@@ -885,3 +888,6 @@ private const val FULL_TURN = 360f
 
 /** Where Wet Mix Blur samples the layer: the dab's centre and four points around it. */
 private val BLUR_TAPS = listOf(0f to 0f, 1f to 0f, -1f to 0f, 0f to 1f, 0f to -1f)
+
+/** Tip sharpness at full raises the taper ramp to this extra power. */
+private const val SHARPNESS_CURVE = 3f

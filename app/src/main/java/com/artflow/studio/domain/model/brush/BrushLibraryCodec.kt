@@ -78,6 +78,7 @@ object BrushLibraryCodec {
                 params.pull,
                 params.countJitter,
                 params.minOpacity,
+                params.tipSharpness,
                 params.maxOpacity,
                 params.wetBlur,
                 params.flow,

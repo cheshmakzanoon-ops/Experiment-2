@@ -169,6 +169,13 @@ private fun BrushTaperSettings(
             valueRange = 0f..1f,
             valueDisplay = "%.0f%%".format(brushParams.taperOpacity * 100),
         )
+        BrushParameterSlider(
+            label = "Tip sharpness",
+            value = brushParams.tipSharpness,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(tipSharpness = it.coerceIn(0f, 1f))) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.tipSharpness * 100),
+        )
     }
 }
 
