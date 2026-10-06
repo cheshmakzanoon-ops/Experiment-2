@@ -94,8 +94,10 @@ object AdjustmentProcessor {
             }
             AdjustmentType.CURVES -> {
                 // The master curve, then each channel's own curve on top of it (identity when unset).
-                val lut = buildCurveLut(merged)
-                val (red, green, blue) = CURVE_CHANNELS.map { buildCurveLut(merged, it) }
+                // Once the caller sets master points, removed defaults must not come back.
+                val curves = if (parameters.keys.any { it.startsWith("point_") }) parameters else merged
+                val lut = buildCurveLut(curves)
+                val (red, green, blue) = CURVE_CHANNELS.map { buildCurveLut(curves, it) }
                 perPixel(source, out, mixed, mask) { _, p ->
                     Channels.argb(
                         Channels.alpha(p).toInt(),
@@ -195,22 +197,44 @@ object AdjustmentProcessor {
     /** Prefixes of the per-channel curves' parameter keys, in red, green, blue order. */
     val CURVE_CHANNELS = listOf("red_", "green_", "blue_")
 
+    /** Most control points one curve can have; Procreate-style curves start with five. */
+    const val MAX_CURVE_POINTS = 8
+
+    /** The control points of one curve ([prefix] "" is the master curve), sorted left to right. */
+    fun curvePoints(
+        parameters: Map<String, Float>,
+        prefix: String = "",
+    ): List<Pair<Float, Float>> =
+        (0 until MAX_CURVE_POINTS)
+            .mapNotNull { index ->
+                val x = parameters["${prefix}point_${index}_x"] ?: return@mapNotNull null
+                val y = parameters["${prefix}point_${index}_y"] ?: return@mapNotNull null
+                (x.coerceIn(0f, 255f) to y.coerceIn(0f, 255f))
+            }.sortedBy { it.first }
+
+    /** [parameters] with one curve's points replaced by [points] (at most [MAX_CURVE_POINTS]). */
+    fun withCurvePoints(
+        parameters: Map<String, Float>,
+        prefix: String,
+        points: List<Pair<Float, Float>>,
+    ): Map<String, Float> {
+        val others = parameters.filterKeys { key -> (0 until MAX_CURVE_POINTS).none { key.startsWith("${prefix}point_${it}_") } }
+        return others +
+            points.take(MAX_CURVE_POINTS).flatMapIndexed { index, (x, y) ->
+                listOf("${prefix}point_${index}_x" to x, "${prefix}point_${index}_y" to y)
+            }
+    }
+
     /**
-     * Build the 256-entry lookup table used by the Curves adjustment from up to five control
-     * points (keys `point_N_x` / `point_N_y`, after [prefix]; "" is the master curve). Uses
+     * Build the 256-entry lookup table used by the Curves adjustment from up to [MAX_CURVE_POINTS]
+     * control points (keys `point_N_x` / `point_N_y`, after [prefix]; "" is the master curve). Uses
      * monotone cubic interpolation so the curve cannot overshoot into artifacts.
      */
     fun buildCurveLut(
         parameters: Map<String, Float>,
         prefix: String = "",
     ): IntArray {
-        val points =
-            (0..4)
-                .mapNotNull { index ->
-                    val x = parameters["${prefix}point_${index}_x"] ?: return@mapNotNull null
-                    val y = parameters["${prefix}point_${index}_y"] ?: return@mapNotNull null
-                    (x.coerceIn(0f, 255f) to y.coerceIn(0f, 255f))
-                }.sortedBy { it.first }
+        val points = curvePoints(parameters, prefix)
 
         val lut = IntArray(256)
         if (points.size < 2) {

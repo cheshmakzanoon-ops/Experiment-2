@@ -3,6 +3,7 @@ package com.artflow.studio.presentation.ui.components.editor
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -145,8 +146,9 @@ private fun ParameterSliders(
 }
 
 /**
- * Procreate-style Curves: drag any of the five points of the Gamma (all channels), Red, Green or
- * Blue curve. Channel curves apply on top of the Gamma curve.
+ * Procreate-style Curves for Gamma (all channels), Red, Green or Blue; channel curves apply on top
+ * of the Gamma curve. Drag a point to move it between its neighbours, tap the curve to add a point
+ * and tap a point to remove it (two always stay).
  */
 @Composable
 private fun CurvesEditor(
@@ -162,21 +164,19 @@ private fun CurvesEditor(
             "blue_" -> Color(0xFF3E63DD)
             else -> MaterialTheme.colorScheme.onSurface
         }
+    val identity = (0..4).map { i -> i * CURVE_STEP to i * CURVE_STEP }
 
-    fun point(i: Int): Pair<Float, Float> {
-        val identity = i * CURVE_STEP
-        return (parameters["${channel}point_${i}_x"] ?: identity) to (parameters["${channel}point_${i}_y"] ?: identity)
-    }
+    fun points(): List<Pair<Float, Float>> = AdjustmentProcessor.curvePoints(parameters, channel).ifEmpty { identity }
+
+    fun write(points: List<Pair<Float, Float>>) = onParameters(AdjustmentProcessor.withCurvePoints(parameters, channel, points))
+
+    fun lutOf(points: List<Pair<Float, Float>>) =
+        AdjustmentProcessor.buildCurveLut(AdjustmentProcessor.withCurvePoints(parameters, channel, points), channel)
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
         listOf("" to "Gamma", "red_" to "Red", "green_" to "Green", "blue_" to "Blue").forEach { (prefix, name) ->
             FilterChip(selected = channel == prefix, onClick = { channel = prefix }, label = { Text(name) })
         }
-        TextButton(onClick = {
-            onParameters(
-                parameters +
-                    (0..4).flatMap { i -> listOf("${channel}point_${i}_x" to i * CURVE_STEP, "${channel}point_${i}_y" to i * CURVE_STEP) },
-            )
-        }) { Text("Reset") }
+        TextButton(onClick = { write(identity) }) { Text("Reset") }
     }
     var dragging by remember { mutableStateOf(-1) }
     Canvas(
@@ -185,22 +185,43 @@ private fun CurvesEditor(
             .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
             .semantics { contentDescription = "Curve" }
             .pointerInput(channel) {
+                detectTapGestures { at ->
+                    val current = points()
+                    val reach = CURVE_TOUCH.dp.toPx()
+                    val hit =
+                        current.indexOfFirst { (x, y) ->
+                            hypot(x / 255f * size.width - at.x, (1f - y / 255f) * size.height - at.y) <= reach
+                        }
+                    if (hit >= 0) {
+                        if (current.size > 2) write(current.filterIndexed { i, _ -> i != hit })
+                    } else if (current.size < AdjustmentProcessor.MAX_CURVE_POINTS) {
+                        // A new point sits on the curve where it was tapped, so the curve keeps its shape.
+                        val x = (at.x / size.width * 255f).coerceIn(0f, 255f)
+                        val y = lutOf(current)[x.toInt()]
+                        write((current + (x to y.toFloat())).sortedBy { it.first })
+                    }
+                }
+            }.pointerInput(channel) {
                 detectDragGestures(
                     onDragStart = { at ->
                         // Grab the point nearest the touch.
                         dragging =
-                            (0..4).minBy { i ->
-                                val (x, y) = point(i)
+                            points().indices.minByOrNull { i ->
+                                val (x, y) = points()[i]
                                 hypot(x / 255f * size.width - at.x, (1f - y / 255f) * size.height - at.y)
-                            }
+                            } ?: -1
                     },
                     onDragEnd = { dragging = -1 },
                 ) { change, _ ->
                     change.consume()
-                    val i = dragging.takeIf { it >= 0 } ?: return@detectDragGestures
-                    val x = (change.position.x / size.width * 255f).coerceIn(0f, 255f)
+                    val current = points()
+                    val i = dragging.takeIf { it in current.indices } ?: return@detectDragGestures
+                    // Points keep their order: each moves only between its neighbours.
+                    val low = current.getOrNull(i - 1)?.first?.plus(1f) ?: 0f
+                    val high = current.getOrNull(i + 1)?.first?.minus(1f) ?: 255f
+                    val x = (change.position.x / size.width * 255f).coerceIn(low, maxOf(low, high))
                     val y = ((1f - change.position.y / size.height) * 255f).coerceIn(0f, 255f)
-                    onParameters(parameters + mapOf("${channel}point_${i}_x" to x, "${channel}point_${i}_y" to y))
+                    write(current.mapIndexed { index, point -> if (index == i) x to y else point })
                 }
             },
     ) {
@@ -209,7 +230,8 @@ private fun CurvesEditor(
             drawLine(grid, Offset(size.width * k / 4f, 0f), Offset(size.width * k / 4f, size.height))
             drawLine(grid, Offset(0f, size.height * k / 4f), Offset(size.width, size.height * k / 4f))
         }
-        val lut = AdjustmentProcessor.buildCurveLut(parameters, channel)
+        val shown = points()
+        val lut = lutOf(shown)
         val path = Path()
         lut.forEachIndexed { x, y ->
             val px = x / 255f * size.width
@@ -217,8 +239,7 @@ private fun CurvesEditor(
             if (x == 0) path.moveTo(px, py) else path.lineTo(px, py)
         }
         drawPath(path, tint, style = Stroke(width = 2.dp.toPx()))
-        for (i in 0..4) {
-            val (x, y) = point(i)
+        shown.forEach { (x, y) ->
             drawCircle(tint, radius = 5.dp.toPx(), center = Offset(x / 255f * size.width, (1f - y / 255f) * size.height))
         }
     }
@@ -369,6 +390,7 @@ private fun GradientRamps(
 }
 
 private const val CURVE_STEP = 63.75f
+private const val CURVE_TOUCH = 14
 
 /** Parameter keys shown for each colour adjustment, with friendly labels. */
 private fun visibleParameters(kind: LiveAdjustments.Kind): List<Pair<String, String>> =

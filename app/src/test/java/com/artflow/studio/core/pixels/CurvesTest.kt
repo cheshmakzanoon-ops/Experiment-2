@@ -29,4 +29,25 @@ class CurvesTest {
         assertTrue(channel < 0x80 - 30)
         assertEquals(channel, (out shr 16) and 0xFF)
     }
+
+    @Test
+    fun removedMasterPointsDoNotComeBackFromTheDefaults() {
+        val source = PixelBuffer.filled(1, 1, 0xFF808080.toInt())
+        // Only the two ends, pulled down at the top: the default mid points must not return.
+        val twoPoints = AdjustmentProcessor.withCurvePoints(emptyMap(), "", listOf(0f to 0f, 255f to 128f))
+        assertEquals(2, AdjustmentProcessor.curvePoints(twoPoints).size)
+        val out = AdjustmentProcessor.apply(source, AdjustmentType.CURVES, twoPoints).getSafe(0, 0)
+        assertEquals(64f, (out and 0xFF).toFloat(), 1.5f)
+    }
+
+    @Test
+    fun withCurvePointsReplacesOnlyThatCurveAndCapsTheCount() {
+        val many = (0..12).map { it * 20f to it * 20f }
+        val parameters = AdjustmentProcessor.withCurvePoints(identity() + identity("red_"), "red_", many)
+        assertEquals(AdjustmentProcessor.MAX_CURVE_POINTS, AdjustmentProcessor.curvePoints(parameters, "red_").size)
+        assertEquals(5, AdjustmentProcessor.curvePoints(parameters).size)
+        val fewer = AdjustmentProcessor.withCurvePoints(parameters, "red_", listOf(0f to 0f, 255f to 255f))
+        assertEquals(2, AdjustmentProcessor.curvePoints(fewer, "red_").size)
+        assertTrue(fewer.keys.none { it.startsWith("red_point_2") })
+    }
 }
