@@ -1119,6 +1119,14 @@ fun GuidesSheet(
                 onChange = { onPerspective(perspective.copy(gridSpacing = it.roundToInt())) },
             )
         }
+        if (perspective.type == PerspectiveGuide.GuideType.GRID) {
+            LabeledSlider(
+                label = "Grid rotation",
+                value = perspective.gridRotation,
+                range = 0f..180f,
+                onChange = { onPerspective(perspective.copy(gridRotation = it.roundToInt().toFloat())) },
+            )
+        }
         if (perspective.activePointCount() > 0) {
             OutlinedButton(onClick = assist.onEditPoints) { Text("Edit vanishing points") }
         }

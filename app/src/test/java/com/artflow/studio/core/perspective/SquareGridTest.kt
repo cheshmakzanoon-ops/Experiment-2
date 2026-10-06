@@ -29,6 +29,22 @@ class SquareGridTest {
         assertEquals(333f to 40f, PerspectiveGuide.snap(333f, 52f, grid, 1920, 1080))
     }
 
+    @Test fun aRotatedGridDrawsTurnedLinesAndSnapsOntoThem() {
+        val turned = grid.copy(gridRotation = 45f)
+        val lines = PerspectiveGuide.guideLines(turned, 1000, 1000)
+        assertTrue("No line stays axis-aligned", lines.none { abs(it.startX - it.endX) < 1e-3f || abs(it.startY - it.endY) < 1e-3f })
+        // 10 px right of the centre is 7 px from both lines through it; it lands on one of them.
+        val (sx, sy) = PerspectiveGuide.snap(510f, 500f, turned, 1000, 1000)
+        val onLine =
+            lines.any { line ->
+                val dx = line.endX - line.startX
+                val dy = line.endY - line.startY
+                abs((sx - line.startX) * dy - (sy - line.startY) * dx) / hypot(dx, dy) < 1e-2f
+            }
+        assertTrue(onLine)
+        assertEquals("Snapping moves the point straight onto the line", 7.07f, hypot(sx - 510f, sy - 500f), 1e-2f)
+    }
+
     @Test fun isometricSnapsToWhereItsLinesCross() {
         val iso = grid.copy(type = PerspectiveGuide.GuideType.ISOMETRIC, snapRadius = 200f)
         // The canvas centre is a crossing of every family of lines.

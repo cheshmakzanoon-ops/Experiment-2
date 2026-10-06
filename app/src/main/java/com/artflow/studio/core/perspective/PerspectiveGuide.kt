@@ -57,6 +57,8 @@ object PerspectiveGuide {
         val snapStrength: Float = 1f,
         /** Isometric grid: grid cell size in pixels. */
         val gridSpacing: Int = 64,
+        /** 2D grid: rotation in degrees about the canvas centre. */
+        val gridRotation: Float = 0f,
         val showHorizon: Boolean = true,
         /** Procreate's guide appearance: the lines' colour (RGB), opacity (0 to 1) and thickness (times a hairline). */
         val lineColor: Int = DEFAULT_LINE_COLOR,
@@ -255,13 +257,17 @@ object PerspectiveGuide {
         return bestX to bestY
     }
 
-    /** Square drawing grid centred on the canvas, [Settings.gridSpacing] pixels per cell. */
+    /**
+     * Square drawing grid centred on the canvas, [Settings.gridSpacing] pixels per cell, turned by
+     * [Settings.gridRotation] about the centre.
+     */
     private fun squareGridLines(
         settings: Settings,
         width: Int,
         height: Int,
     ): List<GuideLine> {
         val spacing = settings.gridSpacing.coerceIn(8, 512)
+        if (settings.gridRotation % 360f != 0f) return rotatedGridLines(settings, width, height)
         val lines = mutableListOf<GuideLine>()
         var x = (width / 2f) % spacing
         while (x <= width) {
@@ -276,7 +282,40 @@ object PerspectiveGuide {
         return lines
     }
 
-    /** Pulls the pointer onto the nearest drawn grid line (horizontal or vertical) within the snap radius. */
+    /** The rotated grid: both line families across the whole canvas, in the grid's own turned frame. */
+    private fun rotatedGridLines(
+        settings: Settings,
+        width: Int,
+        height: Int,
+    ): List<GuideLine> {
+        val spacing = settings.gridSpacing.coerceIn(8, 512).toFloat()
+        val radians = Math.toRadians(settings.gridRotation.toDouble())
+        val cos = cos(radians).toFloat()
+        val sin = sin(radians).toFloat()
+        val cx = width / 2f
+        val cy = height / 2f
+        // Half the diagonal reaches every corner whatever the angle.
+        val reach = sqrt(cx * cx + cy * cy)
+        val count = ceil(reach / spacing).toInt()
+
+        fun line(
+            u0: Float,
+            v0: Float,
+            u1: Float,
+            v1: Float,
+        ): GuideLine {
+            val startX = cx + u0 * cos - v0 * sin
+            val startY = cy + u0 * sin + v0 * cos
+            return GuideLine(startX, startY, cx + u1 * cos - v1 * sin, cy + u1 * sin + v1 * cos, pointIndex = -1)
+        }
+
+        return (-count..count).flatMap { k ->
+            val offset = k * spacing
+            listOf(line(offset, -reach, offset, reach), line(-reach, offset, reach, offset))
+        }
+    }
+
+    /** Pulls the pointer onto the nearest drawn grid line (either family) within the snap radius. */
     fun snapToSquareGrid(
         x: Float,
         y: Float,
@@ -286,18 +325,25 @@ object PerspectiveGuide {
     ): Pair<Float, Float> {
         val spacing = settings.gridSpacing.coerceIn(8, 512).toFloat()
         val strength = settings.snapStrength.coerceIn(0f, 1f)
-        // The grid is centred on the canvas, as [squareGridLines] draws it.
-        val originX = (width / 2f) % spacing
-        val originY = (height / 2f) % spacing
-        val lineX = originX + Math.round((x - originX) / spacing) * spacing
-        val lineY = originY + Math.round((y - originY) / spacing) * spacing
-        val distanceX = abs(x - lineX)
-        val distanceY = abs(y - lineY)
-        return when {
-            distanceX <= distanceY && distanceX <= settings.snapRadius -> (x + (lineX - x) * strength) to y
-            distanceY <= settings.snapRadius -> x to (y + (lineY - y) * strength)
-            else -> x to y
-        }
+        // Work in the grid's frame: centred on the canvas and turned by its rotation, as drawn.
+        val radians = Math.toRadians(settings.gridRotation.toDouble())
+        val cos = cos(radians).toFloat()
+        val sin = sin(radians).toFloat()
+        val cx = width / 2f
+        val cy = height / 2f
+        val u = (x - cx) * cos + (y - cy) * sin
+        val v = -(x - cx) * sin + (y - cy) * cos
+        val lineU = Math.round(u / spacing) * spacing
+        val lineV = Math.round(v / spacing) * spacing
+        val distanceU = abs(u - lineU)
+        val distanceV = abs(v - lineV)
+        val (snappedU, snappedV) =
+            when {
+                distanceU <= distanceV && distanceU <= settings.snapRadius -> (u + (lineU - u) * strength) to v
+                distanceV <= settings.snapRadius -> u to (v + (lineV - v) * strength)
+                else -> return x to y
+            }
+        return (cx + snappedU * cos - snappedV * sin) to (cy + snappedU * sin + snappedV * cos)
     }
 
     /** Snaps onto the nearest intersection of the isometric lines [isometricLines] draws. */
@@ -459,6 +505,7 @@ object PerspectiveGuide {
             snapRadius = settings.snapRadius.coerceIn(SNAP_RADIUS_RANGE),
             snapStrength = settings.snapStrength.coerceIn(0f, 1f),
             gridSpacing = settings.gridSpacing.coerceIn(8, 512),
+            gridRotation = if (settings.gridRotation.isFinite()) settings.gridRotation.mod(360f) else 0f,
         )
 
     /** Human-readable description for the guide overlay's info pill. */
