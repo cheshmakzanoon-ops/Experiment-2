@@ -129,6 +129,10 @@ object LiquifyTool {
         /** Optional selection restricting the distortion. */
         val mask: SelectionMask? = null,
         val alphaLock: Boolean = false,
+        /** `0..1`: how far the distortion carries on after the pen lifts, as with Procreate's Momentum. */
+        val momentum: Float = 0f,
+        /** When false, stylus pressure no longer scales the distortion. */
+        val usePressure: Boolean = true,
     ) {
         val radius: Float get() = if (size.isFinite()) (size / 2f).coerceIn(1f, 4096f) else 1f
     }
@@ -145,7 +149,9 @@ object LiquifyTool {
     ) {
         private var lastX = startX
         private var lastY = startY
-        private var samplePressure = unit(settings.pressure)
+        private var samplePressure = pressureOf(settings.pressure)
+        private var directionX = 0f
+        private var directionY = 0f
         private var reconstruction: FloatArray? = null
         private var reconstructionBounds: IntBounds? = null
         val dirtyBounds: IntBounds? get() = map.dirtyBounds ?: reconstructionBounds
@@ -162,7 +168,7 @@ object LiquifyTool {
             pressure: Float = settings.pressure,
         ): IntBounds? {
             if (!x.isFinite() || !y.isFinite()) return null
-            samplePressure = unit(pressure)
+            samplePressure = pressureOf(pressure)
             val dx = x - lastX
             val dy = y - lastY
             val distance = sqrt(dx * dx + dy * dy)
@@ -188,10 +194,37 @@ object LiquifyTool {
             }
 
             totalDistance += distance
+            directionX = dx / distance
+            directionY = dy / distance
             lastX = x
             lastY = y
 
             return affectedBounds(lastX, lastY, settings.radius, map.width, map.height)
+        }
+
+        private fun pressureOf(pressure: Float): Float = if (settings.usePressure) unit(pressure) else 1f
+
+        /**
+         * Momentum: when the pen lifts, the gesture glides on along its last direction, slowing to a
+         * stop over up to [MOMENTUM_REACH] brush widths. Call once, after the last [dragTo].
+         * @return the region the glide distorted, or null when there is no momentum or no movement.
+         */
+        fun release(): IntBounds? {
+            val momentum = unit(settings.momentum)
+            if (momentum <= 0f || totalDistance <= 0f || settings.mode == Mode.RECONSTRUCT) return null
+            val reach = momentum * MOMENTUM_REACH * settings.radius * 2f
+            // Step lengths fall linearly to zero, so the glide eases out like a sliding object.
+            val stepCount = MOMENTUM_STEPS
+            val unitStep = reach / (stepCount * (stepCount + 1) / 2f)
+            var bounds: IntBounds? = null
+            val glideX = directionX
+            val glideY = directionY
+            for (step in stepCount downTo 1) {
+                val length = unitStep * step
+                val moved = dragTo(lastX + glideX * length, lastY + glideY * length, samplePressure) ?: continue
+                bounds = bounds?.union(moved) ?: moved
+            }
+            return bounds
         }
 
         private fun applyPush(
@@ -554,3 +587,9 @@ object LiquifyTool {
 
 /** Size of a Crystals shard, in pixels. */
 private const val CRYSTAL_CELL = 6
+
+/** Full momentum glides on for this many brush widths after the pen lifts. */
+private const val MOMENTUM_REACH = 1.5f
+
+/** The glide is applied as this many slowing steps. */
+private const val MOMENTUM_STEPS = 12

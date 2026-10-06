@@ -32,6 +32,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -1651,17 +1653,34 @@ private fun ToolOptionsPanel(
                     )
                 }
             }
-            Text("Size ${input.liquify.size.toInt()} px", style = MaterialTheme.typography.labelSmall)
+            // Liquify paints with the brush size, as the sidebar and the brush outline show it.
+            Text("Size ${input.brushParams.size.toInt()} px", style = MaterialTheme.typography.labelSmall)
             Slider(
-                value = input.liquify.size.coerceIn(8f, 400f),
-                onValueChange = { viewModel.setLiquifySettings(input.liquify.copy(size = it)) },
+                value = input.brushParams.size.coerceIn(8f, 400f),
+                onValueChange = viewModel::setBrushSize,
                 valueRange = 8f..400f,
+                modifier = Modifier.semantics { contentDescription = "Liquify size" },
             )
             Text("Distortion ${(input.liquify.strength * 100).toInt()}%", style = MaterialTheme.typography.labelSmall)
             Slider(
                 value = input.liquify.strength.coerceIn(0f, 1f),
                 onValueChange = { viewModel.setLiquifySettings(input.liquify.copy(strength = it)) },
+                modifier = Modifier.semantics { contentDescription = "Liquify distortion" },
             )
+            Text("Momentum ${(input.liquify.momentum * 100).toInt()}%", style = MaterialTheme.typography.labelSmall)
+            Slider(
+                value = input.liquify.momentum.coerceIn(0f, 1f),
+                onValueChange = { viewModel.setLiquifySettings(input.liquify.copy(momentum = it)) },
+                modifier = Modifier.semantics { contentDescription = "Liquify momentum" },
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Pressure", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+                Switch(
+                    checked = input.liquify.usePressure,
+                    onCheckedChange = { viewModel.setLiquifySettings(input.liquify.copy(usePressure = it)) },
+                    modifier = Modifier.semantics { contentDescription = "Liquify pressure" },
+                )
+            }
             TextButton(onClick = viewModel::resetLiquify) { Text("Reset liquify") }
         }
         if (input.tool == ToolType.TRANSFORM) TransformOptions(viewModel, input, canvasView)

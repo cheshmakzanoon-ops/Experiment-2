@@ -2326,6 +2326,8 @@ class ArtFlowCanvasView
                         }
                         if (finalLiquify != null && original != null) {
                             withContext(Dispatchers.Default) {
+                                // Momentum carries the distortion on after the pen lifts.
+                                finalLiquify.release()
                                 finalLiquify
                                     .render(original, reference?.original)
                                     .pixels
