@@ -145,6 +145,8 @@ data class EditorInput(
     val pressureSmoothing: Float = 0f,
     /** Pulled string from Prefs > Pressure and Smoothing (0..1 of 60 dp on screen). */
     val pulledString: Float = 0f,
+    /** Settings > Haptics: a short buzz confirms QuickShape and the touch-and-hold eyedropper. */
+    val haptics: Boolean = true,
     /** Outline the brush under a hovering stylus. */
     val brushCursor: Boolean = true,
     /** Gesture controls from Prefs; each can be switched off. */
@@ -1795,7 +1797,7 @@ class ArtFlowCanvasView
             previewPoints.clear()
             onDragPreview?.invoke(null)
             startSampling()
-            performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+            if (input.haptics) performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
             pickColor(holdCanvasX, holdCanvasY)
         }
 
@@ -1989,7 +1991,7 @@ class ArtFlowCanvasView
             quickShapePressure = pressure
             shape.points.drop(1).forEach { (px, py) -> canvasRepository.continueStroke(currentStrokeId, px, py, pressure) }
             updateLiveStroke()
-            performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+            if (input.haptics) performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
             onStatusMessage?.invoke("QuickShape: ${shape.kind.label} — keep holding and drag to adjust")
         }
 

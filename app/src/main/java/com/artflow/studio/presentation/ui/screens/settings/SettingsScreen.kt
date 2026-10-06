@@ -167,7 +167,7 @@ fun SettingsScreen(
             )
             SwitchRow(
                 title = "Haptics",
-                subtitle = "Short vibration when a tool commits",
+                subtitle = "Short vibration when QuickShape snaps or the touch-and-hold eyedropper starts",
                 checked = settings.haptics,
                 onChange = viewModel::setHaptics,
             )

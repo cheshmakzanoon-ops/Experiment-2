@@ -239,6 +239,7 @@ class CanvasViewModel
                             motionExpression = stored.motionExpression,
                             pressureSmoothing = stored.pressureSmoothing,
                             pulledString = stored.pulledString,
+                            haptics = stored.haptics,
                             brushCursor = stored.brushCursor,
                             gestures =
                                 GestureControls(
