@@ -22,6 +22,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.artflow.studio.core.color.GradientMaps
 import com.artflow.studio.core.pixels.AdjustmentProcessor
+import com.artflow.studio.core.pixels.FractalNoise
 import com.artflow.studio.core.pixels.LiveAdjustments
 import com.artflow.studio.presentation.ui.viewmodel.AdjustmentSessionController
 import kotlin.math.atan2
@@ -106,6 +107,7 @@ fun AdjustmentOverlay(
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (state.kind == LiveAdjustments.Kind.GRADIENT_MAP) GradientRamps(state, actions.onParameters)
                 if (state.kind == LiveAdjustments.Kind.CURVES) CurvesEditor(state, actions.onParameters)
+                if (state.kind == LiveAdjustments.Kind.NOISE) NoiseOptions(state, actions.onParameter)
                 if (state.kind.adjustmentType != null) ParameterSliders(state, actions.onParameter)
                 if ((state.kind.slidesAmount && state.pencil) || state.kind.usesPoint) {
                     val label = if (state.kind == LiveAdjustments.Kind.RECOLOR) "Flood" else "Amount"
@@ -215,6 +217,35 @@ private fun CurvesEditor(
             val (x, y) = point(i)
             drawCircle(tint, radius = 5.dp.toPx(), center = Offset(x / 255f * size.width, (1f - y / 255f) * size.height))
         }
+    }
+}
+
+/** Noise type (Grain, Clouds, Billows, Ridges) and, for the fractal types, their size. */
+@Composable
+private fun NoiseOptions(
+    state: AdjustmentSessionController.State,
+    onParameter: (String, Float) -> Unit,
+) {
+    val parameters = state.settings.parameters
+    val type = FractalNoise.Type.entries.getOrElse(parameters[LiveAdjustments.NOISE_TYPE]?.toInt() ?: 0) { FractalNoise.Type.GRAIN }
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        FractalNoise.Type.entries.forEach { entry ->
+            FilterChip(
+                selected = type == entry,
+                onClick = { onParameter(LiveAdjustments.NOISE_TYPE, entry.ordinal.toFloat()) },
+                label = { Text(entry.displayName) },
+            )
+        }
+    }
+    if (type != FractalNoise.Type.GRAIN) {
+        val scale = parameters[LiveAdjustments.NOISE_SCALE] ?: LiveAdjustments.DEFAULT_NOISE_SCALE
+        Text("Size ${scale.toInt()} px", style = MaterialTheme.typography.labelMedium)
+        Slider(
+            value = scale,
+            onValueChange = { onParameter(LiveAdjustments.NOISE_SCALE, it) },
+            valueRange = FractalNoise.MIN_SCALE..FractalNoise.MAX_SCALE,
+            modifier = Modifier.semantics { contentDescription = "Noise size" },
+        )
     }
 }
 

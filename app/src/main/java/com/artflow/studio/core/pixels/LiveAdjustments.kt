@@ -61,6 +61,7 @@ object LiveAdjustments {
                 kind == Kind.RECOLOR -> recolor(source, settings)
                 kind == Kind.PERSPECTIVE_BLUR -> perspectiveBlur(source, settings)
                 amount <= 0f -> source.copy()
+                kind == Kind.NOISE -> noise(source, amount, settings.parameters)
                 else -> filter(kind, source, amount, settings.angleDegrees)
             }
         val mask = selection?.takeIf { it.width == source.width && it.height == source.height && it.isActive() } ?: return filtered
@@ -80,7 +81,6 @@ object LiveAdjustments {
             Kind.OPACITY -> faded(source, 1f - amount)
             Kind.GAUSSIAN_BLUR -> ImageFilters.gaussianBlur(source, amount * MAX_BLUR_RADIUS)
             Kind.MOTION_BLUR -> ImageFilters.motionBlur(source, amount * MAX_MOTION_DISTANCE, angle)
-            Kind.NOISE -> ImageFilters.addNoise(source, amount, monochrome = true)
             Kind.SHARPEN -> ImageFilters.sharpen(source, amount * 2f)
             Kind.CHROMATIC_ABERRATION ->
                 ImageFilters.chromaticAberration(source, amount * MAX_ABERRATION, source.width / 2f, source.height / 2f)
@@ -89,6 +89,16 @@ object LiveAdjustments {
             Kind.HALFTONE -> halftone(source, amount)
             else -> source.copy()
         }
+
+    /** Noise of the type and size in [parameters] ([NOISE_TYPE], [NOISE_SCALE]); plain grain by default. */
+    private fun noise(
+        source: PixelBuffer,
+        amount: Float,
+        parameters: Map<String, Float>,
+    ): PixelBuffer {
+        val type = FractalNoise.Type.entries.getOrElse(parameters[NOISE_TYPE]?.toInt() ?: 0) { FractalNoise.Type.GRAIN }
+        return FractalNoise.apply(source, type, amount, parameters[NOISE_SCALE] ?: DEFAULT_NOISE_SCALE)
+    }
 
     private fun faded(
         source: PixelBuffer,
@@ -183,6 +193,11 @@ object LiveAdjustments {
     const val RECOLOR_X = "x"
     const val RECOLOR_Y = "y"
     const val RECOLOR_RGB = "rgb"
+
+    /** Noise: which [FractalNoise.Type] (by ordinal) and its feature size in pixels. */
+    const val NOISE_TYPE = "noise_type"
+    const val NOISE_SCALE = "noise_scale"
+    const val DEFAULT_NOISE_SCALE = 48f
 
     /** Bright areas glow: a blurred bright pass is screened back over the image. */
     fun bloom(
