@@ -44,6 +44,7 @@ import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.Quad
 import com.artflow.studio.core.pixels.TransformQuad
 import com.artflow.studio.core.pixels.WarpMesh
+import com.artflow.studio.core.symmetry.SymmetryEngine
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.domain.model.brush.MAX_BRUSH_SIZE
 import com.artflow.studio.domain.model.brush.MIN_BRUSH_OPACITY
@@ -701,9 +702,19 @@ fun VanishingPointEditor(
     onChange: (PerspectiveGuide.Settings) -> Unit,
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
+    symmetry: SymmetryEngine.Settings = SymmetryEngine.Settings(),
+    onSymmetry: (SymmetryEngine.Settings) -> Unit = {},
 ) {
     val latest by rememberUpdatedState(perspective)
+    val latestSymmetry by rememberUpdatedState(symmetry)
     val handle = MaterialTheme.colorScheme.primary
+    val axisHandle = MaterialTheme.colorScheme.tertiary
+
+    // Handle positions in canvas pixels: the vanishing points, then the symmetry axis when it is on.
+    fun handles(): List<Offset> =
+        (0 until latest.activePointCount()).map { i ->
+            PerspectiveGuide.pointPosition(latest, i, canvasWidth, canvasHeight).let { (x, y) -> Offset(x, y) }
+        } + listOfNotNull(latestSymmetry.takeIf { it.isActive() }?.let { Offset(it.centreX * canvasWidth, it.centreY * canvasHeight) })
     Box(modifier) {
         Canvas(
             Modifier
@@ -712,17 +723,11 @@ fun VanishingPointEditor(
                     var grabbed = -1
                     detectDragGestures(
                         onDragStart = { at ->
+                            val points = handles()
                             grabbed =
-                                (0 until latest.activePointCount()).minByOrNull { i ->
-                                    val (x, y) = PerspectiveGuide.pointPosition(latest, i, canvasWidth, canvasHeight)
+                                points.indices.minByOrNull { i ->
                                     val shown =
-                                        view.toView(
-                                            Offset(x, y),
-                                            size.width.toFloat(),
-                                            size.height.toFloat(),
-                                            canvasWidth,
-                                            canvasHeight,
-                                        )
+                                        view.toView(points[i], size.width.toFloat(), size.height.toFloat(), canvasWidth, canvasHeight)
                                     (shown - at).getDistance()
                                 } ?: -1
                         },
@@ -730,15 +735,24 @@ fun VanishingPointEditor(
                         change.consume()
                         if (grabbed < 0) return@detectDragGestures
                         val at = view.toCanvas(change.position, size.width.toFloat(), size.height.toFloat(), canvasWidth, canvasHeight)
-                        onChange(PerspectiveGuide.dragPoint(latest, grabbed, at.x, at.y, canvasWidth, canvasHeight))
+                        if (grabbed < latest.activePointCount()) {
+                            onChange(PerspectiveGuide.dragPoint(latest, grabbed, at.x, at.y, canvasWidth, canvasHeight))
+                        } else {
+                            onSymmetry(
+                                latestSymmetry.copy(
+                                    centreX = (at.x / canvasWidth).coerceIn(0f, 1f),
+                                    centreY = (at.y / canvasHeight).coerceIn(0f, 1f),
+                                ),
+                            )
+                        }
                     }
                 },
         ) {
-            for (i in 0 until perspective.activePointCount()) {
-                val (x, y) = PerspectiveGuide.pointPosition(perspective, i, canvasWidth, canvasHeight)
-                val shown = view.toView(Offset(x, y), size.width, size.height, canvasWidth, canvasHeight)
-                drawCircle(handle, radius = 14.dp.toPx(), center = shown, style = Stroke(width = 3.dp.toPx()))
-                drawCircle(handle, radius = 4.dp.toPx(), center = shown)
+            handles().forEachIndexed { i, point ->
+                val shown = view.toView(point, size.width, size.height, canvasWidth, canvasHeight)
+                val colour = if (i < perspective.activePointCount()) handle else axisHandle
+                drawCircle(colour, radius = 14.dp.toPx(), center = shown, style = Stroke(width = 3.dp.toPx()))
+                drawCircle(colour, radius = 4.dp.toPx(), center = shown)
             }
         }
         Surface(
@@ -747,7 +761,7 @@ fun VanishingPointEditor(
             modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp),
         ) {
             Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Drag the vanishing points", style = MaterialTheme.typography.labelMedium)
+                Text("Drag the vanishing points or the symmetry axis", style = MaterialTheme.typography.labelMedium)
                 TextButton(onClick = onDone) { Text("Done") }
             }
         }

@@ -1157,6 +1157,8 @@ fun CanvasScreen(
                             onChange = viewModel::setPerspectiveSettings,
                             onDone = { editingGuide = false },
                             modifier = Modifier.fillMaxSize().zIndex(7f),
+                            symmetry = input.symmetry,
+                            onSymmetry = viewModel::setSymmetrySettings,
                         )
                     }
 

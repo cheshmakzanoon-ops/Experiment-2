@@ -1055,6 +1055,7 @@ fun GuidesSheet(
             range = 0f..1f,
             onChange = { onSymmetry(symmetry.copy(centreY = it)) },
         )
+        if (symmetry.isActive()) OutlinedButton(onClick = assist.onEditPoints) { Text("Move axis on the canvas") }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(
                 checked = symmetry.secondaryAxis,
