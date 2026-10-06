@@ -567,6 +567,8 @@ class CanvasViewModel
             contiguous: Boolean,
         ) = updateInput { it.copy(fillTolerance = tolerance.coerceIn(0, 255), fillContiguous = contiguous) }
 
+        fun setFillGapClose(pixels: Int) = updateInput { it.copy(fillGapClose = pixels.coerceIn(0, MAX_FILL_GAP)) }
+
         fun setFillTolerance(tolerance: Int) = updateInput { it.copy(fillTolerance = tolerance.coerceIn(0, 255)) }
 
         fun setShapeSettings(
@@ -1571,5 +1573,8 @@ class CanvasViewModel
             const val DEFAULT_HEIGHT = 1080
             const val DEFAULT_DPI = 72
             private const val TIMELAPSE_INTERVAL_MS = 750L
+
+            /** The fill engine closes gaps up to this many pixels. */
+            private const val MAX_FILL_GAP = 16
         }
     }

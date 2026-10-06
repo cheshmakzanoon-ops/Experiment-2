@@ -5,6 +5,7 @@ import com.artflow.studio.core.pixels.SelectionMask
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.hypot
 
 class FillToolTest {
     private val red = 0xFFFF0000.toInt()
@@ -66,6 +67,26 @@ class FillToolTest {
         assertEquals(red, target.getSafe(7, 7))
         assertEquals(white, target.getSafe(0, 0))
         assertEquals(black, target.getSafe(3, 7))
+    }
+
+    @Test
+    fun aWiderGapInAnInkedRingHoldsTheFillWhenClosed() {
+        // A 2 px ink ring of radius 20 with a 3 px break on its right side.
+        val size = 64
+        val target = PixelBuffer.filled(size, size, white)
+        for (y in 0 until size) {
+            for (x in 0 until size) {
+                val r = hypot(x - 32f, y - 32f)
+                if (r in 19f..21f && !(x > 45 && y in 31..33)) target.setUnchecked(x, y, black)
+            }
+        }
+        val leaking = target.copy()
+        FillTool.floodFill(leaking, 32, 32, red, FillTool.Settings(tolerance = 0, antiAlias = false))
+        assertEquals(red, leaking.getSafe(2, 2))
+        FillTool.floodFill(target, 32, 32, red, FillTool.Settings(tolerance = 0, gapClose = 3, antiAlias = false))
+        assertEquals(red, target.getSafe(32, 32))
+        assertEquals(red, target.getSafe(40, 32))
+        assertEquals(white, target.getSafe(2, 2))
     }
 
     @Test

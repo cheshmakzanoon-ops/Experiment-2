@@ -116,6 +116,8 @@ data class EditorInput(
     val gradientType: GradientTool.GradientType = GradientTool.GradientType.LINEAR,
     val fillTolerance: Int = 32,
     val fillContiguous: Boolean = true,
+    /** Gaps in line art up to this many pixels wide stop a fill, so it does not leak out. */
+    val fillGapClose: Int = 0,
     val smudge: PixelBrushes.SmudgeSettings = PixelBrushes.SmudgeSettings(),
     val clone: PixelBrushes.CloneSettings = PixelBrushes.CloneSettings(),
     val healing: PixelBrushes.HealingSettings = PixelBrushes.HealingSettings(),
@@ -2431,6 +2433,7 @@ class ArtFlowCanvasView
                                 FillTool.Settings(
                                     tolerance = tolerance,
                                     contiguous = captured.fillContiguous,
+                                    gapClose = captured.fillGapClose,
                                     mask = selection,
                                     alphaLock = alphaLocked,
                                 ),

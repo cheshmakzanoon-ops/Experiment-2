@@ -1631,6 +1631,14 @@ private fun ToolOptionsPanel(
                 Spacer(Modifier.width(8.dp))
                 Text("Only fill the connected region", style = MaterialTheme.typography.bodySmall)
             }
+            Text("Close gaps up to ${input.fillGapClose} px", style = MaterialTheme.typography.labelSmall)
+            Slider(
+                value = input.fillGapClose.toFloat(),
+                onValueChange = { viewModel.setFillGapClose(it.roundToInt()) },
+                valueRange = 0f..16f,
+                steps = 15,
+                modifier = Modifier.semantics { contentDescription = "Close gaps" },
+            )
         }
 
         if (input.tool == ToolType.SHAPE) {
