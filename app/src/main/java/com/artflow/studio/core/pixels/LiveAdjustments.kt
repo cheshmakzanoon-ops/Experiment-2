@@ -2,9 +2,11 @@ package com.artflow.studio.core.pixels
 
 import com.artflow.studio.domain.model.Color
 import com.artflow.studio.domain.model.layer.AdjustmentType
+import kotlin.math.PI
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
@@ -62,7 +64,7 @@ object LiveAdjustments {
                 kind == Kind.PERSPECTIVE_BLUR -> perspectiveBlur(source, settings)
                 amount <= 0f -> source.copy()
                 kind == Kind.NOISE -> noise(source, amount, settings.parameters)
-                else -> filter(kind, source, amount, settings.angleDegrees, halftoneStyle(settings.parameters))
+                else -> filter(kind, source, amount, settings.angleDegrees, settings.parameters)
             }
         val mask = selection?.takeIf { it.width == source.width && it.height == source.height && it.isActive() } ?: return filtered
         for (i in filtered.pixels.indices) {
@@ -76,7 +78,7 @@ object LiveAdjustments {
         source: PixelBuffer,
         amount: Float,
         angle: Float,
-        style: HalftoneStyle = HalftoneStyle.FULL_COLOUR,
+        parameters: Map<String, Float>,
     ): PixelBuffer =
         when (kind) {
             Kind.OPACITY -> faded(source, 1f - amount)
@@ -85,9 +87,16 @@ object LiveAdjustments {
             Kind.SHARPEN -> ImageFilters.sharpen(source, amount * 2f)
             Kind.CHROMATIC_ABERRATION ->
                 ImageFilters.chromaticAberration(source, amount * MAX_ABERRATION, source.width / 2f, source.height / 2f)
-            Kind.BLOOM -> bloom(source, amount)
-            Kind.GLITCH -> glitch(source, amount)
-            Kind.HALFTONE -> halftone(source, amount, style)
+            Kind.BLOOM ->
+                bloom(
+                    source,
+                    amount,
+                    transition = parameters[BLOOM_TRANSITION] ?: DEFAULT_BLOOM_TRANSITION,
+                    size = parameters[BLOOM_SIZE] ?: 1f,
+                    burn = parameters[BLOOM_BURN] ?: 0f,
+                )
+            Kind.GLITCH -> glitch(source, amount, glitchStyle(parameters))
+            Kind.HALFTONE -> halftone(source, amount, halftoneStyle(parameters))
             else -> source.copy()
         }
 
@@ -203,21 +212,40 @@ object LiveAdjustments {
     /** Halftone: which [HalftoneStyle] (by ordinal). */
     const val HALFTONE_STYLE = "halftone_style"
 
+    /** Bloom: the brightness where glow begins (0 to 1), the glow's size and its burn toward white (0 to 1). */
+    const val BLOOM_TRANSITION = "bloom_transition"
+    const val BLOOM_SIZE = "bloom_size"
+    const val BLOOM_BURN = "bloom_burn"
+    const val DEFAULT_BLOOM_TRANSITION = 0.6f
+
+    /** Glitch: which [GlitchStyle] (by ordinal). */
+    const val GLITCH_STYLE = "glitch_style"
+
     /** Dots grow a little past the cell's inscribed circle so fully inked cells join up. */
     private const val DOT_REACH = 1.15f
 
-    /** Bright areas glow: a blurred bright pass is screened back over the image. */
+    /**
+     * Bright areas glow: a blurred bright pass is screened back over the image. Procreate's options:
+     * [transition] is the brightness where the glow begins, [size] scales its spread and [burn]
+     * pushes the glow toward white.
+     */
     fun bloom(
         source: PixelBuffer,
         amount: Float,
+        transition: Float = DEFAULT_BLOOM_TRANSITION,
+        size: Float = 1f,
+        burn: Float = 0f,
     ): PixelBuffer {
+        val threshold = transition.coerceIn(0f, MAX_BLOOM_TRANSITION)
+        val white = burn.coerceIn(0f, 1f)
         val bright = PixelBuffer(source.width, source.height)
         for (i in source.pixels.indices) {
             val p = source.pixels[i]
-            val excess = ((Channels.luminance(p) - BLOOM_THRESHOLD) / (1f - BLOOM_THRESHOLD)).coerceIn(0f, 1f)
-            bright.pixels[i] = Channels.scaleAlpha(p, excess)
+            val excess = ((Channels.luminance(p) - threshold) / (1f - threshold)).coerceIn(0f, 1f)
+            val lit = if (white > 0f) ImageFilters.lerpArgb(p, p or 0x00FFFFFF, white) else p
+            bright.pixels[i] = Channels.scaleAlpha(lit, excess)
         }
-        val glow = ImageFilters.gaussianBlur(bright, 4f + amount * MAX_BLOOM_RADIUS)
+        val glow = ImageFilters.gaussianBlur(bright, 4f + amount * size.coerceIn(0f, 1f) * MAX_BLOOM_RADIUS)
         val out = source.copy()
         for (i in out.pixels.indices) {
             val g = glow.pixels[i]
@@ -242,8 +270,107 @@ object LiveAdjustments {
         return Channels.argb(alpha, channel(16), channel(8), channel(0))
     }
 
-    /** Digital corruption: bands of rows slip sideways and the red channel separates. */
+    /** Procreate's Glitch styles. */
+    enum class GlitchStyle(
+        val displayName: String,
+    ) {
+        /** Bands of rows slip sideways and the red channel separates. */
+        SIGNAL("Signal"),
+
+        /** Square blocks are replaced by pixels from nearby, like a damaged compressed image. */
+        ARTIFACT("Artifact"),
+
+        /** Rows ripple sideways along a wave. */
+        WAVE("Wave"),
+
+        /** Red and blue pull apart to either side. */
+        DIVERGE("Diverge"),
+    }
+
+    fun glitchStyle(parameters: Map<String, Float>): GlitchStyle =
+        GlitchStyle.entries.getOrElse(parameters[GLITCH_STYLE]?.toInt() ?: 0) { GlitchStyle.SIGNAL }
+
+    /** Digital corruption in one of the [GlitchStyle]s, stronger with [amount]. */
     fun glitch(
+        source: PixelBuffer,
+        amount: Float,
+        style: GlitchStyle = GlitchStyle.SIGNAL,
+    ): PixelBuffer =
+        when (style) {
+            GlitchStyle.SIGNAL -> signalGlitch(source, amount)
+            GlitchStyle.ARTIFACT -> artifactGlitch(source, amount)
+            GlitchStyle.WAVE -> waveGlitch(source, amount)
+            GlitchStyle.DIVERGE -> divergeGlitch(source, amount)
+        }
+
+    private fun artifactGlitch(
+        source: PixelBuffer,
+        amount: Float,
+    ): PixelBuffer {
+        val out = source.copy()
+        val block = (ARTIFACT_MIN_BLOCK + amount * ARTIFACT_BLOCK_RANGE).roundToInt()
+        val damaged = (amount * ARTIFACT_MAX_SHARE * HASH_BUCKETS).roundToInt()
+        for (top in 0 until source.height step block) {
+            for (left in 0 until source.width step block) {
+                val cell = (top / block) * BLOCK_ROW_STRIDE + left / block
+                if (hash(cell) % HASH_BUCKETS < damaged) {
+                    val dx = hash(cell * 3 + 1) % (4 * block + 1) - 2 * block
+                    val dy = hash(cell * 5 + 2) % (2 * block + 1) - block
+                    copyBlock(source, out, left, top, block, dx, dy)
+                }
+            }
+        }
+        return out
+    }
+
+    /** Fills the [size] square at ([left], [top]) of [out] with [source]'s pixels offset by ([dx], [dy]). */
+    private fun copyBlock(
+        source: PixelBuffer,
+        out: PixelBuffer,
+        left: Int,
+        top: Int,
+        size: Int,
+        dx: Int,
+        dy: Int,
+    ) {
+        for (y in top until minOf(top + size, source.height)) {
+            for (x in left until minOf(left + size, source.width)) out.pixels[y * source.width + x] = source.getSafe(x + dx, y + dy)
+        }
+    }
+
+    private fun waveGlitch(
+        source: PixelBuffer,
+        amount: Float,
+    ): PixelBuffer {
+        val out = PixelBuffer(source.width, source.height)
+        val reach = source.width * WAVE_REACH * amount
+        for (y in 0 until source.height) {
+            val shift = (sin(y * 2.0 * PI / WAVE_PERIOD) * reach).roundToInt()
+            for (x in 0 until source.width) out.pixels[y * source.width + x] = source.getSafe(x - shift, y)
+        }
+        return out
+    }
+
+    private fun divergeGlitch(
+        source: PixelBuffer,
+        amount: Float,
+    ): PixelBuffer {
+        val out = PixelBuffer(source.width, source.height)
+        val split = (source.width * DIVERGE_REACH * amount).roundToInt()
+        for (y in 0 until source.height) {
+            for (x in 0 until source.width) {
+                val p = source.getSafe(x, y)
+                val red = source.getSafe(x + split, y)
+                val blue = source.getSafe(x - split, y)
+                val alpha = maxOf(p ushr 24, red ushr 24, blue ushr 24)
+                out.pixels[y * source.width + x] =
+                    (alpha shl 24) or (red and 0x00FF0000) or (p and 0x0000FF00) or (blue and 0x000000FF)
+            }
+        }
+        return out
+    }
+
+    private fun signalGlitch(
         source: PixelBuffer,
         amount: Float,
     ): PixelBuffer {
@@ -425,7 +552,15 @@ object LiveAdjustments {
     private const val MAX_BLUR_RADIUS = 60f
     private const val MAX_MOTION_DISTANCE = 120f
     private const val MAX_BLOOM_RADIUS = 40f
-    private const val BLOOM_THRESHOLD = 0.6f
+    private const val MAX_BLOOM_TRANSITION = 0.95f
+    private const val ARTIFACT_MIN_BLOCK = 8f
+    private const val ARTIFACT_BLOCK_RANGE = 24f
+    private const val ARTIFACT_MAX_SHARE = 0.5f
+    private const val HASH_BUCKETS = 1000
+    private const val BLOCK_ROW_STRIDE = 4099
+    private const val WAVE_REACH = 0.05f
+    private const val WAVE_PERIOD = 48.0
+    private const val DIVERGE_REACH = 0.02f
     private const val GLITCH_BAND = 6
     private const val MAX_ABERRATION = 0.05f
     private const val RECOLOR_MAX_TOLERANCE = 128f

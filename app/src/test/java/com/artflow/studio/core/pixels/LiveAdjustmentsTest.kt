@@ -51,6 +51,39 @@ class LiveAdjustmentsTest {
         for (i in source.pixels.indices) assertTrue(Channels.luminance(out.pixels[i]) >= Channels.luminance(source.pixels[i]) - 1e-3f)
     }
 
+    @Test fun bloomTransitionAndBurnShapeTheGlow() {
+        val dark = 0xFF404040.toInt()
+        val yellow = 0xFFFFFF00.toInt()
+        val source = PixelBuffer.filled(32, 32, dark)
+        for (y in 12 until 20) for (x in 12 until 20) source.pixels[y * 32 + x] = yellow
+
+        fun light(buffer: PixelBuffer) = buffer.pixels.sumOf { Channels.luminance(it).toDouble() }
+        val early = LiveAdjustments.bloom(source, 0.8f, transition = 0f)
+        val late = LiveAdjustments.bloom(source, 0.8f, transition = 0.9f)
+        assertTrue("A lower transition lets more of the image glow", light(early) > light(late))
+
+        val beside = 22 * 32 + 16
+        val plain = LiveAdjustments.bloom(source, 1f).pixels[beside] and 0xFF
+        val burnt = LiveAdjustments.bloom(source, 1f, burn = 1f).pixels[beside] and 0xFF
+        assertTrue("Burn pushes the yellow glow toward white", burnt > plain)
+    }
+
+    @Test fun glitchStylesEachCorruptDifferently() {
+        val source = PixelBuffer(64, 64)
+        for (i in source.pixels.indices) {
+            val x = i % 64
+            val y = i / 64
+            source.pixels[i] = Channels.argb(255, x * 4, y * 4, (x + y) * 2)
+        }
+        val results =
+            LiveAdjustments.GlitchStyle.entries.map { style ->
+                LiveAdjustments.glitch(source, 1f, style).pixels.also { assertFalse(style.name, it.contentEquals(source.pixels)) }
+            }
+        for (a in results.indices) for (b in a + 1 until results.size) assertFalse(results[a].contentEquals(results[b]))
+        val untouched = LiveAdjustments.apply(Kind.GLITCH, source, Settings(0f, mapOf(LiveAdjustments.GLITCH_STYLE to 2f)))
+        assertTrue(untouched.pixels.contentEquals(source.pixels))
+    }
+
     @Test fun recolorReplacesTheTouchedColourAndKeepsShading() {
         val red = 0xFFFF0000.toInt()
         val darkRed = 0xFF800000.toInt()

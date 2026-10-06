@@ -109,6 +109,8 @@ fun AdjustmentOverlay(
                 if (state.kind == LiveAdjustments.Kind.CURVES) CurvesEditor(state, actions.onParameters)
                 if (state.kind == LiveAdjustments.Kind.NOISE) NoiseOptions(state, actions.onParameter)
                 if (state.kind == LiveAdjustments.Kind.HALFTONE) HalftoneOptions(state, actions.onParameter)
+                if (state.kind == LiveAdjustments.Kind.BLOOM) BloomOptions(state, actions.onParameter)
+                if (state.kind == LiveAdjustments.Kind.GLITCH) GlitchOptions(state, actions.onParameter)
                 if (state.kind.adjustmentType != null) ParameterSliders(state, actions.onParameter)
                 if ((state.kind.slidesAmount && state.pencil) || state.kind.usesPoint) {
                     val label = if (state.kind == LiveAdjustments.Kind.RECOLOR) "Flood" else "Amount"
@@ -262,6 +264,46 @@ private fun HalftoneOptions(
             FilterChip(
                 selected = style == entry,
                 onClick = { onParameter(LiveAdjustments.HALFTONE_STYLE, entry.ordinal.toFloat()) },
+                label = { Text(entry.displayName) },
+            )
+        }
+    }
+}
+
+/** Bloom's Transition (where the glow begins), Size and Burn, as in Procreate. */
+@Composable
+private fun BloomOptions(
+    state: AdjustmentSessionController.State,
+    onParameter: (String, Float) -> Unit,
+) {
+    val parameters = state.settings.parameters
+    listOf(
+        Triple("Transition", LiveAdjustments.BLOOM_TRANSITION, LiveAdjustments.DEFAULT_BLOOM_TRANSITION),
+        Triple("Size", LiveAdjustments.BLOOM_SIZE, 1f),
+        Triple("Burn", LiveAdjustments.BLOOM_BURN, 0f),
+    ).forEach { (label, key, default) ->
+        val value = parameters[key] ?: default
+        Text("$label ${(value * 100).toInt()}%", style = MaterialTheme.typography.labelMedium)
+        Slider(
+            value = value,
+            onValueChange = { onParameter(key, it) },
+            modifier = Modifier.semantics { contentDescription = "Bloom ${label.lowercase()}" },
+        )
+    }
+}
+
+/** Glitch style: Signal, Artifact, Wave or Diverge. */
+@Composable
+private fun GlitchOptions(
+    state: AdjustmentSessionController.State,
+    onParameter: (String, Float) -> Unit,
+) {
+    val style = LiveAdjustments.glitchStyle(state.settings.parameters)
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        LiveAdjustments.GlitchStyle.entries.forEach { entry ->
+            FilterChip(
+                selected = style == entry,
+                onClick = { onParameter(LiveAdjustments.GLITCH_STYLE, entry.ordinal.toFloat()) },
                 label = { Text(entry.displayName) },
             )
         }
