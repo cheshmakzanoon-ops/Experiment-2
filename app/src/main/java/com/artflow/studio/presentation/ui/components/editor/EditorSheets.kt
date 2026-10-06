@@ -90,6 +90,8 @@ data class LayerRowActions(
     val onOpacityMode: (Long) -> Unit = {},
     /** Two-finger touch and hold: select the layer's contents. */
     val onSelectContents: (Long) -> Unit = {},
+    /** Touch and hold the visibility box: show only this layer, or bring the others back. */
+    val onSolo: (Long) -> Unit = {},
 )
 
 data class LayerStackActions(

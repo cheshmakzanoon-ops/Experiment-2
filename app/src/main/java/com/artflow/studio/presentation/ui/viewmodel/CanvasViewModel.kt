@@ -940,6 +940,8 @@ class CanvasViewModel
             canvasRepository.setLayerVisibility(layerId, visible)
         }
 
+        fun toggleLayerSolo(layerId: Long) = layerOp { canvasRepository.toggleLayerSolo(layerId) }
+
         fun setLayerOpacity(
             layerId: Long,
             opacity: Float,

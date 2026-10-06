@@ -1,9 +1,12 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+
 package com.artflow.studio.presentation.ui.components.editor
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -22,8 +25,11 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.artflow.studio.core.pixels.PixelBuffer
@@ -128,11 +134,24 @@ internal fun LayerRow(
                     TextButton(onClick = onBlendMode, contentPadding = PaddingValues(horizontal = 6.dp)) {
                         Text(layer.blendMode.shortCode(), style = MaterialTheme.typography.titleSmall)
                     }
-                    Checkbox(
-                        checked = layer.isVisible,
-                        onCheckedChange = { actions.onVisibility(layer.id, it) },
-                        modifier = Modifier.size(touchSize).semantics { contentDescription = "Visibility" },
-                    )
+                    // Touch and hold the box to show only this layer; hold again to bring the others back.
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier =
+                            Modifier
+                                .size(touchSize)
+                                .combinedClickable(
+                                    role = Role.Checkbox,
+                                    onClick = { actions.onVisibility(layer.id, !layer.isVisible) },
+                                    onLongClick = { actions.onSolo(layer.id) },
+                                    onLongClickLabel = "Show only this layer",
+                                ).semantics {
+                                    contentDescription = "Visibility"
+                                    toggleableState = ToggleableState(layer.isVisible)
+                                },
+                    ) {
+                        Checkbox(checked = layer.isVisible, onCheckedChange = null)
+                    }
                     Box {
                         IconButton(
                             onClick = {

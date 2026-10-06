@@ -1235,6 +1235,32 @@ class CanvasRepositoryImpl
                 true
             }
 
+        /** Visibility before the last "show only this layer", restored when it is toggled off. */
+        private var soloRestore: Map<Long, Boolean>? = null
+
+        override suspend fun toggleLayerSolo(layerId: Long): Boolean =
+            withState {
+                val layers = currentLayers().filterNot { it.isInternal }
+                val target = layers.firstOrNull { it.id == layerId } ?: return@withState false
+                val byId = layers.associateBy { it.id }
+                val ancestors = generateSequence(target) { it.parentGroupId?.let(byId::get) }.take(layers.size + 1)
+                val shown = subtreeIds(layers, layerId) + ancestors.map { it.id }
+                val solo = layers.associate { it.id to (it.id in shown) }
+                val current = layers.associate { it.id to it.isVisible }
+                val next =
+                    if (current == solo) {
+                        soloRestore?.takeIf { it.keys == solo.keys } ?: solo.mapValues { true }
+                    } else {
+                        soloRestore = current
+                        solo
+                    }
+                pushUndo()
+                layers.forEach { it.isVisible = next.getValue(it.id) }
+                dirty = true
+                emit(CanvasInvalidationEvent.LayersChanged)
+                true
+            }
+
         private data class OpacityRun(
             val layerId: Long,
             val pushes: Long,

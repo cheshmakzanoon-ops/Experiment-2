@@ -574,6 +574,7 @@ fun CanvasScreen(
                         LayerRowActions(
                             onSelect = { viewModel.setActiveLayer(it) },
                             onVisibility = { id, visible -> viewModel.setLayerVisibility(id, visible) },
+                            onSolo = viewModel::toggleLayerSolo,
                             onOpacity = { id, opacity -> viewModel.setLayerOpacity(id, opacity) },
                             onName = { id, name -> viewModel.setLayerName(id, name) },
                             onLock = { id, locked -> viewModel.setLayerLock(id, locked) },

@@ -328,6 +328,12 @@ interface CanvasRepository {
         isVisible: Boolean? = null,
     ): Boolean
 
+    /**
+     * Touch and hold a layer's visibility box: show only that layer (with its groups and contents),
+     * or, when it is already the only one shown, restore the visibility from before. One undo step.
+     */
+    suspend fun toggleLayerSolo(layerId: Long): Boolean = false
+
     suspend fun setLayerOpacity(
         layerId: Long,
         opacity: Float,
