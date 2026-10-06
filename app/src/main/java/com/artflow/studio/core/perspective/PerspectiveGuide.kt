@@ -2,7 +2,9 @@ package com.artflow.studio.core.perspective
 
 import kotlin.math.abs
 import kotlin.math.atan2
+import kotlin.math.ceil
 import kotlin.math.cos
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
@@ -16,6 +18,9 @@ import kotlin.math.sqrt
  * testable without a device.
  */
 object PerspectiveGuide {
+    /** Directions of the isometric grid's line families, in degrees. */
+    private val ISOMETRIC_AXES = listOf(0f, 30f, -30f, 90f)
+
     enum class GuideType(
         val displayName: String,
     ) {
@@ -163,8 +168,7 @@ object PerspectiveGuide {
         val diagonal = sqrt((width * width + height * height).toFloat())
 
         // The three isometric axes: 0 degrees (horizontal), +30 and -30 degrees.
-        val axes = listOf(0f, 30f, -30f, 90f)
-        for (angleDegrees in axes) {
+        for (angleDegrees in ISOMETRIC_AXES) {
             val radians = Math.toRadians(angleDegrees.toDouble())
             val dx = cos(radians).toFloat()
             val dy = sin(radians).toFloat()
@@ -205,7 +209,7 @@ object PerspectiveGuide {
     ): Pair<Float, Float> {
         if (!settings.isActive() || !settings.snapEnabled) return x to y
         if (settings.type == GuideType.ISOMETRIC) return snapToIsometricGrid(x, y, settings, width, height)
-        if (settings.type == GuideType.GRID) return snapToSquareGrid(x, y, settings)
+        if (settings.type == GuideType.GRID) return snapToSquareGrid(x, y, settings, width, height)
 
         var bestX = x
         var bestY = y
@@ -262,16 +266,21 @@ object PerspectiveGuide {
         return lines
     }
 
-    /** Pulls the pointer onto the nearest grid line (horizontal or vertical) within the snap radius. */
+    /** Pulls the pointer onto the nearest drawn grid line (horizontal or vertical) within the snap radius. */
     fun snapToSquareGrid(
         x: Float,
         y: Float,
         settings: Settings,
+        width: Int,
+        height: Int,
     ): Pair<Float, Float> {
         val spacing = settings.gridSpacing.coerceIn(8, 512).toFloat()
         val strength = settings.snapStrength.coerceIn(0f, 1f)
-        val lineX = Math.round(x / spacing) * spacing
-        val lineY = Math.round(y / spacing) * spacing
+        // The grid is centred on the canvas, as [squareGridLines] draws it.
+        val originX = (width / 2f) % spacing
+        val originY = (height / 2f) % spacing
+        val lineX = originX + Math.round((x - originX) / spacing) * spacing
+        val lineY = originY + Math.round((y - originY) / spacing) * spacing
         val distanceX = abs(x - lineX)
         val distanceY = abs(y - lineY)
         return when {
@@ -281,7 +290,7 @@ object PerspectiveGuide {
         }
     }
 
-    /** Snaps onto the nearest isometric grid intersection. */
+    /** Snaps onto the nearest intersection of the isometric lines [isometricLines] draws. */
     fun snapToIsometricGrid(
         x: Float,
         y: Float,
@@ -289,20 +298,42 @@ object PerspectiveGuide {
         width: Int,
         height: Int,
     ): Pair<Float, Float> {
-        val spacing = settings.gridSpacing.coerceIn(8, 512)
-        // Isometric lattice: rows are spaced spacing * sin(60) apart, columns spacing wide.
-        val rowHeight = spacing * 0.866f
-        val row = Math.round(y / rowHeight)
-        val baseline = row * rowHeight
-        val offset = if (row % 2L == 0L) 0f else spacing / 2f
-        val column = Math.round((x - offset) / spacing)
-        val snapX = column * spacing + offset
-        val snapY = baseline
-
-        val distance = sqrt((x - snapX) * (x - snapX) + (y - snapY) * (y - snapY))
-        if (distance > settings.snapRadius) return x to y
+        val spacing = settings.gridSpacing.coerceIn(8, 512).toFloat()
+        val px = x - width / 2f
+        val py = y - height / 2f
+        // Each family of lines: its unit normal; line i lies where normal · p = i × spacing.
+        val normals = ISOMETRIC_AXES.map { degrees -> Math.toRadians(degrees.toDouble()).let { -sin(it).toFloat() to cos(it).toFloat() } }
+        val crossings =
+            normals.indices.flatMap { f ->
+                (f + 1 until normals.size).flatMap { g -> nearCrossings(normals[f], normals[g], px, py, spacing) }
+            }
+        val (cx, cy) = crossings.minBy { (cx, cy) -> (cx - px) * (cx - px) + (cy - py) * (cy - py) }
+        val best = (cx - px) * (cx - px) + (cy - py) * (cy - py)
+        val snapX = cx + width / 2f
+        val snapY = cy + height / 2f
+        if (sqrt(best) > settings.snapRadius) return x to y
         val strength = settings.snapStrength.coerceIn(0f, 1f)
         return (x + (snapX - x) * strength) to (y + (snapY - y) * strength)
+    }
+
+    /** Where the lines of two families nearest to ([px], [py]) cross, relative to the canvas centre. */
+    private fun nearCrossings(
+        a: Pair<Float, Float>,
+        b: Pair<Float, Float>,
+        px: Float,
+        py: Float,
+        spacing: Float,
+    ): List<Pair<Float, Float>> {
+        val (ax, ay) = a
+        val (bx, by) = b
+        val determinant = ax * by - ay * bx
+        val nearA = (ax * px + ay * py) / spacing
+        val nearB = (bx * px + by * py) / spacing
+        return listOf(floor(nearA), ceil(nearA)).flatMap { i ->
+            listOf(floor(nearB), ceil(nearB)).map { j ->
+                ((i * by - j * ay) * spacing / determinant) to ((j * ax - i * bx) * spacing / determinant)
+            }
+        }
     }
 
     /** Moves the horizon and keeps the horizontal vanishing points on it. */

@@ -3,6 +3,8 @@ package com.artflow.studio.core.perspective
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.abs
+import kotlin.math.hypot
 
 class SquareGridTest {
     private val grid = PerspectiveGuide.Settings(type = PerspectiveGuide.GuideType.GRID, gridSpacing = 100, snapRadius = 24f)
@@ -17,5 +19,29 @@ class SquareGridTest {
         val lines = PerspectiveGuide.guideLines(grid, 1000, 600)
         assertTrue(lines.any { it.startX == it.endX })
         assertTrue(lines.any { it.startY == it.endY })
+    }
+
+    @Test fun snapsOntoTheLinesItDraws() {
+        // On 1920 x 1080 the centred grid's lines sit at x = 60, 160 ... and y = 40, 140 ...
+        val lines = PerspectiveGuide.guideLines(grid, 1920, 1080)
+        assertTrue(lines.any { it.startX == 60f && it.endX == 60f })
+        assertEquals(60f to 517f, PerspectiveGuide.snap(70f, 517f, grid, 1920, 1080))
+        assertEquals(333f to 40f, PerspectiveGuide.snap(333f, 52f, grid, 1920, 1080))
+    }
+
+    @Test fun isometricSnapsToWhereItsLinesCross() {
+        val iso = grid.copy(type = PerspectiveGuide.GuideType.ISOMETRIC, snapRadius = 200f)
+        // The canvas centre is a crossing of every family of lines.
+        assertEquals(320f to 320f, PerspectiveGuide.snap(323f, 318f, iso, 640, 640))
+        val lines = PerspectiveGuide.guideLines(iso, 640, 640)
+        val (sx, sy) = PerspectiveGuide.snap(371f, 297f, iso, 640, 640)
+        // The snapped point lies on at least two drawn lines.
+        val onLines =
+            lines.count { line ->
+                val dx = line.endX - line.startX
+                val dy = line.endY - line.startY
+                abs((sx - line.startX) * dy - (sy - line.startY) * dx) / hypot(dx, dy) < 0.01f
+            }
+        assertTrue("on $onLines lines", onLines >= 2)
     }
 }
