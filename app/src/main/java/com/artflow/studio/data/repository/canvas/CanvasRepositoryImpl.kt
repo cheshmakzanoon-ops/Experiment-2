@@ -28,6 +28,7 @@ import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.FilterType
 import com.artflow.studio.domain.model.layer.Layer
+import com.artflow.studio.domain.model.layer.LayerEffects
 import com.artflow.studio.domain.repository.canvas.CanvasExportSnapshot
 import com.artflow.studio.domain.repository.canvas.CanvasInvalidationEvent
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
@@ -402,6 +403,7 @@ class CanvasRepositoryImpl
                     isFillReference = layer.isFillReference
                     drawingAssist = layer.drawingAssist
                     isPrivate = layer.isPrivate
+                    effects = layer.effects?.takeUnless { it.isEmpty }
                 }
             data.raster = loadRaster(projectId, layer.rasterFile)
             data.text = layer.textContent
@@ -1345,6 +1347,21 @@ class CanvasRepositoryImpl
                 layer.isPrivate = isPrivate
                 dirty = true
                 emit(CanvasInvalidationEvent.LayersChanged)
+                true
+            }
+
+        override suspend fun setLayerEffects(
+            layerId: Long,
+            effects: LayerEffects?,
+        ): Boolean =
+            withState {
+                val layer = layerById(layerId)?.takeIf { !it.isGroup } ?: return@withState false
+                val normalized = effects?.normalized()?.takeUnless { it.isEmpty }
+                if (layer.effects == normalized) return@withState true
+                pushUndo()
+                layer.effects = normalized
+                dirty = true
+                emit(CanvasInvalidationEvent.Full)
                 true
             }
 
@@ -2296,8 +2313,8 @@ class CanvasRepositoryImpl
 
         /**
          * Identifies everything a preview shows except strokes in progress, or null when only a full
-         * composite is exact: pixel sessions in progress, filter layers and feathered masks reach
-         * beyond the pixels they cover.
+         * composite is exact: pixel sessions in progress, filter layers, feathered masks and layer
+         * effects reach beyond the pixels they cover.
          */
         private fun previewKey(): PreviewCache.Key? {
             val layers = currentLayers()
@@ -2305,7 +2322,7 @@ class CanvasRepositoryImpl
             val local =
                 pendingEdits.keys.all { it in damageTrackedSessions } &&
                     (selection == null || (selection.width == canvasWidth && selection.height == canvasHeight)) &&
-                    layers.none { it.filterType != null || it.maskFeather > 0f } &&
+                    layers.none { it.filterType != null || it.maskFeather > 0f || it.effects != null } &&
                     layers.all { canvasSized(it.raster) && canvasSized(it.mask) }
             if (!local) return null
 
@@ -3006,6 +3023,7 @@ class CanvasRepositoryImpl
             var isFillReference: Boolean = false
             var drawingAssist: Boolean = false
             var isPrivate: Boolean = false
+            var effects: LayerEffects? = null
             var parentGroupId: Long? = null
 
             /** Editable text; set it after [raster], because any new pixels turn the text into pixels. */
@@ -3063,6 +3081,7 @@ class CanvasRepositoryImpl
                     isFillReference = this@LayerData.isFillReference
                     drawingAssist = this@LayerData.drawingAssist
                     isPrivate = this@LayerData.isPrivate
+                    effects = this@LayerData.effects
                 }.also {
                     it.raster = raster
                     it.text = text
@@ -3114,6 +3133,7 @@ class CanvasRepositoryImpl
                     isFillReference = this@LayerData.isFillReference
                     drawingAssist = this@LayerData.drawingAssist
                     isPrivate = this@LayerData.isPrivate
+                    effects = this@LayerData.effects
                 }.also { fresh ->
                     fresh.raster = raster
                     fresh.text = text
@@ -3149,6 +3169,7 @@ class CanvasRepositoryImpl
                     isFillReference = isFillReference,
                     drawingAssist = drawingAssist,
                     isPrivate = isPrivate,
+                    effects = effects,
                     parentGroupId = parentGroupId,
                     isInternal = isInternal,
                     textContent = text,

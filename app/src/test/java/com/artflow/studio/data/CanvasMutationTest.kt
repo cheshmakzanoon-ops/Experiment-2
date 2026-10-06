@@ -15,6 +15,7 @@ import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.model.brush.StrokePoint
 import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.layer.FilterType
+import com.artflow.studio.domain.model.layer.LayerEffects
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -146,6 +147,28 @@ class CanvasMutationTest {
             // Undo brings the photo back into the recording.
             assertTrue(repository.undo())
             assertEquals(blue, requireNotNull(repository.compositeWithoutPrivateLayers()).pixels.first())
+        }
+
+    @Test
+    fun layerEffectsDrawAroundThePixelsAndAreUndoable() =
+        runTest {
+            val layer = open()
+            val dot = PixelBuffer(8, 6).also { it.pixels[2 * 8 + 3] = blue }
+            assertTrue(repository.setLayerPixels(layer, dot, "Fixture"))
+            val outline = LayerEffects(outline = LayerEffects.Outline(color = red, width = 2f))
+            assertTrue(repository.setLayerEffects(layer, outline))
+            assertEquals(outline, repository.getAllLayers().first { it.id == layer }.effects)
+            val pixels = image().pixels
+            assertEquals(blue, pixels[2 * 8 + 3])
+            assertEquals(red, pixels[2 * 8 + 4])
+            assertEquals(0, pixels[0] ushr 24)
+            // Duplicates keep the effects; undo removes them from the original.
+            val copy = requireNotNull(repository.duplicateLayer(layer))
+            assertEquals(outline, repository.getAllLayers().first { it.id == copy }.effects)
+            assertTrue(repository.undo())
+            assertTrue(repository.undo())
+            assertEquals(null, repository.getAllLayers().first { it.id == layer }.effects)
+            assertEquals(0, image().pixels[2 * 8 + 4] ushr 24)
         }
 
     @Test

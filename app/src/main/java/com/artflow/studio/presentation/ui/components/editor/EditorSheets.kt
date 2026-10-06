@@ -62,6 +62,7 @@ data class LayerOptionActions(
     val onFillReference: (Long, Boolean) -> Unit = { _, _ -> },
     val onDrawingAssist: (Long, Boolean) -> Unit = { _, _ -> },
     val onPrivate: (Long, Boolean) -> Unit = { _, _ -> },
+    val onEffects: (Layer) -> Unit = {},
 )
 
 /**

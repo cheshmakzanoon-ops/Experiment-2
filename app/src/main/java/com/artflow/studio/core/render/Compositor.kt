@@ -304,6 +304,7 @@ class Compositor(
         if (layer.maskEnabled && input.mask != null) {
             applyMask(content, input.mask, layer)
         }
+        layer.effects?.let { LayerEffectsRenderer.apply(content, it) }
         return content
     }
 

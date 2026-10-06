@@ -92,6 +92,7 @@ import com.artflow.studio.presentation.ui.components.editor.CropOverlay
 import com.artflow.studio.presentation.ui.components.editor.GuideAssist
 import com.artflow.studio.presentation.ui.components.editor.GuidesOverlay
 import com.artflow.studio.presentation.ui.components.editor.GuidesSheet
+import com.artflow.studio.presentation.ui.components.editor.LayerEffectsDialog
 import com.artflow.studio.presentation.ui.components.editor.LayerMaskActions
 import com.artflow.studio.presentation.ui.components.editor.LayerOpacityOverlay
 import com.artflow.studio.presentation.ui.components.editor.LayerOptionActions
@@ -216,6 +217,7 @@ fun CanvasScreen(
     var colorDropThreshold by remember { mutableStateOf<Float?>(null) }
     var continueFilling by remember { mutableStateOf(false) }
     var editingText by remember { mutableStateOf<Layer?>(null) }
+    var effectsLayerId by remember { mutableStateOf<Long?>(null) }
     val adjustment by viewModel.adjustments.state.collectAsState()
     val layerThumbnails by viewModel.layerThumbnails.thumbnails.collectAsState()
     val pickedLayers by viewModel.layerBatch.picked.collectAsState()
@@ -624,6 +626,7 @@ fun CanvasScreen(
                             onFillReference = viewModel::setLayerFillReference,
                             onDrawingAssist = viewModel::setLayerDrawingAssist,
                             onPrivate = viewModel::setLayerPrivate,
+                            onEffects = { effectsLayerId = it.id },
                             onMask = { viewModel.createLayerMask(LayerMaskSource.REVEAL_ALL) },
                             onCombineDown = viewModel::groupWithLayerBelow,
                             onEditText = { layer ->
@@ -1439,6 +1442,14 @@ fun CanvasScreen(
         )
     }
 
+    layers.firstOrNull { it.id == effectsLayerId }?.let { layer ->
+        LayerEffectsDialog(
+            layer = layer,
+            currentColor = input.brushColor or 0xFF000000.toInt(),
+            onApply = { viewModel.setLayerEffects(layer.id, it) },
+            onDismiss = { effectsLayerId = null },
+        )
+    }
     if (showRecoveryDialog) {
         AlertDialog(
             // A tap outside the dialog or system Back must never delete recoverable artwork.

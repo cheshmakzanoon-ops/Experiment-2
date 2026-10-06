@@ -39,6 +39,7 @@ import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.FilterType
 import com.artflow.studio.domain.model.layer.Layer
+import com.artflow.studio.domain.model.layer.LayerEffects
 import com.artflow.studio.domain.model.settings.AppSettings
 import com.artflow.studio.domain.model.settings.PressureAndSmoothing
 import com.artflow.studio.domain.repository.ProjectRepository
@@ -779,6 +780,11 @@ class CanvasViewModel
             layerId: Long,
             isPrivate: Boolean,
         ) = layerOp { canvasRepository.setLayerPrivate(layerId, isPrivate) }
+
+        fun setLayerEffects(
+            layerId: Long,
+            effects: LayerEffects?,
+        ) = layerOp { canvasRepository.setLayerEffects(layerId, effects) }
 
         /** Cut, copy, paste, clear and fill (Copy & Paste menu and layer options). */
         val clipboard = ClipboardController(canvasRepository, ::layerOp)

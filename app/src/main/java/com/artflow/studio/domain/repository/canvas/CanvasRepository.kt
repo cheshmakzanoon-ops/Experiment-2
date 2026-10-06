@@ -15,6 +15,7 @@ import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.FilterType
 import com.artflow.studio.domain.model.layer.Layer
+import com.artflow.studio.domain.model.layer.LayerEffects
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
@@ -363,6 +364,12 @@ interface CanvasRepository {
     suspend fun setLayerPrivate(
         layerId: Long,
         isPrivate: Boolean,
+    ): Boolean = false
+
+    /** Sets the outline and drop shadow drawn around a layer; null removes them. One undo step. */
+    suspend fun setLayerEffects(
+        layerId: Long,
+        effects: LayerEffects?,
     ): Boolean = false
 
     /** Makes a layer the fill reference whose lines bound ColorDrop on other layers (one at a time). */

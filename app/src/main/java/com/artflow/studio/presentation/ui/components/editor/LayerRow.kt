@@ -241,6 +241,7 @@ private fun LayerStatus(layer: Layer) {
             if (layer.drawingAssist) add("assisted")
             if (layer.isReference) add("not exported")
             if (layer.isPrivate) add("private")
+            if (layer.effects != null) add("effects")
             if (layer.textContent != null) add("text")
             if (layer.hasMask()) add("mask")
         }
@@ -306,6 +307,12 @@ private fun LayerMenu(
                 text = { Text(if (layer.isPrivate) "Private (not in time-lapse) ✓" else "Private (not in time-lapse)") },
                 onClick = item { options.onPrivate(layer.id, !layer.isPrivate) },
             )
+            if (!layer.isGroup) {
+                DropdownMenuItem(
+                    text = { Text(if (layer.effects != null) "Effects ✓" else "Effects") },
+                    onClick = item { options.onEffects(layer) },
+                )
+            }
         }
         DropdownMenuItem(text = { Text("Blend mode") }, onClick = item(onBlendMode))
         DropdownMenuItem(text = { Text("Merge Down") }, onClick = item { actions.onMergeDown(layer.id) })

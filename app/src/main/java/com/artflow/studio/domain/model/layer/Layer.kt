@@ -57,6 +57,8 @@ data class Layer(
     val drawingAssist: Boolean = false,
     /** Procreate's private photo: part of the artwork, but left out of the time-lapse recording. */
     val isPrivate: Boolean = false,
+    /** Outline and drop shadow drawn around the layer's pixels; the pixels themselves never change. */
+    val effects: LayerEffects? = null,
     /** Set for an editable text layer; null once the text has been turned into pixels. */
     val textContent: com.artflow.studio.core.text.TextLayerContent? = null,
     /** Runtime mask presence is independent of whether its immutable PNG has been saved yet. */
@@ -142,6 +144,7 @@ data class Layer(
             isFillReference = this.isFillReference,
             drawingAssist = this.drawingAssist,
             isPrivate = this.isPrivate,
+            effects = this.effects,
             hasInMemoryMask = hasInMemoryMask,
         )
 }
