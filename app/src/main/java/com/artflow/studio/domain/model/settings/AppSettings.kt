@@ -85,10 +85,14 @@ data class AppSettings(
     val swipeCopyPaste: Boolean = true,
     /** Gesture controls: tapping four fingers toggles full screen. */
     val fourFingerFullScreen: Boolean = true,
+    /** Gesture controls: how long two or three fingers must rest before undo or redo starts repeating. */
+    val rapidUndoDelayMs: Int = 650,
     /** Longest side, in pixels, of recorded time-lapse frames (720p, 1080p or 1440p). */
     val timelapseMaxSide: Int = 1280,
     /** Brush size follows the zoom so the brush looks the same size on screen. */
     val dynamicBrushScaling: Boolean = false,
+    /** Prefs > Selection mask visibility: how strongly the selected area is tinted (0..1). */
+    val selectionMaskVisibility: Float = 0.28f,
     /** The QuickMenu's six actions, by label, clockwise from the top; touch and hold a slot to change it. */
     val quickMenu: List<String> = listOf("New layer", "Merge down", "Flip horizontal", "Clear layer", "Copy", "Paste"),
     // Saving

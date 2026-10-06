@@ -818,10 +818,16 @@ fun CanvasScreen(
                             input.touchHoldEyedropper,
                             input.fingerPainting,
                             settings.pressureAndSmoothing,
-                            GestureControls(settings.scrubToClear, settings.swipeCopyPaste, settings.fourFingerFullScreen),
+                            GestureControls(
+                                settings.scrubToClear,
+                                settings.swipeCopyPaste,
+                                settings.fourFingerFullScreen,
+                                settings.rapidUndoDelayMs,
+                            ),
                             lightInterface = settings.themeMode == ThemeMode.LIGHT,
                             brushCursor = settings.brushCursor,
                             dynamicBrushScaling = settings.dynamicBrushScaling,
+                            selectionMaskVisibility = settings.selectionMaskVisibility,
                         ),
                     add =
                         AddActions(
@@ -902,6 +908,7 @@ fun CanvasScreen(
                             },
                             onBrushCursor = { on -> viewModel.updateSettings { it.copy(brushCursor = on) } },
                             onDynamicBrushScaling = { on -> viewModel.updateSettings { it.copy(dynamicBrushScaling = on) } },
+                            onSelectionMaskVisibility = { v -> viewModel.updateSettings { it.copy(selectionMaskVisibility = v) } },
                         ),
                     onShare = { panel = EditorPanel.EXPORT },
                     canPaste = hasClipboard,
@@ -1101,15 +1108,13 @@ fun CanvasScreen(
                     GuidesOverlay(
                         canvasWidth = state.width,
                         canvasHeight = state.height,
-                        scale = viewScale,
-                        offsetX = viewOffsetX,
-                        offsetY = viewOffsetY,
-                        rotationDegrees = viewRotation,
+                        view = ViewTransform(viewScale, viewOffsetX, viewOffsetY, viewRotation),
                         symmetry = input.symmetry,
                         showSymmetry = settings.showSymmetryGuides,
                         perspective = input.perspective,
                         showPerspective = settings.showPerspectiveGuides,
                         selection = selection,
+                        selectionVisibility = settings.selectionMaskVisibility,
                         preview = dragPreview,
                         modifier = Modifier.fillMaxSize(),
                     )

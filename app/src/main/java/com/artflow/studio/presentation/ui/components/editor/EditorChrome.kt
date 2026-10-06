@@ -267,10 +267,7 @@ private fun LabeledSlider(
 fun GuidesOverlay(
     canvasWidth: Int,
     canvasHeight: Int,
-    scale: Float,
-    offsetX: Float,
-    offsetY: Float,
-    rotationDegrees: Float,
+    view: ViewTransform,
     symmetry: SymmetryEngine.Settings,
     showSymmetry: Boolean,
     perspective: PerspectiveGuide.Settings,
@@ -278,6 +275,7 @@ fun GuidesOverlay(
     selection: SelectionMask?,
     preview: DragPreview?,
     modifier: Modifier = Modifier,
+    selectionVisibility: Float = 0.28f,
 ) {
     val dashPhase by rememberInfiniteTransition(label = "ants").animateFloat(
         initialValue = 0f,
@@ -295,13 +293,14 @@ fun GuidesOverlay(
             }
     }
 
+    val scale = view.scale
     Canvas(modifier = modifier) {
         val viewCentre = Offset(size.width / 2f, size.height / 2f)
         val canvasCentre = Offset(canvasWidth / 2f, canvasHeight / 2f)
 
         withTransform({
-            translate(viewCentre.x + offsetX, viewCentre.y + offsetY)
-            rotate(rotationDegrees, pivot = Offset.Zero)
+            translate(viewCentre.x + view.offsetX, viewCentre.y + view.offsetY)
+            rotate(view.rotationDegrees, pivot = Offset.Zero)
             scale(scale, scale, pivot = Offset.Zero)
             translate(-canvasCentre.x, -canvasCentre.y)
         }) {
@@ -339,7 +338,7 @@ fun GuidesOverlay(
                     dstSize =
                         androidx.compose.ui.unit
                             .IntSize(canvasWidth, canvasHeight),
-                    alpha = 0.28f,
+                    alpha = selectionVisibility.coerceIn(0f, 1f),
                 )
             }
 

@@ -231,8 +231,10 @@ class SettingsRepositoryImpl
                 KEY_SCRUB_CLEAR to settings.scrubToClear.toString(),
                 KEY_SWIPE_PASTE to settings.swipeCopyPaste.toString(),
                 KEY_FOUR_FINGER to settings.fourFingerFullScreen.toString(),
+                KEY_RAPID_UNDO_DELAY to settings.rapidUndoDelayMs.toString(),
                 KEY_TIMELAPSE_SIDE to settings.timelapseMaxSide.toString(),
                 KEY_DYNAMIC_BRUSH to settings.dynamicBrushScaling.toString(),
+                KEY_SELECTION_VISIBILITY to settings.selectionMaskVisibility.toString(),
                 KEY_QUICK_MENU to settings.quickMenu.joinToString("|"),
                 KEY_AUTOSAVE to settings.autosaveEnabled.toString(),
                 KEY_AUTOSAVE_INTERVAL to settings.autosaveIntervalMs.toString(),
@@ -302,9 +304,13 @@ class SettingsRepositoryImpl
                 scrubToClear = stored.flag(KEY_SCRUB_CLEAR, defaults.scrubToClear),
                 swipeCopyPaste = stored.flag(KEY_SWIPE_PASTE, defaults.swipeCopyPaste),
                 fourFingerFullScreen = stored.flag(KEY_FOUR_FINGER, defaults.fourFingerFullScreen),
+                rapidUndoDelayMs =
+                    stored[KEY_RAPID_UNDO_DELAY]?.toIntOrNull()?.coerceIn(MIN_RAPID_UNDO_DELAY_MS, MAX_RAPID_UNDO_DELAY_MS)
+                        ?: defaults.rapidUndoDelayMs,
                 timelapseMaxSide =
                     stored[KEY_TIMELAPSE_SIDE]?.toIntOrNull()?.takeIf { it in TIMELAPSE_SIDES } ?: defaults.timelapseMaxSide,
                 dynamicBrushScaling = stored.flag(KEY_DYNAMIC_BRUSH, defaults.dynamicBrushScaling),
+                selectionMaskVisibility = stored.unit(KEY_SELECTION_VISIBILITY) ?: defaults.selectionMaskVisibility,
                 quickMenu = stored.slots(KEY_QUICK_MENU, defaults.quickMenu),
                 autosaveEnabled = stored.flag(KEY_AUTOSAVE, defaults.autosaveEnabled),
                 autosaveIntervalMs =
@@ -376,8 +382,12 @@ class SettingsRepositoryImpl
             private const val KEY_SCRUB_CLEAR = "gesture.scrubToClear"
             private const val KEY_SWIPE_PASTE = "gesture.swipeCopyPaste"
             private const val KEY_FOUR_FINGER = "gesture.fourFingerFullScreen"
+            private const val KEY_RAPID_UNDO_DELAY = "gesture.rapidUndoDelayMs"
+            private const val MIN_RAPID_UNDO_DELAY_MS = 200
+            private const val MAX_RAPID_UNDO_DELAY_MS = 1500
             private const val KEY_TIMELAPSE_SIDE = "timelapse.maxSide"
             private const val KEY_DYNAMIC_BRUSH = "brush.dynamicScaling"
+            private const val KEY_SELECTION_VISIBILITY = "canvas.selectionMaskVisibility"
 
             /** Time-lapse recording sizes offered in Prefs: 720p, 1080p and 1440p. */
             val TIMELAPSE_SIDES = listOf(1280, 1920, 2560)

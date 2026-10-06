@@ -55,6 +55,16 @@ class SettingsRepositoryTest {
         }
 
     @Test
+    fun rapidUndoDelayPersistsWithinItsRange() =
+        runTest {
+            val dao = MemorySettingsDao(mapOf("gesture.rapidUndoDelayMs" to "99999"))
+            val repository = SettingsRepositoryImpl(dao)
+            assertEquals(1500, repository.settings.first().rapidUndoDelayMs)
+            repository.update { it.copy(rapidUndoDelayMs = 400) }
+            assertEquals(400, SettingsRepositoryImpl(dao).settings.first().rapidUndoDelayMs)
+        }
+
+    @Test
     fun timelapseQualityPersistsAndIgnoresUnknownSizes() =
         runTest {
             val dao = MemorySettingsDao(mapOf("timelapse.maxSide" to "999"))

@@ -239,7 +239,13 @@ class CanvasViewModel
                             motionExpression = stored.motionExpression,
                             pressureSmoothing = stored.pressureSmoothing,
                             brushCursor = stored.brushCursor,
-                            gestures = GestureControls(stored.scrubToClear, stored.swipeCopyPaste, stored.fourFingerFullScreen),
+                            gestures =
+                                GestureControls(
+                                    stored.scrubToClear,
+                                    stored.swipeCopyPaste,
+                                    stored.fourFingerFullScreen,
+                                    stored.rapidUndoDelayMs,
+                                ),
                             dynamicBrushScaling = stored.dynamicBrushScaling,
                         )
                 }
@@ -595,6 +601,7 @@ class CanvasViewModel
                         scrubToClear = controls.scrubToClear,
                         swipeCopyPaste = controls.swipeCopyPaste,
                         fourFingerFullScreen = controls.fourFingerFullScreen,
+                        rapidUndoDelayMs = controls.rapidUndoDelayMs,
                     )
                 }
             }

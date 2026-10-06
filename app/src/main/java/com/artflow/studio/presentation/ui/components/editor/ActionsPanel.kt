@@ -14,6 +14,7 @@ import com.artflow.studio.domain.model.settings.PressureAndSmoothing
 import com.artflow.studio.presentation.ui.components.canvas.GestureControls
 import kotlin.math.exp
 import kotlin.math.ln
+import kotlin.math.roundToInt
 
 data class AddActions(
     val onInsertFile: () -> Unit,
@@ -66,6 +67,7 @@ data class StudioPrefs(
     val lightInterface: Boolean = false,
     val brushCursor: Boolean = true,
     val dynamicBrushScaling: Boolean = false,
+    val selectionMaskVisibility: Float = 0.28f,
 )
 
 data class PrefActions(
@@ -81,6 +83,7 @@ data class PrefActions(
     val onLightInterface: (Boolean) -> Unit = {},
     val onBrushCursor: (Boolean) -> Unit = {},
     val onDynamicBrushScaling: (Boolean) -> Unit = {},
+    val onSelectionMaskVisibility: (Float) -> Unit = {},
 )
 
 /** Canvas facts shown under Canvas > Canvas information. */
@@ -230,6 +233,13 @@ private fun PrefsTab(
     PrefSwitch("QuickShape (hold at the end of a stroke)", prefs.quickShape, actions.onQuickShape)
     PrefSwitch("Touch and hold for eyedropper", prefs.holdEyedropper, actions.onHoldEyedropper)
     PrefSwitch("Paint with a finger", prefs.fingerPainting, actions.onFingerPainting)
+    PrefSlider(
+        label = "Selection mask",
+        value = prefs.selectionMaskVisibility,
+        range = 0f..1f,
+        readout = "${(prefs.selectionMaskVisibility * 100).roundToInt()}%",
+        onChange = actions.onSelectionMaskVisibility,
+    )
     HorizontalDivider()
     Text("Pressure and Smoothing", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
     val smoothing = prefs.smoothing
@@ -268,6 +278,12 @@ private fun PrefsTab(
     PrefSwitch("Four-finger tap toggles full screen", gestures.fourFingerFullScreen) {
         actions.onGestures(gestures.copy(fourFingerFullScreen = it))
     }
+    PrefSlider(
+        label = "Rapid undo delay",
+        value = gestures.rapidUndoDelayMs.toFloat(),
+        range = 200f..1500f,
+        readout = "%.2f s".format(gestures.rapidUndoDelayMs / 1000f),
+    ) { actions.onGestures(gestures.copy(rapidUndoDelayMs = (it / 50f).roundToInt() * 50)) }
     HorizontalDivider()
     ActionRow("Full screen", actions.onFullScreen)
     ActionRow("More preferences…", actions.onMoreSettings)

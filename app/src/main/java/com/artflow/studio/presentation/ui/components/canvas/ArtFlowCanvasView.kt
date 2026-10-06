@@ -156,6 +156,8 @@ data class GestureControls(
     val scrubToClear: Boolean = true,
     val swipeCopyPaste: Boolean = true,
     val fourFingerFullScreen: Boolean = true,
+    /** How long two or three resting fingers wait before undo or redo starts repeating. */
+    val rapidUndoDelayMs: Int = 650,
 )
 
 /** Brush outline under a hovering stylus, in view pixels. */
@@ -1274,7 +1276,7 @@ class ArtFlowCanvasView
 
                 PointerGestureRouter.Action.REBASE_NAVIGATION -> {
                     removeCallbacks(rapidHistory)
-                    postDelayed(rapidHistory, RAPID_HISTORY_DELAY_MS)
+                    postDelayed(rapidHistory, input.gestures.rapidUndoDelayMs.toLong())
                     val remaining =
                         if (action ==
                             PointerGestureRouter.Event.POINTER_UP
@@ -2899,7 +2901,6 @@ class ArtFlowCanvasView
             private const val HANDLE_TOUCH_PX = 36f
             private const val MIN_SCALED_BRUSH = 0.5f
             private const val MAX_SCALED_BRUSH = 1_000f
-            private const val RAPID_HISTORY_DELAY_MS = 650L
             private const val RAPID_HISTORY_REPEAT_MS = 220L
             private const val KNOB_DISTANCE_PX = 48f
             private const val SNAP_DISTANCE_PX = 12f
