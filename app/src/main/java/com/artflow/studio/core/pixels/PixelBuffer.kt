@@ -380,7 +380,6 @@ class PixelBuffer(
             argb: Int,
         ): PixelBuffer = PixelBuffer(width, height).also { it.fill(argb) }
 
-        /** Bilinear factors are in 0..1; alpha-weighted RGB is unpremultiplied exactly once. */
         /** Catmull-Rom weight of tap [tap] (0..3, covering offsets -1..2) at fraction [t]; the four sum to one. */
         fun catmullRom(
             tap: Int,
@@ -396,6 +395,7 @@ class PixelBuffer(
             }
         }
 
+        /** Bilinear factors are in 0..1; alpha-weighted RGB is unpremultiplied exactly once. */
         fun mix4(
             p00: Int,
             p10: Int,

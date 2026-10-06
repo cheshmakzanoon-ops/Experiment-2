@@ -171,12 +171,12 @@ object LiveAdjustments {
             for (x in 0 until source.width) {
                 val px = x + 0.5f
                 val py = y + 0.5f
+                val ahead = if (directional) max(0f, (px - cx) * ux + (py - cy) * uy) * reach else 0f
                 out.pixels[y * source.width + x] =
-                    if (directional) {
-                        val ahead = max(0f, (px - cx) * ux + (py - cy) * uy) * reach
-                        if (ahead <= 0f) source.pixels[y * source.width + x] else streak(source, px, py, -ux * ahead, -uy * ahead)
-                    } else {
-                        streak(source, px, py, (cx - px) * reach, (cy - py) * reach)
+                    when {
+                        !directional -> streak(source, px, py, (cx - px) * reach, (cy - py) * reach)
+                        ahead <= 0f -> source.pixels[y * source.width + x]
+                        else -> streak(source, px, py, -ux * ahead, -uy * ahead)
                     }
             }
         }
