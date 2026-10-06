@@ -152,6 +152,8 @@ data class EditorInput(
     val pressureResponse: PressureResponse = PressureResponse(),
     /** Settings > Haptics: a short buzz confirms QuickShape and the touch-and-hold eyedropper. */
     val haptics: Boolean = true,
+    /** Settings > Reduce motion: the view jumps to fit instead of animating there. */
+    val reduceMotion: Boolean = false,
     /** Outline the brush under a hovering stylus. */
     val brushCursor: Boolean = true,
     /** Gesture controls from Prefs; each can be switched off. */
@@ -618,6 +620,7 @@ class ArtFlowCanvasView
         /** Eases the view back to fit the screen, unrotated, as after Procreate's quick pinch. */
         fun animateFitToView() {
             if (width == 0 || height == 0) return
+            if (input.reduceMotion) return fitToView()
             val fromScale = scale
             val toScale = fitScale()
             val fromX = offsetX

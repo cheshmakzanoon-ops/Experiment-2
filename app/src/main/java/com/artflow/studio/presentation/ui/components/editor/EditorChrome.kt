@@ -33,6 +33,7 @@ import com.artflow.studio.core.symmetry.SymmetryEngine
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.presentation.ui.components.canvas.DragPreview
+import com.artflow.studio.presentation.ui.theme.LocalArtFlowFlags
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -277,12 +278,15 @@ fun GuidesOverlay(
     modifier: Modifier = Modifier,
     selectionVisibility: Float = 0.28f,
 ) {
-    val dashPhase by rememberInfiniteTransition(label = "ants").animateFloat(
+    val reduceMotion = LocalArtFlowFlags.current.reduceMotion
+    val antsPhase by rememberInfiniteTransition(label = "ants").animateFloat(
         initialValue = 0f,
         targetValue = 24f,
         animationSpec = infiniteRepeatable(tween(durationMillis = 900)),
         label = "dash",
     )
+    // With Reduce motion the selection outline stays still.
+    val dashPhase = if (reduceMotion) 0f else antsPhase
 
     var maskBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(selection) {

@@ -241,6 +241,7 @@ class CanvasViewModel
                             pulledString = stored.pulledString,
                             pressureResponse = stored.pressureResponse,
                             haptics = stored.haptics,
+                            reduceMotion = stored.reduceMotion,
                             brushCursor = stored.brushCursor,
                             gestures =
                                 GestureControls(
@@ -555,7 +556,11 @@ class CanvasViewModel
             viewModelScope.launch(editorErrors) { settingsRepository.setSnapToGuides(enabled) }
         }
 
-        fun setFingerPainting(enabled: Boolean) = updateInput { it.copy(fingerPainting = enabled) }
+        fun setFingerPainting(enabled: Boolean) {
+            updateInput { it.copy(fingerPainting = enabled) }
+            // Saved as Settings' Stylus only, which every settings update reads back.
+            viewModelScope.launch(editorErrors) { settingsRepository.setStylusOnly(!enabled) }
+        }
 
         fun setGradient(
             gradient: GradientTool.Gradient,

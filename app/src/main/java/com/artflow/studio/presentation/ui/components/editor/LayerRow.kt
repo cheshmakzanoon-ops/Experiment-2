@@ -134,7 +134,14 @@ internal fun LayerRow(
                         modifier = Modifier.size(touchSize).semantics { contentDescription = "Visibility" },
                     )
                     Box {
-                        IconButton(onClick = { menuVisible = true }, modifier = Modifier.size(touchSize)) {
+                        IconButton(
+                            onClick = {
+                                // The menu's options act on the active layer, so open it on this one.
+                                if (!isActive) actions.onSelect(layer.id)
+                                menuVisible = true
+                            },
+                            modifier = Modifier.size(touchSize),
+                        ) {
                             Icon(Icons.Default.MoreVert, contentDescription = "Layer menu", modifier = Modifier.size(18.dp))
                         }
                         LayerMenu(layer, menuVisible, actions, options, onBlendMode, onRename) { menuVisible = false }
@@ -239,7 +246,7 @@ private fun LayerStatus(layer: Layer) {
             if (layer.isAlphaLocked) add("alpha locked")
             if (layer.isFillReference) add("reference")
             if (layer.drawingAssist) add("assisted")
-            if (layer.isReference) add("not exported")
+            if (layer.isReference) add("hidden from artwork")
             if (layer.isPrivate) add("private")
             if (layer.effects != null) add("effects")
             if (layer.textContent != null) add("text")
@@ -300,7 +307,7 @@ private fun LayerMenu(
                 onClick = item { options.onDrawingAssist(layer.id, !layer.drawingAssist) },
             )
             DropdownMenuItem(
-                text = { Text(if (layer.isReference) "Exclude from export ✓" else "Exclude from export") },
+                text = { Text(if (layer.isReference) "Hide from artwork ✓" else "Hide from artwork") },
                 onClick = item { options.onReference(layer.id, !layer.isReference) },
             )
             DropdownMenuItem(

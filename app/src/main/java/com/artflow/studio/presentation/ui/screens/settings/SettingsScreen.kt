@@ -104,7 +104,7 @@ fun SettingsScreen(
             )
             SwitchRow(
                 title = "Reduce motion",
-                subtitle = "Shortens panel and canvas animations",
+                subtitle = "Fit to screen jumps instead of animating, and selection outlines stay still",
                 checked = settings.reduceMotion,
                 onChange = viewModel::setReduceMotion,
             )
