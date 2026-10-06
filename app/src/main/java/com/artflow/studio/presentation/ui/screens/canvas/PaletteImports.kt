@@ -26,6 +26,8 @@ class PaletteImports(
     val fromFile: () -> Unit,
     val fromPhoto: () -> Unit,
     val share: (Palette) -> Unit,
+    /** Procreate's Palette Capture: take a photo and keep its main colours. */
+    val fromCamera: () -> Unit = {},
 )
 
 @Composable
@@ -68,9 +70,24 @@ fun rememberPaletteImports(
                 if (colors.isNullOrEmpty()) onError("No colours could be taken from that picture") else onPalette("Photo palette", colors)
             }
         }
+    val camera =
+        rememberCameraCapture(
+            onImage = { image ->
+                scope.launch {
+                    val colors = withContext(Dispatchers.Default) { runCatching { PaletteExtractor.colors(image) }.getOrNull() }
+                    if (colors.isNullOrEmpty()) {
+                        onError("No colours could be taken from that photo")
+                    } else {
+                        onPalette("Camera palette", colors)
+                    }
+                }
+            },
+            onError = onError,
+        )
     return PaletteImports(
         fromFile = { launchSafely(onError) { file.launch(arrayOf("*/*")) } },
         fromPhoto = { launchSafely(onError) { photo.launch("image/*") } },
+        fromCamera = camera,
         share = { palette ->
             scope.launch {
                 val shared =

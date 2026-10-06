@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -57,6 +58,7 @@ fun ColorPanel(
     modifier: Modifier = Modifier,
     onImportPalette: (() -> Unit)? = null,
     onPaletteFromPhoto: (() -> Unit)? = null,
+    onPaletteFromCamera: (() -> Unit)? = null,
     /** The secondary colour and swapping it with the primary; null hides the swatch. */
     secondary: SecondarySwatch? = null,
 ) {
@@ -101,9 +103,10 @@ fun ColorPanel(
             ColorTab.HARMONY -> HarmonyTab(color, harmony, { harmony = it }, onColorSelected)
             ColorTab.VALUE -> ValueTab(color, mode, { mode = it }, onColorSelected)
             ColorTab.PALETTES -> {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     onImportPalette?.let { OutlinedButton(onClick = it) { Text("Import palette") } }
                     onPaletteFromPhoto?.let { OutlinedButton(onClick = it) { Text("New from photo") } }
+                    onPaletteFromCamera?.let { OutlinedButton(onClick = it) { Text("From camera") } }
                     OutlinedButton(onClick = {
                         val number = palettes.count { it.category == "Custom" } + 1
                         onSavePalette("Palette $number", listOf(color))

@@ -547,6 +547,7 @@ fun CanvasScreen(
                     onSavePalette = { name, colors -> viewModel.addPaletteFromColors(name, colors) },
                     onImportPalette = paletteImports.fromFile,
                     onPaletteFromPhoto = paletteImports.fromPhoto,
+                    onPaletteFromCamera = paletteImports.fromCamera,
                     palettesEdit =
                         PaletteEdits(
                             viewModel::removePalette,
