@@ -285,7 +285,6 @@ private fun HexField(
     )
 }
 
-/** Removing a custom palette, and saving one after a swatch is added or removed. */
 /** Where a new palette can come from: a swatch file, a photo, or the camera; null hides that button. */
 data class PaletteSources(
     val fromFile: (() -> Unit)? = null,
@@ -293,6 +292,7 @@ data class PaletteSources(
     val fromCamera: (() -> Unit)? = null,
 )
 
+/** Removing a custom palette, and saving one after a swatch is added or removed. */
 data class PaletteEdits(
     val onRemove: (Long) -> Unit,
     val onEdit: (Palette) -> Unit,

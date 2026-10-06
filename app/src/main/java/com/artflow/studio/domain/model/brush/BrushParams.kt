@@ -83,8 +83,7 @@ data class BrushParams(
     val touchTaperEnd: Float? = null,
 ) {
     /** Flow at [pressure], after Pressure → Flow thins it for lighter presses. */
-    fun flowAt(pressure: Float): Float =
-        flow.coerceIn(0f, 1f) * (1f - pressureToFlow.coerceIn(0f, 1f) * (1f - pressureResponse(pressure)))
+    fun flowAt(pressure: Float): Float = flow.coerceIn(0f, 1f) * (1f - pressureToFlow.coerceIn(0f, 1f) * (1f - pressureResponse(pressure)))
 
     /** These settings for a finger stroke: the Touch taper replaces the stylus (pressure) taper. */
     fun forTouch(): BrushParams = copy(taperStart = touchTaperStart ?: taperStart, taperEnd = touchTaperEnd ?: taperEnd)
