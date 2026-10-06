@@ -45,6 +45,9 @@ import com.artflow.studio.core.pixels.Quad
 import com.artflow.studio.core.pixels.TransformQuad
 import com.artflow.studio.core.pixels.WarpMesh
 import com.artflow.studio.core.tool.ToolType
+import com.artflow.studio.domain.model.brush.MAX_BRUSH_SIZE
+import com.artflow.studio.domain.model.brush.MIN_BRUSH_OPACITY
+import com.artflow.studio.domain.model.brush.MIN_BRUSH_SIZE
 import com.artflow.studio.presentation.ui.components.canvas.SelectionCombineMode
 import kotlinx.coroutines.delay
 import kotlin.math.cos
@@ -187,6 +190,9 @@ data class StudioSidebarState(
     val canUndo: Boolean,
     val canRedo: Boolean,
     val eyedropperActive: Boolean,
+    /** The brush's own size and opacity limits, which the sliders span end to end. */
+    val sizeRange: ClosedFloatingPointRange<Float> = MIN_BRUSH_SIZE..MAX_BRUSH_SIZE,
+    val opacityRange: ClosedFloatingPointRange<Float> = MIN_BRUSH_OPACITY..1f,
 )
 
 data class StudioSidebarActions(
@@ -232,8 +238,8 @@ private fun StudioSidebarContent(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             VerticalSlider(
-                value = sizeToSlider(state.size),
-                onValueChange = { actions.onSize(sliderToSize(it)) },
+                value = sizeToSlider(state.size, state.sizeRange),
+                onValueChange = { actions.onSize(sliderToSize(it, state.sizeRange)) },
                 label = "Brush size ${state.size.toInt()} px",
                 height = sliderHeight,
             )
@@ -249,8 +255,8 @@ private fun StudioSidebarContent(
                         .combinedClickable(onClick = actions.onModify, onLongClick = actions.onQuickMenu, onLongClickLabel = "QuickMenu"),
             )
             VerticalSlider(
-                value = state.opacity,
-                onValueChange = { actions.onOpacity(it.coerceAtLeast(0.01f)) },
+                value = toSlider(state.opacity, state.opacityRange),
+                onValueChange = { actions.onOpacity(fromSlider(it, state.opacityRange)) },
                 label = "Opacity ${(state.opacity * 100).toInt()}%",
                 height = sliderHeight,
             )
@@ -310,17 +316,34 @@ fun HistoryScrubber(
     }
 }
 
-private const val MAX_BRUSH_SIZE = 512f
 
 /** The sidebar's padding, spacing, modify button, undo and redo; the two sliders get the rest. */
 private val SIDEBAR_FIXED_HEIGHT = 180.dp
 private val MIN_SLIDER = 72.dp
 private val MAX_SLIDER = 170.dp
 
-/** Square-root mapping gives fine control over small brushes, like Procreate's size slider. */
-internal fun sizeToSlider(size: Float): Float = sqrt(((size - 1f) / (MAX_BRUSH_SIZE - 1f)).coerceIn(0f, 1f))
+/** Where [value] sits in [range], from 0 to 1. */
+internal fun toSlider(
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+): Float = ((value - range.start) / (range.endInclusive - range.start)).coerceIn(0f, 1f)
 
-internal fun sliderToSize(value: Float): Float = 1f + value.coerceIn(0f, 1f).let { it * it } * (MAX_BRUSH_SIZE - 1f)
+/** The value at [position] (0 to 1) along [range]. */
+internal fun fromSlider(
+    position: Float,
+    range: ClosedFloatingPointRange<Float>,
+): Float = range.start + position.coerceIn(0f, 1f) * (range.endInclusive - range.start)
+
+/** Square-root mapping gives fine control over small brushes, like Procreate's size slider. */
+internal fun sizeToSlider(
+    size: Float,
+    range: ClosedFloatingPointRange<Float> = MIN_BRUSH_SIZE..MAX_BRUSH_SIZE,
+): Float = sqrt(((size - range.start) / (range.endInclusive - range.start)).coerceIn(0f, 1f))
+
+internal fun sliderToSize(
+    value: Float,
+    range: ClosedFloatingPointRange<Float> = MIN_BRUSH_SIZE..MAX_BRUSH_SIZE,
+): Float = range.start + value.coerceIn(0f, 1f).let { it * it } * (range.endInclusive - range.start)
 
 /** A tall rounded slider: drag or tap anywhere along it; top is 1, bottom is 0. */
 @Composable

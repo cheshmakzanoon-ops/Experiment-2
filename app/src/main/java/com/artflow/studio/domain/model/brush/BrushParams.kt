@@ -65,12 +65,24 @@ data class BrushParams(
     val grainDepth: Float = 1f, // 0..1: how strongly the grain shows; 0 paints as if there were no grain
     val dilution: Float = 0f, // 0..1: water in the paint; thins each dab and lets it pick up more of the layer
     val pull: Float = 0f, // 0..1: how far the brush drags the colour it carries along the stroke
+    val minSize: Float = MIN_BRUSH_SIZE, // Brush Studio Properties: the sidebar's size slider runs from this...
+    val maxSize: Float = MAX_BRUSH_SIZE, // ...to this, in pixels
+    val minOpacity: Float = MIN_BRUSH_OPACITY, // and its opacity slider from this...
+    val maxOpacity: Float = 1f, // ...to this
     val grainBrightness: Float = 0f, // -1..1: lightens or darkens the grain
     val grainContrast: Float = 0f, // -1..1: flattens the grain or sharpens it toward black and white
     val wetBlur: Float = 0f, // 0..1: Wet Mix Blur; the paint picked up is averaged over this share of the brush
     val countJitter: Float = 0f, // 0..1: each dab stamps a random number of copies, from count down to one at 1
     val colorJitterPerStroke: Boolean = false, // Colour jitter picks one colour per stroke instead of varying each dab
 ) {
+    /** The sizes the sidebar offers for this brush (Procreate's Min and Max size). */
+    val sizeLimits: ClosedFloatingPointRange<Float>
+        get() = limits(minSize, maxSize, MIN_BRUSH_SIZE, MAX_BRUSH_SIZE)
+
+    /** The opacities the sidebar offers for this brush (Procreate's Min and Max opacity). */
+    val opacityLimits: ClosedFloatingPointRange<Float>
+        get() = limits(minOpacity, maxOpacity, MIN_BRUSH_OPACITY, 1f)
+
     /** Imported grain and shape images this brush (and its second brush) paints with. */
     val imageIds: List<String>
         get() = listOfNotNull(textureId, shapeId) + (dual?.params?.imageIds ?: emptyList())
@@ -265,4 +277,23 @@ data class BrushParams(
                 .hsvToRgb(hsv[0], hsv[1], hsv[2])
         return (baseColor and 0xFF000000.toInt()) or (rgb and 0x00FFFFFF)
     }
+}
+
+/** The smallest and largest brush sizes the app offers, in pixels. */
+const val MIN_BRUSH_SIZE = 1f
+const val MAX_BRUSH_SIZE = 512f
+
+/** The faintest opacity a brush slider offers. */
+const val MIN_BRUSH_OPACITY = 0.01f
+
+/** [low]..[high] kept finite, within [floor]..[ceiling] and in order; the full range when they are not. */
+private fun limits(
+    low: Float,
+    high: Float,
+    floor: Float,
+    ceiling: Float,
+): ClosedFloatingPointRange<Float> {
+    val from = if (low.isFinite()) low.coerceIn(floor, ceiling) else floor
+    val to = if (high.isFinite()) high.coerceIn(floor, ceiling) else ceiling
+    return if (from < to) from..to else floor..ceiling
 }

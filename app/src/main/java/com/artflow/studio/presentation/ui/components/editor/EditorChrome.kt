@@ -172,6 +172,8 @@ fun BrushOptionsRow(
     onEraserSizeChanged: (Float) -> Unit,
     onToleranceChanged: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    sizeRange: ClosedFloatingPointRange<Float> = 1f..400f,
+    opacityRange: ClosedFloatingPointRange<Float> = 0.01f..1f,
 ) {
     Row(
         modifier =
@@ -193,7 +195,7 @@ fun BrushOptionsRow(
                 LabeledSlider(
                     label = "Size",
                     value = size,
-                    range = 1f..400f,
+                    range = sizeRange,
                     onChange = onSizeChanged,
                     modifier = Modifier.weight(1f),
                 )
@@ -201,7 +203,7 @@ fun BrushOptionsRow(
                 LabeledSlider(
                     label = "Opacity",
                     value = opacity,
-                    range = 0.01f..1f,
+                    range = opacityRange,
                     onChange = onOpacityChanged,
                     modifier = Modifier.weight(1f),
                 )

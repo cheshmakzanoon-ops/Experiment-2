@@ -32,6 +32,9 @@ import com.artflow.studio.data.local.GrainStorage
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.DualBrush
+import com.artflow.studio.domain.model.brush.MAX_BRUSH_SIZE
+import com.artflow.studio.domain.model.brush.MIN_BRUSH_OPACITY
+import com.artflow.studio.domain.model.brush.MIN_BRUSH_SIZE
 import com.artflow.studio.domain.model.brush.PressureResponse
 import com.artflow.studio.domain.model.brush.StudioBrushes
 import com.artflow.studio.domain.model.layer.BlendMode
@@ -945,6 +948,37 @@ private fun BrushProperties(
             onValueChange = { onBrushParamsChanged(brushParams.copy(opacity = it)) },
             valueRange = 0.01f..1f,
             valueDisplay = "%.0f%%".format(brushParams.opacity * 100),
+        )
+        // Procreate's size and opacity limits: the sidebar sliders span exactly this range.
+        val sizes = brushParams.sizeLimits
+        val opacities = brushParams.opacityLimits
+        BrushParameterSlider(
+            label = "Minimum size",
+            value = sizes.start,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(minSize = it.coerceAtMost(sizes.endInclusive - 1f))) },
+            valueRange = MIN_BRUSH_SIZE..MAX_BRUSH_SIZE,
+            valueDisplay = "%.0f px".format(sizes.start),
+        )
+        BrushParameterSlider(
+            label = "Maximum size",
+            value = sizes.endInclusive,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(maxSize = it.coerceAtLeast(sizes.start + 1f))) },
+            valueRange = MIN_BRUSH_SIZE..MAX_BRUSH_SIZE,
+            valueDisplay = "%.0f px".format(sizes.endInclusive),
+        )
+        BrushParameterSlider(
+            label = "Minimum opacity",
+            value = opacities.start,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(minOpacity = it.coerceAtMost(opacities.endInclusive - 0.01f))) },
+            valueRange = MIN_BRUSH_OPACITY..1f,
+            valueDisplay = "%.0f%%".format(opacities.start * 100),
+        )
+        BrushParameterSlider(
+            label = "Maximum opacity",
+            value = opacities.endInclusive,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(maxOpacity = it.coerceAtLeast(opacities.start + 0.01f))) },
+            valueRange = MIN_BRUSH_OPACITY..1f,
+            valueDisplay = "%.0f%%".format(opacities.endInclusive * 100),
         )
     }
 }

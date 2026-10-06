@@ -77,6 +77,8 @@ object BrushLibraryCodec {
                 params.dilution,
                 params.pull,
                 params.countJitter,
+                params.minOpacity,
+                params.maxOpacity,
                 params.wetBlur,
                 params.flow,
                 params.tiltInfluence,
@@ -85,6 +87,9 @@ object BrushLibraryCodec {
                 params.velocityToHue,
             )
         require(unitValues.all { it in 0f..1f }) { "Brush dynamics must be finite values between zero and one" }
+        require(params.minSize in MIN_BRUSH_SIZE..MAX_BRUSH_SIZE && params.maxSize in MIN_BRUSH_SIZE..MAX_BRUSH_SIZE) {
+            "Brush size limits must be between $MIN_BRUSH_SIZE and $MAX_BRUSH_SIZE pixels"
+        }
         require(listOf(params.grainBrightness, params.grainContrast).all { it in -1f..1f }) {
             "Grain brightness and contrast must be within -1 and 1"
         }

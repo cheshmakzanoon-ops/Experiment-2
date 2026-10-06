@@ -55,6 +55,8 @@ import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.data.local.FontLibrary
 import com.artflow.studio.data.local.ReferenceImages
 import com.artflow.studio.data.renderer.BitmapPixelBridge
+import com.artflow.studio.domain.model.brush.MAX_BRUSH_SIZE
+import com.artflow.studio.domain.model.brush.MIN_BRUSH_SIZE
 import com.artflow.studio.domain.model.brush.StrokeDestination
 import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.layer.BlendMode
@@ -528,6 +530,8 @@ fun CanvasScreen(
                     onOpacityChanged = viewModel::setBrushOpacity,
                     onEraserSizeChanged = viewModel::setEraserSize,
                     onToleranceChanged = { viewModel.setFillSettings(it, input.fillContiguous) },
+                    sizeRange = input.brushParams.sizeLimits,
+                    opacityRange = input.brushParams.opacityLimits,
                 )
                 ToolOptionsPanel(viewModel, input, canvasView)
             }
@@ -1181,6 +1185,8 @@ fun CanvasScreen(
                             canUndo = history.canUndo,
                             canRedo = history.canRedo,
                             eyedropperActive = input.tool == ToolType.EYEDROPPER,
+                            sizeRange = if (input.tool == ToolType.ERASER) MIN_BRUSH_SIZE..MAX_BRUSH_SIZE else input.brushParams.sizeLimits,
+                            opacityRange = input.brushParams.opacityLimits,
                         ),
                     actions =
                         StudioSidebarActions(

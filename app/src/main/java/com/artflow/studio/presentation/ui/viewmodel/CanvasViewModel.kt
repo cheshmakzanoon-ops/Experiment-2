@@ -497,10 +497,13 @@ class CanvasViewModel
                 }
             }
 
-        fun setBrushSize(size: Float) = updateInput { it.copy(brushParams = it.brushParams.copy(size = size.coerceIn(1f, 512f))) }
+        /** Sets the brush size within the brush's own size limits. */
+        fun setBrushSize(size: Float) =
+            updateInput { it.copy(brushParams = it.brushParams.copy(size = size.coerceIn(it.brushParams.sizeLimits))) }
 
+        /** Sets the brush opacity within the brush's own opacity limits. */
         fun setBrushOpacity(opacity: Float) =
-            updateInput { it.copy(brushParams = it.brushParams.copy(opacity = opacity.coerceIn(0.01f, 1f))) }
+            updateInput { it.copy(brushParams = it.brushParams.copy(opacity = opacity.coerceIn(it.brushParams.opacityLimits))) }
 
         fun setBrushParams(params: com.artflow.studio.domain.model.brush.BrushParams) = updateInput { it.copy(brushParams = params) }
 
