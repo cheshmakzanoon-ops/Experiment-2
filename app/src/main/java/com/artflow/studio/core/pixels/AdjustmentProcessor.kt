@@ -93,13 +93,15 @@ object AdjustmentProcessor {
                 }
             }
             AdjustmentType.CURVES -> {
+                // The master curve, then each channel's own curve on top of it (identity when unset).
                 val lut = buildCurveLut(merged)
+                val (red, green, blue) = CURVE_CHANNELS.map { buildCurveLut(merged, it) }
                 perPixel(source, out, mixed, mask) { _, p ->
                     Channels.argb(
                         Channels.alpha(p).toInt(),
-                        lut[Channels.red(p).toInt().coerceIn(0, 255)],
-                        lut[Channels.green(p).toInt().coerceIn(0, 255)],
-                        lut[Channels.blue(p).toInt().coerceIn(0, 255)],
+                        red[lut[Channels.red(p).toInt().coerceIn(0, 255)]],
+                        green[lut[Channels.green(p).toInt().coerceIn(0, 255)]],
+                        blue[lut[Channels.blue(p).toInt().coerceIn(0, 255)]],
                     )
                 }
             }
@@ -190,17 +192,23 @@ object AdjustmentProcessor {
         }
     }
 
+    /** Prefixes of the per-channel curves' parameter keys, in red, green, blue order. */
+    val CURVE_CHANNELS = listOf("red_", "green_", "blue_")
+
     /**
      * Build the 256-entry lookup table used by the Curves adjustment from up to five control
-     * points (keys `point_N_x` / `point_N_y`). Uses monotone cubic interpolation so the curve
-     * cannot overshoot into artifacts.
+     * points (keys `point_N_x` / `point_N_y`, after [prefix]; "" is the master curve). Uses
+     * monotone cubic interpolation so the curve cannot overshoot into artifacts.
      */
-    fun buildCurveLut(parameters: Map<String, Float>): IntArray {
+    fun buildCurveLut(
+        parameters: Map<String, Float>,
+        prefix: String = "",
+    ): IntArray {
         val points =
             (0..4)
                 .mapNotNull { index ->
-                    val x = parameters["point_${index}_x"] ?: return@mapNotNull null
-                    val y = parameters["point_${index}_y"] ?: return@mapNotNull null
+                    val x = parameters["${prefix}point_${index}_x"] ?: return@mapNotNull null
+                    val y = parameters["${prefix}point_${index}_y"] ?: return@mapNotNull null
                     (x.coerceIn(0f, 255f) to y.coerceIn(0f, 255f))
                 }.sortedBy { it.first }
 

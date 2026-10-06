@@ -1,5 +1,6 @@
 package com.artflow.studio.presentation.ui.components.editor
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
@@ -13,9 +14,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.artflow.studio.core.color.GradientMaps
+import com.artflow.studio.core.pixels.AdjustmentProcessor
 import com.artflow.studio.core.pixels.LiveAdjustments
 import com.artflow.studio.presentation.ui.viewmodel.AdjustmentSessionController
 import kotlin.math.atan2
@@ -99,6 +105,7 @@ fun AdjustmentOverlay(
         ) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (state.kind == LiveAdjustments.Kind.GRADIENT_MAP) GradientRamps(state, actions.onParameters)
+                if (state.kind == LiveAdjustments.Kind.CURVES) CurvesEditor(state, actions.onParameters)
                 if (state.kind.adjustmentType != null) ParameterSliders(state, actions.onParameter)
                 if ((state.kind.slidesAmount && state.pencil) || state.kind.usesPoint) {
                     val label = if (state.kind == LiveAdjustments.Kind.RECOLOR) "Flood" else "Amount"
@@ -131,6 +138,86 @@ private fun ParameterSliders(
     }
 }
 
+/**
+ * Procreate-style Curves: drag any of the five points of the Gamma (all channels), Red, Green or
+ * Blue curve. Channel curves apply on top of the Gamma curve.
+ */
+@Composable
+private fun CurvesEditor(
+    state: AdjustmentSessionController.State,
+    onParameters: (Map<String, Float>) -> Unit,
+) {
+    var channel by remember { mutableStateOf("") }
+    val parameters by rememberUpdatedState(state.settings.parameters)
+    val tint =
+        when (channel) {
+            "red_" -> Color(0xFFE5484D)
+            "green_" -> Color(0xFF30A46C)
+            "blue_" -> Color(0xFF3E63DD)
+            else -> MaterialTheme.colorScheme.onSurface
+        }
+
+    fun point(i: Int): Pair<Float, Float> {
+        val identity = i * CURVE_STEP
+        return (parameters["${channel}point_${i}_x"] ?: identity) to (parameters["${channel}point_${i}_y"] ?: identity)
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        listOf("" to "Gamma", "red_" to "Red", "green_" to "Green", "blue_" to "Blue").forEach { (prefix, name) ->
+            FilterChip(selected = channel == prefix, onClick = { channel = prefix }, label = { Text(name) })
+        }
+        TextButton(onClick = {
+            onParameters(
+                parameters +
+                    (0..4).flatMap { i -> listOf("${channel}point_${i}_x" to i * CURVE_STEP, "${channel}point_${i}_y" to i * CURVE_STEP) },
+            )
+        }) { Text("Reset") }
+    }
+    var dragging by remember { mutableStateOf(-1) }
+    Canvas(
+        Modifier
+            .size(200.dp)
+            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
+            .semantics { contentDescription = "Curve" }
+            .pointerInput(channel) {
+                detectDragGestures(
+                    onDragStart = { at ->
+                        // Grab the point nearest the touch.
+                        dragging =
+                            (0..4).minBy { i ->
+                                val (x, y) = point(i)
+                                hypot(x / 255f * size.width - at.x, (1f - y / 255f) * size.height - at.y)
+                            }
+                    },
+                    onDragEnd = { dragging = -1 },
+                ) { change, _ ->
+                    change.consume()
+                    val i = dragging.takeIf { it >= 0 } ?: return@detectDragGestures
+                    val x = (change.position.x / size.width * 255f).coerceIn(0f, 255f)
+                    val y = ((1f - change.position.y / size.height) * 255f).coerceIn(0f, 255f)
+                    onParameters(parameters + mapOf("${channel}point_${i}_x" to x, "${channel}point_${i}_y" to y))
+                }
+            },
+    ) {
+        val grid = Color.Gray.copy(alpha = 0.35f)
+        for (k in 1..3) {
+            drawLine(grid, Offset(size.width * k / 4f, 0f), Offset(size.width * k / 4f, size.height))
+            drawLine(grid, Offset(0f, size.height * k / 4f), Offset(size.width, size.height * k / 4f))
+        }
+        val lut = AdjustmentProcessor.buildCurveLut(parameters, channel)
+        val path = Path()
+        lut.forEachIndexed { x, y ->
+            val px = x / 255f * size.width
+            val py = (1f - y / 255f) * size.height
+            if (x == 0) path.moveTo(px, py) else path.lineTo(px, py)
+        }
+        drawPath(path, tint, style = Stroke(width = 2.dp.toPx()))
+        for (i in 0..4) {
+            val (x, y) = point(i)
+            drawCircle(tint, radius = 5.dp.toPx(), center = Offset(x / 255f * size.width, (1f - y / 255f) * size.height))
+        }
+    }
+}
+
 /** Gradient Map ramps, each chip showing its colours from shadows to highlights. */
 @Composable
 private fun GradientRamps(
@@ -159,6 +246,8 @@ private fun GradientRamps(
     }
 }
 
+private const val CURVE_STEP = 63.75f
+
 /** Parameter keys shown for each colour adjustment, with friendly labels. */
 private fun visibleParameters(kind: LiveAdjustments.Kind): List<Pair<String, String>> =
     when (kind) {
@@ -166,7 +255,5 @@ private fun visibleParameters(kind: LiveAdjustments.Kind): List<Pair<String, Str
             listOf("hue" to "Hue", "saturation" to "Saturation", "lightness" to "Brightness")
         LiveAdjustments.Kind.COLOR_BALANCE ->
             listOf("cyan_red" to "Cyan ↔ Red", "magenta_green" to "Magenta ↔ Green", "yellow_blue" to "Yellow ↔ Blue")
-        LiveAdjustments.Kind.CURVES ->
-            listOf("point_1_y" to "Shadows", "point_2_y" to "Midtones", "point_3_y" to "Highlights")
         else -> emptyList()
     }
