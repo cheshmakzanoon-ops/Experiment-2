@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -226,6 +227,15 @@ private fun CurvesEditor(
             },
     ) {
         val grid = Color.Gray.copy(alpha = 0.35f)
+        state.histogram?.let { bins ->
+            // The layer's brightness spread, scaled to its tallest bar, behind the curve.
+            val tallest = bins.maxOrNull()?.takeIf { it > 0 } ?: return@let
+            val bar = size.width / bins.size
+            bins.forEachIndexed { i, count ->
+                val height = count.toFloat() / tallest * size.height
+                drawRect(grid, Offset(i * bar, size.height - height), Size(bar, height))
+            }
+        }
         for (k in 1..3) {
             drawLine(grid, Offset(size.width * k / 4f, 0f), Offset(size.width * k / 4f, size.height))
             drawLine(grid, Offset(0f, size.height * k / 4f), Offset(size.width, size.height * k / 4f))

@@ -50,4 +50,14 @@ class CurvesTest {
         assertEquals(2, AdjustmentProcessor.curvePoints(fewer, "red_").size)
         assertTrue(fewer.keys.none { it.startsWith("red_point_2") })
     }
+
+    @Test
+    fun histogramCountsOpaquePixelsByBrightness() {
+        val buffer = PixelBuffer(4, 1, intArrayOf(0xFF000000.toInt(), 0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt(), 0x00FFFFFF))
+        val bins = AdjustmentProcessor.histogram(buffer)
+        assertEquals(256, bins.size)
+        assertEquals(1, bins[0])
+        assertEquals("The transparent pixel is left out", 2, bins[255])
+        assertEquals(3, bins.sum())
+    }
 }

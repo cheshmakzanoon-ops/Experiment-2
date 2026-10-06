@@ -197,6 +197,20 @@ object AdjustmentProcessor {
     /** Prefixes of the per-channel curves' parameter keys, in red, green, blue order. */
     val CURVE_CHANNELS = listOf("red_", "green_", "blue_")
 
+    /**
+     * Curves' backdrop: how many pixels of [buffer] sit at each brightness (Rec. 709 luma, 0..255).
+     * Transparent pixels are left out so an empty layer's clear area does not swamp the shadows.
+     */
+    fun histogram(buffer: PixelBuffer): List<Int> {
+        val bins = IntArray(256)
+        for (pixel in buffer.pixels) {
+            if (pixel ushr 24 == 0) continue
+            val luma = 0.2126f * ((pixel shr 16) and 0xFF) + 0.7152f * ((pixel shr 8) and 0xFF) + 0.0722f * (pixel and 0xFF)
+            bins[luma.roundToInt().coerceIn(0, 255)]++
+        }
+        return bins.toList()
+    }
+
     /** Most control points one curve can have; Procreate-style curves start with five. */
     const val MAX_CURVE_POINTS = 8
 

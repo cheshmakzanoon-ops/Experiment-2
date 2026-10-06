@@ -1,6 +1,7 @@
 package com.artflow.studio.presentation.ui.viewmodel
 
 import com.artflow.studio.core.color.GradientMaps
+import com.artflow.studio.core.pixels.AdjustmentProcessor
 import com.artflow.studio.core.pixels.LiveAdjustments
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
@@ -31,6 +32,8 @@ class AdjustmentSessionController(
         val settings: LiveAdjustments.Settings,
         /** Pencil mode: the effect shows only where it has been painted on, as in Procreate. */
         val pencil: Boolean = false,
+        /** Curves: the layer's brightness histogram, drawn behind the curve. */
+        val histogram: List<Int>? = null,
     )
 
     private val _state = MutableStateFlow<State?>(null)
@@ -74,7 +77,13 @@ class AdjustmentSessionController(
                     kind.slidesAmount -> 0f
                     else -> 1f
                 }
-            _state.value = State(kind, LiveAdjustments.Settings(amount = amount, parameters = parameters))
+            val histogram =
+                if (kind == LiveAdjustments.Kind.CURVES) {
+                    withContext(Dispatchers.Default) { AdjustmentProcessor.histogram(opened.buffer) }
+                } else {
+                    null
+                }
+            _state.value = State(kind, LiveAdjustments.Settings(amount = amount, parameters = parameters), histogram = histogram)
             render()
         }
     }
