@@ -126,6 +126,12 @@ class ModelRenderer : GLSurfaceView.Renderer {
         GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "uPower"), light.highlightPower())
         GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "uSpecular"), light.highlightStrength())
         GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "uExposure"), light.exposure)
+        val second = light.secondDirection()
+        GLES20.glUniform3f(GLES20.glGetUniformLocation(program, "uLight2Dir"), second.x, second.y, second.z)
+        GLES20.glUniform1f(
+            GLES20.glGetUniformLocation(program, "uLight2"),
+            light.secondIntensity.coerceIn(0f, ModelLighting.MAX_INTENSITY),
+        )
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture)
         GLES20.glUniform1i(GLES20.glGetUniformLocation(program, "uTexture"), 0)
@@ -260,6 +266,8 @@ class ModelRenderer : GLSurfaceView.Renderer {
             uniform float uPower;
             uniform float uSpecular;
             uniform float uExposure;
+            uniform vec3 uLight2Dir;
+            uniform float uLight2;
             varying vec3 vNormal;
             varying vec3 vPosition;
             varying vec2 vUv;
@@ -273,7 +281,8 @@ class ModelRenderer : GLSurfaceView.Renderer {
                 float highlight = pow(max(dot(normal, normalize(uLightDir + toEye)), 0.0), uPower) * uSpecular * diffuse;
                 // Metals have no diffuse body colour; their highlights take the surface colour instead.
                 vec3 highlightColour = mix(uLightColour, colour.rgb * uLightColour, uMetallic);
-                vec3 body = colour.rgb * (uAmbient + diffuse * uLightColour * (1.0 - 0.8 * uMetallic));
+                float second = max(dot(normal, uLight2Dir), 0.0) * uLight2;
+                vec3 body = colour.rgb * (uAmbient + (diffuse * uLightColour + second) * (1.0 - 0.8 * uMetallic));
                 vec3 lit = body + highlight * highlightColour * 4.0;
                 gl_FragColor = vec4(clamp(lit * uExposure, 0.0, 1.0), 1.0);
             }

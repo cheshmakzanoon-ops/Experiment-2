@@ -141,6 +141,16 @@ private fun LightingPanel(
             LightSlider("Roughness", lighting.roughness, 0f..1f) { onChange(lighting.copy(roughness = it)) }
             LightSlider("Warmth", lighting.warmth, -1f..1f) { onChange(lighting.copy(warmth = it)) }
             LightSlider("Exposure", lighting.exposure, MIN_EXPOSURE..MAX_EXPOSURE) { onChange(lighting.copy(exposure = it)) }
+            // Procreate's Add light: a second light, off until it is given some strength.
+            LightSlider("Light 2", lighting.secondIntensity, 0f..ModelLighting.MAX_INTENSITY) {
+                onChange(lighting.copy(secondIntensity = it))
+            }
+            if (lighting.secondIntensity > 0f) {
+                LightSlider("Angle 2", lighting.secondAzimuth, -180f..180f) { onChange(lighting.copy(secondAzimuth = it)) }
+                LightSlider("Height 2", lighting.secondElevation, -ModelLighting.MAX_ELEVATION..ModelLighting.MAX_ELEVATION) {
+                    onChange(lighting.copy(secondElevation = it))
+                }
+            }
         }
     }
 }

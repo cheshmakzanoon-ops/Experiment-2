@@ -21,9 +21,21 @@ data class ModelLighting(
     val roughness: Float = 0.6f,
     val exposure: Float = 1f,
     val warmth: Float = 0f,
+    /** Procreate's Add light: a second, white light from its own angle and height; 0 strength is off. */
+    val secondAzimuth: Float = -145f,
+    val secondElevation: Float = 20f,
+    val secondIntensity: Float = 0f,
 ) {
     /** Unit vector from the model toward the light. */
-    fun direction(): Vec3 {
+    fun direction(): Vec3 = directionOf(azimuth, elevation)
+
+    /** Unit vector from the model toward the second light. */
+    fun secondDirection(): Vec3 = directionOf(secondAzimuth, secondElevation)
+
+    private fun directionOf(
+        azimuth: Float,
+        elevation: Float,
+    ): Vec3 {
         val azimuthRadians = Math.toRadians(azimuth.toDouble())
         val elevationRadians = Math.toRadians(elevation.coerceIn(-MAX_ELEVATION, MAX_ELEVATION).toDouble())
         val flat = cos(elevationRadians)
@@ -55,14 +67,25 @@ data class ModelLighting(
     }
 
     /** Brightness reaching a surface facing [normal]: ambient fill plus the key light. */
-    fun shade(normal: Vec3): Float = ambient + intensity * maxOf(0f, normal.normalised().dot(direction()))
+    fun shade(normal: Vec3): Float {
+        val facing = normal.normalised()
+        val second = secondIntensity.coerceIn(0f, MAX_INTENSITY) * maxOf(0f, facing.dot(secondDirection()))
+        return ambient + intensity * maxOf(0f, facing.dot(direction())) + second
+    }
 
     /** A lighting set-up; applying it keeps the surface material. */
     data class Preset(
         val name: String,
         val lighting: ModelLighting,
     ) {
-        fun appliedTo(current: ModelLighting): ModelLighting = lighting.copy(metallic = current.metallic, roughness = current.roughness)
+        fun appliedTo(current: ModelLighting): ModelLighting =
+            lighting.copy(
+                metallic = current.metallic,
+                roughness = current.roughness,
+                secondAzimuth = current.secondAzimuth,
+                secondElevation = current.secondElevation,
+                secondIntensity = current.secondIntensity,
+            )
 
         fun isApplied(current: ModelLighting): Boolean = appliedTo(current) == current
     }
