@@ -86,7 +86,9 @@ object BrushLibraryCodec {
                 params.velocityToOpacity,
                 params.velocityToHue,
             )
-        require(unitValues.all { it in 0f..1f }) { "Brush dynamics must be finite values between zero and one" }
+        require((unitValues + params.colorDynamics.amounts()).all { it in 0f..1f }) {
+            "Brush dynamics must be finite values between zero and one"
+        }
         require(params.minSize in MIN_BRUSH_SIZE..MAX_BRUSH_SIZE && params.maxSize in MIN_BRUSH_SIZE..MAX_BRUSH_SIZE) {
             "Brush size limits must be between $MIN_BRUSH_SIZE and $MAX_BRUSH_SIZE pixels"
         }

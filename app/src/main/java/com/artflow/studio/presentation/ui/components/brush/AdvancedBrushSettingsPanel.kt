@@ -31,6 +31,7 @@ import com.artflow.studio.core.render.CustomGrains
 import com.artflow.studio.data.local.GrainStorage
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.ColorDynamics
 import com.artflow.studio.domain.model.brush.DualBrush
 import com.artflow.studio.domain.model.brush.MAX_BRUSH_SIZE
 import com.artflow.studio.domain.model.brush.MIN_BRUSH_OPACITY
@@ -407,6 +408,33 @@ private fun BrushJitterSettings(
             onValueChange = { onBrushParamsChanged(brushParams.copy(secondaryJitter = it)) },
             valueRange = 0f..1f,
             valueDisplay = "%.0f%%".format(brushParams.secondaryJitter * 100),
+        )
+        ColorDynamicsSliders(brushParams.colorDynamics) { onBrushParamsChanged(brushParams.copy(colorDynamics = it)) }
+    }
+}
+
+/** Procreate's Colour Pressure and Colour Tilt: hue, saturation and brightness that follow the pen. */
+@Composable
+private fun ColorDynamicsSliders(
+    dynamics: ColorDynamics,
+    onChange: (ColorDynamics) -> Unit,
+) {
+    val sliders =
+        listOf(
+            Triple("Pressure → hue", dynamics.pressureHue) { v: Float -> dynamics.copy(pressureHue = v) },
+            Triple("Pressure → saturation", dynamics.pressureSaturation) { v: Float -> dynamics.copy(pressureSaturation = v) },
+            Triple("Pressure → brightness", dynamics.pressureBrightness) { v: Float -> dynamics.copy(pressureBrightness = v) },
+            Triple("Tilt → hue", dynamics.tiltHue) { v: Float -> dynamics.copy(tiltHue = v) },
+            Triple("Tilt → saturation", dynamics.tiltSaturation) { v: Float -> dynamics.copy(tiltSaturation = v) },
+            Triple("Tilt → brightness", dynamics.tiltBrightness) { v: Float -> dynamics.copy(tiltBrightness = v) },
+        )
+    sliders.forEach { (label, value, update) ->
+        BrushParameterSlider(
+            label = label,
+            value = value,
+            onValueChange = { onChange(update(it.coerceIn(0f, 1f))) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(value * 100),
         )
     }
 }

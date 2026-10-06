@@ -73,7 +73,9 @@ data class BrushParams(
     val grainContrast: Float = 0f, // -1..1: flattens the grain or sharpens it toward black and white
     val wetBlur: Float = 0f, // 0..1: Wet Mix Blur; the paint picked up is averaged over this share of the brush
     val countJitter: Float = 0f, // 0..1: each dab stamps a random number of copies, from count down to one at 1
-    val colorJitterPerStroke: Boolean = false, // Colour jitter picks one colour per stroke instead of varying each dab
+    val colorJitterPerStroke: Boolean = false,
+    /** Procreate's Colour Pressure (0..1 each): lighter presses drift the hue, wash out saturation, darken. */
+    val colorDynamics: ColorDynamics = ColorDynamics(), // Colour jitter picks one colour per stroke instead of varying each dab
 ) {
     /** The sizes the sidebar offers for this brush (Procreate's Min and Max size). */
     val sizeLimits: ClosedFloatingPointRange<Float>
@@ -193,9 +195,10 @@ data class BrushParams(
         velocity: Float = 0f,
         random: Random? = null,
         secondary: Int? = null,
+        tilt: Float = 0f,
     ): Int {
         val mixed = towardSecondary(baseColor, secondary, pressure, random)
-        return jittered(mixed, pressure, velocity, random)
+        return colorDynamics.apply(jittered(mixed, pressure, velocity, random), pressureResponse(pressure), tilt)
     }
 
     /** Procreate's secondary colour dynamics: pressure and per-dab jitter blend toward [secondary]. */
@@ -296,4 +299,52 @@ private fun limits(
     val from = if (low.isFinite()) low.coerceIn(floor, ceiling) else floor
     val to = if (high.isFinite()) high.coerceIn(floor, ceiling) else ceiling
     return if (from < to) from..to else floor..ceiling
+}
+
+/**
+ * Procreate's Colour Pressure and Colour Tilt: how far a light press (and a pen tilted toward flat)
+ * moves the colour from the one chosen. Each amount is 0 to 1; at full press and upright pen the
+ * colour is exactly the chosen one.
+ */
+@Serializable
+data class ColorDynamics(
+    val pressureHue: Float = 0f,
+    val pressureSaturation: Float = 0f,
+    val pressureBrightness: Float = 0f,
+    val tiltHue: Float = 0f,
+    val tiltSaturation: Float = 0f,
+    val tiltBrightness: Float = 0f,
+) {
+    val isActive: Boolean get() = amounts().any { it > 0f }
+
+    fun amounts(): List<Float> = listOf(pressureHue, pressureSaturation, pressureBrightness, tiltHue, tiltSaturation, tiltBrightness)
+
+    /** [color] moved by a press of [pressure] (after the pressure curve) with the pen [tilt] from upright (0) to flat (1). */
+    fun apply(
+        color: Int,
+        pressure: Float,
+        tilt: Float,
+    ): Int {
+        if (!isActive) return color
+        val light = 1f - pressure.coerceIn(0f, 1f)
+        val flat = tilt.coerceIn(0f, 1f)
+        val hsv =
+            com.artflow.studio.domain.model.Color
+                .rgbToHsv(color)
+        val hueShift = (unit(pressureHue) * light + unit(tiltHue) * flat) * HALF_TURN
+        hsv[0] = ((hsv[0] + hueShift) % FULL_TURN + FULL_TURN) % FULL_TURN
+        hsv[1] *= (1f - unit(pressureSaturation) * light) * (1f - unit(tiltSaturation) * flat)
+        hsv[2] *= (1f - unit(pressureBrightness) * light) * (1f - unit(tiltBrightness) * flat)
+        val rgb =
+            com.artflow.studio.domain.model.Color
+                .hsvToRgb(hsv[0], hsv[1].coerceIn(0f, 1f), hsv[2].coerceIn(0f, 1f))
+        return (color and 0xFF000000.toInt()) or (rgb and 0x00FFFFFF)
+    }
+
+    private fun unit(value: Float): Float = if (value.isFinite()) value.coerceIn(0f, 1f) else 0f
+
+    private companion object {
+        const val HALF_TURN = 180f
+        const val FULL_TURN = 360f
+    }
 }
