@@ -235,6 +235,8 @@ fun GalleryScreen(
     if (showNewProjectDialog) {
         NewProjectDialog(
             defaultPresetName = settings.defaultPresetName,
+            savedPresets = settings.savedCanvasPresets,
+            presetEdits = PresetEdits(viewModel::saveCanvasPreset, viewModel::deleteCanvasPreset),
             onDismiss = { showNewProjectDialog = false },
             onCreate = { name, preset, width, height, dpi, wideColor ->
                 showNewProjectDialog = false
@@ -824,15 +826,23 @@ private fun ProjectCard(
     }
 }
 
+/** Saving the custom size as a named canvas preset, and deleting a saved one. */
+private class PresetEdits(
+    val onSave: (CanvasOperations.Preset) -> Unit,
+    val onDelete: (String) -> Unit,
+)
+
 @Composable
 private fun NewProjectDialog(
     defaultPresetName: String,
+    savedPresets: List<CanvasOperations.Preset>,
+    presetEdits: PresetEdits,
     onDismiss: () -> Unit,
     onCreate: (String, CanvasOperations.Preset?, Int, Int, Int, Boolean) -> Unit,
 ) {
     var name by remember { mutableStateOf("") }
     var selectedPreset by remember {
-        mutableStateOf(CanvasOperations.presetByName(defaultPresetName) ?: CanvasOperations.PRESETS.first())
+        mutableStateOf(CanvasOperations.presetByName(defaultPresetName, savedPresets) ?: CanvasOperations.PRESETS.first())
     }
     var customWidth by remember { mutableStateOf("2048") }
     var customHeight by remember { mutableStateOf("2048") }
@@ -889,6 +899,21 @@ private fun NewProjectDialog(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    val custom =
+                        CanvasOperations.Preset(
+                            CanvasOperations.presetName(name).ifEmpty { "${customWidth}×$customHeight" },
+                            customWidth.toIntOrNull() ?: 0,
+                            customHeight.toIntOrNull() ?: 0,
+                            customDpi.toIntOrNull() ?: 0,
+                        )
+                    TextButton(
+                        onClick = {
+                            presetEdits.onSave(custom)
+                            selectedPreset = custom
+                            useCustom = false
+                        },
+                        enabled = CanvasOperations.isValidPreset(custom),
+                    ) { Text("Save as preset \"${custom.name}\"") }
                 } else {
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(2),
@@ -896,7 +921,7 @@ private fun NewProjectDialog(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        items(CanvasOperations.PRESETS) { preset ->
+                        items(savedPresets + CanvasOperations.PRESETS) { preset ->
                             FilterChip(
                                 selected = selectedPreset == preset,
                                 onClick = { selectedPreset = preset },
@@ -915,6 +940,12 @@ private fun NewProjectDialog(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (selectedPreset in savedPresets) {
+                        TextButton(onClick = {
+                            presetEdits.onDelete(selectedPreset.name)
+                            selectedPreset = CanvasOperations.PRESETS.first()
+                        }) { Text("Delete preset \"${selectedPreset.name}\"") }
+                    }
                 }
                 val width = if (useCustom) customWidth.toIntOrNull() ?: 2048 else selectedPreset.width
                 val height = if (useCustom) customHeight.toIntOrNull() ?: 2048 else selectedPreset.height

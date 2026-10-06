@@ -238,6 +238,26 @@ class MainViewModel
             }
         }
 
+        /** Saves a canvas size under its name, replacing a saved preset of the same name. */
+        fun saveCanvasPreset(preset: CanvasOperations.Preset) {
+            val named = preset.copy(name = CanvasOperations.presetName(preset.name))
+            if (!CanvasOperations.isValidPreset(named)) return
+            viewModelScope.launch(galleryErrors) {
+                settingsRepository.update { settings ->
+                    val others = settings.savedCanvasPresets.filter { it.name != named.name }
+                    settings.copy(savedCanvasPresets = (listOf(named) + others).take(CanvasOperations.MAX_SAVED_PRESETS))
+                }
+            }
+        }
+
+        fun deleteCanvasPreset(name: String) {
+            viewModelScope.launch(galleryErrors) {
+                settingsRepository.update { settings ->
+                    settings.copy(savedCanvasPresets = settings.savedCanvasPresets.filter { it.name != name })
+                }
+            }
+        }
+
         fun setSort(sort: GallerySort) {
             viewModelScope.launch(galleryErrors) { settingsRepository.setGallerySort(sort) }
         }

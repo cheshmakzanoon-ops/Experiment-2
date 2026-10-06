@@ -1,5 +1,6 @@
 package com.artflow.studio.domain.model.settings
 
+import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.domain.model.brush.PressureResponse
 
@@ -113,6 +114,8 @@ data class AppSettings(
     val autosaveEnabled: Boolean = true,
     // New documents
     val defaultPresetName: String = "FHD 1080p",
+    /** Canvas sizes the artist saved from the New artwork dialog. */
+    val savedCanvasPresets: List<CanvasOperations.Preset> = emptyList(),
     // Gallery
     val gallerySort: GallerySort = GallerySort.RECENT,
     // Content the user has already seen

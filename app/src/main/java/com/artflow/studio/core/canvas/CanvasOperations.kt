@@ -307,7 +307,42 @@ object CanvasOperations {
             Preset("Print 8×10", 2400, 3000, 300),
         )
 
-    fun presetByName(name: String): Preset? = PRESETS.firstOrNull { it.name == name }
+    fun presetByName(
+        name: String,
+        saved: List<Preset> = emptyList(),
+    ): Preset? = saved.firstOrNull { it.name == name } ?: PRESETS.firstOrNull { it.name == name }
+
+    /** The most canvas presets an artist can save. */
+    const val MAX_SAVED_PRESETS = 32
+
+    /** Saved presets as text: one per line, fields separated by tabs. */
+    fun encodePresets(presets: List<Preset>): String =
+        presets.joinToString("\n") { listOf(presetName(it.name), it.width, it.height, it.dpi).joinToString("\t") }
+
+    /** Reads [encodePresets] text, dropping any line that is not a valid, safe canvas size. */
+    fun decodePresets(text: String): List<Preset> =
+        text
+            .lineSequence()
+            .mapNotNull { line ->
+                val fields = line.split('\t')
+                if (fields.size != 4) return@mapNotNull null
+                val name = presetName(fields[0])
+                val width = fields[1].toIntOrNull() ?: return@mapNotNull null
+                val height = fields[2].toIntOrNull() ?: return@mapNotNull null
+                val dpi = fields[3].toIntOrNull() ?: return@mapNotNull null
+                Preset(name, width, height, dpi).takeIf(::isValidPreset)
+            }.distinctBy { it.name }
+            .take(MAX_SAVED_PRESETS)
+            .toList()
+
+    /** True when [preset] has a name and a canvas size and dpi that can be created. */
+    fun isValidPreset(preset: Preset): Boolean =
+        preset.name.isNotEmpty() && isSizeSafe(preset.width, preset.height) && preset.dpi in MIN_DPI..MAX_DPI
+
+    /** A preset name without the characters [encodePresets] uses as separators. */
+    fun presetName(raw: String): String = raw.filterNot { it == '\t' || it == '\n' || it == '\r' }.trim().take(MAX_PRESET_NAME)
+
+    private const val MAX_PRESET_NAME = 40
 
     /** Guard rails against allocations large enough to crash the app. */
     const val MAX_DIMENSION = 8192
