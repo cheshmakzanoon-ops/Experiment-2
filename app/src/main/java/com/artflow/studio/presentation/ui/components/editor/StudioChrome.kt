@@ -316,7 +316,6 @@ fun HistoryScrubber(
     }
 }
 
-
 /** The sidebar's padding, spacing, modify button, undo and redo; the two sliders get the rest. */
 private val SIDEBAR_FIXED_HEIGHT = 180.dp
 private val MIN_SLIDER = 72.dp

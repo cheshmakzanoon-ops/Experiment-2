@@ -281,7 +281,6 @@ class WarpMesh(
             return WarpMesh(out)
         }
 
-
         /**
          * Renders [source] (only its selected pixels when [selection] is active) so that the box
          * [bounds] follows [mesh]. The patch is cut into small triangles, each filled once.
