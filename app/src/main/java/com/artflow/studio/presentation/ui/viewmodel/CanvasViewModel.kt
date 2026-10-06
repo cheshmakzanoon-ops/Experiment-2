@@ -1478,6 +1478,15 @@ class CanvasViewModel
             }
         }
 
+        /** Replaces a custom palette with its edited version. */
+        fun updatePalette(palette: Palette) {
+            viewModelScope.launch(editorErrors) {
+                settingsRepository.update { settings ->
+                    settings.copy(customPalettes = settings.customPalettes.map { if (it.id == palette.id) palette else it })
+                }
+            }
+        }
+
         fun removePalette(paletteId: Long) {
             viewModelScope.launch(editorErrors) { settingsRepository.removePalette(paletteId) }
         }

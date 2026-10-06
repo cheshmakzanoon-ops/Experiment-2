@@ -1,11 +1,15 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+
 package com.artflow.studio.presentation.ui.components.color
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -46,7 +50,7 @@ fun ColorPanel(
     onColorSelected: (Int) -> Unit,
     onClearRecents: () -> Unit,
     onSavePalette: (String, List<Int>) -> Unit,
-    onRemovePalette: (Long) -> Unit,
+    palettesEdit: PaletteEdits,
     modifier: Modifier = Modifier,
     onImportPalette: (() -> Unit)? = null,
     onPaletteFromPhoto: (() -> Unit)? = null,
@@ -97,8 +101,12 @@ fun ColorPanel(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     onImportPalette?.let { OutlinedButton(onClick = it) { Text("Import palette") } }
                     onPaletteFromPhoto?.let { OutlinedButton(onClick = it) { Text("New from photo") } }
+                    OutlinedButton(onClick = {
+                        val number = palettes.count { it.category == "Custom" } + 1
+                        onSavePalette("Palette $number", listOf(color))
+                    }) { Text("New palette") }
                 }
-                PaletteList(palettes, color, onColorSelected, onRemovePalette)
+                PaletteList(palettes, color, onColorSelected, palettesEdit)
             }
         }
 
@@ -267,6 +275,12 @@ private fun HexField(
     )
 }
 
+/** Removing a custom palette, and saving one after a swatch is added or removed. */
+data class PaletteEdits(
+    val onRemove: (Long) -> Unit,
+    val onEdit: (Palette) -> Unit,
+)
+
 /** Procreate's secondary colour swatch: its colour, and swapping it with the primary. */
 data class SecondarySwatch(
     val color: Int,
@@ -296,7 +310,7 @@ private fun PaletteList(
     palettes: List<Palette>,
     currentColor: Int,
     onColorSelected: (Int) -> Unit,
-    onRemovePalette: (Long) -> Unit,
+    edits: PaletteEdits,
 ) {
     val grouped = remember(palettes) { palettes.groupBy { it.category } }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -311,13 +325,14 @@ private fun PaletteList(
                     ) {
                         Text(palette.name, style = MaterialTheme.typography.bodyMedium)
                         if (palette.category == "Custom") {
-                            IconButton(onClick = { onRemovePalette(palette.id) }) {
+                            IconButton(onClick = { edits.onRemove(palette.id) }) {
                                 Icon(Icons.Default.Delete, contentDescription = "Remove ${palette.name}")
                             }
                         }
                     }
+                    val editable = palette.category == "Custom"
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(palette.colors) { entry ->
+                        itemsIndexed(palette.colors) { index, entry ->
                             val closest = ColorHarmony.distance(entry, currentColor) < 24f
                             Box(
                                 modifier =
@@ -325,8 +340,28 @@ private fun PaletteList(
                                         .size(if (closest) 40.dp else 32.dp)
                                         .clip(RoundedCornerShape(6.dp))
                                         .background(Color(entry))
-                                        .clickable { onColorSelected(entry) },
+                                        // In your own palettes, touch and hold a swatch to remove it.
+                                        .combinedClickable(
+                                            onClick = { onColorSelected(entry) },
+                                            onLongClick = if (editable) ({ edits.onEdit(palette.withoutColor(index)) }) else null,
+                                            onLongClickLabel = if (editable) "Remove colour" else null,
+                                        ),
                             )
+                        }
+                        if (editable) {
+                            item {
+                                // Tap the empty cell to add the current colour, as in Procreate.
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .size(32.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(6.dp))
+                                            .clickable { edits.onEdit(palette.withColor(currentColor)) }
+                                            .semantics { contentDescription = "Add the current colour to ${palette.name}" },
+                                    contentAlignment = Alignment.Center,
+                                ) { Text("+", style = MaterialTheme.typography.titleMedium) }
+                            }
                         }
                     }
                 }
