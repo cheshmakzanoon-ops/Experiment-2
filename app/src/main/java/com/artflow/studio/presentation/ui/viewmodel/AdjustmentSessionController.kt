@@ -1,5 +1,6 @@
 package com.artflow.studio.presentation.ui.viewmodel
 
+import com.artflow.studio.core.color.GradientMaps
 import com.artflow.studio.core.pixels.LiveAdjustments
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
@@ -62,6 +63,8 @@ class AdjustmentSessionController(
             val parameters =
                 if (kind == LiveAdjustments.Kind.RECOLOR) {
                     mapOf(LiveAdjustments.RECOLOR_RGB to (color and 0xFFFFFF).toFloat())
+                } else if (kind == LiveAdjustments.Kind.GRADIENT_MAP) {
+                    GradientMaps.toParameters(GradientMaps.PRESETS.first())
                 } else {
                     kind.adjustmentType?.defaultParameters.orEmpty()
                 }
@@ -75,6 +78,9 @@ class AdjustmentSessionController(
             render()
         }
     }
+
+    /** Replaces every parameter at once, rendering a single preview. */
+    fun setParameters(parameters: Map<String, Float>) = update { it.copy(parameters = parameters) }
 
     fun setAmount(amount: Float) = update { it.copy(amount = amount.coerceIn(0f, 1f)) }
 

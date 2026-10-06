@@ -619,6 +619,8 @@ data class AdjustmentOverlayActions(
     val onPencil: (Boolean) -> Unit = {},
     /** A Pencil-mode touch at a point of the overlay, with the overlay's width and height. */
     val onPaint: (Offset, Float, Float) -> Unit = { _, _, _ -> },
+    /** Replaces all of the adjustment's parameters at once (a Gradient Map preset). */
+    val onParameters: (Map<String, Float>) -> Unit = {},
 )
 
 /** The canvas view's pan, zoom and rotation, as reported to the compose layer. */

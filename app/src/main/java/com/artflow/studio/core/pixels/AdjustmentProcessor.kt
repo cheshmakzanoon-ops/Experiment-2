@@ -1,5 +1,6 @@
 package com.artflow.studio.core.pixels
 
+import com.artflow.studio.core.color.GradientMaps
 import com.artflow.studio.domain.model.layer.AdjustmentType
 import kotlin.math.abs
 import kotlin.math.max
@@ -136,6 +137,14 @@ object AdjustmentProcessor {
                 }
             }
             AdjustmentType.GRADIENT_MAP -> {
+                // A colour ramp, when the adjustment carries one; older maps run between two hues.
+                val ramp = GradientMaps.fromParameters(merged)
+                if (ramp != null) {
+                    perPixel(source, out, mixed, mask) { _, p ->
+                        Channels.withAlpha(GradientMaps.colorAt(ramp, Channels.luminance(p)), Channels.alpha(p).toInt())
+                    }
+                    return out
+                }
                 val startHue = merged.float("gradient_start_hue", 0f)
                 val endHue = merged.float("gradient_end_hue", 360f)
                 perPixel(source, out, mixed, mask) { _, p ->

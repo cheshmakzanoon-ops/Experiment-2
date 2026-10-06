@@ -1,15 +1,21 @@
 package com.artflow.studio.presentation.ui.components.editor
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.core.color.GradientMaps
 import com.artflow.studio.core.pixels.LiveAdjustments
 import com.artflow.studio.presentation.ui.viewmodel.AdjustmentSessionController
 import kotlin.math.atan2
@@ -92,6 +98,7 @@ fun AdjustmentOverlay(
             modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp).widthIn(max = 560.dp),
         ) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (state.kind == LiveAdjustments.Kind.GRADIENT_MAP) GradientRamps(state, actions.onParameters)
                 if (state.kind.adjustmentType != null) ParameterSliders(state, actions.onParameter)
                 if ((state.kind.slidesAmount && state.pencil) || state.kind.usesPoint) {
                     val label = if (state.kind == LiveAdjustments.Kind.RECOLOR) "Flood" else "Amount"
@@ -124,6 +131,34 @@ private fun ParameterSliders(
     }
 }
 
+/** Gradient Map ramps, each chip showing its colours from shadows to highlights. */
+@Composable
+private fun GradientRamps(
+    state: AdjustmentSessionController.State,
+    onParameters: (Map<String, Float>) -> Unit,
+) {
+    val current = GradientMaps.fromParameters(state.settings.parameters)
+    Text("Gradient", style = MaterialTheme.typography.labelMedium)
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        GradientMaps.PRESETS.forEach { ramp ->
+            val colors = ramp.stops.map { Color(0xFF000000.toInt() or it.rgb) }
+            FilterChip(
+                selected = current == ramp.stops,
+                onClick = { onParameters(GradientMaps.toParameters(ramp)) },
+                label = { Text(ramp.name) },
+                leadingIcon = {
+                    Box(Modifier.size(width = 28.dp, height = 14.dp).background(Brush.horizontalGradient(colors), RoundedCornerShape(3.dp)))
+                },
+            )
+        }
+        // Reverse swaps shadows and highlights in whichever ramp is showing.
+        if (current != null) {
+            val reversed = GradientMaps.Ramp("Reversed", current.map { GradientMaps.Stop(1f - it.position, it.rgb) }.reversed())
+            AssistChip(onClick = { onParameters(GradientMaps.toParameters(reversed)) }, label = { Text("Reverse") })
+        }
+    }
+}
+
 /** Parameter keys shown for each colour adjustment, with friendly labels. */
 private fun visibleParameters(kind: LiveAdjustments.Kind): List<Pair<String, String>> =
     when (kind) {
@@ -133,7 +168,5 @@ private fun visibleParameters(kind: LiveAdjustments.Kind): List<Pair<String, Str
             listOf("cyan_red" to "Cyan ↔ Red", "magenta_green" to "Magenta ↔ Green", "yellow_blue" to "Yellow ↔ Blue")
         LiveAdjustments.Kind.CURVES ->
             listOf("point_1_y" to "Shadows", "point_2_y" to "Midtones", "point_3_y" to "Highlights")
-        LiveAdjustments.Kind.GRADIENT_MAP ->
-            listOf("gradient_start_hue" to "Shadow hue", "gradient_end_hue" to "Highlight hue")
         else -> emptyList()
     }

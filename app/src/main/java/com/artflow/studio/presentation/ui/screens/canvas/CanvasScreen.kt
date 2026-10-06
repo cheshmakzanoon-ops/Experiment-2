@@ -1370,6 +1370,7 @@ fun CanvasScreen(
                             onAmount = viewModel.adjustments::setAmount,
                             onAngle = viewModel.adjustments::setAngle,
                             onParameter = viewModel.adjustments::setParameter,
+                            onParameters = viewModel.adjustments::setParameters,
                             onCancel = viewModel.adjustments::cancel,
                             onApply = viewModel.adjustments::apply,
                             onPencil = viewModel.adjustments::setPencil,
