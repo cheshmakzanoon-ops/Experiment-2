@@ -1495,6 +1495,13 @@ class CanvasViewModel
             }
         }
 
+        /** Shows [name]'s palette under the colour pickers, or none when it is already the default. */
+        fun toggleDefaultPalette(name: String) {
+            viewModelScope.launch(editorErrors) {
+                settingsRepository.update { it.copy(defaultPaletteName = if (it.defaultPaletteName == name) "" else name) }
+            }
+        }
+
         /** Replaces a custom palette with its edited version. */
         fun updatePalette(palette: Palette) {
             viewModelScope.launch(editorErrors) {

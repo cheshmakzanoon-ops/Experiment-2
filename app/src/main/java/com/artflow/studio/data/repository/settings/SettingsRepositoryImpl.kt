@@ -248,6 +248,7 @@ class SettingsRepositoryImpl
                 KEY_AUTOSAVE_INTERVAL to settings.autosaveIntervalMs.toString(),
                 KEY_DEFAULT_PRESET to settings.defaultPresetName,
                 KEY_SAVED_PRESETS to CanvasOperations.encodePresets(settings.savedCanvasPresets),
+                KEY_DEFAULT_PALETTE to settings.defaultPaletteName,
                 KEY_GALLERY_SORT to settings.gallerySort.name,
                 KEY_ONBOARDING to settings.seenOnboarding.toString(),
                 KEY_TIPS to settings.dismissedTips.joinToString("|"),
@@ -344,6 +345,7 @@ class SettingsRepositoryImpl
                         ?.toLongOrNull()
                         ?.coerceIn(MIN_AUTOSAVE, MAX_AUTOSAVE) ?: defaults.autosaveIntervalMs,
                 defaultPresetName = stored[KEY_DEFAULT_PRESET] ?: defaults.defaultPresetName,
+                defaultPaletteName = stored[KEY_DEFAULT_PALETTE] ?: defaults.defaultPaletteName,
                 savedCanvasPresets = stored[KEY_SAVED_PRESETS]?.let(CanvasOperations::decodePresets) ?: defaults.savedCanvasPresets,
                 gallerySort =
                     stored[KEY_GALLERY_SORT]
@@ -431,6 +433,7 @@ class SettingsRepositoryImpl
             private const val KEY_AUTOSAVE_INTERVAL = "general.autosaveInterval"
             private const val KEY_DEFAULT_PRESET = "general.defaultPreset"
             private const val KEY_SAVED_PRESETS = "general.savedCanvasPresets"
+            private const val KEY_DEFAULT_PALETTE = "color.defaultPalette"
             private const val KEY_QUICK_MENU = "studio.quickMenu"
             private const val KEY_GALLERY_SORT = "gallery.sort"
             private const val KEY_ONBOARDING = "general.onboardingSeen"

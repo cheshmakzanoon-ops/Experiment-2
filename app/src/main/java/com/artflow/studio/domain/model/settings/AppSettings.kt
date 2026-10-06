@@ -114,6 +114,8 @@ data class AppSettings(
     val autosaveEnabled: Boolean = true,
     // New documents
     val defaultPresetName: String = "FHD 1080p",
+    /** The palette shown under the Disc, Classic, Harmony and Value pickers (by name); empty for none. */
+    val defaultPaletteName: String = "",
     /** Canvas sizes the artist saved from the New artwork dialog. */
     val savedCanvasPresets: List<CanvasOperations.Preset> = emptyList(),
     // Gallery

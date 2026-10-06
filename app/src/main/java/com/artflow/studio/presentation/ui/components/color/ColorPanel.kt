@@ -19,6 +19,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -110,6 +112,12 @@ fun ColorPanel(
                 PaletteList(palettes, color, onColorSelected, palettesEdit)
             }
         }
+
+        // Procreate's default palette sits under every picker except the Palettes tab itself.
+        palettes
+            .firstOrNull { it.name == palettesEdit.defaultName }
+            ?.takeIf { tab != ColorTab.PALETTES }
+            ?.let { DefaultPaletteRow(it, color, onColorSelected) }
 
         TabRow(selectedTabIndex = tab.ordinal) {
             ColorTab.entries.forEach { entry ->
@@ -281,6 +289,10 @@ data class PaletteEdits(
     val onRemove: (Long) -> Unit,
     val onEdit: (Palette) -> Unit,
     val onShare: (Palette) -> Unit = {},
+    /** Makes a palette (by name) the default shown under the pickers, or clears it when it already is. */
+    val onToggleDefault: (String) -> Unit = {},
+    /** The current default palette's name; empty for none. */
+    val defaultName: String = "",
 )
 
 /** Procreate's secondary colour swatch: its colour, and swapping it with the primary. */
@@ -307,6 +319,27 @@ private fun Swatch(
     )
 }
 
+/** The default palette's swatches in one scrolling row. */
+@Composable
+private fun DefaultPaletteRow(
+    palette: Palette,
+    currentColor: Int,
+    onColorSelected: (Int) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        SectionLabel(palette.name)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(palette.colors) { entry ->
+                Swatch(
+                    color = entry,
+                    onClick = { onColorSelected(entry) },
+                    description = ColorHarmony.nameOf(entry) + if (ColorHarmony.distance(entry, currentColor) < 24f) ", current" else "",
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun PaletteList(
     palettes: List<Palette>,
@@ -326,6 +359,14 @@ private fun PaletteList(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(palette.name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        val isDefault = palette.name == edits.defaultName
+                        IconButton(onClick = { edits.onToggleDefault(palette.name) }) {
+                            Icon(
+                                if (isDefault) Icons.Default.Star else Icons.Default.StarBorder,
+                                contentDescription =
+                                    if (isDefault) "${palette.name} is the default palette" else "Set ${palette.name} as default",
+                            )
+                        }
                         IconButton(onClick = { edits.onShare(palette) }) {
                             Icon(Icons.Default.Share, contentDescription = "Share ${palette.name}")
                         }
