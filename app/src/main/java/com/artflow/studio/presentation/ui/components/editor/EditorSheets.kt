@@ -1103,6 +1103,14 @@ fun GuidesSheet(
             range = PerspectiveGuide.DENSITY_RANGE.first.toFloat()..PerspectiveGuide.DENSITY_RANGE.last.toFloat(),
             onChange = { onPerspective(perspective.copy(density = it.toInt())) },
         )
+        if (perspective.type == PerspectiveGuide.GuideType.GRID || perspective.type == PerspectiveGuide.GuideType.ISOMETRIC) {
+            LabeledSlider(
+                label = "Grid size",
+                value = perspective.gridSpacing.toFloat(),
+                range = 8f..512f,
+                onChange = { onPerspective(perspective.copy(gridSpacing = it.roundToInt())) },
+            )
+        }
         LabeledSlider(
             label = "Horizon",
             value = perspective.horizonY,

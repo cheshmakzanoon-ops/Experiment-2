@@ -25,6 +25,8 @@ object LiveAdjustments {
         COLOR_BALANCE("Color Balance", false, AdjustmentType.COLOR_BALANCE),
         CURVES("Curves", false, AdjustmentType.CURVES),
         GRADIENT_MAP("Gradient Map", false, AdjustmentType.GRADIENT_MAP),
+        /** Fades the layer: sliding further makes it more transparent. */
+        OPACITY("Opacity", true),
         GAUSSIAN_BLUR("Gaussian Blur", true),
         MOTION_BLUR("Motion Blur", true),
         NOISE("Noise", true),
@@ -74,6 +76,7 @@ object LiveAdjustments {
         angle: Float,
     ): PixelBuffer =
         when (kind) {
+            Kind.OPACITY -> faded(source, 1f - amount)
             Kind.GAUSSIAN_BLUR -> ImageFilters.gaussianBlur(source, amount * MAX_BLUR_RADIUS)
             Kind.MOTION_BLUR -> ImageFilters.motionBlur(source, amount * MAX_MOTION_DISTANCE, angle)
             Kind.NOISE -> ImageFilters.addNoise(source, amount, monochrome = true)
@@ -85,6 +88,11 @@ object LiveAdjustments {
             Kind.HALFTONE -> halftone(source, amount)
             else -> source.copy()
         }
+
+    private fun faded(
+        source: PixelBuffer,
+        keep: Float,
+    ): PixelBuffer = PixelBuffer(source.width, source.height, IntArray(source.pixels.size) { Channels.scaleAlpha(source.pixels[it], keep) })
 
     /**
      * Procreate's Recolor: the area around the crosshair (`x`, `y` parameters) whose colour is within
