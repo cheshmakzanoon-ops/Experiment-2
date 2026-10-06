@@ -145,6 +145,7 @@ data class Layer(
             drawingAssist = this.drawingAssist,
             isPrivate = this.isPrivate,
             effects = this.effects,
+            textContent = this.textContent,
             hasInMemoryMask = hasInMemoryMask,
         )
 }
