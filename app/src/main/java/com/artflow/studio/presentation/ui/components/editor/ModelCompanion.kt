@@ -57,6 +57,7 @@ fun ModelCompanion(
 ) {
     var painting by rememberSaveable { mutableStateOf(false) }
     var lightingOpen by rememberSaveable { mutableStateOf(false) }
+    var showMesh by rememberSaveable { mutableStateOf(false) }
     var lighting by remember { mutableStateOf(ModelLighting()) }
     // The texture is sent to the view only when the artwork actually changes.
     val sent = remember { arrayOfNulls<Bitmap>(1) }
@@ -78,6 +79,8 @@ fun ModelCompanion(
                         FilterChip(selected = painting, onClick = { painting = true }, label = { Text("Paint") })
                         Spacer(Modifier.width(4.dp))
                         FilterChip(selected = lightingOpen, onClick = { lightingOpen = !lightingOpen }, label = { Text("Light") })
+                        Spacer(Modifier.width(4.dp))
+                        FilterChip(selected = showMesh, onClick = { showMesh = !showMesh }, label = { Text("Mesh") })
                     }
                     IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = "Close 3D view") }
                 }
@@ -89,6 +92,7 @@ fun ModelCompanion(
                             view.painting = painting
                             view.painter = painter
                             view.lighting = lighting
+                            view.showMesh = showMesh
                             if (artwork != null && sent[0] !== artwork) {
                                 sent[0] = artwork
                                 view.setTexture(artwork)

@@ -26,11 +26,21 @@ class ModelRenderer : GLSurfaceView.Renderer {
     @Volatile
     var lighting: ModelLighting = ModelLighting()
 
+    /** Procreate's Show 3D mesh: the model's triangle edges drawn over it. */
+    @Volatile
+    var showMesh: Boolean = false
+
     private val pendingMesh = AtomicReference<Mesh?>(null)
     private val pendingTexture = AtomicReference<Bitmap?>(null)
     private var program = 0
+    private var wireProgram = 0
     private var buffers = IntArray(3)
     private var corners = 0
+
+    /** The mesh's edges as line vertices, built on the GL thread the first time the mesh is shown. */
+    private val wireBuffer = IntArray(1)
+    private var wireVertices = 0
+    private var wireSource: Mesh? = null
     private var texture = 0
     private var width = 1
     private var height = 1
@@ -56,7 +66,10 @@ class ModelRenderer : GLSurfaceView.Renderer {
         config: EGLConfig?,
     ) {
         program = program(VERTEX, FRAGMENT)
+        wireProgram = program(WIRE_VERTEX, WIRE_FRAGMENT)
         GLES20.glGenBuffers(3, buffers, 0)
+        GLES20.glGenBuffers(1, wireBuffer, 0)
+        wireSource = null
         val ids = IntArray(1)
         GLES20.glGenTextures(1, ids, 0)
         texture = ids[0]
@@ -119,7 +132,27 @@ class ModelRenderer : GLSurfaceView.Renderer {
         attribute("aPosition", buffers[0], 3)
         attribute("aNormal", buffers[1], 3)
         attribute("aUv", buffers[2], 2)
+        // The surface sits a little behind its own edges so the wireframe is never hidden by it.
+        GLES20.glEnable(GLES20.GL_POLYGON_OFFSET_FILL)
+        GLES20.glPolygonOffset(1f, 1f)
         GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, corners)
+        GLES20.glDisable(GLES20.GL_POLYGON_OFFSET_FILL)
+        if (showMesh) drawWire()
+    }
+
+    private fun drawWire() {
+        val mesh = lastMesh ?: return
+        if (wireSource !== mesh) {
+            val edges = edgeVertices(mesh.positions, corners)
+            GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, wireBuffer[0])
+            GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, edges.size * 4, floats(edges), GLES20.GL_STATIC_DRAW)
+            wireVertices = edges.size / 3
+            wireSource = mesh
+        }
+        GLES20.glUseProgram(wireProgram)
+        GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(wireProgram, "uMvp"), 1, false, mvp, 0)
+        attribute("aPosition", wireBuffer[0], 3, wireProgram)
+        GLES20.glDrawArrays(GLES20.GL_LINES, 0, wireVertices)
     }
 
     private fun upload(mesh: Mesh) {
@@ -134,8 +167,9 @@ class ModelRenderer : GLSurfaceView.Renderer {
         name: String,
         buffer: Int,
         size: Int,
+        owner: Int = program,
     ) {
-        val location = GLES20.glGetAttribLocation(program, name)
+        val location = GLES20.glGetAttribLocation(owner, name)
         GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, buffer)
         GLES20.glEnableVertexAttribArray(location)
         GLES20.glVertexAttribPointer(location, size, GLES20.GL_FLOAT, false, 0, 0)
@@ -179,6 +213,21 @@ class ModelRenderer : GLSurfaceView.Renderer {
     }
 
     private companion object {
+        const val WIRE_VERTEX = """
+            uniform mat4 uMvp;
+            attribute vec3 aPosition;
+            void main() {
+                gl_Position = uMvp * vec4(aPosition, 1.0);
+            }
+        """
+
+        const val WIRE_FRAGMENT = """
+            precision mediump float;
+            void main() {
+                gl_FragColor = vec4(0.36, 0.72, 1.0, 1.0);
+            }
+        """
+
         const val NEAR = 0.05f
         const val FAR = 50f
         const val BACKGROUND = 0.16f
@@ -230,4 +279,26 @@ class ModelRenderer : GLSurfaceView.Renderer {
             }
         """
     }
+}
+
+/** Three edges of two vertices of three floats. */
+private const val EDGE_FLOATS = 18
+
+/** Each of the first [corners] / 3 triangles' three edges as pairs of line vertices (x, y, z each). */
+internal fun edgeVertices(
+    positions: FloatArray,
+    corners: Int,
+): FloatArray {
+    val triangles = corners / 3
+    val out = FloatArray(triangles * EDGE_FLOATS)
+    for (t in 0 until triangles) {
+        for (edge in 0 until 3) {
+            val from = (t * 3 + edge) * 3
+            val to = (t * 3 + (edge + 1) % 3) * 3
+            val at = t * EDGE_FLOATS + edge * 6
+            positions.copyInto(out, at, from, from + 3)
+            positions.copyInto(out, at + 3, to, to + 3)
+        }
+    }
+    return out
 }
