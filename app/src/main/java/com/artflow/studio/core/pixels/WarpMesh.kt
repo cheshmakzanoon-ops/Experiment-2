@@ -11,16 +11,23 @@ import kotlin.math.min
 import kotlin.math.sin
 
 /**
- * Procreate's Warp: the content box becomes a bicubic Bézier patch with a 4 × 4 grid of control
- * points (row-major, x and y interleaved). Dragging a point bends the patch; dragging the surface
- * pulls the spot under the finger along with it. Pixels are always resampled from the session's
- * original pixels, so repeated edits never accumulate blur.
+ * Procreate's Warp: the content box becomes a Bézier patch with a square grid of control points
+ * (row-major, x and y interleaved): 4 × 4 (bicubic) for Warp, or [ADVANCED_SIDE] × [ADVANCED_SIDE]
+ * for Advanced Mesh, whose extra points bend smaller areas. Dragging a point bends the patch;
+ * dragging the surface pulls the spot under the finger along with it. Pixels are always resampled
+ * from the session's original pixels, so repeated edits never accumulate blur.
  */
 class WarpMesh(
     private val points: FloatArray,
 ) {
+    /** Control points along each side of the grid. */
+    val side: Int = SIDES.firstOrNull { it * it * 2 == points.size } ?: 0
+
+    /** Control points in the whole grid. */
+    val pointCount: Int get() = side * side
+
     init {
-        require(points.size == POINTS * 2) { "A warp mesh has ${POINTS * 2} coordinates" }
+        require(side > 0) { "A warp mesh has ${POINTS * 2} or ${ADVANCED_SIDE * ADVANCED_SIDE * 2} coordinates" }
     }
 
     /** What a touch grabbed: one control point, the surface at (u, v), or the whole mesh. */
@@ -48,12 +55,13 @@ class WarpMesh(
     ): Pair<Float, Float> {
         var px = 0f
         var py = 0f
-        for (row in 0 until SIDE) {
-            val bv = bernstein(row, v)
-            for (col in 0 until SIDE) {
-                val w = bv * bernstein(col, u)
-                px += w * x(row * SIDE + col)
-                py += w * y(row * SIDE + col)
+        val degree = side - 1
+        for (row in 0 until side) {
+            val bv = bernstein(row, degree, v)
+            for (col in 0 until side) {
+                val w = bv * bernstein(col, degree, u)
+                px += w * x(row * side + col)
+                py += w * y(row * side + col)
             }
         }
         return px to py
@@ -61,7 +69,7 @@ class WarpMesh(
 
     fun map(transform: (Float, Float) -> Pair<Float, Float>): WarpMesh {
         val out = FloatArray(points.size)
-        for (i in 0 until POINTS) {
+        for (i in 0 until pointCount) {
             val (nx, ny) = transform(x(i), y(i))
             out[i * 2] = nx
             out[i * 2 + 1] = ny
@@ -75,7 +83,10 @@ class WarpMesh(
     ): WarpMesh = map { px, py -> (px + dx) to (py + dy) }
 
     /** The four outer corners, in [Quad] order. */
-    fun corners(): Quad = Quad(x(0), y(0), x(SIDE - 1), y(SIDE - 1), x(POINTS - 1), y(POINTS - 1), x(POINTS - SIDE), y(POINTS - SIDE))
+    fun corners(): Quad {
+        val last = pointCount - 1
+        return Quad(x(0), y(0), x(side - 1), y(side - 1), x(last), y(last), x(pointCount - side), y(pointCount - side))
+    }
 
     /** Index of the control point within [tolerance] of (x, y), or -1. */
     fun pointAt(
@@ -83,7 +94,7 @@ class WarpMesh(
         y: Float,
         tolerance: Float,
     ): Int {
-        val nearest = (0 until POINTS).minByOrNull { hypot(x - x(it), y - y(it)) } ?: return -1
+        val nearest = (0 until pointCount).minByOrNull { hypot(x - x(it), y - y(it)) } ?: return -1
         return if (hypot(x - x(nearest), y - y(nearest)) <= tolerance) nearest else -1
     }
 
@@ -153,11 +164,12 @@ class WarpMesh(
         dx: Float,
         dy: Float,
     ): WarpMesh {
-        val weights = FloatArray(POINTS) { bernstein(it / SIDE, v) * bernstein(it % SIDE, u) }
+        val degree = side - 1
+        val weights = FloatArray(pointCount) { bernstein(it / side, degree, v) * bernstein(it % side, degree, u) }
         val norm = weights.sumOf { (it * it).toDouble() }.toFloat()
         if (norm < 1e-9f) return this
         val out = points.copyOf()
-        for (i in 0 until POINTS) {
+        for (i in 0 until pointCount) {
             val share = weights[i] / norm
             out[i * 2] += dx * share
             out[i * 2 + 1] += dy * share
@@ -165,9 +177,9 @@ class WarpMesh(
         return WarpMesh(out)
     }
 
-    val centerX: Float get() = (0 until POINTS).sumOf { x(it).toDouble() }.toFloat() / POINTS
+    val centerX: Float get() = (0 until pointCount).sumOf { x(it).toDouble() }.toFloat() / pointCount
 
-    val centerY: Float get() = (0 until POINTS).sumOf { y(it).toDouble() }.toFloat() / POINTS
+    val centerY: Float get() = (0 until pointCount).sumOf { y(it).toDouble() }.toFloat() / pointCount
 
     fun rotate(degrees: Float): WarpMesh {
         val cx = centerX
@@ -187,10 +199,10 @@ class WarpMesh(
     /** Mirrors the content inside the same shape by reversing the grid's columns or rows. */
     fun flip(horizontal: Boolean): WarpMesh {
         val out = FloatArray(points.size)
-        for (i in 0 until POINTS) {
-            val row = i / SIDE
-            val col = i % SIDE
-            val from = if (horizontal) row * SIDE + (SIDE - 1 - col) else (SIDE - 1 - row) * SIDE + col
+        for (i in 0 until pointCount) {
+            val row = i / side
+            val col = i % side
+            val from = if (horizontal) row * side + (side - 1 - col) else (side - 1 - row) * side + col
             out[i * 2] = x(from)
             out[i * 2 + 1] = y(from)
         }
@@ -202,13 +214,30 @@ class WarpMesh(
         width: Int,
         height: Int,
     ): WarpMesh {
-        val xs = (0 until POINTS).map { x(it) }
-        val ys = (0 until POINTS).map { y(it) }
+        val xs = (0 until pointCount).map { x(it) }
+        val ys = (0 until pointCount).map { y(it) }
         val w = xs.max() - xs.min()
         val h = ys.max() - ys.min()
         if (w < 1f || h < 1f) return this
         val moved = translate(width / 2f - (xs.min() + xs.max()) / 2f, height / 2f - (ys.min() + ys.max()) / 2f)
         return moved.scale(min(width / w, height / h), width / 2f, height / 2f)
+    }
+
+    /**
+     * The same shape with [newSide] control points along each side, so switching to or from
+     * Advanced Mesh keeps the current bend: exactly when adding points (Bézier degree elevation),
+     * and as closely as the coarser grid allows when removing them.
+     */
+    fun resampled(newSide: Int): WarpMesh {
+        require(newSide in SIDES) { "Unsupported warp mesh size" }
+        if (newSide == side) return this
+        if (newSide < side) return fromQuad(Quad(0f, 0f, 1f, 0f, 1f, 1f, 0f, 1f), newSide).map { u, v -> evaluate(u, v) }
+        var grid = List(side) { row -> List(side) { col -> x(row * side + col) to y(row * side + col) } }
+        repeat(newSide - side) {
+            grid = grid.map(::elevate)
+            grid = transpose(transpose(grid).map(::elevate))
+        }
+        return WarpMesh(grid.flatten().flatMap { listOf(it.first, it.second) }.toFloatArray())
     }
 
     fun toArray(): FloatArray = points.copyOf()
@@ -220,27 +249,38 @@ class WarpMesh(
     companion object {
         const val SIDE = 4
         const val POINTS = SIDE * SIDE
+
+        /** Advanced Mesh: more control points, each bending a smaller part of the content. */
+        const val ADVANCED_SIDE = 6
+        private val SIDES = listOf(SIDE, ADVANCED_SIDE)
         private const val LOCATE_STEPS = 24
         private const val SUBDIVISIONS = 32
 
         /** An unbent mesh covering [bounds]: evenly spaced control points map the box onto itself. */
-        fun fromBounds(bounds: IntBounds): WarpMesh = fromQuad(Quad.fromBounds(bounds))
+        fun fromBounds(
+            bounds: IntBounds,
+            side: Int = SIDE,
+        ): WarpMesh = fromQuad(Quad.fromBounds(bounds), side)
 
-        /** A mesh with the bilinear shape of [quad]. */
-        fun fromQuad(quad: Quad): WarpMesh {
-            val out = FloatArray(POINTS * 2)
-            for (row in 0 until SIDE) {
-                val v = row / (SIDE - 1f)
-                for (col in 0 until SIDE) {
-                    val u = col / (SIDE - 1f)
+        /** A mesh with the bilinear shape of [quad] and [side] control points along each side. */
+        fun fromQuad(
+            quad: Quad,
+            side: Int = SIDE,
+        ): WarpMesh {
+            val out = FloatArray(side * side * 2)
+            for (row in 0 until side) {
+                val v = row / (side - 1f)
+                for (col in 0 until side) {
+                    val u = col / (side - 1f)
                     val top = lerp(quad.x0, quad.x1, u) to lerp(quad.y0, quad.y1, u)
                     val bottom = lerp(quad.x3, quad.x2, u) to lerp(quad.y3, quad.y2, u)
-                    out[(row * SIDE + col) * 2] = lerp(top.first, bottom.first, v)
-                    out[(row * SIDE + col) * 2 + 1] = lerp(top.second, bottom.second, v)
+                    out[(row * side + col) * 2] = lerp(top.first, bottom.first, v)
+                    out[(row * side + col) * 2 + 1] = lerp(top.second, bottom.second, v)
                 }
             }
             return WarpMesh(out)
         }
+
 
         /**
          * Renders [source] (only its selected pixels when [selection] is active) so that the box
@@ -274,17 +314,38 @@ class WarpMesh(
             }
         }
 
+        /** One Bézier degree elevation of a row of control points: the same curve with one more point. */
+        private fun elevate(row: List<Pair<Float, Float>>): List<Pair<Float, Float>> {
+            val n = row.size
+            return List(n + 1) { i ->
+                val a = i / n.toFloat()
+                val before = row.getOrNull(i - 1) ?: row[0]
+                val here = row.getOrNull(i) ?: row[n - 1]
+                (a * before.first + (1 - a) * here.first) to (a * before.second + (1 - a) * here.second)
+            }
+        }
+
+        private fun <T> transpose(grid: List<List<T>>): List<List<T>> = List(grid[0].size) { col -> grid.map { it[col] } }
+
+        /** The Bernstein basis polynomial [i] of [degree] at [t]. */
         private fun bernstein(
             i: Int,
+            degree: Int,
             t: Float,
         ): Float {
-            val s = 1f - t
-            return when (i) {
-                0 -> s * s * s
-                1 -> 3f * t * s * s
-                2 -> 3f * t * t * s
-                else -> t * t * t
-            }
+            var value = binomial(degree, i).toFloat()
+            repeat(i) { value *= t }
+            repeat(degree - i) { value *= 1f - t }
+            return value
+        }
+
+        private fun binomial(
+            n: Int,
+            k: Int,
+        ): Long {
+            var result = 1L
+            for (j in 1..k) result = result * (n - k + j) / j
+            return result
         }
 
         private fun lerp(

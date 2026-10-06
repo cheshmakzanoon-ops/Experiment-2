@@ -637,6 +637,8 @@ class CanvasViewModel
 
         fun setTransformMode(mode: TransformQuad.Mode) = updateInput { it.copy(transformMode = mode) }
 
+        fun setAdvancedMesh(enabled: Boolean) = updateInput { it.copy(advancedMesh = enabled) }
+
         fun updateSettings(change: (AppSettings) -> AppSettings) = viewModelScope.launch(editorErrors) { settingsRepository.update(change) }
 
         fun setTransformAssist(assist: TransformQuad.Assist) = updateInput { it.copy(transformAssist = assist) }

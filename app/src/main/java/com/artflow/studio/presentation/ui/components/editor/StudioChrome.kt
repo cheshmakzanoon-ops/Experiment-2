@@ -592,15 +592,15 @@ fun WarpOverlay(
             translate(-canvasWidth / 2f, -canvasHeight / 2f)
         }) {
             val line = 1.2f / scale
-            for (k in 0 until WarpMesh.SIDE) {
-                val t = k / (WarpMesh.SIDE - 1f)
+            for (k in 0 until mesh.side) {
+                val t = k / (mesh.side - 1f)
                 val rows = (0..WARP_CURVE_STEPS).map { mesh.evaluate(it / WARP_CURVE_STEPS.toFloat(), t) }
                 val columns = (0..WARP_CURVE_STEPS).map { mesh.evaluate(t, it / WARP_CURVE_STEPS.toFloat()) }
                 listOf(rows, columns).forEach { curve ->
                     curve.zipWithNext { a, b -> drawLine(accent, Offset(a.first, a.second), Offset(b.first, b.second), strokeWidth = line) }
                 }
             }
-            for (i in 0 until WarpMesh.POINTS) {
+            for (i in 0 until mesh.pointCount) {
                 val center = Offset(mesh.x(i), mesh.y(i))
                 drawCircle(Color.White, radius = 6f / scale, center = center)
                 drawCircle(accent, radius = 6f / scale, center = center, style = Stroke(line))

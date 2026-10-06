@@ -135,6 +135,8 @@ data class EditorInput(
     val selectionMode: SelectionCombineMode = SelectionCombineMode.REPLACE,
     /** How a one-finger drag edits the active layer while the transform tool is selected. */
     val transformMode: TransformQuad.Mode = TransformQuad.Mode.FREEFORM,
+    /** Warp with Procreate's Advanced Mesh: a denser grid of control points. */
+    val advancedMesh: Boolean = false,
     val transformInterpolation: TransformQuad.Interpolation = TransformQuad.Interpolation.BILINEAR,
     /** Transform Magnetics and Snapping. */
     val transformAssist: TransformQuad.Assist = TransformQuad.Assist(),
@@ -579,6 +581,7 @@ class ArtFlowCanvasView
             val enteringTransform = newInput.tool == ToolType.TRANSFORM && input.tool != ToolType.TRANSFORM
             val leavingTransform = newInput.tool != ToolType.TRANSFORM && input.tool == ToolType.TRANSFORM
             val warpToggled = (newInput.transformMode == TransformQuad.Mode.WARP) != (input.transformMode == TransformQuad.Mode.WARP)
+            val meshResized = newInput.advancedMesh != input.advancedMesh
             input = newInput
             if (enteringTransform) ensureTransformSession()
             if (leavingTransform) clearTransformSession()
@@ -586,6 +589,11 @@ class ArtFlowCanvasView
             if (warpToggled && newInput.tool == ToolType.TRANSFORM && transformSession != null) {
                 clearTransformSession()
                 ensureTransformSession()
+            }
+            // Advanced Mesh adds or removes control points but keeps the current bend.
+            transformSession?.takeIf { meshResized }?.let { session ->
+                session.mesh = session.mesh?.resampled(meshSide())
+                publishTransformQuad()
             }
             canvasRepository.setStrokeColor(newInput.brushColor)
             canvasRepository.setSecondaryColor(newInput.secondaryColor)
@@ -948,7 +956,7 @@ class ArtFlowCanvasView
             /** Control points while warping; null keeps the plain [quad] placement. */
             var mesh: WarpMesh? = null
 
-            fun meshOrBox(): WarpMesh = mesh ?: WarpMesh.fromBounds(bounds)
+            fun meshOrBox(side: Int): WarpMesh = mesh ?: WarpMesh.fromBounds(bounds, side)
         }
 
         private var transformSession: TransformSession? = null
@@ -984,10 +992,12 @@ class ArtFlowCanvasView
 
         private val warping: Boolean get() = input.transformMode == TransformQuad.Mode.WARP
 
+        private fun meshSide(): Int = if (input.advancedMesh) WarpMesh.ADVANCED_SIDE else WarpMesh.SIDE
+
         private fun publishTransformQuad() {
             val session = transformSession
             onTransformQuadChanged?.invoke(session?.takeUnless { warping }?.let { transformPreviewQuad ?: it.quad })
-            onWarpMeshChanged?.invoke(session?.takeIf { warping }?.let { transformPreviewMesh ?: it.meshOrBox() })
+            onWarpMeshChanged?.invoke(session?.takeIf { warping }?.let { transformPreviewMesh ?: it.meshOrBox(meshSide()) })
         }
 
         private fun clearTransformSession() {
@@ -1062,7 +1072,7 @@ class ArtFlowCanvasView
             companions.open(canvasRepository, current.companions)
             transformStartQuad = current.quad
             if (warping) {
-                val mesh = current.meshOrBox()
+                val mesh = current.meshOrBox(meshSide())
                 warpStartMesh = mesh
                 warpTarget = mesh.hit(x, y, HANDLE_TOUCH_PX / scale)
             } else {
@@ -1109,7 +1119,7 @@ class ArtFlowCanvasView
         ) {
             ensureTransformSession { session ->
                 val quad = if (warping) session.quad else change(session)
-                val mesh = if (warping) changeMesh(session.meshOrBox()) else null
+                val mesh = if (warping) changeMesh(session.meshOrBox(meshSide())) else null
                 val highQuality = input.transformInterpolation == TransformQuad.Interpolation.BILINEAR
                 transformCommitting = true
                 coroutineScope.launch {

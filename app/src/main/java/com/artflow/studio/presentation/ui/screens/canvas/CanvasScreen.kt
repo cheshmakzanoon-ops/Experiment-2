@@ -2002,6 +2002,16 @@ private fun TransformOptions(
                 )
             }
         }
+        if (input.transformMode == com.artflow.studio.core.pixels.TransformQuad.Mode.WARP) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Advanced mesh", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+                Switch(
+                    checked = input.advancedMesh,
+                    onCheckedChange = viewModel::setAdvancedMesh,
+                    modifier = Modifier.semantics { contentDescription = "Advanced mesh" },
+                )
+            }
+        }
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),

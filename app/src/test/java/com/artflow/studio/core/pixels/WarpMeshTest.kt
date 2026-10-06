@@ -28,6 +28,30 @@ class WarpMeshTest {
         }
     }
 
+    @Test fun unbentAdvancedMeshReproducesPixels() {
+        val source = block(24, 5, 6, 8)
+        val bounds = LayerTransform.floatingBounds(source, null)!!
+        val out = PixelBuffer(24, 24)
+        WarpMesh.render(source, out, bounds, WarpMesh.fromBounds(bounds, WarpMesh.ADVANCED_SIDE), null, highQuality = false)
+        assertTrue(source.pixels.contentEquals(out.pixels))
+    }
+
+    @Test fun switchingToAdvancedMeshKeepsTheBendExactly() {
+        val bent = WarpMesh.fromBounds(IntBounds(0, 0, 99, 99)).drag(Target.Point(5), 14f, -9f)
+        val advanced = bent.resampled(WarpMesh.ADVANCED_SIDE)
+        assertEquals(WarpMesh.ADVANCED_SIDE, advanced.side)
+        assertEquals(bent.corners(), advanced.corners())
+        for (u in listOf(0f, 0.2f, 0.5f, 0.85f)) {
+            for (v in listOf(0.1f, 0.4f, 1f)) {
+                val (bx, by) = bent.evaluate(u, v)
+                val (ax, ay) = advanced.evaluate(u, v)
+                assertEquals(bx, ax, 1e-2f)
+                assertEquals(by, ay, 1e-2f)
+            }
+        }
+        assertEquals(WarpMesh.SIDE, advanced.resampled(WarpMesh.SIDE).side)
+    }
+
     @Test fun unbentMeshReproducesPixels() {
         val source = block(24, 5, 6, 8)
         assertTrue(source.pixels.contentEquals(render(source) { it }.pixels))
