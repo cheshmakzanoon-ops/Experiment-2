@@ -87,7 +87,8 @@ object FillTool {
 
         if (!filled.isActive()) return Result(0, null, changed = false)
 
-        return applyFill(target, filled, color, settings)
+        val edge = if (settings.antiAlias) colourEdgeCoverage(filled, source, startColor, toleranceSquared) else null
+        return applyFill(target, filled, color, settings, edge)
     }
 
     /**
@@ -135,6 +136,7 @@ object FillTool {
         coverage: SelectionMask,
         color: Int,
         settings: Settings,
+        softened: SelectionMask? = null,
     ): Result {
         var count = 0
         var minX = target.width
@@ -142,7 +144,7 @@ object FillTool {
         var maxX = -1
         var maxY = -1
 
-        val feather = if (settings.antiAlias) softenedCoverage(coverage) else coverage
+        val feather = if (settings.antiAlias) (softened ?: softenedCoverage(coverage)) else coverage
         val pattern = settings.pattern
 
         val mode =
@@ -207,6 +209,38 @@ object FillTool {
                 if (neighbours > 0) {
                     out.coverage[index] = (neighbours * 60).coerceAtMost(255).toByte()
                 }
+            }
+        }
+        return out
+    }
+
+    /**
+     * Anti-aliased edge for a flood fill. A pixel next to the region takes coverage from how close its
+     * colour is to the seed colour: a dark line far from the seed keeps its colour, while an
+     * anti-aliased pixel just beyond the tolerance takes a share of the fill.
+     */
+    private fun colourEdgeCoverage(
+        coverage: SelectionMask,
+        source: PixelBuffer,
+        seed: Int,
+        toleranceSquared: Float,
+    ): SelectionMask {
+        val out = coverage.copy()
+        val width = coverage.width
+        val height = coverage.height
+        val tolerance = sqrt(toleranceSquared)
+        val ramp = max(tolerance * 0.5f, 8f)
+
+        fun covered(index: Int): Boolean = (coverage.coverage[index].toInt() and 0xFF) != 0
+
+        for (y in 1 until height - 1) {
+            for (x in 1 until width - 1) {
+                val index = y * width + x
+                if (covered(index)) continue
+                if (!(covered(index - 1) || covered(index + 1) || covered(index - width) || covered(index + width))) continue
+                val distance = sqrt(colorDistanceSquared(source.pixels[index], seed))
+                val share = ((tolerance + ramp - distance) / ramp).coerceIn(0f, 1f)
+                if (share > 0f) out.coverage[index] = (share * 255f).roundToInt().toByte()
             }
         }
         return out
