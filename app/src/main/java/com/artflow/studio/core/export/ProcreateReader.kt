@@ -179,7 +179,8 @@ object ProcreateReader {
         return width to height
     }
 
-    private fun number(value: Any?): Double? = (value as? Number)?.toDouble()
+    /** A finite number, or null: a binary plist can carry NaN or infinity, which no field here can use. */
+    private fun number(value: Any?): Double? = (value as? Number)?.toDouble()?.takeIf { it.isFinite() }
 
     /** Four little-endian floats, red to alpha, as the background colour is stored. */
     private fun colour(bytes: ByteArray): Int? {
