@@ -2379,8 +2379,10 @@ class ArtFlowCanvasView
             tolerance: Int = input.fillTolerance,
             onCommitted: ((Int) -> Unit)? = null,
         ) {
-            val cx = x.roundToInt()
-            val cy = y.roundToInt()
+            // A pixel covers [i, i + 1), so the seed is the pixel under the touch; rounding would pick the neighbour past
+            // the edge.
+            val cx = floor(x).toInt()
+            val cy = floor(y).toInt()
             val captured = input
             // With a Reference layer, the fill stops at its lines instead of the active layer's pixels.
             val referenceId =
