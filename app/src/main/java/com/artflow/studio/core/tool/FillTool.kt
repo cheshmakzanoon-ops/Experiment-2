@@ -266,12 +266,17 @@ object FillTool {
 
         // Close the *barrier*, not the matching region. Expanding matching pixels used to
         // bridge across ink, opening closed shapes and flooding the rest of the canvas.
+        // Closing erodes after it dilates, and an erosion counts samples past the canvas as empty. That reopened any
+        // gap within gapClose of the edge, so the barrier is closed on a canvas padded by gapClose on every side.
+        val pad = gapClose
         val closedBarrier =
             if (gapClose > 0) {
-                val barrier = SelectionMask(width, height)
-                for (i in source.pixels.indices) {
-                    if (colorDistanceSquared(source.pixels[i], startColor) > toleranceSquared) {
-                        barrier.coverage[i] = 255.toByte()
+                val barrier = SelectionMask(width + 2 * pad, height + 2 * pad)
+                for (y in 0 until height) {
+                    for (x in 0 until width) {
+                        if (colorDistanceSquared(source.getUnchecked(x, y), startColor) > toleranceSquared) {
+                            barrier.coverage[(y + pad) * barrier.width + x + pad] = 255.toByte()
+                        }
                     }
                 }
                 barrier.expanded(gapClose).expanded(-gapClose)
@@ -284,7 +289,7 @@ object FillTool {
             y: Int,
         ): Boolean =
             colorDistanceSquared(source.getUnchecked(x, y), startColor) <= toleranceSquared &&
-                (closedBarrier?.coverageAt(x, y) ?: 0) == 0
+                (closedBarrier?.coverageAt(x + pad, y + pad) ?: 0) == 0
 
         val stack = ArrayDeque<IntArray>()
         stack.addLast(intArrayOf(startX, startY))
