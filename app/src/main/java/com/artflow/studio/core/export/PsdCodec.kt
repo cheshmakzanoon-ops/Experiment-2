@@ -642,12 +642,16 @@ object PsdCodec {
             }
 
             COMPRESSION_ZIP, COMPRESSION_ZIP_PREDICTION -> {
-                channelIds.forEach { id ->
-                    // ZIP channels carry their own length prefix.
-                    val size = reader.readInt()
-                    if (size <= 0 || reader.remaining() < size) return@forEach
-                    val compressed = reader.readBytes(size)
-                    planes[id] = inflate(compressed)
+                // The merged image is one zlib stream: each channel's whole plane follows the one before it.
+                val bytesPerSample = if (depth == 16) 2 else 1
+                val planeBytes = width * height * bytesPerSample
+                if (compression == COMPRESSION_ZIP_PREDICTION && bytesPerSample != 1) return null
+                val stream = inflate(reader.readBytes(reader.remaining()))
+                if (stream.size < planeBytes * channelIds.size) return null
+                channelIds.forEachIndexed { index, id ->
+                    val plane = stream.copyOfRange(index * planeBytes, (index + 1) * planeBytes)
+                    if (compression == COMPRESSION_ZIP_PREDICTION) undoPrediction(plane, width, height)
+                    planes[id] = plane
                 }
             }
 
@@ -920,6 +924,20 @@ object PsdCodec {
         reader: PsdReader,
         width: Int,
     ): ByteArray = unpackBits(reader, width)
+
+    /** Undoes ZIP prediction on 8-bit samples: each byte was stored as its difference from the byte before it in its row. */
+    private fun undoPrediction(
+        plane: ByteArray,
+        width: Int,
+        height: Int,
+    ) {
+        for (row in 0 until height) {
+            val start = row * width
+            for (x in 1 until width) {
+                plane[start + x] = (plane[start + x] + plane[start + x - 1]).toByte()
+            }
+        }
+    }
 
     private fun inflate(bytes: ByteArray): ByteArray =
         try {
