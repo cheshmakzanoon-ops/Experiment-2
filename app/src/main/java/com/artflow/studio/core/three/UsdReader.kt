@@ -327,6 +327,7 @@ object UsdReader {
         val data: ByteArray,
     ) : Values<Long> {
         private val buffer = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
+
         // Read without a bounds failure here, so that a file too short for its header is refused by init below.
         private val minor = data.getOrNull(MAGIC.size + 1)?.toInt() ?: 0
         private val sections = HashMap<String, Int>()

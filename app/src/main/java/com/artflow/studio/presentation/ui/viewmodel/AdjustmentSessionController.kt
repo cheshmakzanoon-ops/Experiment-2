@@ -138,19 +138,27 @@ class AdjustmentSessionController(
     ): PixelBuffer? {
         val source = original ?: return null
         val settingsState = current.copy(pencil = false)
-        val effect =
-            filtered?.takeIf { it.first == settingsState }?.second
-                ?: LiveAdjustments
-                    .apply(
-                        current.kind,
-                        source,
-                        current.settings,
-                        null,
-                        alphaLocked = session?.alphaLocked == true,
-                        checkpoint = checkpoint,
-                    )
-                    .also { filtered = settingsState to it }
+        val effect = filtered?.takeIf { it.first == settingsState }?.second ?: filterFor(settingsState, source, checkpoint)
         return AdjustmentPaint.mix(source, effect, selection, painted.takeIf { current.pencil })
+    }
+
+    /** The whole-layer effect for [state]; it is kept with its settings so Pencil mode and repeat previews reuse it. */
+    private fun filterFor(
+        state: State,
+        source: PixelBuffer,
+        checkpoint: () -> Unit,
+    ): PixelBuffer {
+        val effect =
+            LiveAdjustments.apply(
+                state.kind,
+                source,
+                state.settings,
+                null,
+                alphaLocked = session?.alphaLocked == true,
+                checkpoint = checkpoint,
+            )
+        filtered = state to effect
+        return effect
     }
 
     /** Records the adjustment as one undoable step; an untouched preview is simply closed. */
