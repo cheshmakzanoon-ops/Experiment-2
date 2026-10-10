@@ -54,6 +54,8 @@ object CmykProof {
         g: Float,
         b: Float,
     ): Boolean {
+        // A grey is printed with black ink alone. That ink's cast is a tint, not a gamut limit.
+        if (r == g && g == b) return false
         val printed = proof(r, g, b)
         return maxOf(abs(printed[0] - r), abs(printed[1] - g), abs(printed[2] - b)) > GAMUT_TOLERANCE
     }

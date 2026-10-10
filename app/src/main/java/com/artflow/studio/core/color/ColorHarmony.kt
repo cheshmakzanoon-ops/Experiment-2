@@ -176,7 +176,9 @@ object ColorHarmony {
                 8 -> cleaned.toLong(16).toInt()
                 else -> null
             }
-        } catch (e: NumberFormatException) {
+        } catch (e: IllegalArgumentException) {
+            // digitToInt throws IllegalArgumentException for a non-hex letter, such as "red";
+            // toInt throws NumberFormatException, which is a subclass of it.
             null
         }
     }
@@ -291,8 +293,12 @@ object ColorHarmony {
         largeText: Boolean = false,
     ): Boolean = contrastRatio(foreground, background) >= if (largeText) 3f else 4.5f
 
-    /** Black or white, whichever reads better on [background]. */
-    fun bestTextColor(background: Int): Int = if (relativeLuminance(background) > 0.35f) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
+    /** Black or white, whichever has the higher contrast ratio against [background]. */
+    fun bestTextColor(background: Int): Int {
+        val black = 0xFF000000.toInt()
+        val white = 0xFFFFFFFF.toInt()
+        return if (contrastRatio(black, background) >= contrastRatio(white, background)) black else white
+    }
 
     /** The classic colour-wheel position in degrees, for drawing a hue ring. */
     fun wheelPosition(
