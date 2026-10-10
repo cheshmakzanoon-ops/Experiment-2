@@ -65,16 +65,29 @@ jobs:
           fi
           grep -F "Production signing is required" "${RUNNER_TEMP}/signing-negative.log"
 
-      # Documents saved by Procreate itself (MIT-licensed test files from Avarel/silicate), fetched
-      # rather than committed. RealProcreateFilesTest is skipped when they are unavailable.
+      # Documents saved by Procreate itself, from Avarel/silicate, fetched rather than committed. The job
+      # fails if they are still missing after three attempts, so RealProcreateFilesTest cannot skip in CI.
       - name: Fetch Procreate sample documents
-        continue-on-error: true
         run: |
+          set -euo pipefail
           git lfs install --skip-repo
-          GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 https://github.com/Avarel/silicate "${RUNNER_TEMP}/silicate"
-          git -C "${RUNNER_TEMP}/silicate" lfs pull --include "demo_files/*"
-          ls -l "${RUNNER_TEMP}/silicate/demo_files"
-          echo "PROCREATE_SAMPLES=${RUNNER_TEMP}/silicate/demo_files" >> "$GITHUB_ENV"
+          dest="${RUNNER_TEMP}/silicate"
+          for attempt in 1 2 3; do
+            echo "Procreate sample fetch attempt ${attempt}/3"
+            rm -rf "$dest"
+            if GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 https://github.com/Avarel/silicate "$dest" \
+              && git -C "$dest" lfs pull --include "demo_files/*" \
+              && ls "$dest"/demo_files/*.procreate >/dev/null 2>&1; then
+              break
+            fi
+            if (( attempt == 3 )); then
+              echo "No Procreate sample documents after ${attempt} attempts"
+              exit 1
+            fi
+            sleep $((attempt * 10))
+          done
+          ls -l "$dest/demo_files"
+          echo "PROCREATE_SAMPLES=$dest/demo_files" >> "$GITHUB_ENV"
 
       - name: Run JVM unit tests
         run: |
