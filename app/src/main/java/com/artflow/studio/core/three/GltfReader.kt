@@ -142,6 +142,8 @@ object GltfReader {
                 ?.let { ints(it) }
                 ?: nodes.indices.filter { index -> nodes.none { node -> index in ints(node["children"]) } }
         val found = mutableListOf<Pair<Int, FloatArray>>()
+        // A valid node has one parent. A node shared by several parents is walked once, not once per path.
+        val visited = HashSet<Int>()
 
         fun visit(
             index: Int,
@@ -149,6 +151,7 @@ object GltfReader {
             depth: Int,
         ) {
             val node = nodes.getOrNull(index) ?: return
+            if (!visited.add(index)) return
             require(depth < MAX_DEPTH) { "The model's node tree is too deep" }
             val world = Matrix4.multiply(parent, local(node))
             node["mesh"]?.jsonPrimitive?.intOrNull?.let { found += it to world }
@@ -214,13 +217,14 @@ object GltfReader {
             value: (ByteBuffer, Int) -> Float,
         ): FloatArray {
             val count = int(accessor, "count")
+            // Checked before the early return below, which allocates count * components floats.
+            require(count in 0..MAX_ELEMENTS) { "This model is too large" }
             val viewIndex = accessor["bufferView"]?.jsonPrimitive?.intOrNull ?: return FloatArray(count * components)
             val view = view(viewIndex)
             val buffer = requireNotNull(buffers.getOrNull(int(view, "buffer"))) { "Missing buffer" }
             val size = componentSize(int(accessor, "componentType"))
             val stride = view["byteStride"]?.jsonPrimitive?.intOrNull ?: (size * components)
             val start = (view["byteOffset"]?.jsonPrimitive?.intOrNull ?: 0) + (accessor["byteOffset"]?.jsonPrimitive?.intOrNull ?: 0)
-            require(count in 0..MAX_ELEMENTS) { "This model is too large" }
             require(
                 count == 0 || start + (count - 1).toLong() * stride + size * components <= buffer.size,
             ) { "The model's data is cut short" }

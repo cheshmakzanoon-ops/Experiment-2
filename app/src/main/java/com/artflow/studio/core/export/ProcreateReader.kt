@@ -1,5 +1,6 @@
 package com.artflow.studio.core.export
 
+import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.domain.model.layer.BlendMode
@@ -115,6 +116,8 @@ object ProcreateReader {
         val tileSize = number(document["tileSize"])?.toInt() ?: DEFAULT_TILE
         require(tileSize in MIN_TILE..MAX_TILE) { "The Procreate document's tiles are an unexpected size" }
         val composite = archive.string(archive.map(document["composite"])?.get("UUID"))
+        // Refuse oversized canvases before calibration allocates a full-size raster.
+        require(CanvasOperations.isSizeSafe(width, height)) { "This Procreate document is too large to open on this device" }
         val tiles = Tiles(files, width, height, tileSize)
         val nodes = archive.array(document["layers"]).mapNotNull { node(archive, it, 0) }
         val background =
@@ -287,9 +290,12 @@ object ProcreateReader {
             tile: Tile,
             data: ByteArray,
         ) {
-            val left = tile.column * size
-            val top = tile.row * size
-            if (left >= storedWidth || top >= storedHeight) return
+            // Long arithmetic: a corrupt tile index must not wrap around into a valid-looking position.
+            val leftL = tile.column.toLong() * size
+            val topL = tile.row.toLong() * size
+            if (leftL < 0 || topL < 0 || leftL >= storedWidth || topL >= storedHeight) return
+            val left = leftL.toInt()
+            val top = topL.toInt()
             val visibleWidth = minOf(size, storedWidth - left)
             val visibleHeight = minOf(size, storedHeight - top)
             val bytes = decode(tile.path, data, size * size * 4) ?: return

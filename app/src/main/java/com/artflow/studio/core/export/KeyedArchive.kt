@@ -35,11 +35,15 @@ object BinaryPlist {
         val offsets: IntArray,
         val refSize: Int,
     ) {
+        private var reads = 0
+
         fun read(
             index: Int,
             depth: Int,
         ): Any? {
             require(index in offsets.indices && depth < MAX_DEPTH) { DAMAGED }
+            // Shared references make the graph a DAG whose expansion can be exponential in its depth.
+            require(++reads <= MAX_READS) { DAMAGED }
             var at = offsets[index]
             val marker = bytes[at++].toInt() and 0xFF
             val kind = marker ushr 4
@@ -129,6 +133,7 @@ object BinaryPlist {
     private const val TRAILER = 32
     private const val MAX_OBJECTS = 4_000_000L
     private const val MAX_DEPTH = 64
+    private const val MAX_READS = 200_000
     private const val MAX_NUMBER = 16
     private const val DAMAGED = "The property list is damaged"
 }
