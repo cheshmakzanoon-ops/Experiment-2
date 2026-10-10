@@ -83,15 +83,16 @@ class LiquifyWarpSnapshotTest {
         )
 
     /** Varied colour and alpha, including clear pixels, so the alpha lock has something to keep. */
-    private fun source(): PixelBuffer =
-        PixelBuffer(width, width).apply {
-            for (y in 0 until height) {
-                for (x in 0 until width) {
-                    val alpha = if ((x + y) % 7 == 0) 0 else 255 - (x * 3) % 128
-                    setUnchecked(x, y, (alpha shl 24) or ((x * 3) shl 16) or ((y * 3) shl 8) or (x xor y))
-                }
-            }
+    private fun source(): PixelBuffer {
+        val buffer = PixelBuffer(width, width)
+        for (index in buffer.pixels.indices) {
+            val x = index % width
+            val y = index / width
+            val alpha = if ((x + y) % 7 == 0) 0 else 255 - (x * 3) % 128
+            buffer.pixels[index] = (alpha shl 24) or ((x * 3) shl 16) or ((y * 3) shl 8) or (x xor y)
         }
+        return buffer
+    }
 
     private fun inside(
         buffer: PixelBuffer,

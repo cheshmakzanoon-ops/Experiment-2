@@ -19,6 +19,7 @@ import com.artflow.studio.core.text.TextLayerContent
 import com.artflow.studio.data.local.CanvasDocument
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.renderer.BitmapPixelBridge
+import com.artflow.studio.data.renderer.TextRasterizer
 import com.artflow.studio.domain.model.animation.AnimationFrame
 import com.artflow.studio.domain.model.animation.AnimationSettings
 import com.artflow.studio.domain.model.brush.BrushParams
@@ -35,11 +36,10 @@ import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import com.artflow.studio.domain.repository.canvas.CanvasSize
 import com.artflow.studio.domain.repository.canvas.CanvasState
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -158,11 +158,13 @@ class CanvasRepositoryImpl
 
         private var rasterEditToken = 0L
 
-        /** A copy being made of [source], a layer raster, while its stroke is drawn. */
+        /** A copy of [source], a layer raster, made while its stroke is drawn; [ready] is set once the copy is made. */
         private class StrokeCopy(
             val source: PixelBuffer,
-            val copy: Deferred<PixelBuffer>,
-        )
+        ) {
+            @Volatile var ready: PixelBuffer? = null
+            var job: Job? = null
+        }
 
         private data class PendingEdit(
             val projectId: Long,
@@ -632,8 +634,8 @@ class CanvasRepositoryImpl
             try {
                 commitStroke(strokeId, prepared)
             } finally {
-                // A copy the commit used is already complete, so cancelling it changes nothing.
-                prepared?.copy?.cancel()
+                // A copy the commit used has already finished, so cancelling it changes nothing.
+                prepared?.job?.cancel()
             }
         }
 
@@ -725,7 +727,9 @@ class CanvasRepositoryImpl
         ) {
             val raster = layer.raster ?: return
             if (raster.pixels.size.toLong() * BYTES_PER_PIXEL > Runtime.getRuntime().maxMemory() / LIVE_HEAP_SHARE) return
-            strokeCopies[strokeId] = StrokeCopy(raster, coroutineScope.async { raster.copy() })
+            val prepared = StrokeCopy(raster)
+            prepared.job = coroutineScope.launch { prepared.ready = raster.copy() }
+            strokeCopies[strokeId] = prepared
         }
 
         /** The copy [prepared] made of [layer]'s raster, once it is ready and the raster is still the same buffer; else null. */
@@ -733,12 +737,12 @@ class CanvasRepositoryImpl
             prepared: StrokeCopy?,
             layer: LayerData,
         ): PixelBuffer? {
-            if (prepared == null || prepared.source !== layer.raster || !prepared.copy.isCompleted) return null
-            return runCatching { prepared.copy.getCompleted() }.getOrNull()
+            if (prepared == null || prepared.source !== layer.raster) return null
+            return prepared.ready
         }
 
         private fun cancelStrokeCopies() {
-            strokeCopies.values.forEach { it.copy.cancel() }
+            strokeCopies.values.forEach { it.job?.cancel() }
             strokeCopies.clear()
         }
 
@@ -781,7 +785,7 @@ class CanvasRepositoryImpl
 
         override fun cancelStroke(strokeId: Long) {
             synchronized(liveLock) { liveStrokes.remove(strokeId) }
-            strokeCopies.remove(strokeId)?.copy?.cancel()
+            strokeCopies.remove(strokeId)?.job?.cancel()
             activeStrokes.remove(strokeId)
             strokeBrushParams.remove(strokeId)
             strokeLayerIds.remove(strokeId)
@@ -1950,8 +1954,11 @@ class CanvasRepositoryImpl
                                     .map { layer ->
                                         coroutineContext.ensureActive()
                                         layer.snapshotCopy().also { result ->
-                                            result.raster =
-                                                rawLayerPixels(layer, snapshot.width, snapshot.height)?.let { transform(it, false) }
+                                            // A text layer whose raster file is missing is drawn from its text before the transform.
+                                            val pixels =
+                                                rawLayerPixels(layer, snapshot.width, snapshot.height)
+                                                    ?: layer.text?.let { TextRasterizer.render(snapshot.width, snapshot.height, it) }
+                                            result.raster = pixels?.let { transform(it, false) }
                                             result.strokes.clear()
                                             result.rasterFile = null
                                             result.mask = layer.mask?.let { transform(it, true) }
