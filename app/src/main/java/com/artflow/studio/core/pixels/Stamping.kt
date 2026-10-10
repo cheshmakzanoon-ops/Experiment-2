@@ -62,8 +62,11 @@ object Stamping {
         val y1 = min(target.height - 1, ceil(y + radius).toInt())
         if (x1 < x0 || y1 < y0) return
 
-        val inner = radius * hardness.coerceIn(0f, 1f)
-        val dab = RoundDab(target, x, y, radius, inner, max(radius - inner, 0.75f), color, strength, mode, alphaLock, mask, x0, x1)
+        // The anti-aliased rim is one pixel wide and centred on the radius, so a hard tip keeps its size
+        // without a stair-stepped edge. Pixels beyond the rim are not painted.
+        val inner = min(radius * hardness.coerceIn(0f, 1f), radius - 0.5f).coerceAtLeast(0f)
+        val reach = radius + 0.5f
+        val dab = RoundDab(target, x, y, reach, inner, reach - inner, color, strength, mode, alphaLock, mask, x0, x1)
         // Rows of a dab never share pixels, so a large dab is painted by several cores at once.
         if (radius >= PARALLEL_MIN_RADIUS) inParallel(y0, y1, dab::paintRows) else dab.paintRows(y0, y1)
     }
