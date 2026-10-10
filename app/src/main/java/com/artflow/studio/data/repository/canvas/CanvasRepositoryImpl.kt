@@ -2760,6 +2760,8 @@ class CanvasRepositoryImpl
             val backgroundColor: Int,
             val animation: AnimationSettings,
             val colorProfile: ColorProfile = ColorProfile.SRGB,
+            /** Shared, not copied: the selection is replaced on change and never edited in place. */
+            val selection: SelectionMask? = null,
         )
 
         /**
@@ -2796,6 +2798,7 @@ class CanvasRepositoryImpl
                 backgroundColor = backgroundColor,
                 animation = animationSettings,
                 colorProfile = colorProfile,
+                selection = activeSelection,
             ).also { markRastersShared() }
 
         private fun restore(snapshot: Snapshot) {
@@ -2822,7 +2825,7 @@ class CanvasRepositoryImpl
             pendingEdits.clear()
             damageTrackedSessions.clear()
             pendingSelection = null
-            activeSelection = null
+            activeSelection = snapshot.selection?.copy()
             activeStrokes.clear()
             synchronized(liveLock) { liveStrokes.clear() }
             strokeBrushParams.clear()
