@@ -730,12 +730,15 @@ object PsdCodec {
 
             COMPRESSION_RLE -> {
                 repeat(height) { reader.readShort() } // row byte counts
-                val out = ByteArray(width * height)
+                // A 16-bit row holds two bytes per pixel, so it is decoded at its full width before downsampling.
+                val bytesPerSample = if (depth == DEPTH_16) 2 else 1
+                val rowBytes = width * bytesPerSample
+                val out = ByteArray(rowBytes * height)
                 for (row in 0 until height) {
-                    val rowBytes = decodeRleRow(reader, width)
-                    System.arraycopy(rowBytes, 0, out, row * width, min(width, rowBytes.size))
+                    val decoded = decodeRleRow(reader, rowBytes)
+                    System.arraycopy(decoded, 0, out, row * rowBytes, min(rowBytes, decoded.size))
                 }
-                downsample(out, width, height, 1)
+                downsample(out, width, height, depth)
             }
 
             COMPRESSION_ZIP, COMPRESSION_ZIP_PREDICTION -> {
