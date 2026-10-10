@@ -119,6 +119,7 @@ object AbrReader {
         name: String?,
     ): Tip {
         require(width in 1..MAX_SIDE && height in 1..MAX_SIDE) { "A brush tip has an unexpected size" }
+        reader.spend(width, height)
         val depth = reader.short(start)
         require(depth == 8 || depth == 16) { "A brush tip has an unsupported depth" }
         val bytesPerSample = depth / 8
@@ -200,6 +201,17 @@ object AbrReader {
     ) {
         val size = bytes.size
 
+        // Every tip in a file shares one pixel budget, so many small allocations cannot add up to gigabytes.
+        private var spentPixels = 0L
+
+        fun spend(
+            width: Int,
+            height: Int,
+        ) {
+            spentPixels += width.toLong() * height
+            require(spentPixels <= MAX_TOTAL_PIXELS) { DAMAGED }
+        }
+
         fun byte(at: Int): Int {
             require(at in 0 until size) { DAMAGED }
             return bytes[at].toInt() and 0xFF
@@ -252,6 +264,7 @@ object AbrReader {
     private const val SECTION_HEADER = 12
     private const val SAMPLED = 2
     private const val MAX_TIPS = 1000
+    private const val MAX_TOTAL_PIXELS = 64_000_000L
     private const val MAX_NAME = 1024
     private const val MAX_SIDE = 5000
 
