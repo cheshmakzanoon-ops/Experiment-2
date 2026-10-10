@@ -405,7 +405,7 @@ class StrokeRasterizer(
                 val t = travelled / distance
                 drawDabAt(context, previous, current, t, distance, walk.accumulated + travelled, velocity)
                 walk.lastDabTravelled = travelled
-                travelled += dabSpacing(context, previous, current, t, distance, walk.accumulated + travelled, velocity)
+                travelled += dabSpacing(context, previous, current, t, walk.accumulated + travelled, velocity)
             }
             walk.carry = travelled - distance
             walk.accumulated += distance
@@ -422,7 +422,6 @@ class StrokeRasterizer(
         previous: StrokePoint,
         current: StrokePoint,
         t: Float,
-        distance: Float,
         accumulatedDistance: Float,
         velocity: Float,
     ): Float {
