@@ -35,9 +35,11 @@ import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import com.artflow.studio.domain.repository.canvas.CanvasSize
 import com.artflow.studio.domain.repository.canvas.CanvasState
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -114,6 +116,9 @@ class CanvasRepositoryImpl
         private val strokeSecondaries = mutableMapOf<Long, Int>()
         private val strokeDestinations = mutableMapOf<Long, StrokeDestination>()
 
+        /** Copies of each stroke's layer, started by [beginStroke] so the commit need not make one on the UI thread. */
+        private val strokeCopies = mutableMapOf<Long, StrokeCopy>()
+
         private var strokeColor: Int = 0xFF000000.toInt()
         private var symmetrySettings = SymmetryEngine.Settings()
         private var activeSelection: SelectionMask? = null
@@ -152,6 +157,12 @@ class CanvasRepositoryImpl
         private val dirtyRasters = mutableSetOf<Long>()
 
         private var rasterEditToken = 0L
+
+        /** A copy being made of [source], a layer raster, while its stroke is drawn. */
+        private class StrokeCopy(
+            val source: PixelBuffer,
+            val copy: Deferred<PixelBuffer>,
+        )
 
         private data class PendingEdit(
             val projectId: Long,
@@ -231,6 +242,7 @@ class CanvasRepositoryImpl
             synchronized(liveLock) { liveStrokes.clear() }
             strokeBrushParams.clear()
             strokeLayerIds.clear()
+            cancelStrokeCopies()
             strokeErasers.clear()
             strokeSecondaries.clear()
             strokeDestinations.clear()
@@ -359,6 +371,7 @@ class CanvasRepositoryImpl
             synchronized(liveLock) { liveStrokes.clear() }
             strokeBrushParams.clear()
             strokeLayerIds.clear()
+            cancelStrokeCopies()
             strokeErasers.clear()
             strokeSecondaries.clear()
             strokeDestinations.clear()
@@ -586,6 +599,7 @@ class CanvasRepositoryImpl
             strokeErasers[strokeId] = isEraser && !destination.isMask
             strokeSecondaries[strokeId] = secondaryStrokeColor
             strokeDestinations[strokeId] = destination
+            if (!destination.isMask) prepareStrokeCopy(strokeId, layer)
             return strokeId
         }
 
@@ -614,6 +628,19 @@ class CanvasRepositoryImpl
         }
 
         override fun endStroke(strokeId: Long) {
+            val prepared = strokeCopies.remove(strokeId)
+            try {
+                commitStroke(strokeId, prepared)
+            } finally {
+                // A copy the commit used is already complete, so cancelling it changes nothing.
+                prepared?.copy?.cancel()
+            }
+        }
+
+        private fun commitStroke(
+            strokeId: Long,
+            prepared: StrokeCopy?,
+        ) {
             val points = activeStrokes.remove(strokeId) ?: return
             val brushParams = strokeBrushParams.remove(strokeId) ?: return
             val layerId = strokeLayerIds.remove(strokeId) ?: return
@@ -650,12 +677,14 @@ class CanvasRepositoryImpl
             // A live stroke already holds its dabs: the commit lays them down instead of redrawing.
             val lives = synchronized(liveLock) { liveStrokes.remove(strokeId) }
             val live = lives?.takeIf { destination == StrokeDestination.LAYER && it.size == incoming.size && layer.strokes.isEmpty() }
+            // The copy made while the stroke was drawn, when it is ready and still the layer's raster.
+            val owned = if (destination.isMask) null else readyCopy(prepared, layer)
             val base =
                 if (live != null) {
-                    commitLive(layer, incoming, live)
+                    commitLive(layer, incoming, live, owned)
                 } else {
                     LayerStrokeRenderer.render(
-                        if (destination.isMask) layer.mask else layer.raster,
+                        if (destination.isMask) layer.mask else owned ?: layer.raster,
                         if (destination.isMask) emptyList() else layer.strokes.toList(),
                         incoming,
                         canvasWidth,
@@ -663,6 +692,7 @@ class CanvasRepositoryImpl
                         !destination.isMask && layer.isAlphaLocked,
                         activeSelection,
                         region = area,
+                        ownedBase = owned != null,
                     )
                 }
             val damageBefore = previewDamage
@@ -683,13 +713,43 @@ class CanvasRepositoryImpl
             emitAsync(CanvasInvalidationEvent.Full)
         }
 
+        /**
+         * Starts copying [layer]'s raster now, while the stroke is still being drawn, so the commit can take the
+         * copy instead of making one on the UI thread. Painting leaves the layer's raster alone until the commit
+         * (live strokes are drawn into their own buffers, and raster edits clone first), so the copy matches the
+         * raster unless a later edit replaces it, which [readyCopy] checks.
+         */
+        private fun prepareStrokeCopy(
+            strokeId: Long,
+            layer: LayerData,
+        ) {
+            val raster = layer.raster ?: return
+            if (raster.pixels.size.toLong() * BYTES_PER_PIXEL > Runtime.getRuntime().maxMemory() / LIVE_HEAP_SHARE) return
+            strokeCopies[strokeId] = StrokeCopy(raster, coroutineScope.async { raster.copy() })
+        }
+
+        /** The copy [prepared] made of [layer]'s raster, once it is ready and the raster is still the same buffer; else null. */
+        private fun readyCopy(
+            prepared: StrokeCopy?,
+            layer: LayerData,
+        ): PixelBuffer? {
+            if (prepared == null || prepared.source !== layer.raster || !prepared.copy.isCompleted) return null
+            return runCatching { prepared.copy.getCompleted() }.getOrNull()
+        }
+
+        private fun cancelStrokeCopies() {
+            strokeCopies.values.forEach { it.copy.cancel() }
+            strokeCopies.clear()
+        }
+
         /** [layer]'s pixels with the live [strokes] laid down, as a full redraw would paint them. */
         private fun commitLive(
             layer: LayerData,
             strokes: List<Stroke>,
             lives: List<StrokeRasterizer.LiveStroke>,
+            owned: PixelBuffer?,
         ): PixelBuffer {
-            val result = layer.raster?.copy() ?: PixelBuffer(canvasWidth, canvasHeight)
+            val result = owned ?: layer.raster?.copy() ?: PixelBuffer(canvasWidth, canvasHeight)
             val rasterizer = StrokeRasterizer()
             try {
                 synchronized(liveLock) {
@@ -721,6 +781,7 @@ class CanvasRepositoryImpl
 
         override fun cancelStroke(strokeId: Long) {
             synchronized(liveLock) { liveStrokes.remove(strokeId) }
+            strokeCopies.remove(strokeId)?.copy?.cancel()
             activeStrokes.remove(strokeId)
             strokeBrushParams.remove(strokeId)
             strokeLayerIds.remove(strokeId)
@@ -2889,6 +2950,7 @@ class CanvasRepositoryImpl
             synchronized(liveLock) { liveStrokes.clear() }
             strokeBrushParams.clear()
             strokeLayerIds.clear()
+            cancelStrokeCopies()
             strokeErasers.clear()
             strokeSecondaries.clear()
             strokeDestinations.clear()
@@ -3030,6 +3092,7 @@ class CanvasRepositoryImpl
             synchronized(liveLock) { liveStrokes.clear() }
             strokeBrushParams.clear()
             strokeLayerIds.clear()
+            cancelStrokeCopies()
             strokeErasers.clear()
             strokeSecondaries.clear()
             strokeDestinations.clear()
