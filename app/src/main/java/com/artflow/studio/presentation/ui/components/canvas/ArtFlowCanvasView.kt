@@ -1812,6 +1812,9 @@ class ArtFlowCanvasView
             renderer.setPrediction(null, 0f, 0)
         }
 
+        private fun activeLayerHasText(): Boolean =
+            canvasRepository.getAllLayers().firstOrNull { it.id == activeLayerId }?.textContent != null
+
         /** Lets the stabilised line catch up to the lift point, then commits or cancels the stroke. */
         private fun finishStroke(
             x: Float,
@@ -1829,7 +1832,12 @@ class ArtFlowCanvasView
                 }
             }
             val markBefore = canvasRepository.historyMark
+            val paintedText = activeLayerHasText()
             canvasRepository.endStroke(currentStrokeId)
+            // The first paint on editable text rasterises it: the glyphs stay, the text does not. Say so once.
+            if (paintedText && !activeLayerHasText()) {
+                onStatusMessage?.invoke("Painting rasterised this text: it stays visible but can no longer be edited as text")
+            }
             val shape = quickShapeShown?.takeIf { quickShapeApplied && it.nodes.isNotEmpty() }
             if (shape != null && canvasRepository.historyMark != markBefore) {
                 shapeEdit = ShapeEdit(shape, quickShapePressure, quickShapeTool, activeLayerId, canvasRepository.historyMark)
