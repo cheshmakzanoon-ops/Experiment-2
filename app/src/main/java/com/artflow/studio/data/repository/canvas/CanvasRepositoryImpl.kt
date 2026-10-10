@@ -3,6 +3,7 @@ package com.artflow.studio.data.repository.canvas
 import com.artflow.studio.core.animation.AnimationTimeline
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.color.ColorProfile
+import com.artflow.studio.core.color.ColorProfiles
 import com.artflow.studio.core.pixels.AdjustmentProcessor
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.LayerMaskFactory
@@ -986,7 +987,10 @@ class CanvasRepositoryImpl
         ): Boolean =
             withState {
                 val layer = layerById(layerId) ?: return@withState false
-                if (!layer.canPaint() || pixels.width != canvasWidth || pixels.height != canvasHeight) return@withState false
+                // A layer that a crop, rotation or resize has rasterised is no longer text, so a stale edit cannot re-attach text.
+                if (layer.text == null || !layer.canPaint() || pixels.width != canvasWidth || pixels.height != canvasHeight) {
+                    return@withState false
+                }
                 pushUndo()
                 layer.raster = pixels.copy()
                 layer.text = text
@@ -1851,7 +1855,11 @@ class CanvasRepositoryImpl
                 transformCanvas(canvasWidth, canvasHeight) { buffer, _ -> CanvasOperations.flip(buffer, axis, properties).buffer }
             }
 
-        /** Rasterise legacy vectors BEFORE transforming, retaining masks/effects as independent data. */
+        /**
+         * Rasterise legacy vectors BEFORE transforming, retaining masks/effects as independent data.
+         * Editable text layers are rasterised too: their glyphs stay in the raster, and dropping their
+         * TextLayerContent (the raster setter does this) means the layer can no longer be edited as text.
+         */
         private suspend fun transformCanvas(
             width: Int,
             height: Int,
@@ -1943,14 +1951,56 @@ class CanvasRepositoryImpl
             trackedMs.addAndGet(ms.coerceAtLeast(0L))
         }
 
+        /**
+         * Switches the profile and converts every stored value to it, so colours look the same afterwards.
+         * Every layer in every frame, its text colour and the background convert together, as one undo step.
+         */
         override suspend fun setColorProfile(
             profile: ColorProfile,
             undoable: Boolean,
         ): Boolean =
             withState {
-                if (profile == colorProfile) return@withState true
+                val from = colorProfile
+                if (profile == from) return@withState true
+                if (activeStrokes.isNotEmpty() || pendingEdits.isNotEmpty()) return@withState false
+                val frames = frameList
+                val revision = editRevision
+                val project = currentProjectId
+                val width = canvasWidth
+                val height = canvasHeight
+                val targets = allLayers().map { it.snapshotCopy() }
+                val required = width.toLong() * height * 4L * (targets.size + 6L)
+                require(required <= Runtime.getRuntime().maxMemory() * 3 / 5) {
+                    "Changing the colour profile needs more memory than this device provides"
+                }
+                val background = backgroundColor
+                markRastersShared()
+                val converted =
+                    withContext(Dispatchers.Default) {
+                        targets.associate { layer ->
+                            coroutineContext.ensureActive()
+                            // A new buffer is made, never written in place: buffers are shared with undo snapshots.
+                            val raster = rawLayerPixels(layer, width, height)?.let { ColorProfiles.convert(it, from, profile) }
+                            val text = layer.text?.let { it.copy(color = ColorProfiles.convert(it.color, from, profile)) }
+                            layer.id to (raster to text)
+                        } to ColorProfiles.convert(background, from, profile)
+                    }
+                if (currentProjectId != project || frameList !== frames || editRevision != revision) return@withState false
+                if (activeStrokes.isNotEmpty() || pendingEdits.isNotEmpty()) return@withState false
                 if (undoable) pushUndo()
                 colorProfile = profile
+                backgroundColor = converted.second
+                allLayers().forEach { layer ->
+                    val (raster, text) = converted.first.getValue(layer.id)
+                    if (raster != null) {
+                        layer.raster = raster
+                        layer.strokes.clear()
+                        layer.rasterFile = null
+                        dirtyRasters += layer.id
+                    }
+                    // Text is set after the raster, because the raster setter drops TextLayerContent.
+                    if (text != null) layer.text = text
+                }
                 dirty = true
                 emit(CanvasInvalidationEvent.Full)
                 true

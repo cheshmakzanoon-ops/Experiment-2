@@ -101,9 +101,15 @@ class CanvasOpsController(
         scope.launch { repository.setCanvasBackgroundColor(color) }
     }
 
-    /** Assigns the colour profile the canvas's colours are read in; undoable. */
+    /** Switches the canvas's colour profile, converting its colours; one undo step. */
     fun setColorProfile(profile: ColorProfile) {
-        scope.launch { if (repository.setColorProfile(profile)) notify("Colour profile: ${profile.label}") }
+        scope.launch {
+            if (repository.setColorProfile(profile)) {
+                notify("Colour profile: ${profile.label}")
+            } else {
+                notify("Finish the stroke or edit in progress, then change the colour profile")
+            }
+        }
     }
 
     private fun canvasSize(): Triple<Int, Int, Int> {

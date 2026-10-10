@@ -430,6 +430,8 @@ fun CanvasScreen(
         if (pendingText != null) {
             canvasView?.cancelActiveGesture()
             openMenu = null
+            // A new Add Text must not edit a text layer left over from an earlier session.
+            editingText = null
             panel = EditorPanel.TEXT
         }
     }

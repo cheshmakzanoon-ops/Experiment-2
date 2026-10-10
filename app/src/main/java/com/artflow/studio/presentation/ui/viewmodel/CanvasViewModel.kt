@@ -8,6 +8,7 @@ import com.artflow.studio.core.animation.AnimationTimeline
 import com.artflow.studio.core.animation.PlaybackStepper
 import com.artflow.studio.core.color.ColorHarmony
 import com.artflow.studio.core.color.ColorProfile
+import com.artflow.studio.core.color.ColorProfiles
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.color.PaletteLibrary
 import com.artflow.studio.core.export.ExportArea
@@ -346,7 +347,9 @@ class CanvasViewModel
                         try {
                             // Private layers (Insert a private photo) are left out of the recording.
                             val composite = canvasRepository.compositeWithoutPrivateLayers() ?: return@collect
-                            timelapse.capture(projectId, composite, _settings.value.timelapseMaxSide)
+                            // Stored values are in the document's profile; the recording is sRGB.
+                            val recorded = ColorProfiles.convert(composite, canvasRepository.getColorProfile(), ColorProfile.SRGB)
+                            timelapse.capture(projectId, recorded, _settings.value.timelapseMaxSide)
                             timelapseRevision = revision
                         } catch (cancelled: CancellationException) {
                             throw cancelled

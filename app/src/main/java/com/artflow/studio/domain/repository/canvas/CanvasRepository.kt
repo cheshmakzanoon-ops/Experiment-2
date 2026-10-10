@@ -515,7 +515,10 @@ interface CanvasRepository {
     /** The colour space pixel values are stored in. */
     fun getColorProfile(): ColorProfile = ColorProfile.SRGB
 
-    /** Assigns [profile]: pixel values stay as they are and are read in the new space. */
+    /**
+     * Switches [profile] and converts stored colours to it, so the canvas looks the same. Fails, changing
+     * nothing, while a stroke or edit is in progress.
+     */
     suspend fun setColorProfile(
         profile: ColorProfile,
         undoable: Boolean = true,
