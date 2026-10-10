@@ -1587,7 +1587,7 @@ class ArtFlowCanvasView
                             endX = canvasX,
                             endY = canvasY,
                             filled = input.shapeFilled,
-                            color = input.brushColor,
+                            color = canvasRepository.documentColor(input.brushColor),
                             strokeWidth = max(1f, input.brushParams.size / 4f),
                         )
                     }
@@ -1802,7 +1802,8 @@ class ArtFlowCanvasView
             }
             val radius = input.brushParams.size * 0.5f * pressure.coerceIn(MIN_PREDICTED_PRESSURE, 1f)
             val alpha = (input.brushParams.opacity.coerceIn(0f, 1f) * 255f).toInt()
-            renderer.setPrediction(points, radius, (input.brushColor and 0x00FFFFFF) or (alpha shl 24))
+            val predicted = canvasRepository.documentColor(input.brushColor)
+            renderer.setPrediction(points, radius, (predicted and 0x00FFFFFF) or (alpha shl 24))
             requestRender()
         }
 
@@ -2395,6 +2396,7 @@ class ArtFlowCanvasView
                     .getAllLayers()
                     .firstOrNull { it.isFillReference && it.isVisible && it.id != activeLayerId }
                     ?.id
+            val fillColor = canvasRepository.documentColor(captured.brushColor)
             coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
                 val reference = referenceId?.let { canvasRepository.layerPixels(it) }
                 applyFillEdit("Paint bucket", onCommitted) { target, selection, alphaLocked ->
@@ -2403,7 +2405,7 @@ class ArtFlowCanvasView
                             target = target,
                             startX = cx,
                             startY = cy,
-                            color = captured.brushColor,
+                            color = fillColor,
                             settings =
                                 FillTool.Settings(
                                     tolerance = tolerance,
@@ -2500,7 +2502,8 @@ class ArtFlowCanvasView
                         }
                     }
                 if (color != null) {
-                    val opaque = Channels.withAlpha(color, 255)
+                    // The canvas stores its own colour space; the picker shows sRGB.
+                    val opaque = Channels.withAlpha(canvasRepository.displayColor(color), 255)
                     if (source != null && source === samplingSource) {
                         onEyedropperChanged?.invoke(EyedropperLoupe(viewX, viewY, opaque, samplingPrevious))
                     }

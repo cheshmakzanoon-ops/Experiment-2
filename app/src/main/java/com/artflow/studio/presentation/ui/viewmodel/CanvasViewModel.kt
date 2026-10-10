@@ -444,7 +444,7 @@ class CanvasViewModel
                         width = size.width,
                         height = size.height,
                         dpi = size.dpi,
-                        backgroundColor = canvasRepository.getBackgroundColor(),
+                        backgroundColor = canvasRepository.displayColor(canvasRepository.getBackgroundColor()),
                         colorProfile = canvasRepository.getColorProfile(),
                     )
             }
@@ -506,6 +506,12 @@ class CanvasViewModel
 
         /** Swaps the primary and secondary colours, as tapping Procreate's secondary swatch does. */
         fun swapColors() = updateInput { it.copy(brushColor = it.secondaryColor, secondaryColor = it.brushColor) }
+
+        /** Converts an sRGB interface colour into the canvas's stored colour space. */
+        fun documentColor(srgb: Int): Int = canvasRepository.documentColor(srgb)
+
+        /** Converts a stored canvas colour back to sRGB for the interface. */
+        fun displayColor(stored: Int): Int = canvasRepository.displayColor(stored)
 
         fun setColor(color: Int) {
             updateInput { it.copy(brushColor = color) }

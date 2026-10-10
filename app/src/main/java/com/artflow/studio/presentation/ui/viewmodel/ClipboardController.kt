@@ -63,8 +63,9 @@ class ClipboardController(
         val selection = repository.selection()
         val target = layerId ?: repository.getActiveLayerId()
         val alphaLocked = repository.getAllLayers().firstOrNull { it.id == target }?.isAlphaLocked == true
+        val stored = repository.documentColor(color)
         repository.applyRasterEdit(target, "Fill layer") {
-            SelectionClipboard.fill(it, selection, color, alphaLocked)
+            SelectionClipboard.fill(it, selection, stored, alphaLocked)
         }
     }
 

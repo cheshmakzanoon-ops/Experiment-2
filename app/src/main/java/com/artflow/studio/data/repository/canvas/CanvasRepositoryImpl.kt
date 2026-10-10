@@ -564,7 +564,7 @@ class CanvasRepositoryImpl
                         y = y,
                         pressure = pressure,
                         timestamp = timestamp,
-                        color = destination.color(strokeColor, layer.maskInverted),
+                        color = destination.color(documentColor(strokeColor), layer.maskInverted),
                     ),
                 )
             strokeBrushParams[strokeId] =
@@ -2007,9 +2007,10 @@ class CanvasRepositoryImpl
 
         override suspend fun setCanvasBackgroundColor(color: Int): Boolean =
             withState {
-                if (color == backgroundColor) return@withState true
+                val stored = documentColor(color)
+                if (stored == backgroundColor) return@withState true
                 pushUndo()
-                backgroundColor = color
+                backgroundColor = stored
                 dirty = true
                 emit(CanvasInvalidationEvent.Full)
                 true
@@ -2018,7 +2019,7 @@ class CanvasRepositoryImpl
         override suspend fun clearCanvas(color: Int) =
             withState {
                 pushUndo()
-                backgroundColor = color
+                backgroundColor = documentColor(color)
                 currentLayers().forEach { layer ->
                     layer.strokes.clear()
                     layer.raster = PixelBuffer.filled(canvasWidth, canvasHeight, 0)

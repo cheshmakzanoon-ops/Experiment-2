@@ -61,7 +61,7 @@ class AdjustmentSessionController(
             selection = repository.selection()
             val parameters =
                 if (kind == LiveAdjustments.Kind.RECOLOR) {
-                    mapOf(LiveAdjustments.RECOLOR_RGB to (color and 0xFFFFFF).toFloat())
+                    mapOf(LiveAdjustments.RECOLOR_RGB to (repository.documentColor(color) and 0xFFFFFF).toFloat())
                 } else {
                     kind.adjustmentType?.defaultParameters.orEmpty()
                 }

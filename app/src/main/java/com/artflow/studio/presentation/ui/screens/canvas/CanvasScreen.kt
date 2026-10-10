@@ -629,7 +629,7 @@ fun CanvasScreen(
                             onEditText = { layer ->
                                 layer.textContent?.let { content ->
                                     viewModel.setText(content.text, content.style)
-                                    viewModel.setColor(content.color)
+                                    viewModel.setColor(viewModel.displayColor(content.color))
                                     editingText = layer
                                     panel = EditorPanel.TEXT
                                 }
@@ -735,14 +735,26 @@ fun CanvasScreen(
                         val editingContent = editing?.textContent
                         when {
                             editing != null && editingContent != null -> {
-                                val updated = editingContent.copy(text = input.text, style = input.textStyle, color = input.brushColor)
+                                val updated =
+                                    editingContent.copy(
+                                        text = input.text,
+                                        style = input.textStyle,
+                                        color = viewModel.documentColor(input.brushColor),
+                                    )
                                 viewModel.textLayers.edit(editing.id, updated)
                                 editingText = null
                             }
 
                             pending != null -> {
                                 // Text goes on its own layer and stays editable, as in Procreate.
-                                val content = TextLayerContent(input.text, input.textStyle, input.brushColor, pending.x, pending.y)
+                                val content =
+                                    TextLayerContent(
+                                        input.text,
+                                        input.textStyle,
+                                        viewModel.documentColor(input.brushColor),
+                                        pending.x,
+                                        pending.y,
+                                    )
                                 viewModel.textLayers.place(content)
                                 viewModel.cancelText()
                                 viewModel.setTool(ToolType.BRUSH)

@@ -515,6 +515,12 @@ interface CanvasRepository {
     /** The colour space pixel values are stored in. */
     fun getColorProfile(): ColorProfile = ColorProfile.SRGB
 
+    /** Converts an sRGB colour from the interface into the stored space, so it looks the same on this canvas. */
+    fun documentColor(srgb: Int): Int = com.artflow.studio.core.color.ColorProfiles.convert(srgb, ColorProfile.SRGB, getColorProfile())
+
+    /** Converts a stored colour back to sRGB for display in the interface. */
+    fun displayColor(stored: Int): Int = com.artflow.studio.core.color.ColorProfiles.convert(stored, getColorProfile(), ColorProfile.SRGB)
+
     /**
      * Switches [profile] and converts stored colours to it, so the canvas looks the same. Fails, changing
      * nothing, while a stroke or edit is in progress.
