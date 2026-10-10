@@ -2423,7 +2423,12 @@ class ArtFlowCanvasView
             start: Pair<Float, Float>,
             end: Pair<Float, Float>,
         ) {
-            val gradient = input.gradient.copy(type = input.gradientType, stops = input.gradient.stops.toList())
+            // The stops are interface sRGB; convert them into the canvas's stored space before drawing.
+            val gradient =
+                input.gradient.copy(
+                    type = input.gradientType,
+                    stops = input.gradient.stops.map { it.copy(color = canvasRepository.documentColor(it.color)) },
+                )
             applyFillEdit("Gradient") { target, selection, alphaLocked ->
                 GradientTool
                     .draw(
