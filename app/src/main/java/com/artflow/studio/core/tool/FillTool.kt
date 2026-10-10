@@ -237,7 +237,8 @@ object FillTool {
             for (x in 1 until width - 1) {
                 val index = y * width + x
                 if (covered(index)) continue
-                if (!(covered(index - 1) || covered(index + 1) || covered(index - width) || covered(index + width))) continue
+                val beside = covered(index - 1) || covered(index + 1)
+                if (!(beside || covered(index - width) || covered(index + width))) continue
                 val distance = sqrt(colorDistanceSquared(source.pixels[index], seed))
                 val share = ((tolerance + ramp - distance) / ramp).coerceIn(0f, 1f)
                 if (share > 0f) out.coverage[index] = (share * 255f).roundToInt().toByte()
