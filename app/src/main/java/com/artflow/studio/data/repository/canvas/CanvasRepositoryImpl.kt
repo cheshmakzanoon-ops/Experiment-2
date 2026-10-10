@@ -1075,7 +1075,8 @@ class CanvasRepositoryImpl
                 // A non-adjacent merge changes intervening compositing order; never silently do so.
                 if (source < 0 || target < 0 || kotlin.math.abs(source - target) != 1) return@withState false
                 val selected = listOf(layers[source], layers[target])
-                if (selected.any { !it.isVisible || it.isLocked || it.isReference }) return@withState false
+                // A group header has no pixels of its own; merging it would orphan the layers inside it.
+                if (selected.any { !it.isVisible || it.isLocked || it.isReference || it.isGroup }) return@withState false
                 val lowerIndex = minOf(source, target)
                 mergeStack(selected.map { it.id }.toSet(), targetLayerId, layers[target].name, lowerIndex) != null
             }
