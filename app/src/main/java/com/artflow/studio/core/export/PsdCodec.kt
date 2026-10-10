@@ -565,8 +565,9 @@ object PsdCodec {
                 val blue = planes[CHANNEL_BLUE]
                 for (index in buffer.pixels.indices) {
                     val r = channelValue(red, index, colorMode)
-                    val g = channelValue(green, index, colorMode)
-                    val b = channelValue(blue, index, colorMode)
+                    // A grayscale document has one gray plane, which fills all three colour channels.
+                    val g = if (colorMode == COLOR_MODE_GRAYSCALE) r else channelValue(green, index, colorMode)
+                    val b = if (colorMode == COLOR_MODE_GRAYSCALE) r else channelValue(blue, index, colorMode)
                     val a = alpha?.getOrNull(index)?.toInt()?.and(0xFF) ?: 255
                     buffer.pixels[index] = Channels.argb(a, r, g, b)
                 }
@@ -679,8 +680,9 @@ object PsdCodec {
         }
         for (index in buffer.pixels.indices) {
             val r = channelValue(red, index, colorMode)
-            val g = channelValue(green, index, colorMode)
-            val b = channelValue(blue, index, colorMode)
+            // A grayscale document has one gray plane, which fills all three colour channels.
+            val g = if (colorMode == COLOR_MODE_GRAYSCALE) r else channelValue(green, index, colorMode)
+            val b = if (colorMode == COLOR_MODE_GRAYSCALE) r else channelValue(blue, index, colorMode)
             val a = alpha?.getOrNull(index)?.toInt()?.and(0xFF) ?: 255
             buffer.pixels[index] = Channels.argb(a, r, g, b)
         }
