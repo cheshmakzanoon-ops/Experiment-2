@@ -988,9 +988,8 @@ class CanvasRepositoryImpl
             withState {
                 val layer = layerById(layerId) ?: return@withState false
                 // A layer that a crop, rotation or resize has rasterised is no longer text, so a stale edit cannot re-attach text.
-                if (layer.text == null || !layer.canPaint() || pixels.width != canvasWidth || pixels.height != canvasHeight) {
-                    return@withState false
-                }
+                if (layer.text == null) return@withState false
+                if (!layer.canPaint() || pixels.width != canvasWidth || pixels.height != canvasHeight) return@withState false
                 pushUndo()
                 layer.raster = pixels.copy()
                 layer.text = text

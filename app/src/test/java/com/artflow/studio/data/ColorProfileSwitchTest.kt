@@ -61,41 +61,45 @@ class ColorProfileSwitchTest {
     }
 
     @Test
-    fun switchingToDisplayP3KeepsEachColourLookingTheSame() = runTest {
-        repository.createCanvas(8, 6, 72)
-        val layer = repository.getActiveLayerId()
-        paint(layer, red)
-        assertTrue(repository.setColorProfile(ColorProfile.DISPLAY_P3, undoable = true))
-        val stored = firstPixel(layer)
-        assertEquals(ColorProfiles.convert(red, ColorProfile.SRGB, ColorProfile.DISPLAY_P3), stored)
-        assertWithinOneCode(red, ColorProfiles.convert(stored, ColorProfile.DISPLAY_P3, ColorProfile.SRGB))
-    }
+    fun switchingToDisplayP3KeepsEachColourLookingTheSame() =
+        runTest {
+            repository.createCanvas(8, 6, 72)
+            val layer = repository.getActiveLayerId()
+            paint(layer, red)
+            assertTrue(repository.setColorProfile(ColorProfile.DISPLAY_P3, undoable = true))
+            val stored = firstPixel(layer)
+            assertEquals(ColorProfiles.convert(red, ColorProfile.SRGB, ColorProfile.DISPLAY_P3), stored)
+            assertWithinOneCode(red, ColorProfiles.convert(stored, ColorProfile.DISPLAY_P3, ColorProfile.SRGB))
+        }
 
     @Test
-    fun aSwitchAcrossSeveralLayersIsOneUndoStep() = runTest {
-        repository.createCanvas(8, 6, 72)
-        val first = repository.getActiveLayerId()
-        val second = repository.addLayer(name = "Second").id
-        paint(first, red)
-        paint(second, blue)
-        val depth = repository.undoDepth
-        assertTrue(repository.setColorProfile(ColorProfile.DISPLAY_P3, undoable = true))
-        assertEquals(depth + 1, repository.undoDepth)
-        assertTrue(repository.undo())
-        assertEquals(ColorProfile.SRGB, repository.getColorProfile())
-        assertEquals(red, firstPixel(first))
-        assertEquals(blue, firstPixel(second))
-    }
+    fun aSwitchAcrossSeveralLayersIsOneUndoStep() =
+        runTest {
+            repository.createCanvas(8, 6, 72)
+            val first = repository.getActiveLayerId()
+            val second = repository.addLayer(name = "Second").id
+            paint(first, red)
+            paint(second, blue)
+            val depth = repository.undoDepth
+            assertTrue(repository.setColorProfile(ColorProfile.DISPLAY_P3, undoable = true))
+            assertEquals(depth + 1, repository.undoDepth)
+            assertTrue(repository.undo())
+            assertEquals(ColorProfile.SRGB, repository.getColorProfile())
+            assertEquals(red, firstPixel(first))
+            assertEquals(blue, firstPixel(second))
+        }
 
     @Test
-    fun textColourAndBackgroundConvertWithTheLayers() = runTest {
-        repository.createCanvas(8, 6, 72)
-        assertTrue(repository.setCanvasBackgroundColor(red))
-        val text = TextLayerContent("Hi", TextLayout.TextStyle(), red, 0f, 0f)
-        val layer = requireNotNull(repository.addTextLayer(text, PixelBuffer.filled(8, 6, blue)))
-        assertTrue(repository.setColorProfile(ColorProfile.DISPLAY_P3, undoable = true))
-        val converted = repository.getAllLayers().first { it.id == layer }.textContent
-        assertEquals(ColorProfiles.convert(red, ColorProfile.SRGB, ColorProfile.DISPLAY_P3), converted?.color)
-        assertEquals(ColorProfiles.convert(red, ColorProfile.SRGB, ColorProfile.DISPLAY_P3), repository.getBackgroundColor())
-    }
+    fun textColourAndBackgroundConvertWithTheLayers() =
+        runTest {
+            repository.createCanvas(8, 6, 72)
+            assertTrue(repository.setCanvasBackgroundColor(red))
+            val text = TextLayerContent("Hi", TextLayout.TextStyle(), red, 0f, 0f)
+            val layer = requireNotNull(repository.addTextLayer(text, PixelBuffer.filled(8, 6, blue)))
+            assertTrue(repository.setColorProfile(ColorProfile.DISPLAY_P3, undoable = true))
+            val converted = repository.getAllLayers().first { it.id == layer }.textContent
+            val expected = ColorProfiles.convert(red, ColorProfile.SRGB, ColorProfile.DISPLAY_P3)
+            assertEquals(expected, converted?.color)
+            assertEquals(expected, repository.getBackgroundColor())
+        }
 }
