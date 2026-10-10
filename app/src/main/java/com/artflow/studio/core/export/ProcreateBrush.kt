@@ -48,7 +48,7 @@ object ProcreateBrush {
                 spacing = (number("plotSpacing") ?: DEFAULT_SPACING).coerceIn(MIN_SPACING, 1f),
                 scatter = unit("plotJitter"),
                 count = 1 + (unit("shapeCount") * (MAX_COUNT - 1)).roundToInt(),
-                rotation = Math.toDegrees((number("shapeAngle") ?: 0f).toDouble()).toFloat() % FULL_TURN,
+                rotation = wrapDegrees(Math.toDegrees((number("shapeAngle") ?: 0f).toDouble()).toFloat()),
                 taperStart = unit("pencilTaperStartLength"),
                 taperEnd = unit("pencilTaperEndLength"),
                 taperOpacity = unit("pencilTaperOpacity"),
@@ -101,6 +101,9 @@ object ProcreateBrush {
     private const val MIN_SPACING = 0.01f
     private const val MAX_COUNT = 16
     private const val FULL_TURN = 360f
+
+    /** Kotlin's % keeps the sign of the dividend, so a negative angle needs wrapping to [0, 360). */
+    private fun wrapDegrees(degrees: Float): Float = ((degrees % FULL_TURN) + FULL_TURN) % FULL_TURN
     private const val MIN_ROUNDNESS = 0.05f
     private const val MOVING_GRAIN = 0.5f
 }

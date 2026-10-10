@@ -46,10 +46,12 @@ object BrushLibraryCodec {
     }
 
     private fun validateParameters(params: BrushParams) {
-        require(params.size in 1f..512f && params.spacing in 0.01f..1f) { "Unsupported brush size or spacing" }
-        require(params.count in 1..5 && params.scatter in 0f..2f) { "Unsupported brush scatter or dab count" }
+        // These bounds cover every built-in preset and every Procreate brush import, which both
+        // produce values beyond the Brush Studio sliders' usual ends (spacing 2.8, scatter 3, 16 dabs).
+        require(params.size in 1f..512f && params.spacing in 0.01f..4f) { "Unsupported brush size or spacing" }
+        require(params.count in 1..16 && params.scatter in 0f..4f) { "Unsupported brush scatter or dab count" }
         require(params.rotation in 0f..360f && params.textureRotation in 0f..360f) { "Unsupported brush rotation" }
-        require(params.textureScale in 0.25f..8f) { "Unsupported grain scale" }
+        require(params.textureScale in 0.05f..8f) { "Unsupported grain scale" }
         require(params.textureId in GRAIN_IDS || params.textureId?.matches(IMPORTED_GRAIN) == true) { "Unsupported grain source" }
         require(params.roundness in 0.05f..1f) { "Unsupported tip roundness" }
         require(params.wetEdges in 0f..1f) { "Unsupported wet edges" }
