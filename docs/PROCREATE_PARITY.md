@@ -140,11 +140,11 @@ The engine normalizes velocity over 0–10 document pixels per millisecond. At f
 speed response can reduce size by up to 50%, opacity by up to 30%, and shift hue by up to 60 degrees.
 Those are this engine's parameter contracts, not measurements or claims about Procreate's feel.
 
-Inspection also found a misleading implication in the previous documentation: storing
-`tiltInfluence` and `tiltToRotation` does not make tilt active. Neither field is consumed by the
-current rasterizer. The general rotation field likewise does not rotate a shaped tip; round tips
-are still used. Grain rotation remains a separate, implemented texture operation. These gaps stay
-open instead of receiving disconnected UI controls or a feature-completion checkmark.
+The rasterizer does consume tilt: `tiltInfluence` drives size and opacity, and `tiltToRotation`
+drives the tip angle (`StrokeRasterizer.kt`). The general rotation field turns flat and image tips.
+Round tips ignore rotation by design. Tilt azimuth units have not been checked on a physical stylus,
+so tilt remains open for device validation. Grain rotation is a separate, implemented texture
+operation.
 
 Added verification: seven shared core/JUnit cases and five Compose cases. Local standalone checks
 compile and execute the actual enum, parameter functions, colour conversions, pixel kernels and
