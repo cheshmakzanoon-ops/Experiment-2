@@ -18,10 +18,16 @@ class GifEncoderEdgeTest {
 
         // Blending the partly opaque pixel onto the white matte would make it visibly lighter than pure blue.
         val edge = image.getRGB(1, 0)
-        assertEquals("edge is opaque", 0xFF, (edge ushr 24) and 0xFF)
-        assertTrue("edge red ${(edge shr 16) and 0xFF}", ((edge shr 16) and 0xFF) < 16)
-        assertTrue("edge green ${(edge shr 8) and 0xFF}", ((edge shr 8) and 0xFF) < 16)
-        assertTrue("edge blue ${edge and 0xFF}", (edge and 0xFF) > 240)
-        assertEquals("clear pixel is transparent", 0, (image.getRGB(2, 0) ushr 24) and 0xFF)
+        val alpha: Int = (edge ushr 24) and 0xFF
+        val red: Int = (edge shr 16) and 0xFF
+        val green: Int = (edge shr 8) and 0xFF
+        val edgeBlue: Int = edge and 0xFF
+        assertEquals("edge is opaque", 255L, alpha.toLong())
+        assertTrue("edge red $red", red < 16)
+        assertTrue("edge green $green", green < 16)
+        assertTrue("edge blue $edgeBlue", edgeBlue > 240)
+
+        val clearAlpha: Int = (image.getRGB(2, 0) ushr 24) and 0xFF
+        assertEquals("clear pixel is transparent", 0L, clearAlpha.toLong())
     }
 }
