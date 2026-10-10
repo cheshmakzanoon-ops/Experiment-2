@@ -23,7 +23,7 @@ class DamagedModelFilesTest {
             val damaged = bytes.copyOf().also { it[offset] = (it[offset] + 1).toByte() }
             try {
                 ModelPackage.read(damaged)
-            } catch (refused: IllegalArgumentException) {
+            } catch (_: IllegalArgumentException) {
                 // The documented refusal.
             }
         }
