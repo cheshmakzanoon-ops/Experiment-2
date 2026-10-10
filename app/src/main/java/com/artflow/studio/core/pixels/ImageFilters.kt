@@ -384,20 +384,20 @@ object ImageFilters {
         val count = width * height
         val pixels = source.pixels
 
-        // Two scratch planes serve every pass and each channel is convolved on its own, so a blur holds
-        // six float planes at a time instead of twelve. The arithmetic per channel is unchanged.
-        val scratch = FloatArray(count)
+        // One shared pass plane serves every channel. Each channel's result plane also holds its input before
+        // the horizontal pass, so a blur holds five float planes at a time instead of six. The arithmetic per
+        // channel is unchanged.
         val passed = FloatArray(count)
 
         // shift < 0 blurs alpha; otherwise the colour channel at [shift] is premultiplied by alpha first.
         fun blur(shift: Int): FloatArray {
+            val result = FloatArray(count)
             for (i in 0 until count) {
                 val pixel = pixels[i]
                 val alpha = ((pixel ushr 24) and 0xFF) / 255f
-                scratch[i] = if (shift < 0) alpha else ((pixel ushr shift) and 0xFF) / 255f * alpha
+                result[i] = if (shift < 0) alpha else ((pixel ushr shift) and 0xFF) / 255f * alpha
             }
-            horizontalPass(scratch, passed, width, height, kernel, checkpoint)
-            val result = FloatArray(count)
+            horizontalPass(result, passed, width, height, kernel, checkpoint)
             verticalPassReal(passed, result, width, height, kernel, checkpoint)
             return result
         }
