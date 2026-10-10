@@ -265,6 +265,8 @@ internal object UsdaParser : UsdReader.Values<Any> {
         ): Any {
             if (!type.startsWith("quat") || value !is Numbers) return value
             val v = value.values
+            // Whole quaternions only: a partial one has no real part to move to the front.
+            require(v.size % QUAT == 0) { "The USD text is damaged" }
             return Numbers(DoubleArray(v.size) { v[(it - it % QUAT) + (it % QUAT + 1) % QUAT] })
         }
 
