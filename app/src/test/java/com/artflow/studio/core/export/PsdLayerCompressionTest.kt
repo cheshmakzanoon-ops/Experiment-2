@@ -133,9 +133,10 @@ class PsdLayerCompressionTest {
         val label = "depth=$depth compression=$compression"
         val layers = PsdCodec.read(psd(depth, compression))?.layers.orEmpty()
         assertEquals("$label: one layer", 1L, layers.size.toLong())
+        val pixels = layers.single().pixels.pixels
         for (i in 0 until 4) {
             val expected = argb(red[i], green[i], blue[i]).toLong()
-            assertEquals("$label pixel=$i", expected, layers.single().pixels.pixels[i].toLong())
+            assertEquals("$label pixel=$i", expected, pixels[i].toLong())
         }
     }
 
