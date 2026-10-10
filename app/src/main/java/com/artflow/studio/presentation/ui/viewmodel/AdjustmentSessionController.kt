@@ -123,7 +123,8 @@ class AdjustmentSessionController(
         previewJob?.cancel()
         previewJob =
             scope.launch {
-                val result = withContext(Dispatchers.Default) { result(current) } ?: return@launch
+                // A superseded preview throws from its next checkpoint, so it stops within a row instead of finishing.
+                val result = withContext(Dispatchers.Default) { result(current) { ensureActive() } } ?: return@launch
                 ensureActive()
                 result.pixels.copyInto(target.buffer.pixels)
                 repository.requestPreviewRefresh()
@@ -131,13 +132,23 @@ class AdjustmentSessionController(
     }
 
     /** The layer as it would be applied: the effect, limited to the selection and any painted area. */
-    private fun result(current: State): PixelBuffer? {
+    private fun result(
+        current: State,
+        checkpoint: () -> Unit = {},
+    ): PixelBuffer? {
         val source = original ?: return null
         val settingsState = current.copy(pencil = false)
         val effect =
             filtered?.takeIf { it.first == settingsState }?.second
                 ?: LiveAdjustments
-                    .apply(current.kind, source, current.settings, null, alphaLocked = session?.alphaLocked == true)
+                    .apply(
+                        current.kind,
+                        source,
+                        current.settings,
+                        null,
+                        alphaLocked = session?.alphaLocked == true,
+                        checkpoint = checkpoint,
+                    )
                     .also { filtered = settingsState to it }
         return AdjustmentPaint.mix(source, effect, selection, painted.takeIf { current.pencil })
     }

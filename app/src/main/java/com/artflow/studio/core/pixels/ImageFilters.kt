@@ -23,14 +23,16 @@ object ImageFilters {
      * Separable Gaussian blur.
      *
      * @param radius standard deviation in pixels; `0` returns a copy unchanged.
+     * @param checkpoint called once per row as the blur runs; a throw from it abandons the blur.
      */
     fun gaussianBlur(
         source: PixelBuffer,
         radius: Float,
+        checkpoint: () -> Unit = {},
     ): PixelBuffer {
         if (radius <= 0.01f) return source.copy()
         val kernel = gaussianKernel(radius)
-        return separableConvolve(source, kernel)
+        return separableConvolve(source, kernel, checkpoint)
     }
 
     /** Fast approximate blur with a repeated box filter (used for large radii and mask feathering). */
@@ -43,11 +45,15 @@ object ImageFilters {
         return separableConvolve(source, kernel)
     }
 
-    /** Directional motion blur. [angleDegrees] is measured clockwise from the +x axis. */
+    /**
+     * Directional motion blur. [angleDegrees] is measured clockwise from the +x axis. [checkpoint] runs once per row,
+     * so a throw from it abandons the blur part way through.
+     */
     fun motionBlur(
         source: PixelBuffer,
         distance: Float,
         angleDegrees: Float,
+        checkpoint: () -> Unit = {},
     ): PixelBuffer {
         if (distance <= 0.5f) return source.copy()
         val steps = max(2, distance.roundToInt())
@@ -58,6 +64,7 @@ object ImageFilters {
         val out = PixelBuffer(source.width, source.height)
         val half = distance / 2f
         for (y in 0 until source.height) {
+            checkpoint()
             for (x in 0 until source.width) {
                 var a = 0f
                 var r = 0f
@@ -369,6 +376,7 @@ object ImageFilters {
     private fun separableConvolve(
         source: PixelBuffer,
         kernel: FloatArray,
+        checkpoint: () -> Unit = {},
     ): PixelBuffer {
         val width = source.width
         val height = source.height
@@ -387,9 +395,9 @@ object ImageFilters {
                 val alpha = ((pixel ushr 24) and 0xFF) / 255f
                 scratch[i] = if (shift < 0) alpha else ((pixel ushr shift) and 0xFF) / 255f * alpha
             }
-            horizontalPass(scratch, passed, width, height, kernel)
+            horizontalPass(scratch, passed, width, height, kernel, checkpoint)
             val result = FloatArray(count)
-            verticalPassReal(passed, result, width, height, kernel)
+            verticalPassReal(passed, result, width, height, kernel, checkpoint)
             return result
         }
 
@@ -432,9 +440,11 @@ object ImageFilters {
         width: Int,
         height: Int,
         kernel: FloatArray,
+        checkpoint: () -> Unit = {},
     ) {
         val radius = kernel.size / 2
         for (y in 0 until height) {
+            checkpoint()
             val row = y * width
             for (x in 0 until width) {
                 var sum = 0f
@@ -453,9 +463,11 @@ object ImageFilters {
         width: Int,
         height: Int,
         kernel: FloatArray,
+        checkpoint: () -> Unit = {},
     ) {
         val radius = kernel.size / 2
         for (y in 0 until height) {
+            checkpoint()
             for (x in 0 until width) {
                 var sum = 0f
                 for (k in -radius..radius) {
