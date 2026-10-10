@@ -2,6 +2,7 @@ package com.artflow.studio.domain.repository.canvas
 
 import com.artflow.studio.core.animation.AnimationTimeline
 import com.artflow.studio.core.color.ColorProfile
+import com.artflow.studio.core.color.ColorProfiles
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.PixelBuffer
@@ -516,10 +517,10 @@ interface CanvasRepository {
     fun getColorProfile(): ColorProfile = ColorProfile.SRGB
 
     /** Converts an sRGB colour from the interface into the stored space, so it looks the same on this canvas. */
-    fun documentColor(srgb: Int): Int = com.artflow.studio.core.color.ColorProfiles.convert(srgb, ColorProfile.SRGB, getColorProfile())
+    fun documentColor(srgb: Int): Int = ColorProfiles.convert(srgb, ColorProfile.SRGB, getColorProfile())
 
     /** Converts a stored colour back to sRGB for display in the interface. */
-    fun displayColor(stored: Int): Int = com.artflow.studio.core.color.ColorProfiles.convert(stored, getColorProfile(), ColorProfile.SRGB)
+    fun displayColor(stored: Int): Int = ColorProfiles.convert(stored, getColorProfile(), ColorProfile.SRGB)
 
     /**
      * Switches [profile] and converts stored colours to it, so the canvas looks the same. Fails, changing
