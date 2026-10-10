@@ -110,6 +110,57 @@ object LiquifyTool {
             }
             return out
         }
+
+        /** Copies the displacement inside [bounds], so it can be resampled later while this map keeps changing. */
+        fun copyRegion(bounds: IntBounds): Region {
+            require(bounds.left >= 0 && bounds.top >= 0) { "Region must lie inside the displacement map" }
+            require(bounds.right < width && bounds.bottom < height && !bounds.isEmpty) { "Region must lie inside the displacement map" }
+            val size = bounds.width * bounds.height
+            val copy = Region(bounds, FloatArray(size), FloatArray(size), BooleanArray(size))
+            if (isEmpty()) return copy
+            for (row in 0 until bounds.height) {
+                val from = (bounds.top + row) * width + bounds.left
+                val to = row * bounds.width
+                offsetX.copyInto(copy.offsetX, to, from, from + bounds.width)
+                offsetY.copyInto(copy.offsetY, to, from, from + bounds.width)
+                touched.copyInto(copy.touched, to, from, from + bounds.width)
+            }
+            return copy
+        }
+
+        /** A detached part of a displacement field. Resampling it never reads the live map. */
+        class Region internal constructor(
+            val bounds: IntBounds,
+            internal val offsetX: FloatArray,
+            internal val offsetY: FloatArray,
+            internal val touched: BooleanArray,
+        ) {
+            /** Bilinear resample of [source] through this region, row-major, pixel for pixel as [apply] does. */
+            fun resample(
+                source: PixelBuffer,
+                alphaLock: Boolean,
+            ): IntArray {
+                require(bounds.right < source.width && bounds.bottom < source.height) { "Region must lie inside the source" }
+                val regionWidth = bounds.width
+                val out = IntArray(regionWidth * bounds.height)
+                for (row in 0 until bounds.height) {
+                    val sourceY = bounds.top + row
+                    for (column in 0 until regionWidth) {
+                        val sourceX = bounds.left + column
+                        val index = row * regionWidth + column
+                        val original = source.pixels[sourceY * source.width + sourceX]
+                        val warped =
+                            if (touched[index]) {
+                                source.sampleBilinear(sourceX + 0.5f + offsetX[index], sourceY + 0.5f + offsetY[index])
+                            } else {
+                                original
+                            }
+                        out[index] = if (alphaLock) keepCoverage(original, warped) else warped
+                    }
+                }
+                return out
+            }
+        }
     }
 
     data class Settings(
@@ -377,15 +428,7 @@ object LiquifyTool {
         ): PixelBuffer {
             if (!settings.alphaLock) return result
             for (index in result.pixels.indices) {
-                val original = source.pixels[index]
-                val candidate = result.pixels[index]
-                val alpha = original ushr 24
-                result.pixels[index] =
-                    if (alpha == 0 || (candidate ushr 24) == 0) {
-                        original
-                    } else {
-                        (candidate and 0x00FFFFFF) or (alpha shl 24)
-                    }
+                result.pixels[index] = keepCoverage(source.pixels[index], result.pixels[index])
             }
             return result
         }
@@ -394,6 +437,30 @@ object LiquifyTool {
             val t = falloff.coerceIn(0f, 1f)
             return t * t * (3f - 2f * t)
         }
+
+        /**
+         * Copies the warp inside [bounds] now, on the calling thread. The snapshot can then be rendered on
+         * another thread while this session keeps taking drag samples. Reconstruct is not snapshotted: it
+         * reads a live restore field, so it is rendered with [render] instead.
+         */
+        fun snapshotWarp(bounds: IntBounds): WarpSnapshot {
+            require(settings.mode != Mode.RECONSTRUCT) { "Reconstruct is rendered with render, not snapshotted" }
+            return WarpSnapshot(map.copyRegion(bounds), settings.alphaLock)
+        }
+    }
+
+    /**
+     * A frozen part of a warp. Rendering it reads only its own copy and the source it is given, so it is
+     * safe to run off the UI thread. Pixels outside [bounds] are unchanged by the warp.
+     */
+    class WarpSnapshot internal constructor(
+        private val region: DisplacementMap.Region,
+        private val alphaLock: Boolean,
+    ) {
+        val bounds: IntBounds get() = region.bounds
+
+        /** Row-major pixels for [bounds], warped from [source], which must be the layer as it was before the gesture. */
+        fun render(source: PixelBuffer): IntArray = region.resample(source, alphaLock)
     }
 
     fun beginSession(
@@ -414,6 +481,15 @@ object LiquifyTool {
     }
 
     private fun unit(value: Float): Float = if (value.isFinite()) value.coerceIn(0f, 1f) else 0f
+
+    /** Keeps [original]'s alpha with the warped colour, and falls back to [original] where either side is clear. */
+    private fun keepCoverage(
+        original: Int,
+        warped: Int,
+    ): Int {
+        val alpha = original ushr 24
+        return if (alpha == 0 || (warped ushr 24) == 0) original else (warped and 0x00FFFFFF) or (alpha shl 24)
+    }
 
     /** Applies the accumulated displacement to the layer in place. */
     fun commit(

@@ -362,6 +362,8 @@ class ArtFlowCanvasView
         private var cloneDragStarted = false
         private var lastPreviewRequest = 0L
         private var lastLiquifyPreview = 0L
+        private var liquifyPreviewJob: Job? = null
+        private var liquifyPreviewQueued = false
 
         // --- Callbacks ----------------------------------------------------------------------------
 
@@ -494,6 +496,7 @@ class ArtFlowCanvasView
             healingSession = null
             liquifySession = null
             gestureLiquifyReference = null
+            cancelLiquifyPreview()
         }
 
         override fun onDetachedFromWindow() {
@@ -2261,16 +2264,65 @@ class ArtFlowCanvasView
             requestPreviewRefresh()
         }
 
-        /** Full-canvas resample of the liquify map, throttled so dragging stays responsive. */
+        /**
+         * Throttled live preview of a liquify gesture. Warps render from a snapshot of the displacement on a
+         * background thread, one at a time, so the UI thread only copies the region the gesture has touched.
+         * Reconstruct blends a live restore field and still renders here, so it stays under the pixel cap.
+         */
         private fun previewLiquify(buffer: PixelBuffer) {
             val session = liquifySession ?: return
             val base = rasterBase ?: return
             val now = System.currentTimeMillis()
             if (now - lastLiquifyPreview < LIQUIFY_PREVIEW_INTERVAL_MS) return
             lastLiquifyPreview = now
-            if (buffer.width * buffer.height > LIQUIFY_PREVIEW_MAX_PIXELS) return
-            val preview = session.render(base, gestureLiquifyReference?.original)
-            preview.pixels.copyInto(buffer.pixels)
+            if (session.settings.mode == LiquifyTool.Mode.RECONSTRUCT) {
+                if (buffer.width * buffer.height > LIQUIFY_PREVIEW_MAX_PIXELS) return
+                session.render(base, gestureLiquifyReference?.original).pixels.copyInto(buffer.pixels)
+                return
+            }
+            if (liquifyPreviewJob?.isActive == true) {
+                liquifyPreviewQueued = true
+                return
+            }
+            launchLiquifyPreview(session, buffer, base)
+        }
+
+        private fun launchLiquifyPreview(
+            session: LiquifyTool.Session,
+            buffer: PixelBuffer,
+            base: PixelBuffer,
+        ) {
+            val bounds = session.dirtyBounds ?: return
+            val snapshot = session.snapshotWarp(bounds)
+            liquifyPreviewJob =
+                coroutineScope.launch {
+                    val pixels = withContext(Dispatchers.Default) { snapshot.render(base) }
+                    // The gesture may have ended while this rendered. Only paste into the gesture that asked for it.
+                    if (rasterBuffer !== buffer || liquifySession !== session) return@launch
+                    pasteRegion(buffer, snapshot.bounds, pixels)
+                    requestPreviewRefresh()
+                    if (liquifyPreviewQueued) {
+                        liquifyPreviewQueued = false
+                        launchLiquifyPreview(session, buffer, base)
+                    }
+                }
+        }
+
+        private fun pasteRegion(
+            buffer: PixelBuffer,
+            bounds: IntBounds,
+            pixels: IntArray,
+        ) {
+            for (row in 0 until bounds.height) {
+                val to = (bounds.top + row) * buffer.width + bounds.left
+                pixels.copyInto(buffer.pixels, to, row * bounds.width, (row + 1) * bounds.width)
+            }
+        }
+
+        private fun cancelLiquifyPreview() {
+            liquifyPreviewJob?.cancel()
+            liquifyPreviewJob = null
+            liquifyPreviewQueued = false
         }
 
         private fun moveOriginX(): Float = moveStart.first
@@ -2316,6 +2368,8 @@ class ArtFlowCanvasView
             healingSession = null
             liquifySession = null
             gestureLiquifyReference = null
+            // A preview still rendering must not paste over the committed pixels.
+            cancelLiquifyPreview()
             coroutineScope.launch {
                 try {
                     if (!cancelled) {
