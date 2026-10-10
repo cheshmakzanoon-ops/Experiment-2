@@ -145,7 +145,7 @@ internal object UsdaParser : UsdReader.Values<Any> {
         fun layer(): Map<String, Map<String, Any>> {
             val root = specs.getOrPut("/") { HashMap() }
             if (peek().isPunct("(")) metadata(root)
-            body("/", root)
+            body("/", root, depth = 0)
             return specs
         }
 
@@ -163,6 +163,7 @@ internal object UsdaParser : UsdReader.Values<Any> {
         private fun body(
             path: String,
             fields: MutableMap<String, Any>,
+            depth: Int,
         ) {
             while (true) {
                 val token = next()
@@ -174,8 +175,8 @@ internal object UsdaParser : UsdReader.Values<Any> {
                     }
                     token.isPunct(";") -> Unit
                     token.kind != Kind.WORD -> throw IllegalArgumentException("The USD text is damaged")
-                    token.text in SPECIFIERS -> prim(path, token.text)
-                    token.text == "variantSet" -> variantSet(path, fields)
+                    token.text in SPECIFIERS -> prim(path, token.text, depth)
+                    token.text == "variantSet" -> variantSet(path, fields, depth)
                     token.text == "reorder" -> statement()
                     else -> property(path, token.text)
                 }
@@ -191,7 +192,9 @@ internal object UsdaParser : UsdReader.Values<Any> {
         private fun prim(
             parent: String,
             specifier: String,
+            depth: Int,
         ) {
+            require(depth < MAX_DEPTH) { "The USD text is nested too deeply" }
             val type = if (peek().kind == Kind.WORD) word() else null
             val name = next().also { require(it.kind == Kind.STRING) { "The USD text is damaged" } }.text
             val path = if (parent == "/") "/$name" else "$parent/$name"
@@ -204,7 +207,7 @@ internal object UsdaParser : UsdReader.Values<Any> {
                 specs.remove(path)
                 return
             }
-            body(path, fields)
+            body(path, fields, depth + 1)
             if (fields["active"] == "false") specs.keys.removeAll { it == path || it.startsWith("$path/") || it.startsWith("$path.") }
         }
 
@@ -212,6 +215,7 @@ internal object UsdaParser : UsdReader.Values<Any> {
         private fun variantSet(
             path: String,
             fields: MutableMap<String, Any>,
+            depth: Int,
         ) {
             val set = next().text
             expect("=")
@@ -221,7 +225,7 @@ internal object UsdaParser : UsdReader.Values<Any> {
                 val variant = next().also { require(it.kind == Kind.STRING) { "The USD text is damaged" } }.text
                 if (peek().isPunct("(")) metadata(HashMap())
                 expect("{")
-                if (variant == selected) body(path, fields) else skipBlock()
+                if (variant == selected) body(path, fields, depth + 1) else skipBlock()
             }
         }
 
