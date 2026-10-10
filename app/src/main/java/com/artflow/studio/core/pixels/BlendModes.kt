@@ -378,14 +378,42 @@ object BlendModes {
         if (maxChannel <= minChannel) return Triple(0f, 0f, 0f)
 
         val range = maxChannel - minChannel
-        // Sort the channels so we can map min -> 0, mid -> scaled, max -> target.
-        val order = listOf(0 to r, 1 to g, 2 to b).sortedBy { it.second }
-        val result = FloatArray(3)
-        result[order[0].first] = 0f
-        result[order[1].first] = ((order[1].second - minChannel) * target) / range
-        result[order[2].first] = target
-        return Triple(result[0], result[1], result[2])
+        // Each channel's place in ascending order, with ties going to the lower channel index as a stable sort would.
+        // The places map min -> 0, mid -> scaled, max -> target. Working them out here avoids a list per pixel.
+        val placeR = before(g, r) + before(b, r)
+        val placeG = beforeOrTied(r, g) + before(b, g)
+        val placeB = beforeOrTied(r, b) + beforeOrTied(g, b)
+        return Triple(
+            saturatedChannel(r, placeR, minChannel, range, target),
+            saturatedChannel(g, placeG, minChannel, range, target),
+            saturatedChannel(b, placeB, minChannel, range, target),
+        )
     }
+
+    /** 1 when [first] sorts strictly before [second], else 0. */
+    private fun before(
+        first: Float,
+        second: Float,
+    ): Int = if (first.compareTo(second) < 0) 1 else 0
+
+    /** 1 when [first] sorts before [second] or ties with it, else 0. Use it only where [first] has the lower index. */
+    private fun beforeOrTied(
+        first: Float,
+        second: Float,
+    ): Int = if (first.compareTo(second) <= 0) 1 else 0
+
+    private fun saturatedChannel(
+        value: Float,
+        place: Int,
+        minChannel: Float,
+        range: Float,
+        target: Float,
+    ): Float =
+        when (place) {
+            0 -> 0f
+            1 -> ((value - minChannel) * target) / range
+            else -> target
+        }
 
     /**
      * Blend modes available to the user. `PASS_THROUGH` is a group-only mode and behaves as
