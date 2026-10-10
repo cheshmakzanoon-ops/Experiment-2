@@ -17,12 +17,30 @@ class Psd16BitCompositeTest {
         b: Int,
     ): Int = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
 
-    /** One channel as big-endian 16-bit samples: the high byte is the image value, the low byte is noise. */
+    /**
+     * One channel as big-endian 16-bit samples: the high byte is the image value, and the low byte falls as the
+     * value rises, so predicted differences borrow from the high byte.
+     */
     private fun plane(values: IntArray): ByteArray {
         val out = ByteArrayOutputStream()
         values.forEach {
             out.write(it)
-            out.write(0x5A)
+            out.write(0xFF - it)
+        }
+        return out.toByteArray()
+    }
+
+    /** One channel with ZIP prediction: each row keeps its first 16-bit sample, then stores the difference from it. */
+    private fun predictedPlane(values: IntArray): ByteArray {
+        val words = values.map { (it shl 8) or (0xFF - it) }
+        val out = ByteArrayOutputStream()
+        for (row in 0 until 2) {
+            val first = words[row * 2]
+            val difference = (words[row * 2 + 1] - first) and 0xFFFF
+            out.write(first ushr 8)
+            out.write(first and 0xFF)
+            out.write(difference ushr 8)
+            out.write(difference and 0xFF)
         }
         return out.toByteArray()
     }
@@ -75,8 +93,15 @@ class Psd16BitCompositeTest {
         return out.toByteArray()
     }
 
-    private fun zipBody(): ByteArray {
-        val data = rawBody()
+    private fun zipBody(): ByteArray = deflated(rawBody())
+
+    /** The planes as one zlib stream, each with ZIP prediction applied. */
+    private fun predictedZipBody(): ByteArray {
+        val data = listOf(red, green, blue).fold(ByteArray(0)) { acc, values -> acc + predictedPlane(values) }
+        return deflated(data)
+    }
+
+    private fun deflated(data: ByteArray): ByteArray {
         val deflater = Deflater()
         deflater.setInput(data)
         deflater.finish()
@@ -112,5 +137,10 @@ class Psd16BitCompositeTest {
     @Test
     fun aZipSixteenBitMergedImageKeepsEachSamplesHighByte() {
         assertComposite("zip", psd(compression = 2, body = zipBody()))
+    }
+
+    @Test
+    fun aPredictedZipSixteenBitMergedImageUndoesThePredictionOnWholeSamples() {
+        assertComposite("predicted zip", psd(compression = 3, body = predictedZipBody()))
     }
 }

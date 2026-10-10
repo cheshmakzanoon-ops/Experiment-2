@@ -676,14 +676,13 @@ object PsdCodec {
 
             COMPRESSION_ZIP, COMPRESSION_ZIP_PREDICTION -> {
                 // A layer channel is one zlib stream whose length is the record's declared length, with no size prefix.
-                // Prediction is undone on 8-bit samples only, as for the merged image.
                 val size = min(declaredLength - 2, reader.remaining())
-                val unsupported = compression == COMPRESSION_ZIP_PREDICTION && depth == DEPTH_16
-                if (size <= 0 || unsupported) {
+                if (size <= 0) {
                     ByteArray(width * height)
                 } else {
-                    val plane = inflate(reader.readBytes(size)).copyOf(width * height * (if (depth == DEPTH_16) 2 else 1))
-                    if (compression == COMPRESSION_ZIP_PREDICTION) undoPrediction(plane, width, height)
+                    val bytesPerSample = if (depth == DEPTH_16) 2 else 1
+                    val plane = inflate(reader.readBytes(size)).copyOf(width * height * bytesPerSample)
+                    if (compression == COMPRESSION_ZIP_PREDICTION) undoPrediction(plane, width, height, bytesPerSample)
                     downsample(plane, width, height, depth)
                 }
             }
@@ -929,12 +928,11 @@ object PsdCodec {
             COMPRESSION_ZIP, COMPRESSION_ZIP_PREDICTION -> {
                 // The merged image is one zlib stream: each channel's whole plane follows the one before it.
                 val planeBytes = width * height * bytesPerSample
-                if (compression == COMPRESSION_ZIP_PREDICTION && bytesPerSample != 1) return null
                 val stream = inflate(reader.readBytes(reader.remaining()))
                 if (stream.size < planeBytes * channelIds.size) return null
                 channelIds.forEachIndexed { index, id ->
                     val plane = stream.copyOfRange(index * planeBytes, (index + 1) * planeBytes)
-                    if (compression == COMPRESSION_ZIP_PREDICTION) undoPrediction(plane, width, height)
+                    if (compression == COMPRESSION_ZIP_PREDICTION) undoPrediction(plane, width, height, bytesPerSample)
                     planes[id] = plane
                 }
             }
@@ -959,16 +957,28 @@ object PsdCodec {
     /** Keeps the high byte of each 16-bit sample. */
     private fun highBytes(samples: ByteArray): ByteArray = ByteArray(samples.size / 2) { samples[it * 2] }
 
-    /** Undoes ZIP prediction on 8-bit samples: each byte was stored as its difference from the byte before it in its row. */
+    /**
+     * Undoes ZIP prediction: each sample was stored as its difference from the sample before it in its row,
+     * modulo the sample size. A 16-bit sample is a big-endian pair of bytes, so its carry crosses the high byte.
+     */
     private fun undoPrediction(
         plane: ByteArray,
         width: Int,
         height: Int,
+        bytesPerSample: Int,
     ) {
+        val rowBytes = width * bytesPerSample
         for (row in 0 until height) {
-            val start = row * width
+            val start = row * rowBytes
             for (x in 1 until width) {
-                plane[start + x] = (plane[start + x] + plane[start + x - 1]).toByte()
+                val at = start + x * bytesPerSample
+                val before = at - bytesPerSample
+                var carry = 0
+                for (b in bytesPerSample - 1 downTo 0) {
+                    val sum = (plane[at + b].toInt() and 0xFF) + (plane[before + b].toInt() and 0xFF) + carry
+                    plane[at + b] = sum.toByte()
+                    carry = sum ushr 8
+                }
             }
         }
     }

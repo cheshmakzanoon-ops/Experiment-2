@@ -16,7 +16,10 @@ class PsdLayerCompressionTest {
         b: Int,
     ): Int = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
 
-    /** One 2 x 2 channel: 8-bit samples are the values; 16-bit samples carry the value as the high byte. */
+    /**
+     * One 2 x 2 channel: 8-bit samples are the values; 16-bit samples carry the value as the high byte and a
+     * low byte that falls as the value rises, so each predicted difference borrows from the high byte.
+     */
     private fun samples(
         values: IntArray,
         depth: Int,
@@ -24,19 +27,38 @@ class PsdLayerCompressionTest {
         val out = ByteArrayOutputStream()
         values.forEach {
             out.write(it)
-            if (depth == 16) out.write(0x5A)
+            if (depth == 16) out.write(0xFF - it)
         }
         return out.toByteArray()
     }
 
-    /** ZIP prediction stores each byte as its difference from the byte before it in its row. */
-    private fun predict(plane: ByteArray): ByteArray {
+    /** ZIP prediction stores each sample as its difference from the sample before it in its row, modulo the sample size. */
+    private fun predict(
+        plane: ByteArray,
+        bytesPerSample: Int,
+    ): ByteArray {
         val out = plane.copyOf()
+        val mask = (1 shl (8 * bytesPerSample)) - 1
         for (row in 0 until 2) {
-            val start = row * 2
-            out[start + 1] = (plane[start + 1] - plane[start]).toByte()
+            val start = row * 2 * bytesPerSample
+            val first = bigEndian(plane, start, bytesPerSample)
+            val second = bigEndian(plane, start + bytesPerSample, bytesPerSample)
+            val difference = (second - first) and mask
+            for (b in 0 until bytesPerSample) {
+                out[start + bytesPerSample + b] = (difference ushr (8 * (bytesPerSample - 1 - b))).toByte()
+            }
         }
         return out
+    }
+
+    private fun bigEndian(
+        bytes: ByteArray,
+        start: Int,
+        count: Int,
+    ): Int {
+        var value = 0
+        for (b in 0 until count) value = (value shl 8) or (bytes[start + b].toInt() and 0xFF)
+        return value
     }
 
     /** One channel's data as the layer record stores it: its compression code, then its pixels. */
@@ -63,7 +85,7 @@ class PsdLayerCompressionTest {
             }
 
             else -> {
-                val source = if (compression == ZIP_PREDICTION) predict(data) else data
+                val source = if (compression == ZIP_PREDICTION) predict(data, depth / 8) else data
                 val deflater = Deflater()
                 deflater.setInput(source)
                 deflater.finish()
@@ -173,6 +195,11 @@ class PsdLayerCompressionTest {
     @Test
     fun sixteenBitZipLayersKeepEachSamplesHighByte() {
         assertLayerPixels(depth = 16, compression = ZIP)
+    }
+
+    @Test
+    fun sixteenBitPredictedZipLayersUndoThePredictionOnWholeSamples() {
+        assertLayerPixels(depth = 16, compression = ZIP_PREDICTION)
     }
 
     private companion object {
