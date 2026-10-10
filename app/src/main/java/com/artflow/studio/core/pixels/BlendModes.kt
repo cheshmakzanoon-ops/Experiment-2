@@ -30,6 +30,15 @@ object BlendModes {
         source: Int,
         mode: BlendMode,
         opacity: Float = 1f,
+    ): Int = blendPixel(backdrop, source, mode, opacity, FloatArray(3))
+
+    /** [blend] with [scratch] (three floats) holding the blended channels, so a pixel loop reuses it. */
+    private fun blendPixel(
+        backdrop: Int,
+        source: Int,
+        mode: BlendMode,
+        opacity: Float,
+        scratch: FloatArray,
     ): Int {
         val asource = (Channels.alpha(source) / 255f) * opacity.coerceIn(0f, 1f)
         if (asource <= 0f) return backdrop
@@ -45,7 +54,10 @@ object BlendModes {
         val csG = Channels.green(source) / 255f
         val csB = Channels.blue(source) / 255f
 
-        val (blendR, blendG, blendB) = blendChannels(cbR, cbG, cbB, csR, csG, csB, mode)
+        blendInto(scratch, cbR, cbG, cbB, csR, csG, csB, mode)
+        val blendR = scratch[0]
+        val blendG = scratch[1]
+        val blendB = scratch[2]
 
         // Co = As * (1 - Ab) * Cs + As * Ab * B(Cb, Cs) + (1 - As) * Ab * Cb
         val weightSourceOnly = asource * (1f - abackdrop)
@@ -96,8 +108,9 @@ object BlendModes {
             return
         }
 
+        val scratch = FloatArray(3)
         for (i in dst.pixels.indices) {
-            dst.pixels[i] = blend(dst.pixels[i], src.pixels[i], mode, clamped)
+            dst.pixels[i] = blendPixel(dst.pixels[i], src.pixels[i], mode, clamped, scratch)
         }
     }
 
@@ -121,6 +134,7 @@ object BlendModes {
         require(dst.width == src.width && dst.height == src.height) { "Clipping requires matching buffer sizes" }
         val amount = opacity.coerceIn(0f, 1f)
         if (amount <= 0f) return
+        val scratch = FloatArray(3)
         for (i in dst.pixels.indices) {
             val alpha = (dst.pixels[i] ushr 24) and 0xFF
             if (alpha == 0) continue
@@ -129,7 +143,7 @@ object BlendModes {
                 if (mode == BlendMode.NORMAL || mode == BlendMode.PASS_THROUGH) {
                     sourceOver(opaque, Channels.scaleAlpha(src.pixels[i], amount))
                 } else {
-                    blend(opaque, src.pixels[i], mode, amount)
+                    blendPixel(opaque, src.pixels[i], mode, amount, scratch)
                 }
             dst.pixels[i] = Channels.withAlpha(mixed, alpha)
         }
@@ -167,61 +181,67 @@ object BlendModes {
         csG: Float,
         csB: Float,
         mode: BlendMode,
-    ): Triple<Float, Float, Float> =
+    ): Triple<Float, Float, Float> {
+        val out = FloatArray(3)
+        blendInto(out, cbR, cbG, cbB, csR, csG, csB, mode)
+        return Triple(out[0], out[1], out[2])
+    }
+
+    /**
+     * [blendChannels] with the result written to [out] (red, green, blue). A pixel loop reuses one array this way,
+     * instead of boxing three floats and a Triple for every pixel.
+     */
+    private fun blendInto(
+        out: FloatArray,
+        cbR: Float,
+        cbG: Float,
+        cbB: Float,
+        csR: Float,
+        csG: Float,
+        csB: Float,
+        mode: BlendMode,
+    ) {
         when (mode) {
-            BlendMode.NORMAL, BlendMode.PASS_THROUGH -> Triple(csR, csG, csB)
-            BlendMode.MULTIPLY -> Triple(cbR * csR, cbG * csG, cbB * csB)
-            BlendMode.SCREEN ->
-                Triple(
-                    screen(cbR, csR),
-                    screen(cbG, csG),
-                    screen(cbB, csB),
-                )
-            BlendMode.OVERLAY ->
-                Triple(
-                    hardLight(csR, cbR),
-                    hardLight(csG, cbG),
-                    hardLight(csB, cbB),
-                )
-            BlendMode.DARKEN -> Triple(min(cbR, csR), min(cbG, csG), min(cbB, csB))
-            BlendMode.LIGHTEN -> Triple(max(cbR, csR), max(cbG, csG), max(cbB, csB))
-            BlendMode.COLOR_DODGE -> Triple(dodge(cbR, csR), dodge(cbG, csG), dodge(cbB, csB))
-            BlendMode.COLOR_BURN -> Triple(burn(cbR, csR), burn(cbG, csG), burn(cbB, csB))
-            BlendMode.HARD_LIGHT ->
-                Triple(
-                    hardLight(cbR, csR),
-                    hardLight(cbG, csG),
-                    hardLight(cbB, csB),
-                )
-            BlendMode.SOFT_LIGHT ->
-                Triple(
-                    softLight(cbR, csR),
-                    softLight(cbG, csG),
-                    softLight(cbB, csB),
-                )
-            BlendMode.DIFFERENCE -> Triple(abs(cbR - csR), abs(cbG - csG), abs(cbB - csB))
-            BlendMode.EXCLUSION ->
-                Triple(
-                    exclusion(cbR, csR),
-                    exclusion(cbG, csG),
-                    exclusion(cbB, csB),
-                )
+            BlendMode.NORMAL, BlendMode.PASS_THROUGH -> store(out, csR, csG, csB)
+            BlendMode.MULTIPLY -> store(out, cbR * csR, cbG * csG, cbB * csB)
+            BlendMode.SCREEN -> store(out, screen(cbR, csR), screen(cbG, csG), screen(cbB, csB))
+            BlendMode.OVERLAY -> store(out, hardLight(csR, cbR), hardLight(csG, cbG), hardLight(csB, cbB))
+            BlendMode.DARKEN -> store(out, min(cbR, csR), min(cbG, csG), min(cbB, csB))
+            BlendMode.LIGHTEN -> store(out, max(cbR, csR), max(cbG, csG), max(cbB, csB))
+            BlendMode.COLOR_DODGE -> store(out, dodge(cbR, csR), dodge(cbG, csG), dodge(cbB, csB))
+            BlendMode.COLOR_BURN -> store(out, burn(cbR, csR), burn(cbG, csG), burn(cbB, csB))
+            BlendMode.HARD_LIGHT -> store(out, hardLight(cbR, csR), hardLight(cbG, csG), hardLight(cbB, csB))
+            BlendMode.SOFT_LIGHT -> store(out, softLight(cbR, csR), softLight(cbG, csG), softLight(cbB, csB))
+            BlendMode.DIFFERENCE -> store(out, abs(cbR - csR), abs(cbG - csG), abs(cbB - csB))
+            BlendMode.EXCLUSION -> store(out, exclusion(cbR, csR), exclusion(cbG, csG), exclusion(cbB, csB))
             BlendMode.HUE -> {
-                val saturated = setSaturation(csR, csG, csB, saturation(cbR, cbG, cbB))
-                setLuminosity(saturated.first, saturated.second, saturated.third, luminosity(cbR, cbG, cbB))
+                setSaturation(csR, csG, csB, saturation(cbR, cbG, cbB), out)
+                setLuminosity(out[0], out[1], out[2], luminosity(cbR, cbG, cbB), out)
             }
             BlendMode.SATURATION -> {
-                val saturated = setSaturation(cbR, cbG, cbB, saturation(csR, csG, csB))
-                setLuminosity(saturated.first, saturated.second, saturated.third, luminosity(cbR, cbG, cbB))
+                setSaturation(cbR, cbG, cbB, saturation(csR, csG, csB), out)
+                setLuminosity(out[0], out[1], out[2], luminosity(cbR, cbG, cbB), out)
             }
-            BlendMode.COLOR -> setLuminosity(csR, csG, csB, luminosity(cbR, cbG, cbB))
-            BlendMode.LUMINOSITY -> setLuminosity(cbR, cbG, cbB, luminosity(csR, csG, csB))
+            BlendMode.COLOR -> setLuminosity(csR, csG, csB, luminosity(cbR, cbG, cbB), out)
+            BlendMode.LUMINOSITY -> setLuminosity(cbR, cbG, cbB, luminosity(csR, csG, csB), out)
             BlendMode.DARKER_COLOR ->
-                if (luminosity(csR, csG, csB) < luminosity(cbR, cbG, cbB)) Triple(csR, csG, csB) else Triple(cbR, cbG, cbB)
+                if (luminosity(csR, csG, csB) < luminosity(cbR, cbG, cbB)) store(out, csR, csG, csB) else store(out, cbR, cbG, cbB)
             BlendMode.LIGHTER_COLOR ->
-                if (luminosity(csR, csG, csB) > luminosity(cbR, cbG, cbB)) Triple(csR, csG, csB) else Triple(cbR, cbG, cbB)
-            else -> Triple(extended(cbR, csR, mode), extended(cbG, csG, mode), extended(cbB, csB, mode))
+                if (luminosity(csR, csG, csB) > luminosity(cbR, cbG, cbB)) store(out, csR, csG, csB) else store(out, cbR, cbG, cbB)
+            else -> store(out, extended(cbR, csR, mode), extended(cbG, csG, mode), extended(cbB, csB, mode))
         }
+    }
+
+    private fun store(
+        out: FloatArray,
+        r: Float,
+        g: Float,
+        b: Float,
+    ) {
+        out[0] = r
+        out[1] = g
+        out[2] = b
+    }
 
     /** The separable modes beyond the W3C set, as image editors define them. */
     private fun extended(
@@ -319,7 +339,8 @@ object BlendModes {
         r: Float,
         g: Float,
         b: Float,
-    ): Triple<Float, Float, Float> {
+        out: FloatArray,
+    ) {
         val lum = luminosity(r, g, b)
         val minChannel = min(r, min(g, b))
         val maxChannel = max(r, max(g, b))
@@ -350,7 +371,7 @@ object BlendModes {
                 cb = lum
             }
         }
-        return Triple(cr.coerceIn(0f, 1f), cg.coerceIn(0f, 1f), cb.coerceIn(0f, 1f))
+        store(out, cr.coerceIn(0f, 1f), cg.coerceIn(0f, 1f), cb.coerceIn(0f, 1f))
     }
 
     private fun setLuminosity(
@@ -358,9 +379,10 @@ object BlendModes {
         g: Float,
         b: Float,
         target: Float,
-    ): Triple<Float, Float, Float> {
+        out: FloatArray,
+    ) {
         val d = target - luminosity(r, g, b)
-        return clipColor(r + d, g + d, b + d)
+        clipColor(r + d, g + d, b + d, out)
     }
 
     /**
@@ -372,10 +394,14 @@ object BlendModes {
         g: Float,
         b: Float,
         target: Float,
-    ): Triple<Float, Float, Float> {
+        out: FloatArray,
+    ) {
         val maxChannel = max(r, max(g, b))
         val minChannel = min(r, min(g, b))
-        if (maxChannel <= minChannel) return Triple(0f, 0f, 0f)
+        if (maxChannel <= minChannel) {
+            store(out, 0f, 0f, 0f)
+            return
+        }
 
         val range = maxChannel - minChannel
         // Each channel's place in ascending order, with ties going to the lower channel index as a stable sort would.
@@ -383,7 +409,8 @@ object BlendModes {
         val placeR = before(g, r) + before(b, r)
         val placeG = beforeOrTied(r, g) + before(b, g)
         val placeB = beforeOrTied(r, b) + beforeOrTied(g, b)
-        return Triple(
+        store(
+            out,
             saturatedChannel(r, placeR, minChannel, range, target),
             saturatedChannel(g, placeG, minChannel, range, target),
             saturatedChannel(b, placeB, minChannel, range, target),
