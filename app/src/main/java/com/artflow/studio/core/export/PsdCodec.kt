@@ -742,11 +742,16 @@ object PsdCodec {
             }
 
             COMPRESSION_ZIP, COMPRESSION_ZIP_PREDICTION -> {
-                val size = reader.readInt()
-                if (size <= 0 || reader.remaining() < size) {
+                // A layer channel is one zlib stream whose length is the record's declared length, with no size prefix.
+                // Prediction is undone on 8-bit samples only, as for the merged image.
+                val size = min(declaredLength - 2, reader.remaining())
+                val unsupported = compression == COMPRESSION_ZIP_PREDICTION && depth == DEPTH_16
+                if (size <= 0 || unsupported) {
                     ByteArray(width * height)
                 } else {
-                    downsample(inflate(reader.readBytes(size)), width, height, depth)
+                    val plane = inflate(reader.readBytes(size)).copyOf(width * height * (if (depth == DEPTH_16) 2 else 1))
+                    if (compression == COMPRESSION_ZIP_PREDICTION) undoPrediction(plane, width, height)
+                    downsample(plane, width, height, depth)
                 }
             }
 
