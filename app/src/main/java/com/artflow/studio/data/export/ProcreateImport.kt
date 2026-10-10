@@ -1,6 +1,7 @@
 package com.artflow.studio.data.export
 
 import com.artflow.studio.core.export.ProcreateReader
+import com.artflow.studio.core.export.readAtMost
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import java.io.Closeable
 import java.io.File
@@ -34,7 +35,10 @@ class ProcreateImport private constructor(
         override fun read(name: String): ByteArray? {
             val entry = zip.getEntry(name) ?: return null
             require(entry.size in 0..MAX_ENTRY_BYTES) { "This Procreate document has an entry too large to read" }
-            return zip.getInputStream(entry).use { it.readBytes() }
+            // The declared size is checked above, but the bytes actually inflated are what must stay bounded.
+            val bytes = zip.getInputStream(entry).use { it.readAtMost(MAX_ENTRY_BYTES) }
+            require(bytes != null) { "This Procreate document has an entry too large to read" }
+            return bytes
         }
     }
 
