@@ -104,6 +104,7 @@ object ProcreateBrush {
 
     /** Kotlin's % keeps the sign of the dividend, so a negative angle needs wrapping to [0, 360). */
     private fun wrapDegrees(degrees: Float): Float = ((degrees % FULL_TURN) + FULL_TURN) % FULL_TURN
+
     private const val MIN_ROUNDNESS = 0.05f
     private const val MOVING_GRAIN = 0.5f
 }

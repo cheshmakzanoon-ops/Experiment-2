@@ -293,7 +293,7 @@ object ProcreateReader {
             // Long arithmetic: a corrupt tile index must not wrap around into a valid-looking position.
             val leftL = tile.column.toLong() * size
             val topL = tile.row.toLong() * size
-            if (leftL < 0 || topL < 0 || leftL >= storedWidth || topL >= storedHeight) return
+            if (leftL !in 0L until storedWidth.toLong() || topL !in 0L until storedHeight.toLong()) return
             val left = leftL.toInt()
             val top = topL.toInt()
             val visibleWidth = minOf(size, storedWidth - left)
