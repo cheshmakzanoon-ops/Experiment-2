@@ -171,6 +171,8 @@ class PointerGestureRouterTest {
         send(Event.DOWN, pen)
         router.suppress()
         assertEquals(Action.IGNORE, send(Event.UP, pen).action)
+        // A finger landing straight after the pen lifts is a palm; a fresh touch later is accepted.
+        time += 2000
         assertEquals(Action.START_TOOL, send(Event.DOWN, finger).action)
     }
 
@@ -231,5 +233,53 @@ class PointerGestureRouterTest {
         send(Event.POINTER_DOWN, finger, other, changed = 1)
         send(Event.MOVE, finger.copy(x = 80f), other)
         assertEquals("Moving turns the hold into navigation", 0, router.heldFingers())
+    }
+
+    @Test
+    fun aRestingPalmJustAfterThePenLiftsStartsNothing() {
+        send(Event.DOWN, pen)
+        assertEquals(Action.END_TOOL, send(Event.UP, pen).action)
+        assertEquals(Action.IGNORE, send(Event.DOWN, finger).action)
+        assertEquals(Action.IGNORE, send(Event.MOVE, finger.copy(x = 60f)).action)
+        assertEquals("A resting palm holds no colour", 0, router.heldFingers())
+        assertEquals(Action.IGNORE, send(Event.UP, finger).action)
+        time += 2000
+        assertEquals("The window passes once the palm is gone", Action.START_TOOL, send(Event.DOWN, finger).action)
+    }
+
+    @Test
+    fun aPalmThatStaysDownPastTheWindowStillDrawsNothing() {
+        send(Event.DOWN, pen)
+        send(Event.UP, pen)
+        send(Event.DOWN, finger)
+        time += 2000
+        assertEquals(Action.IGNORE, send(Event.MOVE, finger.copy(x = 60f)).action)
+        assertEquals(Action.IGNORE, send(Event.UP, finger).action)
+    }
+
+    @Test
+    fun aSecondFingerAfterAPalmStillUndoes() {
+        send(Event.DOWN, pen)
+        send(Event.UP, pen)
+        send(Event.DOWN, finger)
+        assertEquals(Action.REBASE_NAVIGATION, send(Event.POINTER_DOWN, finger, other, changed = 1).action)
+        assertEquals(2, router.heldFingers())
+        send(Event.POINTER_UP, finger, other, changed = 1)
+        assertEquals("A two-finger tap after a palm still undoes once", 2, send(Event.UP, finger).historyPointers)
+    }
+
+    @Test
+    fun aPenTakesOverARejectedPalm() {
+        send(Event.DOWN, pen)
+        send(Event.UP, pen)
+        send(Event.DOWN, finger)
+        val route = send(Event.POINTER_DOWN, finger, pen, changed = 1)
+        assertEquals(Action.START_TOOL, route.action)
+        assertEquals(1, route.index)
+    }
+
+    @Test
+    fun aFingerStartsAToolWhenNoPenHasLifted() {
+        assertEquals(Action.START_TOOL, send(Event.DOWN, finger).action)
     }
 }

@@ -42,12 +42,15 @@ class PointerGestureRouter(
         val historyPointers: Int = 0,
     )
 
-    private enum class Mode { IDLE, TOOL, NAVIGATION, SUPPRESSED }
+    private enum class Mode { IDLE, TOOL, NAVIGATION, SUPPRESSED, REJECTED }
 
     private var mode = Mode.IDLE
     private var owner = -1
     private var pen = false
     private var startedAt = 0L
+
+    /** When the pen last lifted; a finger that lands soon after is most likely the resting palm. */
+    private var penLiftedAt: Long? = null
     private var maxPointers = 0
     private var tapEligible = false
     private val lastPositions = mutableMapOf<Int, Pointer>()
@@ -105,13 +108,19 @@ class PointerGestureRouter(
             suppress()
             return Route(Action.CANCEL)
         }
+        if (pointers[changedIndex].stylus && (event == Event.UP || event == Event.POINTER_UP)) penLiftedAt = timeMillis
         if (event == Event.DOWN) {
             val cancelPrevious = mode == Mode.TOOL
+            val palm = !pointers[changedIndex].stylus && recentlyLifted(timeMillis)
             suppress()
             startedAt = timeMillis
             maxPointers = 0
             tapEligible = true
             observe(pointers)
+            if (palm) {
+                mode = Mode.REJECTED
+                return Route(if (cancelPrevious) Action.CANCEL else Action.IGNORE)
+            }
             return start(pointers, changedIndex, cancelPrevious)
         }
         observe(pointers)
@@ -119,6 +128,7 @@ class PointerGestureRouter(
         return when (mode) {
             Mode.TOOL -> routeTool(event, pointers, changedIndex, cancelled)
             Mode.NAVIGATION -> routeNavigation(event, pointers, changedIndex, timeMillis, cancelled)
+            Mode.REJECTED -> routeRejected(event, pointers, changedIndex)
             Mode.SUPPRESSED -> {
                 when {
                     event == Event.POINTER_DOWN && pointers[changedIndex].stylus -> start(pointers, changedIndex, false)
@@ -132,6 +142,35 @@ class PointerGestureRouter(
             Mode.IDLE -> Route(Action.IGNORE)
         }
     }
+
+    private fun recentlyLifted(timeMillis: Long): Boolean {
+        val lifted = penLiftedAt ?: return false
+        val elapsed = timeMillis - lifted
+        return elapsed in 0 until PALM_WINDOW_MILLIS
+    }
+
+    /**
+     * A finger that landed just after the pen lifted is ignored, so a resting palm draws nothing and starts no
+     * colour hold. A second finger still makes it a gesture (undo, redo, navigation), and the pen can take over.
+     */
+    private fun routeRejected(
+        event: Event,
+        pointers: List<Pointer>,
+        changedIndex: Int,
+    ): Route =
+        when {
+            event == Event.POINTER_DOWN && pointers[changedIndex].stylus -> start(pointers, changedIndex, false)
+            event == Event.POINTER_DOWN -> {
+                mode = Mode.NAVIGATION
+                owner = -1
+                Route(Action.REBASE_NAVIGATION)
+            }
+            event == Event.UP -> {
+                mode = Mode.IDLE
+                Route(Action.IGNORE)
+            }
+            else -> Route(Action.IGNORE)
+        }
 
     private fun routeTool(
         event: Event,
@@ -244,5 +283,8 @@ class PointerGestureRouter(
 
     private companion object {
         const val SCRUB_REVERSALS = 3
+
+        /** How long after a pen lift a finger is treated as a palm; longer than a typical pen-to-hand move. */
+        const val PALM_WINDOW_MILLIS = 1_500L
     }
 }
