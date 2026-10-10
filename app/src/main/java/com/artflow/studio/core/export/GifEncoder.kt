@@ -16,6 +16,10 @@ import kotlin.math.min
  * expose, and it makes the encoder fully unit-testable on the JVM.
  */
 object GifEncoder {
+    /** With transparency kept, alpha from this value up is opaque; below it the pixel is transparent. */
+    private const val HARD_EDGE_ALPHA = 128
+    private val OPAQUE_ALPHA = 0xFF000000.toInt()
+
     /**
      * Encodes [frames] into an animated GIF.
      *
@@ -25,9 +29,6 @@ object GifEncoder {
      * @param matteColor colour composited behind semi-transparent pixels (GIF has no alpha ramp).
      * @param keepTransparency when true, fully transparent pixels become the GIF transparent index.
      */
-    /** With transparency kept, alpha from this value up is opaque; below it the pixel is transparent. */
-    private const val HARD_EDGE_ALPHA = 128
-    private val OPAQUE_ALPHA = 0xFF000000.toInt()
 
     fun encode(
         frames: List<IntArray>,

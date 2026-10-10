@@ -41,10 +41,12 @@ class PsdZipCompositeTest {
         deflater.end()
 
         val out = ByteArrayOutputStream()
+
         fun short(value: Int) {
             out.write(value ushr 8)
             out.write(value)
         }
+
         fun int(value: Int) {
             short(value ushr 16)
             short(value)
