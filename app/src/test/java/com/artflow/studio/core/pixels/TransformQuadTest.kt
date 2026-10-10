@@ -28,6 +28,24 @@ class TransformQuadTest {
         }
     }
 
+    @Test fun aCollapsedQuadLeavesTheSourceWhereItWas() {
+        // Two corners on one point have no inverse; the selected pixels must not be erased.
+        val source = block(16, 2, 2, 4)
+        val target = PixelBuffer(16, 16)
+        val bounds = LayerTransform.floatingBounds(source, null)!!
+        TransformQuad.render(source, target, bounds, Quad(2f, 2f, 2f, 2f, 10f, 2f, 10f, 10f), null, highQuality = false)
+        assertTrue(source.pixels.contentEquals(target.pixels))
+    }
+
+    @Test fun anEmptySelectionMovesNothing() {
+        val source = block(16, 2, 2, 4)
+        val target = PixelBuffer(16, 16)
+        val bounds = LayerTransform.floatingBounds(source, null)!!
+        val moved = TransformQuad.translate(Quad.fromBounds(bounds), 6f, 3f)
+        TransformQuad.render(source, target, bounds, moved, SelectionMask(16, 16), highQuality = false)
+        assertTrue(source.pixels.contentEquals(target.pixels))
+    }
+
     @Test fun identityQuadReproducesPixels() {
         val source = block(16, 4, 4, 4)
         assertTrue(source.pixels.contentEquals(render(source) { it }.pixels))

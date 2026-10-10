@@ -188,14 +188,15 @@ object LayerTransform {
 
     /**
      * Writes the pixels that stay put into [target] and returns the pixels that float, plus
-     * whether the floating part must blend over a remainder (true when a selection is active).
+     * whether the floating part must blend over a remainder (true when a selection is present).
+     * A present but empty selection floats nothing, so the whole source stays in [target].
      */
     internal fun split(
         source: PixelBuffer,
         target: PixelBuffer,
         selection: SelectionMask?,
     ): Pair<PixelBuffer, Boolean> {
-        val mask = selection?.takeIf { it.width == source.width && it.height == source.height && it.isActive() }
+        val mask = selection?.takeIf { it.width == source.width && it.height == source.height }
         if (mask == null) {
             target.clear()
             return source to false

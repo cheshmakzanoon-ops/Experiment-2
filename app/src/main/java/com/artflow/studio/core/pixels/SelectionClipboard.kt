@@ -1,11 +1,14 @@
 package com.artflow.studio.core.pixels
 
-/** Pixel operations behind Cut, Copy and Paste: a null or mismatched [SelectionMask] means the whole layer. */
+/**
+ * Pixel operations behind Cut, Copy and Paste: a null or mismatched [SelectionMask] means the whole layer.
+ * A present but empty mask selects nothing, so Clear, Cut and Fill leave the layer unchanged.
+ */
 object SelectionClipboard {
     private fun usable(
         mask: SelectionMask?,
         pixels: PixelBuffer,
-    ): SelectionMask? = mask?.takeIf { it.isActive() && it.width == pixels.width && it.height == pixels.height }
+    ): SelectionMask? = mask?.takeIf { it.width == pixels.width && it.height == pixels.height }
 
     /** Copy of [source] keeping only the selected coverage. */
     fun extract(
@@ -25,6 +28,7 @@ object SelectionClipboard {
         color: Int,
     ) {
         val mask = usable(selection, target) ?: return target.fill(color)
+        if (!mask.isActive()) return
         for (i in target.pixels.indices) target.pixels[i] = ImageFilters.lerpArgb(target.pixels[i], color, mask.alphaAt(i))
     }
 
@@ -34,6 +38,7 @@ object SelectionClipboard {
         selection: SelectionMask?,
     ) {
         val mask = usable(selection, target) ?: return target.clear()
+        if (!mask.isActive()) return
         for (i in target.pixels.indices) target.pixels[i] = Channels.scaleAlpha(target.pixels[i], 1f - mask.alphaAt(i))
     }
 }
