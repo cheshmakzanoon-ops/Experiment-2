@@ -597,74 +597,7 @@ object PsdCodec {
         colorMode: Int,
     ): PixelBuffer? {
         val compression = reader.readShort()
-        val planes = HashMap<Int, ByteArray>()
-        val channelIds =
-            (0 until channelCount).map { index ->
-                when (colorMode) {
-                    COLOR_MODE_GRAYSCALE -> {
-                        if (index == 0) CHANNEL_RED else CHANNEL_ALPHA
-                    }
-
-                    COLOR_MODE_CMYK -> {
-                        index
-                    }
-
-                    else -> {
-                        when (index) {
-                            0 -> CHANNEL_RED
-                            1 -> CHANNEL_GREEN
-                            2 -> CHANNEL_BLUE
-                            else -> CHANNEL_ALPHA
-                        }
-                    }
-                }
-            }
-
-        val bytesPerSample = if (depth == 16) 2 else 1
-        when (compression) {
-            COMPRESSION_RAW -> {
-                channelIds.forEach { id ->
-                    val size = width * height * bytesPerSample
-                    planes[id] = reader.readBytes(min(size, reader.remaining()))
-                }
-            }
-
-            COMPRESSION_RLE -> {
-                // The byte-count table lists every row of every channel, then the row data follows.
-                repeat(channelCount * height) { reader.readShort() }
-                val rowBytes = width * bytesPerSample
-                channelIds.forEach { id ->
-                    val out = ByteArray(rowBytes * height)
-                    for (row in 0 until height) {
-                        val decoded = decodeRleRow(reader, rowBytes)
-                        System.arraycopy(decoded, 0, out, row * rowBytes, min(rowBytes, decoded.size))
-                    }
-                    planes[id] = out
-                }
-            }
-
-            COMPRESSION_ZIP, COMPRESSION_ZIP_PREDICTION -> {
-                // The merged image is one zlib stream: each channel's whole plane follows the one before it.
-                val planeBytes = width * height * bytesPerSample
-                if (compression == COMPRESSION_ZIP_PREDICTION && bytesPerSample != 1) return null
-                val stream = inflate(reader.readBytes(reader.remaining()))
-                if (stream.size < planeBytes * channelIds.size) return null
-                channelIds.forEachIndexed { index, id ->
-                    val plane = stream.copyOfRange(index * planeBytes, (index + 1) * planeBytes)
-                    if (compression == COMPRESSION_ZIP_PREDICTION) undoPrediction(plane, width, height)
-                    planes[id] = plane
-                }
-            }
-
-            else -> {
-                return null
-            }
-        }
-
-        // 16-bit samples: the reader works with one byte per channel, so keep each sample's high byte.
-        if (bytesPerSample == 2) {
-            for (id in planes.keys.toList()) planes[id] = highBytes(planes.getValue(id))
-        }
+        val planes = readMergedPlanes(reader, compression, channelCount, width, height, depth, colorMode) ?: return null
 
         val buffer = PixelBuffer(width, height)
         val red = planes[CHANNEL_RED]
@@ -932,6 +865,90 @@ object PsdCodec {
             }
         }
         return out
+    }
+
+    /**
+     * The merged image's channel planes, one byte per sample: 16-bit samples keep their high byte.
+     * Null when the compression is not one this reader decodes.
+     */
+    private fun readMergedPlanes(
+        reader: PsdReader,
+        compression: Int,
+        channelCount: Int,
+        width: Int,
+        height: Int,
+        depth: Int,
+        colorMode: Int,
+    ): HashMap<Int, ByteArray>? {
+        val planes = HashMap<Int, ByteArray>()
+        val channelIds =
+            (0 until channelCount).map { index ->
+                when (colorMode) {
+                    COLOR_MODE_GRAYSCALE -> {
+                        if (index == 0) CHANNEL_RED else CHANNEL_ALPHA
+                    }
+
+                    COLOR_MODE_CMYK -> {
+                        index
+                    }
+
+                    else -> {
+                        when (index) {
+                            0 -> CHANNEL_RED
+                            1 -> CHANNEL_GREEN
+                            2 -> CHANNEL_BLUE
+                            else -> CHANNEL_ALPHA
+                        }
+                    }
+                }
+            }
+
+        val bytesPerSample = if (depth == 16) 2 else 1
+        when (compression) {
+            COMPRESSION_RAW -> {
+                channelIds.forEach { id ->
+                    val size = width * height * bytesPerSample
+                    planes[id] = reader.readBytes(min(size, reader.remaining()))
+                }
+            }
+
+            COMPRESSION_RLE -> {
+                // The byte-count table lists every row of every channel, then the row data follows.
+                repeat(channelCount * height) { reader.readShort() }
+                val rowBytes = width * bytesPerSample
+                channelIds.forEach { id ->
+                    val out = ByteArray(rowBytes * height)
+                    for (row in 0 until height) {
+                        val decoded = decodeRleRow(reader, rowBytes)
+                        System.arraycopy(decoded, 0, out, row * rowBytes, min(rowBytes, decoded.size))
+                    }
+                    planes[id] = out
+                }
+            }
+
+            COMPRESSION_ZIP, COMPRESSION_ZIP_PREDICTION -> {
+                // The merged image is one zlib stream: each channel's whole plane follows the one before it.
+                val planeBytes = width * height * bytesPerSample
+                if (compression == COMPRESSION_ZIP_PREDICTION && bytesPerSample != 1) return null
+                val stream = inflate(reader.readBytes(reader.remaining()))
+                if (stream.size < planeBytes * channelIds.size) return null
+                channelIds.forEachIndexed { index, id ->
+                    val plane = stream.copyOfRange(index * planeBytes, (index + 1) * planeBytes)
+                    if (compression == COMPRESSION_ZIP_PREDICTION) undoPrediction(plane, width, height)
+                    planes[id] = plane
+                }
+            }
+
+            else -> {
+                return null
+            }
+        }
+
+        // 16-bit samples: the reader works with one byte per channel, so keep each sample's high byte.
+        if (bytesPerSample == 2) {
+            for (id in planes.keys.toList()) planes[id] = highBytes(planes.getValue(id))
+        }
+        return planes
     }
 
     private fun decodeRleRow(
