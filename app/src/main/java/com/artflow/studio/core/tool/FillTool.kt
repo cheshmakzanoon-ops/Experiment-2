@@ -87,8 +87,9 @@ object FillTool {
 
         if (!filled.isActive()) return Result(0, null, changed = false)
 
-        val edge = if (settings.antiAlias) colourEdgeCoverage(filled, source, startColor, toleranceSquared) else null
-        return applyFill(target, filled, color, settings, edge)
+        // The colour-based edge is the coverage applyFill blends, so applyFill must not soften it a second time.
+        val coverage = if (settings.antiAlias) colourEdgeCoverage(filled, source, startColor, toleranceSquared) else filled
+        return applyFill(target, coverage, color, settings.copy(antiAlias = false))
     }
 
     /**
@@ -136,7 +137,6 @@ object FillTool {
         coverage: SelectionMask,
         color: Int,
         settings: Settings,
-        softened: SelectionMask? = null,
     ): Result {
         var count = 0
         var minX = target.width
@@ -144,7 +144,7 @@ object FillTool {
         var maxX = -1
         var maxY = -1
 
-        val feather = if (settings.antiAlias) (softened ?: softenedCoverage(coverage)) else coverage
+        val feather = if (settings.antiAlias) softenedCoverage(coverage) else coverage
         val pattern = settings.pattern
 
         val mode =
