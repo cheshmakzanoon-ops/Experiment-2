@@ -366,9 +366,6 @@ class StrokeRasterizer(
         from: Int,
         walk: DabWalk,
     ) {
-        // Spacing is expressed as a fraction of the brush size; a minimum of one dab per segment
-        // keeps single-point taps visible.
-        val spacingPx = max(1f, context.params.size * context.params.spacing.coerceIn(0.01f, 4f))
         for (i in from until points.size) {
             val previous = points[i - 1]
             val current = points[i]
@@ -384,13 +381,39 @@ class StrokeRasterizer(
 
             var travelled = walk.carry
             while (travelled <= distance) {
-                drawDabAt(context, previous, current, travelled / distance, distance, walk.accumulated + travelled)
+                val t = travelled / distance
+                drawDabAt(context, previous, current, t, distance, walk.accumulated + travelled)
                 walk.lastDabTravelled = travelled
-                travelled += spacingPx
+                travelled += dabSpacing(context, previous, current, t, distance, walk.accumulated + travelled)
             }
             walk.carry = travelled - distance
             walk.accumulated += distance
         }
+    }
+
+    /**
+     * The distance to the next dab: a fraction of the diameter the dab here will have. Spacing from the nominal size
+     * left gaps wherever light pressure or a taper made the dabs smaller, which read as beads along the line. The
+     * estimate leaves out size jitter, so it draws no random numbers and the dab sequence stays the same.
+     */
+    private fun dabSpacing(
+        context: DabContext,
+        previous: StrokePoint,
+        current: StrokePoint,
+        t: Float,
+        distance: Float,
+        accumulatedDistance: Float,
+    ): Float {
+        val params = context.params
+        val pressure = previous.pressure + (current.pressure - previous.pressure) * t
+        val elapsedMs = (current.timestamp - previous.timestamp).coerceAtLeast(1L).toFloat()
+        val velocity = if (distance <= 0f) 0f else distance / elapsedMs
+        val tilt = ((previous.tiltX + (current.tiltX - previous.tiltX) * t) / HALF_PI).coerceIn(0f, 1f)
+        val tiltEffect = params.tiltInfluence.coerceIn(0f, 1f) * tilt
+        val taper = taperFactor(params, accumulatedDistance, context.totalLength)
+        val diameter = params.calculateEffectiveSize(pressure, velocity) * (1f + TILT_SIZE_GAIN * tiltEffect) * taper
+        // A minimum of one pixel keeps single-point taps visible and stops a fully tapered end from stalling.
+        return max(1f, diameter * params.spacing.coerceIn(0.01f, 4f))
     }
 
     /**
