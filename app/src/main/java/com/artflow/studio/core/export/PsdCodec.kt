@@ -620,10 +620,11 @@ object PsdCodec {
                 }
             }
 
+        val bytesPerSample = if (depth == 16) 2 else 1
         when (compression) {
             COMPRESSION_RAW -> {
                 channelIds.forEach { id ->
-                    val size = width * height * (if (depth == 16) 2 else 1)
+                    val size = width * height * bytesPerSample
                     planes[id] = reader.readBytes(min(size, reader.remaining()))
                 }
             }
@@ -631,11 +632,12 @@ object PsdCodec {
             COMPRESSION_RLE -> {
                 // The byte-count table lists every row of every channel, then the row data follows.
                 repeat(channelCount * height) { reader.readShort() }
+                val rowBytes = width * bytesPerSample
                 channelIds.forEach { id ->
-                    val out = ByteArray(width * height)
+                    val out = ByteArray(rowBytes * height)
                     for (row in 0 until height) {
-                        val rowBytes = decodeRleRow(reader, width)
-                        System.arraycopy(rowBytes, 0, out, row * width, min(width, rowBytes.size))
+                        val decoded = decodeRleRow(reader, rowBytes)
+                        System.arraycopy(decoded, 0, out, row * rowBytes, min(rowBytes, decoded.size))
                     }
                     planes[id] = out
                 }
@@ -643,7 +645,6 @@ object PsdCodec {
 
             COMPRESSION_ZIP, COMPRESSION_ZIP_PREDICTION -> {
                 // The merged image is one zlib stream: each channel's whole plane follows the one before it.
-                val bytesPerSample = if (depth == 16) 2 else 1
                 val planeBytes = width * height * bytesPerSample
                 if (compression == COMPRESSION_ZIP_PREDICTION && bytesPerSample != 1) return null
                 val stream = inflate(reader.readBytes(reader.remaining()))
@@ -658,6 +659,11 @@ object PsdCodec {
             else -> {
                 return null
             }
+        }
+
+        // 16-bit samples: the reader works with one byte per channel, so keep each sample's high byte.
+        if (bytesPerSample == 2) {
+            for (id in planes.keys.toList()) planes[id] = highBytes(planes.getValue(id))
         }
 
         val buffer = PixelBuffer(width, height)
@@ -924,6 +930,9 @@ object PsdCodec {
         reader: PsdReader,
         width: Int,
     ): ByteArray = unpackBits(reader, width)
+
+    /** Keeps the high byte of each 16-bit sample. */
+    private fun highBytes(samples: ByteArray): ByteArray = ByteArray(samples.size / 2) { samples[it * 2] }
 
     /** Undoes ZIP prediction on 8-bit samples: each byte was stored as its difference from the byte before it in its row. */
     private fun undoPrediction(
