@@ -38,4 +38,16 @@ class GifEncoderEdgeTest {
         val hasPureBlue = firstFramePalette(gif).any { it[0] < 16 && it[1] < 16 && it[2] > 240 }
         assertTrue("the partly opaque edge keeps its blue", hasPureBlue)
     }
+
+    @Test
+    fun frameDelaysCarryTheirRoundingSoAnAnimationKeepsItsSpeed() {
+        // Three frames of 33 ms are 99 ms, which is 10 centiseconds. Flooring each frame gives 9.
+        val frame = intArrayOf(0xFF102030.toInt())
+        val gif = GifEncoder.encode(listOf(frame, frame, frame), 1, 1, listOf(33, 33, 33))
+        val delays = (0 until gif.size - 5)
+            .filter { i -> gif[i] == 0x21.toByte() && gif[i + 1] == 0xF9.toByte() && gif[i + 2] == 0x04.toByte() }
+            .map { i -> (gif[i + 4].toInt() and 0xFF) or ((gif[i + 5].toInt() and 0xFF) shl 8) }
+        assertEquals("one delay per frame", 3L, delays.size.toLong())
+        assertEquals("total centiseconds", 10L, delays.sum().toLong())
+    }
 }

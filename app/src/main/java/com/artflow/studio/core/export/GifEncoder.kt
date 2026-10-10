@@ -51,8 +51,16 @@ object GifEncoder {
         writeHeader(out, width, height, loop)
 
         val transparentIndex = if (keepTransparency) 0 else -1
+        // GIF times are whole centiseconds. Each frame takes the rounding of the total elapsed time, so the
+        // error does not build up: a 30 fps animation stays at 30 fps rather than running about 10% fast.
+        var elapsedMs = 0L
+        var writtenCentiseconds = 0L
         frames.forEachIndexed { index, frame ->
             val delay = (delaysMs.getOrNull(index) ?: 100).coerceIn(20, 100_000)
+            elapsedMs += delay
+            val roundedCentiseconds = (elapsedMs + 5) / 10
+            val centiseconds = roundedCentiseconds - writtenCentiseconds
+            writtenCentiseconds = roundedCentiseconds
             val quantized =
                 Quantizer.quantize(
                     frame = frame,
@@ -66,7 +74,7 @@ object GifEncoder {
                 height = height,
                 indexed = quantized.indices,
                 palette = quantized.palette,
-                delayMs = delay,
+                delayMs = (centiseconds * 10).toInt(),
                 transparentIndex = transparentIndex,
             )
         }
