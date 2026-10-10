@@ -115,6 +115,8 @@ interface CanvasRepository {
         pressure: Float,
         tiltX: Float = 0f,
         tiltY: Float = 0f,
+        /** Wall-clock milliseconds of the sample, so speed is measured between the samples' own times. */
+        timestamp: Long = System.currentTimeMillis(),
     )
 
     fun endStroke(strokeId: Long)

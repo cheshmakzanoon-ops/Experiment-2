@@ -30,6 +30,7 @@ import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.pixels.TransformQuad
 import com.artflow.studio.core.pixels.WarpMesh
 import com.artflow.studio.core.render.BrushPatch
+import com.artflow.studio.core.render.StrokeClock
 import com.artflow.studio.core.symmetry.SymmetryEngine
 import com.artflow.studio.core.text.TextLayout
 import com.artflow.studio.core.tool.FillTool
@@ -1466,6 +1467,7 @@ class ArtFlowCanvasView
                             pressure = strokePressure,
                             tiltX = axisOf(event, index, MotionEvent.AXIS_TILT, history),
                             tiltY = axisOf(event, index, MotionEvent.AXIS_ORIENTATION, history),
+                            timestamp = StrokeClock.wallTime(time, SystemClock.uptimeMillis(), System.currentTimeMillis()),
                         )
                         predict(tool, smoothX, smoothY, strokePressure, time)
                         updateLiveStroke()

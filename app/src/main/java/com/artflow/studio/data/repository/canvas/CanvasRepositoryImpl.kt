@@ -588,6 +588,7 @@ class CanvasRepositoryImpl
             pressure: Float,
             tiltX: Float,
             tiltY: Float,
+            timestamp: Long,
         ) {
             if (!validSample(x, y, pressure) || !tiltX.isFinite() || !tiltY.isFinite()) return
             val points = activeStrokes[strokeId] ?: return
@@ -598,6 +599,7 @@ class CanvasRepositoryImpl
                     pressure = pressure,
                     tiltX = tiltX,
                     tiltY = tiltY,
+                    timestamp = timestamp,
                     color = points.first().color,
                 ),
             )
