@@ -67,4 +67,24 @@ class LayerGroupsTest {
         val resolved = LayerGroups.resolve(hiddenInner.map { Compositor.LayerInput(it) })
         assertFalse(resolved.single().layer.isVisible)
     }
+
+    @Test fun passThroughFolderDoesNotIsolateItsMembers() {
+        // Photoshop folders default to Pass Through, so members keep blending with the layers below.
+        val folder = Layer(id = 10, name = "Folder", index = 2, isGroup = true, blendMode = BlendMode.PASS_THROUGH)
+        val member = Layer(id = 1, name = "A", index = 0, parentGroupId = 10, blendMode = BlendMode.MULTIPLY)
+        val loose = Layer(id = 2, name = "B", index = 1)
+        assertFalse(LayerGroups.isolates(folder))
+        assertTrue(LayerGroups.isolates(folder.copy(opacity = 0.5f)))
+        val resolved = LayerGroups.resolve(listOf(member, loose, folder).map { Compositor.LayerInput(it) })
+        assertEquals(listOf(1L, 2L), resolved.map { it.layer.id })
+        assertEquals(BlendMode.MULTIPLY, resolved[0].layer.blendMode)
+    }
+
+    @Test fun folderHeadersRecordPassThroughUnlessTheGroupIsolates() {
+        val plain = Layer(id = 10, name = "Plain", index = 2, isGroup = true)
+        assertEquals(BlendMode.PASS_THROUGH, LayerGroups.folderBlendMode(plain))
+        assertEquals(BlendMode.PASS_THROUGH, LayerGroups.folderBlendMode(plain.copy(blendMode = BlendMode.PASS_THROUGH)))
+        assertEquals(BlendMode.MULTIPLY, LayerGroups.folderBlendMode(plain.copy(blendMode = BlendMode.MULTIPLY)))
+        assertEquals(BlendMode.NORMAL, LayerGroups.folderBlendMode(plain.copy(opacity = 0.5f)))
+    }
 }

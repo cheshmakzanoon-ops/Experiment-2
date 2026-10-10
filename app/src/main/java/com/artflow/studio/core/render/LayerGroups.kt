@@ -17,7 +17,20 @@ object LayerGroups {
         val members: List<Entry> = emptyList(),
     )
 
-    fun isolates(group: Layer): Boolean = group.isGroup && (group.blendMode != BlendMode.NORMAL || group.opacity < 1f)
+    /**
+     * Whether [group] merges its members before blending. Pass Through is the Photoshop folder
+     * default and, like Normal, leaves members blending with the layers below, so it does not
+     * isolate on its own.
+     */
+    fun isolates(group: Layer): Boolean =
+        group.isGroup &&
+            (group.blendMode != BlendMode.NORMAL && group.blendMode != BlendMode.PASS_THROUGH || group.opacity < 1f)
+
+    /**
+     * The blend mode a PSD folder header records for [group]: its own mode when it is isolated,
+     * otherwise Pass Through, so Photoshop keeps the members blending with the layers below.
+     */
+    fun folderBlendMode(group: Layer): BlendMode = if (isolates(group)) group.blendMode else BlendMode.PASS_THROUGH
 
     /** Stack entries, bottom first. Isolated groups sit at their header's position with their own plan. */
     fun plan(inputs: List<Compositor.LayerInput>): List<Entry> {

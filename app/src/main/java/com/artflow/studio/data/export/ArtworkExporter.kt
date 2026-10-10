@@ -29,6 +29,7 @@ import com.artflow.studio.core.export.PsdFolders
 import com.artflow.studio.core.export.TiffCodec
 import com.artflow.studio.core.pixels.BlendModes
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.render.LayerGroups
 import com.artflow.studio.core.three.ObjExport
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.renderer.BitmapPixelBridge
@@ -426,7 +427,9 @@ class ArtworkExporter
                         layerOf = { it.layer },
                         groups = groups,
                         includeHidden = options.includeHiddenLayers,
-                        header = { group -> PsdCodec.PsdLayer.groupHeader(group.name, opacity(group), shown(group), group.blendMode) },
+                        header = { group ->
+                            PsdCodec.PsdLayer.groupHeader(group.name, opacity(group), shown(group), LayerGroups.folderBlendMode(group))
+                        },
                     ) { entry ->
                         PsdCodec.PsdLayer(
                             name = entry.name,
