@@ -35,15 +35,19 @@ object AdjustmentPaint {
         }
     }
 
-    /** [effect] where [selection] (if active) and [painted] (if given) allow it, [source] elsewhere. */
+    /**
+     * [effect] where [selection] and [painted] (if given) allow it, [source] elsewhere. A selection that
+     * is present but empty selects nothing; only a missing selection limits nothing.
+     */
     fun mix(
         source: PixelBuffer,
         effect: PixelBuffer,
         selection: SelectionMask?,
         painted: SelectionMask?,
     ): PixelBuffer {
-        val limit = selection?.takeIf { it.width == source.width && it.height == source.height && it.isActive() }
+        val limit = selection?.takeIf { it.width == source.width && it.height == source.height }
         if (limit == null && painted == null) return effect
+        if (limit != null && !limit.isActive()) return source.copy()
         val out = PixelBuffer(source.width, source.height)
         for (i in out.pixels.indices) {
             val amount = (limit?.alphaAt(i) ?: 1f) * (painted?.alphaAt(i) ?: 1f)

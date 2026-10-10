@@ -67,7 +67,9 @@ object LiveAdjustments {
                 filtered.pixels[i] = Channels.withAlpha(filtered.pixels[i], source.pixels[i] ushr 24)
             }
         }
-        val mask = selection?.takeIf { it.width == source.width && it.height == source.height && it.isActive() } ?: return filtered
+        val mask = selection?.takeIf { it.width == source.width && it.height == source.height } ?: return filtered
+        // An empty selection selects nothing, so the layer keeps its pixels rather than taking the whole effect.
+        if (!mask.isActive()) return source.copy()
         for (i in filtered.pixels.indices) {
             filtered.pixels[i] = ImageFilters.lerpArgb(source.pixels[i], filtered.pixels[i], mask.alphaAt(i))
         }
