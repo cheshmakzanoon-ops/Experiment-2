@@ -25,6 +25,10 @@ object GifEncoder {
      * @param matteColor colour composited behind semi-transparent pixels (GIF has no alpha ramp).
      * @param keepTransparency when true, fully transparent pixels become the GIF transparent index.
      */
+    /** With transparency kept, alpha from this value up is opaque; below it the pixel is transparent. */
+    private const val HARD_EDGE_ALPHA = 128
+    private val OPAQUE_ALPHA = 0xFF000000.toInt()
+
     fun encode(
         frames: List<IntArray>,
         width: Int,
@@ -192,13 +196,20 @@ object GifEncoder {
             for (i in frame.indices) {
                 val pixel = frame[i]
                 val alpha = (pixel ushr 24) and 0xFF
-                if (alpha == 0) {
-                    transparentCount++
-                    opaque[i] = matteColor
-                } else if (alpha == 255) {
-                    opaque[i] = pixel
-                } else {
-                    opaque[i] = blend(matteColor, pixel, alpha / 255f)
+                when {
+                    // A GIF pixel is either transparent or opaque. Below the threshold it is transparent; at or
+                    // above it, it keeps its own colour. Blending onto the matte would tint the edge.
+                    reserveTransparent && alpha < HARD_EDGE_ALPHA -> {
+                        transparentCount++
+                        opaque[i] = matteColor
+                    }
+                    reserveTransparent -> opaque[i] = pixel or OPAQUE_ALPHA
+                    alpha == 0 -> {
+                        transparentCount++
+                        opaque[i] = matteColor
+                    }
+                    alpha == 255 -> opaque[i] = pixel
+                    else -> opaque[i] = blend(matteColor, pixel, alpha / 255f)
                 }
             }
 
@@ -240,7 +251,7 @@ object GifEncoder {
             val cache = HashMap<Int, Byte>(1 shl 14)
             val indices = ByteArray(frame.size)
             for (i in opaque.indices) {
-                if (reserveTransparent && (frame[i] ushr 24) == 0) {
+                if (reserveTransparent && ((frame[i] ushr 24) and 0xFF) < HARD_EDGE_ALPHA) {
                     indices[i] = 0
                     continue
                 }
