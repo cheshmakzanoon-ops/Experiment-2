@@ -373,39 +373,30 @@ object ImageFilters {
         val width = source.width
         val height = source.height
         val count = width * height
+        val pixels = source.pixels
 
-        // Premultiply once.
-        val pr = FloatArray(count)
-        val pg = FloatArray(count)
-        val pb = FloatArray(count)
-        val pa = FloatArray(count)
-        for (i in 0 until count) {
-            val pixel = source.pixels[i]
-            val a = Channels.alpha(pixel) / 255f
-            pa[i] = a
-            pr[i] = Channels.red(pixel) / 255f * a
-            pg[i] = Channels.green(pixel) / 255f * a
-            pb[i] = Channels.blue(pixel) / 255f * a
+        // Two scratch planes serve every pass and each channel is convolved on its own, so a blur holds
+        // six float planes at a time instead of twelve. The arithmetic per channel is unchanged.
+        val scratch = FloatArray(count)
+        val passed = FloatArray(count)
+
+        // shift < 0 blurs alpha; otherwise the colour channel at [shift] is premultiplied by alpha first.
+        fun blur(shift: Int): FloatArray {
+            for (i in 0 until count) {
+                val pixel = pixels[i]
+                val alpha = ((pixel ushr 24) and 0xFF) / 255f
+                scratch[i] = if (shift < 0) alpha else ((pixel ushr shift) and 0xFF) / 255f * alpha
+            }
+            horizontalPass(scratch, passed, width, height, kernel)
+            val result = FloatArray(count)
+            verticalPassReal(passed, result, width, height, kernel)
+            return result
         }
 
-        val tr = FloatArray(count)
-        val tg = FloatArray(count)
-        val tb = FloatArray(count)
-        val ta = FloatArray(count)
-
-        horizontalPass(pr, tr, width, height, kernel)
-        horizontalPass(pg, tg, width, height, kernel)
-        horizontalPass(pb, tb, width, height, kernel)
-        horizontalPass(pa, ta, width, height, kernel)
-
-        val r = FloatArray(count)
-        val g = FloatArray(count)
-        val b = FloatArray(count)
-        val a = FloatArray(count)
-        verticalPassReal(tr, r, width, height, kernel)
-        verticalPassReal(tg, g, width, height, kernel)
-        verticalPassReal(tb, b, width, height, kernel)
-        verticalPassReal(ta, a, width, height, kernel)
+        val a = blur(-1)
+        val r = blur(16)
+        val g = blur(8)
+        val b = blur(0)
 
         val out = PixelBuffer(width, height)
         for (i in 0 until count) {
