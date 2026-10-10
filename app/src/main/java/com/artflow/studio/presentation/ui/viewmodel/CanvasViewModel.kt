@@ -1185,6 +1185,11 @@ class CanvasViewModel
         fun save(onSaved: (() -> Unit)? = null) {
             val projectId = currentProjectId
             if (projectId == 0L || _saving.value) return
+            // An autosave that has not been recovered holds the only copy of that work. A save would replace it.
+            if ((_uiState.value as? CanvasUiState.Ready)?.recoveryAvailable == true) {
+                notify("Recover or discard the autosaved version before saving")
+                return
+            }
             _saving.value = true
             viewModelScope.launch(editorErrors) {
                 try {
