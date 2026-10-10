@@ -540,6 +540,9 @@ object UsdReader {
             capacity: Int,
         ): ByteArray {
             require(size >= 1 && at + size <= data.size && capacity in 0..MAX_DECODED) { "The USD data is cut short" }
+            // LZ4 expands its input by at most about 255 times, so a larger declared size cannot be honest. Refusing it
+            // here stops a small file from making the reader allocate hundreds of megabytes.
+            require(capacity.toLong() <= size.toLong() * MAX_EXPANSION + EXPANSION_SLACK) { "The USD data is cut short" }
             val out = ByteArray(capacity)
             val chunks = data[at].toInt() and 0xFF
             if (chunks == 0) {
@@ -578,6 +581,8 @@ object UsdReader {
             const val SECTION_ENTRY = 32
             const val MAX_COUNT = 50_000_000L
             const val MAX_DECODED = 512 * 1024 * 1024
+            const val MAX_EXPANSION = 255L
+            const val EXPANSION_SLACK = 64L
             const val TYPE_SHIFT = 48
             const val ARRAY_BIT = 63
             const val INLINED_BIT = 62
