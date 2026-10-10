@@ -2,13 +2,10 @@ package com.artflow.studio.core.three
 
 import org.junit.Assert.assertThrows
 import org.junit.Test
-import java.io.File
 
 /** Damaged packages are refused with the same error as any other unreadable model, never an unrelated exception. */
 class DamagedModelFilesTest {
-    private val fixtures = "/home/user/Experiment-2/app/src/test/resources/models/"
-
-    private fun fixture(name: String): ByteArray = File(fixtures + name).readBytes()
+    private fun fixture(name: String): ByteArray = requireNotNull(javaClass.getResourceAsStream("/models/$name")).use { it.readBytes() }
 
     @Test
     fun aCrateCutShortIsRefusedWhereverItBreaks() {
