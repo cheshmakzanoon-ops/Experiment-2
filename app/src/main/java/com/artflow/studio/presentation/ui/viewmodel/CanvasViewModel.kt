@@ -55,6 +55,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -1224,7 +1225,11 @@ class CanvasViewModel
             if (!allowAutosave || !_settings.value.autosaveEnabled || _saving.value) return
             val state = _uiState.value as? CanvasUiState.Ready ?: return
             if (state.recoveryAvailable || !canvasRepository.hasUnsavedChanges()) return
-            viewModelScope.launch(editorErrors) { canvasRepository.autosave(state.projectId) }
+            viewModelScope.launch(editorErrors) {
+                // The app can be closed as soon as it stops, which cancels this scope. The save must finish instead,
+                // or the work since the last autosave is lost.
+                withContext(NonCancellable) { canvasRepository.autosave(state.projectId) }
+            }
         }
 
         fun discardChanges(onDiscarded: () -> Unit) {
