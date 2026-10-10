@@ -1366,7 +1366,8 @@ class ArtFlowCanvasView
 
             when (tool) {
                 ToolType.BRUSH, ToolType.ERASER -> {
-                    startStroke(canvasX, canvasY, pressure, tool)
+                    val time = StrokeClock.wallTime(event.eventTime, SystemClock.uptimeMillis(), System.currentTimeMillis())
+                    startStroke(canvasX, canvasY, pressure, tool, time)
                 }
 
                 ToolType.SMUDGE -> {
@@ -1702,6 +1703,7 @@ class ArtFlowCanvasView
             y: Float,
             pressure: Float,
             tool: ToolType,
+            time: Long = System.currentTimeMillis(),
         ) {
             val chosen =
                 if (tool == ToolType.ERASER) {
@@ -1725,6 +1727,7 @@ class ArtFlowCanvasView
                     layerId = activeLayerId,
                     isEraser = tool == ToolType.ERASER,
                     destination = input.strokeDestination,
+                    timestamp = time,
                 )
             drawing = currentStrokeId != 0L
             clearPrediction()

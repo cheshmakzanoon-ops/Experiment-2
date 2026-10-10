@@ -106,6 +106,8 @@ interface CanvasRepository {
         layerId: Long,
         isEraser: Boolean = false,
         destination: StrokeDestination = StrokeDestination.LAYER,
+        /** Wall-clock milliseconds of the first sample, normally the touch-down. */
+        timestamp: Long = System.currentTimeMillis(),
     ): Long
 
     fun continueStroke(

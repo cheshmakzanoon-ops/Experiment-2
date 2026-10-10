@@ -548,6 +548,7 @@ class CanvasRepositoryImpl
             layerId: Long,
             isEraser: Boolean,
             destination: StrokeDestination,
+            timestamp: Long,
         ): Long {
             val strokeId = nextStrokeId++
             val layer = layerById(layerId)
@@ -557,7 +558,13 @@ class CanvasRepositoryImpl
             }
             activeStrokes[strokeId] =
                 mutableListOf(
-                    StrokePoint(x = x, y = y, pressure = pressure, color = destination.color(strokeColor, layer.maskInverted)),
+                    StrokePoint(
+                        x = x,
+                        y = y,
+                        pressure = pressure,
+                        timestamp = timestamp,
+                        color = destination.color(strokeColor, layer.maskInverted),
+                    ),
                 )
             strokeBrushParams[strokeId] =
                 if (destination.isMask) {
