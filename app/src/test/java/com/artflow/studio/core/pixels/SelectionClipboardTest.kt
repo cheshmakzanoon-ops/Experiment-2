@@ -34,4 +34,36 @@ class SelectionClipboardTest {
         SelectionClipboard.erase(layer, null)
         assertEquals(0, layer.opaquePixelCount())
     }
+
+    @Test fun fillWithoutAlphaLockPaintsEveryPixel() {
+        val blue = 0xFF0000FF.toInt()
+        val layer = PixelBuffer(3, 1)
+        layer.pixels[0] = red
+        layer.pixels[2] = 0x80FF0000.toInt()
+        SelectionClipboard.fill(layer, null, blue)
+        assertEquals(listOf(blue, blue, blue), layer.pixels.toList())
+    }
+
+    @Test fun alphaLockedFillPaintsOnlyPaintAndKeepsEachAlpha() {
+        val blue = 0xFF0000FF.toInt()
+        val layer = PixelBuffer(3, 1)
+        layer.pixels[0] = red
+        layer.pixels[2] = 0x80FF0000.toInt()
+        SelectionClipboard.fill(layer, null, blue, alphaLocked = true)
+        assertEquals(blue, layer.pixels[0])
+        assertEquals(0, layer.pixels[1])
+        assertEquals(0x800000FF.toInt(), layer.pixels[2])
+    }
+
+    @Test fun alphaLockedFillStillFollowsTheSelection() {
+        val blue = 0xFF0000FF.toInt()
+        val layer = PixelBuffer(3, 1)
+        layer.pixels[0] = red
+        layer.pixels[2] = 0x80FF0000.toInt()
+        val mask = SelectionMask(3, 1).also { it.coverage[2] = 255.toByte() }
+        SelectionClipboard.fill(layer, mask, blue, alphaLocked = true)
+        assertEquals(red, layer.pixels[0])
+        assertEquals(0, layer.pixels[1])
+        assertEquals(0x800000FF.toInt(), layer.pixels[2])
+    }
 }
