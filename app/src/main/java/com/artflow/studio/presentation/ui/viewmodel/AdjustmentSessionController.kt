@@ -136,7 +136,9 @@ class AdjustmentSessionController(
         val settingsState = current.copy(pencil = false)
         val effect =
             filtered?.takeIf { it.first == settingsState }?.second
-                ?: LiveAdjustments.apply(current.kind, source, current.settings, null).also { filtered = settingsState to it }
+                ?: LiveAdjustments
+                    .apply(current.kind, source, current.settings, null, alphaLocked = session?.alphaLocked == true)
+                    .also { filtered = settingsState to it }
         return AdjustmentPaint.mix(source, effect, selection, painted.takeIf { current.pencil })
     }
 

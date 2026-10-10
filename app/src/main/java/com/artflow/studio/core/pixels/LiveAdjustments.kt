@@ -49,6 +49,7 @@ object LiveAdjustments {
         source: PixelBuffer,
         settings: Settings,
         selection: SelectionMask? = null,
+        alphaLocked: Boolean = false,
     ): PixelBuffer {
         val amount = settings.amount.coerceIn(0f, 1f)
         val type = kind.adjustmentType
@@ -60,6 +61,12 @@ object LiveAdjustments {
                 amount <= 0f -> source.copy()
                 else -> filter(kind, source, amount, settings.angleDegrees)
             }
+        if (alphaLocked) {
+            // An alpha-locked layer keeps its transparency: an effect may change colour, never coverage.
+            for (i in filtered.pixels.indices) {
+                filtered.pixels[i] = Channels.withAlpha(filtered.pixels[i], source.pixels[i] ushr 24)
+            }
+        }
         val mask = selection?.takeIf { it.width == source.width && it.height == source.height && it.isActive() } ?: return filtered
         for (i in filtered.pixels.indices) {
             filtered.pixels[i] = ImageFilters.lerpArgb(source.pixels[i], filtered.pixels[i], mask.alphaAt(i))
