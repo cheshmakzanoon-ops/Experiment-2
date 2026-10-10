@@ -293,12 +293,13 @@ object ImageFilters {
         strength: Float = 1f,
     ): PixelBuffer {
         val kernel =
+            // The weights sum to zero, so a flat area lands on the 128 bias (mid-grey) and only edges relieve.
             floatArrayOf(
                 -2f,
                 -1f,
                 0f,
                 -1f,
-                1f,
+                0f,
                 1f,
                 0f,
                 1f,
