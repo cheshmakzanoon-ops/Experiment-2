@@ -269,6 +269,34 @@ class PointerGestureRouterTest {
     }
 
     @Test
+    fun aPalmThatBringsAThirdContactCannotScrubOrRedo() {
+        send(Event.DOWN, pen)
+        send(Event.UP, pen)
+        send(Event.DOWN, finger)
+        assertEquals(Action.REBASE_NAVIGATION, send(Event.POINTER_DOWN, finger, other, changed = 1).action)
+        val third = Pointer(15, 60f, 60f)
+        assertEquals(Action.IGNORE, send(Event.POINTER_DOWN, finger, other, third, changed = 2).action)
+        val trio = listOf(finger, other, third)
+        val actions =
+            listOf(0f, 80f, 0f, 80f, 0f, 80f, 0f).map { dx ->
+                send(Event.MOVE, *trio.map { it.copy(x = it.x + dx) }.toTypedArray()).action
+            }
+        assertFalse("A palm cannot clear the layer", Action.THREE_FINGER_SCRUB in actions)
+        assertEquals("A third contact is never a tap", 0, send(Event.UP, finger, other, third).historyPointers)
+    }
+
+    @Test
+    fun aSecondContactAfterThePalmWindowStaysRejected() {
+        send(Event.DOWN, pen)
+        send(Event.UP, pen)
+        send(Event.DOWN, finger)
+        time += 2000
+        assertEquals(Action.IGNORE, send(Event.POINTER_DOWN, finger, other, changed = 1).action)
+        assertEquals(0, router.heldFingers())
+        assertEquals(0, send(Event.UP, finger).historyPointers)
+    }
+
+    @Test
     fun aPenTakesOverARejectedPalm() {
         send(Event.DOWN, pen)
         send(Event.UP, pen)

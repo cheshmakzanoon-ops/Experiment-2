@@ -51,6 +51,9 @@ class PointerGestureRouter(
 
     /** When the pen last lifted; a finger that lands soon after is most likely the resting palm. */
     private var penLiftedAt: Long? = null
+
+    /** Navigation begun by a palm pair: a third contact is ignored, so it cannot scrub, redo or count as a tap. */
+    private var palmPair = false
     private var maxPointers = 0
     private var tapEligible = false
     private val lastPositions = mutableMapOf<Int, Pointer>()
@@ -63,6 +66,7 @@ class PointerGestureRouter(
 
     /** Discard the current stream; a trailing finger must not start drawing or undo artwork. */
     fun suppress() {
+        palmPair = false
         mode = Mode.SUPPRESSED
         owner = -1
         tapEligible = false
@@ -128,7 +132,7 @@ class PointerGestureRouter(
         return when (mode) {
             Mode.TOOL -> routeTool(event, pointers, changedIndex, cancelled)
             Mode.NAVIGATION -> routeNavigation(event, pointers, changedIndex, timeMillis, cancelled)
-            Mode.REJECTED -> routeRejected(event, pointers, changedIndex)
+            Mode.REJECTED -> routeRejected(event, pointers, changedIndex, timeMillis)
             Mode.SUPPRESSED -> {
                 when {
                     event == Event.POINTER_DOWN && pointers[changedIndex].stylus -> start(pointers, changedIndex, false)
@@ -157,12 +161,15 @@ class PointerGestureRouter(
         event: Event,
         pointers: List<Pointer>,
         changedIndex: Int,
+        timeMillis: Long,
     ): Route =
         when {
             event == Event.POINTER_DOWN && pointers[changedIndex].stylus -> start(pointers, changedIndex, false)
-            event == Event.POINTER_DOWN -> {
+            // Only a pair landing inside the window is a gesture. A palm that rests on, or brings a third contact, stays ignored.
+            event == Event.POINTER_DOWN && pointers.size == 2 && recentlyLifted(timeMillis) -> {
                 mode = Mode.NAVIGATION
                 owner = -1
+                palmPair = true
                 Route(Action.REBASE_NAVIGATION)
             }
             event == Event.UP -> {
@@ -216,9 +223,14 @@ class PointerGestureRouter(
             event == Event.POINTER_DOWN && pointers[changedIndex].stylus -> start(pointers, changedIndex, false)
             event == Event.UP -> {
                 mode = Mode.IDLE
+                palmPair = false
                 val elapsed = timeMillis - startedAt
                 val count = if (tapEligible && elapsed in 0 until tapTimeoutMillis && maxPointers in 2..4) maxPointers else 0
                 Route(Action.FINISH_NAVIGATION, historyPointers = count)
+            }
+            palmPair && pointers.size > 2 -> {
+                tapEligible = false
+                Route(Action.IGNORE)
             }
             event == Event.POINTER_UP || event == Event.POINTER_DOWN -> Route(Action.REBASE_NAVIGATION)
             event == Event.MOVE && pointers.size >= 3 -> routeThreeFinger(pointers)
@@ -275,6 +287,7 @@ class PointerGestureRouter(
         cancelPrevious: Boolean,
     ): Route {
         owner = pointers[index].id
+        palmPair = false
         pen = pointers[index].stylus
         if (pen) tapEligible = false
         mode = Mode.TOOL
