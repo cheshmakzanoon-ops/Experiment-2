@@ -25,6 +25,9 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.PixelBuffer
@@ -128,6 +131,8 @@ fun ToolStrip(
                             val selected = tool == activeTool
                             IconButton(
                                 onClick = { onToolSelected(tool) },
+                                // Selection is also announced to screen readers, not only shown by colour.
+                                modifier = Modifier.semantics { this.selected = tool == activeTool },
                                 colors =
                                     IconButtonDefaults.iconButtonColors(
                                         containerColor =
@@ -251,7 +256,7 @@ private fun LabeledSlider(
             value = value.coerceIn(range.start, range.endInclusive),
             onValueChange = onChange,
             valueRange = range,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = label },
         )
     }
 }
