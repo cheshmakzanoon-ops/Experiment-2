@@ -728,7 +728,8 @@ class CanvasRepositoryImpl
             val raster = layer.raster ?: return
             if (raster.pixels.size.toLong() * BYTES_PER_PIXEL > Runtime.getRuntime().maxMemory() / LIVE_HEAP_SHARE) return
             val prepared = StrokeCopy(raster)
-            prepared.job = coroutineScope.launch { prepared.ready = raster.copy() }
+            // A failed copy (out of memory, say) must not reach the thread's uncaught handler. The commit then copies as before.
+            prepared.job = coroutineScope.launch { prepared.ready = runCatching { raster.copy() }.getOrNull() }
             strokeCopies[strokeId] = prepared
         }
 

@@ -2300,7 +2300,7 @@ class ArtFlowCanvasView
                     // The gesture may have ended while this rendered. Only paste into the gesture that asked for it.
                     if (rasterBuffer !== buffer || liquifySession !== session) return@launch
                     pasteRegion(buffer, snapshot.bounds, pixels)
-                    requestPreviewRefresh()
+                    forcePreviewRefresh()
                     if (liquifyPreviewQueued) {
                         liquifyPreviewQueued = false
                         launchLiquifyPreview(session, buffer, base)
@@ -2437,7 +2437,12 @@ class ArtFlowCanvasView
         private fun requestPreviewRefresh() {
             val now = System.currentTimeMillis()
             if (now - lastPreviewRequest < PREVIEW_INTERVAL_MS) return
-            lastPreviewRequest = now
+            forcePreviewRefresh()
+        }
+
+        /** A refresh the throttle must not drop: a background render has just changed the pixels it shows. */
+        private fun forcePreviewRefresh() {
+            lastPreviewRequest = System.currentTimeMillis()
             canvasRepository.requestPreviewRefresh()
         }
 
