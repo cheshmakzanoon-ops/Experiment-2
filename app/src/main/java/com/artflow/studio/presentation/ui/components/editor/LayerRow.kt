@@ -130,10 +130,11 @@ internal fun LayerRow(
                     TextButton(onClick = onBlendMode, contentPadding = PaddingValues(horizontal = 6.dp)) {
                         Text(layer.blendMode.shortCode(), style = MaterialTheme.typography.titleSmall)
                     }
+                    val visibilityLabel = stringResource(R.string.layer_visibility)
                     Checkbox(
                         checked = layer.isVisible,
                         onCheckedChange = { actions.onVisibility(layer.id, it) },
-                        modifier = Modifier.size(touchSize).semantics { contentDescription = stringResource(R.string.layer_visibility) },
+                        modifier = Modifier.size(touchSize).semantics { contentDescription = visibilityLabel },
                     )
                     Box {
                         IconButton(onClick = { menuVisible = true }, modifier = Modifier.size(touchSize)) {
