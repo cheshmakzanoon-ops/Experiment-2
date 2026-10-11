@@ -21,11 +21,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.R
 import com.artflow.studio.core.color.ColorHarmony
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.color.PaletteLibrary
@@ -69,15 +71,15 @@ fun ColorPanel(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("Colours", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.color_title), style = MaterialTheme.typography.titleMedium)
                 Text(
                     text = "${ColorHarmony.nameOf(color)} · ${ColorHarmony.toHex(color)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Swatch(color = previous, onClick = { onColorSelected(previous) }, description = "Previous colour")
-            secondary?.let { Swatch(color = it.color, onClick = it.onSwap, description = "Secondary colour, tap to swap") }
+            Swatch(color = previous, onClick = { onColorSelected(previous) }, description = stringResource(R.string.color_previous))
+            secondary?.let { Swatch(color = it.color, onClick = it.onSwap, description = stringResource(R.string.color_secondary_swap)) }
             Box(
                 modifier =
                     Modifier
@@ -95,8 +97,8 @@ fun ColorPanel(
             ColorTab.VALUE -> ValueTab(color, mode, { mode = it }, onColorSelected)
             ColorTab.PALETTES -> {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    onImportPalette?.let { OutlinedButton(onClick = it) { Text("Import palette") } }
-                    onPaletteFromPhoto?.let { OutlinedButton(onClick = it) { Text("New from photo") } }
+                    onImportPalette?.let { OutlinedButton(onClick = it) { Text(stringResource(R.string.color_import_palette)) } }
+                    onPaletteFromPhoto?.let { OutlinedButton(onClick = it) { Text(stringResource(R.string.color_new_from_photo)) } }
                 }
                 PaletteList(palettes, color, onColorSelected, onRemovePalette)
             }
@@ -113,20 +115,20 @@ fun ColorPanel(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SectionLabel("History")
+            SectionLabel(stringResource(R.string.color_history))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = {
                     val name = "My palette"
                     onSavePalette(name, recentColors.take(16))
-                }) { Text("Save as palette", style = MaterialTheme.typography.labelSmall) }
+                }) { Text(stringResource(R.string.color_save_as_palette), style = MaterialTheme.typography.labelSmall) }
                 IconButton(onClick = onClearRecents) {
-                    Icon(Icons.Default.Delete, contentDescription = "Clear recent colours")
+                    Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.color_clear_recent))
                 }
             }
         }
         if (recentColors.isEmpty()) {
             Text(
-                "Colours you use will show up here.",
+                stringResource(R.string.color_history_empty),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -253,7 +255,7 @@ private fun HexField(
     OutlinedTextField(
         value = text,
         onValueChange = { text = it.take(8) },
-        label = { Text("Hex") },
+        label = { Text(stringResource(R.string.color_hex)) },
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Done),
         keyboardActions =
@@ -261,7 +263,7 @@ private fun HexField(
                 ColorHarmony.parseHex(text)?.let(onColorSelected)
             }),
         trailingIcon = {
-            TextButton(onClick = { ColorHarmony.parseHex(text)?.let(onColorSelected) }) { Text("Apply") }
+            TextButton(onClick = { ColorHarmony.parseHex(text)?.let(onColorSelected) }) { Text(stringResource(R.string.color_apply)) }
         },
         modifier = Modifier.fillMaxWidth(),
     )
@@ -332,7 +334,7 @@ private fun PaletteList(
                 }
             }
         }
-        SectionLabel("Named colours")
+        SectionLabel(stringResource(R.string.color_named))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(ColorHarmony.NAMED_COLORS) { (name, value) ->
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {

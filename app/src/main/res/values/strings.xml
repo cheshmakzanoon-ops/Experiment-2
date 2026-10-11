@@ -170,4 +170,16 @@
     <string name="brush_adv_image_n">Image %1$d</string>
     <string name="brush_adv_collapse_section">Collapse %1$s</string>
     <string name="brush_adv_expand_section">Expand %1$s</string>
+    <string name="color_title">Colours</string>
+    <string name="color_previous">Previous colour</string>
+    <string name="color_secondary_swap">Secondary colour, tap to swap</string>
+    <string name="color_import_palette">Import palette</string>
+    <string name="color_new_from_photo">New from photo</string>
+    <string name="color_history">History</string>
+    <string name="color_save_as_palette">Save as palette</string>
+    <string name="color_clear_recent">Clear recent colours</string>
+    <string name="color_history_empty">Colours you use will show up here.</string>
+    <string name="color_hex">Hex</string>
+    <string name="color_apply">Apply</string>
+    <string name="color_named">Named colours</string>
 </resources>
