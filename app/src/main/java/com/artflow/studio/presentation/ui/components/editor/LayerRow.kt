@@ -22,10 +22,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.R
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.layer.BlendMode
@@ -117,7 +119,7 @@ internal fun LayerRow(
                 if (layer.isLocked) {
                     Icon(
                         Icons.Default.Lock,
-                        contentDescription = "Locked",
+                        contentDescription = stringResource(R.string.layer_locked),
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.error,
                     )
@@ -131,11 +133,15 @@ internal fun LayerRow(
                     Checkbox(
                         checked = layer.isVisible,
                         onCheckedChange = { actions.onVisibility(layer.id, it) },
-                        modifier = Modifier.size(touchSize).semantics { contentDescription = "Visibility" },
+                        modifier = Modifier.size(touchSize).semantics { contentDescription = stringResource(R.string.layer_visibility) },
                     )
                     Box {
                         IconButton(onClick = { menuVisible = true }, modifier = Modifier.size(touchSize)) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "Layer menu", modifier = Modifier.size(18.dp))
+                            Icon(
+                                Icons.Default.MoreVert,
+                                contentDescription = stringResource(R.string.layer_menu),
+                                modifier = Modifier.size(18.dp),
+                            )
                         }
                         LayerMenu(layer, menuVisible, actions, options, onBlendMode, onRename) { menuVisible = false }
                     }
@@ -159,9 +165,19 @@ private fun SwipeActions(
             action()
             done()
         }
-    TextButton(onClick = run { actions.onLock(layer.id, !layer.isLocked) }) { Text(if (layer.isLocked) "Unlock" else "Lock") }
-    TextButton(onClick = run { actions.onDuplicate(layer.id) }) { Text("Duplicate") }
-    TextButton(onClick = run { actions.onDelete(layer.id) }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+    TextButton(onClick = run { actions.onLock(layer.id, !layer.isLocked) }) {
+        Text(
+            if (layer.isLocked) {
+                stringResource(R.string.unlock)
+            } else {
+                stringResource(R.string.lock)
+            },
+        )
+    }
+    TextButton(onClick = run { actions.onDuplicate(layer.id) }) { Text(stringResource(R.string.duplicate)) }
+    TextButton(onClick = run { actions.onDelete(layer.id) }) {
+        Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
+    }
 }
 
 private val SWIPE_REVEAL = 56.dp
@@ -269,55 +285,100 @@ private fun LayerMenu(
             dismiss()
         }
     DropdownMenu(expanded = expanded, onDismissRequest = dismiss) {
-        DropdownMenuItem(text = { Text("Rename") }, onClick = item(onRename))
+        DropdownMenuItem(text = { Text(stringResource(R.string.layer_rename)) }, onClick = item(onRename))
         if (options != null && layer.textContent != null) {
-            DropdownMenuItem(text = { Text("Edit Text") }, onClick = item { options.onEditText(layer) })
+            DropdownMenuItem(text = { Text(stringResource(R.string.layer_edit_text)) }, onClick = item { options.onEditText(layer) })
         }
         if (options != null) {
-            DropdownMenuItem(text = { Text("Select") }, onClick = item(options.onSelectContents))
-            DropdownMenuItem(text = { Text("Copy") }, onClick = item(options.onCopy))
-            DropdownMenuItem(text = { Text("Fill Layer") }, onClick = item(options.onFill))
-            DropdownMenuItem(text = { Text("Clear") }, onClick = item(options.onClear))
+            DropdownMenuItem(text = { Text(stringResource(R.string.layer_select)) }, onClick = item(options.onSelectContents))
+            DropdownMenuItem(text = { Text(stringResource(R.string.layer_copy)) }, onClick = item(options.onCopy))
+            DropdownMenuItem(text = { Text(stringResource(R.string.layer_fill)) }, onClick = item(options.onFill))
+            DropdownMenuItem(text = { Text(stringResource(R.string.layer_clear)) }, onClick = item(options.onClear))
         }
         DropdownMenuItem(
-            text = { Text(if (layer.isAlphaLocked) "Alpha Lock ✓" else "Alpha Lock") },
+            text = {
+                Text(
+                    if (layer.isAlphaLocked) {
+                        stringResource(R.string.layer_alpha_lock_on)
+                    } else {
+                        stringResource(R.string.layer_alpha_lock)
+                    },
+                )
+            },
             onClick = item { actions.onAlphaLock(layer.id, !layer.isAlphaLocked) },
         )
-        if (options != null) DropdownMenuItem(text = { Text("Mask") }, onClick = item(options.onMask))
+        if (options != null) DropdownMenuItem(text = { Text(stringResource(R.string.layer_mask)) }, onClick = item(options.onMask))
         DropdownMenuItem(
-            text = { Text(if (layer.isClippingMask) "Clipping Mask ✓" else "Clipping Mask") },
+            text = {
+                Text(
+                    if (layer.isClippingMask) {
+                        stringResource(R.string.layer_clipping_mask_on)
+                    } else {
+                        stringResource(R.string.layer_clipping_mask)
+                    },
+                )
+            },
             onClick = item { actions.onClipping(layer.id, !layer.isClippingMask) },
         )
         if (options != null) {
-            DropdownMenuItem(text = { Text("Invert") }, onClick = item(options.onInvert))
+            DropdownMenuItem(text = { Text(stringResource(R.string.layer_invert)) }, onClick = item(options.onInvert))
             DropdownMenuItem(
-                text = { Text(if (layer.isFillReference) "Reference ✓" else "Reference") },
+                text = {
+                    Text(
+                        if (layer.isFillReference) {
+                            stringResource(R.string.layer_reference_on)
+                        } else {
+                            stringResource(R.string.layer_reference)
+                        },
+                    )
+                },
                 onClick = item { options.onFillReference(layer.id, !layer.isFillReference) },
             )
             DropdownMenuItem(
-                text = { Text(if (layer.drawingAssist) "Drawing Assist ✓" else "Drawing Assist") },
+                text = {
+                    Text(
+                        if (layer.drawingAssist) {
+                            stringResource(R.string.layer_drawing_assist_on)
+                        } else {
+                            stringResource(R.string.layer_drawing_assist)
+                        },
+                    )
+                },
                 onClick = item { options.onDrawingAssist(layer.id, !layer.drawingAssist) },
             )
             DropdownMenuItem(
-                text = { Text(if (layer.isReference) "Exclude from export ✓" else "Exclude from export") },
+                text = {
+                    Text(
+                        if (layer.isReference) {
+                            stringResource(R.string.layer_exclude_export_on)
+                        } else {
+                            stringResource(R.string.layer_exclude_export)
+                        },
+                    )
+                },
                 onClick = item { options.onReference(layer.id, !layer.isReference) },
             )
             DropdownMenuItem(
-                text = { Text(if (layer.isPrivate) "Private (not in time-lapse) ✓" else "Private (not in time-lapse)") },
+                text = { Text(if (layer.isPrivate) stringResource(R.string.layer_private_on) else stringResource(R.string.layer_private)) },
                 onClick = item { options.onPrivate(layer.id, !layer.isPrivate) },
             )
         }
-        DropdownMenuItem(text = { Text("Blend mode") }, onClick = item(onBlendMode))
-        DropdownMenuItem(text = { Text("Merge Down") }, onClick = item { actions.onMergeDown(layer.id) })
-        if (options != null) DropdownMenuItem(text = { Text("Combine Down") }, onClick = item { options.onCombineDown(layer.id) })
-        DropdownMenuItem(text = { Text("Duplicate") }, onClick = item { actions.onDuplicate(layer.id) })
+        DropdownMenuItem(text = { Text(stringResource(R.string.layer_blend_mode)) }, onClick = item(onBlendMode))
+        DropdownMenuItem(text = { Text(stringResource(R.string.merge_down)) }, onClick = item { actions.onMergeDown(layer.id) })
+        if (options != null) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.layer_combine_down)) },
+                onClick = item { options.onCombineDown(layer.id) },
+            )
+        }
+        DropdownMenuItem(text = { Text(stringResource(R.string.duplicate)) }, onClick = item { actions.onDuplicate(layer.id) })
         DropdownMenuItem(
-            text = { Text(if (layer.isLocked) "Unlock" else "Lock") },
+            text = { Text(if (layer.isLocked) stringResource(R.string.unlock) else stringResource(R.string.lock)) },
             onClick = item { actions.onLock(layer.id, !layer.isLocked) },
         )
         HorizontalDivider()
         DropdownMenuItem(
-            text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+            text = { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) },
             onClick = item { actions.onDelete(layer.id) },
         )
     }
