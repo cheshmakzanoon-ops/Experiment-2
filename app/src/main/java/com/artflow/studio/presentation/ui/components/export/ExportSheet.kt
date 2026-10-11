@@ -19,7 +19,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.R
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.export.*
 import com.artflow.studio.data.renderer.BitmapPixelBridge
@@ -57,9 +59,9 @@ fun ExportSheet(
         modifier = modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("Export", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.export_title), style = MaterialTheme.typography.titleMedium)
         ExportPreview(previewBytes)
-        Text("Format", style = MaterialTheme.typography.labelMedium)
+        Text(stringResource(R.string.export_format), style = MaterialTheme.typography.labelMedium)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             availableFormats.forEach { format ->
                 FilterChip(
@@ -69,7 +71,7 @@ fun ExportSheet(
                 )
             }
         }
-        Text("Area", style = MaterialTheme.typography.labelMedium)
+        Text(stringResource(R.string.export_area), style = MaterialTheme.typography.labelMedium)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             ExportArea.entries.forEach { area ->
                 FilterChip(
@@ -81,7 +83,7 @@ fun ExportSheet(
             }
         }
         LabeledSlider(
-            "Scale",
+            stringResource(R.string.export_scale),
             options.scale,
             0.1f..4f,
             { options = options.copy(scale = it, targetWidth = null) },
@@ -89,9 +91,9 @@ fun ExportSheet(
         )
         Text(
             if (safe) {
-                "Output before any selection/content crop: $width × $height px"
+                stringResource(R.string.export_output_size, width, height)
             } else {
-                CanvasOperations.sizeWarning(width, height) ?: "This size is too large"
+                CanvasOperations.sizeWarning(width, height) ?: stringResource(R.string.export_size_too_large)
             },
             style = MaterialTheme.typography.bodySmall,
             color = if (safe) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
@@ -100,25 +102,25 @@ fun ExportSheet(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(options.includeHiddenLayers, onCheckedChange = { options = options.copy(includeHiddenLayers = it) })
             Spacer(Modifier.width(8.dp))
-            Text("Include hidden layers", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.export_include_hidden), style = MaterialTheme.typography.bodySmall)
         }
         if (options.format != ExportFormat.JPEG && options.format != ExportFormat.MP4) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Switch(options.flattenOntoBackground, onCheckedChange = { options = options.copy(flattenOntoBackground = it) })
                 Spacer(Modifier.width(8.dp))
-                Text("Flatten onto white", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.export_flatten_white), style = MaterialTheme.typography.bodySmall)
             }
         } else {
-            Text("This format uses an opaque white background.", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.export_opaque_background), style = MaterialTheme.typography.bodySmall)
         }
         OutlinedTextField(
             value = options.fileName.orEmpty(),
             onValueChange = { options = options.copy(fileName = it) },
-            label = { Text("File name (optional)") },
+            label = { Text(stringResource(R.string.export_file_name)) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
-        Text("Presets", style = MaterialTheme.typography.labelMedium)
+        Text(stringResource(R.string.export_presets), style = MaterialTheme.typography.labelMedium)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             ExportPresets.ALL.filter { it.options.format in availableFormats }.forEach { preset ->
                 AssistChip(
@@ -136,28 +138,28 @@ fun ExportSheet(
             if (running) {
                 CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.width(8.dp))
-                Text("Exporting…")
+                Text(stringResource(R.string.export_exporting))
             } else {
                 val label =
                     if (options.format == ExportFormat.PNG && options.area == ExportArea.ALL_FRAMES) {
-                        "Export PNG frames (zip)"
+                        stringResource(R.string.export_png_frames_zip)
                     } else {
-                        "Export ${options.format.displayName}"
+                        stringResource(R.string.export_format_action, options.format.displayName)
                     }
                 Text(label)
             }
         }
         if (onExportTimelapse != null) {
-            Text("Time-lapse replay", style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.export_timelapse_title), style = MaterialTheme.typography.titleSmall)
             Text(
-                "Every edit is recorded automatically. Export a short MP4 replay of how this artwork was made.",
+                stringResource(R.string.export_timelapse_body),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onExportTimelapse, enabled = !running) { Text("Export time-lapse") }
+                OutlinedButton(onClick = onExportTimelapse, enabled = !running) { Text(stringResource(R.string.export_timelapse_action)) }
                 if (onClearTimelapse != null) {
-                    TextButton(onClick = onClearTimelapse, enabled = !running) { Text("Clear recording") }
+                    TextButton(onClick = onClearTimelapse, enabled = !running) { Text(stringResource(R.string.export_timelapse_clear)) }
                 }
             }
         }
@@ -172,7 +174,7 @@ private fun ExportPreview(bytes: ByteArray?) {
     bitmap?.let {
         Image(
             it.asImageBitmap(),
-            "Export preview",
+            stringResource(R.string.export_preview_description),
             contentScale = ContentScale.Fit,
             modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp),
         )
@@ -185,13 +187,18 @@ private fun FormatControls(
     onChange: (ExportOptions) -> Unit,
 ) {
     if (options.format == ExportFormat.JPEG || options.format == ExportFormat.WEBP) {
-        LabeledSlider("Quality", options.quality.toFloat(), 1f..100f, { onChange(options.copy(quality = it.toInt())) })
+        LabeledSlider(
+            stringResource(R.string.export_quality),
+            options.quality.toFloat(),
+            1f..100f,
+            { onChange(options.copy(quality = it.toInt())) },
+        )
     }
     if (options.format in DPI_FORMATS) {
-        LabeledSlider("DPI", options.dpi.toFloat(), 36f..600f, { onChange(options.copy(dpi = it.toInt())) })
+        LabeledSlider(stringResource(R.string.export_dpi), options.dpi.toFloat(), 36f..600f, { onChange(options.copy(dpi = it.toInt())) })
     }
     if (options.format == ExportFormat.PDF) {
-        Text("PDF page", style = MaterialTheme.typography.labelMedium)
+        Text(stringResource(R.string.export_pdf_page), style = MaterialTheme.typography.labelMedium)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             PdfPageSize.entries.forEach { page ->
                 FilterChip(
@@ -206,19 +213,19 @@ private fun FormatControls(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(options.psdUseRle, onCheckedChange = { onChange(options.copy(psdUseRle = it)) })
             Spacer(Modifier.width(8.dp))
-            Text("RLE compress layers", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.export_rle), style = MaterialTheme.typography.bodySmall)
         }
     }
     if (options.format == ExportFormat.GIF || options.format == ExportFormat.APNG) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(options.gifLoop, onCheckedChange = { onChange(options.copy(gifLoop = it)) })
             Spacer(Modifier.width(8.dp))
-            Text("Loop the animation", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.export_loop), style = MaterialTheme.typography.bodySmall)
         }
     }
     if (options.format == ExportFormat.MP4) {
         LabeledSlider(
-            "Bitrate (Mbps)",
+            stringResource(R.string.export_bitrate),
             options.videoBitrate / 1_000_000f,
             1f..30f,
             { onChange(options.copy(videoBitrate = (it * 1_000_000).toInt())) },
@@ -252,17 +259,17 @@ private fun ExportResultPanel(
                         Button(onClick = { actions.share(result) }) {
                             Icon(Icons.Default.Share, contentDescription = null)
                             Spacer(Modifier.width(6.dp))
-                            Text("Share")
+                            Text(stringResource(R.string.export_share))
                         }
                         if (result.format.supportsGallery) {
-                            OutlinedButton(onClick = { actions.gallery(result) }) { Text("Gallery") }
+                            OutlinedButton(onClick = { actions.gallery(result) }) { Text(stringResource(R.string.export_gallery)) }
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { actions.saveFile(result) }) { Text("Save file") }
-                        TextButton(onClick = { actions.open(result) }) { Text("Open") }
+                        OutlinedButton(onClick = { actions.saveFile(result) }) { Text(stringResource(R.string.export_save_file)) }
+                        TextButton(onClick = { actions.open(result) }) { Text(stringResource(R.string.export_open)) }
                     }
-                    TextButton(onClick = onDismiss) { Text("Export another") }
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.export_another)) }
                 }
             }
         }
