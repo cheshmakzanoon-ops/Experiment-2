@@ -251,10 +251,10 @@ private fun StudioSidebarContent(
                 label = "Opacity ${(state.opacity * 100).toInt()}%",
                 height = sliderHeight,
             )
-            IconButton(onClick = actions.onUndo, enabled = state.canUndo, modifier = Modifier.size(36.dp)) {
+            IconButton(onClick = actions.onUndo, enabled = state.canUndo, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.Default.Undo, contentDescription = stringResource(R.string.undo))
             }
-            IconButton(onClick = actions.onRedo, enabled = state.canRedo, modifier = Modifier.size(36.dp)) {
+            IconButton(onClick = actions.onRedo, enabled = state.canRedo, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.Default.Redo, contentDescription = stringResource(R.string.redo))
             }
         }

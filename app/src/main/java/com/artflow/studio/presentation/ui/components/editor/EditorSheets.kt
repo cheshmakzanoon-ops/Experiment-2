@@ -908,7 +908,7 @@ fun AnimationSheet(
                             ) {
                                 Icon(Icons.Default.ChevronRight, contentDescription = "Move later", modifier = Modifier.size(16.dp))
                             }
-                            IconButton(onClick = { onDeleteFrame(index) }, modifier = Modifier.size(24.dp)) {
+                            IconButton(onClick = { onDeleteFrame(index) }, modifier = Modifier.size(48.dp)) {
                                 Icon(Icons.Default.Delete, contentDescription = "Delete frame", modifier = Modifier.size(16.dp))
                             }
                         }
