@@ -24,4 +24,27 @@ class RoundTipEdgeTest {
             }
         assertTrue("farthest coverage at $farthest", farthest <= 10.5f + 1e-4f)
     }
+
+    @Test
+    fun aHardEllipticalTipHasAnAntiAliasedEdgeAndKeepsItsSize() {
+        val target = PixelBuffer(width, width)
+        Stamping.dab(
+            target,
+            centre,
+            centre,
+            radius = 10f,
+            color = 0xFF000000.toInt(),
+            hardness = 1f,
+            tip = Stamping.TipShape(roundness = 0.5f, angleDegrees = 30f),
+        )
+        val painted = target.pixels.indices.filter { target.pixels[it] ushr 24 != 0 }
+        assertTrue("A hard flat tip still needs partly covered edge pixels", painted.any { (target.pixels[it] ushr 24) in 1..254 })
+        val farthest =
+            painted.maxOf { i ->
+                val dx = i % width + 0.5f - centre
+                val dy = i / width + 0.5f - centre
+                sqrt(dx * dx + dy * dy)
+            }
+        assertTrue("farthest coverage at $farthest", farthest <= 10.5f + 1e-4f)
+    }
 }

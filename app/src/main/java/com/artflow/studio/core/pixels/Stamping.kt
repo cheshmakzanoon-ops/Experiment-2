@@ -239,8 +239,10 @@ object Stamping {
         val y0 = max(0, floor(y - radius).toInt())
         val y1 = min(target.height - 1, ceil(y + radius).toInt())
         if (x1 < x0 || y1 < y0) return
-        val inner = radius * hardness.coerceIn(0f, 1f)
-        // Thin tips need a pixel-wide edge along the short axis to stay anti-aliased.
+        // The edge ramp is at least a pixel wide along the short axis, and it starts inside the radius, so a hard
+        // tip (hardness 1) is anti-aliased too. Without the ramp it stair-steps; the ramp starts at the same place
+        // as before for every tip that is not thin.
+        val inner = min(radius * hardness.coerceIn(0f, 1f), radius - 0.75f / minor).coerceAtLeast(0f)
         val edge = max(radius - inner, 0.75f / minor)
         val paintRows = { from: Int, to: Int ->
             for (py in from..to) {
