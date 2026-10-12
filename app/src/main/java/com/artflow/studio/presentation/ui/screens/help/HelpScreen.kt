@@ -12,7 +12,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.R
 
 /** A tutorial step shown in the help screen and the first-run walkthrough. */
 data class TutorialStep(
@@ -168,10 +170,10 @@ fun HelpScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Help and tutorials") },
+                title = { Text(stringResource(R.string.helpscreen_help_and_tutorials)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.helpscreen_back))
                     }
                 },
             )
@@ -191,19 +193,17 @@ fun HelpScreen(
             TutorialSection("Workflow", Tutorials.WORKFLOW, dismissedTips, onDismissTip)
 
             Divider()
-            Text("About ArtFlow", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.helpscreen_about_artflow), style = MaterialTheme.typography.titleMedium)
             Text(
-                "ArtFlow Studio is an offline painting and animation studio. Artwork, layers, masks, " +
-                    "animation frames and exports stay on this device; there is no account and no upload.",
+                stringResource(R.string.helpscreen_artflow_is_an_offline_studio),
                 style = MaterialTheme.typography.bodyMedium,
             )
             Text(
-                "In the editor, the Actions panel holds Add, Canvas, Share, Video, Prefs and Help, and the " +
-                    "quick menu holds view, history, canvas and selection actions in one place.",
+                stringResource(R.string.helpscreen_in_the_editor_the_actions_panel),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            OutlinedButton(onClick = onResetTips) { Text("Show the first-run tips again") }
+            OutlinedButton(onClick = onResetTips) { Text(stringResource(R.string.helpscreen_show_the_first_run_tips_again)) }
         }
     }
 }
@@ -231,13 +231,13 @@ private fun TutorialSection(
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            "Dismissed",
+                            stringResource(R.string.helpscreen_dismissed),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     } else {
                         TextButton(onClick = { onDismissTip(step.tipId) }) {
-                            Text("Hide this tip", style = MaterialTheme.typography.labelSmall)
+                            Text(stringResource(R.string.helpscreen_hide_this_tip), style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 }
@@ -260,7 +260,7 @@ fun OnboardingDialog(onFinish: (showTips: Boolean) -> Unit) {
 
     AlertDialog(
         onDismissRequest = { onFinish(false) },
-        title = { Text("Welcome to ArtFlow (${index + 1}/${steps.size})") },
+        title = { Text(stringResource(R.string.helpscreen_welcome_to_artflow_step, index + 1, steps.size)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(step.title, style = MaterialTheme.typography.titleSmall)
@@ -275,7 +275,7 @@ fun OnboardingDialog(onFinish: (showTips: Boolean) -> Unit) {
             }
         },
         dismissButton = {
-            TextButton(onClick = { onFinish(false) }) { Text("Skip") }
+            TextButton(onClick = { onFinish(false) }) { Text(stringResource(R.string.helpscreen_skip)) }
         },
     )
 }

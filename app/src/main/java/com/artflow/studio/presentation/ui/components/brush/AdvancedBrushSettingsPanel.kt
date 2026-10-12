@@ -875,7 +875,7 @@ private fun CustomPressureControls(
 ) {
     val response = brushParams.customPressure
     BrushParameterSlider(
-        label = "Output at 25% pressure",
+        label = stringResource(R.string.advancedbrushsettingspanel_output_at_25_pressure),
         value = response.low,
         onValueChange = { value ->
             val curve = PressureResponse(value, maxOf(value, response.middle), maxOf(value, response.high))
@@ -885,7 +885,7 @@ private fun CustomPressureControls(
         valueDisplay = "%.0f%%".format(response.low * 100),
     )
     BrushParameterSlider(
-        label = "Output at 50% pressure",
+        label = stringResource(R.string.advancedbrushsettingspanel_output_at_50_pressure),
         value = response.middle,
         onValueChange = { value ->
             val curve = PressureResponse(minOf(response.low, value), value, maxOf(value, response.high))
@@ -895,7 +895,7 @@ private fun CustomPressureControls(
         valueDisplay = "%.0f%%".format(response.middle * 100),
     )
     BrushParameterSlider(
-        label = "Output at 75% pressure",
+        label = stringResource(R.string.advancedbrushsettingspanel_output_at_75_pressure),
         value = response.high,
         onValueChange = { value ->
             val curve = PressureResponse(minOf(response.low, value), minOf(response.middle, value), value)

@@ -8,7 +8,9 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.R
 import com.artflow.studio.core.color.CmykProof
 import com.artflow.studio.domain.model.settings.PressureAndSmoothing
 import com.artflow.studio.presentation.ui.components.canvas.GestureControls
@@ -202,7 +204,7 @@ private fun CanvasTab(
         }
     }
     HorizontalDivider()
-    Text("Canvas information", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
+    Text(stringResource(R.string.actionspanel_canvas_information), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
     Text(
         "${info.width} × ${info.height} px · ${info.dpi} dpi · ${info.layers} layers · ${info.frames} frame(s) · " +
             "${info.profile} · tracked time ${trackedLabel(info.trackedMs)}",
@@ -231,7 +233,7 @@ private fun PrefsTab(
     PrefSwitch("Touch and hold for eyedropper", prefs.holdEyedropper, actions.onHoldEyedropper)
     PrefSwitch("Paint with a finger", prefs.fingerPainting, actions.onFingerPainting)
     HorizontalDivider()
-    Text("Pressure and Smoothing", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
+    Text(stringResource(R.string.actionspanel_pressure_and_smoothing), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
     val smoothing = prefs.smoothing
     val change = actions.onPressureAndSmoothing
     PrefSlider("Stabilization", smoothing.stabilization, 0f..1f, percent(smoothing.stabilization)) {
@@ -248,7 +250,7 @@ private fun PrefsTab(
     }
     // The slider reads soft (left) to firm (right) on a logarithmic scale centred on linear.
     PrefSlider(
-        label = "Pressure",
+        label = stringResource(R.string.actionspanel_pressure),
         value = ln(smoothing.pressureCurve),
         range = ln(0.3f)..ln(3f),
         readout =
@@ -259,7 +261,7 @@ private fun PrefsTab(
             },
     ) { change(smoothing.copy(pressureCurve = exp(it))) }
     HorizontalDivider()
-    Text("Gesture controls", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
+    Text(stringResource(R.string.actionspanel_gesture_controls), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
     val gestures = prefs.gestures
     PrefSwitch("Three-finger scrub clears the layer", gestures.scrubToClear) { actions.onGestures(gestures.copy(scrubToClear = it)) }
     PrefSwitch("Three-finger swipe opens Copy & Paste", gestures.swipeCopyPaste) {
@@ -297,7 +299,7 @@ private fun TimelapseQuality(
     quality: Int,
     onQuality: (Int) -> Unit,
 ) {
-    Text("Recording quality", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
+    Text(stringResource(R.string.actionspanel_recording_quality), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
     Row(Modifier.padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf(1280 to "720p", 1920 to "1080p", 2560 to "1440p").forEach { (side, label) ->
             FilterChip(selected = quality == side, onClick = { onQuality(side) }, label = { Text(label) })

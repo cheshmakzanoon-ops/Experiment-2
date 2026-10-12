@@ -12,7 +12,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.core.content.FileProvider
+import com.artflow.studio.R
 import com.artflow.studio.core.export.AbrReader
 import com.artflow.studio.data.local.BrushArchives
 import com.artflow.studio.data.local.BrushFiles
@@ -73,8 +75,8 @@ internal fun BrushFileButtons(
                 }
             if (file == null) onFailure("The brush could not be shared") else runCatching { share(context, file) }
         }
-    }, enabled = enabled) { Text("Share") }
-    TextButton(onClick = { runCatching { picker.launch("*/*") } }, enabled = enabled) { Text("Import") }
+    }, enabled = enabled) { Text(stringResource(R.string.export_share)) }
+    TextButton(onClick = { runCatching { picker.launch("*/*") } }, enabled = enabled) { Text(stringResource(R.string.brushfilebuttons_import)) }
 }
 
 /** Procreate `.brush` and `.brushset` files: each brush comes in with its name, settings, shape and grain. */

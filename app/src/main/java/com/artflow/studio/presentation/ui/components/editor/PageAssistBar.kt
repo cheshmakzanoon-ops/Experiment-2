@@ -23,10 +23,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.R
 
 /**
  * Page Assist: a strip of page thumbnails along the bottom of the canvas. Tapping a page shows it
@@ -51,18 +53,18 @@ fun PageAssistBar(
     ) {
         Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Page ${activePage + 1} of $pageCount", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                Text(stringResource(R.string.pageassistbar_page_of, activePage + 1, pageCount), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                 IconButton(onClick = { actions.onMove(activePage, activePage - 1) }, enabled = activePage > 0) {
-                    Icon(Icons.Default.ChevronLeft, contentDescription = "Move page earlier")
+                    Icon(Icons.Default.ChevronLeft, contentDescription = stringResource(R.string.pageassistbar_move_page_earlier))
                 }
                 IconButton(onClick = { actions.onMove(activePage, activePage + 1) }, enabled = activePage < pageCount - 1) {
-                    Icon(Icons.Default.ChevronRight, contentDescription = "Move page later")
+                    Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.pageassistbar_move_page_later))
                 }
-                IconButton(onClick = actions.onDuplicate) { Icon(Icons.Default.ContentCopy, contentDescription = "Duplicate page") }
+                IconButton(onClick = actions.onDuplicate) { Icon(Icons.Default.ContentCopy, contentDescription = stringResource(R.string.pageassistbar_duplicate_page)) }
                 IconButton(onClick = { actions.onDelete(activePage) }, enabled = pageCount > 1) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete page")
+                    Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.pageassistbar_delete_page))
                 }
-                IconButton(onClick = actions.onClose) { Icon(Icons.Default.Close, contentDescription = "Close Page Assist") }
+                IconButton(onClick = actions.onClose) { Icon(Icons.Default.Close, contentDescription = stringResource(R.string.pageassistbar_close_page_assist)) }
             }
             LazyRow(state = listState, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 itemsIndexed(List(pageCount) { it }) { index, _ ->
@@ -71,7 +73,7 @@ fun PageAssistBar(
                 item {
                     OutlinedCard(onClick = actions.onAdd, modifier = Modifier.size(PAGE_WIDTH, PAGE_HEIGHT)) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.Add, contentDescription = "Add page")
+                            Icon(Icons.Default.Add, contentDescription = stringResource(R.string.pageassistbar_add_page))
                         }
                     }
                 }
@@ -88,13 +90,14 @@ private fun PageCard(
     onClick: () -> Unit,
 ) {
     val outline = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+    val pageDescription = stringResource(R.string.pageassistbar_page_number, index + 1)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier =
             Modifier
                 .clickable(onClick = onClick)
                 .semantics {
-                    contentDescription = "Page ${index + 1}"
+                    contentDescription = pageDescription
                     selected = active
                 },
     ) {

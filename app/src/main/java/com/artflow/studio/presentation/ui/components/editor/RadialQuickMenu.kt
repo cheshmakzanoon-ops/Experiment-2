@@ -16,11 +16,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.R
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -67,7 +69,7 @@ fun RadialQuickMenu(
                                     .size(56.dp)
                                     .clip(CircleShape)
                                     .combinedClickable(
-                                        onLongClickLabel = "Change this action",
+                                        onLongClickLabel = stringResource(R.string.radialquickmenu_change_this_action),
                                         onLongClick = if (choices.isEmpty()) null else ({ assigning = index }),
                                         onClick = {
                                             action.onClick()
@@ -105,7 +107,7 @@ fun RadialQuickMenu(
                 modifier = Modifier.size(64.dp),
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text("More", style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
+                    Text(stringResource(R.string.radialquickmenu_more), style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
                 }
             }
         }

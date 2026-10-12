@@ -25,10 +25,12 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.R
 import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
@@ -186,7 +188,7 @@ fun BrushOptionsRow(
         when {
             tool == ToolType.ERASER ->
                 LabeledSlider(
-                    label = "Size",
+                    label = stringResource(R.string.size),
                     value = eraserSize,
                     range = 1f..400f,
                     onChange = onEraserSizeChanged,
@@ -194,7 +196,7 @@ fun BrushOptionsRow(
                 )
             tool.usesBrushSize() -> {
                 LabeledSlider(
-                    label = "Size",
+                    label = stringResource(R.string.size),
                     value = size,
                     range = 1f..400f,
                     onChange = onSizeChanged,
@@ -202,7 +204,7 @@ fun BrushOptionsRow(
                 )
                 Spacer(Modifier.width(12.dp))
                 LabeledSlider(
-                    label = "Opacity",
+                    label = stringResource(R.string.opacity),
                     value = opacity,
                     range = 0.01f..1f,
                     onChange = onOpacityChanged,
@@ -211,7 +213,7 @@ fun BrushOptionsRow(
             }
             tool == ToolType.PAINT_BUCKET || tool == ToolType.SELECT_MAGIC_WAND ->
                 LabeledSlider(
-                    label = "Tolerance",
+                    label = stringResource(R.string.editorchrome_tolerance),
                     value = tolerance.toFloat(),
                     range = 0f..255f,
                     onChange = { onToleranceChanged(it.toInt()) },
@@ -492,11 +494,11 @@ fun QuickMenuSheet(
                 .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("View", style = MaterialTheme.typography.titleSmall)
+        Text(stringResource(R.string.editorchrome_view), style = MaterialTheme.typography.titleSmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AssistChip(onClick = onZoomOut, label = { Text("Zoom out") })
-            AssistChip(onClick = onZoomIn, label = { Text("Zoom in") })
-            AssistChip(onClick = onFit, label = { Text("Fit") })
+            AssistChip(onClick = onZoomOut, label = { Text(stringResource(R.string.editorchrome_zoom_out)) })
+            AssistChip(onClick = onZoomIn, label = { Text(stringResource(R.string.editorchrome_zoom_in)) })
+            AssistChip(onClick = onFit, label = { Text(stringResource(R.string.editorchrome_fit)) })
             AssistChip(onClick = onResetView, label = { Text("100%") })
         }
         Text(
@@ -505,29 +507,29 @@ fun QuickMenuSheet(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AssistChip(onClick = { onRotate(15f) }, label = { Text("View +15°") })
-            AssistChip(onClick = { onRotate(-15f) }, label = { Text("View -15°") })
+            AssistChip(onClick = { onRotate(15f) }, label = { Text(stringResource(R.string.editorchrome_view_15)) })
+            AssistChip(onClick = { onRotate(-15f) }, label = { Text(stringResource(R.string.editorchrome_view_15_2)) })
         }
 
-        Text("History", style = MaterialTheme.typography.titleSmall)
+        Text(stringResource(R.string.color_history), style = MaterialTheme.typography.titleSmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AssistChip(onClick = onUndo, enabled = canUndo, label = { Text("Undo") })
-            AssistChip(onClick = onRedo, enabled = canRedo, label = { Text("Redo") })
+            AssistChip(onClick = onUndo, enabled = canUndo, label = { Text(stringResource(R.string.undo)) })
+            AssistChip(onClick = onRedo, enabled = canRedo, label = { Text(stringResource(R.string.redo)) })
         }
 
-        Text("Canvas", style = MaterialTheme.typography.titleSmall)
+        Text(stringResource(R.string.editorchrome_canvas), style = MaterialTheme.typography.titleSmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AssistChip(onClick = { onRotateCanvas(90) }, label = { Text("Rotate 90°") })
-            AssistChip(onClick = { onRotateCanvas(-90) }, label = { Text("Rotate -90°") })
-            AssistChip(onClick = { onFlipCanvas(false) }, label = { Text("Flip H") })
-            AssistChip(onClick = { onFlipCanvas(true) }, label = { Text("Flip V") })
+            AssistChip(onClick = { onRotateCanvas(90) }, label = { Text(stringResource(R.string.editorchrome_rotate_90)) })
+            AssistChip(onClick = { onRotateCanvas(-90) }, label = { Text(stringResource(R.string.editorchrome_rotate_90_2)) })
+            AssistChip(onClick = { onFlipCanvas(false) }, label = { Text(stringResource(R.string.editorchrome_flip_h)) })
+            AssistChip(onClick = { onFlipCanvas(true) }, label = { Text(stringResource(R.string.editorchrome_flip_v)) })
         }
 
-        Text("Selection", style = MaterialTheme.typography.titleSmall)
+        Text(stringResource(R.string.editorchrome_selection), style = MaterialTheme.typography.titleSmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AssistChip(onClick = onSelectAll, label = { Text("Select all") })
-            AssistChip(onClick = onInvertSelection, label = { Text("Invert") })
-            AssistChip(onClick = onClearSelection, label = { Text("Clear") })
+            AssistChip(onClick = onSelectAll, label = { Text(stringResource(R.string.editorchrome_select_all)) })
+            AssistChip(onClick = onInvertSelection, label = { Text(stringResource(R.string.chip_invert)) })
+            AssistChip(onClick = onClearSelection, label = { Text(stringResource(R.string.chip_clear)) })
         }
     }
 }

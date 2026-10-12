@@ -12,11 +12,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.artflow.studio.R
 import com.artflow.studio.domain.model.Project
 import java.io.File
 
@@ -55,12 +57,13 @@ internal fun StackCard(
     modifier: Modifier = Modifier,
     onOpen: () -> Unit,
 ) {
+    val stackDescription = stringResource(R.string.gallerylayout_stack_name, name)
     Card(
         modifier =
             modifier
                 .fillMaxWidth()
                 .clickable(onClick = onOpen)
-                .semantics { contentDescription = "Stack $name" },
+                .semantics { contentDescription = stackDescription },
     ) {
         Column {
             Box(
@@ -126,18 +129,18 @@ internal fun StackDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it.take(60) },
-                    label = { Text("New stack") },
+                    label = { Text(stringResource(R.string.gallerylayout_new_stack)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 if (current != null) {
-                    TextButton(onClick = { onMove(null) }) { Text("Remove from stack") }
+                    TextButton(onClick = { onMove(null) }) { Text(stringResource(R.string.gallerylayout_remove_from_stack)) }
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onMove(name) }, enabled = name.isNotBlank()) { Text("Create stack") }
+            TextButton(onClick = { onMove(name) }, enabled = name.isNotBlank()) { Text(stringResource(R.string.gallerylayout_create_stack)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }

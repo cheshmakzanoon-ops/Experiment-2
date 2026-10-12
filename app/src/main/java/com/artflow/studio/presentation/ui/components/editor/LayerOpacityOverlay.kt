@@ -12,9 +12,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.R
 import kotlin.math.roundToInt
 
 /**
@@ -30,10 +32,11 @@ fun LayerOpacityOverlay(
 ) {
     val current by rememberUpdatedState(opacity)
     var value by remember { mutableFloatStateOf(opacity) }
+    val sliderDescription = stringResource(R.string.layeropacityoverlay_slide_to_set_opacity)
     Box(
         modifier
             .fillMaxSize()
-            .semantics { contentDescription = "Slide to set layer opacity" }
+            .semantics { contentDescription = sliderDescription }
             .pointerInput(Unit) { detectTapGestures { onDone() } }
             .pointerInput(Unit) {
                 detectHorizontalDragGestures(onDragStart = { value = current }) { change, amount ->
@@ -54,7 +57,7 @@ fun LayerOpacityOverlay(
                     "Opacity ${(opacity * 100).roundToInt()}% · slide across the canvas",
                     style = MaterialTheme.typography.labelLarge,
                 )
-                TextButton(onClick = onDone) { Text("Done") }
+                TextButton(onClick = onDone) { Text(stringResource(R.string.layeropacityoverlay_done)) }
             }
         }
     }

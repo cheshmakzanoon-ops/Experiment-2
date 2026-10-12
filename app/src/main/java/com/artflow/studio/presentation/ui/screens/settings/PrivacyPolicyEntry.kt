@@ -23,17 +23,17 @@ import com.artflow.studio.R
 @Composable
 fun PrivacyPolicyEntry() {
     var visible by rememberSaveable { mutableStateOf(false) }
-    OutlinedButton(onClick = { visible = true }) { Text("Privacy policy") }
+    OutlinedButton(onClick = { visible = true }) { Text(stringResource(R.string.privacypolicyentry_privacy_policy)) }
     if (visible) {
         AlertDialog(
             onDismissRequest = { visible = false },
-            title = { Text("ArtFlow Privacy Policy") },
+            title = { Text(stringResource(R.string.privacypolicyentry_artflow_privacy_policy)) },
             text = {
                 Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                     SelectionContainer { Text(stringResource(R.string.privacy_policy)) }
                 }
             },
-            confirmButton = { TextButton(onClick = { visible = false }) { Text("Close") } },
+            confirmButton = { TextButton(onClick = { visible = false }) { Text(stringResource(R.string.privacypolicyentry_close)) } },
         )
     }
 }

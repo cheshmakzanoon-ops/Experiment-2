@@ -27,6 +27,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
@@ -44,6 +45,7 @@ import coil.request.ImageRequest.Builder
 import coil.request.SuccessResult
 import coil.size.Precision
 import coil.size.Scale
+import com.artflow.studio.R
 import com.artflow.studio.core.canvas.ReferenceViewport
 import com.artflow.studio.presentation.ui.theme.LocalArtFlowFlags
 import kotlinx.coroutines.ensureActive
@@ -148,23 +150,23 @@ fun ReferenceWindow(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        "Reference",
+                        stringResource(R.string.layer_reference),
                         style = MaterialTheme.typography.titleSmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f).padding(start = 12.dp).testTag("reference-handle"),
                     )
                     IconButton(onClick = onImport, modifier = Modifier.size(touchSize)) {
-                        Icon(Icons.Default.AddPhotoAlternate, contentDescription = "Import reference image")
+                        Icon(Icons.Default.AddPhotoAlternate, contentDescription = stringResource(R.string.referencecompanion_import_reference_image))
                     }
                     IconButton(onClick = onClose, modifier = Modifier.size(touchSize)) {
-                        Icon(Icons.Default.Close, contentDescription = "Close reference")
+                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.referencecompanion_close_reference))
                     }
                 }
                 canvas?.let { mode ->
                     Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(selected = mode.showing, onClick = { mode.onShow(true) }, label = { Text("Canvas") })
-                        FilterChip(selected = !mode.showing, onClick = { mode.onShow(false) }, label = { Text("Image") })
+                        FilterChip(selected = mode.showing, onClick = { mode.onShow(true) }, label = { Text(stringResource(R.string.editorchrome_canvas)) })
+                        FilterChip(selected = !mode.showing, onClick = { mode.onShow(false) }, label = { Text(stringResource(R.string.referencecompanion_image)) })
                     }
                 }
                 val liveCanvas = canvas?.takeIf { it.showing }
@@ -192,7 +194,7 @@ fun ReferenceWindow(
                                     },
                                     style = MaterialTheme.typography.bodySmall,
                                 )
-                                TextButton(onClick = onImport) { Text("Choose image") }
+                                TextButton(onClick = onImport) { Text(stringResource(R.string.referencecompanion_choose_image)) }
                             }
                         }
                     }
@@ -245,6 +247,8 @@ private fun ReferenceImageViewer(
     }
 
     Column(modifier) {
+        val referenceDescription = stringResource(R.string.referencecompanion_reference_image)
+        val referenceSize = stringResource(R.string.referencecompanion_pixel_preview_size, bitmap.width, bitmap.height)
         Canvas(
             modifier =
                 Modifier
@@ -254,8 +258,8 @@ private fun ReferenceImageViewer(
                     .onSizeChanged { viewSize = it }
                     .testTag("reference-image")
                     .semantics {
-                        contentDescription = "Reference image"
-                        stateDescription = "${bitmap.width} × ${bitmap.height} pixel preview"
+                        contentDescription = referenceDescription
+                        stateDescription = referenceSize
                         customActions =
                             listOf(
                                 CustomAccessibilityAction("Sample centre colour") {
@@ -290,20 +294,20 @@ private fun ReferenceImageViewer(
             horizontalArrangement = Arrangement.Center,
         ) {
             IconButton(onClick = { update(viewport().zoomBy(0.8f)) }, enabled = zoom > 1f, modifier = Modifier.size(touchSize)) {
-                Icon(Icons.Default.ZoomOut, contentDescription = "Zoom reference out")
+                Icon(Icons.Default.ZoomOut, contentDescription = stringResource(R.string.referencecompanion_zoom_reference_out))
             }
             IconButton(
                 onClick = { update(viewport().zoomBy(1.25f)) },
                 enabled = zoom < ReferenceViewport.MAX_ZOOM,
                 modifier = Modifier.size(touchSize),
             ) {
-                Icon(Icons.Default.ZoomIn, contentDescription = "Zoom reference in")
+                Icon(Icons.Default.ZoomIn, contentDescription = stringResource(R.string.referencecompanion_zoom_reference_in))
             }
             IconButton(onClick = { update(viewport().fit()) }, modifier = Modifier.size(touchSize)) {
-                Icon(Icons.Default.CenterFocusStrong, contentDescription = "Fit reference")
+                Icon(Icons.Default.CenterFocusStrong, contentDescription = stringResource(R.string.referencecompanion_fit_reference))
             }
             IconToggleButton(checked = picking, onCheckedChange = { picking = it }, modifier = Modifier.size(touchSize)) {
-                Icon(Icons.Default.Colorize, contentDescription = "Pick reference colour")
+                Icon(Icons.Default.Colorize, contentDescription = stringResource(R.string.referencecompanion_pick_reference_colour))
             }
         }
         Text(

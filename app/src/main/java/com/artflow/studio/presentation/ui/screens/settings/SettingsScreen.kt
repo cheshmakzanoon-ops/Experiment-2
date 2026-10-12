@@ -16,9 +16,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.artflow.studio.R
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.domain.model.settings.AccentChoice
 import com.artflow.studio.domain.model.settings.GallerySort
@@ -52,10 +54,10 @@ fun SettingsScreen(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = { Text(stringResource(R.string.settings)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.helpscreen_back))
                     }
                 },
             )
@@ -74,7 +76,7 @@ fun SettingsScreen(
                 PaletteRecoveryNotice(recoveryRunning) { paletteBackup.launch("ArtFlow-unreadable-palettes.txt") }
             }
             SettingsSection("Appearance")
-            Text("Theme", style = MaterialTheme.typography.labelMedium)
+            Text(stringResource(R.string.settingsscreen_theme), style = MaterialTheme.typography.labelMedium)
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ThemeMode.entries.forEach { mode ->
                     FilterChip(
@@ -84,7 +86,7 @@ fun SettingsScreen(
                     )
                 }
             }
-            Text("Accent", style = MaterialTheme.typography.labelMedium)
+            Text(stringResource(R.string.settingsscreen_accent), style = MaterialTheme.typography.labelMedium)
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AccentChoice.entries.forEach { accent ->
                     FilterChip(
@@ -97,20 +99,20 @@ fun SettingsScreen(
 
             SettingsSection("Accessibility")
             SwitchRow(
-                title = "High contrast",
-                subtitle = "Stronger outlines and clearer text contrast",
+                title = stringResource(R.string.settingsscreen_high_contrast),
+                subtitle = stringResource(R.string.settingsscreen_stronger_outlines_and_clearer_text),
                 checked = settings.highContrast,
                 onChange = viewModel::setHighContrast,
             )
             SwitchRow(
-                title = "Reduce motion",
-                subtitle = "Shortens panel and canvas animations",
+                title = stringResource(R.string.settingsscreen_reduce_motion),
+                subtitle = stringResource(R.string.settingsscreen_shortens_panel_and_canvas_animations),
                 checked = settings.reduceMotion,
                 onChange = viewModel::setReduceMotion,
             )
             SwitchRow(
-                title = "Larger touch targets",
-                subtitle = "Bigger toolbar buttons for easier tapping",
+                title = stringResource(R.string.settingsscreen_larger_touch_targets),
+                subtitle = stringResource(R.string.settingsscreen_bigger_toolbar_buttons_for_easier),
                 checked = settings.largeTouchTargets,
                 onChange = viewModel::setLargeTouchTargets,
             )
@@ -128,54 +130,54 @@ fun SettingsScreen(
 
             SettingsSection("Canvas")
             SwitchRow(
-                title = "Transparency checkerboard",
-                subtitle = "Show the checker pattern behind transparent pixels",
+                title = stringResource(R.string.settingsscreen_transparency_checkerboard),
+                subtitle = stringResource(R.string.settingsscreen_show_the_checker_pattern_behind),
                 checked = settings.checkerboard,
                 onChange = viewModel::setCheckerboard,
             )
             SwitchRow(
-                title = "Onion skin",
-                subtitle = "Show previous and next animation frames as ghosts",
+                title = stringResource(R.string.editorsheets_onion_skin),
+                subtitle = stringResource(R.string.settingsscreen_show_previous_and_next_animation_frames),
                 checked = settings.onionSkin,
                 onChange = viewModel::setOnionSkin,
             )
             SwitchRow(
-                title = "Symmetry guides",
-                subtitle = "Draw the active symmetry axis on the canvas",
+                title = stringResource(R.string.settingsscreen_symmetry_guides),
+                subtitle = stringResource(R.string.settingsscreen_draw_the_active_symmetry_axis_on_the),
                 checked = settings.showSymmetryGuides,
                 onChange = viewModel::setSymmetryGuides,
             )
             SwitchRow(
-                title = "Perspective guides",
-                subtitle = "Draw vanishing-point rays on the canvas",
+                title = stringResource(R.string.settingsscreen_perspective_guides),
+                subtitle = stringResource(R.string.settingsscreen_draw_vanishing_point_rays_on_the_canvas),
                 checked = settings.showPerspectiveGuides,
                 onChange = viewModel::setPerspectiveGuides,
             )
             SwitchRow(
-                title = "Snap strokes to guides",
-                subtitle = "Strokes stick to the nearest guide line",
+                title = stringResource(R.string.editorsheets_snap_strokes_to_guides),
+                subtitle = stringResource(R.string.settingsscreen_strokes_stick_to_the_nearest_guide_line),
                 checked = settings.snapToGuides,
                 onChange = viewModel::setSnapToGuides,
             )
 
             SettingsSection("Input")
             SwitchRow(
-                title = "Stylus only",
-                subtitle = "Fingers pan and zoom; only a stylus paints (recommended for palm rejection)",
+                title = stringResource(R.string.settingsscreen_stylus_only),
+                subtitle = stringResource(R.string.settingsscreen_fingers_pan_and_zoom_only_a_stylus),
                 checked = settings.stylusOnly,
                 onChange = viewModel::setStylusOnly,
             )
             SwitchRow(
-                title = "Haptics",
-                subtitle = "Short vibration when a tool commits",
+                title = stringResource(R.string.settingsscreen_haptics),
+                subtitle = stringResource(R.string.settingsscreen_short_vibration_when_a_tool_commits),
                 checked = settings.haptics,
                 onChange = viewModel::setHaptics,
             )
 
             SettingsSection("Saving")
             SwitchRow(
-                title = "Autosave",
-                subtitle = "Keeps a recovery copy while you paint",
+                title = stringResource(R.string.settingsscreen_autosave),
+                subtitle = stringResource(R.string.settingsscreen_keeps_a_recovery_copy_while_you_paint),
                 checked = settings.autosaveEnabled,
                 onChange = { viewModel.setAutosave(it, settings.autosaveIntervalMs) },
             )
@@ -192,7 +194,7 @@ fun SettingsScreen(
             }
 
             SettingsSection("New documents")
-            Text("Default canvas preset", style = MaterialTheme.typography.labelMedium)
+            Text(stringResource(R.string.settingsscreen_default_canvas_preset), style = MaterialTheme.typography.labelMedium)
             var presetMenu by remember { mutableStateOf(false) }
             Box {
                 OutlinedButton(onClick = { presetMenu = true }) { Text(settings.defaultPresetName) }
@@ -210,7 +212,7 @@ fun SettingsScreen(
             }
 
             SettingsSection("Gallery")
-            Text("Sort by", style = MaterialTheme.typography.labelMedium)
+            Text(stringResource(R.string.settingsscreen_sort_by), style = MaterialTheme.typography.labelMedium)
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 GallerySort.entries.forEach { sort ->
                     FilterChip(
@@ -230,10 +232,10 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            OutlinedButton(onClick = viewModel::clearRecentColors) { Text("Clear recent colours") }
+            OutlinedButton(onClick = viewModel::clearRecentColors) { Text(stringResource(R.string.color_clear_recent)) }
 
             Text(
-                "ArtFlow has no account or developer uploads. Android backup and exports follow your choices and device settings.",
+                stringResource(R.string.settingsscreen_artflow_has_no_account_or_developer),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

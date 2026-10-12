@@ -18,9 +18,11 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.R
 import com.artflow.studio.core.color.ColorHarmony
 import com.artflow.studio.core.color.ColorWheelGeometry
 import com.artflow.studio.core.color.ColorWheelState
@@ -49,13 +51,14 @@ internal fun ColorWheel(
     val selectLatest by rememberUpdatedState(select)
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        val wheelDescription = stringResource(R.string.colorwheel_hue_and_saturation_picker)
         Canvas(
             modifier =
                 Modifier
                     .fillMaxWidth()
                     .height(240.dp)
                     .testTag("color-wheel")
-                    .semantics { contentDescription = "Hue and saturation picker; channel sliders are available below" }
+                    .semantics { contentDescription = wheelDescription }
                     .pointerInput(Unit) {
                         trackColorWheel({ wheel }) { selectLatest(it) }
                     },
@@ -123,12 +126,13 @@ internal fun ColorWheel(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Brightness", style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(72.dp))
+            val brightnessDescription = stringResource(R.string.colorwheel_colour_brightness)
+            Text(stringResource(R.string.colorwheel_brightness), style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(72.dp))
             Slider(
                 value = wheel.value,
                 onValueChange = { selectLatest(wheel.withValue(it)) },
                 valueRange = 0f..1f,
-                modifier = Modifier.weight(1f).semantics { contentDescription = "Colour brightness" },
+                modifier = Modifier.weight(1f).semantics { contentDescription = brightnessDescription },
             )
         }
     }

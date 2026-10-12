@@ -231,9 +231,10 @@ private fun StudioSidebarContent(
             VerticalSlider(
                 value = sizeToSlider(state.size),
                 onValueChange = { actions.onSize(sliderToSize(it)) },
-                label = "Brush size ${state.size.toInt()} px",
+                label = stringResource(R.string.studiochrome_brush_size, state.size.toInt()),
                 height = sliderHeight,
             )
+            val pickDescription = stringResource(R.string.studiochrome_pick_colour_from_canvas)
             Box(
                 modifier =
                     Modifier
@@ -242,13 +243,13 @@ private fun StudioSidebarContent(
                             width = 2.dp,
                             color = if (state.eyedropperActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                             shape = RoundedCornerShape(6.dp),
-                        ).semantics { contentDescription = "Modify: pick a colour from the canvas" }
-                        .combinedClickable(onClick = actions.onModify, onLongClick = actions.onQuickMenu, onLongClickLabel = "QuickMenu"),
+                        ).semantics { contentDescription = pickDescription }
+                        .combinedClickable(onClick = actions.onModify, onLongClick = actions.onQuickMenu, onLongClickLabel = stringResource(R.string.studiochrome_quickmenu)),
             )
             VerticalSlider(
                 value = state.opacity,
                 onValueChange = { actions.onOpacity(it.coerceAtLeast(0.01f)) },
-                label = "Opacity ${(state.opacity * 100).toInt()}%",
+                label = stringResource(R.string.studiochrome_opacity_percent, (state.opacity * 100).toInt()),
                 height = sliderHeight,
             )
             IconButton(onClick = actions.onUndo, enabled = state.canUndo, modifier = Modifier.size(48.dp)) {

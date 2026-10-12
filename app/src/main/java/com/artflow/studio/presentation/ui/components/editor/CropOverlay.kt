@@ -17,9 +17,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.R
 import com.artflow.studio.core.canvas.CropBox
 import kotlin.math.roundToInt
 
@@ -38,9 +40,10 @@ fun CropOverlay(
 ) {
     val current by rememberUpdatedState(box)
     val accent = MaterialTheme.colorScheme.primary
+    val cropDescription = stringResource(R.string.cropoverlay_crop_box)
     Canvas(
         modifier
-            .semantics { contentDescription = "Crop box" }
+            .semantics { contentDescription = cropDescription }
             .pointerInput(view, canvasWidth, canvasHeight) {
                 var grip: CropBox.Grip? = null
                 var start = current
@@ -121,10 +124,10 @@ fun CropBar(
                 style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier.align(Alignment.CenterVertically).padding(horizontal = 8.dp),
             )
-            TextButton(onClick = onSettings) { Text("Crop settings") }
-            TextButton(onClick = onReset) { Text("Reset") }
-            TextButton(onClick = onCancel) { Text("Cancel") }
-            Button(onClick = onDone) { Text("Done") }
+            TextButton(onClick = onSettings) { Text(stringResource(R.string.cropoverlay_crop_settings)) }
+            TextButton(onClick = onReset) { Text(stringResource(R.string.chip_reset)) }
+            TextButton(onClick = onCancel) { Text(stringResource(R.string.cancel)) }
+            Button(onClick = onDone) { Text(stringResource(R.string.layeropacityoverlay_done)) }
         }
     }
 }
