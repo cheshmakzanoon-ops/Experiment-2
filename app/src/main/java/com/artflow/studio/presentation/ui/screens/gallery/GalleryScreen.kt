@@ -303,7 +303,7 @@ private fun rememberPsdImport(
                         }.getOrNull()
                     }
                 if (opened == null) {
-                    snackbarHostState.showSnackbar("That file is not a Photoshop document ArtFlow can read")
+                    snackbarHostState.showSnackbar(context.getString(R.string.galleryscreen_not_a_photoshop_document))
                     return@launch
                 }
                 val (bytes, document) = opened
@@ -352,7 +352,7 @@ private fun rememberProcreateImport(
                 val size = document.document
                 if (!CanvasOperations.isSizeSafe(size.width, size.height)) {
                     document.close()
-                    snackbarHostState.showSnackbar("This Procreate canvas is too large for this device")
+                    snackbarHostState.showSnackbar(context.getString(R.string.galleryscreen_procreate_too_large))
                     return@launch
                 }
                 val name = size.name?.takeIf { it.isNotBlank() } ?: "Imported Procreate"
@@ -468,7 +468,7 @@ private fun rememberPackageImport(
                         }.getOrNull()
                     }
                 if (bytes == null) {
-                    snackbarHostState.showSnackbar("That file could not be read, or it is too large")
+                    snackbarHostState.showSnackbar(context.getString(R.string.galleryscreen_file_could_not_be_read))
                     return@launch
                 }
                 viewModel.importPackage(bytes) { id -> scope.launch { onNavigateToCanvas(id) } }
@@ -530,7 +530,7 @@ private fun rememberPhotoImport(
                         runCatching { BitmapPixelBridge.decodeUri(context.contentResolver, uri) }.getOrNull()
                     }
                 if (image == null) {
-                    snackbarHostState.showSnackbar("That image could not be opened")
+                    snackbarHostState.showSnackbar(context.getString(R.string.galleryscreen_image_could_not_be_opened))
                     return@launch
                 }
                 viewModel.createProject("Imported photo", null, image.width, image.height, 72) { id ->
@@ -573,7 +573,7 @@ private suspend fun shareProject(
 ) {
     val file = viewModel.shareablePng(project)
     if (file == null) {
-        snackbar.showSnackbar("Open the artwork once so it can be shared")
+        snackbar.showSnackbar(context.getString(R.string.galleryscreen_open_artwork_to_share))
     } else {
         runCatching { sharePng(context, file) }
     }

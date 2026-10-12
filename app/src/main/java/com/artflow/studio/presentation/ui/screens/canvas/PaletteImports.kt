@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
+import com.artflow.studio.R
 import com.artflow.studio.core.color.PaletteCodec
 import com.artflow.studio.core.color.PaletteExtractor
 import com.artflow.studio.data.renderer.BitmapPixelBridge
@@ -42,7 +43,7 @@ fun rememberPaletteImports(
                         }.getOrNull()
                     }
                 if (palette == null || palette.colors.isEmpty()) {
-                    onError("That file has no colours ArtFlow can read (ASE, GIMP, hex or ArtFlow palettes)")
+                    onError(context.getString(R.string.paletteimports_no_readable_colours))
                 } else {
                     onPalette(palette.name, palette.colors)
                 }
@@ -58,7 +59,7 @@ fun rememberPaletteImports(
                             PaletteExtractor.colors(requireNotNull(BitmapPixelBridge.decodeUri(context.contentResolver, uri)))
                         }.getOrNull()
                     }
-                if (colors.isNullOrEmpty()) onError("No colours could be taken from that picture") else onPalette("Photo palette", colors)
+                if (colors.isNullOrEmpty()) onError(context.getString(R.string.paletteimports_no_colours_from_picture)) else onPalette("Photo palette", colors)
             }
         }
     return PaletteImports(
@@ -74,7 +75,7 @@ private fun launchSafely(
     try {
         launch()
     } catch (missing: ActivityNotFoundException) {
-        onError("No file picker is available on this device")
+        onError(context.getString(R.string.paletteimports_no_file_picker))
     }
 }
 

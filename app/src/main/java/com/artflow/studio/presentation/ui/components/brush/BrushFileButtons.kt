@@ -58,7 +58,7 @@ internal fun BrushFileButtons(
                             }
                         }.getOrNull()
                     }
-                if (brushes == null) onFailure("That file is not a brush ArtFlow can import") else latestControls.importAll(brushes)
+                if (brushes == null) onFailure(context.getString(R.string.brushfilebuttons_not_a_brush_file)) else latestControls.importAll(brushes)
             }
         }
     TextButton(onClick = {
@@ -73,7 +73,7 @@ internal fun BrushFileButtons(
                         }
                     }.getOrNull()
                 }
-            if (file == null) onFailure("The brush could not be shared") else runCatching { share(context, file) }
+            if (file == null) onFailure(context.getString(R.string.brushfilebuttons_could_not_share)) else runCatching { share(context, file) }
         }
     }, enabled = enabled) { Text(stringResource(R.string.export_share)) }
     TextButton(onClick = { runCatching { picker.launch("*/*") } }, enabled = enabled) { Text(stringResource(R.string.brushfilebuttons_import)) }
