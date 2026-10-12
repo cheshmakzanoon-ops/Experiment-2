@@ -28,6 +28,7 @@ fun rememberPaletteImports(
     onError: (String) -> Unit,
 ): PaletteImports {
     val context = LocalContext.current
+    val noPickerMessage = context.getString(R.string.paletteimports_no_file_picker)
     val scope = rememberCoroutineScope()
     val file =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -63,19 +64,20 @@ fun rememberPaletteImports(
             }
         }
     return PaletteImports(
-        fromFile = { launchSafely(onError) { file.launch(arrayOf("*/*")) } },
-        fromPhoto = { launchSafely(onError) { photo.launch("image/*") } },
+        fromFile = { launchSafely(onError, noPickerMessage) { file.launch(arrayOf("*/*")) } },
+        fromPhoto = { launchSafely(onError, noPickerMessage) { photo.launch("image/*") } },
     )
 }
 
 private fun launchSafely(
     onError: (String) -> Unit,
+    missingPickerMessage: String,
     launch: () -> Unit,
 ) {
     try {
         launch()
     } catch (missing: ActivityNotFoundException) {
-        onError(context.getString(R.string.paletteimports_no_file_picker))
+        onError(missingPickerMessage)
     }
 }
 

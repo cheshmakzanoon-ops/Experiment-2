@@ -28,7 +28,6 @@ fun BrushParameterSlider(
     var editing by remember { mutableStateOf(false) }
     val displayScale = if (valueDisplay.endsWith("%")) 100f else 1f
     val exactDescription = stringResource(R.string.brushparameterslider_exact_value, label)
-    val displayScale = if (valueDisplay.endsWith("%")) 100f else 1f
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
