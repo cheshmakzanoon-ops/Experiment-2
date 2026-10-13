@@ -32,10 +32,20 @@ internal fun SelectionTopBar(
     count: Int,
     actions: SelectionActions,
 ) {
+    val title =
+        if (count == 0) {
+            stringResource(R.string.galleryselection_select_artworks)
+        } else {
+            stringResource(R.string.galleryselection_count_selected, count)
+        }
     TopAppBar(
-        title = { Text(if (count == 0) stringResource(R.string.galleryselection_select_artworks) else stringResource(R.string.galleryselection_count_selected, count)) },
+        title = {
+            Text(title)
+        },
         navigationIcon = {
-            IconButton(onClick = actions.onDone) { Icon(Icons.Default.Close, contentDescription = stringResource(R.string.galleryselection_done_selecting)) }
+            IconButton(onClick = actions.onDone) {
+                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.galleryselection_done_selecting))
+            }
         },
         actions = {
             TextButton(onClick = actions.onStack, enabled = count > 0) { Text(stringResource(R.string.galleryselection_stack)) }
@@ -95,7 +105,11 @@ private fun DeleteManyDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.galleryselection_delete_artworks, count)) },
         text = { Text(stringResource(R.string.galleryselection_the_artworks_and_their_layers_are)) },
-        confirmButton = { TextButton(onClick = onDelete) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) } },
+        confirmButton = {
+            TextButton(
+                onClick = onDelete,
+            ) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }

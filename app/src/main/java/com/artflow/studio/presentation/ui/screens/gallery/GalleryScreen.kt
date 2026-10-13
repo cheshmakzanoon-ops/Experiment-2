@@ -639,7 +639,11 @@ private fun DeleteDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.galleryscreen_delete_project, project.name)) },
         text = { Text(stringResource(R.string.galleryscreen_the_artwork_and_its_layers_are_removed)) },
-        confirmButton = { TextButton(onClick = onDelete) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) } },
+        confirmButton = {
+            TextButton(
+                onClick = onDelete,
+            ) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }

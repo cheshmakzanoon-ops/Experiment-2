@@ -1491,7 +1491,10 @@ fun CanvasScreen(
             },
             dismissButton = {
                 Row {
-                    TextButton(enabled = !saving, onClick = { showExitConfirm = false }) { Text(stringResource(R.string.canvasscreen_stay)) }
+                    TextButton(
+                        enabled = !saving,
+                        onClick = { showExitConfirm = false },
+                    ) { Text(stringResource(R.string.canvasscreen_stay)) }
                     TextButton(enabled = !saving, onClick = {
                         viewModel.discardChanges {
                             showExitConfirm = false
@@ -1654,7 +1657,10 @@ private fun ToolOptionsPanel(
             )
         }
         if (input.tool == ToolType.LIQUIFY) {
-            Text(stringResource(R.string.canvasscreen_liquify_mode, input.liquify.mode.displayName), style = MaterialTheme.typography.bodySmall)
+            Text(
+                stringResource(R.string.canvasscreen_liquify_mode, input.liquify.mode.displayName),
+                style = MaterialTheme.typography.bodySmall,
+            )
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1667,13 +1673,19 @@ private fun ToolOptionsPanel(
                     )
                 }
             }
-            Text(stringResource(R.string.canvasscreen_liquify_size, input.liquify.size.toInt()), style = MaterialTheme.typography.labelSmall)
+            Text(
+                stringResource(R.string.canvasscreen_liquify_size, input.liquify.size.toInt()),
+                style = MaterialTheme.typography.labelSmall,
+            )
             Slider(
                 value = input.liquify.size.coerceIn(8f, 400f),
                 onValueChange = { viewModel.setLiquifySettings(input.liquify.copy(size = it)) },
                 valueRange = 8f..400f,
             )
-            Text(stringResource(R.string.canvasscreen_liquify_distortion, (input.liquify.strength * 100).toInt()), style = MaterialTheme.typography.labelSmall)
+            Text(
+                stringResource(R.string.canvasscreen_liquify_distortion, (input.liquify.strength * 100).toInt()),
+                style = MaterialTheme.typography.labelSmall,
+            )
             Slider(
                 value = input.liquify.strength.coerceIn(0f, 1f),
                 onValueChange = { viewModel.setLiquifySettings(input.liquify.copy(strength = it)) },
@@ -1706,7 +1718,10 @@ private fun ColorDropThresholdBar(
 ) {
     Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 4.dp, modifier = modifier.padding(12.dp).widthIn(max = 420.dp)) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.canvasscreen_color_drop_threshold, (threshold / 255f * 100).roundToInt()), style = MaterialTheme.typography.labelMedium)
+            Text(
+                stringResource(R.string.canvasscreen_color_drop_threshold, (threshold / 255f * 100).roundToInt()),
+                style = MaterialTheme.typography.labelMedium,
+            )
             Slider(
                 value = threshold,
                 onValueChange = onChange,
@@ -1847,7 +1862,9 @@ private fun ClipboardActions(
     ) {
         AssistChip(onClick = { viewModel.clipboard.copy(cut = true) }, label = { Text(if (hasSelection) "Cut" else "Cut layer") })
         AssistChip(onClick = { viewModel.clipboard.copy() }, label = { Text(if (hasSelection) "Copy" else "Copy layer") })
-        AssistChip(onClick = viewModel.clipboard::paste, enabled = hasClipboard, label = { Text(stringResource(R.string.canvasscreen_paste_as_layer)) })
+        AssistChip(onClick = viewModel.clipboard::paste, enabled = hasClipboard, label = {
+            Text(stringResource(R.string.canvasscreen_paste_as_layer))
+        })
     }
 }
 
@@ -1897,12 +1914,25 @@ private fun TransformOptions(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            AssistChip(onClick = { canvasView?.transformActiveLayer(flipHorizontal = true) }, label = { Text(stringResource(R.string.editorchrome_flip_h)) })
-            AssistChip(onClick = { canvasView?.transformActiveLayer(flipVertical = true) }, label = { Text(stringResource(R.string.editorchrome_flip_v)) })
-            AssistChip(onClick = { canvasView?.transformActiveLayer(rotation = 45f) }, label = { Text(stringResource(R.string.chip_rotate_45)) })
-            AssistChip(onClick = { canvasView?.transformActiveLayer(rotation = 90f) }, label = { Text(stringResource(R.string.editorchrome_rotate_90)) })
-            AssistChip(onClick = { canvasView?.transformActiveLayer(scaleFactor = 0.5f) }, label = { Text(stringResource(R.string.canvasscreen_half_size)) })
-            AssistChip(onClick = { canvasView?.transformActiveLayer(scaleFactor = 2f) }, label = { Text(stringResource(R.string.canvasscreen_double_size)) })
+            AssistChip(onClick = {
+                canvasView?.transformActiveLayer(flipHorizontal = true)
+            }, label = { Text(stringResource(R.string.editorchrome_flip_h)) })
+            AssistChip(onClick = {
+                canvasView?.transformActiveLayer(flipVertical = true)
+            }, label = { Text(stringResource(R.string.editorchrome_flip_v)) })
+            AssistChip(
+                onClick = { canvasView?.transformActiveLayer(rotation = 45f) },
+                label = { Text(stringResource(R.string.chip_rotate_45)) },
+            )
+            AssistChip(onClick = {
+                canvasView?.transformActiveLayer(rotation = 90f)
+            }, label = { Text(stringResource(R.string.editorchrome_rotate_90)) })
+            AssistChip(onClick = {
+                canvasView?.transformActiveLayer(scaleFactor = 0.5f)
+            }, label = { Text(stringResource(R.string.canvasscreen_half_size)) })
+            AssistChip(onClick = {
+                canvasView?.transformActiveLayer(scaleFactor = 2f)
+            }, label = { Text(stringResource(R.string.canvasscreen_double_size)) })
         }
     }
 }

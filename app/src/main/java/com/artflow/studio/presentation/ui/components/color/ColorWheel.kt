@@ -127,7 +127,11 @@ internal fun ColorWheel(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             val brightnessDescription = stringResource(R.string.colorwheel_colour_brightness)
-            Text(stringResource(R.string.colorwheel_brightness), style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(72.dp))
+            Text(
+                stringResource(R.string.colorwheel_brightness),
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.width(72.dp),
+            )
             Slider(
                 value = wheel.value,
                 onValueChange = { selectLatest(wheel.withValue(it)) },

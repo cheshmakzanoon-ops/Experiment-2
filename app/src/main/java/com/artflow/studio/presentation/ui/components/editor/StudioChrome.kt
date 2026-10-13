@@ -244,7 +244,11 @@ private fun StudioSidebarContent(
                             color = if (state.eyedropperActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                             shape = RoundedCornerShape(6.dp),
                         ).semantics { contentDescription = pickDescription }
-                        .combinedClickable(onClick = actions.onModify, onLongClick = actions.onQuickMenu, onLongClickLabel = stringResource(R.string.studiochrome_quickmenu)),
+                        .combinedClickable(
+                            onClick = actions.onModify,
+                            onLongClick = actions.onQuickMenu,
+                            onLongClickLabel = stringResource(R.string.studiochrome_quickmenu),
+                        ),
             )
             VerticalSlider(
                 value = state.opacity,

@@ -77,7 +77,9 @@ fun BrushStudioContent(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = stringResource(R.string.brushstudiodialog_cancel_brush_changes)) }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.brushstudiodialog_cancel_brush_changes))
+                    }
                 }
                 library?.let { SavedBrushToolbar(draft, it) }
                 BrushStudioTabs(selectedTab = tab, onSelect = {
@@ -112,7 +114,10 @@ fun BrushStudioContent(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    TextButton(onClick = { draft = original }, enabled = draft != original) { Text(stringResource(R.string.brushstudiodialog_restore_initial)) }
+                    TextButton(
+                        onClick = { draft = original },
+                        enabled = draft != original,
+                    ) { Text(stringResource(R.string.brushstudiodialog_restore_initial)) }
                     Button(onClick = {
                         applying = true
                         onApply(draft)
@@ -171,7 +176,9 @@ fun StudioBrushLibrary(
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
             trailingIcon = {
                 if (query.isNotEmpty()) {
-                    IconButton(onClick = { query = "" }) { Icon(Icons.Default.Close, contentDescription = stringResource(R.string.brushstudiodialog_clear_brush_search)) }
+                    IconButton(onClick = {
+                        query = ""
+                    }) { Icon(Icons.Default.Close, contentDescription = stringResource(R.string.brushstudiodialog_clear_brush_search)) }
                 }
             },
             singleLine = true,
@@ -181,7 +188,9 @@ fun StudioBrushLibrary(
             categories.forEach { title ->
                 FilterChip(selected = category == title, onClick = { category = title }, label = { Text(title) })
             }
-            if (library != null) AssistChip(onClick = { naming = true }, label = { Text(stringResource(R.string.brushstudiodialog_new_set)) })
+            if (library != null) {
+                AssistChip(onClick = { naming = true }, label = { Text(stringResource(R.string.brushstudiodialog_new_set)) })
+            }
         }
         if (library != null && category in sets) {
             TextButton(onClick = {
@@ -199,7 +208,10 @@ fun StudioBrushLibrary(
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
             if (matches.isEmpty()) {
                 item {
-                    Text(stringResource(R.string.brushstudiodialog_no_matching_brushes_clear_the_search_or), style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        stringResource(R.string.brushstudiodialog_no_matching_brushes_clear_the_search_or),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
                 }
             }
             items(matches, key = { it.id }) { preset ->
@@ -259,7 +271,9 @@ private fun SetMenu(
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { open = true }) { Icon(Icons.Default.PlaylistAdd, contentDescription = stringResource(R.string.brushstudiodialog_brush_sets)) }
+        IconButton(onClick = {
+            open = true
+        }) { Icon(Icons.Default.PlaylistAdd, contentDescription = stringResource(R.string.brushstudiodialog_brush_sets)) }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             sets.forEach { (name, members) ->
                 DropdownMenuItem(
@@ -294,7 +308,9 @@ private fun NewSetDialog(
             )
         },
         confirmButton = {
-            TextButton(onClick = { onCreate(trimmed) }, enabled = trimmed.isNotEmpty() && trimmed !in taken) { Text(stringResource(R.string.brushstudiodialog_create)) }
+            TextButton(onClick = {
+                onCreate(trimmed)
+            }, enabled = trimmed.isNotEmpty() && trimmed !in taken) { Text(stringResource(R.string.brushstudiodialog_create)) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )

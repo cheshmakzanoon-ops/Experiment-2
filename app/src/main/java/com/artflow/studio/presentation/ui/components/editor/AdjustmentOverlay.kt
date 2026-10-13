@@ -96,13 +96,21 @@ fun AdjustmentOverlay(
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (state.kind.adjustmentType != null) ParameterSliders(state, actions.onParameter)
                 if ((state.kind.slidesAmount && state.pencil) || state.kind.usesPoint) {
-                    val label = if (state.kind == LiveAdjustments.Kind.RECOLOR) stringResource(R.string.adjustmentoverlay_flood) else stringResource(R.string.adjustmentoverlay_amount)
-                    Text(stringResource(R.string.adjustmentoverlay_label_percent, label, (state.settings.amount * 100).toInt()), style = MaterialTheme.typography.labelMedium)
+                    val isRecolor = state.kind == LiveAdjustments.Kind.RECOLOR
+                    val label = stringResource(if (isRecolor) R.string.adjustmentoverlay_flood else R.string.adjustmentoverlay_amount)
+                    Text(
+                        stringResource(R.string.adjustmentoverlay_label_percent, label, (state.settings.amount * 100).toInt()),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
                     Slider(value = state.settings.amount, onValueChange = actions.onAmount)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.align(Alignment.End)) {
-                    FilterChip(selected = !state.pencil, onClick = { actions.onPencil(false) }, label = { Text(stringResource(R.string.adjustmentoverlay_layer)) })
-                    FilterChip(selected = state.pencil, onClick = { actions.onPencil(true) }, label = { Text(stringResource(R.string.adjustmentoverlay_pencil)) })
+                    FilterChip(selected = !state.pencil, onClick = {
+                        actions.onPencil(false)
+                    }, label = { Text(stringResource(R.string.adjustmentoverlay_layer)) })
+                    FilterChip(selected = state.pencil, onClick = {
+                        actions.onPencil(true)
+                    }, label = { Text(stringResource(R.string.adjustmentoverlay_pencil)) })
                     Spacer(Modifier.width(8.dp))
                     TextButton(onClick = actions.onCancel) { Text(stringResource(R.string.cancel)) }
                     Button(onClick = actions.onApply) { Text(stringResource(R.string.color_apply)) }

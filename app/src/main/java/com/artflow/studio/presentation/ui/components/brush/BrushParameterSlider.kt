@@ -28,6 +28,12 @@ fun BrushParameterSlider(
     var editing by remember { mutableStateOf(false) }
     val displayScale = if (valueDisplay.endsWith("%")) 100f else 1f
     val exactDescription = stringResource(R.string.brushparameterslider_exact_value, label)
+    val hintText =
+        if (isInteger) {
+            stringResource(R.string.brushparameterslider_enter_a_valid_whole_number)
+        } else {
+            stringResource(R.string.brushparameterslider_enter_a_valid_number)
+        }
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
@@ -62,7 +68,11 @@ fun BrushParameterSlider(
                         singleLine = true,
                         label = { Text(stringResource(R.string.brushparameterslider_value)) },
                         isError = parsed == null,
-                        supportingText = { if (parsed == null) Text(if (isInteger) stringResource(R.string.brushparameterslider_enter_a_valid_whole_number) else stringResource(R.string.brushparameterslider_enter_a_valid_number)) },
+                        supportingText = {
+                            if (parsed == null) {
+                                Text(hintText)
+                            }
+                        },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     )
                 }

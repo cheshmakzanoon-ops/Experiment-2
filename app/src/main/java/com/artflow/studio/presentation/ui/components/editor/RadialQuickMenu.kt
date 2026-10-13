@@ -107,7 +107,11 @@ fun RadialQuickMenu(
                 modifier = Modifier.size(64.dp),
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text(stringResource(R.string.radialquickmenu_more), style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
+                    Text(
+                        stringResource(R.string.radialquickmenu_more),
+                        style = MaterialTheme.typography.labelMedium,
+                        textAlign = TextAlign.Center,
+                    )
                 }
             }
         }

@@ -53,18 +53,26 @@ fun PageAssistBar(
     ) {
         Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.pageassistbar_page_of, activePage + 1, pageCount), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                Text(
+                    stringResource(R.string.pageassistbar_page_of, activePage + 1, pageCount),
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f),
+                )
                 IconButton(onClick = { actions.onMove(activePage, activePage - 1) }, enabled = activePage > 0) {
                     Icon(Icons.Default.ChevronLeft, contentDescription = stringResource(R.string.pageassistbar_move_page_earlier))
                 }
                 IconButton(onClick = { actions.onMove(activePage, activePage + 1) }, enabled = activePage < pageCount - 1) {
                     Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.pageassistbar_move_page_later))
                 }
-                IconButton(onClick = actions.onDuplicate) { Icon(Icons.Default.ContentCopy, contentDescription = stringResource(R.string.pageassistbar_duplicate_page)) }
+                IconButton(onClick = actions.onDuplicate) {
+                    Icon(Icons.Default.ContentCopy, contentDescription = stringResource(R.string.pageassistbar_duplicate_page))
+                }
                 IconButton(onClick = { actions.onDelete(activePage) }, enabled = pageCount > 1) {
                     Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.pageassistbar_delete_page))
                 }
-                IconButton(onClick = actions.onClose) { Icon(Icons.Default.Close, contentDescription = stringResource(R.string.pageassistbar_close_page_assist)) }
+                IconButton(onClick = actions.onClose) {
+                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.pageassistbar_close_page_assist))
+                }
             }
             LazyRow(state = listState, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 itemsIndexed(List(pageCount) { it }) { index, _ ->

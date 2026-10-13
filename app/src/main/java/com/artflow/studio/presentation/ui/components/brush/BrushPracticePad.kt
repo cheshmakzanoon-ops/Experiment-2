@@ -80,7 +80,11 @@ fun BrushPracticePad(
 
     Column(modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.brushpracticepad_try_your_brush), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            Text(
+                stringResource(R.string.brushpracticepad_try_your_brush),
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.weight(1f),
+            )
             TextButton(onClick = {
                 active = null
                 suppress = true

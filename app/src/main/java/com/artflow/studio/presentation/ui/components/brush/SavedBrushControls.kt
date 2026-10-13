@@ -46,7 +46,10 @@ fun SavedBrushToolbar(
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             )
-            TextButton(onClick = controls.retry, enabled = !state.busy) { Text(stringResource(R.string.savedbrushcontrols_retry_saved_library)) }
+            TextButton(
+                onClick = controls.retry,
+                enabled = !state.busy,
+            ) { Text(stringResource(R.string.savedbrushcontrols_retry_saved_library)) }
         }
     }
     if (naming) {
@@ -94,7 +97,9 @@ fun SavedBrushMenu(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { controls.delete(brush.id) }, enabled = !controls.state.busy) { Text(stringResource(R.string.savedbrushcontrols_delete_copy)) }
+                TextButton(onClick = {
+                    controls.delete(brush.id)
+                }, enabled = !controls.state.busy) { Text(stringResource(R.string.savedbrushcontrols_delete_copy)) }
             },
             dismissButton = {
                 TextButton(onClick = { deleting = false }, enabled = !controls.state.busy) { Text(stringResource(R.string.cancel)) }

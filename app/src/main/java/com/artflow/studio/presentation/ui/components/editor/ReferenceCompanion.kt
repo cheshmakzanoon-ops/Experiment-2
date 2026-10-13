@@ -157,7 +157,10 @@ fun ReferenceWindow(
                         modifier = Modifier.weight(1f).padding(start = 12.dp).testTag("reference-handle"),
                     )
                     IconButton(onClick = onImport, modifier = Modifier.size(touchSize)) {
-                        Icon(Icons.Default.AddPhotoAlternate, contentDescription = stringResource(R.string.referencecompanion_import_reference_image))
+                        Icon(
+                            Icons.Default.AddPhotoAlternate,
+                            contentDescription = stringResource(R.string.referencecompanion_import_reference_image),
+                        )
                     }
                     IconButton(onClick = onClose, modifier = Modifier.size(touchSize)) {
                         Icon(Icons.Default.Close, contentDescription = stringResource(R.string.referencecompanion_close_reference))
@@ -165,8 +168,16 @@ fun ReferenceWindow(
                 }
                 canvas?.let { mode ->
                     Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(selected = mode.showing, onClick = { mode.onShow(true) }, label = { Text(stringResource(R.string.editorchrome_canvas)) })
-                        FilterChip(selected = !mode.showing, onClick = { mode.onShow(false) }, label = { Text(stringResource(R.string.referencecompanion_image)) })
+                        FilterChip(
+                            selected = mode.showing,
+                            onClick = { mode.onShow(true) },
+                            label = { Text(stringResource(R.string.editorchrome_canvas)) },
+                        )
+                        FilterChip(
+                            selected = !mode.showing,
+                            onClick = { mode.onShow(false) },
+                            label = { Text(stringResource(R.string.referencecompanion_image)) },
+                        )
                     }
                 }
                 val liveCanvas = canvas?.takeIf { it.showing }

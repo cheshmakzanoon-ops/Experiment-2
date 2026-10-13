@@ -26,6 +26,12 @@ fun BrushSample(
         value = withContext(Dispatchers.Default) { BitmapPixelBridge.toBitmap(BrushPreview.render(parameters)).asImageBitmap() }
     }
     Box(modifier) {
-        sample?.let { Image(it, contentDescription = stringResource(R.string.brushsample_actual_brush_stroke_preview), modifier = Modifier.fillMaxSize()) }
+        sample?.let {
+            Image(
+                it,
+                contentDescription = stringResource(R.string.brushsample_actual_brush_stroke_preview),
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
     }
 }

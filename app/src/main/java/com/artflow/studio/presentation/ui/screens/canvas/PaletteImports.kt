@@ -60,7 +60,13 @@ fun rememberPaletteImports(
                             PaletteExtractor.colors(requireNotNull(BitmapPixelBridge.decodeUri(context.contentResolver, uri)))
                         }.getOrNull()
                     }
-                if (colors.isNullOrEmpty()) onError(context.getString(R.string.paletteimports_no_colours_from_picture)) else onPalette("Photo palette", colors)
+                if (colors.isNullOrEmpty()) {
+                    onError(
+                        context.getString(R.string.paletteimports_no_colours_from_picture),
+                    )
+                } else {
+                    onPalette("Photo palette", colors)
+                }
             }
         }
     return PaletteImports(

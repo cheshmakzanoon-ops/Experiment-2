@@ -139,7 +139,10 @@ internal fun StackDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onMove(name) }, enabled = name.isNotBlank()) { Text(stringResource(R.string.gallerylayout_create_stack)) }
+            TextButton(
+                onClick = { onMove(name) },
+                enabled = name.isNotBlank(),
+            ) { Text(stringResource(R.string.gallerylayout_create_stack)) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )

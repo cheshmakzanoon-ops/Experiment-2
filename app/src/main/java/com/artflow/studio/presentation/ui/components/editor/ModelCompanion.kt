@@ -75,13 +75,25 @@ fun ModelCompanion(
                     Text(stringResource(R.string.modelcompanion_3d), style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.width(8.dp))
                     Row(Modifier.weight(1f).horizontalScroll(rememberScrollState())) {
-                        FilterChip(selected = !painting, onClick = { painting = false }, label = { Text(stringResource(R.string.modelcompanion_turn)) })
+                        FilterChip(
+                            selected = !painting,
+                            onClick = { painting = false },
+                            label = { Text(stringResource(R.string.modelcompanion_turn)) },
+                        )
                         Spacer(Modifier.width(4.dp))
-                        FilterChip(selected = painting, onClick = { painting = true }, label = { Text(stringResource(R.string.modelcompanion_paint)) })
+                        FilterChip(
+                            selected = painting,
+                            onClick = { painting = true },
+                            label = { Text(stringResource(R.string.modelcompanion_paint)) },
+                        )
                         Spacer(Modifier.width(4.dp))
-                        FilterChip(selected = lightingOpen, onClick = { lightingOpen = !lightingOpen }, label = { Text(stringResource(R.string.modelcompanion_light)) })
+                        FilterChip(selected = lightingOpen, onClick = {
+                            lightingOpen = !lightingOpen
+                        }, label = { Text(stringResource(R.string.modelcompanion_light)) })
                     }
-                    IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = stringResource(R.string.modelcompanion_close_3d_view)) }
+                    IconButton(
+                        onClick = onClose,
+                    ) { Icon(Icons.Default.Close, contentDescription = stringResource(R.string.modelcompanion_close_3d_view)) }
                 }
                 Box(Modifier.weight(1f)) {
                     AndroidView(

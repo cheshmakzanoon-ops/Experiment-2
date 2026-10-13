@@ -53,9 +53,20 @@ fun TimelapseReplay(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.timelapsereplay_time_lapse_replay), color = Color.White, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                Text(
+                    stringResource(R.string.timelapsereplay_time_lapse_replay),
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
                 TextButton(onClick = onExport) { Text(stringResource(R.string.timelapsereplay_export_mp4)) }
-                IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = stringResource(R.string.timelapsereplay_close_replay), tint = Color.White) }
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = stringResource(R.string.timelapsereplay_close_replay),
+                        tint = Color.White,
+                    )
+                }
             }
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 val current = image

@@ -372,7 +372,11 @@ private fun MultiLayerBar(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(stringResource(R.string.editorsheets_layers_selected, count), style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+        Text(
+            stringResource(R.string.editorsheets_layers_selected, count),
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.weight(1f),
+        )
         TextButton(onClick = onGroup) { Text(stringResource(R.string.editorsheets_group)) }
         TextButton(onClick = onMerge) { Text(stringResource(R.string.editorsheets_merge)) }
         TextButton(onClick = onDelete) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
@@ -417,8 +421,14 @@ private fun LayerMaskControls(
     } else {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val canPaint = layer.canEdit() && layer.maskEnabled && !layer.isReference
-            OutlinedButton(onClick = { actions.onPaintMask(true) }, enabled = canPaint) { Text(stringResource(R.string.editorsheets_paint_reveal)) }
-            OutlinedButton(onClick = { actions.onPaintMask(false) }, enabled = canPaint) { Text(stringResource(R.string.editorsheets_paint_hide)) }
+            OutlinedButton(
+                onClick = { actions.onPaintMask(true) },
+                enabled = canPaint,
+            ) { Text(stringResource(R.string.editorsheets_paint_reveal)) }
+            OutlinedButton(
+                onClick = { actions.onPaintMask(false) },
+                enabled = canPaint,
+            ) { Text(stringResource(R.string.editorsheets_paint_hide)) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AssistChip(
@@ -493,7 +503,11 @@ private fun BackgroundRow(background: BackgroundControls) {
             onClick = background.onUseCurrentColour,
             modifier = Modifier.semantics { contentDescription = useColourDescription },
         )
-        Text(stringResource(R.string.editorsheets_background_colour), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(start = 12.dp))
+        Text(
+            stringResource(R.string.editorsheets_background_colour),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f).padding(start = 12.dp),
+        )
         Checkbox(
             checked = (background.color ushr 24) != 0,
             onCheckedChange = background.onVisible,
@@ -904,16 +918,28 @@ fun AnimationSheet(
                                 onClick = { if (index > 0) onMoveFrame(index, index - 1) },
                                 modifier = Modifier.size(24.dp),
                             ) {
-                                Icon(Icons.Default.ChevronLeft, contentDescription = stringResource(R.string.editorsheets_move_earlier), modifier = Modifier.size(16.dp))
+                                Icon(
+                                    Icons.Default.ChevronLeft,
+                                    contentDescription = stringResource(R.string.editorsheets_move_earlier),
+                                    modifier = Modifier.size(16.dp),
+                                )
                             }
                             IconButton(
                                 onClick = { if (index < timeline.frames.lastIndex) onMoveFrame(index, index + 1) },
                                 modifier = Modifier.size(24.dp),
                             ) {
-                                Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.editorsheets_move_later), modifier = Modifier.size(16.dp))
+                                Icon(
+                                    Icons.Default.ChevronRight,
+                                    contentDescription = stringResource(R.string.editorsheets_move_later),
+                                    modifier = Modifier.size(16.dp),
+                                )
                             }
                             IconButton(onClick = { onDeleteFrame(index) }, modifier = Modifier.size(48.dp)) {
-                                Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.editorsheets_delete_frame), modifier = Modifier.size(16.dp))
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = stringResource(R.string.editorsheets_delete_frame),
+                                    modifier = Modifier.size(16.dp),
+                                )
                             }
                         }
                     }
@@ -921,7 +947,10 @@ fun AnimationSheet(
             }
         }
 
-        Text(stringResource(R.string.editorsheets_total_duration_and_frames, timeline.durationMs, timeline.frameCount), style = MaterialTheme.typography.bodySmall)
+        Text(
+            stringResource(R.string.editorsheets_total_duration_and_frames, timeline.durationMs, timeline.frameCount),
+            style = MaterialTheme.typography.bodySmall,
+        )
 
         LabeledSlider(
             label = stringResource(R.string.editorsheets_frame_duration_ms),

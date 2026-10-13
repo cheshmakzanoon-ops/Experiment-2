@@ -314,7 +314,10 @@ private fun PaletteList(
                         Text(palette.name, style = MaterialTheme.typography.bodyMedium)
                         if (palette.category == "Custom") {
                             IconButton(onClick = { onRemovePalette(palette.id) }) {
-                                Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.colorpanel_remove_palette, palette.name))
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = stringResource(R.string.colorpanel_remove_palette, palette.name),
+                                )
                             }
                         }
                     }
