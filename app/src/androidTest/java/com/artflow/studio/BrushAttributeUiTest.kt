@@ -149,6 +149,42 @@ class BrushAttributeUiTest {
         pressureBrightness.assertHeightIsAtLeast(56.dp)
     }
 
+    @Test
+    fun countReachesEveryDabCountTheLibraryStores() {
+        var parameters by mutableStateOf(BrushParams())
+        compose.setContent {
+            MaterialTheme {
+                BrushSettingsWorkspace(
+                    parameters,
+                    { parameters = it },
+                    BrushAttribute.SCATTER,
+                    {},
+                    Modifier.widthIn(max = 300.dp).height(400.dp),
+                )
+            }
+        }
+        change("Count", 20f)
+        compose.runOnIdle { assertEquals(20, parameters.count) }
+    }
+
+    @Test
+    fun reversedSpeedCanBeSetFromTheDynamicsPanel() {
+        var parameters by mutableStateOf(BrushParams())
+        compose.setContent {
+            MaterialTheme {
+                BrushSettingsWorkspace(
+                    parameters,
+                    { parameters = it },
+                    BrushAttribute.DYNAMICS,
+                    {},
+                    Modifier.widthIn(max = 300.dp).height(400.dp),
+                )
+            }
+        }
+        change("Speed → size", -0.5f)
+        compose.runOnIdle { assertEquals(-0.5f, parameters.velocityToSize, 0.0001f) }
+    }
+
     private fun choose(label: String) {
         compose
             .onNodeWithText(label)

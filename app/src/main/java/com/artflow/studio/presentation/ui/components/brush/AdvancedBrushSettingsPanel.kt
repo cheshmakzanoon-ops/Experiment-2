@@ -305,7 +305,7 @@ private fun BrushScatterSettings(
             label = "Count",
             value = brushParams.count.toFloat(),
             onValueChange = { onBrushParamsChanged(brushParams.copy(count = it.toInt())) },
-            valueRange = 1f..5f,
+            valueRange = 1f..32f,
             valueDisplay = "%d".format(brushParams.count),
             isInteger = true,
         )
@@ -525,7 +525,8 @@ private fun BrushSpeedSettings(
     val touchSize = if (LocalArtFlowFlags.current.largeTouchTargets) 56.dp else 48.dp
     BrushSettingsSection(title = "Speed and colour dynamics") {
         Text(
-            "Faster strokes can become thinner, lighter or shift hue. Test the response in the drawing pad.",
+            "Faster strokes can become thinner, lighter or shift hue. A negative speed makes them larger or more opaque " +
+                "instead. Test the response in the drawing pad.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -533,15 +534,15 @@ private fun BrushSpeedSettings(
             label = "Speed → size",
             value = brushParams.velocityToSize,
             onValueChange = { onBrushParamsChanged(brushParams.copy(velocityToSize = it)) },
-            valueRange = 0f..1f,
-            valueDisplay = "%.0f%%".format(brushParams.velocityToSize * 100),
+            valueRange = -1f..1f,
+            valueDisplay = "%+.0f%%".format(brushParams.velocityToSize * 100),
         )
         BrushParameterSlider(
             label = "Speed → opacity",
             value = brushParams.velocityToOpacity,
             onValueChange = { onBrushParamsChanged(brushParams.copy(velocityToOpacity = it)) },
-            valueRange = 0f..1f,
-            valueDisplay = "%.0f%%".format(brushParams.velocityToOpacity * 100),
+            valueRange = -1f..1f,
+            valueDisplay = "%+.0f%%".format(brushParams.velocityToOpacity * 100),
         )
         BrushParameterSlider(
             label = "Speed → hue",
