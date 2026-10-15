@@ -282,6 +282,47 @@ class CanvasMutationTest {
         }
 
     @Test
+    fun mergeDownKeepsTheMergedLayerInItsGroup() =
+        runTest {
+            val lower = open()
+            paint(lower, blue)
+            val upper = repository.addLayer("Upper").id
+            paint(upper, 0x80FF0000.toInt())
+            val group = requireNotNull(repository.groupLayers(listOf(lower, upper)))
+            val before = image()
+            assertTrue(repository.mergeLayerDown(upper))
+            assertArrayEquals(before.pixels, image().pixels)
+            assertEquals(group, repository.getAllLayers().first { it.id == lower }.parentGroupId)
+        }
+
+    @Test
+    fun mergeDownDoesNotDissolveTheGroupAboveTheLayerBelow() =
+        runTest {
+            val lower = open()
+            paint(lower, blue)
+            val inner = repository.addLayer("Inner").id
+            paint(inner, red)
+            val group = requireNotNull(repository.groupLayers(listOf(lower, inner)))
+            val above = repository.addLayer("Above", 3).id
+            val depth = repository.undoDepth
+            assertFalse(repository.mergeLayerDown(above))
+            assertEquals(depth, repository.undoDepth)
+            assertTrue(repository.getAllLayers().any { it.id == group && it.isGroup })
+        }
+
+    @Test
+    fun mergingAPrivateLayerKeepsItOutOfTheTimelapse() =
+        runTest {
+            val lower = open()
+            paint(lower, blue)
+            val upper = repository.addLayer("Upper").id
+            paint(upper, red)
+            assertTrue(repository.setLayerPrivate(upper, true))
+            assertTrue(repository.mergeLayerDown(upper))
+            assertTrue(repository.getAllLayers().first { it.id == lower }.isPrivate)
+        }
+
+    @Test
     fun mergingDoesNotBakeTheCanvasBackgroundIntoTransparentArtwork() =
         runTest {
             val lower = open()

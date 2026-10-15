@@ -1075,9 +1075,12 @@ class CanvasRepositoryImpl
                 // A non-adjacent merge changes intervening compositing order; never silently do so.
                 if (source < 0 || target < 0 || kotlin.math.abs(source - target) != 1) return@withState false
                 val selected = listOf(layers[source], layers[target])
-                if (selected.any { !it.isVisible || it.isLocked || it.isReference }) return@withState false
+                if (!selected.all(::mergeable)) return@withState false
+                // A merge never moves a layer into or out of a group, so both must share one.
+                val group = selected[0].parentGroupId
+                if (selected[1].parentGroupId != group) return@withState false
                 val lowerIndex = minOf(source, target)
-                mergeStack(selected.map { it.id }.toSet(), targetLayerId, layers[target].name, lowerIndex) != null
+                mergeStack(selected.map { it.id }.toSet(), targetLayerId, layers[target].name, lowerIndex, parentGroupId = group) != null
             }
 
         private fun mergeable(layer: LayerData): Boolean = layer.isVisible && !layer.isLocked && !layer.isReference && !layer.isGroup
@@ -1090,8 +1093,10 @@ class CanvasRepositoryImpl
                 if (indices.size < 2 || indices.first() < 0 || indices.last() - indices.first() != indices.size - 1) return@withState false
                 val selected = indices.map { layers[it] }
                 if (!selected.all(::mergeable)) return@withState false
+                val group = selected.first().parentGroupId
+                if (selected.any { it.parentGroupId != group }) return@withState false
                 val bottom = selected.first()
-                mergeStack(selected.map { it.id }.toSet(), bottom.id, bottom.name, indices.first()) != null
+                mergeStack(selected.map { it.id }.toSet(), bottom.id, bottom.name, indices.first(), parentGroupId = group) != null
             }
 
         override suspend fun mergeVisibleLayers(keepOriginals: Boolean): Long? =
@@ -1130,6 +1135,7 @@ class CanvasRepositoryImpl
             name: String,
             insertionIndex: Int,
             keepOriginals: Boolean = false,
+            parentGroupId: Long? = null,
         ): Long? {
             if (activeStrokes.isNotEmpty() || pendingEdits.isNotEmpty()) return null
             val live = currentLayers()
@@ -1142,6 +1148,10 @@ class CanvasRepositoryImpl
                 withContext(Dispatchers.Default) {
                     val selected = frozen.filter { it.id in selectedIds }
                     val baked = LayerData(id = mergedId, name = name)
+                    // The merged layer stays in the group its sources shared and stays private if any source was,
+                    // so a private photo never reaches the time-lapse.
+                    baked.parentGroupId = parentGroupId
+                    baked.isPrivate = selected.any { it.isPrivate }
                     // Raster content excludes the canvas background. All per-layer effects are already
                     // baked; the replacement must have neutral opacity, blend mode, mask and strokes.
                     baked.raster = renderFrozen(selected, document, transparentBackground = true)
