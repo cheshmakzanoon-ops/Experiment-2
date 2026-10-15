@@ -2541,7 +2541,7 @@ class ArtFlowCanvasView
                             )
                         }
 
-                        ToolType.SELECT_LASSO -> {
+                        ToolType.SELECT_FREEHAND, ToolType.SELECT_LASSO -> {
                             SelectionMask.polygon(session.width, session.height, points, checkActive = { ensureActive() })
                         }
 
