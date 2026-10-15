@@ -18,4 +18,14 @@ class SquareGridTest {
         assertTrue(lines.any { it.startX == it.endX })
         assertTrue(lines.any { it.startY == it.endY })
     }
+
+    @Test fun snapsOntoTheLinesItDraws() {
+        // The grid is centred on (1024, 625), so the drawn lines sit at x = 24 + 100k and y = 25 + 100k.
+        val drawn = PerspectiveGuide.guideLines(grid, 2048, 1250)
+        val verticals = drawn.filter { it.startX == it.endX }.map { it.startX }.filter { it in 100f..900f }
+        val horizontals = drawn.filter { it.startY == it.endY }.map { it.startY }.filter { it in 100f..900f }
+        assertTrue(verticals.isNotEmpty() && horizontals.isNotEmpty())
+        verticals.forEach { x -> assertEquals(x to 350f, PerspectiveGuide.snap(x + 3f, 350f, grid, 2048, 1250)) }
+        horizontals.forEach { y -> assertEquals(350f to y, PerspectiveGuide.snap(350f, y + 3f, grid, 2048, 1250)) }
+    }
 }
