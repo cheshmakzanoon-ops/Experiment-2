@@ -1,6 +1,7 @@
 package com.artflow.studio.core.pixels
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class LayerTransformTest {
@@ -26,6 +27,15 @@ class LayerTransformTest {
         LayerTransform.render(src, out, LayerTransform.Params(4f, 4f, translateX = 3f, translateY = 2f))
         assertEquals(red, out.pixels[3 * 8 + 4])
         assertEquals(1, out.opaquePixelCount())
+    }
+
+    @Test fun emptySelectionMovesNothing() {
+        val src = dot(8, 1, 1)
+        val out = PixelBuffer(8, 8)
+        LayerTransform.render(src, out, LayerTransform.Params(4f, 4f, translateX = 3f, translateY = 2f), SelectionMask(8, 8))
+        assertEquals(red, out.pixels[1 * 8 + 1])
+        assertEquals(1, out.opaquePixelCount())
+        assertNull(LayerTransform.floatingBounds(src, SelectionMask(8, 8)))
     }
 
     @Test fun horizontalFlipMirrorsAboutPivot() {

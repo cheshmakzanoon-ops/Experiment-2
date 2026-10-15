@@ -60,7 +60,7 @@ object LiveAdjustments {
                 amount <= 0f -> source.copy()
                 else -> filter(kind, source, amount, settings.angleDegrees)
             }
-        val mask = selection?.takeIf { it.width == source.width && it.height == source.height && it.isActive() } ?: return filtered
+        val mask = selection?.takeIf { it.width == source.width && it.height == source.height } ?: return filtered
         for (i in filtered.pixels.indices) {
             filtered.pixels[i] = ImageFilters.lerpArgb(source.pixels[i], filtered.pixels[i], mask.alphaAt(i))
         }
