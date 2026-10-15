@@ -76,11 +76,13 @@ object BrushLibraryCodec {
                 params.wetMix,
                 params.flow,
                 params.tiltInfluence,
-                params.velocityToSize,
-                params.velocityToOpacity,
                 params.velocityToHue,
             )
         require(unitValues.all { it in 0f..1f }) { "Brush dynamics must be finite values between zero and one" }
+        // Speed may reverse: a negative setting makes faster strokes larger or more opaque.
+        require(params.velocityToSize in -1f..1f && params.velocityToOpacity in -1f..1f) {
+            "Speed dynamics must be finite values between minus one and one"
+        }
         // PressureResponse validates finite, monotone control points during deserialization.
     }
 }
