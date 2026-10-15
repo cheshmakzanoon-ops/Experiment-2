@@ -1097,6 +1097,14 @@ fun GuidesSheet(
             range = 0f..1f,
             onChange = { onPerspective(PerspectiveGuide.withHorizon(perspective, it)) },
         )
+        if (perspective.type == PerspectiveGuide.GuideType.GRID || perspective.type == PerspectiveGuide.GuideType.ISOMETRIC) {
+            LabeledSlider(
+                label = "Grid size (px)",
+                value = perspective.gridSpacing.toFloat(),
+                range = 8f..512f,
+                onChange = { onPerspective(perspective.copy(gridSpacing = it.toInt())) },
+            )
+        }
         LabeledSlider(
             label = "Snap radius",
             value = perspective.snapRadius,
