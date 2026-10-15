@@ -8,6 +8,9 @@ object BrushLibraryCodec {
     const val MAX_BRUSHES = 128
     const val MAX_NAME = 80
     private const val MAX_CHARACTERS = 524_288
+
+    /** The rasterizer repeats each dab at most this many times; Procreate's Count reaches 16. */
+    private const val MAX_DAB_COUNT = 32
     private val GRAIN_IDS = setOf(null, "paper", "charcoal", "canvas", "fine", "blotch", "bristle", "halftone", "hatch", "speckle")
 
     /** Grains imported from photos; their tiles live beside the library. */
@@ -47,7 +50,7 @@ object BrushLibraryCodec {
 
     private fun validateParameters(params: BrushParams) {
         require(params.size in 1f..512f && params.spacing in 0.01f..1f) { "Unsupported brush size or spacing" }
-        require(params.count in 1..5 && params.scatter in 0f..2f) { "Unsupported brush scatter or dab count" }
+        require(params.count in 1..MAX_DAB_COUNT && params.scatter in 0f..2f) { "Unsupported brush scatter or dab count" }
         require(params.rotation in 0f..360f && params.textureRotation in 0f..360f) { "Unsupported brush rotation" }
         require(params.textureScale in 0.25f..8f) { "Unsupported grain scale" }
         require(params.textureId in GRAIN_IDS || params.textureId?.matches(IMPORTED_GRAIN) == true) { "Unsupported grain source" }

@@ -1,5 +1,7 @@
 package com.artflow.studio.core.export
 
+import com.artflow.studio.domain.model.brush.BrushLibraryCodec
+import com.artflow.studio.domain.model.brush.SavedBrush
 import com.artflow.studio.domain.model.layer.BlendMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -49,6 +51,28 @@ class ProcreateBrushTest {
         assertTrue(settings.bundledShape)
         assertEquals(0.05f, settings.parameters.spacing, 1e-6f)
         assertEquals(BlendMode.NORMAL, settings.parameters.blendMode)
+    }
+
+    @Test
+    fun importedValuesStayInsideTheLibraryRanges() {
+        val settings =
+            ProcreateBrush.parameters(
+                mapOf(
+                    "shapeAngle" to -0.5,
+                    "textureScale" to 0.1,
+                    "shapeCount" to 1.0,
+                    "dynamicsSpeedSize" to -0.6,
+                    "dynamicsSpeedOpacity" to -1.0,
+                ),
+            )
+        // A negative angle turns into [0, 360); a grain scale below the stored minimum is raised to it.
+        assertEquals(331.35f, settings.rotation, 0.01f)
+        assertEquals(0.25f, settings.textureScale, 1e-6f)
+        assertEquals(16, settings.count)
+        assertEquals(-0.6f, settings.velocityToSize, 1e-6f)
+        assertEquals(-1f, settings.velocityToOpacity, 1e-6f)
+        val saved = BrushLibraryCodec.encode(listOf(SavedBrush("imported", "Imported", settings)))
+        assertEquals(settings, BrushLibraryCodec.decode(saved).single().parameters)
     }
 
     @Test
