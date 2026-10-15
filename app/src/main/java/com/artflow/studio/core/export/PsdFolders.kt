@@ -1,5 +1,7 @@
 package com.artflow.studio.core.export
 
+import com.artflow.studio.core.render.LayerGroups
+import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.Layer
 
 /**
@@ -36,6 +38,24 @@ object PsdFolders {
         open.asReversed().forEach { out += header(it) }
         return out
     }
+
+    /**
+     * The blend mode a folder is written with. A group that ArtFlow composites straight through
+     * (Normal and fully opaque) is Photoshop's pass-through folder; any other group is isolated, so
+     * it keeps its own blend mode, with Pass Through read as Normal.
+     */
+    fun headerBlend(group: Layer): BlendMode =
+        when {
+            !LayerGroups.isolates(group) -> BlendMode.PASS_THROUGH
+            group.blendMode == BlendMode.PASS_THROUGH -> BlendMode.NORMAL
+            else -> group.blendMode
+        }
+
+    /**
+     * The blend mode an imported layer or folder gets. Pass Through is a folder code only, so it is
+     * read as Normal: a Normal, fully opaque group is what ArtFlow composites straight through.
+     */
+    fun importedBlend(blend: BlendMode): BlendMode = if (blend == BlendMode.PASS_THROUGH) BlendMode.NORMAL else blend
 
     /** The groups containing [layer], outermost first. */
     private fun ancestors(

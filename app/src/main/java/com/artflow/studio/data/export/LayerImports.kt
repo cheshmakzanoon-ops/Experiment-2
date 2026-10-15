@@ -4,7 +4,9 @@ import com.artflow.studio.core.color.ColorProfile
 import com.artflow.studio.core.color.ColorProfiles
 import com.artflow.studio.core.export.ProcreateReader
 import com.artflow.studio.core.export.PsdCodec
+import com.artflow.studio.core.export.PsdFolders
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import kotlinx.coroutines.Dispatchers
@@ -81,6 +83,10 @@ object LayerImports {
                     }
                     applyLook(repository, layer.id, source)
                     if (source.isClippingMask) repository.setLayerClippingMask(layer.id, true)
+                    source.mask?.let { mask ->
+                        val coverage = mask.coverageFor(size.width, size.height, dx, dy)
+                        repository.addLayerMask(layer.id, SelectionMask(size.width, size.height, coverage))
+                    }
                     (open.lastOrNull() ?: root) += Node.Pixels(layer.id)
                     added++
                 }
@@ -251,7 +257,8 @@ object LayerImports {
         source: PsdCodec.PsdLayer,
     ) {
         if (source.opacity < 255) repository.setLayerOpacity(id, source.opacity / 255f)
-        if (source.blendMode != BlendMode.NORMAL) repository.setLayerBlendMode(id, source.blendMode)
+        val blend = PsdFolders.importedBlend(source.blendMode)
+        if (blend != BlendMode.NORMAL) repository.setLayerBlendMode(id, blend)
         if (!source.isVisible) repository.setLayerVisibility(id, false)
     }
 }

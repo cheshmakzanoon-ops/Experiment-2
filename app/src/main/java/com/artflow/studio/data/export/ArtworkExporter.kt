@@ -426,7 +426,9 @@ class ArtworkExporter
                         layerOf = { it.layer },
                         groups = groups,
                         includeHidden = options.includeHiddenLayers,
-                        header = { group -> PsdCodec.PsdLayer.groupHeader(group.name, opacity(group), shown(group), group.blendMode) },
+                        header = { group ->
+                            PsdCodec.PsdLayer.groupHeader(group.name, opacity(group), shown(group), PsdFolders.headerBlend(group))
+                        },
                     ) { entry ->
                         PsdCodec.PsdLayer(
                             name = entry.name,

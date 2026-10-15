@@ -57,6 +57,7 @@ class PointerGestureRouter(
     private var scrubDirection = 0
     private var scrubAnchorX = 0f
     private var scrubReversals = 0
+    private var scrubTracking = false
 
     /** Discard the current stream; a trailing finger must not start drawing or undo artwork. */
     fun suppress() {
@@ -69,6 +70,7 @@ class PointerGestureRouter(
         multiGestureFired = false
         scrubDirection = 0
         scrubReversals = 0
+        scrubTracking = false
     }
 
     /** Two or three fingers resting still since the touch began, else 0: Procreate's rapid undo and redo. */
@@ -206,12 +208,20 @@ class PointerGestureRouter(
             multiGestureFired = true
             return Route(Action.THREE_FINGER_SWIPE_DOWN)
         }
+        if (!scrubTracking) {
+            // Anchor the scrub where the fingers first move together, not at the screen's left edge.
+            scrubTracking = true
+            scrubAnchorX = meanX
+        }
         val step = meanX - scrubAnchorX
         val direction = if (step > 0f) 1 else -1
         when {
+            // Only real movement sets the direction, so jitter inside the scrub distance is not a reversal.
             scrubDirection == 0 -> {
-                scrubDirection = direction
-                scrubAnchorX = meanX
+                if (abs(step) > scrubDistance) {
+                    scrubDirection = direction
+                    scrubAnchorX = meanX
+                }
             }
             direction == scrubDirection -> scrubAnchorX = meanX
             abs(step) > scrubDistance -> {

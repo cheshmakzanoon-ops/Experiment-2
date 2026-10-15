@@ -219,6 +219,20 @@ class PointerGestureRouterTest {
     }
 
     @Test
+    fun threeFingerScrubCountsOnlyRealReversalsNotTheFirstMove() {
+        val fingers = (0 until 3).map { Pointer(it, 300f + it * 40f, 300f) }
+        send(Event.DOWN, fingers[0])
+        send(Event.POINTER_DOWN, *fingers.take(2).toTypedArray(), changed = 1)
+        send(Event.POINTER_DOWN, *fingers.toTypedArray(), changed = 2)
+        // Left, right, left and right is only two reversals: the first leftward move is not one.
+        val twoReversals = listOf(0f, -80f, 0f, -80f)
+        val early = twoReversals.map { dx -> send(Event.MOVE, *fingers.map { it.copy(x = it.x + dx) }.toTypedArray()).action }
+        assertFalse(Action.THREE_FINGER_SCRUB in early)
+        val third = send(Event.MOVE, *fingers.map { it.copy(x = it.x) }.toTypedArray()).action
+        assertEquals(Action.THREE_FINGER_SCRUB, third)
+    }
+
+    @Test
     fun stillFingersAreAHoldUntilTheyMoveAndAHoldIsNotATap() {
         send(Event.DOWN, finger)
         send(Event.POINTER_DOWN, finger, other, changed = 1)
