@@ -563,11 +563,20 @@ private fun BrushSpeedSettings(
             )
         }
         BrushParameterSlider(
-            label = "Tilt → size and opacity",
+            label = "Tilt → size",
             value = brushParams.tiltInfluence,
             onValueChange = { onBrushParamsChanged(brushParams.copy(tiltInfluence = it.coerceIn(0f, 1f))) },
             valueRange = 0f..1f,
             valueDisplay = "%.0f%%".format(brushParams.tiltInfluence * 100),
+        )
+        // Opacity has its own tilt amount once set; until then it follows the size amount.
+        val opacityTilt = brushParams.tiltOpacityInfluence ?: brushParams.tiltInfluence
+        BrushParameterSlider(
+            label = if (brushParams.tiltOpacityInfluence == null) "Tilt → opacity (follows size)" else "Tilt → opacity",
+            value = opacityTilt,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(tiltOpacityInfluence = it.coerceIn(0f, 1f))) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(opacityTilt * 100),
         )
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Tilt turns the tip", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
