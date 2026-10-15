@@ -789,12 +789,27 @@ fun CanvasOpsSheet(
         }
 
         Divider()
-        LabeledSlider(
-            label = "Resolution (dpi)",
-            value = dpi.toFloat(),
-            range = 36f..600f,
-            onChange = { onDpi(it.toInt()) },
-        )
+        // The drag only moves this slider; the resolution is set once on release, so one drag is one undo step.
+        var liveDpi by remember(dpi) { mutableStateOf(dpi.toFloat()) }
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text("Resolution (dpi)", style = MaterialTheme.typography.labelMedium)
+                Text(
+                    "${liveDpi.roundToInt()}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Slider(
+                value = liveDpi.coerceIn(36f, 600f),
+                onValueChange = { liveDpi = it },
+                onValueChangeFinished = { onDpi(liveDpi.roundToInt()) },
+                valueRange = 36f..600f,
+            )
+        }
 
         Text("Background", style = MaterialTheme.typography.titleSmall)
         FlowRow(
