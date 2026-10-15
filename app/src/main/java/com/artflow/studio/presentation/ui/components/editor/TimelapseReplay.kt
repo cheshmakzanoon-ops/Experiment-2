@@ -30,17 +30,21 @@ fun TimelapseReplay(
     onDismiss: () -> Unit,
 ) {
     var index by remember(frames) { mutableIntStateOf(0) }
+    var loadedIndex by remember(frames) { mutableIntStateOf(-1) }
     var playing by remember(frames) { mutableStateOf(frames.size > 1) }
     var image by remember { mutableStateOf<ImageBitmap?>(null) }
-    val frameDelay = (REPLAY_SECONDS * 1000L / frames.size.coerceAtLeast(1)).coerceIn(16L, 250L)
 
     LaunchedEffect(frames, index) {
         val file = frames.getOrNull(index) ?: return@LaunchedEffect
         image = withContext(Dispatchers.IO) { BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap() }
+        loadedIndex = index
     }
     LaunchedEffect(playing, frames) {
         while (playing && frames.isNotEmpty()) {
-            delay(frameDelay)
+            delay(REPLAY_FRAME_MS)
+            // Advance only after the shown frame is decoded: a slow decode lowers the pace instead of
+            // cancelling each decode before it finishes.
+            while (loadedIndex != index) delay(REPLAY_POLL_MS)
             if (index >= frames.lastIndex) playing = false else index++
         }
     }
@@ -96,4 +100,6 @@ fun TimelapseReplay(
     }
 }
 
-private const val REPLAY_SECONDS = 20
+/** 30 fps: the same hold as a full-length time-lapse MP4, so the replay shows what the export contains. */
+private const val REPLAY_FRAME_MS = 33L
+private const val REPLAY_POLL_MS = 4L
