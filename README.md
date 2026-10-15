@@ -59,8 +59,9 @@ Navigation and the pressure toggle honour the larger-touch-target preference.
 
 **Speed & colour** exposes speed-controlled size, opacity and hue, plus pressure-dependent
 brightness, using the same exact-value entry and staged Use brush/Cancel workflow. Saved copies
-preserve the complete parameter model. The active renderer still uses round tips: stored tilt and
-general tip rotation are not implemented rendering features. Procedural **grain rotation** works.
+preserve the complete parameter model. Stylus tilt widens and lightens dabs, with tilt opacity set
+apart from tilt size; tilt-to-rotation and the Rotation setting turn flat and imported tips.
+Procedural **grain rotation** works. The stylus azimuth sign and tilt curves are unvalidated on hardware.
 
 ## Neutral, adaptive workspace
 
@@ -82,8 +83,7 @@ rename and **confirmed deletion**. Built-in presets cannot be renamed or deleted
 Saved brushes participate in search; copies have independent identities even when names match.
 
 A saved copy preserves the **entire brush parameter model**, including custom pressure response,
-procedural grain, colour/velocity settings, reserved tilt fields and wet mix. Persisted tilt fields
-do not establish tilt-aware rendering. Saving a copy is an explicit library
+procedural grain, colour/velocity settings, tilt settings and wet mix. Saving a copy is an explicit library
 operation independent of **Use brush**: it does not apply the draft or edit artwork. Closing the
 studio still discards unapplied draft changes but does not undo a confirmed library save.
 
@@ -100,7 +100,7 @@ Open **Brush** in the editor. **Library** searches eight original starter preset
 Sketch, Ink, Texture and Paint, with samples rendered by the painting engine. **Settings** edits
 size, opacity, spacing, smoothing, pressure curves, taper, procedural grain, scatter, jitter and wet
 mix. Attribute navigation and speed/colour controls are connected. General tip rotation
-is reserved metadata; grain rotation is active. Tap a displayed value for exact numeric entry. **Drawing pad** tests your own
+turns flat and imported tips; grain rotation is active. Tap a displayed value for exact numeric entry. **Drawing pad** tests your own
 marks without touching the artwork; return after changing settings to see those marks re-rendered.
 
 Changes remain a **draft** until **Use brush**. Close, Back or outside dismissal discards the draft;
@@ -112,7 +112,7 @@ Numeric entry accepts decimal points/commas, maps percentages to engine values, 
 values, and rejects fractions for integer controls. The practice buffer is **320×180**, retains the
 last **8 strokes**, caps each at **128 points**, and limits preview brush sizes to **48 pixels**.
 These are preview limits, not document limits. Presets are original starting points, not Procreate
-assets or a professionally validated equivalent library. Imported shape/grain textures, dual brushes and custom preset interchange remain unfinished.
+assets or a professionally validated equivalent library. Imported shape and grain textures and dual brushes are available, and Procreate and Photoshop brush files import.
 
 ## Studio workflows
 
@@ -136,15 +136,19 @@ Canvas background state follows the document through edits and undo/redo.
 
 | Area | Available | Important gaps |
 | --- | --- | --- |
-| Painting | Pressure/dynamics, smoothing, taper, flow, wet mix, jitter, three procedural grains, staged Brush Studio | Preset interchange, imported/shaped/dual textures, tilt rendering, curated-library and stylus-feel parity |
+| Painting | Pressure/dynamics, smoothing, taper, flow, wet mix, jitter, procedural and imported grains, tilt, dual brushes, staged Brush Studio | Curated-library and stylus-feel parity; tilt azimuth sign and curves unvalidated on hardware |
 | Tools | Brush, eraser, smudge, clone, healing, liquify, bucket, gradients, text and shapes | QuickShape recognition and ColorDrop-style interaction |
-| Selections | Rectangle/ellipse/lasso/wand, combine/invert/feather | Saved selections and equivalent gesture ergonomics |
-| Transform | MOVE/TRANSFORM translation | Interactive scale/rotate/distort/warp/snapping with preview/apply/cancel |
-| Layers | Pixel/mask/effect workflows and reorder | Nested groups, linking UI and fill-reference workflow |
-| Colour | Wheel, RGB/HSV/CMYK controls, palettes, harmonies | ICC-managed working spaces and print fidelity; CMYK sliders are not colour management |
-| Animation | Frames, duration/FPS, onion skin, playback and animated export | Drawing timelapse, Page Assist and 3D painting |
+| Selections | Automatic, freehand, rectangle, ellipse, combine/invert/feather, save and load | Gesture ergonomics; automatic-selection sampling and Remove without a selection unverified |
+| Transform | Freeform, uniform, distort and warp with snapping, cancel and undo | Device validation of large multi-layer moves |
+| Layers | Pixel/mask/effect workflows, nested groups, clipping, alpha lock, reorder | Merge Down bakes opacity and blend mode into pixels and does not carry alpha lock or clipping |
+| Colour | Disc, Classic (HSB), Value (RGB/HSV/CMYK), palettes, harmonies, Display P3 canvases | Classic model parity unverified; print proof not validated against real press output |
+| Animation | Frames, duration/FPS, loop and ping-pong playback, tinted onion skin, timelapse, GIF/MP4/APNG export | Export ignores ping-pong and playback range; no onion colour control or frame hide; preview timing on device unmeasured |
 | Documents | Atomic `.artflow` saves, thumbnails, autosave and recovery | Broader interruption, low-storage and long-session acceptance |
-| Export | PNG/JPEG/WebP/PDF/PSD/GIF/MP4 and frame-sequence ZIP; picker/gallery/sharing | PSD import and broader external interoperability fixtures |
+| Export | PNG/JPEG/WebP/PDF/PSD/TIFF/GIF/APNG/MP4, layer PNG zip and frame-sequence ZIP; picker/gallery/sharing | PSD export bakes masks into pixels; broader external interoperability fixtures |
+
+The latest parity sweep (one worker per area) is recorded under *Parity sweep candidate* in
+[docs/PROCREATE_PARITY.md](docs/PROCREATE_PARITY.md). It was not compiled with Gradle or run on a device
+in the environment that wrote it; the Android build, JVM tests and device lanes on CI are the first gate.
 
 Cloud collaboration and smart objects are separate roadmap ideas, not asserted Procreate features.
 No internet permission, analytics or crash telemetry is added.
