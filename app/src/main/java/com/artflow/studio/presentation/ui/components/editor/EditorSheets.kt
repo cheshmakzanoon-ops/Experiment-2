@@ -700,8 +700,9 @@ fun CanvasOpsSheet(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("Canvas", style = MaterialTheme.typography.titleMedium)
+        val printSize = CanvasOperations.CanvasProperties(width, height, dpi, backgroundColor)
         Text(
-            "$width × $height px · $dpi dpi",
+            "$width × $height px · $dpi dpi · %.1f × %.1f in".format(printSize.widthInches, printSize.heightInches),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -789,12 +790,27 @@ fun CanvasOpsSheet(
         }
 
         Divider()
-        LabeledSlider(
-            label = "Resolution (dpi)",
-            value = dpi.toFloat(),
-            range = 36f..600f,
-            onChange = { onDpi(it.toInt()) },
-        )
+        // The drag only moves this slider; the resolution is set once on release, so one drag is one undo step.
+        var liveDpi by remember(dpi) { mutableStateOf(dpi.toFloat()) }
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text("Resolution (dpi)", style = MaterialTheme.typography.labelMedium)
+                Text(
+                    "${liveDpi.roundToInt()}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Slider(
+                value = liveDpi.coerceIn(36f, 600f),
+                onValueChange = { liveDpi = it },
+                onValueChangeFinished = { onDpi(liveDpi.roundToInt()) },
+                valueRange = 36f..600f,
+            )
+        }
 
         Text("Background", style = MaterialTheme.typography.titleSmall)
         FlowRow(
@@ -1082,6 +1098,14 @@ fun GuidesSheet(
             range = 0f..1f,
             onChange = { onPerspective(PerspectiveGuide.withHorizon(perspective, it)) },
         )
+        if (perspective.type == PerspectiveGuide.GuideType.GRID || perspective.type == PerspectiveGuide.GuideType.ISOMETRIC) {
+            LabeledSlider(
+                label = "Grid size (px)",
+                value = perspective.gridSpacing.toFloat(),
+                range = 8f..512f,
+                onChange = { onPerspective(perspective.copy(gridSpacing = it.toInt())) },
+            )
+        }
         LabeledSlider(
             label = "Snap radius",
             value = perspective.snapRadius,

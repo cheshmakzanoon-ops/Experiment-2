@@ -234,14 +234,15 @@ object CanvasOperations {
         margin: Int = 32,
     ): Result {
         val content = buffer.contentBounds() ?: return Result(buffer, properties)
-        val padded = content.inflated(margin)
-        return resizeCanvas(
-            buffer = buffer,
-            width = padded.width,
-            height = padded.height,
-            anchor = Anchor.CENTER,
-            properties = properties,
-        )
+        val padding = margin.coerceAtLeast(0)
+        val padded = content.inflated(padding)
+        val width = padded.width.coerceIn(1, MAX_DIMENSION)
+        val height = padded.height.coerceIn(1, MAX_DIMENSION)
+        // Move the artwork's own bounds to the margin, not the whole buffer to the centre, so the
+        // content keeps an even margin on every side and is never pushed out of the canvas.
+        val canvas = PixelBuffer(width, height)
+        canvas.drawInto(buffer, padding - content.left, padding - content.top)
+        return Result(canvas, properties.copy(width = width, height = height))
     }
 
     /** Changes DPI only; the pixel data is untouched (this is a print-resolution change). */

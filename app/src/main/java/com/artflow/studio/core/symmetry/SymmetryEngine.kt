@@ -159,7 +159,9 @@ object SymmetryEngine {
 
     /**
      * Mirrors a whole stroke. Used when symmetry is switched on after a stroke was drawn, and by
-     * the tests that assert the replication matches stamp-for-stamp.
+     * the tests that assert the replication matches stamp-for-stamp. Every point of a copy goes
+     * through the map of its copy: a reflection for mirrored copies, a half turn for the diagonal
+     * of quadrant symmetry and a rotation for radial copies. Points keep their pressure and timing.
      */
     fun mirrorStroke(
         stroke: Stroke,
@@ -168,38 +170,84 @@ object SymmetryEngine {
         settings: Settings,
     ): List<Stroke> {
         if (!settings.isActive()) return listOf(stroke)
-        val mirrored =
-            instances(
-                x = stroke.points.firstOrNull()?.x ?: 0f,
-                y = stroke.points.firstOrNull()?.y ?: 0f,
-                width = width,
-                height = height,
-                settings = settings,
-            )
-        if (mirrored.size <= 1) return listOf(stroke)
+        val copies = copyMaps(width, height, settings)
+        if (copies.size <= 1) return listOf(stroke)
 
-        // Apply the same transform to every point so pressure/texture data is preserved.
-        return mirrored.mapIndexed { index, instance ->
+        return copies.mapIndexed { index, map ->
             if (index == 0) {
                 stroke
             } else {
-                val dx = instance.x - (stroke.points.firstOrNull()?.x ?: 0f)
-                val dy = instance.y - (stroke.points.firstOrNull()?.y ?: 0f)
-                val rotation = Math.toRadians(instance.rotationDegrees.toDouble())
-                val cosR = cos(rotation).toFloat()
-                val sinR = sin(rotation).toFloat()
-                val originX = stroke.points.firstOrNull()?.x ?: 0f
-                val originY = stroke.points.firstOrNull()?.y ?: 0f
                 val transformed =
                     stroke.points.map { point ->
-                        val localX = point.x - originX
-                        val localY = point.y - originY
-                        point.copy(
-                            x = originX + dx + (localX * cosR - localY * sinR),
-                            y = originY + dy + (localX * sinR + localY * cosR),
-                        )
+                        point.copy(x = map.x(point.x, point.y), y = map.y(point.x, point.y))
                     }
                 stroke.copy(id = stroke.id + index, points = transformed)
+            }
+        }
+    }
+
+    /** One copy of the sample as an affine map: `x' = a·x + b·y + tx` and `y' = c·x + d·y + ty`. */
+    private class CopyMap(
+        private val a: Float,
+        private val b: Float,
+        private val c: Float,
+        private val d: Float,
+        private val tx: Float,
+        private val ty: Float,
+    ) {
+        fun x(
+            px: Float,
+            py: Float,
+        ): Float = a * px + b * py + tx
+
+        fun y(
+            px: Float,
+            py: Float,
+        ): Float = c * px + d * py + ty
+    }
+
+    /**
+     * The copies [instances] produces, in the same order and count, expressed as affine maps so a
+     * whole stroke can be carried through them. A mirrored copy is a reflection of the stroke, not
+     * a translation of it.
+     */
+    private fun copyMaps(
+        width: Int,
+        height: Int,
+        settings: Settings,
+    ): List<CopyMap> {
+        val axisX = (settings.centreX + settings.offsetX) * width
+        val axisY = (settings.centreY + settings.offsetY) * height
+        val identity = CopyMap(1f, 0f, 0f, 1f, 0f, 0f)
+        val reflectX = CopyMap(-1f, 0f, 0f, 1f, 2f * axisX, 0f)
+        val reflectY = CopyMap(1f, 0f, 0f, -1f, 0f, 2f * axisY)
+        val halfTurn = CopyMap(-1f, 0f, 0f, -1f, 2f * axisX, 2f * axisY)
+        return when (settings.type) {
+            SymmetryType.NONE -> listOf(identity)
+            SymmetryType.VERTICAL ->
+                if (settings.secondaryAxis) listOf(identity, reflectX, reflectY, halfTurn) else listOf(identity, reflectX)
+            SymmetryType.HORIZONTAL ->
+                if (settings.secondaryAxis) listOf(identity, reflectY, reflectX, halfTurn) else listOf(identity, reflectY)
+            SymmetryType.QUADRANT -> listOf(identity, reflectX, reflectY, halfTurn)
+            SymmetryType.RADIAL -> {
+                val count = settings.radialCount.coerceIn(2, 32)
+                val baseAngle = Math.toRadians(settings.radialAngleDegrees.toDouble())
+                val centreX = width / 2f
+                val centreY = height / 2f
+                List(count) { i ->
+                    val angle = baseAngle + (2.0 * Math.PI * i) / count
+                    val cosA = cos(angle).toFloat()
+                    val sinA = sin(angle).toFloat()
+                    // Rotation about the canvas centre: x' = R·x + (centre - R·centre).
+                    CopyMap(
+                        a = cosA,
+                        b = -sinA,
+                        c = sinA,
+                        d = cosA,
+                        tx = centreX - (cosA * centreX - sinA * centreY),
+                        ty = centreY - (sinA * centreX + cosA * centreY),
+                    )
+                }
             }
         }
     }

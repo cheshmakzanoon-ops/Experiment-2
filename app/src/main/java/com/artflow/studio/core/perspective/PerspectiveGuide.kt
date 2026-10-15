@@ -3,6 +3,8 @@ package com.artflow.studio.core.perspective
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.floor
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
@@ -83,6 +85,9 @@ object PerspectiveGuide {
             VanishingPoint(0.50f, 0.95f),
         )
 
+    /** Directions of the isometric families: vertical, and 30 degrees either side of horizontal. */
+    private val ISOMETRIC_AXES: List<Float> = listOf(90f, 30f, -30f)
+
     /** Resolution-independent position of vanishing point [index]. */
     fun pointPosition(
         settings: Settings,
@@ -162,9 +167,7 @@ object PerspectiveGuide {
         val lines = mutableListOf<GuideLine>()
         val diagonal = sqrt((width * width + height * height).toFloat())
 
-        // The three isometric axes: 0 degrees (horizontal), +30 and -30 degrees.
-        val axes = listOf(0f, 30f, -30f, 90f)
-        for (angleDegrees in axes) {
+        for (angleDegrees in ISOMETRIC_AXES) {
             val radians = Math.toRadians(angleDegrees.toDouble())
             val dx = cos(radians).toFloat()
             val dy = sin(radians).toFloat()
@@ -205,7 +208,7 @@ object PerspectiveGuide {
     ): Pair<Float, Float> {
         if (!settings.isActive() || !settings.snapEnabled) return x to y
         if (settings.type == GuideType.ISOMETRIC) return snapToIsometricGrid(x, y, settings, width, height)
-        if (settings.type == GuideType.GRID) return snapToSquareGrid(x, y, settings)
+        if (settings.type == GuideType.GRID) return snapToSquareGrid(x, y, settings, width / 2f, height / 2f)
 
         var bestX = x
         var bestY = y
@@ -262,16 +265,21 @@ object PerspectiveGuide {
         return lines
     }
 
-    /** Pulls the pointer onto the nearest grid line (horizontal or vertical) within the snap radius. */
+    /**
+     * Pulls the pointer onto the nearest grid line (horizontal or vertical) within the snap radius.
+     * The lines pass through ([originX], [originY]), the canvas centre that [squareGridLines] draws from.
+     */
     fun snapToSquareGrid(
         x: Float,
         y: Float,
         settings: Settings,
+        originX: Float,
+        originY: Float,
     ): Pair<Float, Float> {
         val spacing = settings.gridSpacing.coerceIn(8, 512).toFloat()
         val strength = settings.snapStrength.coerceIn(0f, 1f)
-        val lineX = Math.round(x / spacing) * spacing
-        val lineY = Math.round(y / spacing) * spacing
+        val lineX = originX + Math.round((x - originX) / spacing) * spacing
+        val lineY = originY + Math.round((y - originY) / spacing) * spacing
         val distanceX = abs(x - lineX)
         val distanceY = abs(y - lineY)
         return when {
@@ -281,7 +289,10 @@ object PerspectiveGuide {
         }
     }
 
-    /** Snaps onto the nearest isometric grid intersection. */
+    /**
+     * Snaps onto the nearest intersection of two isometric guide lines. The lines are the families
+     * [isometricLines] draws, each spaced [Settings.gridSpacing] apart from the canvas centre.
+     */
     fun snapToIsometricGrid(
         x: Float,
         y: Float,
@@ -289,20 +300,71 @@ object PerspectiveGuide {
         width: Int,
         height: Int,
     ): Pair<Float, Float> {
-        val spacing = settings.gridSpacing.coerceIn(8, 512)
-        // Isometric lattice: rows are spaced spacing * sin(60) apart, columns spacing wide.
-        val rowHeight = spacing * 0.866f
-        val row = Math.round(y / rowHeight)
-        val baseline = row * rowHeight
-        val offset = if (row % 2L == 0L) 0f else spacing / 2f
-        val column = Math.round((x - offset) / spacing)
-        val snapX = column * spacing + offset
-        val snapY = baseline
-
-        val distance = sqrt((x - snapX) * (x - snapX) + (y - snapY) * (y - snapY))
-        if (distance > settings.snapRadius) return x to y
+        val spacing = settings.gridSpacing.coerceIn(8, 512).toDouble()
+        val centreX = width / 2.0
+        val centreY = height / 2.0
+        val crossing = nearestIsometricCrossing(x - centreX, y - centreY, spacing)
+        if (crossing.distance > settings.snapRadius) return x to y
+        val snapX = (centreX + crossing.x).toFloat()
+        val snapY = (centreY + crossing.y).toFloat()
         val strength = settings.snapStrength.coerceIn(0f, 1f)
         return (x + (snapX - x) * strength) to (y + (snapY - y) * strength)
+    }
+
+    /** A point where two isometric families cross, relative to the canvas centre. */
+    private class Crossing(
+        val x: Double,
+        val y: Double,
+        val distance: Double,
+    )
+
+    /** The crossing of any two isometric families nearest to the offset ([qx], [qy]) from the centre. */
+    private fun nearestIsometricCrossing(
+        qx: Double,
+        qy: Double,
+        spacing: Double,
+    ): Crossing {
+        var best = Crossing(0.0, 0.0, Double.MAX_VALUE)
+        for (a in ISOMETRIC_AXES.indices) {
+            for (b in a + 1 until ISOMETRIC_AXES.size) {
+                val candidate = crossingNear(ISOMETRIC_AXES[a], ISOMETRIC_AXES[b], qx, qy, spacing)
+                if (candidate.distance < best.distance) best = candidate
+            }
+        }
+        return best
+    }
+
+    /** Two families meet where both offsets are whole multiples of the spacing; test the cells around the point. */
+    private fun crossingNear(
+        degreesA: Float,
+        degreesB: Float,
+        qx: Double,
+        qy: Double,
+        spacing: Double,
+    ): Crossing {
+        val (ax, ay) = isometricNormal(degreesA)
+        val (bx, by) = isometricNormal(degreesB)
+        val determinant = ax * by - ay * bx
+        val ua = floor((ax * qx + ay * qy) / spacing).toInt()
+        val ub = floor((bx * qx + by * qy) / spacing).toInt()
+        var best = Crossing(0.0, 0.0, Double.MAX_VALUE)
+        for (i in ua - 1..ua + 2) {
+            for (j in ub - 1..ub + 2) {
+                val offsetA = i * spacing
+                val offsetB = j * spacing
+                val px = (offsetA * by - ay * offsetB) / determinant
+                val py = (ax * offsetB - bx * offsetA) / determinant
+                val distance = hypot(px - qx, py - qy)
+                if (distance < best.distance) best = Crossing(px, py, distance)
+            }
+        }
+        return best
+    }
+
+    /** Unit normal of the isometric family whose lines run at [degrees]: offsets are measured along it. */
+    private fun isometricNormal(degrees: Float): Pair<Double, Double> {
+        val radians = Math.toRadians(degrees.toDouble())
+        return -sin(radians) to cos(radians)
     }
 
     /** Moves the horizon and keeps the horizontal vanishing points on it. */
