@@ -700,8 +700,9 @@ fun CanvasOpsSheet(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("Canvas", style = MaterialTheme.typography.titleMedium)
+        val printSize = CanvasOperations.CanvasProperties(width, height, dpi, backgroundColor)
         Text(
-            "$width × $height px · $dpi dpi",
+            "$width × $height px · $dpi dpi · %.1f × %.1f in".format(printSize.widthInches, printSize.heightInches),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
