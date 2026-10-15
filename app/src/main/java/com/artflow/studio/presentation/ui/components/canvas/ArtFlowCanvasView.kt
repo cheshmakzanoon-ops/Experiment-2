@@ -10,6 +10,7 @@ import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.animation.DecelerateInterpolator
 import androidx.core.math.MathUtils
+import com.artflow.studio.core.animation.OnionSkinTint
 import com.artflow.studio.core.canvas.MotionFilter
 import com.artflow.studio.core.canvas.PointerGestureRouter
 import com.artflow.studio.core.canvas.PointerPressure
@@ -39,6 +40,7 @@ import com.artflow.studio.core.tool.PixelBrushes
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.data.renderer.opengl.OpenGLCanvasRenderer
+import com.artflow.studio.domain.model.animation.AnimationSettings
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.StrokeDestination
 import com.artflow.studio.domain.repository.canvas.CanvasInvalidationEvent
@@ -1090,6 +1092,12 @@ class ArtFlowCanvasView
                             // A busy renderer must complete frames instead of cancelling each one
                             // when another pointer sample arrives. Only the latest queued request is kept.
                             refreshComposite()
+                            // Ghosts also depend on the onion look and pinned frames, which change without a frame change.
+                            val ghostSettings = canvasRepository.timeline.value.settings
+                            if (ghostSettings != ghostSettingsSeen) {
+                                ghostSettingsSeen = ghostSettings
+                                onionDirty = true
+                            }
                             if (onionDirty) refreshOnionSkins()
                             if (input.tool == ToolType.TRANSFORM && pixelTool == null && !transformCommitting) ensureTransformSession()
                         }
@@ -1140,6 +1148,7 @@ class ArtFlowCanvasView
         }
 
         private var onionJob: Job? = null
+        private var ghostSettingsSeen: AnimationSettings? = null
 
         private fun refreshOnionSkins() {
             if (onionEnabled && !onionDirty) return
@@ -1175,7 +1184,9 @@ class ArtFlowCanvasView
                             } else {
                                 frame
                             }
-                        ghosts += preview to opacity / abs(offset).toFloat()
+                        val tint = if (offset < 0) state.settings.onionSkinPreviousColor else state.settings.onionSkinNextColor
+                        val silhouette = withContext(Dispatchers.Default) { OnionSkinTint.silhouette(preview, tint) }
+                        ghosts += silhouette to opacity / abs(offset).toFloat()
                     }
                     renderer.setOnionSkins(ghosts)
                     requestRender()

@@ -47,8 +47,15 @@ object GifEncoder {
         writeHeader(out, width, height, loop)
 
         val transparentIndex = if (keepTransparency) 0 else -1
+        // GIF holds are whole centiseconds. Each delay is the gap between rounded cumulative times, so a
+        // clip keeps its total length instead of drifting by the truncation of every frame.
+        var targetMs = 0L
+        var emittedCs = 0
         frames.forEachIndexed { index, frame ->
-            val delay = (delaysMs.getOrNull(index) ?: 100).coerceIn(20, 100_000)
+            val delayMs = (delaysMs.getOrNull(index) ?: 100).coerceIn(20, 100_000)
+            targetMs += delayMs
+            val delayCs = (((targetMs + 5) / 10).toInt() - emittedCs).coerceAtLeast(2)
+            emittedCs += delayCs
             val quantized =
                 Quantizer.quantize(
                     frame = frame,
@@ -62,7 +69,7 @@ object GifEncoder {
                 height = height,
                 indexed = quantized.indices,
                 palette = quantized.palette,
-                delayMs = delay,
+                delayCs = delayCs,
                 transparentIndex = transparentIndex,
             )
         }
@@ -104,7 +111,7 @@ object GifEncoder {
         height: Int,
         indexed: ByteArray,
         palette: IntArray,
-        delayMs: Int,
+        delayCs: Int,
         transparentIndex: Int,
     ) {
         // Graphics control extension: delay + transparency.
@@ -114,7 +121,7 @@ object GifEncoder {
         val transparencyFlag = if (transparentIndex >= 0) 0x01 else 0x00
         // Disposal method 2 (restore to background) keeps transparent areas clean between frames.
         out.write(0x04 or transparencyFlag)
-        writeShort(out, (delayMs / 10).coerceAtLeast(2)) // GIF delays are in centiseconds
+        writeShort(out, delayCs)
         out.write(if (transparentIndex >= 0) transparentIndex else 0)
         out.write(0x00)
 

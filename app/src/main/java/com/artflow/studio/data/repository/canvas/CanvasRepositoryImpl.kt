@@ -1222,6 +1222,36 @@ class CanvasRepositoryImpl
 
         private var opacityRun: OpacityRun? = null
 
+        /** A run of timeline edits of one kind (a slider drag), merged into one undo step like [OpacityRun]. */
+        private data class EditRun(
+            val key: String,
+            val pushes: Long,
+            val at: Long,
+        )
+
+        private var editRun: EditRun? = null
+
+        private fun continuesEditRun(
+            key: String,
+            now: Long,
+        ): Boolean {
+            val run = editRun ?: return false
+            return run.key == key && run.pushes == undoPushes && now - run.at <= EDIT_MERGE_MS
+        }
+
+        /**
+         * The onion-skin look (frames, opacity and tints) is a viewing preference, so [source] supplies it
+         * instead of this settings object: undo and redo never change it.
+         */
+        private fun AnimationSettings.withOnionLookOf(source: AnimationSettings): AnimationSettings =
+            copy(
+                onionSkinEnabled = source.onionSkinEnabled,
+                onionSkinFrames = source.onionSkinFrames,
+                onionSkinOpacity = source.onionSkinOpacity,
+                onionSkinPreviousColor = source.onionSkinPreviousColor,
+                onionSkinNextColor = source.onionSkinNextColor,
+            )
+
         /** True when the last undo entry is an opacity change to [layerId] made moments ago. */
         private fun continuesOpacityRun(
             layerId: Long,
@@ -2123,6 +2153,7 @@ class CanvasRepositoryImpl
                 val clamped = index.coerceIn(0, frameList.lastIndex.coerceAtLeast(0))
                 if (clamped == activeFrame) return@withState
                 pendingSelection = null
+                editRun = null
                 activeFrame = clamped
                 syncTimeline()
                 emit(CanvasInvalidationEvent.FrameChanged(activeFrame))
@@ -2136,7 +2167,11 @@ class CanvasRepositoryImpl
                 val frame = frameList.getOrNull(index) ?: return@withState false
                 val clamped = durationMs.coerceIn(AnimationFrame.MIN_DURATION_MS, AnimationFrame.MAX_DURATION_MS)
                 if (clamped == frame.durationMs) return@withState true
-                pushUndo()
+                // A duration slider drag is one undo step, and it keeps the step from before the drag.
+                val now = System.currentTimeMillis()
+                val key = "duration:${frame.id}"
+                if (!continuesEditRun(key, now)) pushUndo()
+                editRun = EditRun(key, undoPushes, now)
                 frame.durationMs = clamped
                 dirty = true
                 syncTimeline()
@@ -2154,7 +2189,12 @@ class CanvasRepositoryImpl
                         onionSkinOpacity = settings.onionSkinOpacity.coerceIn(0.05f, 1f),
                     )
                 if (normalized == animationSettings) return@withState
-                pushUndo()
+                // Only the onion-skin look changed: a viewing preference, so it is not an undoable edit.
+                if (normalized.withOnionLookOf(animationSettings) != animationSettings) {
+                    val now = System.currentTimeMillis()
+                    if (!continuesEditRun("animation", now)) pushUndo()
+                    editRun = EditRun("animation", undoPushes, now)
+                }
                 val oldDuration = animationSettings.frameDurationMs
                 val fpsChanged = normalized.fps != animationSettings.fps
                 animationSettings = normalized
@@ -2826,7 +2866,8 @@ class CanvasRepositoryImpl
             canvasDpi = snapshot.dpi
             colorProfile = snapshot.colorProfile
             backgroundColor = snapshot.backgroundColor
-            animationSettings = snapshot.animation
+            animationSettings = snapshot.animation.withOnionLookOf(animationSettings)
+            editRun = null
             pendingEdits.clear()
             damageTrackedSessions.clear()
             pendingSelection = null
@@ -3181,6 +3222,7 @@ class CanvasRepositoryImpl
             private const val MAX_HISTORY = 30
             private val NO_SYMMETRY = SymmetryEngine.Settings()
             private const val OPACITY_MERGE_MS = 1_500L
+            private const val EDIT_MERGE_MS = 1_500L
             private const val TEXT_LAYER_NAME = 32
 
             /**
