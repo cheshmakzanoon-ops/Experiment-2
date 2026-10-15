@@ -38,7 +38,12 @@ object PsdCodec {
     private const val CHANNEL_GREEN = 1
     private const val CHANNEL_BLUE = 2
     private const val CHANNEL_ALPHA = -1
+    private const val CHANNEL_USER_MASK = -2
     private const val LSCT_LENGTH = 12
+    private const val MASK_HEADER_LENGTH = 18
+    private const val MASK_RELATIVE = 0x01
+    private const val MASK_DISABLED = 0x02
+    private const val MASK_INVERTED = 0x04
     private const val PASS_THROUGH_KEY = "pass"
 
     /** A layer to be written to (or read from) a PSD file. */
@@ -54,6 +59,8 @@ object PsdCodec {
         val isClippingMask: Boolean = false,
         /** Folder structure; folder records carry no pixels. */
         val section: Section = Section.NONE,
+        /** The layer's mask as read from a file, in document coordinates; the pixels are not pre-masked. */
+        val mask: PsdMask? = null,
     ) {
         companion object {
             private val NO_PIXELS = PixelBuffer(1, 1)
@@ -92,6 +99,49 @@ object PsdCodec {
     }
 
     const val GROUP_END_NAME = "</Layer group>"
+
+    /**
+     * A layer mask read from a PSD file, in document coordinates. [coverage] holds one 0..255 value
+     * per pixel of its rectangle (255 reveals); pixels outside the rectangle take [outside].
+     */
+    data class PsdMask(
+        val left: Int,
+        val top: Int,
+        val width: Int,
+        val height: Int,
+        val coverage: ByteArray,
+        val outside: Int,
+    ) {
+        /** The mask laid over a canvas, with the document's top-left corner at ([offsetX], [offsetY]). */
+        fun coverageFor(
+            canvasWidth: Int,
+            canvasHeight: Int,
+            offsetX: Int,
+            offsetY: Int,
+        ): ByteArray {
+            val out = ByteArray(canvasWidth * canvasHeight) { outside.toByte() }
+            for (y in 0 until height) {
+                val targetY = offsetY + top + y
+                if (targetY !in 0 until canvasHeight) continue
+                for (x in 0 until width) {
+                    val targetX = offsetX + left + x
+                    if (targetX !in 0 until canvasWidth) continue
+                    out[targetY * canvasWidth + targetX] = coverage[y * width + x]
+                }
+            }
+            return out
+        }
+    }
+
+    /** The fixed part of a layer mask record: its rectangle, default value and flags. */
+    private data class MaskHeader(
+        val top: Int,
+        val left: Int,
+        val bottom: Int,
+        val right: Int,
+        val defaultValue: Int,
+        val flags: Int,
+    )
 
     /** A parsed PSD document. */
     data class PsdDocument(
@@ -435,6 +485,7 @@ object PsdCodec {
             val channels: List<Pair<Int, Int>>,
             val isClippingMask: Boolean,
             val section: Section,
+            val mask: MaskHeader?,
         )
 
         val pending = mutableListOf<Pending>()
@@ -463,9 +514,18 @@ object PsdCodec {
             var name = "Layer ${i + 1}"
             var section = Section.NONE
             var folderBlend: BlendMode? = null
+            var maskHeader: MaskHeader? = null
             if (extraLength > 0 && reader.remaining() >= 8) {
                 val maskLength = reader.readInt()
-                if (maskLength > 0) reader.skip(maskLength)
+                val maskStart = reader.position
+                if (maskLength >= MASK_HEADER_LENGTH && reader.remaining() >= MASK_HEADER_LENGTH) {
+                    val maskTop = reader.readInt()
+                    val maskLeft = reader.readInt()
+                    val maskBottom = reader.readInt()
+                    val maskRight = reader.readInt()
+                    maskHeader = MaskHeader(maskTop, maskLeft, maskBottom, maskRight, reader.readByte(), reader.readByte())
+                }
+                reader.position = (maskStart + maskLength.coerceAtLeast(0)).coerceAtMost(extraEnd)
                 val blendingRangesLength = reader.readInt()
                 if (blendingRangesLength > 0) reader.skip(blendingRangesLength)
                 if (reader.position < extraEnd) {
@@ -512,6 +572,7 @@ object PsdCodec {
                     channels = channels,
                     isClippingMask = isClippingMask,
                     section = section,
+                    mask = maskHeader,
                 )
         }
 
@@ -538,9 +599,17 @@ object PsdCodec {
             }
 
             val planes = HashMap<Int, ByteArray>()
+            val mask = record.mask
+            val maskWidth = (mask?.let { it.right - it.left } ?: 0).coerceAtLeast(0)
+            val maskHeight = (mask?.let { it.bottom - it.top } ?: 0).coerceAtLeast(0)
             record.channels.forEach { (channelId, length) ->
                 val start = reader.position
-                planes[channelId] = readChannel(reader, layerWidth, layerHeight, depth, length)
+                if (channelId != CHANNEL_USER_MASK) {
+                    planes[channelId] = readChannel(reader, layerWidth, layerHeight, depth, length)
+                } else if (maskWidth > 0 && maskHeight > 0) {
+                    // The mask has its own rectangle, which need not match the layer's.
+                    planes[channelId] = readChannel(reader, maskWidth, maskHeight, depth, length)
+                }
                 // Trust the declared length over where the decoder ended up.
                 reader.position = start + length
             }
@@ -582,9 +651,41 @@ object PsdCodec {
                     left = record.left,
                     top = record.top,
                     isClippingMask = record.isClippingMask,
+                    mask = mask?.let { maskOf(it, record.left, record.top, planes[CHANNEL_USER_MASK]) },
                 )
         }
         return layers
+    }
+
+    /** Places a mask record in document coordinates; null when the mask is disabled and so has no effect. */
+    private fun maskOf(
+        header: MaskHeader,
+        layerLeft: Int,
+        layerTop: Int,
+        plane: ByteArray?,
+    ): PsdMask? {
+        if ((header.flags and MASK_DISABLED) != 0) return null
+        val relative = (header.flags and MASK_RELATIVE) != 0
+        val originX = if (relative) layerLeft else 0
+        val originY = if (relative) layerTop else 0
+        val width = (header.right - header.left).coerceAtLeast(0)
+        val height = (header.bottom - header.top).coerceAtLeast(0)
+        val invert = (header.flags and MASK_INVERTED) != 0
+        fun adjust(value: Int): Int = if (invert) 255 - value else value
+        // Pixels the file did not store take the mask's default value.
+        val coverage =
+            ByteArray(width * height) { index ->
+                val stored = plane?.getOrNull(index)?.toInt()?.and(0xFF)
+                adjust(stored ?: header.defaultValue).toByte()
+            }
+        return PsdMask(
+            left = originX + header.left,
+            top = originY + header.top,
+            width = width,
+            height = height,
+            coverage = coverage,
+            outside = adjust(header.defaultValue),
+        )
     }
 
     private fun readImageData(

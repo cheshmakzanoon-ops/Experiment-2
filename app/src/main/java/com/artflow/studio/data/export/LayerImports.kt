@@ -5,6 +5,7 @@ import com.artflow.studio.core.color.ColorProfiles
 import com.artflow.studio.core.export.ProcreateReader
 import com.artflow.studio.core.export.PsdCodec
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import kotlinx.coroutines.Dispatchers
@@ -81,6 +82,10 @@ object LayerImports {
                     }
                     applyLook(repository, layer.id, source)
                     if (source.isClippingMask) repository.setLayerClippingMask(layer.id, true)
+                    source.mask?.let { mask ->
+                        val coverage = mask.coverageFor(size.width, size.height, dx, dy)
+                        repository.addLayerMask(layer.id, SelectionMask(size.width, size.height, coverage))
+                    }
                     (open.lastOrNull() ?: root) += Node.Pixels(layer.id)
                     added++
                 }
