@@ -82,6 +82,7 @@ object BrushLibraryCodec {
                 params.velocityToHue,
             )
         require(unitValues.all { it in 0f..1f }) { "Brush dynamics must be finite values between zero and one" }
+        params.tiltOpacityInfluence?.let { require(it in 0f..1f) { "Tilt opacity must be a value between zero and one" } }
         // Speed may reverse: a negative setting makes faster strokes larger or more opaque.
         require(params.velocityToSize in -1f..1f && params.velocityToOpacity in -1f..1f) {
             "Speed dynamics must be finite values between minus one and one"

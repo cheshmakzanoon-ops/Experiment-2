@@ -76,6 +76,14 @@ class ProcreateBrushTest {
     }
 
     @Test
+    fun tiltSizeAndTiltOpacityImportAsSeparateAmounts() {
+        val settings =
+            ProcreateBrush.parameters(mapOf("dynamicsTiltSize" to 0.0, "dynamicsTiltOpacity" to 1.0))
+        assertEquals(0f, settings.tiltInfluence, 0f)
+        assertEquals(1f, settings.tiltOpacityInfluence ?: -1f, 0f)
+    }
+
+    @Test
     fun anythingElseIsRefused() {
         assertTrue(runCatching { ProcreateBrush.read("bplist00 not really".toByteArray()) }.exceptionOrNull() is IllegalArgumentException)
     }
