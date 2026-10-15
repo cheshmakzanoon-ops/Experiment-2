@@ -2032,6 +2032,7 @@ class ArtFlowCanvasView
             val layerId = activeLayerId
             val gestureInput = input
             val gestureSelection = canvasRepository.selection()
+            moveSelection = if (tool == ToolType.MOVE) gestureSelection else null
             pixelOpenJob =
                 coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
                     val session = canvasRepository.beginRasterEdit(layerId)
@@ -2231,13 +2232,17 @@ class ArtFlowCanvasView
 
                 ToolType.MOVE -> {
                     val base = rasterBase ?: return
-                    buffer.clear()
-                    drawShifted(
-                        buffer,
-                        base,
-                        (x - moveOriginX()).roundToInt(),
-                        (y - moveOriginY()).roundToInt(),
-                    )
+                    val dx = (x - moveOriginX()).roundToInt()
+                    val dy = (y - moveOriginY()).roundToInt()
+                    val selection = moveSelection
+                    if (selection == null) {
+                        buffer.clear()
+                        drawShifted(buffer, base, dx, dy)
+                    } else {
+                        // With a selection, only the selected pixels move; the rest of the layer stays put.
+                        val params = LayerTransform.Params(moveOriginX(), moveOriginY(), dx.toFloat(), dy.toFloat())
+                        LayerTransform.render(base, buffer, params, selection)
+                    }
                 }
 
                 else -> {
@@ -2264,6 +2269,9 @@ class ArtFlowCanvasView
         private fun moveOriginY(): Float = moveStart.second
 
         private var moveStart: Pair<Float, Float> = 0f to 0f
+
+        /** Selection in force when a Move gesture began; null moves the whole layer. */
+        private var moveSelection: SelectionMask? = null
 
         private fun endPixelGesture(cancelled: Boolean) {
             if (pixelTool == null) return
@@ -2541,7 +2549,7 @@ class ArtFlowCanvasView
                             )
                         }
 
-                        ToolType.SELECT_LASSO -> {
+                        ToolType.SELECT_FREEHAND, ToolType.SELECT_LASSO -> {
                             SelectionMask.polygon(session.width, session.height, points, checkActive = { ensureActive() })
                         }
 

@@ -39,6 +39,12 @@ class LiveAdjustmentsTest {
         assertFalse(out.pixels.copyOfRange(0, 32 * 16).contentEquals(source.pixels.copyOfRange(0, 32 * 16)))
     }
 
+    @Test fun emptySelectionLeavesTheLayerUntouched() {
+        val source = checker()
+        val out = LiveAdjustments.apply(Kind.GAUSSIAN_BLUR, source, Settings(0.5f), SelectionMask(32, 32))
+        assertTrue(out.pixels.contentEquals(source.pixels))
+    }
+
     @Test fun colourAdjustmentsUseTheirParameters() {
         val source = PixelBuffer.filled(4, 4, 0xFF808080.toInt())
         val brighter = LiveAdjustments.apply(Kind.HUE_SATURATION_BRIGHTNESS, source, Settings(1f, mapOf("lightness" to 50f)))

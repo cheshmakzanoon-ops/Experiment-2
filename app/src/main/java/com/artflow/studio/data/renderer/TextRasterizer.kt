@@ -51,20 +51,28 @@ object TextRasterizer {
             return result
         }
         val maxWidth = style.maxWidth ?: (width - content.x - 8f)
-        val lines = mutableListOf<String>()
+        // Justified text stretches each wrapped line except a paragraph's last one, which keeps its natural width.
+        val lines = mutableListOf<Pair<String, Boolean>>()
         text.split('\n').forEach { paragraph ->
-            lines += TextLayout.wrap(paragraph, maxWidth, style) { candidate -> paint.measureText(candidate) }
+            val wrapped = TextLayout.wrap(paragraph, maxWidth, style) { candidate -> paint.measureText(candidate) }
+            wrapped.forEachIndexed { index, line -> lines += line to (index < wrapped.lastIndex) }
         }
         var baseline = content.y + TextLayout.estimatedAscent(style)
-        lines.forEach { line ->
-            val measured = paint.measureText(line)
-            val startX =
-                when (style.alignment) {
-                    TextLayout.Alignment.CENTER -> content.x + (maxWidth - measured) / 2f
-                    TextLayout.Alignment.RIGHT -> content.x + maxWidth - measured
-                    else -> content.x
+        lines.forEach { (line, stretch) ->
+            if (stretch && style.alignment == TextLayout.Alignment.JUSTIFY && style.maxWidth != null) {
+                TextLayout.justify(line, { paint.measureText(it) }, maxWidth, content.x).forEach { run ->
+                    canvas.drawText(run.text, run.x, baseline, paint)
                 }
-            canvas.drawText(line, startX, baseline, paint)
+            } else {
+                val measured = paint.measureText(line)
+                val startX =
+                    when (style.alignment) {
+                        TextLayout.Alignment.CENTER -> content.x + (maxWidth - measured) / 2f
+                        TextLayout.Alignment.RIGHT -> content.x + maxWidth - measured
+                        else -> content.x
+                    }
+                canvas.drawText(line, startX, baseline, paint)
+            }
             baseline += style.lineHeightPx
         }
         val result = BitmapPixelBridge.fromBitmap(bitmap)

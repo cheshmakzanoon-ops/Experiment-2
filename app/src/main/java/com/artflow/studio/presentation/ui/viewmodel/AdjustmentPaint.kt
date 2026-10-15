@@ -42,7 +42,7 @@ object AdjustmentPaint {
         selection: SelectionMask?,
         painted: SelectionMask?,
     ): PixelBuffer {
-        val limit = selection?.takeIf { it.width == source.width && it.height == source.height && it.isActive() }
+        val limit = selection?.takeIf { it.width == source.width && it.height == source.height }
         if (limit == null && painted == null) return effect
         val out = PixelBuffer(source.width, source.height)
         for (i in out.pixels.indices) {

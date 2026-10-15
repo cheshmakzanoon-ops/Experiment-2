@@ -214,7 +214,7 @@ object TextLayout {
     }
 
     /** Distributes leftover width across the gaps of an already-wrapped line. */
-    private fun justify(
+    internal fun justify(
         lineText: String,
         measureWidth: (String) -> Float,
         targetWidth: Float,
