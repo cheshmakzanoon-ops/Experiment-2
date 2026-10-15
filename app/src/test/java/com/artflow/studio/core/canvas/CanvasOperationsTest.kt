@@ -190,10 +190,23 @@ class CanvasOperationsTest {
     fun `expandToContent pads the canvas out around the artwork`() {
         val result = CanvasOperations.expandToContent(dotBuffer(), properties(), margin = 32)
 
-        // Content spans (2,3)-(5,6); inflated by 32 that is a 68x68 canvas with a 30px offset.
+        // Content spans (2,3)-(5,6); inflated by 32 that is a 68x68 canvas, with the content starting at (32,32).
         assertEquals(68, result.buffer.width)
         assertEquals(68, result.buffer.height)
-        assertEquals(red, result.buffer.getUnchecked(32, 33))
+        assertEquals(red, result.buffer.getUnchecked(32, 32))
+        assertEquals(red, result.buffer.getUnchecked(35, 35))
+    }
+
+    @Test
+    fun `expandToContent keeps artwork that sits far from the buffer centre`() {
+        val offCentre = PixelBuffer(20, 20).apply { setUnchecked(13, 4, red) }
+
+        val result = CanvasOperations.expandToContent(offCentre, properties(20, 20), margin = 2)
+
+        assertEquals(5, result.buffer.width)
+        assertEquals(5, result.buffer.height)
+        assertEquals(red, result.buffer.getUnchecked(2, 2))
+        assertEquals(1, result.buffer.pixels.count { (it ushr 24) != 0 })
     }
 
     // ---------------------------------------------------------------------------------------
