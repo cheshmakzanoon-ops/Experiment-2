@@ -7,7 +7,9 @@ import com.artflow.studio.domain.model.layer.Layer
  * Applies group headers to their member layers, at any nesting depth. A plain group (Normal, fully
  * opaque) passes its members straight through, hidden when the group is hidden. A group with its
  * own blend mode or opacity is isolated: its members are merged first and the result is blended as
- * one layer, the way Procreate and Photoshop treat group blend modes.
+ * one layer, the way Procreate and Photoshop treat group blend modes. Pass Through is the group
+ * mode that does not isolate, so a Pass Through group (imported from a Photoshop folder, say) lets
+ * its members blend with the layers below it.
  */
 object LayerGroups {
     /** One step of the stack: a layer, or an isolated group whose [members] are merged first. */
@@ -17,7 +19,9 @@ object LayerGroups {
         val members: List<Entry> = emptyList(),
     )
 
-    fun isolates(group: Layer): Boolean = group.isGroup && (group.blendMode != BlendMode.NORMAL || group.opacity < 1f)
+    fun isolates(group: Layer): Boolean =
+        group.isGroup &&
+            ((group.blendMode != BlendMode.NORMAL && group.blendMode != BlendMode.PASS_THROUGH) || group.opacity < 1f)
 
     /** Stack entries, bottom first. Isolated groups sit at their header's position with their own plan. */
     fun plan(inputs: List<Compositor.LayerInput>): List<Entry> {
