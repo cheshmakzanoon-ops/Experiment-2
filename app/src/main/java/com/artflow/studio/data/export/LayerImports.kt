@@ -4,6 +4,7 @@ import com.artflow.studio.core.color.ColorProfile
 import com.artflow.studio.core.color.ColorProfiles
 import com.artflow.studio.core.export.ProcreateReader
 import com.artflow.studio.core.export.PsdCodec
+import com.artflow.studio.core.export.PsdFolders
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.domain.model.layer.BlendMode
@@ -256,7 +257,8 @@ object LayerImports {
         source: PsdCodec.PsdLayer,
     ) {
         if (source.opacity < 255) repository.setLayerOpacity(id, source.opacity / 255f)
-        if (source.blendMode != BlendMode.NORMAL) repository.setLayerBlendMode(id, source.blendMode)
+        val blend = PsdFolders.importedBlend(source.blendMode)
+        if (blend != BlendMode.NORMAL) repository.setLayerBlendMode(id, blend)
         if (!source.isVisible) repository.setLayerVisibility(id, false)
     }
 }
