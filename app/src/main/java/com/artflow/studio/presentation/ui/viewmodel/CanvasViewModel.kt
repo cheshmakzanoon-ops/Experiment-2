@@ -1492,7 +1492,8 @@ class CanvasViewModel
                         canvasRepository.selectFrame(cursor.index)
                         while (true) {
                             if (projectId != canvasRepository.projectId()) break
-                            val frame = canvasRepository.frames().getOrNull(cursor.index) ?: break
+                            // The timeline snapshot already holds each frame's id and duration.
+                            val frame = canvasRepository.timeline.value.frames.getOrNull(cursor.index) ?: break
                             delay(frame.durationMs.toLong().coerceAtLeast(16L))
                             if (projectId != canvasRepository.projectId()) break
                             val state = canvasRepository.timeline.value
