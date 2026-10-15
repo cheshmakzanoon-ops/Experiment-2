@@ -1,5 +1,8 @@
 package com.artflow.studio.core.symmetry
 
+import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.Stroke
+import com.artflow.studio.domain.model.brush.StrokePoint
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -255,5 +258,94 @@ class SymmetryEngineTest {
                 SymmetryEngine.Settings(type = SymmetryEngine.SymmetryType.RADIAL, radialCount = 32),
             ),
         )
+    }
+
+    private fun stroke(vararg points: Pair<Float, Float>) =
+        Stroke(
+            id = 7L,
+            points = points.map { (x, y) -> StrokePoint(x, y, pressure = 0.4f) },
+            brushParams = BrushParams(),
+            layerId = 1L,
+            color = 0,
+        )
+
+    private fun assertPoints(
+        expected: List<Pair<Float, Float>>,
+        actual: Stroke,
+    ) {
+        assertEquals(expected.size, actual.points.size)
+        expected.zip(actual.points).forEach { (want, got) ->
+            assertEquals(want.first, got.x, 0.001f)
+            assertEquals(want.second, got.y, 0.001f)
+        }
+    }
+
+    @Test
+    fun `mirrored strokes are reflections of every point and keep their pressure`() {
+        val copies = SymmetryEngine.mirrorStroke(stroke(40f to 20f, 60f to 20f, 60f to 50f), width, height, vertical())
+
+        assertEquals(2, copies.size)
+        // Axis at x = 100: a reflection moves each point across it, so the stroke runs back toward the axis.
+        assertPoints(listOf(160f to 20f, 140f to 20f, 140f to 50f), copies[1])
+        assertTrue(copies[1].points.all { it.pressure == 0.4f })
+    }
+
+    @Test
+    fun `horizontal symmetry reflects a stroke across the centre row`() {
+        val copies =
+            SymmetryEngine.mirrorStroke(
+                stroke(40f to 20f, 60f to 20f, 60f to 50f),
+                width,
+                height,
+                SymmetryEngine.Settings(type = SymmetryEngine.SymmetryType.HORIZONTAL),
+            )
+
+        assertEquals(2, copies.size)
+        // Axis at y = 50: the point at y = 20 lands at y = 80 and the point on the axis stays put.
+        assertPoints(listOf(40f to 80f, 60f to 80f, 60f to 50f), copies[1])
+    }
+
+    @Test
+    fun `quadrant copies reflect across both axes and then turn half way round`() {
+        val copies =
+            SymmetryEngine.mirrorStroke(
+                stroke(40f to 20f, 60f to 20f, 60f to 50f),
+                width,
+                height,
+                SymmetryEngine.Settings(type = SymmetryEngine.SymmetryType.QUADRANT),
+            )
+
+        assertEquals(4, copies.size)
+        assertPoints(listOf(40f to 80f, 60f to 80f, 60f to 50f), copies[2])
+        assertPoints(listOf(160f to 80f, 140f to 80f, 140f to 50f), copies[3])
+    }
+
+    @Test
+    fun `double axis vertical symmetry adds the half turn about the axis crossing`() {
+        val copies =
+            SymmetryEngine.mirrorStroke(
+                stroke(40f to 20f, 60f to 20f, 60f to 50f),
+                width,
+                height,
+                vertical(secondary = true),
+            )
+
+        assertEquals(4, copies.size)
+        assertPoints(listOf(160f to 80f, 140f to 80f, 140f to 50f), copies[3])
+    }
+
+    @Test
+    fun `radial copies rotate the stroke about the canvas centre`() {
+        val copies =
+            SymmetryEngine.mirrorStroke(
+                stroke(40f to 20f, 60f to 20f, 60f to 50f),
+                width,
+                height,
+                SymmetryEngine.Settings(type = SymmetryEngine.SymmetryType.RADIAL, radialCount = 4),
+            )
+
+        assertEquals(4, copies.size)
+        // A quarter turn about (100, 50) maps (x, y) to (100 - (y - 50), 50 + (x - 100)).
+        assertPoints(listOf(130f to -10f, 130f to 10f, 100f to 10f), copies[1])
     }
 }
