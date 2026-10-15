@@ -8,6 +8,9 @@ object BrushLibraryCodec {
     const val MAX_BRUSHES = 128
     const val MAX_NAME = 80
     private const val MAX_CHARACTERS = 524_288
+
+    /** The rasterizer repeats each dab at most this many times; Procreate's Count reaches 16. */
+    private const val MAX_DAB_COUNT = 32
     private val GRAIN_IDS = setOf(null, "paper", "charcoal", "canvas", "fine", "blotch", "bristle", "halftone", "hatch", "speckle")
 
     /** Grains imported from photos; their tiles live beside the library. */
@@ -47,7 +50,7 @@ object BrushLibraryCodec {
 
     private fun validateParameters(params: BrushParams) {
         require(params.size in 1f..512f && params.spacing in 0.01f..1f) { "Unsupported brush size or spacing" }
-        require(params.count in 1..5 && params.scatter in 0f..2f) { "Unsupported brush scatter or dab count" }
+        require(params.count in 1..MAX_DAB_COUNT && params.scatter in 0f..2f) { "Unsupported brush scatter or dab count" }
         require(params.rotation in 0f..360f && params.textureRotation in 0f..360f) { "Unsupported brush rotation" }
         require(params.textureScale in 0.25f..8f) { "Unsupported grain scale" }
         require(params.textureId in GRAIN_IDS || params.textureId?.matches(IMPORTED_GRAIN) == true) { "Unsupported grain source" }
@@ -76,11 +79,14 @@ object BrushLibraryCodec {
                 params.wetMix,
                 params.flow,
                 params.tiltInfluence,
-                params.velocityToSize,
-                params.velocityToOpacity,
                 params.velocityToHue,
             )
         require(unitValues.all { it in 0f..1f }) { "Brush dynamics must be finite values between zero and one" }
+        params.tiltOpacityInfluence?.let { require(it in 0f..1f) { "Tilt opacity must be a value between zero and one" } }
+        // Speed may reverse: a negative setting makes faster strokes larger or more opaque.
+        require(params.velocityToSize in -1f..1f && params.velocityToOpacity in -1f..1f) {
+            "Speed dynamics must be finite values between minus one and one"
+        }
         // PressureResponse validates finite, monotone control points during deserialization.
     }
 }

@@ -44,8 +44,8 @@ data class BrushParams(
     // Advanced
     val tiltInfluence: Float = 0f, // How much tilt affects brush
     val tiltToRotation: Boolean = false, // Map tilt to brush rotation
-    val velocityToSize: Float = 0f, // Speed affects size (0.0 - 1.0)
-    val velocityToOpacity: Float = 0f, // Speed affects opacity (0.0 - 1.0)
+    val velocityToSize: Float = 0f, // Speed affects size (-1.0 - 1.0); negative makes fast strokes larger
+    val velocityToOpacity: Float = 0f, // Speed affects opacity (-1.0 - 1.0); negative makes fast strokes more opaque
     val velocityToHue: Float = 0f, // Speed affects hue shift (0.0 - 1.0)
     val roundness: Float = 1f, // Tip shape: 1 is round, lower values flatten it along [rotation]
     val shapeId: String? = null, // Imported tip image ("custom-…"); null stamps the round/flat tip
@@ -63,6 +63,7 @@ data class BrushParams(
     val secondaryJitter: Float = 0f, // 0..1: each dab blends a random amount toward the secondary colour
     val burntEdges: Float = 0f, // 0..1: paint darkens where the stroke's coverage falls off, like a scorched rim
     val grainDepth: Float = 1f, // 0..1: how strongly the grain shows; 0 paints as if there were no grain
+    val tiltOpacityInfluence: Float? = null, // 0..1: how much tilt lightens the paint; null follows tiltInfluence
 ) {
     /** Imported grain and shape images this brush (and its second brush) paints with. */
     val imageIds: List<String>
@@ -99,7 +100,7 @@ data class BrushParams(
         }
 
         // Apply velocity dynamics
-        if (velocityToSize > 0f && velocity > 0f) {
+        if (velocityToSize != 0f && velocity > 0f) {
             val normalizedVelocity = velocity.coerceIn(0f, 10f) / 10f
             effectiveSize *= (1f - normalizedVelocity * velocityToSize * 0.5f)
         }
@@ -132,7 +133,7 @@ data class BrushParams(
         }
 
         // Apply velocity dynamics
-        if (velocityToOpacity > 0f && velocity > 0f) {
+        if (velocityToOpacity != 0f && velocity > 0f) {
             val normalizedVelocity = velocity.coerceIn(0f, 10f) / 10f
             effectiveOpacity *= (1f - normalizedVelocity * velocityToOpacity * 0.3f)
         }

@@ -454,11 +454,13 @@ class StrokeRasterizer(
         val velocity = if (distance <= 0f) 0f else distance / elapsedMs
 
         // Stylus tilt: 0 upright, 1 lying flat. Shading with the side of the pen widens and softens the mark.
+        // Size and opacity have separate amounts; opacity follows the size amount unless it was set apart.
         val tilt = ((previous.tiltX + (current.tiltX - previous.tiltX) * t) / HALF_PI).coerceIn(0f, 1f)
-        val tiltEffect = params.tiltInfluence.coerceIn(0f, 1f) * tilt
-        val size = params.calculateEffectiveSize(pressure, velocity, random) * (1f + TILT_SIZE_GAIN * tiltEffect)
+        val sizeTilt = params.tiltInfluence.coerceIn(0f, 1f) * tilt
+        val opacityTilt = (params.tiltOpacityInfluence ?: params.tiltInfluence).coerceIn(0f, 1f) * tilt
+        val size = params.calculateEffectiveSize(pressure, velocity, random) * (1f + TILT_SIZE_GAIN * sizeTilt)
         val baseOpacity = params.calculateEffectiveOpacity(pressure, velocity, random) * params.flow.coerceIn(0f, 1f)
-        val opacity = baseOpacity * (1f - TILT_OPACITY_LOSS * tiltEffect)
+        val opacity = baseOpacity * (1f - TILT_OPACITY_LOSS * opacityTilt)
 
         // Tapering thins the stroke over the first and last portion of its length.
         val taper = taperFactor(params, accumulatedDistance, totalLength)
@@ -537,6 +539,7 @@ class StrokeRasterizer(
             params.roundness >= 1f &&
             params.wetMix <= 0f &&
             params.tiltInfluence <= 0f &&
+            (params.tiltOpacityInfluence ?: 0f) <= 0f &&
             CustomGrains.get(params.shapeId) == null &&
             points.size <= 2 &&
             params.count == 1 &&

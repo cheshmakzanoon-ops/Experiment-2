@@ -27,17 +27,25 @@ object ProcreateBrush {
     fun read(archive: ByteArray): Settings {
         val keyed = KeyedArchive(BinaryPlist.read(archive))
         val brush = requireNotNull(keyed.root) { "This is not a Procreate brush" }
+        return Settings(
+            name = keyed.string(brush["name"])?.trim()?.takeIf { it.isNotEmpty() },
+            parameters = parameters(brush),
+            shapeInverted = brush.flag("shapeInverted"),
+            grainInverted = brush.flag("textureInverted"),
+            bundledShape = keyed.string(brush["bundledShapePath"]) != null,
+            bundledGrain = keyed.string(brush["bundledGrainPath"]) != null,
+        )
+    }
 
-        fun number(key: String): Float? = (brush[key] as? Number)?.toFloat()?.takeIf { it.isFinite() }
-
-        fun unit(key: String): Float = number(key)?.coerceIn(0f, 1f) ?: 0f
-
-        fun flag(key: String): Boolean = brush[key] == true
-
-        val mode =
-            number("extendedBlend")?.roundToInt()?.let(ProcreateBlendModes::of)
-                ?: number("blendMode")?.roundToInt()?.let(ProcreateBlendModes::of)
-        val parameters =
+    /**
+     * The brush's ArtFlow settings. Each value is kept inside the range the brush library stores, so an
+     * imported brush always saves: values outside it are clamped or wrapped, never refused.
+     */
+    internal fun parameters(brush: Map<String, Any?>): BrushParams =
+        with(brush) {
+            val mode =
+                number("extendedBlend")?.roundToInt()?.let(ProcreateBlendModes::of)
+                    ?: number("blendMode")?.roundToInt()?.let(ProcreateBlendModes::of)
             BrushParams(
                 size =
                     (
@@ -48,7 +56,7 @@ object ProcreateBrush {
                 spacing = (number("plotSpacing") ?: DEFAULT_SPACING).coerceIn(MIN_SPACING, 1f),
                 scatter = unit("plotJitter"),
                 count = 1 + (unit("shapeCount") * (MAX_COUNT - 1)).roundToInt(),
-                rotation = Math.toDegrees((number("shapeAngle") ?: 0f).toDouble()).toFloat() % FULL_TURN,
+                rotation = ((Math.toDegrees((number("shapeAngle") ?: 0f).toDouble()).toFloat() % FULL_TURN) + FULL_TURN) % FULL_TURN,
                 taperStart = unit("pencilTaperStartLength"),
                 taperEnd = unit("pencilTaperEndLength"),
                 taperOpacity = unit("pencilTaperOpacity"),
@@ -62,8 +70,9 @@ object ProcreateBrush {
                 smoothing = maxOf(unit("plotSmoothing"), unit("plotMovingAverageStabilization"), unit("plotFFTSmoothingAmount")),
                 wetMix = unit("dynamicsMix"),
                 flow = (number("dynamicsGlazedFlow") ?: 1f).coerceIn(MIN_OPACITY, 1f),
-                textureScale = (number("textureScale") ?: 1f).coerceIn(MIN_SCALE, MAX_SCALE),
-                tiltInfluence = maxOf(unit("dynamicsTiltSize"), unit("dynamicsTiltOpacity")),
+                textureScale = (number("textureScale") ?: 1f).coerceIn(MIN_GRAIN_SCALE, MAX_SCALE),
+                tiltInfluence = unit("dynamicsTiltSize"),
+                tiltOpacityInfluence = unit("dynamicsTiltOpacity"),
                 tiltToRotation = flag("shapeAzimuth") || flag("oriented"),
                 velocityToSize = (number("dynamicsSpeedSize") ?: 0f).coerceIn(-1f, 1f),
                 velocityToOpacity = (number("dynamicsSpeedOpacity") ?: 0f).coerceIn(-1f, 1f),
@@ -81,21 +90,16 @@ object ProcreateBrush {
                 secondaryPressure = unit("dynamicsPressureSecondaryColor"),
                 secondaryJitter = unit("jitterSecondary"),
             )
-        return Settings(
-            name = keyed.string(brush["name"])?.trim()?.takeIf { it.isNotEmpty() },
-            parameters = parameters,
-            shapeInverted = flag("shapeInverted"),
-            grainInverted = flag("textureInverted"),
-            bundledShape = keyed.string(brush["bundledShapePath"]) != null,
-            bundledGrain = keyed.string(brush["bundledGrainPath"]) != null,
-        )
-    }
+        }
 
     /** Procreate's size slider tops out at maxSize; 1.0 is taken as a medium brush. */
     private const val BASE_SIZE = 24f
     private const val MAX_SIZE = 500f
     private const val MIN_SCALE = 0.05f
     private const val MAX_SCALE = 8f
+
+    /** The smallest grain scale the library stores and the renderer uses. */
+    private const val MIN_GRAIN_SCALE = 0.25f
     private const val MIN_OPACITY = 0.05f
     private const val DEFAULT_SPACING = 0.1f
     private const val MIN_SPACING = 0.01f
@@ -103,6 +107,12 @@ object ProcreateBrush {
     private const val FULL_TURN = 360f
     private const val MIN_ROUNDNESS = 0.05f
     private const val MOVING_GRAIN = 0.5f
+
+    private fun Map<String, Any?>.number(key: String): Float? = (this[key] as? Number)?.toFloat()?.takeIf { it.isFinite() }
+
+    private fun Map<String, Any?>.unit(key: String): Float = number(key)?.coerceIn(0f, 1f) ?: 0f
+
+    private fun Map<String, Any?>.flag(key: String): Boolean = this[key] == true
 }
 
 /** Procreate's blend mode numbers, as documents and brushes store them. */
