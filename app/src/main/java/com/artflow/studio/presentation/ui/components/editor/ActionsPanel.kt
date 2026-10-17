@@ -9,6 +9,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.core.canvas.CanvasInformation
 import com.artflow.studio.core.canvas.StylusAction
 import com.artflow.studio.core.canvas.StylusButtons
 import com.artflow.studio.core.canvas.StylusEraserEnd
@@ -94,10 +95,13 @@ data class CanvasInfo(
     val width: Int,
     val height: Int,
     val dpi: Int,
+    /** Layers used across every frame. */
     val layers: Int,
     val frames: Int,
     val profile: String = "sRGB IEC61966-2.1",
     val trackedMs: Long = 0L,
+    /** Most layers this canvas size can hold on this device, see [CanvasInformation]. */
+    val layerLimit: Int = 0,
 )
 
 private enum class ActionsTab { Add, Canvas, Share, Video, Prefs, Help }
@@ -210,7 +214,8 @@ private fun CanvasTab(
     HorizontalDivider()
     Text("Canvas information", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
     Text(
-        "${info.width} × ${info.height} px · ${info.dpi} dpi · ${info.layers} layers · ${info.frames} frame(s) · " +
+        "${info.width} × ${info.height} px · ${info.dpi} dpi · " +
+            "${CanvasInformation.layerSummary(info.layers, info.layerLimit)} · ${info.frames} frame(s) · " +
             "${info.profile} · tracked time ${trackedLabel(info.trackedMs)}",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.artflow.studio.core.animation.AnimationTimeline
 import com.artflow.studio.core.animation.PlaybackStepper
+import com.artflow.studio.core.canvas.CanvasInformation
 import com.artflow.studio.core.canvas.StylusButtons
 import com.artflow.studio.core.color.ColorHarmony
 import com.artflow.studio.core.color.ColorProfile
@@ -1313,6 +1314,9 @@ class CanvasViewModel
 
         /** Time spent changing this artwork, for Canvas information. */
         fun trackedTimeMs(): Long = canvasRepository.trackedTimeMs()
+
+        /** Layers across every frame, the count the layer limit applies to (Canvas information). */
+        fun layerTotal(): Int = CanvasInformation.layerTotal(canvasRepository.frames().map { it.layers.size })
 
         /** Runs an export through the shared pipeline and keeps the result for the dialog. */
         fun export(options: ExportOptions) {
