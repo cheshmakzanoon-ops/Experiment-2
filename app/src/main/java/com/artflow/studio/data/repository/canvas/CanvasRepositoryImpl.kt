@@ -1279,8 +1279,10 @@ class CanvasRepositoryImpl
         ): Boolean =
             withState {
                 val layer = layerById(layerId) ?: return@withState false
+                val next = isVisible ?: !layer.isVisible
+                if (layer.isVisible == next) return@withState true
                 pushUndo()
-                layer.isVisible = isVisible ?: !layer.isVisible
+                layer.isVisible = next
                 dirty = true
                 emit(CanvasInvalidationEvent.LayersChanged)
                 true
@@ -1346,6 +1348,7 @@ class CanvasRepositoryImpl
         ): Boolean =
             withState {
                 val layer = layerById(layerId) ?: return@withState false
+                if (layer.isLocked == isLocked) return@withState true
                 pushUndo()
                 layer.isLocked = isLocked
                 dirty = true
@@ -1359,6 +1362,7 @@ class CanvasRepositoryImpl
         ): Boolean =
             withState {
                 val layer = layerById(layerId) ?: return@withState false
+                if (layer.blendMode == blendMode) return@withState true
                 pushUndo()
                 layer.blendMode = blendMode
                 dirty = true
@@ -1372,8 +1376,10 @@ class CanvasRepositoryImpl
         ): Boolean =
             withState {
                 val layer = layerById(layerId) ?: return@withState false
+                val next = isLocked ?: !layer.isAlphaLocked
+                if (layer.isAlphaLocked == next) return@withState true
                 pushUndo()
-                layer.isAlphaLocked = isLocked ?: !layer.isAlphaLocked
+                layer.isAlphaLocked = next
                 dirty = true
                 emit(CanvasInvalidationEvent.LayersChanged)
                 true
@@ -1385,8 +1391,10 @@ class CanvasRepositoryImpl
         ): Boolean =
             withState {
                 val layer = layerById(layerId) ?: return@withState false
+                val next = isClipping ?: !layer.isClippingMask
+                if (layer.isClippingMask == next) return@withState true
                 pushUndo()
-                layer.isClippingMask = isClipping ?: !layer.isClippingMask
+                layer.isClippingMask = next
                 dirty = true
                 emit(CanvasInvalidationEvent.LayersChanged)
                 true
@@ -1450,6 +1458,7 @@ class CanvasRepositoryImpl
         ): Boolean =
             withState {
                 val layer = layerById(layerId) ?: return@withState false
+                if (layer.isReference == isReference) return@withState true
                 pushUndo()
                 layer.isReference = isReference
                 dirty = true
@@ -1696,6 +1705,7 @@ class CanvasRepositoryImpl
         ): Boolean =
             withState {
                 val layer = layerById(layerId) ?: return@withState false
+                if (layer.maskEnabled == enabled) return@withState true
                 pushUndo()
                 layer.maskEnabled = enabled
                 dirty = true
