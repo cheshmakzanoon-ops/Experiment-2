@@ -5,6 +5,8 @@
 
 package com.artflow.studio.presentation.ui.components.editor
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
@@ -12,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -20,6 +23,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
@@ -30,6 +35,7 @@ import androidx.compose.ui.zIndex
 import com.artflow.studio.core.animation.AnimationTimeline
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.canvas.TwoFingerLayerGesture
+import com.artflow.studio.core.perspective.GuideLineStyle
 import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.PixelBuffer
@@ -1058,6 +1064,10 @@ fun GuidesSheet(
                 )
             }
         }
+        GuideLineStyleControls(
+            style = symmetry.lineStyle,
+            onStyle = { onSymmetry(symmetry.copy(lineStyle = it)) },
+        )
 
         Divider()
         Text("Perspective", style = MaterialTheme.typography.titleMedium)
@@ -1084,6 +1094,18 @@ fun GuidesSheet(
             value = perspective.horizonY,
             range = 0f..1f,
             onChange = { onPerspective(PerspectiveGuide.withHorizon(perspective, it)) },
+        )
+        if (perspective.type == PerspectiveGuide.GuideType.GRID || perspective.type == PerspectiveGuide.GuideType.ISOMETRIC) {
+            LabeledSlider(
+                label = "Grid size (px)",
+                value = perspective.gridSpacing.toFloat(),
+                range = 8f..512f,
+                onChange = { onPerspective(perspective.copy(gridSpacing = it.toInt())) },
+            )
+        }
+        GuideLineStyleControls(
+            style = perspective.lineStyle,
+            onStyle = { onPerspective(perspective.copy(lineStyle = it)) },
         )
         LabeledSlider(
             label = "Snap radius",
@@ -1135,6 +1157,45 @@ fun GuidesSheet(
             Switch(checked = showPerspectiveGuides, onCheckedChange = onShowPerspective)
             Spacer(Modifier.width(8.dp))
             Text("Show perspective guides", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+/** Thickness, opacity and colour of one guide's lines, as Procreate's guide editor offers them. */
+@Composable
+private fun GuideLineStyleControls(
+    style: GuideLineStyle,
+    onStyle: (GuideLineStyle) -> Unit,
+) {
+    LabeledSlider(
+        label = "Line thickness",
+        value = style.thickness,
+        range = GuideLineStyle.THICKNESS_RANGE,
+        onChange = { onStyle(style.copy(thickness = it)) },
+    )
+    LabeledSlider(
+        label = "Line opacity",
+        value = style.opacity,
+        range = GuideLineStyle.OPACITY_RANGE,
+        onChange = { onStyle(style.copy(opacity = it)) },
+    )
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("Line colour", style = MaterialTheme.typography.labelMedium)
+        GuideLineStyle.COLOUR_CHOICES.forEach { choice ->
+            Box(
+                modifier =
+                    Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(Color(choice or 0xFF000000.toInt()))
+                        .border(if (choice == style.colour) 3.dp else 1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                        .clickable { onStyle(style.copy(colour = choice)) }
+                        .semantics { contentDescription = "Line colour ${choice.toString(16).padStart(6, '0')}" },
+            )
         }
     }
 }

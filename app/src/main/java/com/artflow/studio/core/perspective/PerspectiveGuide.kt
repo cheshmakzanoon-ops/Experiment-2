@@ -53,6 +53,8 @@ object PerspectiveGuide {
         /** Isometric grid: grid cell size in pixels. */
         val gridSpacing: Int = 64,
         val showHorizon: Boolean = true,
+        /** Thickness, opacity and colour of every drawn guide line. */
+        val lineStyle: GuideLineStyle = GuideLineStyle(),
     ) {
         fun isActive(): Boolean = type != GuideType.NONE
 
@@ -205,7 +207,7 @@ object PerspectiveGuide {
     ): Pair<Float, Float> {
         if (!settings.isActive() || !settings.snapEnabled) return x to y
         if (settings.type == GuideType.ISOMETRIC) return snapToIsometricGrid(x, y, settings, width, height)
-        if (settings.type == GuideType.GRID) return snapToSquareGrid(x, y, settings)
+        if (settings.type == GuideType.GRID) return snapToSquareGrid(x, y, settings, width, height)
 
         var bestX = x
         var bestY = y
@@ -241,20 +243,25 @@ object PerspectiveGuide {
         return bestX to bestY
     }
 
-    /** Square drawing grid centred on the canvas, [Settings.gridSpacing] pixels per cell. */
+    /**
+     * Square drawing grid, [Settings.gridSpacing] pixels per cell. The lines sit at the phase
+     * [squareGridPhase] gives, so the grid is centred on the canvas centre.
+     */
     private fun squareGridLines(
         settings: Settings,
         width: Int,
         height: Int,
     ): List<GuideLine> {
         val spacing = settings.gridSpacing.coerceIn(8, 512)
+        val phaseX = squareGridPhase(width, spacing)
+        val phaseY = squareGridPhase(height, spacing)
         val lines = mutableListOf<GuideLine>()
-        var x = (width / 2f) % spacing
+        var x = phaseX
         while (x <= width) {
             lines += GuideLine(x, 0f, x, height.toFloat(), pointIndex = -1)
             x += spacing
         }
-        var y = (height / 2f) % spacing
+        var y = phaseY
         while (y <= height) {
             lines += GuideLine(0f, y, width.toFloat(), y, pointIndex = -1)
             y += spacing
@@ -262,16 +269,32 @@ object PerspectiveGuide {
         return lines
     }
 
-    /** Pulls the pointer onto the nearest grid line (horizontal or vertical) within the snap radius. */
+    /**
+     * Offset of the first square-grid line from the canvas origin, for a canvas [size] pixels
+     * long: half the canvas modulo the cell size. [squareGridLines] and [snapToSquareGrid] both
+     * use it, so a snapped point lands on a line that is actually drawn.
+     */
+    fun squareGridPhase(
+        size: Int,
+        spacing: Int,
+    ): Float = (size / 2f) % spacing
+
+    /**
+     * Pulls the pointer onto the nearest grid line (horizontal or vertical) within the snap radius.
+     * The grid lines are the ones [squareGridLines] draws for a [width] x [height] canvas.
+     */
     fun snapToSquareGrid(
         x: Float,
         y: Float,
         settings: Settings,
+        width: Int,
+        height: Int,
     ): Pair<Float, Float> {
-        val spacing = settings.gridSpacing.coerceIn(8, 512).toFloat()
+        val cell = settings.gridSpacing.coerceIn(8, 512)
+        val spacing = cell.toFloat()
         val strength = settings.snapStrength.coerceIn(0f, 1f)
-        val lineX = Math.round(x / spacing) * spacing
-        val lineY = Math.round(y / spacing) * spacing
+        val lineX = Math.round((x - squareGridPhase(width, cell)) / spacing) * spacing + squareGridPhase(width, cell)
+        val lineY = Math.round((y - squareGridPhase(height, cell)) / spacing) * spacing + squareGridPhase(height, cell)
         val distanceX = abs(x - lineX)
         val distanceY = abs(y - lineY)
         return when {
@@ -399,6 +422,7 @@ object PerspectiveGuide {
             snapRadius = settings.snapRadius.coerceIn(SNAP_RADIUS_RANGE),
             snapStrength = settings.snapStrength.coerceIn(0f, 1f),
             gridSpacing = settings.gridSpacing.coerceIn(8, 512),
+            lineStyle = settings.lineStyle.sanitize(),
         )
 
     /** Human-readable description for the guide overlay's info pill. */

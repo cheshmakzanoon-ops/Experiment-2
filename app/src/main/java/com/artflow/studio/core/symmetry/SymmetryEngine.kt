@@ -1,5 +1,6 @@
 package com.artflow.studio.core.symmetry
 
+import com.artflow.studio.core.perspective.GuideLineStyle
 import com.artflow.studio.domain.model.brush.Stroke
 import kotlin.math.cos
 import kotlin.math.max
@@ -57,6 +58,8 @@ object SymmetryEngine {
         val secondaryAxis: Boolean = false,
         /** When true the mirrored copies use their own independent colour jitter. */
         val independentColour: Boolean = false,
+        /** Thickness, opacity and colour of the symmetry axis lines drawn on the canvas. */
+        val lineStyle: GuideLineStyle = GuideLineStyle.SYMMETRY_DEFAULT,
     ) {
         fun isActive(): Boolean = type != SymmetryType.NONE
 
@@ -314,6 +317,7 @@ object SymmetryEngine {
             offsetY = settings.offsetY.coerceIn(-1f, 1f),
             radialCount = settings.radialCount.coerceIn(RADIAL_RANGE.first, RADIAL_RANGE.last),
             radialAngleDegrees = ((settings.radialAngleDegrees % 360f) + 360f) % 360f,
+            lineStyle = settings.lineStyle.sanitize(),
         )
 
     /** True when mirrored strokes would fall outside the canvas and are worth skipping. */

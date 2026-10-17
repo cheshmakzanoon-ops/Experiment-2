@@ -308,24 +308,29 @@ fun GuidesOverlay(
             val hairline = (1.2f / scale).coerceAtLeast(0.2f)
 
             if (showSymmetry && symmetry.isActive()) {
+                // Primary axes are drawn 1.4 times as thick as the secondary ones.
+                val symmetryWidth = symmetry.lineStyle.widthInCanvasPixels(scale)
+                val symmetryColour = Color(symmetry.lineStyle.argb())
                 SymmetryEngine.guideLines(canvasWidth, canvasHeight, symmetry).forEach { line ->
                     drawLine(
-                        color = Color(0xCC2D9CDB),
+                        color = symmetryColour,
                         start = Offset(line.startX, line.startY),
                         end = Offset(line.endX, line.endY),
-                        strokeWidth = if (line.isPrimary) hairline * 1.4f else hairline,
+                        strokeWidth = if (line.isPrimary) symmetryWidth * 1.4f else symmetryWidth,
                     )
                 }
             }
 
             if (showPerspective && perspective.isActive()) {
+                val perspectiveWidth = perspective.lineStyle.widthInCanvasPixels(scale)
+                val perspectiveColour = Color(perspective.lineStyle.argb())
                 PerspectiveGuide.guideLines(perspective, canvasWidth, canvasHeight).forEach { line ->
                     val clipped = PerspectiveGuide.clipToCanvas(line, canvasWidth, canvasHeight) ?: return@forEach
                     drawLine(
-                        color = Color(0x9988CC66),
+                        color = perspectiveColour,
                         start = Offset(clipped.startX, clipped.startY),
                         end = Offset(clipped.endX, clipped.endY),
-                        strokeWidth = hairline,
+                        strokeWidth = perspectiveWidth,
                     )
                 }
             }
