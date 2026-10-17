@@ -1,5 +1,6 @@
 package com.artflow.studio.domain.model.settings
 
+import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.color.Palette
 
 /** Which theme the app follows. */
@@ -95,7 +96,9 @@ data class AppSettings(
     val autosaveIntervalMs: Long = 20_000L,
     val autosaveEnabled: Boolean = true,
     // New documents
-    val defaultPresetName: String = "FHD 1080p",
+    val defaultPresetName: String = "Screen HD",
+    /** Canvas sizes saved from the new-canvas dialog, newest first. */
+    val canvasPresets: List<CanvasOperations.Preset> = emptyList(),
     // Gallery
     val gallerySort: GallerySort = GallerySort.RECENT,
     // Content the user has already seen

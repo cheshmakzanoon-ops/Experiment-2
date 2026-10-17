@@ -292,6 +292,7 @@ object CanvasOperations {
         listOf(
             Preset("Screen HD", 1920, 1080, 72),
             Preset("Screen 4K", 3840, 2160, 72),
+            Preset("4K Canvas", 4096, 2304, 132),
             Preset("Tablet", 2560, 1600, 132),
             Preset("Square 2048", 2048, 2048, 132),
             Preset("Square 4096", 4096, 4096, 132),
@@ -303,11 +304,22 @@ object CanvasOperations {
             Preset("Instagram Post", 1080, 1080, 72),
             Preset("Instagram Story", 1080, 1920, 72),
             Preset("Twitter Header", 1500, 500, 72),
+            Preset("4×6 Photo", 1200, 1800, 300),
             Preset("Print 5×7", 1500, 2100, 300),
             Preset("Print 8×10", 2400, 3000, 300),
         )
 
     fun presetByName(name: String): Preset? = PRESETS.firstOrNull { it.name == name }
+
+    /** The name of the preset made from the device's own display; see [screenPreset]. */
+    const val SCREEN_SIZE = "Screen size"
+
+    /** A canvas the size of the display, at the display's density; null when that is too large to allocate. */
+    fun screenPreset(
+        width: Int,
+        height: Int,
+        densityDpi: Int,
+    ): Preset? = Preset(SCREEN_SIZE, width, height, densityDpi.coerceIn(MIN_DPI, MAX_DPI)).takeIf { isSizeSafe(width, height) }
 
     /** Guard rails against allocations large enough to crash the app. */
     const val MAX_DIMENSION = 8192

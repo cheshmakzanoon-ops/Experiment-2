@@ -1,5 +1,7 @@
 package com.artflow.studio.data.repository.settings
 
+import com.artflow.studio.core.canvas.CanvasOperations
+import com.artflow.studio.core.canvas.CanvasPresets
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.color.PaletteCodec
 import com.artflow.studio.data.local.dao.SettingsDao
@@ -105,6 +107,7 @@ class SettingsRepositoryImpl
                 dismissedTips = dismissedTips.toSet(),
                 recentColors = recentColors.toList(),
                 customPalettes = customPalettes.map { it.copy(colors = it.colors.toList()) },
+                canvasPresets = canvasPresets.toList(),
             )
 
         override suspend fun setThemeMode(mode: ThemeMode) = update { it.copy(themeMode = mode) }
@@ -143,6 +146,12 @@ class SettingsRepositoryImpl
         }
 
         override suspend fun setDefaultPreset(name: String) = update { it.copy(defaultPresetName = name) }
+
+        override suspend fun saveCanvasPreset(preset: CanvasOperations.Preset) =
+            update { it.copy(canvasPresets = CanvasPresets.add(it.canvasPresets, preset)) }
+
+        override suspend fun deleteCanvasPreset(name: String) =
+            update { it.copy(canvasPresets = CanvasPresets.remove(it.canvasPresets, name)) }
 
         override suspend fun setGallerySort(sort: GallerySort) = update { it.copy(gallerySort = sort) }
 
@@ -247,6 +256,7 @@ class SettingsRepositoryImpl
                 KEY_AUTOSAVE to settings.autosaveEnabled.toString(),
                 KEY_AUTOSAVE_INTERVAL to settings.autosaveIntervalMs.toString(),
                 KEY_DEFAULT_PRESET to settings.defaultPresetName,
+                KEY_CANVAS_PRESETS to CanvasPresets.encode(settings.canvasPresets),
                 KEY_GALLERY_SORT to settings.gallerySort.name,
                 KEY_ONBOARDING to settings.seenOnboarding.toString(),
                 KEY_TIPS to settings.dismissedTips.joinToString("|"),
@@ -322,6 +332,7 @@ class SettingsRepositoryImpl
                         ?.toLongOrNull()
                         ?.coerceIn(MIN_AUTOSAVE, MAX_AUTOSAVE) ?: defaults.autosaveIntervalMs,
                 defaultPresetName = stored[KEY_DEFAULT_PRESET] ?: defaults.defaultPresetName,
+                canvasPresets = CanvasPresets.decode(stored[KEY_CANVAS_PRESETS]),
                 gallerySort =
                     stored[KEY_GALLERY_SORT]
                         ?.let { name -> GallerySort.entries.firstOrNull { it.name == name } }
@@ -396,6 +407,7 @@ class SettingsRepositoryImpl
             private const val KEY_AUTOSAVE = "general.autosave"
             private const val KEY_AUTOSAVE_INTERVAL = "general.autosaveInterval"
             private const val KEY_DEFAULT_PRESET = "general.defaultPreset"
+            private const val KEY_CANVAS_PRESETS = "canvas.sizePresets"
             private const val KEY_QUICK_MENU = "studio.quickMenu"
             private const val KEY_GALLERY_SORT = "gallery.sort"
             private const val KEY_ONBOARDING = "general.onboardingSeen"

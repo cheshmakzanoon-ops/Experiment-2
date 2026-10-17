@@ -1,5 +1,6 @@
 package com.artflow.studio.data
 
+import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.color.PaletteCodec
 import com.artflow.studio.data.local.dao.SettingsDao
@@ -201,6 +202,22 @@ class SettingsRepositoryTest {
             repository.updatePalette(d, makeDefault = true)
             assertEquals(listOf(4L, 3L, 1L, 2L), repository.current().customPalettes.map { it.id })
             assertEquals(repository.current().customPalettes, SettingsRepositoryImpl(dao).settings.first().customPalettes)
+        }
+
+    @Test
+    fun savedCanvasSizesSurviveRestartAndDamagedLinesAreDropped() =
+        runTest {
+            val dao = MemorySettingsDao()
+            val repository = SettingsRepositoryImpl(dao)
+            val poster = CanvasOperations.Preset("Poster", 3000, 4000, 200)
+            val banner = CanvasOperations.Preset("Banner", 4000, 1000, 150)
+            repository.saveCanvasPreset(poster)
+            repository.saveCanvasPreset(banner)
+            assertEquals(listOf(banner, poster), SettingsRepositoryImpl(dao).settings.first().canvasPresets)
+            repository.deleteCanvasPreset("Banner")
+            assertEquals(listOf(poster), SettingsRepositoryImpl(dao).settings.first().canvasPresets)
+            val damaged = MemorySettingsDao(mapOf("canvas.sizePresets" to "Poster\t3000\t4000\t200\nnot a preset\nHuge\t99999\t99999\t72"))
+            assertEquals(listOf(poster), SettingsRepositoryImpl(damaged).settings.first().canvasPresets)
         }
 
     @Test

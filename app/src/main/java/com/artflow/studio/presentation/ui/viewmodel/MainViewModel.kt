@@ -316,6 +316,14 @@ class MainViewModel
             viewModelScope.launch(galleryErrors) { settingsRepository.setDefaultPreset(name) }
         }
 
+        fun saveCanvasPreset(preset: CanvasOperations.Preset) {
+            viewModelScope.launch(galleryErrors) { settingsRepository.saveCanvasPreset(preset) }
+        }
+
+        fun deleteCanvasPreset(name: String) {
+            viewModelScope.launch(galleryErrors) { settingsRepository.deleteCanvasPreset(name) }
+        }
+
         fun setOnboardingSeen(seen: Boolean) {
             viewModelScope.launch(galleryErrors) { settingsRepository.setOnboardingSeen(seen) }
         }

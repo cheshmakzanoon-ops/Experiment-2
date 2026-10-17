@@ -30,9 +30,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.artflow.studio.R
-import com.artflow.studio.core.canvas.CanvasOperations
-import com.artflow.studio.core.color.ColorProfile
-import com.artflow.studio.data.export.PendingImports
 import com.artflow.studio.domain.model.Project
 import com.artflow.studio.domain.model.settings.GallerySort
 import com.artflow.studio.presentation.ui.IncomingFiles
@@ -243,20 +240,9 @@ fun GalleryScreen(
     }
 
     if (showNewProjectDialog) {
-        NewProjectDialog(
-            defaultPresetName = settings.defaultPresetName,
-            onDismiss = { showNewProjectDialog = false },
-            onCreate = { name, preset, width, height, dpi, wideColor ->
-                showNewProjectDialog = false
-                val stack = openStack
-                viewModel.createProject(name, preset, width, height, dpi) { id ->
-                    if (wideColor) PendingImports.putProfile(id, ColorProfile.DISPLAY_P3)
-                    // New artworks made inside a stack belong to it, as in Procreate.
-                    if (stack != null) viewModel.moveToStack(id, stack)
-                    scope.launch { onNavigateToCanvas(id) }
-                }
-            },
-        )
+        NewArtworkHost(viewModel, settings, openStack, onDismiss = { showNewProjectDialog = false }) { id ->
+            scope.launch { onNavigateToCanvas(id) }
+        }
     }
 
     preview?.let { (projects, index) ->
@@ -634,129 +620,6 @@ private fun ProjectCard(
             }
         }
     }
-}
-
-@Composable
-private fun NewProjectDialog(
-    defaultPresetName: String,
-    onDismiss: () -> Unit,
-    onCreate: (String, CanvasOperations.Preset?, Int, Int, Int, Boolean) -> Unit,
-) {
-    var name by remember { mutableStateOf("") }
-    var selectedPreset by remember {
-        mutableStateOf(CanvasOperations.presetByName(defaultPresetName) ?: CanvasOperations.PRESETS.first())
-    }
-    var customWidth by remember { mutableStateOf("2048") }
-    var customHeight by remember { mutableStateOf("2048") }
-    var customDpi by remember { mutableStateOf("132") }
-    var useCustom by remember { mutableStateOf(false) }
-    var wideColor by remember { mutableStateOf(false) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.galleryscreen_new_artwork)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text(stringResource(R.string.galleryscreen_name)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    FilterChip(
-                        selected = !useCustom,
-                        onClick = { useCustom = false },
-                        label = { Text(stringResource(R.string.galleryscreen_preset)) },
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    FilterChip(
-                        selected = useCustom,
-                        onClick = { useCustom = true },
-                        label = { Text(stringResource(R.string.galleryscreen_custom)) },
-                    )
-                }
-                if (useCustom) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = customWidth,
-                            onValueChange = { customWidth = it.filter { c -> c.isDigit() }.take(5) },
-                            label = { Text(stringResource(R.string.editorsheets_width)) },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f),
-                        )
-                        OutlinedTextField(
-                            value = customHeight,
-                            onValueChange = { customHeight = it.filter { c -> c.isDigit() }.take(5) },
-                            label = { Text(stringResource(R.string.editorsheets_height)) },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                    OutlinedTextField(
-                        value = customDpi,
-                        onValueChange = { customDpi = it.filter { c -> c.isDigit() }.take(3) },
-                        label = { Text(stringResource(R.string.galleryscreen_dpi)) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                } else {
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
-                        modifier = Modifier.heightIn(max = 220.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        items(CanvasOperations.PRESETS) { preset ->
-                            FilterChip(
-                                selected = selectedPreset == preset,
-                                onClick = { selectedPreset = preset },
-                                label = {
-                                    Text(
-                                        preset.name,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        maxLines = 1,
-                                    )
-                                },
-                            )
-                        }
-                    }
-                    Text(
-                        "${selectedPreset.width}×${selectedPreset.height} px · ${selectedPreset.dpi} dpi",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                val width = if (useCustom) customWidth.toIntOrNull() ?: 2048 else selectedPreset.width
-                val height = if (useCustom) customHeight.toIntOrNull() ?: 2048 else selectedPreset.height
-                if (!CanvasOperations.isSizeSafe(width, height)) {
-                    Text(
-                        text = CanvasOperations.sizeWarning(width, height) ?: "That canvas is too large",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.galleryscreen_display_p3_colour_profile), modifier = Modifier.weight(1f))
-                    Switch(checked = wideColor, onCheckedChange = { wideColor = it })
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                onCreate(
-                    name.ifBlank { "Untitled artwork" },
-                    if (useCustom) null else selectedPreset,
-                    customWidth.toIntOrNull() ?: 2048,
-                    customHeight.toIntOrNull() ?: 2048,
-                    customDpi.toIntOrNull() ?: 132,
-                    wideColor,
-                )
-            }) { Text(stringResource(R.string.brushstudiodialog_create)) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
-    )
 }
 
 private fun formatDate(timestamp: Long): String {
