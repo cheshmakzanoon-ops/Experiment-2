@@ -33,6 +33,14 @@
         android:required="true" />
 
     <!--
+      A mouse, trackpad or keyboard-only computer (ChromeOS, DeX, a desktop window) can run the editor. Touch
+      becomes optional on top of the multi-touch requirement above, so those devices are not filtered out.
+    -->
+    <uses-feature
+        android:name="android.hardware.touchscreen"
+        android:required="false" />
+
+    <!--
       Edge-to-edge. Apps targeting API 35+ draw under the system bars, and from API 36
       `android:windowOptOutEdgeToEdgeEnforcement` is deprecated and ignored, so the UI handles the
       insets instead: the Material3 top app bars consume the top/horizontal insets themselves,
@@ -60,7 +68,8 @@
             android:exported="true"
             android:theme="@style/Theme.ArtFlow.Starting"
             android:windowSoftInputMode="adjustResize"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|keyboard|smallestScreenSize"
+            android:resizeableActivity="true"
             android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

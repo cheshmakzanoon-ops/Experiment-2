@@ -72,6 +72,7 @@ import com.artflow.studio.presentation.ui.components.canvas.BrushCursor
 import com.artflow.studio.presentation.ui.components.canvas.DragPreview
 import com.artflow.studio.presentation.ui.components.canvas.EditorInput
 import com.artflow.studio.presentation.ui.components.canvas.EyedropperLoupe
+import com.artflow.studio.presentation.ui.components.canvas.NavigationReadout
 import com.artflow.studio.presentation.ui.components.canvas.ShapeEditState
 import com.artflow.studio.presentation.ui.components.canvas.gestureControls
 import com.artflow.studio.presentation.ui.components.canvas.imageDropTarget
@@ -247,6 +248,8 @@ fun CanvasScreen(
     var cropBox by remember { mutableStateOf<CropBox.Box?>(null) }
     var opacityLayer by remember { mutableStateOf<Long?>(null) }
     var quickMenu by remember { mutableStateOf(false) }
+    // Written by the canvas while the artist navigates; read only by NavigationHud, so the editor does not redraw.
+    val navReadout = remember { mutableStateOf<NavigationReadout?>(null) }
     val pageThumbnails by viewModel.pageThumbnails.pages.collectAsState()
     val pageImages =
         remember(pageThumbnails) {
@@ -1159,6 +1162,7 @@ fun CanvasScreen(
                                     canvasView?.cancelActiveGesture()
                                     quickMenu = true
                                 }
+                                onNavigationReadout = { navReadout.value = it }
                                 setEditorInput(input)
                                 setOnionSkinEnabled(settings.onionSkin)
                                 setCheckerboardVisible(settings.checkerboard)
@@ -1394,6 +1398,7 @@ fun CanvasScreen(
                     )
                 }
             }
+            NavigationHud(navReadout, modifier = Modifier.align(Alignment.TopCenter).zIndex(4f))
             val crop = cropBox
             if (crop != null && ready != null) {
                 CropOverlay(

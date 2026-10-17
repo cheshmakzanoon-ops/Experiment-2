@@ -7,24 +7,32 @@ import android.opengl.GLSurfaceView
 import android.os.Build
 import android.os.SystemClock
 import android.util.AttributeSet
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.animation.DecelerateInterpolator
 import androidx.core.math.MathUtils
 import com.artflow.studio.core.animation.AnimationTimeline
 import com.artflow.studio.core.animation.OnionSkinTint
 import com.artflow.studio.core.canvas.MotionFilter
+import com.artflow.studio.core.canvas.MouseInput
+import com.artflow.studio.core.canvas.MousePress
 import com.artflow.studio.core.canvas.PalmRejection
 import com.artflow.studio.core.canvas.PointerGestureRouter
 import com.artflow.studio.core.canvas.PointerKind
 import com.artflow.studio.core.canvas.PointerPressure
 import com.artflow.studio.core.canvas.PressureSmoother
 import com.artflow.studio.core.canvas.QuickShape
+import com.artflow.studio.core.canvas.RotationSnap
 import com.artflow.studio.core.canvas.StrokePredictor
 import com.artflow.studio.core.canvas.StrokeStabilizer
 import com.artflow.studio.core.canvas.StylusAction
 import com.artflow.studio.core.canvas.StylusButtonMapper
 import com.artflow.studio.core.canvas.StylusButtons
 import com.artflow.studio.core.canvas.StylusDecision
+import com.artflow.studio.core.canvas.ViewFrame
+import com.artflow.studio.core.canvas.ViewMath
+import com.artflow.studio.core.canvas.ViewTransform
+import com.artflow.studio.core.canvas.WheelAction
 import com.artflow.studio.core.color.CmykProof
 import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.Channels
@@ -162,6 +170,16 @@ data class EditorInput(
     val haptics: Boolean = true,
 )
 
+/**
+ * The zoom percentage and the signed angle shown while the artist navigates. [stamp] changes on every update,
+ * so the HUD can restart its hide timer each time.
+ */
+data class NavigationReadout(
+    val zoomPercent: Int,
+    val angleDegrees: Int,
+    val stamp: Long,
+)
+
 /** Which touch gestures are active, from Prefs > Gesture controls. Each one can be switched off. */
 data class GestureControls(
     val scrubToClear: Boolean = true,
@@ -258,6 +276,15 @@ class ArtFlowCanvasView
         /** The tool chosen before the current one, which a held stylus button can return to. */
         private var previousTool = ToolType.BRUSH
 
+        /** Snaps a pinch-rotation to a right angle while it is close to one; see [RotationSnap]. */
+        private val rotationSnap = RotationSnap()
+
+        /** The rotation the fingers have turned, before snapping; the view shows the snapped value. */
+        private var rotationRaw = 0f
+
+        /** True while a middle-button mouse drag pans the view. */
+        private var mousePanning = false
+
         /** Ignores a resting palm while the stylus hovers or touches; see [PalmRejection]. */
         private val palmRejection = PalmRejection()
 
@@ -300,10 +327,41 @@ class ArtFlowCanvasView
         /** Reports the brush outline under a hovering stylus, or null when it leaves. */
         var onBrushCursorChanged: ((BrushCursor?) -> Unit)? = null
 
+        /** Scroll wheel and trackpad scroll pan the view; Ctrl with the wheel, or a trackpad pinch, zooms about the pointer. */
+        override fun onGenericMotionEvent(event: MotionEvent): Boolean {
+            if (event.actionMasked != MotionEvent.ACTION_SCROLL) return super.onGenericMotionEvent(event)
+            val action =
+                MouseInput.wheel(
+                    ctrl = (event.metaState and KeyEvent.META_CTRL_ON) != 0,
+                    horizontal = event.getAxisValue(MotionEvent.AXIS_HSCROLL),
+                    vertical = event.getAxisValue(MotionEvent.AXIS_VSCROLL),
+                    // The touchpad pinch axis exists from Android 13; below that there is no pinch to read.
+                    pinchScale =
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            event.getAxisValue(MotionEvent.AXIS_GESTURE_PINCH_SCALE_FACTOR)
+                        } else {
+                            0f
+                        },
+                )
+            when (action) {
+                WheelAction.None -> Unit
+                is WheelAction.Pan -> {
+                    viewAnimator?.cancel()
+                    panBy(action.dx, action.dy)
+                    emitNavigationReadout()
+                }
+
+                is WheelAction.Zoom -> zoomAboutPoint(action.factor, event.x, event.y)
+            }
+            return true
+        }
+
         override fun onHoverEvent(event: MotionEvent): Boolean {
             val type = event.getToolType(0)
-            if (type != MotionEvent.TOOL_TYPE_STYLUS && type != MotionEvent.TOOL_TYPE_ERASER) return super.onHoverEvent(event)
-            palmRejection.stylusHover(event.actionMasked != MotionEvent.ACTION_HOVER_EXIT)
+            val pen = type == MotionEvent.TOOL_TYPE_STYLUS || type == MotionEvent.TOOL_TYPE_ERASER
+            if (!pen && type != MotionEvent.TOOL_TYPE_MOUSE) return super.onHoverEvent(event)
+            // A hovering mouse shows the brush outline as a hovering pen does; only the pen counts for palm rejection.
+            if (pen) palmRejection.stylusHover(event.actionMasked != MotionEvent.ACTION_HOVER_EXIT)
             val tool = stylusMapper.toolFor(pointerKind(type), input.tool)
             val showing = input.brushCursor && tool in CURSOR_TOOLS && event.actionMasked != MotionEvent.ACTION_HOVER_EXIT
             val size = if (tool == ToolType.ERASER) input.eraserSize else input.brushParams.size
@@ -414,6 +472,9 @@ class ArtFlowCanvasView
         /** A stylus button set to QuickMenu opens the QuickMenu once per press. */
         var onQuickMenuRequested: (() -> Unit)? = null
 
+        /** Zoom and angle while the artist navigates, for the transient navigation HUD. */
+        var onNavigationReadout: ((NavigationReadout) -> Unit)? = null
+
         var onClearLayerRequested: (() -> Unit)? = null
         var onViewChanged: ((scale: Float, offsetX: Float, offsetY: Float, rotation: Float) -> Unit)? = null
         var onTextPlacementRequested: ((x: Float, y: Float) -> Unit)? = null
@@ -499,6 +560,7 @@ class ArtFlowCanvasView
 
         private fun cancelToolInteraction() {
             stylusMapper.end()
+            mousePanning = false
             // A node drag keeps the shape it has reached rather than losing the stroke.
             if (draggedNode >= 0) dropShapeNode()
             gestureTool = null
@@ -1360,6 +1422,16 @@ class ArtFlowCanvasView
             return true
         }
 
+        /** Starts colour sampling under the screen point ([x], [y]) for as long as the button or pointer is held. */
+        private fun beginSampling(
+            x: Float,
+            y: Float,
+        ) {
+            val (canvasX, canvasY) = viewToCanvas(x, y)
+            startSampling()
+            pickColor(canvasX, canvasY)
+        }
+
         /** Runs a one-shot stylus action: Undo, or the QuickMenu. Hold-style actions never reach here. */
         private fun performStylusAction(action: StylusAction) {
             when (action) {
@@ -1454,6 +1526,24 @@ class ArtFlowCanvasView
                 gestureTool = null
                 return true
             }
+            // A mouse's middle button pans and its right button samples; its left button draws like a finger.
+            if (event.getToolType(index) == MotionEvent.TOOL_TYPE_MOUSE) {
+                when (MouseInput.press(event.buttonState)) {
+                    MousePress.PAN -> {
+                        mousePanning = true
+                        gestureTool = null
+                        return true
+                    }
+
+                    MousePress.SAMPLE -> {
+                        beginSampling(x, y)
+                        gestureTool = null
+                        return true
+                    }
+
+                    MousePress.DRAW -> Unit
+                }
+            }
             // The primary side button samples colour by default, the usual Android pen shortcut.
             when (choice) {
                 is StylusDecision.Fire -> {
@@ -1463,9 +1553,7 @@ class ArtFlowCanvasView
                 }
 
                 StylusDecision.Sample -> {
-                    val (canvasX, canvasY) = viewToCanvas(x, y)
-                    startSampling()
-                    pickColor(canvasX, canvasY)
+                    beginSampling(x, y)
                     gestureTool = null
                     return true
                 }
@@ -1556,6 +1644,12 @@ class ArtFlowCanvasView
             y: Float,
             history: Int = -1,
         ): Boolean {
+            if (mousePanning) {
+                panBy(x - lastPointerX, y - lastPointerY)
+                lastPointerX = x
+                lastPointerY = y
+                return true
+            }
             // A one-shot stylus button pressed during the touch fires once and ends this touch's stroke.
             if (history < 0 && isStylusTool(event.getToolType(index))) {
                 val decision = stylusMapper.move(event.buttonState)
@@ -1653,6 +1747,11 @@ class ArtFlowCanvasView
         ) {
             removeCallbacks(holdEyedropper)
             stylusMapper.end()
+            if (mousePanning) {
+                mousePanning = false
+                gestureTool = null
+                return
+            }
             if (holdSampling) {
                 endSampling()
                 gestureTool = null
@@ -1776,6 +1875,9 @@ class ArtFlowCanvasView
             if (pinchStartScale == 0f) {
                 pinchStartScale = scale
                 pinchStartTime = SystemClock.uptimeMillis()
+                // A new pinch starts from the rotation on screen, with no snap held over from the last one.
+                rotationRaw = rotationDegrees
+                rotationSnap.reset()
             }
             val ordered = pointers.sortedBy { it.id }
             navPrevDistance = spacing(ordered)
@@ -1818,7 +1920,11 @@ class ArtFlowCanvasView
             val midY = ordered.map { it.y }.average().toFloat()
             if (navPrevDistance > 1f && distance > 1f) {
                 scale = MathUtils.clamp(scale * (distance / navPrevDistance), MIN_SCALE, MAX_SCALE)
-                rotationDegrees = normalizeDegrees(rotationDegrees + (eventAngle - navPrevAngle))
+                // The fingers' turn is accumulated unsnapped; the view shows it held at a right angle while close to one.
+                rotationRaw = normalizeDegrees(rotationRaw + (eventAngle - navPrevAngle))
+                val snap = rotationSnap.update(rotationRaw)
+                if (snap.entered && input.haptics) performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+                rotationDegrees = snap.degrees
                 val radians = Math.toRadians(rotationDegrees.toDouble())
                 val cosR = cos(radians).toFloat()
                 val sinR = sin(radians).toFloat()
@@ -1831,7 +1937,44 @@ class ArtFlowCanvasView
                 offsetY += midY - navPrevMidY
             }
             pushTransform()
+            emitNavigationReadout()
             rebaseNavigation(ordered)
+        }
+
+        /** Shows the navigation HUD: the zoom percentage and the signed angle, as they are now. */
+        private fun emitNavigationReadout() {
+            onNavigationReadout?.invoke(
+                NavigationReadout(
+                    zoomPercent = ViewMath.zoomPercent(scale),
+                    angleDegrees = ViewMath.readoutDegrees(rotationDegrees),
+                    stamp = SystemClock.uptimeMillis(),
+                ),
+            )
+        }
+
+        /** Zooms by [factor] so the canvas point under ([x], [y]) stays under the pointer. */
+        private fun zoomAboutPoint(
+            factor: Float,
+            x: Float,
+            y: Float,
+        ) {
+            viewAnimator?.cancel()
+            val frame = ViewFrame(canvasWidth.toFloat(), canvasHeight.toFloat(), width.toFloat(), height.toFloat())
+            val zoomed =
+                ViewMath.zoomAbout(
+                    ViewTransform(scale, offsetX, offsetY, rotationDegrees),
+                    frame,
+                    factor,
+                    MIN_SCALE,
+                    MAX_SCALE,
+                    x,
+                    y,
+                )
+            scale = zoomed.scale
+            offsetX = zoomed.offsetX
+            offsetY = zoomed.offsetY
+            pushTransform()
+            emitNavigationReadout()
         }
 
         // -----------------------------------------------------------------------------------------

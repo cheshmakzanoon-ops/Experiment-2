@@ -306,6 +306,7 @@
     <string name="actionspanel_stylus_undo">Undo</string>
     <string name="actionspanel_stylus_nothing">Nothing</string>
     <string name="actionspanel_stylus_eraser">Eraser</string>
+    <string name="canvasscreen_zoom_and_angle">%1$d%% · %2$d°</string>
     <string name="modelcompanion_3d">3D</string>
     <string name="modelcompanion_turn">Turn</string>
     <string name="modelcompanion_paint">Paint</string>
