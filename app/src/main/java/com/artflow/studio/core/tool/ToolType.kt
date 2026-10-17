@@ -42,7 +42,7 @@ enum class ToolType(
     /** Whether the brush size / opacity controls are relevant. */
     fun usesBrushSize(): Boolean =
         when (this) {
-            SMUDGE, CLONE_STAMP, HEALING, LIQUIFY, ERASER, BRUSH, SELECT_FREEHAND, GRADIENT -> true
+            SMUDGE, CLONE_STAMP, HEALING, LIQUIFY, ERASER, BRUSH, GRADIENT -> true
             else -> false
         }
 

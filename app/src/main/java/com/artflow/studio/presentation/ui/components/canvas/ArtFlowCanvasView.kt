@@ -1509,7 +1509,7 @@ class ArtFlowCanvasView
 
                 ToolType.SELECT_FREEHAND, ToolType.SELECT_LASSO -> {
                     previewPoints.add(canvasX to canvasY)
-                    emitDragPreview(tool, closed = tool == ToolType.SELECT_LASSO)
+                    emitDragPreview(tool, closed = true)
                 }
 
                 else -> {
@@ -2605,6 +2605,9 @@ class ArtFlowCanvasView
             points: List<Pair<Float, Float>>,
         ) {
             if (points.size < 2) return
+            // A tap is not a lasso: it must not replace the selection with an empty one.
+            val enclosing = tool == ToolType.SELECT_FREEHAND || tool == ToolType.SELECT_LASSO
+            if (enclosing && points.size < MIN_LASSO_POINTS) return
             val mode = input.selectionMode
             runSelectionEdit(mode) { session ->
                 withContext(Dispatchers.Default) {
@@ -2633,12 +2636,9 @@ class ArtFlowCanvasView
                             )
                         }
 
-                        ToolType.SELECT_LASSO -> {
-                            SelectionMask.polygon(session.width, session.height, points, checkActive = { ensureActive() })
-                        }
-
+                        // Freehand and Lasso select what the drawn path encloses; the path closes itself on release.
                         else -> {
-                            SelectionMask.fromStroke(session.width, session.height, points, radius = 12f, checkActive = { ensureActive() })
+                            SelectionMask.polygon(session.width, session.height, points, checkActive = { ensureActive() })
                         }
                     }
                 }
@@ -2982,6 +2982,7 @@ class ArtFlowCanvasView
             private const val TRANSFORM_PREVIEW_INTERVAL_MS = 33L
             private const val TAP_TIMEOUT_MS = 320L
             private const val SNAP_TOLERANCE = 12f
+            private const val MIN_LASSO_POINTS = 3
             private const val PREVIEW_INTERVAL_MS = 66L
             private const val LIQUIFY_PREVIEW_INTERVAL_MS = 140L
             private const val LIQUIFY_PREVIEW_MAX_PIXELS = 4_000_000

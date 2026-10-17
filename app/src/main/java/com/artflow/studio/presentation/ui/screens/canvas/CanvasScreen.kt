@@ -1845,7 +1845,8 @@ private fun ContextToolbar(
                         onInvert = viewModel::invertSelection,
                         onCopyPaste = viewModel.clipboard::copyAndPaste,
                         onMore = { openPanel(EditorPanel.SELECTION) },
-                        onClear = viewModel::clearSelection,
+                        onClear = { viewModel.clipboard.clear() },
+                        onDeselect = viewModel::clearSelection,
                         onColorFill = { viewModel.clipboard.fill(input.brushColor) },
                         onSave = {
                             if (!viewModel.savedSelections.save()) viewModel.notify("Make a selection first")

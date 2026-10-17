@@ -327,8 +327,11 @@ data class SelectionToolbarActions(
     val onInvert: () -> Unit,
     val onCopyPaste: () -> Unit,
     val onMore: () -> Unit,
+    /** Erases the selected pixels on the active layer. */
     val onClear: () -> Unit,
     val onColorFill: () -> Unit = {},
+    /** Drops the selection and leaves the pixels alone. */
+    val onDeselect: () -> Unit = {},
     val onSave: () -> Unit = {},
     val onLoad: (Int) -> Unit = {},
     val onDelete: (Int) -> Unit = {},
@@ -395,6 +398,7 @@ fun SelectionToolbar(
         }
         AssistChip(onClick = actions.onColorFill, label = { Text(stringResource(R.string.chip_colour_fill)) })
         AssistChip(onClick = actions.onClear, label = { Text(stringResource(R.string.chip_clear)) })
+        AssistChip(onClick = actions.onDeselect, label = { Text(stringResource(R.string.chip_deselect)) })
     }
 }
 
