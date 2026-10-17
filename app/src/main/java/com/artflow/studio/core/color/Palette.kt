@@ -533,6 +533,7 @@ object PaletteCodec {
         ASE("ase", "Adobe swatch"),
         HEX("txt", "Hex list"),
         JSON("json", "ArtFlow palette"),
+        SWATCHES(ProcreateSwatches.EXTENSION, "Procreate swatches"),
     }
 
     /** Encodes a palette in the requested format. */
@@ -545,6 +546,7 @@ object PaletteCodec {
             Format.ASE -> exportAse(palette)
             Format.HEX -> exportHex(palette).toByteArray()
             Format.JSON -> exportJson(palette).toByteArray()
+            Format.SWATCHES -> ProcreateSwatches.write(palette)
         }
 
     /** Decodes a palette from raw bytes, sniffing the format. */
@@ -554,6 +556,9 @@ object PaletteCodec {
     ): Palette? {
         if (bytes.size >= 4 && String(bytes, 0, 4, Charsets.US_ASCII) == ASE_HEADER) {
             return importAse(bytes, fallbackName)
+        }
+        if (ProcreateSwatches.isArchive(bytes)) {
+            return ProcreateSwatches.read(bytes, fallbackName).firstOrNull()
         }
         val text = String(bytes, Charsets.UTF_8)
         return importAuto(text, fallbackName)

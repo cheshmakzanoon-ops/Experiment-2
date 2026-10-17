@@ -14,6 +14,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -52,6 +53,8 @@ fun ColorPanel(
     modifier: Modifier = Modifier,
     onImportPalette: (() -> Unit)? = null,
     onPaletteFromPhoto: (() -> Unit)? = null,
+    /** Shares a palette as a Procreate `.swatches` file; null hides the button. */
+    onSharePalette: ((Palette) -> Unit)? = null,
     /** The secondary colour and swapping it with the primary; null hides the swatch. */
     secondary: SecondarySwatch? = null,
 ) {
@@ -100,7 +103,7 @@ fun ColorPanel(
                     onImportPalette?.let { OutlinedButton(onClick = it) { Text(stringResource(R.string.color_import_palette)) } }
                     onPaletteFromPhoto?.let { OutlinedButton(onClick = it) { Text(stringResource(R.string.color_new_from_photo)) } }
                 }
-                PaletteList(palettes, color, onColorSelected, onRemovePalette)
+                PaletteList(palettes, color, onColorSelected, onRemovePalette, onSharePalette)
             }
         }
 
@@ -299,6 +302,7 @@ private fun PaletteList(
     currentColor: Int,
     onColorSelected: (Int) -> Unit,
     onRemovePalette: (Long) -> Unit,
+    onSharePalette: ((Palette) -> Unit)?,
 ) {
     val grouped = remember(palettes) { palettes.groupBy { it.category } }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -312,12 +316,22 @@ private fun PaletteList(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(palette.name, style = MaterialTheme.typography.bodyMedium)
-                        if (palette.category == "Custom") {
-                            IconButton(onClick = { onRemovePalette(palette.id) }) {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = stringResource(R.string.colorpanel_remove_palette, palette.name),
-                                )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            onSharePalette?.let { share ->
+                                IconButton(onClick = { share(palette) }) {
+                                    Icon(
+                                        Icons.Default.Share,
+                                        contentDescription = stringResource(R.string.colorpanel_share_palette, palette.name),
+                                    )
+                                }
+                            }
+                            if (palette.category == "Custom") {
+                                IconButton(onClick = { onRemovePalette(palette.id) }) {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = stringResource(R.string.colorpanel_remove_palette, palette.name),
+                                    )
+                                }
                             }
                         }
                     }

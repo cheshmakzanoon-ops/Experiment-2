@@ -536,6 +536,7 @@ fun CanvasScreen(
                     onSavePalette = { name, colors -> viewModel.addPaletteFromColors(name, colors) },
                     onImportPalette = paletteImports.fromFile,
                     onPaletteFromPhoto = paletteImports.fromPhoto,
+                    onSharePalette = paletteImports.share,
                     onRemovePalette = { viewModel.removePalette(it) },
                     secondary = SecondarySwatch(input.secondaryColor, viewModel::swapColors),
                 )
