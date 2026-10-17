@@ -44,6 +44,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.artflow.studio.R
 import com.artflow.studio.core.canvas.CanvasInformation
 import com.artflow.studio.core.canvas.CropBox
+import com.artflow.studio.core.canvas.ShortcutAction
 import com.artflow.studio.core.color.CmykProof
 import com.artflow.studio.core.color.ColorProfile
 import com.artflow.studio.core.pixels.LayerMaskSource
@@ -64,6 +65,7 @@ import com.artflow.studio.domain.model.layer.FilterType
 import com.artflow.studio.domain.model.layer.Layer
 import com.artflow.studio.domain.model.settings.ThemeMode
 import com.artflow.studio.domain.model.settings.pressureAndSmoothing
+import com.artflow.studio.presentation.ui.ShortcutHost
 import com.artflow.studio.presentation.ui.components.brush.BrushStudioDialog
 import com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView
 import com.artflow.studio.presentation.ui.components.canvas.BrushCursor
@@ -458,8 +460,8 @@ fun CanvasScreen(
             dirty -> BackTarget.LEAVE
             else -> null
         }
-    BackHandler(enabled = backTarget != null) {
-        when (backTarget) {
+    val performBack: (BackTarget?) -> Unit = { target ->
+        when (target) {
             BackTarget.PANEL -> {
                 dismissPanel()
             }
@@ -493,6 +495,41 @@ fun CanvasScreen(
                 Unit
             }
         }
+    }
+    BackHandler(enabled = backTarget != null) { performBack(backTarget) }
+
+    // Hardware-keyboard shortcuts reach the editor through the activity, which asks this lambda.
+    val shortcutHandler: (ShortcutAction) -> Boolean = { action ->
+        when {
+            ready == null -> false
+            action == ShortcutAction.CLOSE_PANEL -> {
+                // Escape closes what is open; it never leaves the artwork the way Back can.
+                (backTarget != null && backTarget != BackTarget.LEAVE).also { if (it) performBack(backTarget) }
+            }
+            else -> {
+                if (action.group != ShortcutAction.Group.VIEW && action.group != ShortcutAction.Group.BRUSH) {
+                    canvasView?.cancelActiveGesture()
+                }
+                runShortcut(
+                    action,
+                    ShortcutEnvironment(
+                        viewModel = viewModel,
+                        input = input,
+                        canvasView = canvasView,
+                        activeLayerId = activeLayerId,
+                        toggleInterface = { focusMode = !focusMode },
+                        openExport = { panel = EditorPanel.EXPORT },
+                    ),
+                )
+                true
+            }
+        }
+    }
+    val currentShortcutHandler by rememberUpdatedState(shortcutHandler)
+    DisposableEffect(Unit) {
+        val host: (ShortcutAction) -> Boolean = { currentShortcutHandler(it) }
+        ShortcutHost.handler = host
+        onDispose { if (ShortcutHost.handler === host) ShortcutHost.handler = null }
     }
 
     val panelContent: @Composable ColumnScope.() -> Unit = {
