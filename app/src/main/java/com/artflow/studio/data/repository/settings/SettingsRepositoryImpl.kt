@@ -4,6 +4,7 @@ import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.canvas.CanvasPresets
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.color.PaletteCodec
+import com.artflow.studio.core.gallery.GalleryOrder
 import com.artflow.studio.data.local.dao.SettingsDao
 import com.artflow.studio.data.local.entity.SettingsEntity
 import com.artflow.studio.domain.model.settings.AccentChoice
@@ -108,6 +109,7 @@ class SettingsRepositoryImpl
                 recentColors = recentColors.toList(),
                 customPalettes = customPalettes.map { it.copy(colors = it.colors.toList()) },
                 canvasPresets = canvasPresets.toList(),
+                galleryOrder = galleryOrder.toList(),
             )
 
         override suspend fun setThemeMode(mode: ThemeMode) = update { it.copy(themeMode = mode) }
@@ -258,6 +260,7 @@ class SettingsRepositoryImpl
                 KEY_DEFAULT_PRESET to settings.defaultPresetName,
                 KEY_CANVAS_PRESETS to CanvasPresets.encode(settings.canvasPresets),
                 KEY_GALLERY_SORT to settings.gallerySort.name,
+                KEY_GALLERY_ORDER to GalleryOrder.encode(settings.galleryOrder),
                 KEY_ONBOARDING to settings.seenOnboarding.toString(),
                 KEY_TIPS to settings.dismissedTips.joinToString("|"),
                 KEY_RECENT_COLORS to settings.recentColors.joinToString(","),
@@ -337,6 +340,7 @@ class SettingsRepositoryImpl
                     stored[KEY_GALLERY_SORT]
                         ?.let { name -> GallerySort.entries.firstOrNull { it.name == name } }
                         ?: defaults.gallerySort,
+                galleryOrder = GalleryOrder.decode(stored[KEY_GALLERY_ORDER]),
                 seenOnboarding = stored.flag(KEY_ONBOARDING, defaults.seenOnboarding),
                 dismissedTips =
                     stored[KEY_TIPS]?.split('|')?.filter { it.isNotBlank() }?.toSet()
@@ -410,6 +414,7 @@ class SettingsRepositoryImpl
             private const val KEY_CANVAS_PRESETS = "canvas.sizePresets"
             private const val KEY_QUICK_MENU = "studio.quickMenu"
             private const val KEY_GALLERY_SORT = "gallery.sort"
+            private const val KEY_GALLERY_ORDER = "gallery.order"
             private const val KEY_ONBOARDING = "general.onboardingSeen"
             private const val KEY_TIPS = "general.dismissedTips"
             private const val KEY_RECENT_COLORS = "color.recent"

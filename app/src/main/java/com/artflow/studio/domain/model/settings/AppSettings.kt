@@ -41,6 +41,7 @@ enum class GallerySort(
     CREATED("Recently created"),
     NAME("Name"),
     SIZE("Canvas size"),
+    MANUAL("Manual"),
 }
 
 /**
@@ -101,6 +102,8 @@ data class AppSettings(
     val canvasPresets: List<CanvasOperations.Preset> = emptyList(),
     // Gallery
     val gallerySort: GallerySort = GallerySort.RECENT,
+    /** Artwork ids in the order the user arranged them; used by [GallerySort.MANUAL]. */
+    val galleryOrder: List<Long> = emptyList(),
     // Content the user has already seen
     val seenOnboarding: Boolean = false,
     val dismissedTips: Set<String> = emptySet(),

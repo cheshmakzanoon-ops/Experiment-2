@@ -45,6 +45,13 @@ interface ProjectDao {
         stack: String?,
     )
 
+    /** Renames a stack, merges it into [to] when that exists already, or dissolves it for a null [to]. */
+    @Query("UPDATE projects SET stack = :to WHERE stack = :from")
+    suspend fun renameStack(
+        from: String,
+        to: String?,
+    )
+
     @Query("SELECT COALESCE(MAX(id), 0) FROM projects")
     suspend fun maximumProjectId(): Long
 

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="gallery_stack_commands">Commands for stack %1$s</string>
+    <string name="gallery_stack_rename">Rename stack</string>
+    <string name="gallery_stack_merge">Merge into another stack</string>
+    <string name="gallery_stack_dissolve">Un-stack</string>
+    <string name="gallery_stack_share">Share all</string>
+    <string name="gallery_stack_merge_title">Merge \"%1$s\" into</string>
+    <string name="gallery_select_all">Select all</string>
+    <string name="gallery_share_selected">Share</string>
+    <string name="gallery_favourite_selected">Favourite</string>
+    <string name="gallery_unfavourite_selected">Remove favourite</string>
+    <string name="gallery_more_actions">More actions</string>
+    <string name="gallery_share_chooser">Share artworks</string>
+</resources>

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -23,6 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -59,16 +62,15 @@ fun GalleryScreen(
     val scope = rememberCoroutineScope()
 
     var showNewProjectDialog by remember { mutableStateOf(false) }
-    var renameTarget by remember { mutableStateOf<Project?>(null) }
-    var deleteTarget by remember { mutableStateOf<Project?>(null) }
     var searchVisible by remember { mutableStateOf(false) }
     var openStack by rememberSaveable { mutableStateOf<String?>(null) }
-    var stackTarget by remember { mutableStateOf<Project?>(null) }
-    var preview by remember { mutableStateOf<Pair<List<Project>, Int>?>(null) }
     // Select mode: null while browsing, otherwise the chosen artworks.
     var selection by remember { mutableStateOf<Set<Long>?>(null) }
-    var batch by remember { mutableStateOf<GalleryBatch?>(null) }
+    val dialogs = remember { GalleryDialogs() }
     val drag = rememberGalleryDrag()
+    val hint = MaterialTheme.colorScheme.primary
+    val gridState = rememberLazyGridState()
+    AutoScrollWhileDragging(drag, gridState)
     val onDrop: (Long, GalleryDrop) -> Unit = { id, target -> dropArtwork(viewModel, uiState, id, target) }
     BackHandler(enabled = selection != null) { selection = null }
     BackHandler(enabled = openStack != null && selection == null) { openStack = null }
@@ -108,16 +110,21 @@ fun GalleryScreen(
         topBar = {
             val chosen = selection
             if (chosen != null) {
+                val picked = selectedProjects(uiState, chosen)
                 SelectionTopBar(
                     chosen.size,
                     SelectionActions(
-                        onStack = { batch = GalleryBatch.STACK },
+                        onStack = { dialogs.batch = GalleryBatch.STACK },
                         onDuplicate = {
-                            selectedProjects(uiState, chosen).forEach(viewModel::duplicate)
+                            picked.forEach(viewModel::duplicate)
                             selection = null
                         },
-                        onDelete = { batch = GalleryBatch.DELETE },
+                        onDelete = { dialogs.batch = GalleryBatch.DELETE },
                         onDone = { selection = null },
+                        onSelectAll = { selection = shownProjects(uiState, openStack, query).mapTo(HashSet()) { it.id } },
+                        onShare = { scope.launch { shareProjects(viewModel, picked, context, snackbarHostState) } },
+                        onFavorite = { viewModel.setFavorite(picked, !picked.all(Project::isFavorite)) },
+                        allFavourite = picked.isNotEmpty() && picked.all(Project::isFavorite),
                     ),
                 )
             } else {
@@ -180,7 +187,8 @@ fun GalleryScreen(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .padding(padding),
+                    .padding(padding)
+                    .onGloballyPositioned { drag.viewport = it.boundsInRoot() },
         ) {
             when (val state = uiState) {
                 is MainUiState.Loading -> {
@@ -201,6 +209,7 @@ fun GalleryScreen(
                         EmptyGallery(query.isNotEmpty())
                     } else {
                         LazyVerticalGrid(
+                            state = gridState,
                             columns = GridCells.Adaptive(minSize = 168.dp),
                             contentPadding = PaddingValues(12.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -208,10 +217,18 @@ fun GalleryScreen(
                         ) {
                             val layout = GalleryLayout.of(state.projects, openStack, searching = query.isNotEmpty())
                             items(layout.stacks, key = { "stack:${it.first}" }) { (name, members) ->
-                                StackCard(name, members, Modifier.stackDropTarget(drag, name)) { openStack = name }
+                                val menu =
+                                    StackMenu(
+                                        onRename = { dialogs.stackAction = StackAction(name, StackCommand.RENAME) },
+                                        onMerge = { dialogs.stackAction = StackAction(name, StackCommand.MERGE) },
+                                        onDissolve = { viewModel.dissolveStack(name) },
+                                        onShare = { scope.launch { shareProjects(viewModel, members, context, snackbarHostState) } },
+                                    )
+                                StackCard(name, members, menu, Modifier.stackDropTarget(drag, name, hint)) { openStack = name }
                             }
                             items(layout.projects, key = { it.id }) { project ->
                                 val chosen = selection
+                                KeepWhile(drag.dragging == project.id)
                                 ProjectCard(
                                     project = project,
                                     onClick = {
@@ -223,13 +240,13 @@ fun GalleryScreen(
                                     },
                                     selected = chosen?.let { project.id in it },
                                     onFavorite = { viewModel.toggleFavorite(project) },
-                                    onRename = { renameTarget = project },
+                                    onRename = { dialogs.rename = project },
                                     onDuplicate = { viewModel.duplicate(project) },
-                                    onDelete = { deleteTarget = project },
-                                    onStack = { stackTarget = project },
-                                    onPreview = { preview = layout.projects to layout.projects.indexOf(project) },
-                                    onShare = { scope.launch { shareProject(viewModel, project, context, snackbarHostState) } },
-                                    modifier = if (chosen == null) Modifier.draggableArtwork(drag, project.id, onDrop) else Modifier,
+                                    onDelete = { dialogs.delete = project },
+                                    onStack = { dialogs.stack = project },
+                                    onPreview = { dialogs.preview = layout.projects to layout.projects.indexOf(project) },
+                                    onShare = { scope.launch { shareProjects(viewModel, listOf(project), context, snackbarHostState) } },
+                                    modifier = if (chosen == null) Modifier.draggableArtwork(drag, project.id, hint, onDrop) else Modifier,
                                 )
                             }
                         }
@@ -245,34 +262,7 @@ fun GalleryScreen(
         }
     }
 
-    preview?.let { (projects, index) ->
-        GalleryPreview(projects, index, viewModel::previewImage) { preview = null }
-    }
-
-    batch?.let { action ->
-        BatchDialog(action, selectedProjects(uiState, selection.orEmpty()), existingStacks(uiState), viewModel) { done ->
-            batch = null
-            if (done) selection = null
-        }
-    }
-    stackTarget?.let { project ->
-        StackDialog("Stack ${project.name}", project.stack, existingStacks(uiState), onDismiss = { stackTarget = null }) { stack ->
-            viewModel.moveToStack(project.id, stack)
-            stackTarget = null
-        }
-    }
-    renameTarget?.let { project ->
-        RenameDialog(project, onDismiss = { renameTarget = null }) { name ->
-            viewModel.rename(project, name)
-            renameTarget = null
-        }
-    }
-    deleteTarget?.let { project ->
-        DeleteDialog(project, onDismiss = { deleteTarget = null }) {
-            viewModel.delete(project)
-            deleteTarget = null
-        }
-    }
+    GalleryDialogHost(dialogs, uiState, selection, viewModel) { selection = null }
 }
 
 /** What the gallery's Import menu can bring in, each as a new artwork. */
@@ -357,21 +347,10 @@ private fun SortMenu(
     }
 }
 
-private suspend fun shareProject(
-    viewModel: MainViewModel,
-    project: Project,
-    context: android.content.Context,
-    snackbar: SnackbarHostState,
-) {
-    val file = viewModel.shareablePng(project)
-    if (file == null) {
-        snackbar.showSnackbar(context.getString(R.string.galleryscreen_open_artwork_to_share))
-    } else {
-        runCatching { sharePng(context, file) }
-    }
-}
-
-/** Drag-to-stack: onto a stack moves the artwork in; onto another artwork makes a new stack of both. */
+/**
+ * Drag in the gallery: onto a stack moves the artwork in; onto another artwork makes a new stack of both; beside an artwork puts it
+ * there, which keeps the gallery in that order.
+ */
 private fun dropArtwork(
     viewModel: MainViewModel,
     state: MainUiState,
@@ -383,6 +362,8 @@ private fun dropArtwork(
             viewModel.moveToStack(projectId, target.name)
         }
 
+        is GalleryDrop.Beside -> viewModel.reorder(projectId, target.projectId, target.after)
+
         is GalleryDrop.OnProject -> {
             val other = (state as? MainUiState.Success)?.projects?.firstOrNull { it.id == target.projectId } ?: return
             val name = other.stack ?: newStackName(existingStacks(state))
@@ -390,54 +371,6 @@ private fun dropArtwork(
             viewModel.moveToStack(projectId, name)
         }
     }
-}
-
-private fun selectedProjects(
-    state: MainUiState,
-    ids: Set<Long>,
-): List<Project> = (state as? MainUiState.Success)?.projects.orEmpty().filter { it.id in ids }
-
-private fun existingStacks(state: MainUiState): List<String> =
-    (state as? MainUiState.Success)
-        ?.projects
-        ?.mapNotNull { it.stack }
-        ?.distinct()
-        ?.sorted()
-        .orEmpty()
-
-@Composable
-private fun RenameDialog(
-    project: Project,
-    onDismiss: () -> Unit,
-    onRename: (String) -> Unit,
-) {
-    var text by remember(project.id) { mutableStateOf(project.name) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.galleryscreen_rename_artwork)) },
-        text = { OutlinedTextField(value = text, onValueChange = { text = it }, singleLine = true) },
-        confirmButton = { TextButton(onClick = { onRename(text) }) { Text(stringResource(R.string.layer_rename)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
-    )
-}
-
-@Composable
-private fun DeleteDialog(
-    project: Project,
-    onDismiss: () -> Unit,
-    onDelete: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.galleryscreen_delete_project, project.name)) },
-        text = { Text(stringResource(R.string.galleryscreen_the_artwork_and_its_layers_are_removed)) },
-        confirmButton = {
-            TextButton(
-                onClick = onDelete,
-            ) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
-    )
 }
 
 @Composable

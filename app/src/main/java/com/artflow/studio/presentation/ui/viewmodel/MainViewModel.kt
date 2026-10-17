@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.color.Palette
+import com.artflow.studio.core.gallery.GalleryOrder
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.domain.model.Project
 import com.artflow.studio.domain.model.settings.AccentChoice
@@ -119,14 +120,56 @@ class MainViewModel
                 } else {
                     allProjects.filter { it.name.contains(query, ignoreCase = true) }
                 }
-            val sorted =
-                when (settings.gallerySort) {
-                    GallerySort.RECENT -> filtered.sortedByDescending { it.modifiedAt }
-                    GallerySort.CREATED -> filtered.sortedByDescending { it.createdAt }
-                    GallerySort.NAME -> filtered.sortedBy { it.name.lowercase() }
-                    GallerySort.SIZE -> filtered.sortedByDescending { it.width.toLong() * it.height }
+            _uiState.value = MainUiState.Success(sortProjects(filtered, settings), storageBytes)
+        }
+
+        private fun sortProjects(
+            projects: List<Project>,
+            settings: AppSettings,
+        ): List<Project> =
+            when (settings.gallerySort) {
+                GallerySort.RECENT -> projects.sortedByDescending { it.modifiedAt }
+                GallerySort.CREATED -> projects.sortedByDescending { it.createdAt }
+                GallerySort.NAME -> projects.sortedBy { it.name.lowercase() }
+                GallerySort.SIZE -> projects.sortedByDescending { it.width.toLong() * it.height }
+                GallerySort.MANUAL ->
+                    GalleryOrder.arrange(projects.sortedByDescending { it.createdAt }, settings.galleryOrder, Project::id)
+            }
+
+        /**
+         * Drag-to-arrange: puts the artwork [movedId] just before (or, with [after], just after) [targetId], as the gallery
+         * is shown now, and keeps that arrangement by switching the sort to Manual.
+         */
+        fun reorder(
+            movedId: Long,
+            targetId: Long,
+            after: Boolean,
+        ) {
+            viewModelScope.launch(galleryErrors) {
+                settingsRepository.update { current ->
+                    val shown = sortProjects(allProjects, current).map { it.id }
+                    val moved = GalleryOrder.move(shown, movedId, targetId, after)
+                    current.copy(
+                        gallerySort = GallerySort.MANUAL,
+                        galleryOrder = GalleryOrder.tidy(moved, allProjects.mapTo(HashSet()) { it.id }),
+                    )
                 }
-            _uiState.value = MainUiState.Success(sorted, storageBytes)
+            }
+        }
+
+        /** Renames the stack [from], or merges it into the stack [to] if that exists. */
+        fun renameStack(
+            from: String,
+            to: String,
+        ) {
+            val name = cleanStackName(to) ?: return
+            if (name == from) return
+            viewModelScope.launch(galleryErrors) { projectRepository.renameStack(from, name) }
+        }
+
+        /** Takes every artwork out of the stack [name] and back into the main gallery. */
+        fun dissolveStack(name: String) {
+            viewModelScope.launch(galleryErrors) { projectRepository.renameStack(name, null) }
         }
 
         fun setQuery(query: String) {
@@ -202,12 +245,20 @@ class MainViewModel
             projectId: Long,
             stack: String?,
         ) {
-            val name = stack?.trim()?.take(MAX_STACK_NAME)?.takeIf { it.isNotEmpty() && it.none(Char::isISOControl) }
+            val name = stack?.let(::cleanStackName)
             viewModelScope.launch(galleryErrors) { projectRepository.setStack(listOf(projectId), name) }
         }
 
         fun toggleFavorite(project: Project) {
             viewModelScope.launch(galleryErrors) { projectRepository.toggleFavorite(project.id, !project.isFavorite) }
+        }
+
+        /** Stars or un-stars every one of [projects]. */
+        fun setFavorite(
+            projects: List<Project>,
+            favorite: Boolean,
+        ) {
+            viewModelScope.launch(galleryErrors) { projects.forEach { projectRepository.toggleFavorite(it.id, favorite) } }
         }
 
         fun duplicate(project: Project) {
@@ -389,3 +440,6 @@ class MainViewModel
     }
 
 private const val MAX_STACK_NAME = 60
+
+/** A stack name as stored: trimmed and cut short, or null when nothing usable is left. */
+private fun cleanStackName(raw: String): String? = raw.trim().take(MAX_STACK_NAME).takeIf { it.isNotEmpty() && it.none(Char::isISOControl) }

@@ -6,6 +6,7 @@ import com.artflow.studio.core.color.PaletteCodec
 import com.artflow.studio.data.local.dao.SettingsDao
 import com.artflow.studio.data.local.entity.SettingsEntity
 import com.artflow.studio.data.repository.settings.SettingsRepositoryImpl
+import com.artflow.studio.domain.model.settings.GallerySort
 import com.artflow.studio.domain.model.settings.ThemeMode
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -218,6 +219,19 @@ class SettingsRepositoryTest {
             assertEquals(listOf(poster), SettingsRepositoryImpl(dao).settings.first().canvasPresets)
             val damaged = MemorySettingsDao(mapOf("canvas.sizePresets" to "Poster\t3000\t4000\t200\nnot a preset\nHuge\t99999\t99999\t72"))
             assertEquals(listOf(poster), SettingsRepositoryImpl(damaged).settings.first().canvasPresets)
+        }
+
+    @Test
+    fun manualGalleryOrderSurvivesRestartAndIgnoresDamage() =
+        runTest {
+            val dao = MemorySettingsDao()
+            val repository = SettingsRepositoryImpl(dao)
+            repository.update { it.copy(gallerySort = GallerySort.MANUAL, galleryOrder = listOf(7L, 3L, 9L)) }
+            val back = SettingsRepositoryImpl(dao).settings.first()
+            assertEquals(GallerySort.MANUAL, back.gallerySort)
+            assertEquals(listOf(7L, 3L, 9L), back.galleryOrder)
+            val damaged = MemorySettingsDao(mapOf("gallery.order" to "4,x,,4,2"))
+            assertEquals(listOf(4L, 2L), SettingsRepositoryImpl(damaged).settings.first().galleryOrder)
         }
 
     @Test
