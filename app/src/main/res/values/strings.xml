@@ -438,8 +438,6 @@
     <string name="brushpracticepad_test_strokes">%1$d test strokes; not part of artwork</string>
     <string name="timelapsereplay_time_lapse_frame">Time-lapse frame %1$d</string>
     <string name="savedbrushcontrols_actions_for_brush">Saved brush actions %1$s</string>
-    <string name="colorpanel_remove_palette">Remove %1$s</string>
-    <string name="colorpanel_share_palette">Share %1$s</string>
     <string name="paletteimports_could_not_share">The palette could not be shared</string>
     <string name="canvasscreen_close_panel">Close %1$s</string>
     <string name="adjustmentoverlay_flood">Flood</string>

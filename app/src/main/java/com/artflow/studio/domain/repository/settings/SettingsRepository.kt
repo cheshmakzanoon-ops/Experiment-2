@@ -83,4 +83,10 @@ interface SettingsRepository {
         paletteId: Long,
         name: String,
     )
+
+    /** Replaces the palette with the same id where it stands (or adds it); [makeDefault] moves it to the front. */
+    suspend fun updatePalette(
+        palette: Palette,
+        makeDefault: Boolean = false,
+    )
 }

@@ -14,7 +14,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -49,12 +48,10 @@ fun ColorPanel(
     onColorSelected: (Int) -> Unit,
     onClearRecents: () -> Unit,
     onSavePalette: (String, List<Int>) -> Unit,
-    onRemovePalette: (Long) -> Unit,
+    paletteActions: PaletteActions,
     modifier: Modifier = Modifier,
     onImportPalette: (() -> Unit)? = null,
     onPaletteFromPhoto: (() -> Unit)? = null,
-    /** Shares a palette as a Procreate `.swatches` file; null hides the button. */
-    onSharePalette: ((Palette) -> Unit)? = null,
     /** The secondary colour and swapping it with the primary; null hides the swatch. */
     secondary: SecondarySwatch? = null,
 ) {
@@ -103,7 +100,16 @@ fun ColorPanel(
                     onImportPalette?.let { OutlinedButton(onClick = it) { Text(stringResource(R.string.color_import_palette)) } }
                     onPaletteFromPhoto?.let { OutlinedButton(onClick = it) { Text(stringResource(R.string.color_new_from_photo)) } }
                 }
-                PaletteList(palettes, color, onColorSelected, onRemovePalette, onSharePalette)
+                PaletteManager(palettes, color, onColorSelected, paletteActions)
+                SectionLabel(stringResource(R.string.color_named))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(ColorHarmony.NAMED_COLORS) { (name, value) ->
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Swatch(color = value, onClick = { onColorSelected(value) })
+                            Text(name, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                        }
+                    }
+                }
             }
         }
 
@@ -334,73 +340,6 @@ private fun Swatch(
                 .clickable(onClick = onClick)
                 .then(if (description != null) Modifier.semantics { contentDescription = description } else Modifier),
     )
-}
-
-@Composable
-private fun PaletteList(
-    palettes: List<Palette>,
-    currentColor: Int,
-    onColorSelected: (Int) -> Unit,
-    onRemovePalette: (Long) -> Unit,
-    onSharePalette: ((Palette) -> Unit)?,
-) {
-    val grouped = remember(palettes) { palettes.groupBy { it.category } }
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        grouped.forEach { (category, entries) ->
-            SectionLabel(category)
-            entries.forEach { palette ->
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(palette.name, style = MaterialTheme.typography.bodyMedium)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            onSharePalette?.let { share ->
-                                IconButton(onClick = { share(palette) }) {
-                                    Icon(
-                                        Icons.Default.Share,
-                                        contentDescription = stringResource(R.string.colorpanel_share_palette, palette.name),
-                                    )
-                                }
-                            }
-                            if (palette.category == "Custom") {
-                                IconButton(onClick = { onRemovePalette(palette.id) }) {
-                                    Icon(
-                                        Icons.Default.Delete,
-                                        contentDescription = stringResource(R.string.colorpanel_remove_palette, palette.name),
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(palette.colors) { entry ->
-                            val closest = ColorHarmony.distance(entry, currentColor) < 24f
-                            Box(
-                                modifier =
-                                    Modifier
-                                        .size(if (closest) 40.dp else 32.dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(Color(entry))
-                                        .clickable { onColorSelected(entry) },
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        SectionLabel(stringResource(R.string.color_named))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(ColorHarmony.NAMED_COLORS) { (name, value) ->
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Swatch(color = value, onClick = { onColorSelected(value) })
-                    Text(name, style = MaterialTheme.typography.labelSmall, maxLines = 1)
-                }
-            }
-        }
-    }
 }
 
 /** Small helper used by the brush sheet: a row of the built-in palettes. */

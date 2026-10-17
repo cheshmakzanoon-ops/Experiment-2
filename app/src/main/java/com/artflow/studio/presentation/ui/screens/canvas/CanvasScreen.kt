@@ -74,6 +74,7 @@ import com.artflow.studio.presentation.ui.components.canvas.GestureControls
 import com.artflow.studio.presentation.ui.components.canvas.ShapeEditState
 import com.artflow.studio.presentation.ui.components.canvas.imageDropTarget
 import com.artflow.studio.presentation.ui.components.color.ColorPanel
+import com.artflow.studio.presentation.ui.components.color.PaletteActions
 import com.artflow.studio.presentation.ui.components.color.SecondarySwatch
 import com.artflow.studio.presentation.ui.components.editor.ActionsPanel
 import com.artflow.studio.presentation.ui.components.editor.AddActions
@@ -574,8 +575,18 @@ fun CanvasScreen(
                     onSavePalette = { name, colors -> viewModel.addPaletteFromColors(name, colors) },
                     onImportPalette = paletteImports.fromFile,
                     onPaletteFromPhoto = paletteImports.fromPhoto,
-                    onSharePalette = paletteImports.share,
-                    onRemovePalette = { viewModel.removePalette(it) },
+                    paletteActions =
+                        PaletteActions(
+                            onCreate = viewModel::createPalette,
+                            onRename = viewModel::renamePalette,
+                            onDuplicate = viewModel::duplicatePalette,
+                            onSetDefault = viewModel::setDefaultPalette,
+                            onDelete = viewModel::removePalette,
+                            onAddSwatch = { viewModel.addSwatch(it, input.brushColor) },
+                            onReplaceSwatch = { id, index -> viewModel.replaceSwatch(id, index, input.brushColor) },
+                            onRemoveSwatch = viewModel::removeSwatch,
+                            onShare = paletteImports.share,
+                        ),
                     secondary = SecondarySwatch(input.secondaryColor, viewModel::swapColors),
                 )
             }

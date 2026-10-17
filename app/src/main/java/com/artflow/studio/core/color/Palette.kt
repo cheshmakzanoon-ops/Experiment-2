@@ -48,6 +48,15 @@ data class Palette(
 
     /** Duplicates the palette under a new name. */
     fun renamed(newName: String): Palette = copy(id = 0, name = newName, createdAt = 0L)
+
+    /** A palette with the colour at [index] replaced; an index that is not a swatch leaves it as it is. */
+    fun withColorAt(
+        index: Int,
+        color: Int,
+    ): Palette = if (index in colors.indices) copy(colors = colors.toMutableList().also { it[index] = color }) else this
+
+    /** A palette with [color] added at the end, even when it is already there (unlike [withColor]). */
+    fun withColorAppended(color: Int): Palette = copy(colors = colors + color)
 }
 
 /** Bundled starter palettes so the app is useful before the artist saves anything. */

@@ -182,6 +182,28 @@ class SettingsRepositoryTest {
         }
 
     @Test
+    fun updatePaletteReplacesInPlaceAndCanMakeItTheDefault() =
+        runTest {
+            val dao = MemorySettingsDao()
+            val repository = SettingsRepositoryImpl(dao)
+            val a = Palette(id = 1, name = "A", colors = listOf(1), category = "Custom")
+            val b = Palette(id = 2, name = "B", colors = listOf(2), category = "Custom")
+            val c = Palette(id = 3, name = "C", colors = listOf(3), category = "Custom")
+            listOf(a, b, c).forEach { repository.addPalette(it) }
+            // An edit keeps the palette where it stands.
+            repository.updatePalette(b.copy(colors = listOf(2, 22)))
+            assertEquals(listOf(a, b.copy(colors = listOf(2, 22)), c), repository.current().customPalettes)
+            // Making one the default moves it to the front, once.
+            repository.updatePalette(c, makeDefault = true)
+            assertEquals(listOf(3L, 1L, 2L), repository.current().customPalettes.map { it.id })
+            // An unknown palette is added; it can be made the default too.
+            val d = Palette(id = 4, name = "D", colors = emptyList(), category = "Custom")
+            repository.updatePalette(d, makeDefault = true)
+            assertEquals(listOf(4L, 3L, 1L, 2L), repository.current().customPalettes.map { it.id })
+            assertEquals(repository.current().customPalettes, SettingsRepositoryImpl(dao).settings.first().customPalettes)
+        }
+
+    @Test
     fun legacyPaletteDelimitersAreSplitOnlyBetweenCompleteObjects() =
         runTest {
             val first = Palette(id = 1, name = "A;;B\\\";;C", colors = listOf(1, 2))

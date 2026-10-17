@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="palettes_new">New palette</string>
+    <string name="palettes_name">Palette name</string>
+    <string name="palettes_rename">Rename</string>
+    <string name="palettes_set_default">Set as default</string>
+    <string name="palettes_commands">Palette actions for %1$s</string>
+    <string name="palettes_add_current_colour">Add the current colour to %1$s</string>
+    <string name="palettes_swatch">Swatch %1$s</string>
+    <string name="palettes_replace_swatch">Replace with the current colour</string>
+    <string name="palettes_remove_swatch">Remove swatch</string>
+</resources>

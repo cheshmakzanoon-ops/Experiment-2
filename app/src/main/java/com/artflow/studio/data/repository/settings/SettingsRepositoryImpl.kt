@@ -181,6 +181,16 @@ class SettingsRepositoryImpl
             )
         }
 
+        override suspend fun updatePalette(
+            palette: Palette,
+            makeDefault: Boolean,
+        ) = update { current ->
+            val stored = current.customPalettes
+            val index = stored.indexOfFirst { it.id == palette.id }
+            val replaced = if (index >= 0) stored.toMutableList().also { it[index] = palette } else stored + palette
+            current.copy(customPalettes = if (makeDefault) listOf(palette) + replaced.filterNot { it.id == palette.id } else replaced)
+        }
+
         // -----------------------------------------------------------------------------------------
         // Persistence
         // -----------------------------------------------------------------------------------------

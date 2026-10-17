@@ -1487,6 +1487,65 @@ class CanvasViewModel
             viewModelScope.launch(editorErrors) { settingsRepository.removePalette(paletteId) }
         }
 
+        /** An id no stored palette has: the clock, or one past the highest in the rare case two arrive in a millisecond. */
+        private fun nextPaletteId(): Long = maxOf(System.currentTimeMillis(), (_palettes.value.maxOfOrNull { it.id } ?: 0L) + 1L)
+
+        /** Procreate's "+" in Palettes: a new, empty palette that becomes the default. */
+        fun createPalette(name: String) {
+            val label = name.trim().take(MAX_PALETTE_NAME).ifEmpty { "Palette" }
+            viewModelScope.launch(editorErrors) {
+                val palette = Palette(id = nextPaletteId(), name = label, colors = emptyList(), category = "Custom")
+                settingsRepository.updatePalette(palette, true)
+            }
+        }
+
+        fun renamePalette(
+            paletteId: Long,
+            name: String,
+        ) {
+            val label = name.trim().take(MAX_PALETTE_NAME)
+            if (label.isEmpty()) return
+            viewModelScope.launch(editorErrors) { settingsRepository.renamePalette(paletteId, label) }
+        }
+
+        /** An editable copy of any palette, built-in ones included, placed first. */
+        fun duplicatePalette(palette: Palette) {
+            viewModelScope.launch(editorErrors) {
+                val copy = palette.renamed("${palette.name} copy".take(MAX_PALETTE_NAME)).copy(id = nextPaletteId(), category = "Custom")
+                settingsRepository.updatePalette(copy, true)
+            }
+        }
+
+        fun setDefaultPalette(paletteId: Long) {
+            val palette = _palettes.value.firstOrNull { it.id == paletteId && it.category == "Custom" } ?: return
+            viewModelScope.launch(editorErrors) { settingsRepository.updatePalette(palette, true) }
+        }
+
+        /** Adds [color] as the last swatch of one of the user's own palettes. */
+        fun addSwatch(
+            paletteId: Long,
+            color: Int,
+        ) = editPalette(paletteId) { it.withColorAppended(color) }
+
+        fun replaceSwatch(
+            paletteId: Long,
+            index: Int,
+            color: Int,
+        ) = editPalette(paletteId) { it.withColorAt(index, color) }
+
+        fun removeSwatch(
+            paletteId: Long,
+            index: Int,
+        ) = editPalette(paletteId) { it.withoutColor(index) }
+
+        private fun editPalette(
+            paletteId: Long,
+            change: (Palette) -> Palette,
+        ) {
+            val palette = _palettes.value.firstOrNull { it.id == paletteId && it.category == "Custom" } ?: return
+            viewModelScope.launch(editorErrors) { settingsRepository.updatePalette(change(palette)) }
+        }
+
         fun harmonyFor(
             baseColor: Int,
             harmony: ColorHarmony.Harmony,
@@ -1581,5 +1640,6 @@ class CanvasViewModel
             const val DEFAULT_HEIGHT = 1080
             const val DEFAULT_DPI = 72
             private const val TIMELAPSE_INTERVAL_MS = 750L
+            private const val MAX_PALETTE_NAME = 40
         }
     }
