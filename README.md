@@ -25,6 +25,18 @@ Paint with pressure-sensitive brushes, compose layers and masks, animate frames,
 The [Procreate comparison](docs/PROCREATE_PARITY.md) separates implemented workflows from missing capabilities.
 [Release readiness](docs/RELEASE_READINESS.md) tracks the separate distribution requirements.
 
+## Latest development session — 17 October 2026
+
+Every change made in the session that set out to reach Procreate parity, and was then wound down, is
+recorded with its evidence level in [docs/DEVELOPMENT_LOG_2026-10-17.md](docs/DEVELOPMENT_LOG_2026-10-17.md).
+In short: Procreate `.swatches` palettes, palette management, typed colour values, hardware-keyboard
+shortcuts, opening and sharing files into ArtFlow from other apps, a New artwork dialog with inch/cm/mm
+sizes, a Screen size preset and saved sizes, gallery stack commands, hand-arranged gallery order and bulk
+actions, a corrected Freehand selection and Clear, Justify text, a time-lapse recording switch and replay
+speeds. **Parity with Procreate has not been reached**; the log ends with the list of what is missing.
+These changes are compile- and lint-checked offline and their pure logic is covered by JVM tests; none has
+been run on a device and CI has not yet run on them.
+
 ## Current CI follow-through
 
 Run **78** (`27b4c6cf`) passed all build/static/artifact checks and five of six device jobs.
@@ -137,14 +149,14 @@ Canvas background state follows the document through edits and undo/redo.
 | Area | Available | Important gaps |
 | --- | --- | --- |
 | Painting | Pressure/dynamics, smoothing, taper, flow, wet mix, jitter, three procedural grains, staged Brush Studio | Preset interchange, imported/shaped/dual textures, tilt rendering, curated-library and stylus-feel parity |
-| Tools | Brush, eraser, smudge, clone, healing, liquify, bucket, gradients, text and shapes | QuickShape recognition and ColorDrop-style interaction |
-| Selections | Rectangle/ellipse/lasso/wand, combine/invert/feather | Saved selections and equivalent gesture ergonomics |
-| Transform | MOVE/TRANSFORM translation | Interactive scale/rotate/distort/warp/snapping with preview/apply/cancel |
-| Layers | Pixel/mask/effect workflows and reorder | Nested groups, linking UI and fill-reference workflow |
-| Colour | Wheel, RGB/HSV/CMYK controls, palettes, harmonies | ICC-managed working spaces and print fidelity; CMYK sliders are not colour management |
-| Animation | Frames, duration/FPS, onion skin, playback and animated export | Drawing timelapse, Page Assist and 3D painting |
-| Documents | Atomic `.artflow` saves, thumbnails, autosave and recovery | Broader interruption, low-storage and long-session acceptance |
-| Export | PNG/JPEG/WebP/PDF/PSD/GIF/MP4 and frame-sequence ZIP; picker/gallery/sharing | PSD import and broader external interoperability fixtures |
+| Tools | Brush, eraser, smudge, clone, healing, liquify, bucket, gradients, text, shapes, QuickShape and ColorDrop | Per-tool brush slots, Smudge strength and Clone/Heal option bars |
+| Selections | Automatic, rectangle, ellipse and freehand lasso; add/remove/invert/feather; Save & Load (in memory); Clear and Deselect | Tap-to-place polygon lasso, live feather slider, mask visibility setting, saved selections kept in the document |
+| Transform | Freeform, Uniform, Distort and Warp with snapping and magnetics; flip, rotate, fit, reset, interpolation choice | A Done/Cancel session, numeric entry, pivot, Bicubic |
+| Layers | Pixel/mask/effect workflows, reorder, nested groups, reference layers | Layer-linking UI, group duplicate/delete semantics, mask thumbnails and Apply |
+| Colour | Wheel, RGB/HSV/CMYK controls with typed values, palettes (create, rename, duplicate, edit swatches, `.swatches` import/share), harmonies | ICC-managed working spaces and print fidelity; CMYK sliders are not colour management |
+| Animation | Frames, duration/FPS, onion skin, playback and animated export; Drawing timelapse with a recording switch; Page Assist; 3D painting | A timeline strip with thumbnails and scrubbing, onion-skin tint colours |
+| Documents | Atomic `.artflow` saves, thumbnails, autosave and recovery; New artwork in px/in/cm/mm with saved sizes | Broader interruption, low-storage and long-session acceptance; a maximum-layers readout |
+| Export | PNG/JPEG/WebP/PDF/PSD/GIF/MP4 and frame-sequence ZIP; picker/gallery/sharing; PSD and `.procreate` import; open and share files into ArtFlow from other apps | Native `.procreate` and `.brushset` export, print, broader external interoperability fixtures |
 
 Cloud collaboration and smart objects are separate roadmap ideas, not asserted Procreate features.
 No internet permission, analytics or crash telemetry is added.
