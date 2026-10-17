@@ -8,7 +8,27 @@ import kotlin.math.max
 class PointerGestureRouter(
     private val tapSlop: Float,
     private val tapTimeoutMillis: Long,
+    enabled: Set<Gesture> = Gesture.entries.toSet(),
 ) {
+    /** The multi-finger gestures Prefs > Gesture controls can switch off. */
+    enum class Gesture {
+        TWO_FINGER_TAP_UNDO,
+        THREE_FINGER_TAP_REDO,
+        FOUR_FINGER_TAP_FULL_SCREEN,
+        HOLD_RAPID_UNDO_REDO,
+        PINCH_NAVIGATION,
+        QUICK_PINCH_FIT,
+        THREE_FINGER_SWIPE_COPY_PASTE,
+        THREE_FINGER_SCRUB_CLEAR,
+    }
+
+    /**
+     * Gestures that may be recognised. A disabled gesture is never reported and never latches the
+     * touch: its fingers keep their other meaning (a two-finger tap that is not undo can still be a
+     * quick pinch, and three fingers that are not a swipe can still scrub).
+     */
+    var enabled: Set<Gesture> = enabled.toSet()
+
     enum class Event { DOWN, POINTER_DOWN, MOVE, POINTER_UP, UP, CANCEL }
 
     enum class Action {
@@ -72,7 +92,15 @@ class PointerGestureRouter(
     }
 
     /** Two or three fingers resting still since the touch began, else 0: Procreate's rapid undo and redo. */
-    fun heldFingers(): Int = if (mode == Mode.NAVIGATION && tapEligible && maxPointers in 2..3) maxPointers else 0
+    fun heldFingers(): Int =
+        if (Gesture.HOLD_RAPID_UNDO_REDO in enabled && mode == Mode.NAVIGATION && tapEligible && maxPointers in 2..3) maxPointers else 0
+
+    /** Procreate's quick pinch to fit: a fast pinch that closes well below its start scale, while the gesture is on. */
+    fun quickPinchRecognised(
+        startScale: Float,
+        endScale: Float,
+        durationMillis: Long,
+    ): Boolean = Gesture.QUICK_PINCH_FIT in enabled && QuickPinch.isQuickPinch(startScale, endScale, durationMillis)
 
     /** A hold that already undid or redid must not also count as a tap when the fingers lift. */
     fun consumeTap() {
@@ -178,13 +206,22 @@ class PointerGestureRouter(
             event == Event.UP -> {
                 mode = Mode.IDLE
                 val elapsed = timeMillis - startedAt
-                val count = if (tapEligible && elapsed in 0 until tapTimeoutMillis && maxPointers in 2..4) maxPointers else 0
+                val tapped = tapEligible && elapsed in 0 until tapTimeoutMillis && maxPointers in 2..4
+                val count = if (tapped && tapEnabled(maxPointers)) maxPointers else 0
                 Route(Action.FINISH_NAVIGATION, historyPointers = count)
             }
             event == Event.POINTER_UP || event == Event.POINTER_DOWN -> Route(Action.REBASE_NAVIGATION)
             event == Event.MOVE && pointers.size >= 3 -> routeThreeFinger(pointers)
-            event == Event.MOVE -> Route(Action.NAVIGATE)
+            event == Event.MOVE && Gesture.PINCH_NAVIGATION in enabled -> Route(Action.NAVIGATE)
             else -> Route(Action.IGNORE)
+        }
+
+    /** Whether a still tap of [fingers] fingers is one of the enabled tap gestures. */
+    private fun tapEnabled(fingers: Int): Boolean =
+        when (fingers) {
+            2 -> Gesture.TWO_FINGER_TAP_UNDO in enabled
+            3 -> Gesture.THREE_FINGER_TAP_REDO in enabled
+            else -> Gesture.FOUR_FINGER_TAP_FULL_SCREEN in enabled
         }
 
     /** Three-finger moves never pan the canvas; they can only trigger one swipe or scrub per touch. */
@@ -202,10 +239,11 @@ class PointerGestureRouter(
         dx /= pointers.size
         dy /= pointers.size
         meanX /= pointers.size
-        if (dy > swipeDistance && abs(dx) < dy * 0.6f) {
+        if (Gesture.THREE_FINGER_SWIPE_COPY_PASTE in enabled && dy > swipeDistance && abs(dx) < dy * 0.6f) {
             multiGestureFired = true
             return Route(Action.THREE_FINGER_SWIPE_DOWN)
         }
+        if (Gesture.THREE_FINGER_SCRUB_CLEAR !in enabled) return Route(Action.IGNORE)
         val step = meanX - scrubAnchorX
         val direction = if (step > 0f) 1 else -1
         when {

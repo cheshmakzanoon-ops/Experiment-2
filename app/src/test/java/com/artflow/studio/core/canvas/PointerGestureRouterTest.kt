@@ -2,9 +2,12 @@ package com.artflow.studio.core.canvas
 
 import com.artflow.studio.core.canvas.PointerGestureRouter.Action
 import com.artflow.studio.core.canvas.PointerGestureRouter.Event
+import com.artflow.studio.core.canvas.PointerGestureRouter.Gesture
 import com.artflow.studio.core.canvas.PointerGestureRouter.Pointer
+import com.artflow.studio.core.canvas.PointerGestureRouter.Route
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -231,5 +234,144 @@ class PointerGestureRouterTest {
         send(Event.POINTER_DOWN, finger, other, changed = 1)
         send(Event.MOVE, finger.copy(x = 80f), other)
         assertEquals("Moving turns the hold into navigation", 0, router.heldFingers())
+    }
+
+    /** Feeds one scripted touch to a router and logs what it reported, in order. */
+    private class Touch(
+        val router: PointerGestureRouter,
+    ) {
+        private var time = 5_000L
+        val log = mutableListOf<Any>()
+
+        fun route(
+            event: Event,
+            vararg pointers: Pointer,
+            changed: Int = 0,
+        ) {
+            log += router.route(event, pointers.toList(), changed, time++, cancelled = false)
+        }
+
+        fun tap(count: Int) {
+            val fingers = (0 until count).map { Pointer(it, it * 30f, 5f) }
+            route(Event.DOWN, fingers.first())
+            for (size in 2..count) route(Event.POINTER_DOWN, *fingers.take(size).toTypedArray(), changed = size - 1)
+            for (size in count downTo 2) route(Event.POINTER_UP, *fingers.take(size).toTypedArray(), changed = size - 1)
+            route(Event.UP, fingers.first())
+        }
+
+        fun threeFingersDown(fingers: List<Pointer>) {
+            route(Event.DOWN, fingers[0])
+            route(Event.POINTER_DOWN, fingers[0], fingers[1], changed = 1)
+            route(Event.POINTER_DOWN, fingers[0], fingers[1], fingers[2], changed = 2)
+        }
+    }
+
+    private fun threeFingers(
+        x: Float,
+        y: Float,
+    ) = (0 until 3).map { Pointer(it, x + it * 40f, y) }
+
+    /** One scripted touch per gesture, the same stream the router sees on a device. */
+    private val scripts: Map<Gesture, (Touch) -> Unit> =
+        mapOf(
+            Gesture.TWO_FINGER_TAP_UNDO to { touch -> touch.tap(2) },
+            Gesture.THREE_FINGER_TAP_REDO to { touch -> touch.tap(3) },
+            Gesture.FOUR_FINGER_TAP_FULL_SCREEN to { touch -> touch.tap(4) },
+            Gesture.HOLD_RAPID_UNDO_REDO to { touch ->
+                touch.route(Event.DOWN, finger)
+                touch.route(Event.POINTER_DOWN, finger, other, changed = 1)
+                touch.log += touch.router.heldFingers()
+            },
+            Gesture.PINCH_NAVIGATION to { touch ->
+                touch.route(Event.DOWN, finger)
+                touch.route(Event.POINTER_DOWN, finger, other, changed = 1)
+                touch.route(Event.MOVE, finger.copy(x = -30f), other.copy(x = 140f))
+            },
+            Gesture.QUICK_PINCH_FIT to { touch -> touch.log += touch.router.quickPinchRecognised(1f, 0.5f, 120L) },
+            Gesture.THREE_FINGER_SWIPE_COPY_PASTE to { touch ->
+                val fingers = threeFingers(100f, 100f)
+                touch.threeFingersDown(fingers)
+                for (step in 1..8) touch.route(Event.MOVE, *fingers.map { it.copy(y = it.y + step * 20f) }.toTypedArray())
+            },
+            Gesture.THREE_FINGER_SCRUB_CLEAR to { touch ->
+                val fingers = threeFingers(300f, 300f)
+                touch.threeFingersDown(fingers)
+                for (dx in listOf(0f, 80f, 0f, 80f, 0f, 80f, 0f)) {
+                    touch.route(Event.MOVE, *fingers.map { it.copy(x = it.x + dx) }.toTypedArray())
+                }
+            },
+        )
+
+    /** What each gesture's stream must report when it is recognised. */
+    private val recognised: Map<Gesture, Any> =
+        mapOf(
+            Gesture.TWO_FINGER_TAP_UNDO to Route(Action.FINISH_NAVIGATION, historyPointers = 2),
+            Gesture.THREE_FINGER_TAP_REDO to Route(Action.FINISH_NAVIGATION, historyPointers = 3),
+            Gesture.FOUR_FINGER_TAP_FULL_SCREEN to Route(Action.FINISH_NAVIGATION, historyPointers = 4),
+            Gesture.HOLD_RAPID_UNDO_REDO to 2,
+            Gesture.PINCH_NAVIGATION to Route(Action.NAVIGATE),
+            Gesture.QUICK_PINCH_FIT to true,
+            Gesture.THREE_FINGER_SWIPE_COPY_PASTE to Route(Action.THREE_FINGER_SWIPE_DOWN),
+            Gesture.THREE_FINGER_SCRUB_CLEAR to Route(Action.THREE_FINGER_SCRUB),
+        )
+
+    private fun playWith(
+        enabled: Set<Gesture>,
+        gesture: Gesture,
+    ): List<Any> {
+        val touch = Touch(PointerGestureRouter(24f, 320, enabled))
+        scripts.getValue(gesture)(touch)
+        return touch.log
+    }
+
+    @Test
+    fun everyGestureIsRecognisedWhenItIsOn() {
+        for (gesture in Gesture.entries) {
+            assertTrue("$gesture should be recognised", recognised.getValue(gesture) in playWith(Gesture.entries.toSet(), gesture))
+        }
+    }
+
+    @Test
+    fun aGestureThatIsOffIsNeverRecognisedAndDoesNotSwallowItsTouch() {
+        for (gesture in Gesture.entries) {
+            val log = playWith(Gesture.entries.toSet() - gesture, gesture)
+            assertFalse("$gesture must stay off", recognised.getValue(gesture) in log)
+        }
+    }
+
+    @Test
+    fun switchingOneGestureOffChangesOnlyThatGesture() {
+        val all = Gesture.entries.toSet()
+        for (off in Gesture.entries) {
+            for (gesture in Gesture.entries) {
+                val withAll = playWith(all, gesture)
+                val withOneOff = playWith(all - off, gesture)
+                if (gesture == off) {
+                    assertNotEquals("$off off should change its own stream", withAll, withOneOff)
+                } else {
+                    assertEquals("$off off must not change $gesture", withAll, withOneOff)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun aDisabledTapDoesNotBlockAQuickPinchOnTheSameTouch() {
+        val touch = Touch(PointerGestureRouter(24f, 320, Gesture.entries.toSet() - Gesture.TWO_FINGER_TAP_UNDO))
+        touch.tap(2)
+        assertEquals(Route(Action.FINISH_NAVIGATION, historyPointers = 0), touch.log.last())
+        assertTrue(touch.router.quickPinchRecognised(1f, 0.5f, 120L))
+    }
+
+    @Test
+    fun changingTheEnabledSetTakesEffectOnTheNextTouch() {
+        val router = PointerGestureRouter(24f, 320, emptySet())
+        val off = Touch(router)
+        off.tap(2)
+        assertEquals(Route(Action.FINISH_NAVIGATION, historyPointers = 0), off.log.last())
+        router.enabled = setOf(Gesture.TWO_FINGER_TAP_UNDO)
+        val on = Touch(router)
+        on.tap(2)
+        assertEquals(Route(Action.FINISH_NAVIGATION, historyPointers = 2), on.log.last())
     }
 }
