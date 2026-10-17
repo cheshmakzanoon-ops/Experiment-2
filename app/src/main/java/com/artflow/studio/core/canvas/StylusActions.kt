@@ -3,40 +3,36 @@ package com.artflow.studio.core.canvas
 import com.artflow.studio.core.tool.ToolType
 
 /** What an assignable stylus button does, from Prefs > Stylus. */
-enum class StylusAction(
-    val label: String,
-) {
+enum class StylusAction {
     /** Samples the colour under the pen while the button is held. This is the primary button's default. */
-    EYEDROPPER("Eyedropper"),
+    EYEDROPPER,
 
     /** Erases while the button is held; the stroke then returns to the selected tool. */
-    ERASER("Eraser while held"),
+    ERASER,
 
     /** Smudges while the button is held. */
-    SMUDGE("Smudge while held"),
+    SMUDGE,
 
     /** Uses the tool selected before the current one while the button is held. */
-    PREVIOUS_TOOL("Previous tool while held"),
+    PREVIOUS_TOOL,
 
     /** Opens the QuickMenu once per press. */
-    QUICK_MENU("Quick Menu"),
+    QUICK_MENU,
 
     /** Undoes once per press. */
-    UNDO("Undo"),
+    UNDO,
 
     /** The button does nothing. This is the secondary button's default. */
-    NOTHING("Nothing"),
+    NOTHING,
     ;
 
     val isOneShot: Boolean get() = this == QUICK_MENU || this == UNDO
 }
 
 /** What the eraser end of the stylus does: erase, or paint with the selected tool like the tip. */
-enum class StylusEraserEnd(
-    val label: String,
-) {
-    ERASER("Eraser"),
-    NOTHING("Nothing"),
+enum class StylusEraserEnd {
+    ERASER,
+    NOTHING,
 }
 
 /** The stylus assignments, as Prefs stores them. */

@@ -285,65 +285,65 @@ private fun PrefsTab(
     )
     val gestures = prefs.gestures
     val changeGestures = actions.onGestures
-    PrefSwitch("Two-finger tap undoes", gestures.twoFingerTapUndo) {
+    PrefSwitch(stringResource(R.string.actionspanel_gesture_two_finger_undo), gestures.twoFingerTapUndo) {
         changeGestures(gestures.copy(twoFingerTapUndo = it))
     }
-    PrefSwitch("Three-finger tap redoes", gestures.threeFingerTapRedo) {
+    PrefSwitch(stringResource(R.string.actionspanel_gesture_three_finger_redo), gestures.threeFingerTapRedo) {
         changeGestures(gestures.copy(threeFingerTapRedo = it))
     }
-    PrefSwitch("Hold two or three fingers to repeat undo or redo", gestures.holdRapidUndoRedo) {
+    PrefSwitch(stringResource(R.string.actionspanel_gesture_hold_repeat), gestures.holdRapidUndoRedo) {
         changeGestures(gestures.copy(holdRapidUndoRedo = it))
     }
-    PrefSwitch("Pinch, rotate and drag move the canvas", gestures.pinchNavigation) {
+    PrefSwitch(stringResource(R.string.actionspanel_gesture_pinch_navigation), gestures.pinchNavigation) {
         changeGestures(gestures.copy(pinchNavigation = it))
     }
-    PrefSwitch("Quick pinch fits the canvas to the screen", gestures.quickPinchFit) {
+    PrefSwitch(stringResource(R.string.actionspanel_gesture_quick_pinch_fit), gestures.quickPinchFit) {
         changeGestures(gestures.copy(quickPinchFit = it))
     }
-    PrefSwitch("Touch and hold for eyedropper", prefs.holdEyedropper, actions.onHoldEyedropper)
-    PrefSwitch("Three-finger scrub clears the layer", gestures.scrubToClear) {
+    PrefSwitch(stringResource(R.string.actionspanel_gesture_touch_hold_eyedropper), prefs.holdEyedropper, actions.onHoldEyedropper)
+    PrefSwitch(stringResource(R.string.actionspanel_gesture_scrub_clears), gestures.scrubToClear) {
         changeGestures(gestures.copy(scrubToClear = it))
     }
-    PrefSwitch("Three-finger swipe opens Copy & Paste", gestures.swipeCopyPaste) {
+    PrefSwitch(stringResource(R.string.actionspanel_gesture_swipe_copy_paste), gestures.swipeCopyPaste) {
         changeGestures(gestures.copy(swipeCopyPaste = it))
     }
-    PrefSwitch("Four-finger tap toggles full screen", gestures.fourFingerFullScreen) {
+    PrefSwitch(stringResource(R.string.actionspanel_gesture_four_finger_full_screen), gestures.fourFingerFullScreen) {
         changeGestures(gestures.copy(fourFingerFullScreen = it))
     }
-    PrefSwitch("Layer: two-finger tap, then slide, sets opacity", gestures.layerTwoFingerOpacity) {
+    PrefSwitch(stringResource(R.string.actionspanel_gesture_layer_opacity), gestures.layerTwoFingerOpacity) {
         changeGestures(gestures.copy(layerTwoFingerOpacity = it))
     }
-    PrefSwitch("Layer: two-finger swipe right toggles Alpha Lock", gestures.layerTwoFingerAlphaLock) {
+    PrefSwitch(stringResource(R.string.actionspanel_gesture_layer_alpha_lock), gestures.layerTwoFingerAlphaLock) {
         changeGestures(gestures.copy(layerTwoFingerAlphaLock = it))
     }
-    PrefSwitch("Layer: two-finger touch and hold selects contents", gestures.layerTwoFingerSelect) {
+    PrefSwitch(stringResource(R.string.actionspanel_gesture_layer_select), gestures.layerTwoFingerSelect) {
         changeGestures(gestures.copy(layerTwoFingerSelect = it))
     }
-    PrefSwitch("Hold the modify button for QuickMenu", gestures.modifyHoldQuickMenu) {
+    PrefSwitch(stringResource(R.string.actionspanel_gesture_modify_quick_menu), gestures.modifyHoldQuickMenu) {
         changeGestures(gestures.copy(modifyHoldQuickMenu = it))
     }
     HorizontalDivider()
-    Text("Stylus", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
+    Text(stringResource(R.string.actionspanel_stylus), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
     val stylus = prefs.stylus
     ChoiceRow(
-        label = "Primary button",
+        label = stringResource(R.string.actionspanel_stylus_primary_button),
         selected = stylus.primary,
         options = StylusAction.entries,
-        optionLabel = { it.label },
+        optionLabel = { it.labelRes() },
         onSelect = { actions.onStylus(stylus.copy(primary = it)) },
     )
     ChoiceRow(
-        label = "Secondary button",
+        label = stringResource(R.string.actionspanel_stylus_secondary_button),
         selected = stylus.secondary,
         options = StylusAction.entries,
-        optionLabel = { it.label },
+        optionLabel = { it.labelRes() },
         onSelect = { actions.onStylus(stylus.copy(secondary = it)) },
     )
     ChoiceRow(
-        label = "Eraser end",
+        label = stringResource(R.string.actionspanel_stylus_eraser_end),
         selected = stylus.eraserEnd,
         options = StylusEraserEnd.entries,
-        optionLabel = { it.label },
+        optionLabel = { it.labelRes() },
         onSelect = { actions.onStylus(stylus.copy(eraserEnd = it)) },
     )
     HorizontalDivider()
@@ -420,24 +420,43 @@ private fun PrefSlider(
     }
 }
 
+/** The menu label for each stylus button action. */
+private fun StylusAction.labelRes(): Int =
+    when (this) {
+        StylusAction.EYEDROPPER -> R.string.actionspanel_stylus_eyedropper
+        StylusAction.ERASER -> R.string.actionspanel_stylus_eraser_while_held
+        StylusAction.SMUDGE -> R.string.actionspanel_stylus_smudge_while_held
+        StylusAction.PREVIOUS_TOOL -> R.string.actionspanel_stylus_previous_tool_while_held
+        StylusAction.QUICK_MENU -> R.string.actionspanel_stylus_quick_menu
+        StylusAction.UNDO -> R.string.actionspanel_stylus_undo
+        StylusAction.NOTHING -> R.string.actionspanel_stylus_nothing
+    }
+
+/** The menu label for each eraser-end choice. */
+private fun StylusEraserEnd.labelRes(): Int =
+    when (this) {
+        StylusEraserEnd.ERASER -> R.string.actionspanel_stylus_eraser
+        StylusEraserEnd.NOTHING -> R.string.actionspanel_stylus_nothing
+    }
+
 /** A label with the current choice on a button; tapping it opens the choices, as the canvas preset menu does. */
 @Composable
 private fun <T> ChoiceRow(
     label: String,
     selected: T,
     options: List<T>,
-    optionLabel: (T) -> String,
+    optionLabel: (T) -> Int,
     onSelect: (T) -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         Box {
-            OutlinedButton(onClick = { open = true }) { Text(optionLabel(selected)) }
+            OutlinedButton(onClick = { open = true }) { Text(stringResource(optionLabel(selected))) }
             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                 options.forEach { option ->
                     DropdownMenuItem(
-                        text = { Text(optionLabel(option)) },
+                        text = { Text(stringResource(optionLabel(option))) },
                         onClick = {
                             open = false
                             onSelect(option)
