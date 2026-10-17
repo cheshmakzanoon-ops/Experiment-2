@@ -96,9 +96,13 @@ internal fun BrushFileButtons(
                         }
                     }.getOrNull()
                 }
-            if (file == null) onFailure("The brush could not be shared") else runCatching { share(context, file) }
+            if (file == null) {
+                onFailure(context.getString(R.string.brushfilebuttons_could_not_share))
+            } else {
+                runCatching { share(context, file) }
+            }
         }
-    }, enabled = enabled) { Text("Share for Procreate") }
+    }, enabled = enabled) { Text(stringResource(R.string.brushfilebuttons_share_procreate)) }
     TextButton(
         onClick = { runCatching { picker.launch("*/*") } },
         enabled = enabled,

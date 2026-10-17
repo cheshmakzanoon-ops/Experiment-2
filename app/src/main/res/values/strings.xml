@@ -540,6 +540,7 @@
     <string name="studiochrome_opacity_percent">Opacity %1$d%%</string>
     <string name="brushfilebuttons_not_a_brush_file">That file is not a brush ArtFlow can import</string>
     <string name="brushfilebuttons_could_not_share">The brush could not be shared</string>
+    <string name="brushfilebuttons_share_procreate">Share for Procreate</string>
     <string name="galleryscreen_not_a_photoshop_document">That file is not a Photoshop document ArtFlow can read</string>
     <string name="galleryscreen_procreate_too_large">This Procreate canvas is too large for this device</string>
     <string name="galleryscreen_file_could_not_be_read">That file could not be read, or it is too large</string>
