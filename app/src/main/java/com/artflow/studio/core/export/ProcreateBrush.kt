@@ -138,4 +138,7 @@ internal object ProcreateBlendModes {
         )
 
     fun of(number: Int): BlendMode? = MODES[number]
+
+    /** The number Procreate stores for [mode]; modes it has no number for are written as Normal. */
+    fun numberOf(mode: BlendMode): Int = MODES.entries.firstOrNull { it.value == mode }?.key ?: 0
 }

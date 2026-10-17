@@ -1,5 +1,7 @@
 package com.artflow.studio.core.export
 
+import java.io.ByteArrayOutputStream
+
 /**
  * LZ4 block decompression (the raw block format, without frame headers), as USD crate files and
  * Procreate's tiles store data. Every read and write is bounds-checked, so damaged data raises an
@@ -59,6 +61,92 @@ object Lz4 {
     }
 
     /**
+     * Compresses [source] into one raw LZ4 block, the format [decompress] reads: a greedy match finder over a
+     * hash of 4-byte groups (the reference "fast" strategy). The last five bytes are always literals and no
+     * match starts in the last twelve, as the format requires, so standard decoders accept the output.
+     */
+    fun compress(source: ByteArray): ByteArray {
+        val out = ByteArrayOutputStream(source.size / 2 + 16)
+        val anchor = if (source.size >= MIN_INPUT) writeMatches(source, out) else 0
+        writeSequence(out, source, anchor, source.size, 0, 0)
+        return out.toByteArray()
+    }
+
+    /** Writes a sequence for every match found; returns where the literals after the last match start. */
+    private fun writeMatches(
+        source: ByteArray,
+        out: ByteArrayOutputStream,
+    ): Int {
+        val table = IntArray(1 shl HASH_BITS) { -1 }
+        val lastMatchStart = source.size - MATCH_START_MARGIN
+        val matchLimit = source.size - LAST_LITERALS
+        var anchor = 0
+        var ip = 0
+        while (ip < lastMatchStart) {
+            val word = littleInt(source, ip)
+            val slot = (word * HASH_MULTIPLIER) ushr (32 - HASH_BITS)
+            val candidate = table[slot]
+            table[slot] = ip
+            if (candidate < 0 || ip - candidate > MAX_DISTANCE || littleInt(source, candidate) != word) {
+                ip++
+                continue
+            }
+            val length = matchLength(source, candidate, ip, matchLimit)
+            writeSequence(out, source, anchor, ip, ip - candidate, length)
+            ip += length
+            anchor = ip
+        }
+        return anchor
+    }
+
+    /** How far the bytes at [candidate] and [ip] agree, from the known four, before [limit]. */
+    private fun matchLength(
+        source: ByteArray,
+        candidate: Int,
+        ip: Int,
+        limit: Int,
+    ): Int {
+        var length = MIN_MATCH
+        while (ip + length < limit && source[candidate + length] == source[ip + length]) length++
+        return length
+    }
+
+    /** One sequence: [literals] bytes from [anchor] to [literalEnd], then a match of [length] at [offset] (none when [length] is 0). */
+    private fun writeSequence(
+        out: ByteArrayOutputStream,
+        source: ByteArray,
+        anchor: Int,
+        literalEnd: Int,
+        offset: Int,
+        length: Int,
+    ) {
+        val literals = literalEnd - anchor
+        val hasMatch = length > 0
+        val matchCode = if (hasMatch) length - MIN_MATCH else 0
+        out.write((minOf(literals, LONG) shl 4) or minOf(matchCode, LONG))
+        if (literals >= LONG) writeLength(out, literals - LONG)
+        out.write(source, anchor, literals)
+        if (hasMatch) {
+            out.write(offset and 0xFF)
+            out.write(offset ushr 8)
+            if (matchCode >= LONG) writeLength(out, matchCode - LONG)
+        }
+    }
+
+    /** A length beyond the token's nibble: runs of 255, then the remainder. */
+    private fun writeLength(
+        out: ByteArrayOutputStream,
+        length: Int,
+    ) {
+        var rest = length
+        while (rest >= 255) {
+            out.write(255)
+            rest -= 255
+        }
+        out.write(rest)
+    }
+
+    /**
      * Apple's LZ4 container (Compression framework, as Procreate's ".lz4" tiles use it): "bv41"
      * blocks of LZ4 that may refer back into earlier blocks, "bvx-" stored blocks, and an end
      * marker. Returns the decoded bytes, at most [size].
@@ -111,5 +199,11 @@ object Lz4 {
     private const val DAMAGED = "The compressed data is damaged"
     private const val LONG = 15
     private const val MIN_MATCH = 4
+    private const val MIN_INPUT = 13
+    private const val MATCH_START_MARGIN = 12
+    private const val LAST_LITERALS = 5
+    private const val HASH_BITS = 16
+    private const val HASH_MULTIPLIER = -1640531535 // 0x9E3779B1, the golden-ratio multiplier of the reference codec
+    private const val MAX_DISTANCE = 65535
     private val APPLE_KINDS = byteArrayOf('4'.code.toByte(), 'x'.code.toByte()).toSet()
 }

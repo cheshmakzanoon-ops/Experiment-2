@@ -1,5 +1,8 @@
 package com.artflow.studio.core.export
 
+import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
+
 /**
  * Apple binary property lists ("bplist00") and the keyed archives stored in them (NSKeyedArchiver,
  * as Procreate saves its document description). Plist values come back as Kotlin values: null,
@@ -29,6 +32,164 @@ object BinaryPlist {
         require(offsets.all { it in MAGIC.size until trailer }) { DAMAGED }
         return Reader(bytes, offsets, refSize).read(top.toInt(), 0)
     }
+
+    /**
+     * Writes [value] as a binary property list that [read] (and Apple's readers) accept: null,
+     * Boolean, Int or Long, Double, String, ByteArray, List, Map with String keys, and [Uid]
+     * references. Equal scalars share one object, as Apple's writer does.
+     */
+    fun write(value: Any?): ByteArray {
+        val writer = Writer()
+        val top = writer.add(value)
+        return writer.finish(top)
+    }
+
+    /** One object of the table: a scalar already encoded, or a container whose references are resolved at the end. */
+    private sealed interface Entry
+
+    private class Scalar(
+        val bytes: ByteArray,
+    ) : Entry
+
+    private class Container(
+        val marker: Int,
+        val count: Int,
+        val refs: IntArray,
+    ) : Entry
+
+    private class Writer {
+        private val entries = ArrayList<Entry>()
+        private val shared = HashMap<Any, Int>()
+
+        /** Adds [value] and everything in it; returns its object index. */
+        fun add(value: Any?): Int {
+            val key: Any? =
+                when (value) {
+                    null, is Boolean, is Long, is Double, is String, is Uid -> value ?: NULL
+                    is Int -> value.toLong()
+                    else -> null
+                }
+            if (key != null) shared[key]?.let { return it }
+            val index =
+                when (value) {
+                    null -> scalar(byteArrayOf(0x00))
+                    is Boolean -> scalar(byteArrayOf(if (value) 0x09 else 0x08))
+                    is Int, is Long -> scalar(integer(if (value is Int) value.toLong() else value as Long))
+                    is Double -> scalar(byteArrayOf(0x23) + ByteBuffer.allocate(8).putDouble(value).array())
+                    is String -> scalar(string(value))
+                    is ByteArray -> scalar(sized(0x40, value.size) + value)
+                    is Uid -> scalar(uid(value.index))
+                    is List<*> -> container(0xA0, value.size, value.map { add(it) })
+                    is Map<*, *> ->
+                        container(
+                            0xD0,
+                            value.size,
+                            value.keys.map { add(it) } + value.values.map { add(it) },
+                        )
+                    else -> throw IllegalArgumentException("A ${value::class.simpleName} cannot be written to a property list")
+                }
+            if (key != null) shared[key] = index
+            return index
+        }
+
+        private fun scalar(bytes: ByteArray): Int {
+            entries += Scalar(bytes)
+            return entries.lastIndex
+        }
+
+        private fun container(
+            marker: Int,
+            count: Int,
+            refs: List<Int>,
+        ): Int {
+            entries += Container(marker, count, refs.toIntArray())
+            return entries.lastIndex
+        }
+
+        /** The table with its offsets and trailer, rooted at [top]. */
+        fun finish(top: Int): ByteArray {
+            val refSize = sizeOf(entries.size.toLong() - 1)
+            val body = ByteArrayOutputStream()
+            body.write(MAGIC)
+            val offsets = IntArray(entries.size)
+            for (index in entries.indices) {
+                offsets[index] = body.size()
+                when (val entry = entries[index]) {
+                    is Scalar -> body.write(entry.bytes)
+                    is Container -> {
+                        if (entry.count < 15) {
+                            body.write(entry.marker or entry.count)
+                        } else {
+                            body.write(entry.marker or 0xF)
+                            body.write(integer(entry.count.toLong()))
+                        }
+                        entry.refs.forEach { body.write(number(it.toLong(), refSize)) }
+                    }
+                }
+            }
+            val tableOffset = body.size()
+            val offsetSize = sizeOf(tableOffset.toLong())
+            offsets.forEach { body.write(number(it.toLong(), offsetSize)) }
+            body.write(ByteArray(TRAILER_UNUSED))
+            body.write(offsetSize)
+            body.write(refSize)
+            body.write(number(entries.size.toLong(), 8))
+            body.write(number(top.toLong(), 8))
+            body.write(number(tableOffset.toLong(), 8))
+            return body.toByteArray()
+        }
+
+        private fun integer(value: Long): ByteArray =
+            when {
+                value in 0..0xFF -> byteArrayOf(0x10) + number(value, 1)
+                value in 0..0xFFFF -> byteArrayOf(0x11) + number(value, 2)
+                value in 0..0xFFFFFFFFL -> byteArrayOf(0x12) + number(value, 4)
+                else -> byteArrayOf(0x13) + number(value, 8)
+            }
+
+        private fun string(text: String): ByteArray {
+            val ascii = text.all { it.code < 0x80 }
+            return if (ascii) {
+                sized(0x50, text.length) + text.toByteArray(Charsets.ISO_8859_1)
+            } else {
+                val utf16 = text.toByteArray(Charsets.UTF_16BE)
+                sized(0x60, utf16.size / 2) + utf16
+            }
+        }
+
+        private fun uid(index: Int): ByteArray {
+            val size = sizeOf(index.toLong())
+            return byteArrayOf((0x80 or (size - 1)).toByte()) + number(index.toLong(), size)
+        }
+
+        /** A marker with its length: inline when short, else as a separate integer. */
+        private fun sized(
+            marker: Int,
+            length: Int,
+        ): ByteArray =
+            if (length < 15) {
+                byteArrayOf((marker or length).toByte())
+            } else {
+                byteArrayOf((marker or 0xF).toByte()) + integer(length.toLong())
+            }
+
+        private object NULL
+    }
+
+    /** The fewest bytes, from 1 to 8, that hold [value] unsigned. */
+    private fun sizeOf(value: Long): Int {
+        var size = 1
+        while (size < 8 && value ushr (8 * size) != 0L) size++
+        return size
+    }
+
+    /** [value] as [size] big-endian bytes (the low bytes when it is wider). */
+    private fun number(
+        value: Long,
+        size: Int,
+    ): ByteArray = ByteArray(size) { k -> (value ushr (8 * (size - 1 - k))).toByte() }
+
+    private const val TRAILER_UNUSED = 6
 
     private class Reader(
         val bytes: ByteArray,
@@ -176,5 +337,46 @@ class KeyedArchive(
 
     private companion object {
         const val NULL = "\$null"
+    }
+}
+
+/**
+ * Builds an NSKeyedArchiver archive that [KeyedArchive] reads: objects go in one flat list and refer to each
+ * other by [BinaryPlist.Uid], with the list's first entry the null object, as Apple's archiver writes them.
+ */
+class KeyedArchiveBuilder {
+    private val objects = arrayListOf<Any?>("\$null")
+    private val classes = HashMap<String, BinaryPlist.Uid>()
+
+    /** Adds [value] as an object and returns the reference to it. */
+    fun add(value: Any?): BinaryPlist.Uid {
+        objects += value
+        return BinaryPlist.Uid(objects.lastIndex)
+    }
+
+    /** The class description for [name], added once. */
+    fun classOf(name: String): BinaryPlist.Uid =
+        classes.getOrPut(name) { add(mapOf("\$classname" to name, "\$classes" to listOf(name, "NSObject"))) }
+
+    /** An object of class [className] whose [fields] may hold references from this builder. */
+    fun instance(
+        className: String,
+        fields: Map<String, Any?>,
+    ): BinaryPlist.Uid = add(mapOf("\$class" to classOf(className)) + fields)
+
+    /** An NSMutableArray of [items]. */
+    fun array(items: List<BinaryPlist.Uid>): BinaryPlist.Uid = add(mapOf("\$class" to classOf("NSMutableArray"), "NS.objects" to items))
+
+    /** The archive as a binary property list, with [root] as its top object. */
+    fun encode(root: Map<String, Any?>): ByteArray {
+        val rootRef = add(root)
+        return BinaryPlist.write(
+            mapOf(
+                "\$archiver" to "NSKeyedArchiver",
+                "\$version" to 100_000L,
+                "\$top" to mapOf("root" to rootRef),
+                "\$objects" to objects.toList(),
+            ),
+        )
     }
 }

@@ -530,7 +530,10 @@ object ProcreateReader {
     private const val MAX_TILE = 4096
     private const val DEFAULT_DPI = 132
     private const val MAX_DPI = 10_000
-    private const val MAX_NESTING = 32
+
+    /** How many groups deep a document may nest; [ProcreateWriter] refuses deeper trees. */
+    const val MAX_NESTING = 32
+
     private const val COLOUR_BYTES = 16
     private const val WHITE = -1
     private const val CELLS = 16
