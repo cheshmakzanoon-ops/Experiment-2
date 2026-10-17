@@ -28,7 +28,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-/** Share the brush being edited as an `.artbrush` file, or import brushes (ArtFlow, Procreate or Photoshop). */
+/** Share the brush being edited as an `.artbrush` or Procreate `.brush` file, or import brushes (ArtFlow, Procreate or Photoshop). */
 @Composable
 internal fun BrushFileButtons(
     parameters: BrushParams,
@@ -84,6 +84,21 @@ internal fun BrushFileButtons(
             }
         }
     }, enabled = enabled) { Text(stringResource(R.string.export_share)) }
+    TextButton(onClick = {
+        scope.launch {
+            val name = StudioBrushes.presets.firstOrNull { it.parameters == parameters }?.name ?: "Custom brush"
+            val file =
+                withContext(Dispatchers.IO) {
+                    runCatching {
+                        val directory = File(context.filesDir, "exports/brushes").apply { mkdirs() }
+                        File(directory, BrushFiles.fileName(name, PROCREATE_BRUSH_EXTENSION)).apply {
+                            writeBytes(BrushArchives.procreateBrush(SavedBrush("shared", name, parameters)))
+                        }
+                    }.getOrNull()
+                }
+            if (file == null) onFailure("The brush could not be shared") else runCatching { share(context, file) }
+        }
+    }, enabled = enabled) { Text("Share for Procreate") }
     TextButton(
         onClick = { runCatching { picker.launch("*/*") } },
         enabled = enabled,
@@ -116,6 +131,7 @@ private fun importAbr(
 }
 
 private const val MAX_ARCHIVE_BYTES = 64 * 1024 * 1024
+private const val PROCREATE_BRUSH_EXTENSION = "brush"
 
 /** Stores the file's images under their content identities and points the brushes at them. */
 private fun importBrushes(
