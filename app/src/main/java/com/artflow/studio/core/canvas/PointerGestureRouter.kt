@@ -92,8 +92,10 @@ class PointerGestureRouter(
     }
 
     /** Two or three fingers resting still since the touch began, else 0: Procreate's rapid undo and redo. */
-    fun heldFingers(): Int =
-        if (Gesture.HOLD_RAPID_UNDO_REDO in enabled && mode == Mode.NAVIGATION && tapEligible && maxPointers in 2..3) maxPointers else 0
+    fun heldFingers(): Int {
+        if (Gesture.HOLD_RAPID_UNDO_REDO !in enabled) return 0
+        return if (mode == Mode.NAVIGATION && tapEligible && maxPointers in 2..3) maxPointers else 0
+    }
 
     /** Procreate's quick pinch to fit: a fast pinch that closes well below its start scale, while the gesture is on. */
     fun quickPinchRecognised(
