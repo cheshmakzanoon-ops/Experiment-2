@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
@@ -101,6 +102,12 @@ class BrushLibraryViewModel
         fun delete(id: String) = edit { store.delete(id) }
 
         fun importAll(brushes: List<SavedBrush>) = edit { store.importAll(brushes) }
+
+        /** Imports once the library has loaded and no other change is running; a file opened at launch can arrive first. */
+        suspend fun importWhenReady(brushes: List<SavedBrush>) {
+            state.first { !it.loading && !it.busy }
+            importAll(brushes)
+        }
 
         private fun edit(operation: suspend () -> Unit) {
             if (mutableState.value.loading || mutableState.value.busy) return

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="incoming_files_wait_for_gallery">ArtFlow will open this file from the gallery. Close the artwork to continue.</string>
+    <string name="incoming_file_unknown">ArtFlow cannot open that kind of file</string>
+    <string name="incoming_file_unreadable">That file could not be read</string>
+    <string name="incoming_brushes_added">Added %1$d brushes to the library</string>
+    <string name="incoming_palette_added">Added the palette %1$s</string>
+</resources>

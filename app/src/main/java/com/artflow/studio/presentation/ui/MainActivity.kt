@@ -1,9 +1,11 @@
 package com.artflow.studio.presentation.ui
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.KeyboardShortcutGroup
 import android.view.Menu
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
@@ -32,6 +34,8 @@ class MainActivity : ComponentActivity() {
         // window theme before the first frame so insets, system bars and dialogs are correct.
         setTheme(R.style.Theme_ArtFlow)
         super.onCreate(savedInstanceState)
+        // A recreated activity must not import the file that started it a second time.
+        if (savedInstanceState == null) acceptFiles(intent)
         setContent {
             val viewModel: MainViewModel = hiltViewModel()
             val settings by viewModel.settings.collectAsState()
@@ -43,6 +47,21 @@ class MainActivity : ComponentActivity() {
                     ArtFlowApp(viewModel = viewModel)
                 }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        acceptFiles(intent)
+    }
+
+    /** Queues files opened from other apps; while an artwork is open they wait for the gallery, and the user is told. */
+    private fun acceptFiles(intent: Intent?) {
+        val received = IncomingFiles.offer(intent)
+        // The editor registers as the shortcut host, so a registered host means an artwork is open.
+        if (received > 0 && ShortcutHost.handler != null) {
+            Toast.makeText(this, R.string.incoming_files_wait_for_gallery, Toast.LENGTH_LONG).show()
         }
     }
 

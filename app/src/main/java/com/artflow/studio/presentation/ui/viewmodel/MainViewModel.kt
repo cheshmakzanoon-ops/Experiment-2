@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.artflow.studio.core.canvas.CanvasOperations
+import com.artflow.studio.core.color.Palette
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.domain.model.Project
 import com.artflow.studio.domain.model.settings.AccentChoice
@@ -225,6 +226,16 @@ class MainViewModel
                 val id = projectRepository.importPackage(bytes)
                 storageBytes = withContext(Dispatchers.IO) { storage.totalStorageBytes() }
                 onImported(id)
+            }
+        }
+
+        /** Saves colours as a new custom palette, for a swatch file opened from another app. */
+        fun addPalette(
+            name: String,
+            colors: List<Int>,
+        ) {
+            viewModelScope.launch(galleryErrors) {
+                settingsRepository.addPalette(Palette(id = System.currentTimeMillis(), name = name, colors = colors, category = "Custom"))
             }
         }
 

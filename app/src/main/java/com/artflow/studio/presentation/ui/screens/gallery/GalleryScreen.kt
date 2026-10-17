@@ -2,6 +2,7 @@
 
 package com.artflow.studio.presentation.ui.screens.gallery
 
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -31,21 +32,14 @@ import coil.compose.AsyncImage
 import com.artflow.studio.R
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.color.ColorProfile
-import com.artflow.studio.core.export.PsdCodec
-import com.artflow.studio.core.pixels.PixelBuffer
-import com.artflow.studio.core.three.ModelPackage
-import com.artflow.studio.core.three.ObjParser
-import com.artflow.studio.core.three.TextureAtlas
 import com.artflow.studio.data.export.PendingImports
-import com.artflow.studio.data.export.ProcreateImport
-import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.Project
 import com.artflow.studio.domain.model.settings.GallerySort
+import com.artflow.studio.presentation.ui.IncomingFiles
+import com.artflow.studio.presentation.ui.viewmodel.BrushLibraryViewModel
 import com.artflow.studio.presentation.ui.viewmodel.MainUiState
 import com.artflow.studio.presentation.ui.viewmodel.MainViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -88,11 +82,25 @@ fun GalleryScreen(
         if (projects.none { it.stack == stack }) openStack = null
     }
     val context = LocalContext.current
-    val photoImport = rememberPhotoImport(viewModel, snackbarHostState, onNavigateToCanvas)
-    val psdImport = rememberPsdImport(viewModel, snackbarHostState, onNavigateToCanvas)
-    val procreateImport = rememberProcreateImport(viewModel, snackbarHostState, onNavigateToCanvas)
-    val packageImport = rememberPackageImport(viewModel, snackbarHostState, onNavigateToCanvas)
-    val modelImport = rememberModelImport(viewModel, snackbarHostState, onNavigateToCanvas)
+    val brushLibrary: BrushLibraryViewModel = hiltViewModel()
+    val imports =
+        remember(context, viewModel, onNavigateToCanvas) {
+            GalleryImports(
+                context = context,
+                scope = scope,
+                viewModel = viewModel,
+                say = { snackbarHostState.showSnackbar(it) },
+                addBrushes = brushLibrary::importWhenReady,
+                openArtwork = onNavigateToCanvas,
+            )
+        }
+    val photoImport = rememberPhotoPicker(imports::photo)
+    val psdImport = rememberDocumentPicker(arrayOf("image/vnd.adobe.photoshop", "application/octet-stream"), imports::psd)
+    val procreateImport = rememberDocumentPicker(arrayOf("application/octet-stream", "application/zip", "*/*"), imports::procreate)
+    val packageImport = rememberDocumentPicker(arrayOf("application/octet-stream", "application/zip"), imports::artwork)
+    val modelImport = rememberDocumentPicker(arrayOf("*/*"), imports::model)
+    // Files other apps open or share with ArtFlow are imported here, as the pickers' files are.
+    LaunchedEffect(imports) { IncomingFiles.files.collect { imports.open(it) } }
 
     LaunchedEffect(Unit) {
         viewModel.messageFlow.collect { snackbarHostState.showSnackbar(it) }
@@ -281,91 +289,6 @@ fun GalleryScreen(
     }
 }
 
-/** Opens a layered Photoshop document as a new artwork of the same size, keeping its layers. */
-@Composable
-private fun rememberPsdImport(
-    viewModel: MainViewModel,
-    snackbarHostState: SnackbarHostState,
-    onNavigateToCanvas: (Long) -> Unit,
-): () -> Unit {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val launcher =
-        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            if (uri == null) return@rememberLauncherForActivityResult
-            scope.launch {
-                val opened =
-                    withContext(Dispatchers.IO) {
-                        runCatching {
-                            val bytes = requireNotNull(context.contentResolver.openInputStream(uri)?.use { it.readBytes() })
-                            val document = requireNotNull(PsdCodec.read(bytes))
-                            bytes to document
-                        }.getOrNull()
-                    }
-                if (opened == null) {
-                    snackbarHostState.showSnackbar(context.getString(R.string.galleryscreen_not_a_photoshop_document))
-                    return@launch
-                }
-                val (bytes, document) = opened
-                viewModel.createProject("Imported PSD", null, document.width, document.height, document.dpi) { id ->
-                    PendingImports.putPsd(id, bytes)
-                    scope.launch { onNavigateToCanvas(id) }
-                }
-            }
-        }
-    return { runCatching { launcher.launch(arrayOf("image/vnd.adobe.photoshop", "application/octet-stream")) } }
-}
-
-/**
- * Opens a Procreate document as a new artwork of the same size, with its layers, groups, blend
- * modes, masks and background colour.
- */
-@Composable
-private fun rememberProcreateImport(
-    viewModel: MainViewModel,
-    snackbarHostState: SnackbarHostState,
-    onNavigateToCanvas: (Long) -> Unit,
-): () -> Unit {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val launcher =
-        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            if (uri == null) return@rememberLauncherForActivityResult
-            scope.launch {
-                val opened =
-                    withContext(Dispatchers.IO) {
-                        runCatching {
-                            requireNotNull(context.contentResolver.openInputStream(uri)) { "That file could not be opened" }.use { input ->
-                                ProcreateImport.open(input, context.cacheDir)
-                            }
-                        }
-                    }
-                val document =
-                    opened.getOrElse { failure ->
-                        // Our own checks explain themselves; anything else means a damaged or unusual file.
-                        val explained = failure is IllegalArgumentException && failure !is NumberFormatException
-                        snackbarHostState.showSnackbar(
-                            failure.message?.takeIf { explained } ?: "That file is not a Procreate document ArtFlow can read",
-                        )
-                        return@launch
-                    }
-                val size = document.document
-                if (!CanvasOperations.isSizeSafe(size.width, size.height)) {
-                    document.close()
-                    snackbarHostState.showSnackbar(context.getString(R.string.galleryscreen_procreate_too_large))
-                    return@launch
-                }
-                val name = size.name?.takeIf { it.isNotBlank() } ?: "Imported Procreate"
-                val dpi = size.dpi.coerceIn(CanvasOperations.MIN_DPI, CanvasOperations.MAX_DPI)
-                viewModel.createProject(name, null, size.width, size.height, dpi) { id ->
-                    PendingImports.putProcreate(id, document)
-                    scope.launch { onNavigateToCanvas(id) }
-                }
-            }
-        }
-    return { runCatching { launcher.launch(arrayOf("application/octet-stream", "application/zip", "*/*")) } }
-}
-
 /** What the gallery's Import menu can bring in, each as a new artwork. */
 private class ImportChoices(
     val photo: () -> Unit,
@@ -374,110 +297,6 @@ private class ImportChoices(
     val artwork: () -> Unit,
     val model: () -> Unit,
 )
-
-/** Opens an OBJ model as a new artwork that is its texture, for 3D painting. */
-@Composable
-private fun rememberModelImport(
-    viewModel: MainViewModel,
-    snackbarHostState: SnackbarHostState,
-    onNavigateToCanvas: (Long) -> Unit,
-): () -> Unit {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val launcher =
-        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            if (uri == null) return@rememberLauncherForActivityResult
-            scope.launch {
-                // An OBJ file, or a zip with the OBJ, its materials and textures.
-                val read =
-                    withContext(Dispatchers.IO) {
-                        runCatching {
-                            val bytes =
-                                requireNotNull(
-                                    context.contentResolver.openInputStream(uri)?.use { it.readBytes() },
-                                )
-                            val contents = ModelPackage.read(bytes)
-                            ObjParser.parse(contents.objText)
-                            // Several textured materials share one artwork, each in its own cell.
-                            val decoded =
-                                contents.textures
-                                    .mapNotNull { (name, image) ->
-                                        BitmapPixelBridge.fromEncodedBytes(image)?.let {
-                                            name to
-                                                it
-                                        }
-                                    }.toMap()
-                            TextureAtlas.pack(contents.objText, decoded, MAX_MODEL_TEXTURE)?.takeIf { decoded.isNotEmpty() }?.let {
-                                it.objText to
-                                    it.image
-                            }
-                                ?: (contents.objText to contents.texture?.let(BitmapPixelBridge::fromEncodedBytes)?.let(::fittedTexture))
-                        }
-                    }
-                read.onFailure { failure ->
-                    // Our own checks explain themselves; anything else means a damaged or unusual file.
-                    val explained =
-                        (failure is IllegalArgumentException || failure is IllegalStateException) && failure !is NumberFormatException
-                    snackbarHostState.showSnackbar(failure.message?.takeIf { explained } ?: "That 3D model could not be read")
-                }
-                val (model, texture) = read.getOrNull() ?: return@launch
-                val width = texture?.width ?: MODEL_TEXTURE
-                val height = texture?.height ?: MODEL_TEXTURE
-                viewModel.createProject("3D model", null, width, height, MODEL_DPI) { id ->
-                    PendingImports.putModel(id, model)
-                    // The model's own texture becomes the first layer to paint over.
-                    texture?.let { PendingImports.put(id, it) }
-                    scope.launch { onNavigateToCanvas(id) }
-                }
-            }
-        }
-    return { runCatching { launcher.launch(arrayOf("*/*")) } }
-}
-
-private const val MODEL_TEXTURE = 2048
-private const val MAX_MODEL_TEXTURE = 4096
-
-/** A model texture scaled down, if needed, so its longest side fits the canvas limit. */
-private fun fittedTexture(texture: PixelBuffer): PixelBuffer {
-    val scale = MAX_MODEL_TEXTURE.toFloat() / maxOf(texture.width, texture.height)
-    if (scale >= 1f) return texture
-    return texture.scaled((texture.width * scale).toInt().coerceAtLeast(1), (texture.height * scale).toInt().coerceAtLeast(1))
-}
-
-private const val MODEL_DPI = 132
-
-/** Opens an `.artflow` file as a new artwork with all its layers, frames and settings. */
-@Composable
-private fun rememberPackageImport(
-    viewModel: MainViewModel,
-    snackbarHostState: SnackbarHostState,
-    onNavigateToCanvas: (Long) -> Unit,
-): () -> Unit {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val launcher =
-        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            if (uri == null) return@rememberLauncherForActivityResult
-            scope.launch {
-                val bytes =
-                    withContext(Dispatchers.IO) {
-                        runCatching {
-                            context.contentResolver.openInputStream(uri)?.use { input ->
-                                input.readBytes().also { require(it.size <= MAX_PACKAGE_BYTES) }
-                            }
-                        }.getOrNull()
-                    }
-                if (bytes == null) {
-                    snackbarHostState.showSnackbar(context.getString(R.string.galleryscreen_file_could_not_be_read))
-                    return@launch
-                }
-                viewModel.importPackage(bytes) { id -> scope.launch { onNavigateToCanvas(id) } }
-            }
-        }
-    return { runCatching { launcher.launch(arrayOf("application/octet-stream", "application/zip")) } }
-}
-
-private const val MAX_PACKAGE_BYTES = 512 * 1024 * 1024
 
 /** The gallery's Import menu: a photo or a layered Photoshop file, each as a new artwork. */
 @Composable
@@ -512,33 +331,20 @@ private fun ImportMenu(choices: ImportChoices) {
     }
 }
 
-/** Opens a photo from the device as a new canvas of the same size. */
+/** A document picker that hands the chosen file to [import]; returns the function that opens it. */
 @Composable
-private fun rememberPhotoImport(
-    viewModel: MainViewModel,
-    snackbarHostState: SnackbarHostState,
-    onNavigateToCanvas: (Long) -> Unit,
+private fun rememberDocumentPicker(
+    types: Array<String>,
+    import: (Uri) -> Unit,
 ): () -> Unit {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val launcher =
-        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-            if (uri == null) return@rememberLauncherForActivityResult
-            scope.launch {
-                val image =
-                    withContext(Dispatchers.IO) {
-                        runCatching { BitmapPixelBridge.decodeUri(context.contentResolver, uri) }.getOrNull()
-                    }
-                if (image == null) {
-                    snackbarHostState.showSnackbar(context.getString(R.string.galleryscreen_image_could_not_be_opened))
-                    return@launch
-                }
-                viewModel.createProject("Imported photo", null, image.width, image.height, 72) { id ->
-                    PendingImports.put(id, image)
-                    scope.launch { onNavigateToCanvas(id) }
-                }
-            }
-        }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) import(uri) }
+    return { runCatching { launcher.launch(types) } }
+}
+
+/** The photo picker, which lists the device's photo apps first. */
+@Composable
+private fun rememberPhotoPicker(import: (Uri) -> Unit): () -> Unit {
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> if (uri != null) import(uri) }
     return { runCatching { launcher.launch("image/*") } }
 }
 
