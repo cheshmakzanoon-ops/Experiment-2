@@ -10,6 +10,8 @@ import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.SavedBrush
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.util.SortedMap
 import java.util.zip.ZipInputStream
 
 /**
@@ -67,6 +69,33 @@ object BrushArchives {
         bytes: ByteArray,
         decode: (ByteArray) -> PixelBuffer?,
     ): List<Imported> {
+        val found =
+            try {
+                filesByFolder(bytes)
+            } catch (damaged: IOException) {
+                // A truncated or corrupt zip is refused the same way as any other damaged brush file.
+                throw IllegalArgumentException("This brush file is damaged", damaged)
+            }
+        // A set lists its brush folders in library order; anything it leaves out follows.
+        val listed = found[""]?.get(SET)?.let(::listedFolders).orEmpty()
+        val folders = listed.filter { it in found } + found.keys.filter { it !in listed }
+        val brushes =
+            folders
+                .mapNotNull { found[it] }
+                .map { files ->
+                    val settings = files[SETTINGS]?.let(::settings)
+                    Imported(
+                        files[SHAPE]?.let(decode)?.let { tile(it, settings?.shapeInverted == true) },
+                        files[GRAIN]?.let(decode)?.let { tile(it, settings?.grainInverted == true) },
+                        settings,
+                    )
+                }.filter { it.shape != null || it.grain != null || it.settings != null }
+        require(brushes.isNotEmpty()) { "No brushes were found in this file" }
+        return brushes
+    }
+
+    /** The brush files of the archive by folder, the brushes' images and settings under their kinds. */
+    private fun filesByFolder(bytes: ByteArray): SortedMap<String, MutableMap<String, ByteArray>> {
         val found = sortedMapOf<String, MutableMap<String, ByteArray>>()
         ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
             var entries = 0
@@ -89,22 +118,7 @@ object BrushArchives {
                 entry = zip.nextEntry
             }
         }
-        // A set lists its brush folders in library order; anything it leaves out follows.
-        val listed = found[""]?.get(SET)?.let(::listedFolders).orEmpty()
-        val folders = listed.filter { it in found } + found.keys.filter { it !in listed }
-        val brushes =
-            folders
-                .mapNotNull { found[it] }
-                .map { files ->
-                    val settings = files[SETTINGS]?.let(::settings)
-                    Imported(
-                        files[SHAPE]?.let(decode)?.let { tile(it, settings?.shapeInverted == true) },
-                        files[GRAIN]?.let(decode)?.let { tile(it, settings?.grainInverted == true) },
-                        settings,
-                    )
-                }.filter { it.shape != null || it.grain != null || it.settings != null }
-        require(brushes.isNotEmpty()) { "No brushes were found in this file" }
-        return brushes
+        return found
     }
 
     /** The brush's settings, or null when its archive cannot be read (the images still come in). */

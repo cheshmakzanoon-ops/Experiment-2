@@ -4,6 +4,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -59,6 +60,22 @@ object ArtflowPackage {
         bytes: ByteArray,
         maxTotalBytes: Long = MAX_TOTAL_BYTES,
     ): Contents {
+        val (name, files) =
+            try {
+                unzip(bytes, maxTotalBytes)
+            } catch (damaged: IOException) {
+                // A truncated or corrupt zip is refused the same way as any other damaged artwork.
+                throw IllegalArgumentException("This artwork file is damaged", damaged)
+            }
+        require(name != null && DOCUMENT in files) { "This is not an ArtFlow artwork" }
+        return Contents(name.ifBlank { null } ?: "Imported artwork", files)
+    }
+
+    /** The marker's name and the package's files, in order, each within its size limits. */
+    private fun unzip(
+        bytes: ByteArray,
+        maxTotalBytes: Long,
+    ): Pair<String?, Map<String, ByteArray>> {
         var name: String? = null
         val files = linkedMapOf<String, ByteArray>()
         var total = 0L
@@ -80,8 +97,7 @@ object ArtflowPackage {
                 }
             }
         }
-        require(name != null && DOCUMENT in files) { "This is not an ArtFlow artwork" }
-        return Contents(name?.ifBlank { null } ?: "Imported artwork", files)
+        return name to files
     }
 
     private fun readBounded(
