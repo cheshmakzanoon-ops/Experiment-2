@@ -245,6 +245,7 @@ class CanvasViewModel
                             touchHoldEyedropper = stored.touchHoldEyedropper,
                             dynamicBrushScaling = stored.dynamicBrushScaling,
                             stylus = stored.stylusButtons(),
+                            haptics = stored.haptics,
                         )
                 }
             }

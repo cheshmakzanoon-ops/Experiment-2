@@ -154,6 +154,8 @@ data class EditorInput(
     val dynamicBrushScaling: Boolean = false,
     /** Prefs > Stylus: what the stylus buttons and the eraser end do. */
     val stylus: StylusButtons = StylusButtons(),
+    /** Settings > Haptics: the vibration when a hold-to-sample or QuickShape locks on, off when the switch is off. */
+    val haptics: Boolean = true,
 )
 
 /** Which touch gestures are active, from Prefs > Gesture controls. Each one can be switched off. */
@@ -1887,7 +1889,7 @@ class ArtFlowCanvasView
             previewPoints.clear()
             onDragPreview?.invoke(null)
             startSampling()
-            performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+            if (input.haptics) performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
             pickColor(holdCanvasX, holdCanvasY)
         }
 
@@ -2081,7 +2083,7 @@ class ArtFlowCanvasView
             quickShapePressure = pressure
             shape.points.drop(1).forEach { (px, py) -> canvasRepository.continueStroke(currentStrokeId, px, py, pressure) }
             updateLiveStroke()
-            performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+            if (input.haptics) performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
             onStatusMessage?.invoke("QuickShape: ${shape.kind.label} — keep holding and drag to adjust")
         }
 
