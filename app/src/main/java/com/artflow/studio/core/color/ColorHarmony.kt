@@ -432,6 +432,46 @@ object ColorHarmony {
         }
     }
 
+    /** How a channel is shown and typed: the number is the channel value times [scale], followed by [suffix]. */
+    data class ChannelDisplay(
+        val scale: Float,
+        val suffix: String,
+    )
+
+    /** Hue reads in degrees, saturation, brightness and CMYK inks in percent, RGB as 0-255. */
+    fun channelDisplay(
+        mode: ColorMode,
+        index: Int,
+    ): ChannelDisplay =
+        when (mode) {
+            ColorMode.HSV -> if (index == 0) ChannelDisplay(1f, "\u00B0") else ChannelDisplay(100f, "%")
+            ColorMode.RGB, ColorMode.HEX -> ChannelDisplay(1f, "")
+            ColorMode.CMYK -> ChannelDisplay(100f, "%")
+        }
+
+    /** The readout for one channel value, e.g. `87%` or `210\u00B0`. */
+    fun formatChannelValue(
+        mode: ColorMode,
+        index: Int,
+        value: Float,
+    ): String {
+        val display = channelDisplay(mode, index)
+        return "${(value * display.scale).roundToInt()}${display.suffix}"
+    }
+
+    /** The channel value (in the slider's units) a user typed, or null when it is not a number inside the channel's range. */
+    fun parseChannelValue(
+        mode: ColorMode,
+        index: Int,
+        text: String,
+    ): Float? {
+        val display = channelDisplay(mode, index)
+        val typed = text.trim().removeSuffix(display.suffix).trim().replace(',', '.').toFloatOrNull() ?: return null
+        val value = typed / display.scale
+        val range = channelRange(mode, index)
+        return value.takeIf { it.isFinite() && it >= range.start && it <= range.endInclusive }
+    }
+
     /** Ranges for each channel slider. */
     fun channelRange(
         mode: ColorMode,

@@ -197,7 +197,8 @@ private fun ValueTab(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            ColorHarmony.ColorMode.entries.forEach { entry ->
+            // The Hex field below is always shown, so Hex is not a separate mode with sliders of its own.
+            ColorHarmony.ColorMode.entries.filter { it != ColorHarmony.ColorMode.HEX }.forEach { entry ->
                 FilterChip(
                     selected = mode == entry,
                     onClick = { onMode(entry) },
@@ -210,6 +211,8 @@ private fun ValueTab(
                 label = label,
                 value = value,
                 range = ColorHarmony.channelRange(mode, index),
+                readout = ColorHarmony.formatChannelValue(mode, index, value),
+                parse = { text -> ColorHarmony.parseChannelValue(mode, index, text) },
                 onChange = { newValue -> onColorSelected(ColorHarmony.withChannel(color, mode, index, newValue)) },
             )
         }
@@ -231,8 +234,11 @@ private fun ChannelSlider(
     label: String,
     value: Float,
     range: ClosedFloatingPointRange<Float>,
+    readout: String,
+    parse: (String) -> Float?,
     onChange: (Float) -> Unit,
 ) {
+    var typing by remember { mutableStateOf(false) }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(label, modifier = Modifier.width(34.dp), style = MaterialTheme.typography.labelMedium)
         Slider(
@@ -241,12 +247,46 @@ private fun ChannelSlider(
             valueRange = range,
             modifier = Modifier.weight(1f),
         )
-        Text(
-            text = value.roundToInt().toString(),
-            modifier = Modifier.width(40.dp),
-            style = MaterialTheme.typography.labelSmall,
-        )
+        // Tap the number to type an exact value, as in Procreate's Value tab.
+        TextButton(onClick = { typing = true }, contentPadding = PaddingValues(horizontal = 4.dp), modifier = Modifier.width(56.dp)) {
+            Text(text = readout, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+        }
     }
+    if (typing) {
+        ChannelValueDialog(label, readout, parse, onDismiss = { typing = false }) {
+            onChange(it)
+            typing = false
+        }
+    }
+}
+
+@Composable
+private fun ChannelValueDialog(
+    label: String,
+    current: String,
+    parse: (String) -> Float?,
+    onDismiss: () -> Unit,
+    onValue: (Float) -> Unit,
+) {
+    var text by remember { mutableStateOf(current) }
+    val parsed = parse(text)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(label) },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it.take(8) },
+                singleLine = true,
+                isError = parsed == null,
+                supportingText = { if (parsed == null) Text(stringResource(R.string.color_value_invalid)) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { parsed?.let(onValue) }),
+            )
+        },
+        confirmButton = { TextButton(onClick = { parsed?.let(onValue) }, enabled = parsed != null) { Text(stringResource(R.string.ok)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
 }
 
 @Composable
