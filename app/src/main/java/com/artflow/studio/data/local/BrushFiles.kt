@@ -47,13 +47,16 @@ object BrushFiles {
         return BrushLibraryCodec.decode(file.library) to images
     }
 
-    /** A file name for [name] that is safe on every platform. */
-    fun fileName(name: String): String =
+    /** A file name for [name] that is safe on every platform, with [extension] (ArtFlow's `.artbrush` by default). */
+    fun fileName(
+        name: String,
+        extension: String = EXTENSION,
+    ): String =
         name
             .filter { it.isLetterOrDigit() || it in " -_" }
             .trim()
             .ifEmpty { "Brush" }
-            .take(MAX_NAME) + ".$EXTENSION"
+            .take(MAX_NAME) + ".$extension"
 
     private const val FORMAT = "artflow-brush-1"
     private const val MAX_NAME = 60
