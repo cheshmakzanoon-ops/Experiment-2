@@ -231,6 +231,16 @@ class SettingsRepositoryImpl
                 KEY_SCRUB_CLEAR to settings.scrubToClear.toString(),
                 KEY_SWIPE_PASTE to settings.swipeCopyPaste.toString(),
                 KEY_FOUR_FINGER to settings.fourFingerFullScreen.toString(),
+                KEY_TWO_FINGER_UNDO to settings.twoFingerTapUndo.toString(),
+                KEY_THREE_FINGER_REDO to settings.threeFingerTapRedo.toString(),
+                KEY_HOLD_RAPID to settings.holdRapidUndoRedo.toString(),
+                KEY_PINCH_NAV to settings.pinchNavigation.toString(),
+                KEY_QUICK_PINCH to settings.quickPinchFit.toString(),
+                KEY_TOUCH_HOLD_EYEDROPPER to settings.touchHoldEyedropper.toString(),
+                KEY_LAYER_OPACITY to settings.layerTwoFingerOpacity.toString(),
+                KEY_LAYER_ALPHA to settings.layerTwoFingerAlphaLock.toString(),
+                KEY_LAYER_SELECT to settings.layerTwoFingerSelect.toString(),
+                KEY_MODIFY_QUICK_MENU to settings.modifyHoldQuickMenu.toString(),
                 KEY_TIMELAPSE_SIDE to settings.timelapseMaxSide.toString(),
                 KEY_DYNAMIC_BRUSH to settings.dynamicBrushScaling.toString(),
                 KEY_QUICK_MENU to settings.quickMenu.joinToString("|"),
@@ -302,6 +312,16 @@ class SettingsRepositoryImpl
                 scrubToClear = stored.flag(KEY_SCRUB_CLEAR, defaults.scrubToClear),
                 swipeCopyPaste = stored.flag(KEY_SWIPE_PASTE, defaults.swipeCopyPaste),
                 fourFingerFullScreen = stored.flag(KEY_FOUR_FINGER, defaults.fourFingerFullScreen),
+                twoFingerTapUndo = stored.flag(KEY_TWO_FINGER_UNDO, defaults.twoFingerTapUndo),
+                threeFingerTapRedo = stored.flag(KEY_THREE_FINGER_REDO, defaults.threeFingerTapRedo),
+                holdRapidUndoRedo = stored.flag(KEY_HOLD_RAPID, defaults.holdRapidUndoRedo),
+                pinchNavigation = stored.flag(KEY_PINCH_NAV, defaults.pinchNavigation),
+                quickPinchFit = stored.flag(KEY_QUICK_PINCH, defaults.quickPinchFit),
+                touchHoldEyedropper = stored.flag(KEY_TOUCH_HOLD_EYEDROPPER, defaults.touchHoldEyedropper),
+                layerTwoFingerOpacity = stored.flag(KEY_LAYER_OPACITY, defaults.layerTwoFingerOpacity),
+                layerTwoFingerAlphaLock = stored.flag(KEY_LAYER_ALPHA, defaults.layerTwoFingerAlphaLock),
+                layerTwoFingerSelect = stored.flag(KEY_LAYER_SELECT, defaults.layerTwoFingerSelect),
+                modifyHoldQuickMenu = stored.flag(KEY_MODIFY_QUICK_MENU, defaults.modifyHoldQuickMenu),
                 timelapseMaxSide =
                     stored[KEY_TIMELAPSE_SIDE]?.toIntOrNull()?.takeIf { it in TIMELAPSE_SIDES } ?: defaults.timelapseMaxSide,
                 dynamicBrushScaling = stored.flag(KEY_DYNAMIC_BRUSH, defaults.dynamicBrushScaling),
@@ -376,6 +396,16 @@ class SettingsRepositoryImpl
             private const val KEY_SCRUB_CLEAR = "gesture.scrubToClear"
             private const val KEY_SWIPE_PASTE = "gesture.swipeCopyPaste"
             private const val KEY_FOUR_FINGER = "gesture.fourFingerFullScreen"
+            private const val KEY_TWO_FINGER_UNDO = "gesture.twoFingerTapUndo"
+            private const val KEY_THREE_FINGER_REDO = "gesture.threeFingerTapRedo"
+            private const val KEY_HOLD_RAPID = "gesture.holdRapidUndoRedo"
+            private const val KEY_PINCH_NAV = "gesture.pinchNavigation"
+            private const val KEY_QUICK_PINCH = "gesture.quickPinchFit"
+            private const val KEY_TOUCH_HOLD_EYEDROPPER = "gesture.touchHoldEyedropper"
+            private const val KEY_LAYER_OPACITY = "gesture.layerTwoFingerOpacity"
+            private const val KEY_LAYER_ALPHA = "gesture.layerTwoFingerAlphaLock"
+            private const val KEY_LAYER_SELECT = "gesture.layerTwoFingerSelect"
+            private const val KEY_MODIFY_QUICK_MENU = "gesture.modifyHoldQuickMenu"
             private const val KEY_TIMELAPSE_SIDE = "timelapse.maxSide"
             private const val KEY_DYNAMIC_BRUSH = "brush.dynamicScaling"
 

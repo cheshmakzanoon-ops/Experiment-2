@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.artflow.studio.core.animation.AnimationTimeline
 import com.artflow.studio.core.canvas.CanvasOperations
+import com.artflow.studio.core.canvas.TwoFingerLayerGesture
 import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.PixelBuffer
@@ -86,6 +87,8 @@ data class LayerRowActions(
     val onOpacityMode: (Long) -> Unit = {},
     /** Two-finger touch and hold: select the layer's contents. */
     val onSelectContents: (Long) -> Unit = {},
+    /** The two-finger layer gestures Prefs > Gesture controls has switched on. */
+    val twoFingerGestures: Set<TwoFingerLayerGesture.Kind> = TwoFingerLayerGesture.Kind.entries.toSet(),
 )
 
 data class LayerStackActions(

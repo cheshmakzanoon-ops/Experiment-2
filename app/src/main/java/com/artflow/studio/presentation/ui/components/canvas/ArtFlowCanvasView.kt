@@ -14,7 +14,6 @@ import com.artflow.studio.core.canvas.MotionFilter
 import com.artflow.studio.core.canvas.PointerGestureRouter
 import com.artflow.studio.core.canvas.PointerPressure
 import com.artflow.studio.core.canvas.PressureSmoother
-import com.artflow.studio.core.canvas.QuickPinch
 import com.artflow.studio.core.canvas.QuickShape
 import com.artflow.studio.core.canvas.StrokePredictor
 import com.artflow.studio.core.canvas.StrokeStabilizer
@@ -149,11 +148,20 @@ data class EditorInput(
     val dynamicBrushScaling: Boolean = false,
 )
 
-/** Which multi-finger shortcuts are active, from Prefs > Gesture controls. */
+/** Which touch gestures are active, from Prefs > Gesture controls. Each one can be switched off. */
 data class GestureControls(
     val scrubToClear: Boolean = true,
     val swipeCopyPaste: Boolean = true,
     val fourFingerFullScreen: Boolean = true,
+    val twoFingerTapUndo: Boolean = true,
+    val threeFingerTapRedo: Boolean = true,
+    val holdRapidUndoRedo: Boolean = true,
+    val pinchNavigation: Boolean = true,
+    val quickPinchFit: Boolean = true,
+    val layerTwoFingerOpacity: Boolean = true,
+    val layerTwoFingerAlphaLock: Boolean = true,
+    val layerTwoFingerSelect: Boolean = true,
+    val modifyHoldQuickMenu: Boolean = true,
 )
 
 /** Brush outline under a hovering stylus, in view pixels. */
@@ -515,6 +523,7 @@ class ArtFlowCanvasView
             val destinationChanged = newInput.tool != input.tool || newInput.strokeDestination != input.strokeDestination
             if (destinationChanged || newInput.fingerPainting != input.fingerPainting) cancelActiveGesture()
             if (destinationChanged) resetLiquifyReference()
+            pointerRouter.enabled = newInput.gestures.canvasGestures()
             val enteringTransform = newInput.tool == ToolType.TRANSFORM && input.tool != ToolType.TRANSFORM
             val leavingTransform = newInput.tool != ToolType.TRANSFORM && input.tool == ToolType.TRANSFORM
             val warpToggled = (newInput.transformMode == TransformQuad.Mode.WARP) != (input.transformMode == TransformQuad.Mode.WARP)
@@ -1283,12 +1292,12 @@ class ArtFlowCanvasView
 
                 PointerGestureRouter.Action.THREE_FINGER_SWIPE_DOWN -> {
                     resetNavigation()
-                    if (input.gestures.swipeCopyPaste) onCopyPasteMenuRequested?.invoke()
+                    onCopyPasteMenuRequested?.invoke()
                 }
 
                 PointerGestureRouter.Action.THREE_FINGER_SCRUB -> {
                     resetNavigation()
-                    if (input.gestures.scrubToClear) onClearLayerRequested?.invoke()
+                    onClearLayerRequested?.invoke()
                 }
 
                 PointerGestureRouter.Action.IGNORE -> {
@@ -1645,18 +1654,21 @@ class ArtFlowCanvasView
             navAnchor = viewToCanvas(navPrevMidX, navPrevMidY)
         }
 
-        /** Taps of two, three or four fingers undo, redo or toggle full screen; a quick pinch fits the canvas. */
+        /**
+         * Taps of two, three or four fingers undo, redo or toggle full screen; a quick pinch fits the canvas.
+         * The router reports only the taps and pinches whose gesture is switched on.
+         */
         private fun finishNavigation(
             tapFingers: Int,
             timeMillis: Long,
         ) {
             resetNavigation()
-            val quickPinch = QuickPinch.isQuickPinch(pinchStartScale, scale, timeMillis - pinchStartTime)
+            val quickPinch = pointerRouter.quickPinchRecognised(pinchStartScale, scale, timeMillis - pinchStartTime)
             pinchStartScale = 0f
             when {
                 tapFingers == 2 -> onUndoRequested?.invoke()
                 tapFingers == 3 -> onRedoRequested?.invoke()
-                tapFingers == 4 -> if (input.gestures.fourFingerFullScreen) onFullscreenRequested?.invoke()
+                tapFingers == 4 -> onFullscreenRequested?.invoke()
                 quickPinch -> animateFitToView()
             }
         }

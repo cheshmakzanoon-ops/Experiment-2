@@ -228,7 +228,6 @@ private fun PrefsTab(
     PrefSwitch("Brush cursor", prefs.brushCursor, actions.onBrushCursor)
     PrefSwitch("Dynamic brush scaling", prefs.dynamicBrushScaling, actions.onDynamicBrushScaling)
     PrefSwitch("QuickShape (hold at the end of a stroke)", prefs.quickShape, actions.onQuickShape)
-    PrefSwitch("Touch and hold for eyedropper", prefs.holdEyedropper, actions.onHoldEyedropper)
     PrefSwitch("Paint with a finger", prefs.fingerPainting, actions.onFingerPainting)
     HorizontalDivider()
     Text("Pressure and Smoothing", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
@@ -261,12 +260,43 @@ private fun PrefsTab(
     HorizontalDivider()
     Text("Gesture controls", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
     val gestures = prefs.gestures
-    PrefSwitch("Three-finger scrub clears the layer", gestures.scrubToClear) { actions.onGestures(gestures.copy(scrubToClear = it)) }
+    val changeGestures = actions.onGestures
+    PrefSwitch("Two-finger tap undoes", gestures.twoFingerTapUndo) {
+        changeGestures(gestures.copy(twoFingerTapUndo = it))
+    }
+    PrefSwitch("Three-finger tap redoes", gestures.threeFingerTapRedo) {
+        changeGestures(gestures.copy(threeFingerTapRedo = it))
+    }
+    PrefSwitch("Hold two or three fingers to repeat undo or redo", gestures.holdRapidUndoRedo) {
+        changeGestures(gestures.copy(holdRapidUndoRedo = it))
+    }
+    PrefSwitch("Pinch, rotate and drag move the canvas", gestures.pinchNavigation) {
+        changeGestures(gestures.copy(pinchNavigation = it))
+    }
+    PrefSwitch("Quick pinch fits the canvas to the screen", gestures.quickPinchFit) {
+        changeGestures(gestures.copy(quickPinchFit = it))
+    }
+    PrefSwitch("Touch and hold for eyedropper", prefs.holdEyedropper, actions.onHoldEyedropper)
+    PrefSwitch("Three-finger scrub clears the layer", gestures.scrubToClear) {
+        changeGestures(gestures.copy(scrubToClear = it))
+    }
     PrefSwitch("Three-finger swipe opens Copy & Paste", gestures.swipeCopyPaste) {
-        actions.onGestures(gestures.copy(swipeCopyPaste = it))
+        changeGestures(gestures.copy(swipeCopyPaste = it))
     }
     PrefSwitch("Four-finger tap toggles full screen", gestures.fourFingerFullScreen) {
-        actions.onGestures(gestures.copy(fourFingerFullScreen = it))
+        changeGestures(gestures.copy(fourFingerFullScreen = it))
+    }
+    PrefSwitch("Layer: two-finger tap, then slide, sets opacity", gestures.layerTwoFingerOpacity) {
+        changeGestures(gestures.copy(layerTwoFingerOpacity = it))
+    }
+    PrefSwitch("Layer: two-finger swipe right toggles Alpha Lock", gestures.layerTwoFingerAlphaLock) {
+        changeGestures(gestures.copy(layerTwoFingerAlphaLock = it))
+    }
+    PrefSwitch("Layer: two-finger touch and hold selects contents", gestures.layerTwoFingerSelect) {
+        changeGestures(gestures.copy(layerTwoFingerSelect = it))
+    }
+    PrefSwitch("Hold the modify button for QuickMenu", gestures.modifyHoldQuickMenu) {
+        changeGestures(gestures.copy(modifyHoldQuickMenu = it))
     }
     HorizontalDivider()
     ActionRow("Full screen", actions.onFullScreen)

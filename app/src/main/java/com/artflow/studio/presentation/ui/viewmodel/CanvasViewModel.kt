@@ -49,6 +49,7 @@ import com.artflow.studio.presentation.ui.components.canvas.EditorInput
 import com.artflow.studio.presentation.ui.components.canvas.GestureControls
 import com.artflow.studio.presentation.ui.components.canvas.SelectionCombineMode
 import com.artflow.studio.presentation.ui.components.canvas.ShapeKind
+import com.artflow.studio.presentation.ui.components.canvas.gestureControls
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -238,7 +239,8 @@ class CanvasViewModel
                             motionExpression = stored.motionExpression,
                             pressureSmoothing = stored.pressureSmoothing,
                             brushCursor = stored.brushCursor,
-                            gestures = GestureControls(stored.scrubToClear, stored.swipeCopyPaste, stored.fourFingerFullScreen),
+                            gestures = stored.gestureControls(),
+                            touchHoldEyedropper = stored.touchHoldEyedropper,
                             dynamicBrushScaling = stored.dynamicBrushScaling,
                         )
                 }
@@ -581,7 +583,10 @@ class CanvasViewModel
 
         fun setQuickShape(enabled: Boolean) = updateInput { it.copy(quickShape = enabled) }
 
-        fun setTouchHoldEyedropper(enabled: Boolean) = updateInput { it.copy(touchHoldEyedropper = enabled) }
+        fun setTouchHoldEyedropper(enabled: Boolean) {
+            updateInput { it.copy(touchHoldEyedropper = enabled) }
+            viewModelScope.launch(editorErrors) { settingsRepository.update { it.copy(touchHoldEyedropper = enabled) } }
+        }
 
         fun setRightHandedInterface(enabled: Boolean) {
             viewModelScope.launch(editorErrors) { settingsRepository.update { it.copy(rightHandedInterface = enabled) } }
@@ -594,6 +599,15 @@ class CanvasViewModel
                         scrubToClear = controls.scrubToClear,
                         swipeCopyPaste = controls.swipeCopyPaste,
                         fourFingerFullScreen = controls.fourFingerFullScreen,
+                        twoFingerTapUndo = controls.twoFingerTapUndo,
+                        threeFingerTapRedo = controls.threeFingerTapRedo,
+                        holdRapidUndoRedo = controls.holdRapidUndoRedo,
+                        pinchNavigation = controls.pinchNavigation,
+                        quickPinchFit = controls.quickPinchFit,
+                        layerTwoFingerOpacity = controls.layerTwoFingerOpacity,
+                        layerTwoFingerAlphaLock = controls.layerTwoFingerAlphaLock,
+                        layerTwoFingerSelect = controls.layerTwoFingerSelect,
+                        modifyHoldQuickMenu = controls.modifyHoldQuickMenu,
                     )
                 }
             }

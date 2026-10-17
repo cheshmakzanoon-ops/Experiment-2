@@ -66,9 +66,10 @@ import com.artflow.studio.presentation.ui.components.canvas.BrushCursor
 import com.artflow.studio.presentation.ui.components.canvas.DragPreview
 import com.artflow.studio.presentation.ui.components.canvas.EditorInput
 import com.artflow.studio.presentation.ui.components.canvas.EyedropperLoupe
-import com.artflow.studio.presentation.ui.components.canvas.GestureControls
 import com.artflow.studio.presentation.ui.components.canvas.ShapeEditState
+import com.artflow.studio.presentation.ui.components.canvas.gestureControls
 import com.artflow.studio.presentation.ui.components.canvas.imageDropTarget
+import com.artflow.studio.presentation.ui.components.canvas.layerGestures
 import com.artflow.studio.presentation.ui.components.color.ColorPanel
 import com.artflow.studio.presentation.ui.components.color.SecondarySwatch
 import com.artflow.studio.presentation.ui.components.editor.ActionsPanel
@@ -564,6 +565,7 @@ fun CanvasScreen(
                                 panel = EditorPanel.NONE
                                 opacityLayer = id
                             },
+                            twoFingerGestures = settings.gestureControls().layerGestures(),
                         ),
                     stackActions =
                         LayerStackActions(
@@ -813,7 +815,7 @@ fun CanvasScreen(
                             input.touchHoldEyedropper,
                             input.fingerPainting,
                             settings.pressureAndSmoothing,
-                            GestureControls(settings.scrubToClear, settings.swipeCopyPaste, settings.fourFingerFullScreen),
+                            settings.gestureControls(),
                             lightInterface = settings.themeMode == ThemeMode.LIGHT,
                             brushCursor = settings.brushCursor,
                             dynamicBrushScaling = settings.dynamicBrushScaling,
@@ -1161,8 +1163,11 @@ fun CanvasScreen(
                             onUndo = viewModel::undo,
                             onRedo = viewModel::redo,
                             onQuickMenu = {
-                                canvasView?.cancelActiveGesture()
-                                quickMenu = true
+                                // Switched off in Prefs > Gesture controls, a long press on modify does nothing.
+                                if (settings.modifyHoldQuickMenu) {
+                                    canvasView?.cancelActiveGesture()
+                                    quickMenu = true
+                                }
                             },
                         ),
                     modifier =

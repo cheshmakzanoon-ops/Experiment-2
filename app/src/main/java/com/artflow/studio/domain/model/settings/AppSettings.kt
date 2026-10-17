@@ -85,6 +85,26 @@ data class AppSettings(
     val swipeCopyPaste: Boolean = true,
     /** Gesture controls: tapping four fingers toggles full screen. */
     val fourFingerFullScreen: Boolean = true,
+    /** Gesture controls: a two-finger tap undoes. */
+    val twoFingerTapUndo: Boolean = true,
+    /** Gesture controls: a three-finger tap redoes. */
+    val threeFingerTapRedo: Boolean = true,
+    /** Gesture controls: holding two or three fingers still keeps undoing or redoing. */
+    val holdRapidUndoRedo: Boolean = true,
+    /** Gesture controls: pinch, rotate and two-finger drag move the canvas. */
+    val pinchNavigation: Boolean = true,
+    /** Gesture controls: a quick pinch that closes fits the canvas to the screen. */
+    val quickPinchFit: Boolean = true,
+    /** Gesture controls: a finger held still samples colour, like Procreate's touch-and-hold eyedropper. */
+    val touchHoldEyedropper: Boolean = true,
+    /** Gesture controls: a two-finger tap on a layer, then a slide, sets its opacity. */
+    val layerTwoFingerOpacity: Boolean = true,
+    /** Gesture controls: a two-finger swipe right on a layer toggles Alpha Lock. */
+    val layerTwoFingerAlphaLock: Boolean = true,
+    /** Gesture controls: a two-finger touch and hold on a layer selects its contents. */
+    val layerTwoFingerSelect: Boolean = true,
+    /** Gesture controls: touching and holding the modify button opens the QuickMenu. */
+    val modifyHoldQuickMenu: Boolean = true,
     /** Longest side, in pixels, of recorded time-lapse frames (720p, 1080p or 1440p). */
     val timelapseMaxSide: Int = 1280,
     /** Brush size follows the zoom so the brush looks the same size on screen. */

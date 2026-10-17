@@ -26,6 +26,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.core.canvas.TwoFingerLayerGesture
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.layer.BlendMode
@@ -70,6 +71,7 @@ internal fun LayerRow(
                 .padding(horizontal = 8.dp, vertical = 2.dp)
                 .twoFingerGestures(
                     key = layer.id,
+                    enabled = actions.twoFingerGestures,
                     onTap = { actions.onOpacityMode(layer.id) },
                     onSwipeRight = { actions.onAlphaLock(layer.id, !layer.isAlphaLocked) },
                     onHold = { actions.onSelectContents(layer.id) },
@@ -173,11 +175,12 @@ private val SWIPE_REVEAL = 56.dp
  */
 private fun Modifier.twoFingerGestures(
     key: Any,
+    enabled: Set<TwoFingerLayerGesture.Kind>,
     onTap: () -> Unit,
     onSwipeRight: () -> Unit,
     onHold: () -> Unit,
 ): Modifier =
-    pointerInput(key) {
+    pointerInput(key, enabled) {
         awaitEachGesture {
             val first = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
             var pointers = 1
@@ -191,22 +194,30 @@ private fun Modifier.twoFingerGestures(
                 // The fingers' average sideways movement.
                 sideways += event.changes.sumOf { it.positionChange().x.toDouble() }.toFloat() / event.changes.size.coerceAtLeast(1)
                 last = event.changes.maxOf { it.uptimeMillis }
-                if (pointers >= 2) event.changes.forEach { it.consume() }
+                // With every two-finger gesture switched off, two fingers belong to the row's own handling.
+                if (enabled.isNotEmpty() && pointers >= 2) event.changes.forEach { it.consume() }
                 if (event.changes.none { it.pressed }) break
             }
-            if (pointers != 2) return@awaitEachGesture
-            val still = travel < viewConfiguration.touchSlop * 2
-            when {
-                sideways > TWO_FINGER_SWIPE_DP.dp.toPx() -> onSwipeRight()
-                still && last - first.uptimeMillis < TWO_FINGER_TAP_MS -> onTap()
-                still && last - first.uptimeMillis >= TWO_FINGER_HOLD_MS -> onHold()
+            val kind =
+                TwoFingerLayerGesture.classify(
+                    fingers = pointers,
+                    travel = travel,
+                    stillSlop = viewConfiguration.touchSlop * 2,
+                    sideways = sideways,
+                    swipeThreshold = TWO_FINGER_SWIPE_DP.dp.toPx(),
+                    durationMs = last - first.uptimeMillis,
+                    enabled = enabled,
+                )
+            when (kind) {
+                TwoFingerLayerGesture.Kind.SWIPE_ALPHA_LOCK -> onSwipeRight()
+                TwoFingerLayerGesture.Kind.TAP_OPACITY -> onTap()
+                TwoFingerLayerGesture.Kind.HOLD_SELECT_CONTENTS -> onHold()
+                null -> Unit
             }
         }
     }
 
 private const val TWO_FINGER_SWIPE_DP = 48
-private const val TWO_FINGER_HOLD_MS = 500L
-private const val TWO_FINGER_TAP_MS = 400L
 
 @Composable
 private fun LayerThumbnail(
