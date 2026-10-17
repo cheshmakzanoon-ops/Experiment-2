@@ -1,5 +1,6 @@
 package com.artflow.studio.core.export
 
+import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.pixels.Channels
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.domain.model.layer.BlendMode
@@ -28,6 +29,9 @@ object PsdCodec {
     private const val COLOR_MODE_CMYK = 4
     private const val DEPTH_8 = 8
     private const val DEPTH_16 = 16
+
+    /** The most channels a PSD may have (the format's limit), which bounds every per-channel allocation. */
+    private const val MAX_CHANNELS = 56
 
     private const val COMPRESSION_RAW = 0
     private const val COMPRESSION_RLE = 1
@@ -340,7 +344,8 @@ object PsdCodec {
         val width = reader.readInt()
         val depth = reader.readShort()
         val colorMode = reader.readShort()
-        if (width <= 0 || height <= 0 || width > 30_000 || height > 30_000) return null
+        if (!CanvasOperations.isSizeSafe(width, height)) return null
+        if (channelCount !in 1..MAX_CHANNELS) return null
         if (colorMode !in setOf(COLOR_MODE_RGB, COLOR_MODE_GRAYSCALE, COLOR_MODE_CMYK)) return null
 
         // Colour mode data.
@@ -364,7 +369,13 @@ object PsdCodec {
             val layerInfoLength = reader.readInt()
             if (layerInfoLength > 0) {
                 val layerInfoEnd = reader.position + layerInfoLength
-                layers += readLayerRecords(reader, width, height, channelCount, depth, colorMode)
+                // A damaged layer record is a damaged file: the document reads as not a PSD, as documented.
+                layers +=
+                    try {
+                        readLayerRecords(reader, width, height, channelCount, depth, colorMode)
+                    } catch (damaged: IllegalArgumentException) {
+                        return null
+                    }
                 reader.position = layerInfoEnd
             }
             reader.position = sectionEnd
@@ -445,6 +456,7 @@ object PsdCodec {
             val bottom = reader.readInt()
             val right = reader.readInt()
             val layerChannelCount = reader.readShort()
+            require(layerChannelCount <= MAX_CHANNELS) { "A PSD layer has too many channels" }
             val channels =
                 (0 until layerChannelCount).map {
                     val id = reader.readShort().toShort().toInt()
@@ -536,6 +548,7 @@ object PsdCodec {
                 record.channels.forEach { (_, length) -> reader.skip(max(0, length)) }
                 return@forEach
             }
+            require(CanvasOperations.isSizeSafe(layerWidth, layerHeight)) { "A PSD layer is too large" }
 
             val planes = HashMap<Int, ByteArray>()
             record.channels.forEach { (channelId, length) ->
@@ -545,7 +558,7 @@ object PsdCodec {
                 reader.position = start + length
             }
 
-            val buffer = PixelBuffer(max(1, layerWidth), max(1, layerHeight))
+            val buffer = PixelBuffer(layerWidth, layerHeight)
             val alpha = planes[CHANNEL_ALPHA]
             if (colorMode == COLOR_MODE_CMYK) {
                 for (index in buffer.pixels.indices) {
@@ -681,7 +694,7 @@ object PsdCodec {
                     ByteArray(width * height)
                 } else {
                     val bytesPerSample = if (depth == DEPTH_16) 2 else 1
-                    val plane = inflate(reader.readBytes(size)).copyOf(width * height * bytesPerSample)
+                    val plane = inflate(reader.readBytes(size), width * height * bytesPerSample).copyOf(width * height * bytesPerSample)
                     if (compression == COMPRESSION_ZIP_PREDICTION) undoPrediction(plane, width, height, bytesPerSample)
                     downsample(plane, width, height, depth)
                 }
@@ -928,7 +941,7 @@ object PsdCodec {
             COMPRESSION_ZIP, COMPRESSION_ZIP_PREDICTION -> {
                 // The merged image is one zlib stream: each channel's whole plane follows the one before it.
                 val planeBytes = width * height * bytesPerSample
-                val stream = inflate(reader.readBytes(reader.remaining()))
+                val stream = inflate(reader.readBytes(reader.remaining()), planeBytes * channelIds.size)
                 if (stream.size < planeBytes * channelIds.size) return null
                 channelIds.forEachIndexed { index, id ->
                     val plane = stream.copyOfRange(index * planeBytes, (index + 1) * planeBytes)
@@ -983,14 +996,18 @@ object PsdCodec {
         }
     }
 
-    private fun inflate(bytes: ByteArray): ByteArray =
+    /** Inflates a ZIP channel, stopping at [limit] bytes: a plane never needs more than its pixels, so a bomb cannot grow it. */
+    private fun inflate(
+        bytes: ByteArray,
+        limit: Int,
+    ): ByteArray =
         try {
             val inflater = java.util.zip.Inflater()
             inflater.setInput(bytes)
-            val out = ByteArrayOutputStream(bytes.size * 4)
+            val out = ByteArrayOutputStream(min(limit, bytes.size * 4))
             val buffer = ByteArray(8192)
-            while (!inflater.finished()) {
-                val read = inflater.inflate(buffer)
+            while (!inflater.finished() && out.size() < limit) {
+                val read = inflater.inflate(buffer, 0, min(buffer.size, limit - out.size()))
                 if (read == 0) break
                 out.write(buffer, 0, read)
             }
@@ -1075,7 +1092,11 @@ object PsdCodec {
     class PsdReader(
         private val bytes: ByteArray,
     ) {
+        /** Always within the data: a declared length can point anywhere, and the readers must not index past either end. */
         var position: Int = 0
+            set(value) {
+                field = value.coerceIn(0, bytes.size)
+            }
 
         fun remaining(): Int = bytes.size - position
 
