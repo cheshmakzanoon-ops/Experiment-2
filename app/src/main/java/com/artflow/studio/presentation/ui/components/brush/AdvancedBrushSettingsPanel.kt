@@ -503,6 +503,48 @@ private fun BrushWetSettings(
             valueDisplay = "%.0f%%".format(brushParams.wetMix * 100),
         )
         BrushParameterSlider(
+            label = "Dilution",
+            value = brushParams.wetDilution,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(wetDilution = it.coerceIn(0f, 1f))) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.wetDilution * 100),
+        )
+        BrushParameterSlider(
+            label = "Charge",
+            value = brushParams.wetCharge,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(wetCharge = it.coerceIn(0f, 1f))) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.wetCharge * 100),
+        )
+        BrushParameterSlider(
+            label = "Attack",
+            value = brushParams.wetAttack,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(wetAttack = it.coerceIn(0f, 1f))) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.wetAttack * 100),
+        )
+        BrushParameterSlider(
+            label = "Pull",
+            value = brushParams.wetPull,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(wetPull = it.coerceIn(0f, 1f))) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.wetPull * 100),
+        )
+        BrushParameterSlider(
+            label = "Blur",
+            value = brushParams.wetBlur,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(wetBlur = it.coerceIn(0f, 1f))) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.wetBlur * 100),
+        )
+        BrushParameterSlider(
+            label = "Blur jitter",
+            value = brushParams.wetBlurJitter,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(wetBlurJitter = it.coerceIn(0f, 1f))) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.wetBlurJitter * 100),
+        )
+        BrushParameterSlider(
             label = stringResource(R.string.brush_adv_wet_edges),
             value = brushParams.wetEdges,
             onValueChange = { onBrushParamsChanged(brushParams.copy(wetEdges = it.coerceIn(0f, 1f))) },

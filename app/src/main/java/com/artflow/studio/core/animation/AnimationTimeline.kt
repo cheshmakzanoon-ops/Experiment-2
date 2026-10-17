@@ -230,46 +230,6 @@ object AnimationTimeline {
         return state.copy(activeIndex = index)
     }
 
-    /**
-     * The next frame index during playback, honouring the playback range, looping and ping-pong.
-     *
-     * @param direction +1 for forward, -1 for backwards during a ping-pong return leg.
-     */
-    fun nextPlaybackIndex(
-        state: State,
-        direction: Int,
-    ): Pair<Int, Int> {
-        val range = playbackRange(state)
-        if (range.isEmpty()) return state.activeIndex to direction
-        var index = state.activeIndex
-        var nextDirection = direction
-
-        when {
-            direction >= 0 && index >= range.last -> {
-                when {
-                    state.settings.pingPong -> {
-                        index = (range.last - 1).coerceAtLeast(range.first)
-                        nextDirection = -1
-                    }
-                    state.settings.loop -> index = range.first
-                    else -> return index to direction
-                }
-            }
-            direction < 0 && index <= range.first -> {
-                when {
-                    state.settings.pingPong -> {
-                        index = (range.first + 1).coerceAtMost(range.last)
-                        nextDirection = 1
-                    }
-                    state.settings.loop -> index = range.last
-                    else -> return index to direction
-                }
-            }
-            else -> index += direction
-        }
-        return index.coerceIn(range.first, range.last) to nextDirection
-    }
-
     /** Inclusive playback range, defaulting to the whole timeline. */
     fun playbackRange(state: State): IntRange {
         if (state.frames.isEmpty()) return IntRange.EMPTY
@@ -283,24 +243,6 @@ object AnimationTimeline {
         return start..end
     }
 
-    /** Frame index displayed at [elapsedMs] of playback, respecting per-frame durations. */
-    fun frameIndexAtElapsed(
-        state: State,
-        elapsedMs: Long,
-    ): Int {
-        val range = playbackRange(state)
-        if (range.isEmpty()) return 0
-        val total = (range.first..range.last).sumOf { state.frames[it].durationMs.toLong() }
-        if (total <= 0) return range.first
-        var position = if (state.settings.loop) elapsedMs.mod(total) else elapsedMs.coerceAtMost(total - 1)
-        for (index in range) {
-            val duration = state.frames[index].durationMs.toLong()
-            if (position < duration) return index
-            position -= duration
-        }
-        return range.last
-    }
-
     /**
      * Onion-skin frames: `previous` are the frames before the active one, `next` the ones after.
      * `alpha` is already scaled by the configured opacity, so the renderer can use it directly.
@@ -310,8 +252,17 @@ object AnimationTimeline {
         val next: List<Pair<Int, Float>>,
     )
 
-    fun onionSkin(state: State): OnionSkin {
-        if (!state.settings.onionSkinEnabled || state.frames.isEmpty()) return OnionSkin(emptyList(), emptyList())
+    fun onionSkin(state: State): OnionSkin =
+        if (state.settings.onionSkinEnabled) onionGhosts(state) else OnionSkin(emptyList(), emptyList())
+
+    /**
+     * The ghost frames around the active one, whether or not onion skinning is switched on. The
+     * canvas view decides when to show them; this decides which frames and how strongly.
+     * Each list runs from the frame nearest the active one outwards. The nth frame away from the
+     * active one has `opacity / n`, so ghosts fade the further they sit from it.
+     */
+    fun onionGhosts(state: State): OnionSkin {
+        if (state.frames.isEmpty()) return OnionSkin(emptyList(), emptyList())
         val count = state.settings.onionSkinFrames.coerceIn(0, AnimationSettings.MAX_ONION_SKIN_FRAMES)
         if (count == 0) return OnionSkin(emptyList(), emptyList())
 

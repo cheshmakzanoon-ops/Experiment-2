@@ -15,6 +15,12 @@ import kotlin.math.min
  */
 object StrokeReach {
     const val PADDING = 4f
+
+    /** How far back along the path a fully pulled dab reads the canvas it picks up from, in brush sizes. */
+    internal const val PULL_SIZES = 2f
+
+    /** How far a fully blurred dab's canvas samples reach from its centre, in brush sizes. */
+    internal const val BLUR_SIZES = 0.5f
     private const val SIZE_PER_TILT = 2f
     private const val SIZE_PER_SPEED = 0.5f
     private const val IMAGE_TIP_CORNER = 1.4143f
@@ -32,7 +38,14 @@ object StrokeReach {
         val radius = max(MIN_RADIUS, max(params.size, 1f) * growth / 2f) * if (params.shapeId != null) IMAGE_TIP_CORNER else 1f
         val scatter = params.scatter.coerceIn(0f, MAX_SCATTER) * params.size * SCATTER_DIAGONAL
         val spread = if (params.count > 1) params.size * COUNT_SPREAD else 0f
-        return max(radius + scatter + spread, params.dual?.let { of(it.params) } ?: 0f)
+        // Wet mix reads the canvas up to a pulled distance behind a dab and up to a blur radius around it.
+        val canvasRead =
+            params.size.coerceAtLeast(1f) *
+                (
+                    params.wetPull.coerceIn(0f, 1f) * PULL_SIZES +
+                        params.wetBlur.coerceIn(0f, 1f) * BLUR_SIZES * (1f + params.wetBlurJitter.coerceIn(0f, 1f))
+                )
+        return max(radius + scatter + spread + canvasRead, params.dual?.let { of(it.params) } ?: 0f)
     }
 
     /** Pixels of a [width] × [height] buffer that [points] painted with [params] can reach; may be empty. */

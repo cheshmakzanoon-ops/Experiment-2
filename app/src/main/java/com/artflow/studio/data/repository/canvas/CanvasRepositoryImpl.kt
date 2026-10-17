@@ -591,6 +591,8 @@ class CanvasRepositoryImpl
                         colorPressure = false,
                         velocityToHue = 0f,
                         wetMix = 0f,
+                        wetDilution = 0f,
+                        wetCharge = 1f,
                         secondaryPressure = 0f,
                         secondaryJitter = 0f,
                     )
@@ -2639,7 +2641,7 @@ class CanvasRepositoryImpl
             val eligible =
                 StrokeRasterizer.canDrawLive(stroke) &&
                     layer.strokes.isEmpty() &&
-                    (mirrors.size == 1 || stroke.brushParams.wetMix <= 0f)
+                    (mirrors.size == 1 || !stroke.brushParams.picksUpCanvas)
             val bytes = width.toLong() * height * BYTES_PER_PIXEL * mirrors.size
             if (!eligible || bytes > Runtime.getRuntime().maxMemory() / LIVE_HEAP_SHARE) return null
             val lives =

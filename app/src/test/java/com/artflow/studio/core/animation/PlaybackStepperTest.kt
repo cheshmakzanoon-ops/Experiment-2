@@ -21,9 +21,22 @@ class PlaybackStepperTest {
     }
 
     @Test
-    fun finitePingPongStopsAfterOneReturnPass() {
+    fun oneShotPlaysForwardOnceEvenWhenTheLegacyPingPongSwitchIsOn() {
+        // Ping-pong without loop was a contradictory pair of switches; it now plays as One shot.
         val state = state(3, AnimationSettings(loop = false, pingPong = true))
-        assertEquals(listOf(0, 1, 2, 1, 0), sequence(state, 10))
+        assertEquals(listOf(0, 1, 2), sequence(state, 10))
+    }
+
+    @Test
+    fun loopRepeatsFromTheFirstFrame() {
+        val state = state(3, AnimationSettings(loop = true, pingPong = false))
+        assertEquals(listOf(0, 1, 2, 0, 1, 2, 0), sequence(state, 7))
+    }
+
+    @Test
+    fun pingPongBouncesWithoutRepeatingEndpoints() {
+        val state = state(4, AnimationSettings(loop = true, pingPong = true))
+        assertEquals(listOf(0, 1, 2, 3, 2, 1, 0, 1, 2, 3), sequence(state, 10))
     }
 
     @Test

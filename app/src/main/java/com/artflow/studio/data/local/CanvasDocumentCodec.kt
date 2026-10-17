@@ -7,6 +7,7 @@ import com.artflow.studio.domain.model.animation.TimelapseRecording
 import com.artflow.studio.domain.model.layer.Layer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import java.security.MessageDigest
 
 /**
  * The on-disk representation of a project.
@@ -39,6 +40,12 @@ data class CanvasDocument(
     val animation: AnimationSettings = AnimationSettings(),
     val timelapse: TimelapseRecording = TimelapseRecording(),
     val savedAt: Long = System.currentTimeMillis(),
+    /**
+     * SHA-256 (lowercase hex) of the encoded document with this field null. [CanvasDocumentCodec.encode]
+     * writes it and [CanvasDocumentCodec.decode] verifies it, so a damaged field cannot load silently.
+     * Null in documents written before the checksum existed; decoded documents always have it null.
+     */
+    val checksum: String? = null,
 ) {
     /**
      * Frames in a canonical form. Documents written before animation existed have no [frames], so
@@ -86,10 +93,31 @@ object CanvasDocumentCodec {
             isLenient = false
         }
 
-    fun encode(document: CanvasDocument): ByteArray = json.encodeToString(CanvasDocument.serializer(), document).toByteArray()
+    /** Encodes [document] with a fresh [CanvasDocument.checksum]. */
+    fun encode(document: CanvasDocument): ByteArray {
+        val unsigned = document.copy(checksum = null)
+        val signed = unsigned.copy(checksum = checksumOf(unsigned))
+        return json.encodeToString(CanvasDocument.serializer(), signed).toByteArray()
+    }
 
-    /** Parses JSON only. Call [requireValidHeader] and [requireValidStructure] on the result. */
-    fun decode(text: String): CanvasDocument = json.decodeFromString(CanvasDocument.serializer(), text)
+    /**
+     * Parses and verifies the checksum, returning the document with [CanvasDocument.checksum] cleared.
+     * Documents without a checksum (written by earlier builds) are accepted unverified. Call
+     * [requireValidHeader] and [requireValidStructure] on the result.
+     */
+    fun decode(text: String): CanvasDocument {
+        val document = json.decodeFromString(CanvasDocument.serializer(), text)
+        val stored = document.checksum ?: return document
+        val unsigned = document.copy(checksum = null)
+        require(checksumOf(unsigned) == stored) { "The project data does not match its checksum" }
+        return unsigned
+    }
+
+    private fun checksumOf(document: CanvasDocument): String =
+        MessageDigest
+            .getInstance("SHA-256")
+            .digest(json.encodeToString(CanvasDocument.serializer(), document).toByteArray())
+            .joinToString("") { "%02x".format(it.toInt() and 255) }
 
     /** Version, canvas size and DPI. These are the only checks a packaged manifest receives before import. */
     fun requireValidHeader(document: CanvasDocument) {

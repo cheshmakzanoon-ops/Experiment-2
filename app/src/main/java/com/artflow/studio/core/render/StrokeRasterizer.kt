@@ -505,13 +505,18 @@ class StrokeRasterizer(
         // Taper opacity fades the tapered ends as well, and fall off fades the stroke along its path.
         val dabOpacity = opacity * (1f - params.taperOpacity.coerceIn(0f, 1f) * (1f - taper)) * falloffFactor(params, accumulatedDistance)
 
+        val dirX = if (distance > 0f) (current.x - previous.x) / distance else 0f
+        val dirY = if (distance > 0f) (current.y - previous.y) / distance else 0f
         val color =
             wetColor(
+                context,
                 params.applyColorJitter(stroke.color, pressure, velocity, random, stroke.secondaryColor),
-                context.canvas,
                 x,
                 y,
-                params.wetMix,
+                accumulatedDistance,
+                dirX,
+                dirY,
+                random,
             )
 
         // Scatter offsets each dab; count repeats it along a random perpendicular offset.
@@ -552,20 +557,109 @@ class StrokeRasterizer(
         return tip.copy(angleDegrees = tip.angleDegrees + Math.toDegrees(point.tiltY.toDouble()).toFloat())
     }
 
-    /** Wet mix: the dab picks up some of the paint already on the layer under it. */
+    /**
+     * Wet mix: the dab takes up the paint already on the layer and mixes it into its own colour. Each
+     * step reads only the dab's own sample of the canvas and its position on the path, so live frames,
+     * full redraws and region renders agree. With no wet mix field set, the colour is returned unchanged.
+     *
+     * - Pickup, from Wetness ([BrushParams.wetMix]) and Bleed, leans the colour toward the canvas in
+     *   proportion to that canvas's opacity at the sample.
+     * - Attack ([pickupRamp]) scales pickup in from the stroke's start.
+     * - Pull moves the sample back along the path; blur averages the canvas around it ([canvasUnder]).
+     * - Charge below one leans the colour toward the canvas further, even with no pickup from Wetness.
+     * - Dilution leans the colour toward the canvas and removes the same share of the dab's alpha.
+     */
     private fun wetColor(
+        context: DabContext,
         color: Int,
-        canvas: PixelBuffer?,
         x: Float,
         y: Float,
-        wetMix: Float,
+        travelled: Float,
+        dirX: Float,
+        dirY: Float,
+        random: Random,
     ): Int {
-        if (canvas == null || wetMix <= 0f) return color
-        val under = canvas.getSafe(floor(x).toInt(), floor(y).toInt())
-        val pickup = wetMix.coerceIn(0f, 1f) * WET_PICKUP * ((under ushr 24) / 255f)
-        if (pickup <= 0f) return color
-        val mixed = ImageFilters.lerpArgb(color or 0xFF000000.toInt(), under or 0xFF000000.toInt(), pickup)
-        return (color and 0xFF000000.toInt()) or (mixed and 0x00FFFFFF)
+        val canvas = context.canvas
+        val params = context.params
+        if (canvas == null || !params.picksUpCanvas) return color
+        val pullDistance = params.wetPull.coerceIn(0f, 1f) * params.size * StrokeReach.PULL_SIZES
+        val under = canvasUnder(canvas, x - dirX * pullDistance, y - dirY * pullDistance, params, random)
+        val underAlpha = (under ushr 24) / 255f
+        val ramp = pickupRamp(params, travelled)
+        val pickup = params.wetMix.coerceIn(0f, 1f) * WET_PICKUP * underAlpha * ramp
+        val canvasColour = under or OPAQUE_ALPHA
+        var mixed = ImageFilters.lerpArgb(color or OPAQUE_ALPHA, canvasColour, pickup)
+        val chargeLoss = (1f - params.wetCharge.coerceIn(0f, 1f)) * underAlpha * ramp
+        mixed = ImageFilters.lerpArgb(mixed, canvasColour, chargeLoss)
+        val thinning = params.wetDilution.coerceIn(0f, 1f) * underAlpha * ramp
+        mixed = ImageFilters.lerpArgb(mixed, canvasColour, thinning)
+        return Channels.withAlpha(mixed, (Channels.alpha(color) * (1f - thinning)).roundToInt())
+    }
+
+    /** The canvas colour a dab reads at ([x], [y]): one sample, or [BLUR_TAPS] averaged around it when blurred. */
+    private fun canvasUnder(
+        canvas: PixelBuffer,
+        x: Float,
+        y: Float,
+        params: BrushParams,
+        random: Random,
+    ): Int {
+        val centreX = floor(x).toInt()
+        val centreY = floor(y).toInt()
+        val blur = params.wetBlur.coerceIn(0f, 1f)
+        if (blur <= 0f) return canvas.getSafe(centreX, centreY)
+        val jitter = if (params.wetBlurJitter > 0f) 1f + params.wetBlurJitter.coerceIn(0f, 1f) * (random.nextFloat() * 2f - 1f) else 1f
+        val radius = (blur * params.size * StrokeReach.BLUR_SIZES * jitter.coerceAtLeast(0f) + 0.5f).toInt()
+        if (radius <= 0) return canvas.getSafe(centreX, centreY)
+        return averageAround(canvas, centreX, centreY, radius)
+    }
+
+    /** Alpha-weighted average of the centre and four points [radius] pixels away, without allocating. */
+    private fun averageAround(
+        canvas: PixelBuffer,
+        centreX: Int,
+        centreY: Int,
+        radius: Int,
+    ): Int {
+        var alphaSum = 0f
+        var redSum = 0f
+        var greenSum = 0f
+        var blueSum = 0f
+        for (tap in 0 until BLUR_TAPS) {
+            val px =
+                centreX +
+                    when (tap) {
+                        1 -> radius
+                        2 -> -radius
+                        else -> 0
+                    }
+            val py =
+                centreY +
+                    when (tap) {
+                        3 -> radius
+                        4 -> -radius
+                        else -> 0
+                    }
+            val sample = canvas.getSafe(px, py)
+            val weight = (sample ushr 24).toFloat()
+            alphaSum += weight
+            redSum += ((sample shr 16) and 0xFF) * weight
+            greenSum += ((sample shr 8) and 0xFF) * weight
+            blueSum += (sample and 0xFF) * weight
+        }
+        if (alphaSum <= 0f) return 0
+        return Channels.fromFloats(alphaSum / BLUR_TAPS, redSum / alphaSum, greenSum / alphaSum, blueSum / alphaSum)
+    }
+
+    /** Attack: 0..1 share of full pickup reached after travelling [travelled] pixels; 1 is immediate. */
+    private fun pickupRamp(
+        params: BrushParams,
+        travelled: Float,
+    ): Float {
+        val attack = params.wetAttack.coerceIn(0f, 1f)
+        if (attack >= 1f) return 1f
+        val length = (1f - attack) * params.size.coerceAtLeast(1f) * ATTACK_SIZES
+        return (travelled / length).coerceIn(0f, 1f)
     }
 
     private fun canUseCapsule(
@@ -574,7 +668,7 @@ class StrokeRasterizer(
     ): Boolean =
         params.spacing <= 0f &&
             params.roundness >= 1f &&
-            params.wetMix <= 0f &&
+            !params.picksUpCanvas &&
             params.tiltInfluence <= 0f &&
             CustomGrains.get(params.shapeId) == null &&
             points.size <= 2 &&
@@ -838,6 +932,15 @@ private const val BURNT_DEPTH = 0.6f
 
 /** How much of the paint under a dab a fully wet brush picks up. */
 private const val WET_PICKUP = 0.6f
+
+/** Attack ramps pickup in over this many brush sizes when it is fully reduced. */
+private const val ATTACK_SIZES = 4f
+
+/** Blur averages this many canvas samples per dab: the centre and four points around it. */
+private const val BLUR_TAPS = 5
+
+/** Alpha bits of an opaque colour, used to take a canvas colour's RGB without its alpha. */
+private const val OPAQUE_ALPHA = -0x1000000
 
 private const val HALF_PI = (Math.PI / 2).toFloat()
 
