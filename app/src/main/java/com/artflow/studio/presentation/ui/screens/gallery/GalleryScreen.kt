@@ -23,10 +23,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
+import com.artflow.studio.R
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.color.ColorProfile
 import com.artflow.studio.core.export.PsdCodec
@@ -120,7 +122,7 @@ fun GalleryScreen(
                             OutlinedTextField(
                                 value = query,
                                 onValueChange = viewModel::setQuery,
-                                placeholder = { Text("Search artworks") },
+                                placeholder = { Text(stringResource(R.string.galleryscreen_search_artworks)) },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
                             )
@@ -137,7 +139,7 @@ fun GalleryScreen(
                     navigationIcon = {
                         if (openStack != null) {
                             IconButton(onClick = { openStack = null }) {
-                                Icon(Icons.Default.ArrowBack, contentDescription = "Back to gallery")
+                                Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.galleryscreen_back_to_gallery))
                             }
                         }
                     },
@@ -145,17 +147,17 @@ fun GalleryScreen(
                         IconButton(onClick = { searchVisible = !searchVisible }) {
                             Icon(
                                 imageVector = if (searchVisible) Icons.Default.Close else Icons.Default.Search,
-                                contentDescription = "Search",
+                                contentDescription = stringResource(R.string.galleryscreen_search),
                             )
                         }
                         SortMenu(settings.gallerySort, viewModel::setSort)
-                        TextButton(onClick = { selection = emptySet() }) { Text("Select") }
+                        TextButton(onClick = { selection = emptySet() }) { Text(stringResource(R.string.layer_select)) }
                         ImportMenu(ImportChoices(photoImport, psdImport, procreateImport, packageImport, modelImport))
                         IconButton(onClick = onOpenHelp) {
-                            Icon(Icons.Default.HelpOutline, contentDescription = "Help")
+                            Icon(Icons.Default.HelpOutline, contentDescription = stringResource(R.string.galleryscreen_help))
                         }
                         IconButton(onClick = onOpenSettings) {
-                            Icon(Icons.Default.Settings, contentDescription = "Settings")
+                            Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings))
                         }
                     },
                 )
@@ -165,7 +167,7 @@ fun GalleryScreen(
             ExtendedFloatingActionButton(
                 onClick = { showNewProjectDialog = true },
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("New artwork") },
+                text = { Text(stringResource(R.string.galleryscreen_new_artwork)) },
             )
         },
     ) { padding ->
@@ -301,7 +303,7 @@ private fun rememberPsdImport(
                         }.getOrNull()
                     }
                 if (opened == null) {
-                    snackbarHostState.showSnackbar("That file is not a Photoshop document ArtFlow can read")
+                    snackbarHostState.showSnackbar(context.getString(R.string.galleryscreen_not_a_photoshop_document))
                     return@launch
                 }
                 val (bytes, document) = opened
@@ -350,7 +352,7 @@ private fun rememberProcreateImport(
                 val size = document.document
                 if (!CanvasOperations.isSizeSafe(size.width, size.height)) {
                     document.close()
-                    snackbarHostState.showSnackbar("This Procreate canvas is too large for this device")
+                    snackbarHostState.showSnackbar(context.getString(R.string.galleryscreen_procreate_too_large))
                     return@launch
                 }
                 val name = size.name?.takeIf { it.isNotBlank() } ?: "Imported Procreate"
@@ -466,7 +468,7 @@ private fun rememberPackageImport(
                         }.getOrNull()
                     }
                 if (bytes == null) {
-                    snackbarHostState.showSnackbar("That file could not be read, or it is too large")
+                    snackbarHostState.showSnackbar(context.getString(R.string.galleryscreen_file_could_not_be_read))
                     return@launch
                 }
                 viewModel.importPackage(bytes) { id -> scope.launch { onNavigateToCanvas(id) } }
@@ -483,26 +485,26 @@ private fun ImportMenu(choices: ImportChoices) {
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }) {
-            Icon(Icons.Default.AddPhotoAlternate, contentDescription = "Import as a new artwork")
+            Icon(Icons.Default.AddPhotoAlternate, contentDescription = stringResource(R.string.galleryscreen_import_as_a_new_artwork))
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            DropdownMenuItem(text = { Text("Photo") }, onClick = {
+            DropdownMenuItem(text = { Text(stringResource(R.string.galleryscreen_photo)) }, onClick = {
                 open = false
                 choices.photo()
             })
-            DropdownMenuItem(text = { Text("Photoshop file (PSD)") }, onClick = {
+            DropdownMenuItem(text = { Text(stringResource(R.string.galleryscreen_photoshop_file_psd)) }, onClick = {
                 open = false
                 choices.psd()
             })
-            DropdownMenuItem(text = { Text("Procreate document (.procreate)") }, onClick = {
+            DropdownMenuItem(text = { Text(stringResource(R.string.galleryscreen_procreate_document_procreate)) }, onClick = {
                 open = false
                 choices.procreate()
             })
-            DropdownMenuItem(text = { Text("ArtFlow artwork (.artflow)") }, onClick = {
+            DropdownMenuItem(text = { Text(stringResource(R.string.galleryscreen_artflow_artwork_artflow)) }, onClick = {
                 open = false
                 choices.artwork()
             })
-            DropdownMenuItem(text = { Text("3D model (OBJ, glTF, USDZ)") }, onClick = {
+            DropdownMenuItem(text = { Text(stringResource(R.string.galleryscreen_3d_model_obj_gltf_usdz)) }, onClick = {
                 open = false
                 choices.model()
             })
@@ -528,7 +530,7 @@ private fun rememberPhotoImport(
                         runCatching { BitmapPixelBridge.decodeUri(context.contentResolver, uri) }.getOrNull()
                     }
                 if (image == null) {
-                    snackbarHostState.showSnackbar("That image could not be opened")
+                    snackbarHostState.showSnackbar(context.getString(R.string.galleryscreen_image_could_not_be_opened))
                     return@launch
                 }
                 viewModel.createProject("Imported photo", null, image.width, image.height, 72) { id ->
@@ -547,7 +549,7 @@ private fun SortMenu(
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { open = true }) { Icon(Icons.Default.Sort, contentDescription = "Sort") }
+        IconButton(onClick = { open = true }) { Icon(Icons.Default.Sort, contentDescription = stringResource(R.string.galleryscreen_sort)) }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             GallerySort.entries.forEach { sort ->
                 DropdownMenuItem(
@@ -571,7 +573,7 @@ private suspend fun shareProject(
 ) {
     val file = viewModel.shareablePng(project)
     if (file == null) {
-        snackbar.showSnackbar("Open the artwork once so it can be shared")
+        snackbar.showSnackbar(context.getString(R.string.galleryscreen_open_artwork_to_share))
     } else {
         runCatching { sharePng(context, file) }
     }
@@ -620,10 +622,10 @@ private fun RenameDialog(
     var text by remember(project.id) { mutableStateOf(project.name) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Rename artwork") },
+        title = { Text(stringResource(R.string.galleryscreen_rename_artwork)) },
         text = { OutlinedTextField(value = text, onValueChange = { text = it }, singleLine = true) },
-        confirmButton = { TextButton(onClick = { onRename(text) }) { Text("Rename") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { TextButton(onClick = { onRename(text) }) { Text(stringResource(R.string.layer_rename)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 
@@ -635,10 +637,14 @@ private fun DeleteDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Delete ${project.name}?") },
-        text = { Text("The artwork and its layers are removed from this device. This cannot be undone.") },
-        confirmButton = { TextButton(onClick = onDelete) { Text("Delete", color = MaterialTheme.colorScheme.error) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        title = { Text(stringResource(R.string.galleryscreen_delete_project, project.name)) },
+        text = { Text(stringResource(R.string.galleryscreen_the_artwork_and_its_layers_are_removed)) },
+        confirmButton = {
+            TextButton(
+                onClick = onDelete,
+            ) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 
@@ -733,7 +739,7 @@ private fun ProjectCard(
                 if (project.isFavorite) {
                     Icon(
                         Icons.Default.Star,
-                        contentDescription = "Favourite",
+                        contentDescription = stringResource(R.string.galleryscreen_favourite),
                         tint = Color(0xFFF2C037),
                         modifier =
                             Modifier
@@ -764,7 +770,7 @@ private fun ProjectCard(
                 }
                 Box {
                     IconButton(onClick = { menuVisible = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Project actions")
+                        Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.galleryscreen_project_actions))
                     }
                     DropdownMenu(expanded = menuVisible, onDismissRequest = { menuVisible = false }) {
                         DropdownMenuItem(
@@ -775,28 +781,28 @@ private fun ProjectCard(
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("Rename") },
+                            text = { Text(stringResource(R.string.layer_rename)) },
                             onClick = {
                                 onRename()
                                 menuVisible = false
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("Duplicate") },
+                            text = { Text(stringResource(R.string.duplicate)) },
                             onClick = {
                                 onDuplicate()
                                 menuVisible = false
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("Preview") },
+                            text = { Text(stringResource(R.string.galleryscreen_preview)) },
                             onClick = {
                                 onPreview()
                                 menuVisible = false
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("Share") },
+                            text = { Text(stringResource(R.string.export_share)) },
                             onClick = {
                                 onShare()
                                 menuVisible = false
@@ -811,7 +817,7 @@ private fun ProjectCard(
                         )
                         Divider()
                         DropdownMenuItem(
-                            text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                            text = { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) },
                             onClick = {
                                 onDelete()
                                 menuVisible = false
@@ -842,13 +848,13 @@ private fun NewProjectDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("New artwork") },
+        title = { Text(stringResource(R.string.galleryscreen_new_artwork)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Name") },
+                    label = { Text(stringResource(R.string.galleryscreen_name)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -856,13 +862,13 @@ private fun NewProjectDialog(
                     FilterChip(
                         selected = !useCustom,
                         onClick = { useCustom = false },
-                        label = { Text("Preset") },
+                        label = { Text(stringResource(R.string.galleryscreen_preset)) },
                     )
                     Spacer(Modifier.width(8.dp))
                     FilterChip(
                         selected = useCustom,
                         onClick = { useCustom = true },
-                        label = { Text("Custom") },
+                        label = { Text(stringResource(R.string.galleryscreen_custom)) },
                     )
                 }
                 if (useCustom) {
@@ -870,14 +876,14 @@ private fun NewProjectDialog(
                         OutlinedTextField(
                             value = customWidth,
                             onValueChange = { customWidth = it.filter { c -> c.isDigit() }.take(5) },
-                            label = { Text("Width") },
+                            label = { Text(stringResource(R.string.editorsheets_width)) },
                             singleLine = true,
                             modifier = Modifier.weight(1f),
                         )
                         OutlinedTextField(
                             value = customHeight,
                             onValueChange = { customHeight = it.filter { c -> c.isDigit() }.take(5) },
-                            label = { Text("Height") },
+                            label = { Text(stringResource(R.string.editorsheets_height)) },
                             singleLine = true,
                             modifier = Modifier.weight(1f),
                         )
@@ -885,7 +891,7 @@ private fun NewProjectDialog(
                     OutlinedTextField(
                         value = customDpi,
                         onValueChange = { customDpi = it.filter { c -> c.isDigit() }.take(3) },
-                        label = { Text("Dpi") },
+                        label = { Text(stringResource(R.string.galleryscreen_dpi)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -926,7 +932,7 @@ private fun NewProjectDialog(
                     )
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Display P3 colour profile", modifier = Modifier.weight(1f))
+                    Text(stringResource(R.string.galleryscreen_display_p3_colour_profile), modifier = Modifier.weight(1f))
                     Switch(checked = wideColor, onCheckedChange = { wideColor = it })
                 }
             }
@@ -941,9 +947,9 @@ private fun NewProjectDialog(
                     customDpi.toIntOrNull() ?: 132,
                     wideColor,
                 )
-            }) { Text("Create") }
+            }) { Text(stringResource(R.string.brushstudiodialog_create)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 

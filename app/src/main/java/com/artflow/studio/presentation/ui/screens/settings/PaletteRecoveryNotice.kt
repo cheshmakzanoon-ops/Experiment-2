@@ -7,6 +7,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
+import androidx.compose.ui.res.stringResource
+import com.artflow.studio.R
 
 /** Reset is explicit and only follows a successful backup to the user's document-provider choice. */
 @Composable
@@ -16,10 +18,9 @@ internal fun PaletteRecoveryNotice(
 ) {
     var confirm by remember { mutableStateOf(false) }
     Column {
-        Text("Saved palettes need recovery", color = MaterialTheme.colorScheme.error)
+        Text(stringResource(R.string.paletterecoverynotice_saved_palettes_need_recovery), color = MaterialTheme.colorScheme.error)
         Text(
-            "Your artwork and other settings are available. The unreadable palette data is preserved, " +
-                "but custom palettes cannot be edited until it has been backed up and reset.",
+            stringResource(R.string.paletterecoverynotice_your_artwork_is_available),
             style = MaterialTheme.typography.bodySmall,
         )
         OutlinedButton(onClick = { confirm = true }, enabled = !running) {
@@ -29,21 +30,19 @@ internal fun PaletteRecoveryNotice(
     if (confirm) {
         AlertDialog(
             onDismissRequest = { confirm = false },
-            title = { Text("Preserve unreadable palettes?") },
+            title = { Text(stringResource(R.string.paletterecoverynotice_preserve_unreadable_palettes)) },
             text = {
                 Text(
-                    "Choose a file for the exact original palette text. Only after that file has been saved " +
-                        "will the unreadable custom-palette list be reset. Artwork and other preferences are not changed. " +
-                        "Cancelling or a failed backup leaves the stored data untouched. This does not repair the backup's contents.",
+                    stringResource(R.string.paletterecoverynotice_choose_a_file_for_the_original),
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
                     confirm = false
                     onChooseBackup()
-                }) { Text("Choose backup file") }
+                }) { Text(stringResource(R.string.paletterecoverynotice_choose_backup_file)) }
             },
-            dismissButton = { TextButton(onClick = { confirm = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { confirm = false }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 }

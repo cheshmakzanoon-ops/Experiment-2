@@ -12,7 +12,9 @@ import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.R
 import com.artflow.studio.domain.model.Project
 import com.artflow.studio.presentation.ui.viewmodel.MainViewModel
 
@@ -30,15 +32,25 @@ internal fun SelectionTopBar(
     count: Int,
     actions: SelectionActions,
 ) {
+    val title =
+        if (count == 0) {
+            stringResource(R.string.galleryselection_select_artworks)
+        } else {
+            stringResource(R.string.galleryselection_count_selected, count)
+        }
     TopAppBar(
-        title = { Text(if (count == 0) "Select artworks" else "$count selected") },
+        title = {
+            Text(title)
+        },
         navigationIcon = {
-            IconButton(onClick = actions.onDone) { Icon(Icons.Default.Close, contentDescription = "Done selecting") }
+            IconButton(onClick = actions.onDone) {
+                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.galleryselection_done_selecting))
+            }
         },
         actions = {
-            TextButton(onClick = actions.onStack, enabled = count > 0) { Text("Stack") }
-            TextButton(onClick = actions.onDuplicate, enabled = count > 0) { Text("Duplicate") }
-            TextButton(onClick = actions.onDelete, enabled = count > 0) { Text("Delete") }
+            TextButton(onClick = actions.onStack, enabled = count > 0) { Text(stringResource(R.string.galleryselection_stack)) }
+            TextButton(onClick = actions.onDuplicate, enabled = count > 0) { Text(stringResource(R.string.duplicate)) }
+            TextButton(onClick = actions.onDelete, enabled = count > 0) { Text(stringResource(R.string.delete)) }
         },
     )
 }
@@ -91,9 +103,13 @@ private fun DeleteManyDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Delete $count artworks?") },
-        text = { Text("The artworks and their layers are removed from this device. This cannot be undone.") },
-        confirmButton = { TextButton(onClick = onDelete) { Text("Delete", color = MaterialTheme.colorScheme.error) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        title = { Text(stringResource(R.string.galleryselection_delete_artworks, count)) },
+        text = { Text(stringResource(R.string.galleryselection_the_artworks_and_their_layers_are)) },
+        confirmButton = {
+            TextButton(
+                onClick = onDelete,
+            ) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }

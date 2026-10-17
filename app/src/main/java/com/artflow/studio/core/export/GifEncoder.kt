@@ -16,6 +16,10 @@ import kotlin.math.min
  * expose, and it makes the encoder fully unit-testable on the JVM.
  */
 object GifEncoder {
+    /** With transparency kept, alpha from this value up is opaque; below it the pixel is transparent. */
+    private const val HARD_EDGE_ALPHA = 128
+    private val OPAQUE_ALPHA = 0xFF000000.toInt()
+
     /**
      * Encodes [frames] into an animated GIF.
      *
@@ -25,6 +29,7 @@ object GifEncoder {
      * @param matteColor colour composited behind semi-transparent pixels (GIF has no alpha ramp).
      * @param keepTransparency when true, fully transparent pixels become the GIF transparent index.
      */
+
     fun encode(
         frames: List<IntArray>,
         width: Int,
@@ -47,8 +52,16 @@ object GifEncoder {
         writeHeader(out, width, height, loop)
 
         val transparentIndex = if (keepTransparency) 0 else -1
+        // GIF times are whole centiseconds. Each frame takes the rounding of the total elapsed time, so the
+        // error does not build up: a 30 fps animation stays at 30 fps rather than running about 10% fast.
+        var elapsedMs = 0L
+        var writtenCentiseconds = 0L
         frames.forEachIndexed { index, frame ->
             val delay = (delaysMs.getOrNull(index) ?: 100).coerceIn(20, 100_000)
+            elapsedMs += delay
+            val roundedCentiseconds = (elapsedMs + 5) / 10
+            val centiseconds = roundedCentiseconds - writtenCentiseconds
+            writtenCentiseconds = roundedCentiseconds
             val quantized =
                 Quantizer.quantize(
                     frame = frame,
@@ -62,7 +75,7 @@ object GifEncoder {
                 height = height,
                 indexed = quantized.indices,
                 palette = quantized.palette,
-                delayMs = delay,
+                delayMs = (centiseconds * 10).toInt(),
                 transparentIndex = transparentIndex,
             )
         }
@@ -192,13 +205,20 @@ object GifEncoder {
             for (i in frame.indices) {
                 val pixel = frame[i]
                 val alpha = (pixel ushr 24) and 0xFF
-                if (alpha == 0) {
-                    transparentCount++
-                    opaque[i] = matteColor
-                } else if (alpha == 255) {
-                    opaque[i] = pixel
-                } else {
-                    opaque[i] = blend(matteColor, pixel, alpha / 255f)
+                when {
+                    // A GIF pixel is either transparent or opaque. Below the threshold it is transparent; at or
+                    // above it, it keeps its own colour. Blending onto the matte would tint the edge.
+                    reserveTransparent && alpha < HARD_EDGE_ALPHA -> {
+                        transparentCount++
+                        opaque[i] = matteColor
+                    }
+                    reserveTransparent -> opaque[i] = pixel or OPAQUE_ALPHA
+                    alpha == 0 -> {
+                        transparentCount++
+                        opaque[i] = matteColor
+                    }
+                    alpha == 255 -> opaque[i] = pixel
+                    else -> opaque[i] = blend(matteColor, pixel, alpha / 255f)
                 }
             }
 
@@ -240,7 +260,7 @@ object GifEncoder {
             val cache = HashMap<Int, Byte>(1 shl 14)
             val indices = ByteArray(frame.size)
             for (i in opaque.indices) {
-                if (reserveTransparent && (frame[i] ushr 24) == 0) {
+                if (reserveTransparent && ((frame[i] ushr 24) and 0xFF) < HARD_EDGE_ALPHA) {
                     indices[i] = 0
                     continue
                 }

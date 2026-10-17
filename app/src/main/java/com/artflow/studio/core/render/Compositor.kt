@@ -193,6 +193,7 @@ class Compositor(
         var completed = false
         try {
             compositeEntries(merged, entry.members, options)
+            applyMask(merged, entry.mask, entry.layer)
             completed = true
             return merged
         } finally {

@@ -33,16 +33,16 @@ phase describes · **⛔ unreachable** — the code exists but nothing calls it 
 | Phases | Scope | Status in this repository |
 |--------|-------|---------------------------|
 | 1–8 | Setup, DI, architecture, design system, canvas, input, brush, layers | ✅ The Gradle wrapper, build config, dark-first design system, GL canvas, stylus/gesture input, stroke engine and layer stack all work. Strokes are rasterised by `Compositor` + `StrokeRasterizer`; the live layer state is `CanvasRepositoryImpl`. ktlint and detekt are configured (see *Tooling gaps*). |
-| 9–16 | Advanced brush params, textures, colour dynamics, blend modes, selection, transform, alpha lock, masks | 🟡 Blend modes, jitter/scatter/taper dynamics, the selection engine and layer masks run in the app. Brush textures are 🟡 partial: paper/canvas/charcoal procedural grains are rendered, with scale/rotation controls; custom import, a user texture library and dual textures remain absent. The custom pressure response has three editable monotone control points. Transform is 🟡 translate only (see phase 14). Masks support reveal/hide painting, selection and layer-alpha sources, and horizontal/vertical/radial gradients, with transactional preview and undo. |
+| 9–16 | Advanced brush params, textures, colour dynamics, blend modes, selection, transform, alpha lock, masks | 🟡 Blend modes, jitter/scatter/taper dynamics, the selection engine and layer masks run in the app. Brush textures are 🟡 partial: paper/canvas/charcoal procedural grains are rendered, with scale/rotation controls; imported grains and dual brushes (Multiply, Subtract, Add) are wired, while a user texture library remains absent. The custom pressure response has three editable monotone control points. Transform covers move, scale, rotate, flip, distort, warp and snapping (see phase 14). Masks support reveal/hide painting, selection and layer-alpha sources, and horizontal/vertical/radial gradients, with transactional preview and undo. |
 | 17–24 | Smudge, liquify, clone stamp, healing, gradient, paint bucket, text, shapes | ✅ `PixelBrushes` (smudge/clone/heal) and `LiquifyTool` are driven from `ArtFlowCanvasView`, alongside paint bucket, gradient, text and shapes. Shape drawing lives in `ArtFlowCanvasView`; corner radius and boolean ops are ⬜. |
-| 25–30 | Adjustment layers, layer groups, reference layers, layer linking, filter layers, smart objects | 🟡 Adjustments (`AdjustmentProcessor`) and filter layers (`ImageFilters`, via `addFilterLayer` / `rasterizeFilterLayer`) are wired, and reference layers exist as a flag plus a label in the layer sheet — though no UI sets the flag. ⬜ Layer groups, layer-linking UI, smart objects. |
+| 25–30 | Adjustment layers, layer groups, reference layers, layer linking, filter layers, smart objects | 🟡 Adjustments (`AdjustmentProcessor`) and filter layers (`ImageFilters`, via `addFilterLayer` / `rasterizeFilterLayer`) are wired, and reference layers are set from the layer options. ✅ Layer groups (nested; isolated only for a non-Normal, non-Pass Through blend or opacity below 100%). ⬜ Layer-linking UI, smart objects. |
 | 31–36 | Colour picker, palettes, symmetry, perspective guides, canvas properties, quick menu | ✅ `ColorPanel`, `Palette` with `PaletteCodec` for persistence, `ColorHarmony`, `SymmetryEngine`, `PerspectiveGuide`, `CanvasOperations` and the quick menu. ⬜ Shortcut remapping and stylus-button mapping. |
-| 37–42 | Save system, PNG/JPEG export, PSD, PDF, gallery, cloud sync | ✅ Wired: `.artflow` documents (v2: per-layer rasters, frames, timelapse metadata), autosave with crash recovery, PNG/JPEG/WebP/PDF/PSD export and gallery publishing. ⬜ PSD **import**, ⬜ cloud sync. |
-| 43–50 | Animation timeline, animation export, timelapse, performance, tutorials, settings, QA, release | 🟡 Timeline, onion skinning and GIF/MP4/frame-sequence export work; settings, help centre and onboarding exist, and device regressions cover storage, rendering, duplication, exports and selected UI flows. ⬜ Timelapse recording, ⬜ analytics/crash reporting, ⬜ benchmark module (`benchmark` is used for a minified launch smoke test, not a performance benchmark), 🟡 broader physical-device and end-to-end coverage. ✅ Signing configuration is validated; production builds can require it with `-PrequireReleaseSigning=true`. CI can build unsigned candidates, which are not approved releases. |
+| 37–42 | Save system, PNG/JPEG export, PSD, PDF, gallery, cloud sync | ✅ Wired: `.artflow` documents (v2: per-layer rasters, frames, timelapse metadata), autosave with crash recovery, PNG/JPEG/WebP/PDF/PSD export and gallery publishing. ✅ PSD **import**, ⬜ cloud sync. |
+| 43–50 | Animation timeline, animation export, timelapse, performance, tutorials, settings, QA, release | 🟡 Timeline, onion skinning and GIF/MP4/frame-sequence export work; settings, help centre and onboarding exist, and device regressions cover storage, rendering, duplication, exports and selected UI flows. ⬜ analytics/crash reporting, ⬜ benchmark module (`benchmark` is used for a minified launch smoke test, not a performance benchmark), 🟡 broader physical-device and end-to-end coverage. ✅ Signing configuration is validated; production builds can require it with `-PrequireReleaseSigning=true`. CI can build unsigned candidates, which are not approved releases. |
 
 ### Known gaps
 
-Nothing in `app/src/main` is known to be unreachable. The prototype layer an earlier revision of
+Some code in `app/src/main` is still unreachable: `CanvasOperations.resampleToDpi`, `rotateFree` and `straighten`, `TextLayout.layoutOnCurve`, and the layer-link wrappers in `CanvasViewModel` (see [docs/AUDIT_2026-10.md](docs/AUDIT_2026-10.md)). The prototype layer an earlier revision of
 this document listed as dead code — `core/layer`, `core/selection`, `core/transform`,
 `core/shape`, `core/brush`, `domain/usecase`, `data/repository/texture`, `data/renderer/native`,
 `presentation/ui/components/texture`, the seven Hilt modules that only provided them, and the unused
@@ -50,18 +50,18 @@ this document listed as dead code — `core/layer`, `core/selection`, `core/tran
 **functionality**, not orphaned code:
 
 - **Layer groups** — ✅ organisational groups (`Layer.isGroup`): group visibility/opacity cascade
-  to members via `LayerGroups`; groups do not yet isolate blending (no Procreate "Normal" group mode).
+  to members via `LayerGroups`; a group isolates its members only when its blend mode is neither Normal nor Pass Through, or its opacity is below 100%. Normal and Pass Through groups let members blend with the layers below. Procreate's isolating "Normal" group mode is not implemented.
 - **Layer-linking UI** — `CanvasRepositoryImpl` can set and clear `linkGroupId`; nothing calls it.
 - **Transform** — ✅ move, uniform/freeform scale, rotate and flip of a layer or selection
-  (`LayerTransform`); ⬜ perspective, distort, warp and snapping.
-- **Imported and dual textures** — three procedural grains are wired, but custom texture import,
-  a user texture library and dual-texture mixing remain absent. Mask sources and custom pressure
+  (`LayerTransform`); distort, Bézier warp and snapping are implemented; a separate perspective mode is not, since distort covers it.
+- **Imported and dual textures** — procedural and imported grains and dual brushes are wired; a
+  user texture library remains absent. Mask sources and custom pressure
   controls are implemented; their earlier “not implemented” status was stale.
 - **Native engine** — the C++ prototype remains unintegrated and is excluded from the app build.
 - **Timelapse** — ✅ `TimelapseRecorder` captures a frame per settled edit and exports an MP4 replay.
 - **StreamLine / QuickShape** — ✅ `StrokeStabilizer` applies the brush smoothing setting; `QuickShape`
   snaps held strokes to lines and ellipses.
-- **PSD import, cloud sync, smart objects, analytics/crash reporting.**
+- **Cloud sync, smart objects, analytics/crash reporting.**
 - **Benchmark module** and a comprehensive physical-device, stylus, GPU and low-memory test campaign.
   Automated coverage now also includes rendering, filling, selections, storage, recovery,
   duplication, exports and selected Compose UI flows.

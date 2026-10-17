@@ -27,11 +27,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import com.artflow.studio.R
 import com.artflow.studio.core.animation.AnimationTimeline
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.canvas.TwoFingerLayerGesture
@@ -244,7 +246,7 @@ fun LayersSheet(
                 layer.filterType?.let { type ->
                     Text(type.displayName, style = MaterialTheme.typography.titleSmall)
                     LabeledSlider(
-                        label = "Amount",
+                        label = stringResource(R.string.adjustmentoverlay_amount),
                         value = layer.filterAmount,
                         range = 0f..1f,
                         onChange = { onFilterAmount(layer.id, it) },
@@ -269,7 +271,7 @@ fun LayersSheet(
         var text by remember(layer.id) { mutableStateOf(layer.name) }
         AlertDialog(
             onDismissRequest = { renameTarget = null },
-            title = { Text("Rename layer") },
+            title = { Text(stringResource(R.string.editorsheets_rename_layer)) },
             text = {
                 OutlinedTextField(
                     value = text,
@@ -281,9 +283,9 @@ fun LayersSheet(
                 TextButton(onClick = {
                     onName(layer.id, text)
                     renameTarget = null
-                }) { Text("Rename") }
+                }) { Text(stringResource(R.string.layer_rename)) }
             },
-            dismissButton = { TextButton(onClick = { renameTarget = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { renameTarget = null }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 }
@@ -304,31 +306,31 @@ private fun LayersHeader(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("Layers", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.layers), style = MaterialTheme.typography.titleMedium)
         Row {
             IconButton(
                 enabled = active != null && active.index < layers.lastIndex,
                 onClick = { active?.let { stackActions.onReorder(it.id, it.index + 1) } },
             ) {
-                Icon(Icons.Default.ArrowUpward, contentDescription = "Move active layer up")
+                Icon(Icons.Default.ArrowUpward, contentDescription = stringResource(R.string.editorsheets_move_active_layer_up))
             }
             IconButton(
                 enabled = active != null && active.index > 0,
                 onClick = { active?.let { stackActions.onReorder(it.id, it.index - 1) } },
             ) {
-                Icon(Icons.Default.ArrowDownward, contentDescription = "Move active layer down")
+                Icon(Icons.Default.ArrowDownward, contentDescription = stringResource(R.string.editorsheets_move_active_layer_down))
             }
             IconButton(onClick = stackActions.onAddLayer) {
-                Icon(Icons.Default.Add, contentDescription = "Add layer")
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.editorsheets_add_layer))
             }
             Box {
                 IconButton(onClick = { addMenuVisible = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "Layer actions")
+                    Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.editorsheets_layer_actions))
                 }
                 DropdownMenu(expanded = addMenuVisible, onDismissRequest = { addMenuVisible = false }) {
                     stackActions.onImportPsd?.let { importPsd ->
                         DropdownMenuItem(
-                            text = { Text("Import PSD layers") },
+                            text = { Text(stringResource(R.string.editorsheets_import_psd_layers)) },
                             onClick = {
                                 importPsd()
                                 addMenuVisible = false
@@ -337,7 +339,7 @@ private fun LayersHeader(
                     }
                     stackActions.onInsertPhoto?.let { insert ->
                         DropdownMenuItem(
-                            text = { Text("Insert photo") },
+                            text = { Text(stringResource(R.string.editorsheets_insert_photo)) },
                             onClick = {
                                 insert()
                                 addMenuVisible = false
@@ -345,14 +347,14 @@ private fun LayersHeader(
                         )
                     }
                     DropdownMenuItem(
-                        text = { Text("Merge visible") },
+                        text = { Text(stringResource(R.string.editorsheets_merge_visible)) },
                         onClick = {
                             stackActions.onMergeVisible()
                             addMenuVisible = false
                         },
                     )
                     DropdownMenuItem(
-                        text = { Text("Flatten image") },
+                        text = { Text(stringResource(R.string.editorsheets_flatten_image)) },
                         onClick = {
                             stackActions.onFlatten()
                             addMenuVisible = false
@@ -379,11 +381,15 @@ private fun MultiLayerBar(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("$count layers selected", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
-        TextButton(onClick = onGroup) { Text("Group") }
-        TextButton(onClick = onMerge) { Text("Merge") }
-        TextButton(onClick = onDelete) { Text("Delete", color = MaterialTheme.colorScheme.error) }
-        TextButton(onClick = onClear) { Text("Done") }
+        Text(
+            stringResource(R.string.editorsheets_layers_selected, count),
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.weight(1f),
+        )
+        TextButton(onClick = onGroup) { Text(stringResource(R.string.editorsheets_group)) }
+        TextButton(onClick = onMerge) { Text(stringResource(R.string.editorsheets_merge)) }
+        TextButton(onClick = onDelete) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
+        TextButton(onClick = onClear) { Text(stringResource(R.string.layeropacityoverlay_done)) }
     }
 }
 
@@ -394,14 +400,14 @@ private fun LayerMaskControls(
     actions: LayerMaskActions,
 ) {
     var maskMenuVisible by remember(layer.id) { mutableStateOf(false) }
-    Text("Mask", style = MaterialTheme.typography.titleSmall)
+    Text(stringResource(R.string.layer_mask), style = MaterialTheme.typography.titleSmall)
     if (!layer.hasMask()) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box {
                 Button(
                     onClick = { maskMenuVisible = true },
                     enabled = !layer.isLocked && !layer.isReference,
-                ) { Text("Add mask") }
+                ) { Text(stringResource(R.string.editorsheets_add_mask)) }
                 DropdownMenu(expanded = maskMenuVisible, onDismissRequest = { maskMenuVisible = false }) {
                     LayerMaskSource.entries.forEach { source ->
                         DropdownMenuItem(
@@ -416,7 +422,7 @@ private fun LayerMaskControls(
                 }
             }
             Text(
-                "A mask hides parts of this layer without erasing them.",
+                stringResource(R.string.editorsheets_a_mask_hides_parts_of_this_layer),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -424,25 +430,31 @@ private fun LayerMaskControls(
     } else {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val canPaint = layer.canEdit() && layer.maskEnabled && !layer.isReference
-            OutlinedButton(onClick = { actions.onPaintMask(true) }, enabled = canPaint) { Text("Paint reveal") }
-            OutlinedButton(onClick = { actions.onPaintMask(false) }, enabled = canPaint) { Text("Paint hide") }
+            OutlinedButton(
+                onClick = { actions.onPaintMask(true) },
+                enabled = canPaint,
+            ) { Text(stringResource(R.string.editorsheets_paint_reveal)) }
+            OutlinedButton(
+                onClick = { actions.onPaintMask(false) },
+                enabled = canPaint,
+            ) { Text(stringResource(R.string.editorsheets_paint_hide)) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AssistChip(
                 onClick = { actions.onMaskEnabled(!layer.maskEnabled) },
                 label = { Text(if (layer.maskEnabled) "Enabled" else "Disabled") },
             )
-            AssistChip(onClick = actions.onInvertMask, label = { Text("Invert") })
-            AssistChip(onClick = actions.onRemoveMask, label = { Text("Remove") })
+            AssistChip(onClick = actions.onInvertMask, label = { Text(stringResource(R.string.chip_invert)) })
+            AssistChip(onClick = actions.onRemoveMask, label = { Text(stringResource(R.string.editorsheets_remove)) })
         }
         LabeledSlider(
-            label = "Density",
+            label = stringResource(R.string.editorsheets_density),
             value = layer.maskDensity,
             range = 0f..1f,
             onChange = actions.onMaskDensity,
         )
         LabeledSlider(
-            label = "Feather",
+            label = stringResource(R.string.editorsheets_feather),
             value = layer.maskFeather,
             range = 0f..64f,
             onChange = actions.onMaskFeather,
@@ -489,6 +501,8 @@ private fun Modifier.reorderOnLongPress(
 
 @Composable
 private fun BackgroundRow(background: BackgroundControls) {
+    val useColourDescription = stringResource(R.string.editorsheets_use_current_colour_for_background)
+    val showBackgroundDescription = stringResource(R.string.editorsheets_show_background)
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -496,13 +510,17 @@ private fun BackgroundRow(background: BackgroundControls) {
         ColorChip(
             background.color or 0xFF000000.toInt(),
             onClick = background.onUseCurrentColour,
-            modifier = Modifier.semantics { contentDescription = "Use the current colour for the background" },
+            modifier = Modifier.semantics { contentDescription = useColourDescription },
         )
-        Text("Background colour", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(start = 12.dp))
+        Text(
+            stringResource(R.string.editorsheets_background_colour),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f).padding(start = 12.dp),
+        )
         Checkbox(
             checked = (background.color ushr 24) != 0,
             onCheckedChange = background.onVisible,
-            modifier = Modifier.semantics { contentDescription = "Show the background" },
+            modifier = Modifier.semantics { contentDescription = showBackgroundDescription },
         )
     }
 }
@@ -530,7 +548,7 @@ private fun GroupMenuItems(
     val group = actions.onGroupWithBelow
     if (active != null && !active.isGroup && group != null) {
         DropdownMenuItem(
-            text = { Text("Group with layer below") },
+            text = { Text(stringResource(R.string.editorsheets_group_with_layer_below)) },
             onClick = {
                 group(active.id)
                 dismiss()
@@ -541,7 +559,7 @@ private fun GroupMenuItems(
     val groupId = if (active?.isGroup == true) active.id else active?.parentGroupId
     if (groupId != null && ungroup != null) {
         DropdownMenuItem(
-            text = { Text("Ungroup") },
+            text = { Text(stringResource(R.string.editorsheets_ungroup)) },
             onClick = {
                 ungroup(groupId)
                 dismiss()
@@ -558,7 +576,7 @@ private fun EffectLayerMenuItems(
 ) {
     Divider()
     DropdownMenuItem(
-        text = { Text("Add adjustment layer") },
+        text = { Text(stringResource(R.string.editorsheets_add_adjustment_layer)) },
         onClick = { dismiss() },
         trailingIcon = { Icon(Icons.Default.Tune, contentDescription = null) },
     )
@@ -573,7 +591,7 @@ private fun EffectLayerMenuItems(
     }
     Divider()
     DropdownMenuItem(
-        text = { Text("Add filter layer") },
+        text = { Text(stringResource(R.string.editorsheets_add_filter_layer)) },
         onClick = { dismiss() },
         trailingIcon = { Icon(Icons.Default.FilterVintage, contentDescription = null) },
     )
@@ -619,14 +637,14 @@ fun SelectionSheet(
                 .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("Selection", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.editorchrome_selection), style = MaterialTheme.typography.titleMedium)
         Text(
             if (selectionCount > 0) "$selectionCount pixels selected" else "Nothing selected",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
-        Text("Combine mode", style = MaterialTheme.typography.labelMedium)
+        Text(stringResource(R.string.editorsheets_combine_mode), style = MaterialTheme.typography.labelMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             SelectionCombineMode.entries.forEach { entry ->
                 FilterChip(
@@ -638,39 +656,39 @@ fun SelectionSheet(
         }
 
         LabeledSlider(
-            label = "Magic wand tolerance",
+            label = stringResource(R.string.editorsheets_magic_wand_tolerance),
             value = tolerance.toFloat(),
             range = 0f..255f,
             onChange = { onToleranceChange(it.toInt()) },
         )
         LabeledSlider(
-            label = "Feather radius",
+            label = stringResource(R.string.editorsheets_feather_radius),
             value = featherRadius.toFloat(),
             range = 0f..64f,
             onChange = { onFeatherChange(it.toInt()) },
         )
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AssistChip(onClick = onSelectAll, label = { Text("Select all") })
-            AssistChip(onClick = onInvertSelection, label = { Text("Invert") })
-            AssistChip(onClick = onClearSelection, enabled = hasSelection, label = { Text("Clear") })
+            AssistChip(onClick = onSelectAll, label = { Text(stringResource(R.string.editorchrome_select_all)) })
+            AssistChip(onClick = onInvertSelection, label = { Text(stringResource(R.string.chip_invert)) })
+            AssistChip(onClick = onClearSelection, enabled = hasSelection, label = { Text(stringResource(R.string.chip_clear)) })
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AssistChip(
                 onClick = onApplyFeather,
                 enabled = hasSelection,
-                label = { Text("Apply feather") },
+                label = { Text(stringResource(R.string.editorsheets_apply_feather)) },
             )
-            AssistChip(onClick = onSelectionFromLayer, label = { Text("From layer alpha") })
+            AssistChip(onClick = onSelectionFromLayer, label = { Text(stringResource(R.string.editorsheets_from_layer_alpha)) })
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AssistChip(
                 onClick = onTrimToSelection,
                 enabled = hasSelection,
-                label = { Text("Crop to selection") },
+                label = { Text(stringResource(R.string.editorsheets_crop_to_selection)) },
             )
-            AssistChip(onClick = { onColorRange(0xFF000000.toInt()) }, label = { Text("Select black") })
-            AssistChip(onClick = { onColorRange(0xFFFFFFFF.toInt()) }, label = { Text("Select white") })
+            AssistChip(onClick = { onColorRange(0xFF000000.toInt()) }, label = { Text(stringResource(R.string.editorsheets_select_black)) })
+            AssistChip(onClick = { onColorRange(0xFFFFFFFF.toInt()) }, label = { Text(stringResource(R.string.editorsheets_select_white)) })
         }
     }
 }
@@ -708,7 +726,7 @@ fun CanvasOpsSheet(
                 .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("Canvas", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.editorchrome_canvas), style = MaterialTheme.typography.titleMedium)
         Text(
             "$width × $height px · $dpi dpi",
             style = MaterialTheme.typography.bodySmall,
@@ -716,7 +734,7 @@ fun CanvasOpsSheet(
         )
 
         Box {
-            OutlinedButton(onClick = { presetMenu = true }) { Text("Presets") }
+            OutlinedButton(onClick = { presetMenu = true }) { Text(stringResource(R.string.export_presets)) }
             DropdownMenu(expanded = presetMenu, onDismissRequest = { presetMenu = false }) {
                 CanvasOperations.PRESETS.forEach { preset ->
                     DropdownMenuItem(
@@ -735,7 +753,7 @@ fun CanvasOpsSheet(
             OutlinedTextField(
                 value = targetWidth,
                 onValueChange = { targetWidth = it.filter { c -> c.isDigit() }.take(5) },
-                label = { Text("Width") },
+                label = { Text(stringResource(R.string.editorsheets_width)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 singleLine = true,
                 modifier = Modifier.weight(1f),
@@ -743,7 +761,7 @@ fun CanvasOpsSheet(
             OutlinedTextField(
                 value = targetHeight,
                 onValueChange = { targetHeight = it.filter { c -> c.isDigit() }.take(5) },
-                label = { Text("Height") },
+                label = { Text(stringResource(R.string.editorsheets_height)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 singleLine = true,
                 modifier = Modifier.weight(1f),
@@ -759,7 +777,7 @@ fun CanvasOpsSheet(
             )
         }
 
-        Text("Anchor", style = MaterialTheme.typography.labelMedium)
+        Text(stringResource(R.string.editorsheets_anchor), style = MaterialTheme.typography.labelMedium)
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -776,36 +794,36 @@ fun CanvasOpsSheet(
             val w = targetWidth.toIntOrNull() ?: width
             val h = targetHeight.toIntOrNull() ?: height
             onResize(w, h, resample, anchor)
-        }) { Text("Apply resize") }
+        }) { Text(stringResource(R.string.editorsheets_apply_resize)) }
 
         Divider()
-        Text("Transform", style = MaterialTheme.typography.titleSmall)
+        Text(stringResource(R.string.editorsheets_transform), style = MaterialTheme.typography.titleSmall)
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            AssistChip(onClick = { onRotate(90) }, label = { Text("Rotate 90°") })
-            AssistChip(onClick = { onRotate(-90) }, label = { Text("Rotate -90°") })
-            AssistChip(onClick = { onRotate(180) }, label = { Text("Rotate 180°") })
+            AssistChip(onClick = { onRotate(90) }, label = { Text(stringResource(R.string.editorchrome_rotate_90)) })
+            AssistChip(onClick = { onRotate(-90) }, label = { Text(stringResource(R.string.editorchrome_rotate_90_2)) })
+            AssistChip(onClick = { onRotate(180) }, label = { Text(stringResource(R.string.editorsheets_rotate_180)) })
         }
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            AssistChip(onClick = { onFlip(false) }, label = { Text("Flip horizontal") })
-            AssistChip(onClick = { onFlip(true) }, label = { Text("Flip vertical") })
-            AssistChip(onClick = onTrim, label = { Text("Trim transparency") })
+            AssistChip(onClick = { onFlip(false) }, label = { Text(stringResource(R.string.editorsheets_flip_horizontal)) })
+            AssistChip(onClick = { onFlip(true) }, label = { Text(stringResource(R.string.editorsheets_flip_vertical)) })
+            AssistChip(onClick = onTrim, label = { Text(stringResource(R.string.editorsheets_trim_transparency)) })
         }
 
         Divider()
         LabeledSlider(
-            label = "Resolution (dpi)",
+            label = stringResource(R.string.editorsheets_resolution_dpi),
             value = dpi.toFloat(),
             range = 36f..600f,
             onChange = { onDpi(it.toInt()) },
         )
 
-        Text("Background", style = MaterialTheme.typography.titleSmall)
+        Text(stringResource(R.string.editorsheets_background), style = MaterialTheme.typography.titleSmall)
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -825,8 +843,8 @@ fun CanvasOpsSheet(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            OutlinedButton(onClick = { onClear(0) }) { Text("Clear to transparency") }
-            OutlinedButton(onClick = { onClear(backgroundColor) }) { Text("Fill with background") }
+            OutlinedButton(onClick = { onClear(0) }) { Text(stringResource(R.string.editorsheets_clear_to_transparency)) }
+            OutlinedButton(onClick = { onClear(backgroundColor) }) { Text(stringResource(R.string.editorsheets_fill_with_background)) }
         }
     }
 }
@@ -863,13 +881,13 @@ fun AnimationSheet(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Animation", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.editorsheets_animation), style = MaterialTheme.typography.titleMedium)
             Row {
                 IconButton(onClick = { onAddFrame(false) }) {
-                    Icon(Icons.Default.Add, contentDescription = "New frame")
+                    Icon(Icons.Default.Add, contentDescription = stringResource(R.string.editorsheets_new_frame))
                 }
                 IconButton(onClick = { onAddFrame(true) }) {
-                    Icon(Icons.Default.ContentCopy, contentDescription = "Duplicate frame")
+                    Icon(Icons.Default.ContentCopy, contentDescription = stringResource(R.string.editorsheets_duplicate_frame))
                 }
                 IconButton(onClick = onTogglePlayback) {
                     Icon(
@@ -909,16 +927,28 @@ fun AnimationSheet(
                                 onClick = { if (index > 0) onMoveFrame(index, index - 1) },
                                 modifier = Modifier.size(24.dp),
                             ) {
-                                Icon(Icons.Default.ChevronLeft, contentDescription = "Move earlier", modifier = Modifier.size(16.dp))
+                                Icon(
+                                    Icons.Default.ChevronLeft,
+                                    contentDescription = stringResource(R.string.editorsheets_move_earlier),
+                                    modifier = Modifier.size(16.dp),
+                                )
                             }
                             IconButton(
                                 onClick = { if (index < timeline.frames.lastIndex) onMoveFrame(index, index + 1) },
                                 modifier = Modifier.size(24.dp),
                             ) {
-                                Icon(Icons.Default.ChevronRight, contentDescription = "Move later", modifier = Modifier.size(16.dp))
+                                Icon(
+                                    Icons.Default.ChevronRight,
+                                    contentDescription = stringResource(R.string.editorsheets_move_later),
+                                    modifier = Modifier.size(16.dp),
+                                )
                             }
-                            IconButton(onClick = { onDeleteFrame(index) }, modifier = Modifier.size(24.dp)) {
-                                Icon(Icons.Default.Delete, contentDescription = "Delete frame", modifier = Modifier.size(16.dp))
+                            IconButton(onClick = { onDeleteFrame(index) }, modifier = Modifier.size(48.dp)) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = stringResource(R.string.editorsheets_delete_frame),
+                                    modifier = Modifier.size(16.dp),
+                                )
                             }
                         }
                     }
@@ -926,10 +956,13 @@ fun AnimationSheet(
             }
         }
 
-        Text("Total ${timeline.durationMs} ms · ${timeline.frameCount} frames", style = MaterialTheme.typography.bodySmall)
+        Text(
+            stringResource(R.string.editorsheets_total_duration_and_frames, timeline.durationMs, timeline.frameCount),
+            style = MaterialTheme.typography.bodySmall,
+        )
 
         LabeledSlider(
-            label = "Frame duration (ms)",
+            label = stringResource(R.string.editorsheets_frame_duration_ms),
             value =
                 timeline.frames
                     .getOrNull(timeline.activeIndex)
@@ -939,7 +972,7 @@ fun AnimationSheet(
             onChange = { onFrameDuration(timeline.activeIndex, it.toInt()) },
         )
         LabeledSlider(
-            label = "Playback fps",
+            label = stringResource(R.string.editorsheets_playback_fps),
             value = settings.fps.toFloat(),
             range = 1f..60f,
             onChange = { onSettings(settings.copy(fps = it.toInt())) },
@@ -947,36 +980,36 @@ fun AnimationSheet(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(checked = settings.loop, onCheckedChange = { onSettings(settings.copy(loop = it)) })
             Spacer(Modifier.width(8.dp))
-            Text("Loop playback", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.editorsheets_loop_playback), style = MaterialTheme.typography.bodySmall)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(checked = settings.pingPong, onCheckedChange = { onSettings(settings.copy(pingPong = it)) })
             Spacer(Modifier.width(8.dp))
-            Text("Ping-pong playback", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.editorsheets_ping_pong_playback), style = MaterialTheme.typography.bodySmall)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(checked = settings.backgroundFrame, onCheckedChange = { onSettings(settings.copy(backgroundFrame = it)) })
             Spacer(Modifier.width(8.dp))
-            Text("First frame is the background", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.editorsheets_first_frame_is_the_background), style = MaterialTheme.typography.bodySmall)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(checked = settings.foregroundFrame, onCheckedChange = { onSettings(settings.copy(foregroundFrame = it)) })
             Spacer(Modifier.width(8.dp))
-            Text("Last frame is the foreground", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.editorsheets_last_frame_is_the_foreground), style = MaterialTheme.typography.bodySmall)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(checked = onionEnabled, onCheckedChange = onToggleOnion)
             Spacer(Modifier.width(8.dp))
-            Text("Onion skin", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.editorsheets_onion_skin), style = MaterialTheme.typography.bodySmall)
         }
         LabeledSlider(
-            label = "Onion skin frames",
+            label = stringResource(R.string.editorsheets_onion_skin_frames),
             value = settings.onionSkinFrames.toFloat(),
             range = 0f..5f,
             onChange = { onSettings(settings.copy(onionSkinFrames = it.toInt())) },
         )
         LabeledSlider(
-            label = "Onion skin opacity",
+            label = stringResource(R.string.editorsheets_onion_skin_opacity),
             value = settings.onionSkinOpacity,
             range = 0.05f..1f,
             onChange = { onSettings(settings.copy(onionSkinOpacity = it)) },
@@ -1017,7 +1050,7 @@ fun GuidesSheet(
                 .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("Symmetry", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.editorsheets_symmetry), style = MaterialTheme.typography.titleMedium)
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1031,19 +1064,19 @@ fun GuidesSheet(
             }
         }
         LabeledSlider(
-            label = "Radial copies",
+            label = stringResource(R.string.editorsheets_radial_copies),
             value = symmetry.radialCount.toFloat(),
             range = SymmetryEngine.RADIAL_RANGE.first.toFloat()..SymmetryEngine.RADIAL_RANGE.last.toFloat(),
             onChange = { onSymmetry(symmetry.copy(radialCount = it.toInt())) },
         )
         LabeledSlider(
-            label = "Axis X",
+            label = stringResource(R.string.editorsheets_axis_x),
             value = symmetry.centreX,
             range = 0f..1f,
             onChange = { onSymmetry(symmetry.copy(centreX = it)) },
         )
         LabeledSlider(
-            label = "Axis Y",
+            label = stringResource(R.string.editorsheets_axis_y),
             value = symmetry.centreY,
             range = 0f..1f,
             onChange = { onSymmetry(symmetry.copy(centreY = it)) },
@@ -1054,7 +1087,7 @@ fun GuidesSheet(
                 onCheckedChange = { onSymmetry(symmetry.copy(secondaryAxis = it)) },
             )
             Spacer(Modifier.width(8.dp))
-            Text("Second axis (kaleidoscope)", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.editorsheets_second_axis_kaleidoscope), style = MaterialTheme.typography.bodySmall)
         }
         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             items(SymmetryEngine.PRESETS) { preset ->
@@ -1070,7 +1103,7 @@ fun GuidesSheet(
         )
 
         Divider()
-        Text("Perspective", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.editorsheets_perspective), style = MaterialTheme.typography.titleMedium)
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1084,13 +1117,13 @@ fun GuidesSheet(
             }
         }
         LabeledSlider(
-            label = "Rays",
+            label = stringResource(R.string.editorsheets_rays),
             value = perspective.density.toFloat(),
             range = PerspectiveGuide.DENSITY_RANGE.first.toFloat()..PerspectiveGuide.DENSITY_RANGE.last.toFloat(),
             onChange = { onPerspective(perspective.copy(density = it.toInt())) },
         )
         LabeledSlider(
-            label = "Horizon",
+            label = stringResource(R.string.editorsheets_horizon),
             value = perspective.horizonY,
             range = 0f..1f,
             onChange = { onPerspective(PerspectiveGuide.withHorizon(perspective, it)) },
@@ -1108,13 +1141,13 @@ fun GuidesSheet(
             onStyle = { onPerspective(perspective.copy(lineStyle = it)) },
         )
         LabeledSlider(
-            label = "Snap radius",
+            label = stringResource(R.string.editorsheets_snap_radius),
             value = perspective.snapRadius,
             range = PerspectiveGuide.SNAP_RADIUS_RANGE,
             onChange = { onPerspective(perspective.copy(snapRadius = it)) },
         )
         LabeledSlider(
-            label = "Snap strength",
+            label = stringResource(R.string.editorsheets_snap_strength),
             value = perspective.snapStrength,
             range = 0f..1f,
             onChange = { onPerspective(perspective.copy(snapStrength = it)) },
@@ -1125,7 +1158,7 @@ fun GuidesSheet(
                 onCheckedChange = { onPerspective(perspective.copy(snapEnabled = it)) },
             )
             Spacer(Modifier.width(8.dp))
-            Text("Snap to rays", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.editorsheets_snap_to_rays), style = MaterialTheme.typography.bodySmall)
         }
         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             items(PerspectiveGuide.PRESETS) { preset ->
@@ -1137,26 +1170,26 @@ fun GuidesSheet(
         }
 
         Divider()
-        Text("Display", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.editorsheets_display), style = MaterialTheme.typography.titleMedium)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(checked = assist.assisted, onCheckedChange = assist.onAssisted)
             Spacer(Modifier.width(8.dp))
-            Text("Assisted drawing on this layer", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.editorsheets_assisted_drawing_on_this_layer), style = MaterialTheme.typography.bodySmall)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(checked = assist.snapToGuides, onCheckedChange = assist.onSnap)
             Spacer(Modifier.width(8.dp))
-            Text("Snap strokes to guides", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.editorsheets_snap_strokes_to_guides), style = MaterialTheme.typography.bodySmall)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(checked = showSymmetryGuides, onCheckedChange = onShowSymmetry)
             Spacer(Modifier.width(8.dp))
-            Text("Show symmetry guides", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.editorsheets_show_symmetry_guides), style = MaterialTheme.typography.bodySmall)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(checked = showPerspectiveGuides, onCheckedChange = onShowPerspective)
             Spacer(Modifier.width(8.dp))
-            Text("Show perspective guides", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.editorsheets_show_perspective_guides), style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -1230,14 +1263,14 @@ fun TextSheet(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Text", style = MaterialTheme.typography.titleMedium)
-            Button(onClick = onPlace, enabled = text.isNotBlank()) { Text("Place on canvas") }
+            Text(stringResource(R.string.editorsheets_text), style = MaterialTheme.typography.titleMedium)
+            Button(onClick = onPlace, enabled = text.isNotBlank()) { Text(stringResource(R.string.editorsheets_place_on_canvas)) }
         }
 
         OutlinedTextField(
             value = text,
             onValueChange = onTextChange,
-            label = { Text("Content") },
+            label = { Text(stringResource(R.string.editorsheets_content)) },
             minLines = 2,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -1248,7 +1281,7 @@ fun TextSheet(
             DropdownMenu(expanded = fontMenu, onDismissRequest = { fontMenu = false }) {
                 onImportFont?.let { import ->
                     DropdownMenuItem(
-                        text = { Text("Import font…") },
+                        text = { Text(stringResource(R.string.editorsheets_import_font)) },
                         onClick = {
                             fontMenu = false
                             import()
@@ -1268,25 +1301,25 @@ fun TextSheet(
         }
 
         LabeledSlider(
-            label = "Size",
+            label = stringResource(R.string.size),
             value = style.fontSize,
             range = 8f..400f,
             onChange = { onStyleChange(style.copy(fontSize = it)) },
         )
         LabeledSlider(
-            label = "Line height",
+            label = stringResource(R.string.editorsheets_line_height),
             value = style.lineHeight,
             range = 0.8f..3f,
             onChange = { onStyleChange(style.copy(lineHeight = it)) },
         )
         LabeledSlider(
-            label = "Letter spacing",
+            label = stringResource(R.string.editorsheets_letter_spacing),
             value = style.letterSpacing,
             range = -4f..40f,
             onChange = { onStyleChange(style.copy(letterSpacing = it)) },
         )
         LabeledSlider(
-            label = "Wrap width",
+            label = stringResource(R.string.editorsheets_wrap_width),
             value = style.maxWidth ?: 0f,
             range = 0f..4000f,
             onChange = { onStyleChange(style.copy(maxWidth = if (it <= 0f) null else it)) },
@@ -1299,41 +1332,41 @@ fun TextSheet(
             FilterChip(
                 selected = style.bold,
                 onClick = { onStyleChange(style.copy(bold = !style.bold)) },
-                label = { Text("Bold") },
+                label = { Text(stringResource(R.string.editorsheets_bold)) },
             )
             FilterChip(
                 selected = style.italic,
                 onClick = { onStyleChange(style.copy(italic = !style.italic)) },
-                label = { Text("Italic") },
+                label = { Text(stringResource(R.string.editorsheets_italic)) },
             )
             FilterChip(
                 selected = style.underline,
                 onClick = { onStyleChange(style.copy(underline = !style.underline)) },
-                label = { Text("Underline") },
+                label = { Text(stringResource(R.string.editorsheets_underline)) },
             )
             FilterChip(
                 selected = style.strikeThrough,
                 onClick = { onStyleChange(style.copy(strikeThrough = !style.strikeThrough)) },
-                label = { Text("Strike") },
+                label = { Text(stringResource(R.string.editorsheets_strike)) },
             )
             FilterChip(
                 selected = style.allCaps,
                 onClick = { onStyleChange(style.copy(allCaps = !style.allCaps)) },
-                label = { Text("All caps") },
+                label = { Text(stringResource(R.string.editorsheets_all_caps)) },
             )
             FilterChip(
                 selected = style.outline,
                 onClick = { onStyleChange(style.copy(outline = !style.outline)) },
-                label = { Text("Outline") },
+                label = { Text(stringResource(R.string.editorsheets_outline)) },
             )
             FilterChip(
                 selected = style.vertical,
                 onClick = { onStyleChange(style.copy(vertical = !style.vertical)) },
-                label = { Text("Vertical") },
+                label = { Text(stringResource(R.string.editorsheets_vertical)) },
             )
         }
 
-        Text("Alignment", style = MaterialTheme.typography.labelMedium)
+        Text(stringResource(R.string.editorsheets_alignment), style = MaterialTheme.typography.labelMedium)
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1347,7 +1380,7 @@ fun TextSheet(
             }
         }
 
-        Text("Colour", style = MaterialTheme.typography.labelMedium)
+        Text(stringResource(R.string.editorsheets_colour), style = MaterialTheme.typography.labelMedium)
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1356,7 +1389,7 @@ fun TextSheet(
             ColorChip(0xFFFFFFFF.toInt(), onClick = { onColorChange(0xFFFFFFFF.toInt()) })
             ColorChip(color, onClick = { })
             Text(
-                "Tap the colour chip in the toolbar for the full picker.",
+                stringResource(R.string.editorsheets_tap_the_colour_chip_in_the_toolbar_for),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

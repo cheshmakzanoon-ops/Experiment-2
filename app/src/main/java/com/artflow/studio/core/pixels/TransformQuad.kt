@@ -484,8 +484,14 @@ object TransformQuad {
         highQuality: Boolean,
     ) {
         require(source.width == target.width && source.height == target.height) { "Buffer sizes differ" }
+        // A collapsed quad has no placement, so nothing moves: the source stays where it was.
+        // Checked before split, which clears the selected pixels out of target.
+        val inverse = inverseMapping(quad)
+        if (inverse == null) {
+            source.pixels.copyInto(target.pixels)
+            return
+        }
         val (floating, blend) = LayerTransform.split(source, target, selection)
-        val inverse = inverseMapping(quad) ?: return
         val x0 = max(0, floor(min(min(quad.x0, quad.x1), min(quad.x2, quad.x3))).toInt() - 1)
         val x1 = min(target.width - 1, ceil(max(max(quad.x0, quad.x1), max(quad.x2, quad.x3))).toInt() + 1)
         val y0 = max(0, floor(min(min(quad.y0, quad.y1), min(quad.y2, quad.y3))).toInt() - 1)

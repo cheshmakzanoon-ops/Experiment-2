@@ -286,11 +286,20 @@ object PaletteCodec {
         if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
             importJson(trimmed)?.let { return it.renamed(name) }
         }
-        if (trimmed.startsWith("GIMP Palette", ignoreCase = true)) {
+        if (trimmed.startsWith("GIMP Palette", ignoreCase = true) || isRgbListing(trimmed)) {
             return importGpl(trimmed, name)
         }
         importHex(trimmed, name)?.let { return it }
         return importGpl(trimmed, name)
+    }
+
+    /**
+     * True when every data line is an `r g b` triplet, as a GPL body is. Checked before hex, because a three-digit
+     * hex code and a decimal channel look alike, so a headerless GPL list would otherwise import as hex garbage.
+     */
+    private fun isRgbListing(text: String): Boolean {
+        val data = text.lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
+        return data.isNotEmpty() && data.all { parseRgbTriplet(it) != null }
     }
 
     // ---------------------------------------------------------------------------------------

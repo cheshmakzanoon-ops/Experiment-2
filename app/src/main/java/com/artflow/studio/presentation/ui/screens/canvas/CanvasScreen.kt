@@ -32,6 +32,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -40,6 +41,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.artflow.studio.R
 import com.artflow.studio.core.canvas.CropBox
 import com.artflow.studio.core.color.CmykProof
 import com.artflow.studio.core.color.ColorProfile
@@ -432,6 +434,8 @@ fun CanvasScreen(
         if (pendingText != null) {
             canvasView?.cancelActiveGesture()
             openMenu = null
+            // A new Add Text must not edit a text layer left over from an earlier session.
+            editingText = null
             panel = EditorPanel.TEXT
         }
     }
@@ -499,7 +503,7 @@ fun CanvasScreen(
                 modifier = Modifier.weight(1f),
             )
             IconButton(onClick = dismissPanel) {
-                Icon(Icons.Default.Close, contentDescription = "Close ${panel.title}")
+                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.canvasscreen_close_panel, panel.title))
             }
         }
         when (panel) {
@@ -630,7 +634,7 @@ fun CanvasScreen(
                             onEditText = { layer ->
                                 layer.textContent?.let { content ->
                                     viewModel.setText(content.text, content.style)
-                                    viewModel.setColor(content.color)
+                                    viewModel.setColor(viewModel.displayColor(content.color))
                                     editingText = layer
                                     panel = EditorPanel.TEXT
                                 }
@@ -736,14 +740,26 @@ fun CanvasScreen(
                         val editingContent = editing?.textContent
                         when {
                             editing != null && editingContent != null -> {
-                                val updated = editingContent.copy(text = input.text, style = input.textStyle, color = input.brushColor)
+                                val updated =
+                                    editingContent.copy(
+                                        text = input.text,
+                                        style = input.textStyle,
+                                        color = viewModel.documentColor(input.brushColor),
+                                    )
                                 viewModel.textLayers.edit(editing.id, updated)
                                 editingText = null
                             }
 
                             pending != null -> {
                                 // Text goes on its own layer and stays editable, as in Procreate.
-                                val content = TextLayerContent(input.text, input.textStyle, input.brushColor, pending.x, pending.y)
+                                val content =
+                                    TextLayerContent(
+                                        input.text,
+                                        input.textStyle,
+                                        viewModel.documentColor(input.brushColor),
+                                        pending.x,
+                                        pending.y,
+                                    )
                                 viewModel.textLayers.place(content)
                                 viewModel.cancelText()
                                 viewModel.setTool(ToolType.BRUSH)
@@ -1121,7 +1137,7 @@ fun CanvasScreen(
                     if (!focusMode && (settings.showSymmetryGuides || settings.showPerspectiveGuides)) {
                         // Guides are always available from the quick menu; the chip is a reminder.
                         Text(
-                            text = "Guides on",
+                            text = stringResource(R.string.canvasscreen_guides_on),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier =
@@ -1420,7 +1436,7 @@ fun CanvasScreen(
                             .padding(8.dp)
                             .size(if (settings.largeTouchTargets) 56.dp else 48.dp),
                 ) {
-                    Icon(Icons.Default.FullscreenExit, contentDescription = "Exit focus mode")
+                    Icon(Icons.Default.FullscreenExit, contentDescription = stringResource(R.string.canvasscreen_exit_focus_mode))
                 }
             }
         }
@@ -1453,21 +1469,21 @@ fun CanvasScreen(
         AlertDialog(
             // A tap outside the dialog or system Back must never delete recoverable artwork.
             onDismissRequest = {},
-            title = { Text("Autosave found") },
+            title = { Text(stringResource(R.string.canvasscreen_autosave_found)) },
             text = {
-                Text("ArtFlow closed unexpectedly the last time this project was open. Recover the autosaved version?")
+                Text(stringResource(R.string.canvasscreen_artflow_closed_unexpectedly_the_last))
             },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.recoverAutosave()
                     showRecoveryDialog = false
-                }) { Text("Recover") }
+                }) { Text(stringResource(R.string.canvasscreen_recover)) }
             },
             dismissButton = {
                 TextButton(onClick = {
                     viewModel.dismissRecovery()
                     showRecoveryDialog = false
-                }) { Text("Discard") }
+                }) { Text(stringResource(R.string.canvasscreen_discard)) }
             },
         )
     }
@@ -1475,8 +1491,8 @@ fun CanvasScreen(
     if (showExitConfirm) {
         AlertDialog(
             onDismissRequest = { if (!saving) showExitConfirm = false },
-            title = { Text("Save changes?") },
-            text = { Text("This project has unsaved changes.") },
+            title = { Text(stringResource(R.string.canvasscreen_save_changes)) },
+            text = { Text(stringResource(R.string.canvasscreen_this_project_has_unsaved_changes)) },
             confirmButton = {
                 TextButton(enabled = !saving, onClick = {
                     viewModel.save {
@@ -1487,13 +1503,16 @@ fun CanvasScreen(
             },
             dismissButton = {
                 Row {
-                    TextButton(enabled = !saving, onClick = { showExitConfirm = false }) { Text("Stay") }
+                    TextButton(
+                        enabled = !saving,
+                        onClick = { showExitConfirm = false },
+                    ) { Text(stringResource(R.string.canvasscreen_stay)) }
                     TextButton(enabled = !saving, onClick = {
                         viewModel.discardChanges {
                             showExitConfirm = false
                             onNavigateBack()
                         }
-                    }) { Text("Discard and leave") }
+                    }) { Text(stringResource(R.string.canvasscreen_discard_and_leave)) }
                 }
             },
         )
@@ -1581,7 +1600,7 @@ private fun ToolOptionsPanel(
         )
 
         if (input.tool == ToolType.GRADIENT) {
-            Text("Gradient direction", style = MaterialTheme.typography.labelMedium)
+            Text(stringResource(R.string.canvasscreen_gradient_direction), style = MaterialTheme.typography.labelMedium)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1594,7 +1613,7 @@ private fun ToolOptionsPanel(
                     )
                 }
             }
-            Text("Ramp", style = MaterialTheme.typography.labelMedium)
+            Text(stringResource(R.string.canvasscreen_ramp), style = MaterialTheme.typography.labelMedium)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1615,12 +1634,12 @@ private fun ToolOptionsPanel(
                     onCheckedChange = { viewModel.setFillSettings(input.fillTolerance, it) },
                 )
                 Spacer(Modifier.width(8.dp))
-                Text("Only fill the connected region", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.canvasscreen_only_fill_the_connected_region), style = MaterialTheme.typography.bodySmall)
             }
         }
 
         if (input.tool == ToolType.SHAPE) {
-            Text("Shape", style = MaterialTheme.typography.labelMedium)
+            Text(stringResource(R.string.brush_adv_shape), style = MaterialTheme.typography.labelMedium)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1639,7 +1658,7 @@ private fun ToolOptionsPanel(
                     onCheckedChange = { viewModel.setShapeSettings(input.shapeKind, it) },
                 )
                 Spacer(Modifier.width(8.dp))
-                Text("Filled", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.canvasscreen_filled), style = MaterialTheme.typography.bodySmall)
             }
         }
 
@@ -1650,7 +1669,10 @@ private fun ToolOptionsPanel(
             )
         }
         if (input.tool == ToolType.LIQUIFY) {
-            Text("Liquify mode: ${input.liquify.mode.displayName}", style = MaterialTheme.typography.bodySmall)
+            Text(
+                stringResource(R.string.canvasscreen_liquify_mode, input.liquify.mode.displayName),
+                style = MaterialTheme.typography.bodySmall,
+            )
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1663,24 +1685,30 @@ private fun ToolOptionsPanel(
                     )
                 }
             }
-            Text("Size ${input.liquify.size.toInt()} px", style = MaterialTheme.typography.labelSmall)
+            Text(
+                stringResource(R.string.canvasscreen_liquify_size, input.liquify.size.toInt()),
+                style = MaterialTheme.typography.labelSmall,
+            )
             Slider(
                 value = input.liquify.size.coerceIn(8f, 400f),
                 onValueChange = { viewModel.setLiquifySettings(input.liquify.copy(size = it)) },
                 valueRange = 8f..400f,
             )
-            Text("Distortion ${(input.liquify.strength * 100).toInt()}%", style = MaterialTheme.typography.labelSmall)
+            Text(
+                stringResource(R.string.canvasscreen_liquify_distortion, (input.liquify.strength * 100).toInt()),
+                style = MaterialTheme.typography.labelSmall,
+            )
             Slider(
                 value = input.liquify.strength.coerceIn(0f, 1f),
                 onValueChange = { viewModel.setLiquifySettings(input.liquify.copy(strength = it)) },
             )
-            TextButton(onClick = viewModel::resetLiquify) { Text("Reset liquify") }
+            TextButton(onClick = viewModel::resetLiquify) { Text(stringResource(R.string.canvasscreen_reset_liquify)) }
         }
         if (input.tool == ToolType.TRANSFORM) TransformOptions(viewModel, input, canvasView)
         if (input.tool == ToolType.BRUSH) BrushAssistOptions(viewModel, input)
         if (input.tool == ToolType.CLONE_STAMP) {
             Text(
-                "Tap to set the clone source, then drag. Blend mode: aligned.",
+                stringResource(R.string.canvasscreen_tap_to_set_the_clone_source_then_drag),
                 style = MaterialTheme.typography.bodySmall,
             )
         }
@@ -1702,7 +1730,10 @@ private fun ColorDropThresholdBar(
 ) {
     Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 4.dp, modifier = modifier.padding(12.dp).widthIn(max = 420.dp)) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("ColorDrop threshold ${(threshold / 255f * 100).roundToInt()}%", style = MaterialTheme.typography.labelMedium)
+            Text(
+                stringResource(R.string.canvasscreen_color_drop_threshold, (threshold / 255f * 100).roundToInt()),
+                style = MaterialTheme.typography.labelMedium,
+            )
             Slider(
                 value = threshold,
                 onValueChange = onChange,
@@ -1712,7 +1743,7 @@ private fun ColorDropThresholdBar(
             )
             // Procreate's Continue Filling: further taps fill more areas with the same colour.
             TextButton(onClick = onContinueFilling) { Text(if (continueFilling) "Filling: tap areas" else "Continue filling") }
-            TextButton(onClick = onDone) { Text("Done") }
+            TextButton(onClick = onDone) { Text(stringResource(R.string.layeropacityoverlay_done)) }
         }
     }
 }
@@ -1755,9 +1786,9 @@ private fun ShapeEditBar(
                 style = MaterialTheme.typography.labelMedium,
             )
             if (edit.editing) {
-                TextButton(onClick = onDone) { Text("Done") }
+                TextButton(onClick = onDone) { Text(stringResource(R.string.layeropacityoverlay_done)) }
             } else {
-                TextButton(onClick = onEdit) { Text("Edit Shape") }
+                TextButton(onClick = onEdit) { Text(stringResource(R.string.canvasscreen_edit_shape)) }
             }
         }
     }
@@ -1843,7 +1874,9 @@ private fun ClipboardActions(
     ) {
         AssistChip(onClick = { viewModel.clipboard.copy(cut = true) }, label = { Text(if (hasSelection) "Cut" else "Cut layer") })
         AssistChip(onClick = { viewModel.clipboard.copy() }, label = { Text(if (hasSelection) "Copy" else "Copy layer") })
-        AssistChip(onClick = viewModel.clipboard::paste, enabled = hasClipboard, label = { Text("Paste as layer") })
+        AssistChip(onClick = viewModel.clipboard::paste, enabled = hasClipboard, label = {
+            Text(stringResource(R.string.canvasscreen_paste_as_layer))
+        })
     }
 }
 
@@ -1864,7 +1897,7 @@ private fun BrushAssistOptions(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(checked = input.quickShape, onCheckedChange = viewModel::setQuickShape)
             Spacer(Modifier.width(8.dp))
-            Text("QuickShape — hold at the end of a stroke to snap a line or ellipse", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.canvasscreen_quickshape_hold_at_the_end_of_a_stroke), style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -1876,7 +1909,7 @@ private fun TransformOptions(
     canvasView: ArtFlowCanvasView?,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Drag mode", style = MaterialTheme.typography.labelMedium)
+        Text(stringResource(R.string.canvasscreen_drag_mode), style = MaterialTheme.typography.labelMedium)
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1893,12 +1926,25 @@ private fun TransformOptions(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            AssistChip(onClick = { canvasView?.transformActiveLayer(flipHorizontal = true) }, label = { Text("Flip H") })
-            AssistChip(onClick = { canvasView?.transformActiveLayer(flipVertical = true) }, label = { Text("Flip V") })
-            AssistChip(onClick = { canvasView?.transformActiveLayer(rotation = 45f) }, label = { Text("Rotate 45°") })
-            AssistChip(onClick = { canvasView?.transformActiveLayer(rotation = 90f) }, label = { Text("Rotate 90°") })
-            AssistChip(onClick = { canvasView?.transformActiveLayer(scaleFactor = 0.5f) }, label = { Text("Half size") })
-            AssistChip(onClick = { canvasView?.transformActiveLayer(scaleFactor = 2f) }, label = { Text("Double size") })
+            AssistChip(onClick = {
+                canvasView?.transformActiveLayer(flipHorizontal = true)
+            }, label = { Text(stringResource(R.string.editorchrome_flip_h)) })
+            AssistChip(onClick = {
+                canvasView?.transformActiveLayer(flipVertical = true)
+            }, label = { Text(stringResource(R.string.editorchrome_flip_v)) })
+            AssistChip(
+                onClick = { canvasView?.transformActiveLayer(rotation = 45f) },
+                label = { Text(stringResource(R.string.chip_rotate_45)) },
+            )
+            AssistChip(onClick = {
+                canvasView?.transformActiveLayer(rotation = 90f)
+            }, label = { Text(stringResource(R.string.editorchrome_rotate_90)) })
+            AssistChip(onClick = {
+                canvasView?.transformActiveLayer(scaleFactor = 0.5f)
+            }, label = { Text(stringResource(R.string.canvasscreen_half_size)) })
+            AssistChip(onClick = {
+                canvasView?.transformActiveLayer(scaleFactor = 2f)
+            }, label = { Text(stringResource(R.string.canvasscreen_double_size)) })
         }
     }
 }
@@ -1920,7 +1966,7 @@ private fun ErrorState(
         Spacer(Modifier.height(12.dp))
         Text(message, color = MaterialTheme.colorScheme.error)
         Spacer(Modifier.height(12.dp))
-        Button(onClick = onRetry) { Text("Retry") }
+        Button(onClick = onRetry) { Text(stringResource(R.string.canvasscreen_retry)) }
     }
 }
 

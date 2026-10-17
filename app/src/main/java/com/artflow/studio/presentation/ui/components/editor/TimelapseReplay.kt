@@ -14,9 +14,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.artflow.studio.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -51,18 +53,29 @@ fun TimelapseReplay(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Time-lapse Replay", color = Color.White, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                TextButton(onClick = onExport) { Text("Export MP4") }
-                IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Close replay", tint = Color.White) }
+                Text(
+                    stringResource(R.string.timelapsereplay_time_lapse_replay),
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onExport) { Text(stringResource(R.string.timelapsereplay_export_mp4)) }
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = stringResource(R.string.timelapsereplay_close_replay),
+                        tint = Color.White,
+                    )
+                }
             }
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 val current = image
                 if (frames.isEmpty()) {
-                    Text("Nothing recorded yet. Every edit is recorded automatically.", color = Color.White)
+                    Text(stringResource(R.string.timelapsereplay_nothing_recorded_yet_every_edit_is), color = Color.White)
                 } else if (current != null) {
                     Image(
                         bitmap = current,
-                        contentDescription = "Time-lapse frame ${index + 1}",
+                        contentDescription = stringResource(R.string.timelapsereplay_time_lapse_frame, index + 1),
                         contentScale = ContentScale.Fit,
                         modifier = Modifier.fillMaxSize(),
                     )

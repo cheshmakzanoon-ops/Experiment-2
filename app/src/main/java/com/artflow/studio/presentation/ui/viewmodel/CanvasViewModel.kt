@@ -9,12 +9,12 @@ import com.artflow.studio.core.animation.PlaybackStepper
 import com.artflow.studio.core.canvas.StylusButtons
 import com.artflow.studio.core.color.ColorHarmony
 import com.artflow.studio.core.color.ColorProfile
+import com.artflow.studio.core.color.ColorProfiles
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.color.PaletteLibrary
 import com.artflow.studio.core.export.ExportArea
 import com.artflow.studio.core.export.ExportFormat
 import com.artflow.studio.core.export.ExportOptions
-import com.artflow.studio.core.export.ExportRegion
 import com.artflow.studio.core.export.ExportResult
 import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.PixelBuffer
@@ -29,7 +29,6 @@ import com.artflow.studio.core.tool.PixelBrushes
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.data.export.ArtworkExporter
 import com.artflow.studio.data.export.LayerImports
-import com.artflow.studio.data.export.LayerRaster
 import com.artflow.studio.data.export.PendingImports
 import com.artflow.studio.data.export.ProcreateImport
 import com.artflow.studio.data.export.TimelapseRecorder
@@ -58,6 +57,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -351,7 +351,9 @@ class CanvasViewModel
                         try {
                             // Private layers (Insert a private photo) are left out of the recording.
                             val composite = canvasRepository.compositeWithoutPrivateLayers() ?: return@collect
-                            timelapse.capture(projectId, composite, _settings.value.timelapseMaxSide)
+                            // Stored values are in the document's profile; the recording is sRGB.
+                            val recorded = ColorProfiles.convert(composite, canvasRepository.getColorProfile(), ColorProfile.SRGB)
+                            timelapse.capture(projectId, recorded, _settings.value.timelapseMaxSide)
                             timelapseRevision = revision
                         } catch (cancelled: CancellationException) {
                             throw cancelled
@@ -446,7 +448,7 @@ class CanvasViewModel
                         width = size.width,
                         height = size.height,
                         dpi = size.dpi,
-                        backgroundColor = canvasRepository.getBackgroundColor(),
+                        backgroundColor = canvasRepository.displayColor(canvasRepository.getBackgroundColor()),
                         colorProfile = canvasRepository.getColorProfile(),
                     )
             }
@@ -508,6 +510,12 @@ class CanvasViewModel
 
         /** Swaps the primary and secondary colours, as tapping Procreate's secondary swatch does. */
         fun swapColors() = updateInput { it.copy(brushColor = it.secondaryColor, secondaryColor = it.brushColor) }
+
+        /** Converts an sRGB interface colour into the canvas's stored colour space. */
+        fun documentColor(srgb: Int): Int = canvasRepository.documentColor(srgb)
+
+        /** Converts a stored canvas colour back to sRGB for the interface. */
+        fun displayColor(stored: Int): Int = canvasRepository.displayColor(stored)
 
         fun setColor(color: Int) {
             updateInput { it.copy(brushColor = color) }
@@ -1215,6 +1223,11 @@ class CanvasViewModel
         fun save(onSaved: (() -> Unit)? = null) {
             val projectId = currentProjectId
             if (projectId == 0L || _saving.value) return
+            // An autosave that has not been recovered holds the only copy of that work. A save would replace it.
+            if ((_uiState.value as? CanvasUiState.Ready)?.recoveryAvailable == true) {
+                notify("Recover or discard the autosaved version before saving")
+                return
+            }
             _saving.value = true
             viewModelScope.launch(editorErrors) {
                 try {
@@ -1255,7 +1268,11 @@ class CanvasViewModel
             if (!allowAutosave || !_settings.value.autosaveEnabled || _saving.value) return
             val state = _uiState.value as? CanvasUiState.Ready ?: return
             if (state.recoveryAvailable || !canvasRepository.hasUnsavedChanges()) return
-            viewModelScope.launch(editorErrors) { canvasRepository.autosave(state.projectId) }
+            viewModelScope.launch(editorErrors) {
+                // The app can be closed as soon as it stops, which cancels this scope. The save must finish instead,
+                // or the work since the last autosave is lost.
+                withContext(NonCancellable) { canvasRepository.autosave(state.projectId) }
+            }
         }
 
         fun discardChanges(onDiscarded: () -> Unit) {
@@ -1335,7 +1352,7 @@ class CanvasViewModel
                             _dirty.value = canvasRepository.hasUnsavedChanges()
                             exporter.exportPackage(projectId, name, resolved)
                         } else {
-                            renderedExport(projectId, name, resolved)
+                            renderedExport(canvasRepository, exporter, projectId, name, resolved)
                         }
                     _exportState.value =
                         result.fold(
@@ -1350,40 +1367,6 @@ class CanvasViewModel
                     Timber.e(error, "Export failed")
                     _exportState.value = ExportUiState.Failed(error.message ?: "Export failed")
                 }
-            }
-        }
-
-        /** An image, document or animation export rendered from the canvas. */
-        private suspend fun renderedExport(
-            projectId: Long,
-            name: String,
-            resolved: ExportOptions,
-        ): Result<ExportResult> {
-            val allFrames =
-                resolved.area == ExportArea.ALL_FRAMES ||
-                    (resolved.format.requiresAnimation && resolved.area != ExportArea.CURRENT_FRAME)
-            require(!allFrames || resolved.format.requiresAnimation || resolved.format == ExportFormat.PDF) {
-                "For all frames, choose PNG frames, PDF, GIF or MP4"
-            }
-            val snapshot =
-                canvasRepository.exportSnapshot(
-                    allFrames,
-                    resolved.includeHiddenLayers,
-                    resolved.format.needsLayers,
-                )
-            val region = ExportRegion.resolve(snapshot.frames, snapshot.selection, resolved.area)
-            val frames = snapshot.frames.map { ExportRegion.apply(it, snapshot.selection, resolved.area, region) }
-            val delays =
-                resolved.animationFpsOverride?.let { fps -> List(frames.size) { 1000 / fps.coerceIn(1, 60) } }
-                    ?: snapshot.delaysMs
-            return if (allFrames || resolved.format.requiresAnimation) {
-                exporter.exportAnimation(projectId, name, frames, delays, resolved)
-            } else {
-                val layers =
-                    snapshot.layers.map { (layer, buffer) ->
-                        LayerRaster(layer.name, ExportRegion.apply(buffer, snapshot.selection, resolved.area, region), layer)
-                    }
-                exporter.exportStill(projectId, name, frames.first(), layers, resolved, snapshot.hasAdjustmentLayers, snapshot.groups)
             }
         }
 

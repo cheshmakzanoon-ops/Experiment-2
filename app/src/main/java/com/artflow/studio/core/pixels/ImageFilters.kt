@@ -23,14 +23,16 @@ object ImageFilters {
      * Separable Gaussian blur.
      *
      * @param radius standard deviation in pixels; `0` returns a copy unchanged.
+     * @param checkpoint called once per row as the blur runs; a throw from it abandons the blur.
      */
     fun gaussianBlur(
         source: PixelBuffer,
         radius: Float,
+        checkpoint: () -> Unit = {},
     ): PixelBuffer {
         if (radius <= 0.01f) return source.copy()
         val kernel = gaussianKernel(radius)
-        return separableConvolve(source, kernel)
+        return separableConvolve(source, kernel, checkpoint)
     }
 
     /** Fast approximate blur with a repeated box filter (used for large radii and mask feathering). */
@@ -43,11 +45,15 @@ object ImageFilters {
         return separableConvolve(source, kernel)
     }
 
-    /** Directional motion blur. [angleDegrees] is measured clockwise from the +x axis. */
+    /**
+     * Directional motion blur. [angleDegrees] is measured clockwise from the +x axis. [checkpoint] runs once per row,
+     * so a throw from it abandons the blur part way through.
+     */
     fun motionBlur(
         source: PixelBuffer,
         distance: Float,
         angleDegrees: Float,
+        checkpoint: () -> Unit = {},
     ): PixelBuffer {
         if (distance <= 0.5f) return source.copy()
         val steps = max(2, distance.roundToInt())
@@ -58,6 +64,7 @@ object ImageFilters {
         val out = PixelBuffer(source.width, source.height)
         val half = distance / 2f
         for (y in 0 until source.height) {
+            checkpoint()
             for (x in 0 until source.width) {
                 var a = 0f
                 var r = 0f
@@ -286,12 +293,13 @@ object ImageFilters {
         strength: Float = 1f,
     ): PixelBuffer {
         val kernel =
+            // The weights sum to zero, so a flat area lands on the 128 bias (mid-grey) and only edges relieve.
             floatArrayOf(
                 -2f,
                 -1f,
                 0f,
                 -1f,
-                1f,
+                0f,
                 1f,
                 0f,
                 1f,
@@ -369,43 +377,35 @@ object ImageFilters {
     private fun separableConvolve(
         source: PixelBuffer,
         kernel: FloatArray,
+        checkpoint: () -> Unit = {},
     ): PixelBuffer {
         val width = source.width
         val height = source.height
         val count = width * height
+        val pixels = source.pixels
 
-        // Premultiply once.
-        val pr = FloatArray(count)
-        val pg = FloatArray(count)
-        val pb = FloatArray(count)
-        val pa = FloatArray(count)
-        for (i in 0 until count) {
-            val pixel = source.pixels[i]
-            val a = Channels.alpha(pixel) / 255f
-            pa[i] = a
-            pr[i] = Channels.red(pixel) / 255f * a
-            pg[i] = Channels.green(pixel) / 255f * a
-            pb[i] = Channels.blue(pixel) / 255f * a
+        // One shared pass plane serves every channel. Each channel's result plane also holds its input before
+        // the horizontal pass, so a blur holds five float planes at a time instead of six. The arithmetic per
+        // channel is unchanged.
+        val passed = FloatArray(count)
+
+        // shift < 0 blurs alpha; otherwise the colour channel at [shift] is premultiplied by alpha first.
+        fun blur(shift: Int): FloatArray {
+            val result = FloatArray(count)
+            for (i in 0 until count) {
+                val pixel = pixels[i]
+                val alpha = ((pixel ushr 24) and 0xFF) / 255f
+                result[i] = if (shift < 0) alpha else ((pixel ushr shift) and 0xFF) / 255f * alpha
+            }
+            horizontalPass(result, passed, width, height, kernel, checkpoint)
+            verticalPassReal(passed, result, width, height, kernel, checkpoint)
+            return result
         }
 
-        val tr = FloatArray(count)
-        val tg = FloatArray(count)
-        val tb = FloatArray(count)
-        val ta = FloatArray(count)
-
-        horizontalPass(pr, tr, width, height, kernel)
-        horizontalPass(pg, tg, width, height, kernel)
-        horizontalPass(pb, tb, width, height, kernel)
-        horizontalPass(pa, ta, width, height, kernel)
-
-        val r = FloatArray(count)
-        val g = FloatArray(count)
-        val b = FloatArray(count)
-        val a = FloatArray(count)
-        verticalPassReal(tr, r, width, height, kernel)
-        verticalPassReal(tg, g, width, height, kernel)
-        verticalPassReal(tb, b, width, height, kernel)
-        verticalPassReal(ta, a, width, height, kernel)
+        val a = blur(-1)
+        val r = blur(16)
+        val g = blur(8)
+        val b = blur(0)
 
         val out = PixelBuffer(width, height)
         for (i in 0 until count) {
@@ -441,9 +441,11 @@ object ImageFilters {
         width: Int,
         height: Int,
         kernel: FloatArray,
+        checkpoint: () -> Unit = {},
     ) {
         val radius = kernel.size / 2
         for (y in 0 until height) {
+            checkpoint()
             val row = y * width
             for (x in 0 until width) {
                 var sum = 0f
@@ -462,9 +464,11 @@ object ImageFilters {
         width: Int,
         height: Int,
         kernel: FloatArray,
+        checkpoint: () -> Unit = {},
     ) {
         val radius = kernel.size / 2
         for (y in 0 until height) {
+            checkpoint()
             for (x in 0 until width) {
                 var sum = 0f
                 for (k in -radius..radius) {

@@ -16,7 +16,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.R
 import com.artflow.studio.domain.model.layer.BlendMode
 
 /**
@@ -37,9 +39,9 @@ fun BlendModeSelectorDialog(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Blend Mode")
+                Text(stringResource(R.string.blendmodeselector_blend_mode))
                 Badge {
-                    Text("Phase 12")
+                    Text(stringResource(R.string.blendmodeselector_phase_12))
                 }
             }
         },
@@ -55,7 +57,7 @@ fun BlendModeSelectorDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("Done")
+                Text(stringResource(R.string.layeropacityoverlay_done))
             }
         },
     )
@@ -249,7 +251,7 @@ fun BlendModeDropdown(
             value = selectedBlendMode.displayName,
             onValueChange = {},
             readOnly = true,
-            label = { Text("Blend Mode") },
+            label = { Text(stringResource(R.string.blendmodeselector_blend_mode)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier =
                 Modifier

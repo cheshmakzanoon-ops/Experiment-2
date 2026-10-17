@@ -174,6 +174,8 @@ class PointerGestureRouterTest {
         send(Event.DOWN, pen)
         router.suppress()
         assertEquals(Action.IGNORE, send(Event.UP, pen).action)
+        // A finger landing straight after the pen lifts is a palm; a fresh touch later is accepted.
+        time += 2000
         assertEquals(Action.START_TOOL, send(Event.DOWN, finger).action)
     }
 
@@ -373,5 +375,81 @@ class PointerGestureRouterTest {
         val on = Touch(router)
         on.tap(2)
         assertEquals(Route(Action.FINISH_NAVIGATION, historyPointers = 2), on.log.last())
+    }
+
+    @Test
+    fun aRestingPalmJustAfterThePenLiftsStartsNothing() {
+        send(Event.DOWN, pen)
+        assertEquals(Action.END_TOOL, send(Event.UP, pen).action)
+        assertEquals(Action.IGNORE, send(Event.DOWN, finger).action)
+        assertEquals(Action.IGNORE, send(Event.MOVE, finger.copy(x = 60f)).action)
+        assertEquals("A resting palm holds no colour", 0, router.heldFingers())
+        assertEquals(Action.IGNORE, send(Event.UP, finger).action)
+        time += 2000
+        assertEquals("The window passes once the palm is gone", Action.START_TOOL, send(Event.DOWN, finger).action)
+    }
+
+    @Test
+    fun aPalmThatStaysDownPastTheWindowStillDrawsNothing() {
+        send(Event.DOWN, pen)
+        send(Event.UP, pen)
+        send(Event.DOWN, finger)
+        time += 2000
+        assertEquals(Action.IGNORE, send(Event.MOVE, finger.copy(x = 60f)).action)
+        assertEquals(Action.IGNORE, send(Event.UP, finger).action)
+    }
+
+    @Test
+    fun aSecondFingerAfterAPalmStillUndoes() {
+        send(Event.DOWN, pen)
+        send(Event.UP, pen)
+        send(Event.DOWN, finger)
+        assertEquals(Action.REBASE_NAVIGATION, send(Event.POINTER_DOWN, finger, other, changed = 1).action)
+        assertEquals(2, router.heldFingers())
+        send(Event.POINTER_UP, finger, other, changed = 1)
+        assertEquals("A two-finger tap after a palm still undoes once", 2, send(Event.UP, finger).historyPointers)
+    }
+
+    @Test
+    fun aPalmThatBringsAThirdContactCannotScrubOrRedo() {
+        send(Event.DOWN, pen)
+        send(Event.UP, pen)
+        send(Event.DOWN, finger)
+        assertEquals(Action.REBASE_NAVIGATION, send(Event.POINTER_DOWN, finger, other, changed = 1).action)
+        val third = Pointer(15, 60f, 60f)
+        assertEquals(Action.IGNORE, send(Event.POINTER_DOWN, finger, other, third, changed = 2).action)
+        val trio = listOf(finger, other, third)
+        val actions =
+            listOf(0f, 80f, 0f, 80f, 0f, 80f, 0f).map { dx ->
+                send(Event.MOVE, *trio.map { it.copy(x = it.x + dx) }.toTypedArray()).action
+            }
+        assertFalse("A palm cannot clear the layer", Action.THREE_FINGER_SCRUB in actions)
+        assertEquals("A third contact is never a tap", 0, send(Event.UP, finger, other, third).historyPointers)
+    }
+
+    @Test
+    fun aSecondContactAfterThePalmWindowStaysRejected() {
+        send(Event.DOWN, pen)
+        send(Event.UP, pen)
+        send(Event.DOWN, finger)
+        time += 2000
+        assertEquals(Action.IGNORE, send(Event.POINTER_DOWN, finger, other, changed = 1).action)
+        assertEquals(0, router.heldFingers())
+        assertEquals(0, send(Event.UP, finger).historyPointers)
+    }
+
+    @Test
+    fun aPenTakesOverARejectedPalm() {
+        send(Event.DOWN, pen)
+        send(Event.UP, pen)
+        send(Event.DOWN, finger)
+        val route = send(Event.POINTER_DOWN, finger, pen, changed = 1)
+        assertEquals(Action.START_TOOL, route.action)
+        assertEquals(1, route.index)
+    }
+
+    @Test
+    fun aFingerStartsAToolWhenNoPenHasLifted() {
+        assertEquals(Action.START_TOOL, send(Event.DOWN, finger).action)
     }
 }

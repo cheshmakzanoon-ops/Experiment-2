@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
@@ -39,6 +40,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.R
 import com.artflow.studio.core.pixels.Quad
 import com.artflow.studio.core.pixels.TransformQuad
 import com.artflow.studio.core.pixels.WarpMesh
@@ -229,9 +231,10 @@ private fun StudioSidebarContent(
             VerticalSlider(
                 value = sizeToSlider(state.size),
                 onValueChange = { actions.onSize(sliderToSize(it)) },
-                label = "Brush size ${state.size.toInt()} px",
+                label = stringResource(R.string.studiochrome_brush_size, state.size.toInt()),
                 height = sliderHeight,
             )
+            val pickDescription = stringResource(R.string.studiochrome_pick_colour_from_canvas)
             Box(
                 modifier =
                     Modifier
@@ -240,20 +243,24 @@ private fun StudioSidebarContent(
                             width = 2.dp,
                             color = if (state.eyedropperActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                             shape = RoundedCornerShape(6.dp),
-                        ).semantics { contentDescription = "Modify: pick a colour from the canvas" }
-                        .combinedClickable(onClick = actions.onModify, onLongClick = actions.onQuickMenu, onLongClickLabel = "QuickMenu"),
+                        ).semantics { contentDescription = pickDescription }
+                        .combinedClickable(
+                            onClick = actions.onModify,
+                            onLongClick = actions.onQuickMenu,
+                            onLongClickLabel = stringResource(R.string.studiochrome_quickmenu),
+                        ),
             )
             VerticalSlider(
                 value = state.opacity,
                 onValueChange = { actions.onOpacity(it.coerceAtLeast(0.01f)) },
-                label = "Opacity ${(state.opacity * 100).toInt()}%",
+                label = stringResource(R.string.studiochrome_opacity_percent, (state.opacity * 100).toInt()),
                 height = sliderHeight,
             )
-            IconButton(onClick = actions.onUndo, enabled = state.canUndo, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Default.Undo, contentDescription = "Undo")
+            IconButton(onClick = actions.onUndo, enabled = state.canUndo, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Default.Undo, contentDescription = stringResource(R.string.undo))
             }
-            IconButton(onClick = actions.onRedo, enabled = state.canRedo, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Default.Redo, contentDescription = "Redo")
+            IconButton(onClick = actions.onRedo, enabled = state.canRedo, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Default.Redo, contentDescription = stringResource(R.string.redo))
             }
         }
     }
@@ -354,14 +361,14 @@ fun SelectionToolbar(
                 label = { Text(name) },
             )
         }
-        AssistChip(onClick = actions.onInvert, label = { Text("Invert") })
-        AssistChip(onClick = actions.onCopyPaste, label = { Text("Copy & Paste") })
-        AssistChip(onClick = actions.onMore, label = { Text("Feather…") })
+        AssistChip(onClick = actions.onInvert, label = { Text(stringResource(R.string.chip_invert)) })
+        AssistChip(onClick = actions.onCopyPaste, label = { Text(stringResource(R.string.chip_copy_paste)) })
+        AssistChip(onClick = actions.onMore, label = { Text(stringResource(R.string.chip_feather)) })
         Box {
-            AssistChip(onClick = { savedMenu = true }, label = { Text("Save & Load") })
+            AssistChip(onClick = { savedMenu = true }, label = { Text(stringResource(R.string.chip_save_load)) })
             DropdownMenu(expanded = savedMenu, onDismissRequest = { savedMenu = false }) {
                 DropdownMenuItem(
-                    text = { Text("Save selection") },
+                    text = { Text(stringResource(R.string.chip_save_selection)) },
                     onClick = {
                         actions.onSave()
                         savedMenu = false
@@ -369,22 +376,25 @@ fun SelectionToolbar(
                 )
                 repeat(savedCount) { index ->
                     DropdownMenuItem(
-                        text = { Text("Selection ${index + 1}") },
+                        text = { Text(stringResource(R.string.selection_slot, index + 1)) },
                         onClick = {
                             actions.onLoad(index)
                             savedMenu = false
                         },
                         trailingIcon = {
                             IconButton(onClick = { actions.onDelete(index) }) {
-                                Icon(Icons.Default.Delete, contentDescription = "Delete selection ${index + 1}")
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = stringResource(R.string.delete_selection_description, index + 1),
+                                )
                             }
                         },
                     )
                 }
             }
         }
-        AssistChip(onClick = actions.onColorFill, label = { Text("Colour Fill") })
-        AssistChip(onClick = actions.onClear, label = { Text("Clear") })
+        AssistChip(onClick = actions.onColorFill, label = { Text(stringResource(R.string.chip_colour_fill)) })
+        AssistChip(onClick = actions.onClear, label = { Text(stringResource(R.string.chip_clear)) })
     }
 }
 
@@ -415,19 +425,19 @@ fun TransformToolbar(
         FilterChip(
             selected = assist.magnetics,
             onClick = { actions.onAssist(assist.copy(magnetics = !assist.magnetics)) },
-            label = { Text("Magnetics") },
+            label = { Text(stringResource(R.string.chip_magnetics)) },
         )
         FilterChip(
             selected = assist.snapping,
             onClick = { actions.onAssist(assist.copy(snapping = !assist.snapping)) },
-            label = { Text("Snapping") },
+            label = { Text(stringResource(R.string.chip_snapping)) },
         )
         VerticalDivider(Modifier.height(24.dp))
-        AssistChip(onClick = { actions.onFlip(true) }, label = { Text("Flip Horizontal") })
-        AssistChip(onClick = { actions.onFlip(false) }, label = { Text("Flip Vertical") })
-        AssistChip(onClick = { actions.onRotate(45f) }, label = { Text("Rotate 45°") })
-        AssistChip(onClick = actions.onFit, label = { Text("Fit to Screen") })
-        AssistChip(onClick = actions.onReset, label = { Text("Reset") })
+        AssistChip(onClick = { actions.onFlip(true) }, label = { Text(stringResource(R.string.chip_flip_horizontal)) })
+        AssistChip(onClick = { actions.onFlip(false) }, label = { Text(stringResource(R.string.chip_flip_vertical)) })
+        AssistChip(onClick = { actions.onRotate(45f) }, label = { Text(stringResource(R.string.chip_rotate_45)) })
+        AssistChip(onClick = actions.onFit, label = { Text(stringResource(R.string.chip_fit_screen)) })
+        AssistChip(onClick = actions.onReset, label = { Text(stringResource(R.string.chip_reset)) })
         FilterChip(
             selected = interpolation == TransformQuad.Interpolation.BILINEAR,
             onClick = {
@@ -439,7 +449,7 @@ fun TransformToolbar(
                     },
                 )
             },
-            label = { Text("Interpolation: ${interpolation.displayName}") },
+            label = { Text(stringResource(R.string.chip_interpolation, interpolation.displayName)) },
         )
     }
 }
@@ -644,15 +654,17 @@ fun CopyPasteMenu(
             actions.onDismiss()
         }
     FloatingBar(modifier) {
-        Text("Copy & Paste", style = MaterialTheme.typography.titleSmall)
-        AssistChip(onClick = run(actions.onCut), label = { Text("Cut") })
-        AssistChip(onClick = run(actions.onCopy), label = { Text("Copy") })
-        AssistChip(onClick = run(actions.onCopyAll), label = { Text("Copy All") })
-        AssistChip(onClick = run(actions.onDuplicate), label = { Text("Duplicate") })
-        AssistChip(onClick = run(actions.onCutAndPaste), label = { Text("Cut & Paste") })
-        AssistChip(onClick = run(actions.onCopyAndPaste), label = { Text("Copy & Paste") })
-        AssistChip(onClick = run(actions.onPaste), enabled = canPaste, label = { Text("Paste") })
-        IconButton(onClick = actions.onDismiss) { Icon(Icons.Default.Close, contentDescription = "Close Copy & Paste") }
+        Text(stringResource(R.string.copy_paste), style = MaterialTheme.typography.titleSmall)
+        AssistChip(onClick = run(actions.onCut), label = { Text(stringResource(R.string.chip_cut)) })
+        AssistChip(onClick = run(actions.onCopy), label = { Text(stringResource(R.string.chip_copy)) })
+        AssistChip(onClick = run(actions.onCopyAll), label = { Text(stringResource(R.string.chip_copy_all)) })
+        AssistChip(onClick = run(actions.onDuplicate), label = { Text(stringResource(R.string.duplicate)) })
+        AssistChip(onClick = run(actions.onCutAndPaste), label = { Text(stringResource(R.string.chip_cut_and_paste)) })
+        AssistChip(onClick = run(actions.onCopyAndPaste), label = { Text(stringResource(R.string.chip_copy_paste)) })
+        AssistChip(onClick = run(actions.onPaste), enabled = canPaste, label = { Text(stringResource(R.string.chip_paste)) })
+        IconButton(onClick = actions.onDismiss) {
+            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close_copy_paste_description))
+        }
     }
 }
 

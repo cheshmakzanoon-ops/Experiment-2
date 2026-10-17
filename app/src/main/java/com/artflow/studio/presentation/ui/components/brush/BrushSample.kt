@@ -7,6 +7,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.res.stringResource
+import com.artflow.studio.R
 import com.artflow.studio.core.render.BrushPreview
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.brush.BrushParams
@@ -24,6 +26,12 @@ fun BrushSample(
         value = withContext(Dispatchers.Default) { BitmapPixelBridge.toBitmap(BrushPreview.render(parameters)).asImageBitmap() }
     }
     Box(modifier) {
-        sample?.let { Image(it, contentDescription = "Actual brush stroke preview", modifier = Modifier.fillMaxSize()) }
+        sample?.let {
+            Image(
+                it,
+                contentDescription = stringResource(R.string.brushsample_actual_brush_stroke_preview),
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
     }
 }

@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
+import com.artflow.studio.R
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import kotlinx.coroutines.Dispatchers
@@ -36,14 +37,14 @@ fun rememberCameraCapture(
                     withContext(Dispatchers.IO) {
                         runCatching { BitmapPixelBridge.decodeUri(context.contentResolver, uri) }.getOrNull().also { target.delete() }
                     }
-                if (image == null) onError("The photo could not be read") else onImage(image)
+                if (image == null) onError(context.getString(R.string.cameracapture_photo_could_not_be_read)) else onImage(image)
             }
         }
     return {
         try {
             launcher.launch(uri)
         } catch (missing: ActivityNotFoundException) {
-            onError("No camera app is available on this device")
+            onError(context.getString(R.string.cameracapture_no_camera_app))
         }
     }
 }

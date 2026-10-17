@@ -1,11 +1,14 @@
 package com.artflow.studio.core.pixels
 
-/** Pixel operations behind Cut, Copy and Paste: a null or mismatched [SelectionMask] means the whole layer. */
+/**
+ * Pixel operations behind Cut, Copy and Paste: a null or mismatched [SelectionMask] means the whole layer.
+ * A present but empty mask selects nothing, so Clear, Cut and Fill leave the layer unchanged.
+ */
 object SelectionClipboard {
     private fun usable(
         mask: SelectionMask?,
         pixels: PixelBuffer,
-    ): SelectionMask? = mask?.takeIf { it.isActive() && it.width == pixels.width && it.height == pixels.height }
+    ): SelectionMask? = mask?.takeIf { it.width == pixels.width && it.height == pixels.height }
 
     /** Copy of [source] keeping only the selected coverage. */
     fun extract(
@@ -18,14 +21,24 @@ object SelectionClipboard {
         }
     }
 
-    /** Paints [color] over [target], blended by the selection's coverage. */
+    /**
+     * Paints [color] over [target], blended by the selection's coverage. With [alphaLocked], only pixels that
+     * already have paint change, and each keeps its alpha, as Procreate's alpha lock does.
+     */
     fun fill(
         target: PixelBuffer,
         selection: SelectionMask?,
         color: Int,
+        alphaLocked: Boolean = false,
     ) {
-        val mask = usable(selection, target) ?: return target.fill(color)
-        for (i in target.pixels.indices) target.pixels[i] = ImageFilters.lerpArgb(target.pixels[i], color, mask.alphaAt(i))
+        val mask = usable(selection, target)
+        if (mask == null && !alphaLocked) return target.fill(color)
+        if (mask != null && !mask.isActive()) return
+        for (i in target.pixels.indices) {
+            val before = target.pixels[i]
+            val painted = if (alphaLocked) BlendModes.sourceAtop(before, color) else color
+            target.pixels[i] = ImageFilters.lerpArgb(before, painted, mask?.alphaAt(i) ?: 1f)
+        }
     }
 
     /** Removes the selected coverage from [target] in place. */
@@ -34,6 +47,7 @@ object SelectionClipboard {
         selection: SelectionMask?,
     ) {
         val mask = usable(selection, target) ?: return target.clear()
+        if (!mask.isActive()) return
         for (i in target.pixels.indices) target.pixels[i] = Channels.scaleAlpha(target.pixels[i], 1f - mask.alphaAt(i))
     }
 }

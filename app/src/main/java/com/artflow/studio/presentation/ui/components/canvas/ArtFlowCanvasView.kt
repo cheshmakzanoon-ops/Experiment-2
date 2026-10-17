@@ -35,6 +35,7 @@ import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.pixels.TransformQuad
 import com.artflow.studio.core.pixels.WarpMesh
 import com.artflow.studio.core.render.BrushPatch
+import com.artflow.studio.core.render.StrokeClock
 import com.artflow.studio.core.symmetry.SymmetryEngine
 import com.artflow.studio.core.text.TextLayout
 import com.artflow.studio.core.tool.FillTool
@@ -390,6 +391,8 @@ class ArtFlowCanvasView
         private var cloneDragStarted = false
         private var lastPreviewRequest = 0L
         private var lastLiquifyPreview = 0L
+        private var liquifyPreviewJob: Job? = null
+        private var liquifyPreviewQueued = false
 
         // --- Callbacks ----------------------------------------------------------------------------
 
@@ -527,6 +530,7 @@ class ArtFlowCanvasView
             healingSession = null
             liquifySession = null
             gestureLiquifyReference = null
+            cancelLiquifyPreview()
         }
 
         override fun onDetachedFromWindow() {
@@ -1469,7 +1473,8 @@ class ArtFlowCanvasView
 
             when (tool) {
                 ToolType.BRUSH, ToolType.ERASER -> {
-                    startStroke(canvasX, canvasY, pressure, tool)
+                    val time = StrokeClock.wallTime(event.eventTime, SystemClock.uptimeMillis(), System.currentTimeMillis())
+                    startStroke(canvasX, canvasY, pressure, tool, time)
                 }
 
                 ToolType.SMUDGE -> {
@@ -1579,6 +1584,7 @@ class ArtFlowCanvasView
                             pressure = strokePressure,
                             tiltX = axisOf(event, index, MotionEvent.AXIS_TILT, history),
                             tiltY = axisOf(event, index, MotionEvent.AXIS_ORIENTATION, history),
+                            timestamp = StrokeClock.wallTime(time, SystemClock.uptimeMillis(), System.currentTimeMillis()),
                         )
                         predict(tool, smoothX, smoothY, strokePressure, time)
                         updateLiveStroke()
@@ -1698,7 +1704,7 @@ class ArtFlowCanvasView
                             endX = canvasX,
                             endY = canvasY,
                             filled = input.shapeFilled,
-                            color = input.brushColor,
+                            color = canvasRepository.documentColor(input.brushColor),
                             strokeWidth = max(1f, input.brushParams.size / 4f),
                         )
                     }
@@ -1817,6 +1823,7 @@ class ArtFlowCanvasView
             y: Float,
             pressure: Float,
             tool: ToolType,
+            time: Long = System.currentTimeMillis(),
         ) {
             val chosen =
                 if (tool == ToolType.ERASER) {
@@ -1840,6 +1847,7 @@ class ArtFlowCanvasView
                     layerId = activeLayerId,
                     isEraser = tool == ToolType.ERASER,
                     destination = input.strokeDestination,
+                    timestamp = time,
                 )
             drawing = currentStrokeId != 0L
             clearPrediction()
@@ -1914,7 +1922,8 @@ class ArtFlowCanvasView
             }
             val radius = input.brushParams.size * 0.5f * pressure.coerceIn(MIN_PREDICTED_PRESSURE, 1f)
             val alpha = (input.brushParams.opacity.coerceIn(0f, 1f) * 255f).toInt()
-            renderer.setPrediction(points, radius, (input.brushColor and 0x00FFFFFF) or (alpha shl 24))
+            val predicted = canvasRepository.documentColor(input.brushColor)
+            renderer.setPrediction(points, radius, (predicted and 0x00FFFFFF) or (alpha shl 24))
             requestRender()
         }
 
@@ -1922,6 +1931,9 @@ class ArtFlowCanvasView
             predictor.reset()
             renderer.setPrediction(null, 0f, 0)
         }
+
+        private fun activeLayerHasText(): Boolean =
+            canvasRepository.getAllLayers().firstOrNull { it.id == activeLayerId }?.textContent != null
 
         /** Lets the stabilised line catch up to the lift point, then commits or cancels the stroke. */
         private fun finishStroke(
@@ -1940,7 +1952,12 @@ class ArtFlowCanvasView
                 }
             }
             val markBefore = canvasRepository.historyMark
+            val paintedText = activeLayerHasText()
             canvasRepository.endStroke(currentStrokeId)
+            // The first paint on editable text rasterises it: the glyphs stay, the text does not. Say so once.
+            if (paintedText && !activeLayerHasText()) {
+                onStatusMessage?.invoke("Painting rasterised this text: it stays visible but can no longer be edited as text")
+            }
             val shape = quickShapeShown?.takeIf { quickShapeApplied && it.nodes.isNotEmpty() }
             if (shape != null && canvasRepository.historyMark != markBefore) {
                 shapeEdit = ShapeEdit(shape, quickShapePressure, quickShapeTool, activeLayerId, canvasRepository.historyMark)
@@ -2364,16 +2381,65 @@ class ArtFlowCanvasView
             requestPreviewRefresh()
         }
 
-        /** Full-canvas resample of the liquify map, throttled so dragging stays responsive. */
+        /**
+         * Throttled live preview of a liquify gesture. Warps render from a snapshot of the displacement on a
+         * background thread, one at a time, so the UI thread only copies the region the gesture has touched.
+         * Reconstruct blends a live restore field and still renders here, so it stays under the pixel cap.
+         */
         private fun previewLiquify(buffer: PixelBuffer) {
             val session = liquifySession ?: return
             val base = rasterBase ?: return
             val now = System.currentTimeMillis()
             if (now - lastLiquifyPreview < LIQUIFY_PREVIEW_INTERVAL_MS) return
             lastLiquifyPreview = now
-            if (buffer.width * buffer.height > LIQUIFY_PREVIEW_MAX_PIXELS) return
-            val preview = session.render(base, gestureLiquifyReference?.original)
-            preview.pixels.copyInto(buffer.pixels)
+            if (session.settings.mode == LiquifyTool.Mode.RECONSTRUCT) {
+                if (buffer.width * buffer.height > LIQUIFY_PREVIEW_MAX_PIXELS) return
+                session.render(base, gestureLiquifyReference?.original).pixels.copyInto(buffer.pixels)
+                return
+            }
+            if (liquifyPreviewJob?.isActive == true) {
+                liquifyPreviewQueued = true
+                return
+            }
+            launchLiquifyPreview(session, buffer, base)
+        }
+
+        private fun launchLiquifyPreview(
+            session: LiquifyTool.Session,
+            buffer: PixelBuffer,
+            base: PixelBuffer,
+        ) {
+            val bounds = session.dirtyBounds ?: return
+            val snapshot = session.snapshotWarp(bounds)
+            liquifyPreviewJob =
+                coroutineScope.launch {
+                    val pixels = withContext(Dispatchers.Default) { snapshot.render(base) }
+                    // The gesture may have ended while this rendered. Only paste into the gesture that asked for it.
+                    if (rasterBuffer !== buffer || liquifySession !== session) return@launch
+                    pasteRegion(buffer, snapshot.bounds, pixels)
+                    forcePreviewRefresh()
+                    if (liquifyPreviewQueued) {
+                        liquifyPreviewQueued = false
+                        launchLiquifyPreview(session, buffer, base)
+                    }
+                }
+        }
+
+        private fun pasteRegion(
+            buffer: PixelBuffer,
+            bounds: IntBounds,
+            pixels: IntArray,
+        ) {
+            for (row in 0 until bounds.height) {
+                val to = (bounds.top + row) * buffer.width + bounds.left
+                pixels.copyInto(buffer.pixels, to, row * bounds.width, (row + 1) * bounds.width)
+            }
+        }
+
+        private fun cancelLiquifyPreview() {
+            liquifyPreviewJob?.cancel()
+            liquifyPreviewJob = null
+            liquifyPreviewQueued = false
         }
 
         private fun moveOriginX(): Float = moveStart.first
@@ -2419,6 +2485,8 @@ class ArtFlowCanvasView
             healingSession = null
             liquifySession = null
             gestureLiquifyReference = null
+            // A preview still rendering must not paste over the committed pixels.
+            cancelLiquifyPreview()
             coroutineScope.launch {
                 try {
                     if (!cancelled) {
@@ -2486,7 +2554,12 @@ class ArtFlowCanvasView
         private fun requestPreviewRefresh() {
             val now = System.currentTimeMillis()
             if (now - lastPreviewRequest < PREVIEW_INTERVAL_MS) return
-            lastPreviewRequest = now
+            forcePreviewRefresh()
+        }
+
+        /** A refresh the throttle must not drop: a background render has just changed the pixels it shows. */
+        private fun forcePreviewRefresh() {
+            lastPreviewRequest = System.currentTimeMillis()
             canvasRepository.requestPreviewRefresh()
         }
 
@@ -2496,8 +2569,10 @@ class ArtFlowCanvasView
             tolerance: Int = input.fillTolerance,
             onCommitted: ((Int) -> Unit)? = null,
         ) {
-            val cx = x.roundToInt()
-            val cy = y.roundToInt()
+            // A pixel covers [i, i + 1), so the seed is the pixel under the touch; rounding would pick the neighbour past
+            // the edge.
+            val cx = floor(x).toInt()
+            val cy = floor(y).toInt()
             val captured = input
             // With a Reference layer, the fill stops at its lines instead of the active layer's pixels.
             val referenceId =
@@ -2505,6 +2580,7 @@ class ArtFlowCanvasView
                     .getAllLayers()
                     .firstOrNull { it.isFillReference && it.isVisible && it.id != activeLayerId }
                     ?.id
+            val fillColor = canvasRepository.documentColor(captured.brushColor)
             coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
                 val reference = referenceId?.let { canvasRepository.layerPixels(it) }
                 applyFillEdit("Paint bucket", onCommitted) { target, selection, alphaLocked ->
@@ -2513,7 +2589,7 @@ class ArtFlowCanvasView
                             target = target,
                             startX = cx,
                             startY = cy,
-                            color = captured.brushColor,
+                            color = fillColor,
                             settings =
                                 FillTool.Settings(
                                     tolerance = tolerance,
@@ -2531,7 +2607,12 @@ class ArtFlowCanvasView
             start: Pair<Float, Float>,
             end: Pair<Float, Float>,
         ) {
-            val gradient = input.gradient.copy(type = input.gradientType, stops = input.gradient.stops.toList())
+            // The stops are interface sRGB; convert them into the canvas's stored space before drawing.
+            val gradient =
+                input.gradient.copy(
+                    type = input.gradientType,
+                    stops = input.gradient.stops.map { it.copy(color = canvasRepository.documentColor(it.color)) },
+                )
             applyFillEdit("Gradient") { target, selection, alphaLocked ->
                 GradientTool
                     .draw(
@@ -2610,7 +2691,8 @@ class ArtFlowCanvasView
                         }
                     }
                 if (color != null) {
-                    val opaque = Channels.withAlpha(color, 255)
+                    // The canvas stores its own colour space; the picker shows sRGB.
+                    val opaque = Channels.withAlpha(canvasRepository.displayColor(color), 255)
                     if (source != null && source === samplingSource) {
                         onEyedropperChanged?.invoke(EyedropperLoupe(viewX, viewY, opaque, samplingPrevious))
                     }

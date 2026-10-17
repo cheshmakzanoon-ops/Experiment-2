@@ -44,11 +44,17 @@ object LiveAdjustments {
         val angleDegrees: Float = 0f,
     )
 
+    /**
+     * [checkpoint] is called as a blur progresses; a throw from it abandons the work, so a preview that has been
+     * superseded stops early instead of running to completion.
+     */
     fun apply(
         kind: Kind,
         source: PixelBuffer,
         settings: Settings,
         selection: SelectionMask? = null,
+        alphaLocked: Boolean = false,
+        checkpoint: () -> Unit = {},
     ): PixelBuffer {
         val amount = settings.amount.coerceIn(0f, 1f)
         val type = kind.adjustmentType
@@ -58,9 +64,17 @@ object LiveAdjustments {
                 kind == Kind.RECOLOR -> recolor(source, settings)
                 kind == Kind.PERSPECTIVE_BLUR -> perspectiveBlur(source, settings)
                 amount <= 0f -> source.copy()
-                else -> filter(kind, source, amount, settings.angleDegrees)
+                else -> filter(kind, source, amount, settings.angleDegrees, checkpoint)
             }
-        val mask = selection?.takeIf { it.width == source.width && it.height == source.height && it.isActive() } ?: return filtered
+        if (alphaLocked) {
+            // An alpha-locked layer keeps its transparency: an effect may change colour, never coverage.
+            for (i in filtered.pixels.indices) {
+                filtered.pixels[i] = Channels.withAlpha(filtered.pixels[i], source.pixels[i] ushr 24)
+            }
+        }
+        val mask = selection?.takeIf { it.width == source.width && it.height == source.height } ?: return filtered
+        // An empty selection selects nothing, so the layer keeps its pixels rather than taking the whole effect.
+        if (!mask.isActive()) return source.copy()
         for (i in filtered.pixels.indices) {
             filtered.pixels[i] = ImageFilters.lerpArgb(source.pixels[i], filtered.pixels[i], mask.alphaAt(i))
         }
@@ -72,10 +86,11 @@ object LiveAdjustments {
         source: PixelBuffer,
         amount: Float,
         angle: Float,
+        checkpoint: () -> Unit,
     ): PixelBuffer =
         when (kind) {
-            Kind.GAUSSIAN_BLUR -> ImageFilters.gaussianBlur(source, amount * MAX_BLUR_RADIUS)
-            Kind.MOTION_BLUR -> ImageFilters.motionBlur(source, amount * MAX_MOTION_DISTANCE, angle)
+            Kind.GAUSSIAN_BLUR -> ImageFilters.gaussianBlur(source, amount * MAX_BLUR_RADIUS, checkpoint)
+            Kind.MOTION_BLUR -> ImageFilters.motionBlur(source, amount * MAX_MOTION_DISTANCE, angle, checkpoint)
             Kind.NOISE -> ImageFilters.addNoise(source, amount, monochrome = true)
             Kind.SHARPEN -> ImageFilters.sharpen(source, amount * 2f)
             Kind.CHROMATIC_ABERRATION ->

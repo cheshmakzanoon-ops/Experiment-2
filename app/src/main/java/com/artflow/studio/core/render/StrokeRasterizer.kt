@@ -349,10 +349,29 @@ class StrokeRasterizer(
         )
     }
 
+    /**
+     * Speed along a segment, in pixels per millisecond. Samples that share a timestamp, as batched input does, have no
+     * measurable time between them, so they keep the speed of the last measured segment. Reading them as a 1 ms gap
+     * would make the stroke look infinitely fast and drive the speed dynamics to their limit.
+     */
+    private fun segmentVelocity(
+        previous: StrokePoint,
+        current: StrokePoint,
+        distance: Float,
+        carried: Float,
+    ): Float {
+        if (distance <= 0f) return 0f
+        val elapsedMs = current.timestamp - previous.timestamp
+        return if (elapsedMs > 0L) distance / elapsedMs.toFloat() else carried
+    }
+
     /** Where the spacing grid stands after the segments stamped so far. */
     internal class DabWalk {
         var carry = 0f
         var accumulated = 0f
+
+        // Speed of the last segment that had elapsed time; a segment without any keeps it.
+        var velocity = 0f
 
         // Travelled value of the most recently stamped dab, used to avoid stamping the path end
         // twice when the spacing grid already lands exactly on it.
@@ -366,9 +385,6 @@ class StrokeRasterizer(
         from: Int,
         walk: DabWalk,
     ) {
-        // Spacing is expressed as a fraction of the brush size; a minimum of one dab per segment
-        // keeps single-point taps visible.
-        val spacingPx = max(1f, context.params.size * context.params.spacing.coerceIn(0.01f, 4f))
         for (i in from until points.size) {
             val previous = points[i - 1]
             val current = points[i]
@@ -378,19 +394,45 @@ class StrokeRasterizer(
 
             if (distance <= 0.0001f) {
                 // Duplicate sample: a single dab keeps a tap visible without double-darkening.
-                drawDabAt(context, previous, current, 0f, distance, walk.accumulated)
+                drawDabAt(context, previous, current, 0f, distance, walk.accumulated, 0f)
                 continue
             }
 
+            val velocity = segmentVelocity(previous, current, distance, walk.velocity)
+            walk.velocity = velocity
             var travelled = walk.carry
             while (travelled <= distance) {
-                drawDabAt(context, previous, current, travelled / distance, distance, walk.accumulated + travelled)
+                val t = travelled / distance
+                drawDabAt(context, previous, current, t, distance, walk.accumulated + travelled, velocity)
                 walk.lastDabTravelled = travelled
-                travelled += spacingPx
+                travelled += dabSpacing(context, previous, current, t, walk.accumulated + travelled, velocity)
             }
             walk.carry = travelled - distance
             walk.accumulated += distance
         }
+    }
+
+    /**
+     * The distance to the next dab: a fraction of the diameter the dab here will have. Spacing from the nominal size
+     * left gaps wherever light pressure or a taper made the dabs smaller, which read as beads along the line. The
+     * estimate leaves out size jitter, so it draws no random numbers and the dab sequence stays the same.
+     */
+    private fun dabSpacing(
+        context: DabContext,
+        previous: StrokePoint,
+        current: StrokePoint,
+        t: Float,
+        accumulatedDistance: Float,
+        velocity: Float,
+    ): Float {
+        val params = context.params
+        val pressure = previous.pressure + (current.pressure - previous.pressure) * t
+        val tilt = ((previous.tiltX + (current.tiltX - previous.tiltX) * t) / HALF_PI).coerceIn(0f, 1f)
+        val tiltEffect = params.tiltInfluence.coerceIn(0f, 1f) * tilt
+        val taper = taperFactor(params, accumulatedDistance, context.totalLength)
+        val diameter = params.calculateEffectiveSize(pressure, velocity) * (1f + TILT_SIZE_GAIN * tiltEffect) * taper
+        // A minimum of one pixel keeps single-point taps visible and stops a fully tapered end from stalling.
+        return max(1f, diameter * params.spacing.coerceIn(0.01f, 4f))
     }
 
     /**
@@ -403,7 +445,7 @@ class StrokeRasterizer(
         walk: DabWalk,
     ) {
         if (points.size == 1) {
-            drawDabAt(context, points.first(), points.first(), 0f, 0f, 0f)
+            drawDabAt(context, points.first(), points.first(), 0f, 0f, 0f, 0f)
             return
         }
         val lastPrevious = points[points.size - 2]
@@ -412,7 +454,8 @@ class StrokeRasterizer(
         val endDy = last.y - lastPrevious.y
         val endDistance = sqrt(endDx * endDx + endDy * endDy)
         if (endDistance > 0.0001f && walk.lastDabTravelled != endDistance) {
-            drawDabAt(context, lastPrevious, last, 1f, endDistance, walk.accumulated)
+            val velocity = segmentVelocity(lastPrevious, last, endDistance, walk.velocity)
+            drawDabAt(context, lastPrevious, last, 1f, endDistance, walk.accumulated, velocity)
         }
     }
 
@@ -436,6 +479,7 @@ class StrokeRasterizer(
         t: Float,
         distance: Float,
         accumulatedDistance: Float,
+        velocity: Float,
     ) {
         val target = context.target
         val stroke = context.stroke
@@ -447,11 +491,6 @@ class StrokeRasterizer(
         val x = previous.x + (current.x - previous.x) * t
         val y = previous.y + (current.y - previous.y) * t
         val pressure = previous.pressure + (current.pressure - previous.pressure) * t
-
-        // Velocity is derived from the sample spacing and timestamps so the dynamics are stable
-        // regardless of how fast the digitiser reports.
-        val elapsedMs = (current.timestamp - previous.timestamp).coerceAtLeast(1L).toFloat()
-        val velocity = if (distance <= 0f) 0f else distance / elapsedMs
 
         // Stylus tilt: 0 upright, 1 lying flat. Shading with the side of the pen widens and softens the mark.
         val tilt = ((previous.tiltX + (current.tiltX - previous.tiltX) * t) / HALF_PI).coerceIn(0f, 1f)

@@ -40,6 +40,15 @@ class CmykProofTest {
     }
 
     @Test
+    fun neutralGreysAreNeverFlaggedAsOutOfGamut() {
+        // Greys use black ink alone, whose cast would otherwise flag every grey below about 42%.
+        for (level in 0..255) {
+            val v = level / 255f
+            assertFalse("grey $level", CmykProof.outOfGamut(v, v, v))
+        }
+    }
+
+    @Test
     fun applyKeepsAlphaAndGreysOnlyInGamutWarning() {
         val blue = 0x800000FF.toInt()
         assertEquals(blue, CmykProof.apply(blue, CmykProof.Mode.OFF))

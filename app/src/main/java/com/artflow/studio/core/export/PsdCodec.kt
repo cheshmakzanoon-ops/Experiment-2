@@ -565,8 +565,9 @@ object PsdCodec {
                 val blue = planes[CHANNEL_BLUE]
                 for (index in buffer.pixels.indices) {
                     val r = channelValue(red, index, colorMode)
-                    val g = channelValue(green, index, colorMode)
-                    val b = channelValue(blue, index, colorMode)
+                    // A grayscale document has one gray plane, which fills all three colour channels.
+                    val g = if (colorMode == COLOR_MODE_GRAYSCALE) r else channelValue(green, index, colorMode)
+                    val b = if (colorMode == COLOR_MODE_GRAYSCALE) r else channelValue(blue, index, colorMode)
                     val a = alpha?.getOrNull(index)?.toInt()?.and(0xFF) ?: 255
                     buffer.pixels[index] = Channels.argb(a, r, g, b)
                 }
@@ -596,64 +597,7 @@ object PsdCodec {
         colorMode: Int,
     ): PixelBuffer? {
         val compression = reader.readShort()
-        val planes = HashMap<Int, ByteArray>()
-        val channelIds =
-            (0 until channelCount).map { index ->
-                when (colorMode) {
-                    COLOR_MODE_GRAYSCALE -> {
-                        if (index == 0) CHANNEL_RED else CHANNEL_ALPHA
-                    }
-
-                    COLOR_MODE_CMYK -> {
-                        index
-                    }
-
-                    else -> {
-                        when (index) {
-                            0 -> CHANNEL_RED
-                            1 -> CHANNEL_GREEN
-                            2 -> CHANNEL_BLUE
-                            else -> CHANNEL_ALPHA
-                        }
-                    }
-                }
-            }
-
-        when (compression) {
-            COMPRESSION_RAW -> {
-                channelIds.forEach { id ->
-                    val size = width * height * (if (depth == 16) 2 else 1)
-                    planes[id] = reader.readBytes(min(size, reader.remaining()))
-                }
-            }
-
-            COMPRESSION_RLE -> {
-                // The byte-count table lists every row of every channel, then the row data follows.
-                repeat(channelCount * height) { reader.readShort() }
-                channelIds.forEach { id ->
-                    val out = ByteArray(width * height)
-                    for (row in 0 until height) {
-                        val rowBytes = decodeRleRow(reader, width)
-                        System.arraycopy(rowBytes, 0, out, row * width, min(width, rowBytes.size))
-                    }
-                    planes[id] = out
-                }
-            }
-
-            COMPRESSION_ZIP, COMPRESSION_ZIP_PREDICTION -> {
-                channelIds.forEach { id ->
-                    // ZIP channels carry their own length prefix.
-                    val size = reader.readInt()
-                    if (size <= 0 || reader.remaining() < size) return@forEach
-                    val compressed = reader.readBytes(size)
-                    planes[id] = inflate(compressed)
-                }
-            }
-
-            else -> {
-                return null
-            }
-        }
+        val planes = readMergedPlanes(reader, compression, channelCount, width, height, depth, colorMode) ?: return null
 
         val buffer = PixelBuffer(width, height)
         val red = planes[CHANNEL_RED]
@@ -679,8 +623,9 @@ object PsdCodec {
         }
         for (index in buffer.pixels.indices) {
             val r = channelValue(red, index, colorMode)
-            val g = channelValue(green, index, colorMode)
-            val b = channelValue(blue, index, colorMode)
+            // A grayscale document has one gray plane, which fills all three colour channels.
+            val g = if (colorMode == COLOR_MODE_GRAYSCALE) r else channelValue(green, index, colorMode)
+            val b = if (colorMode == COLOR_MODE_GRAYSCALE) r else channelValue(blue, index, colorMode)
             val a = alpha?.getOrNull(index)?.toInt()?.and(0xFF) ?: 255
             buffer.pixels[index] = Channels.argb(a, r, g, b)
         }
@@ -718,20 +663,27 @@ object PsdCodec {
 
             COMPRESSION_RLE -> {
                 repeat(height) { reader.readShort() } // row byte counts
-                val out = ByteArray(width * height)
+                // A 16-bit row holds two bytes per pixel, so it is decoded at its full width before downsampling.
+                val bytesPerSample = if (depth == DEPTH_16) 2 else 1
+                val rowBytes = width * bytesPerSample
+                val out = ByteArray(rowBytes * height)
                 for (row in 0 until height) {
-                    val rowBytes = decodeRleRow(reader, width)
-                    System.arraycopy(rowBytes, 0, out, row * width, min(width, rowBytes.size))
+                    val decoded = decodeRleRow(reader, rowBytes)
+                    System.arraycopy(decoded, 0, out, row * rowBytes, min(rowBytes, decoded.size))
                 }
-                downsample(out, width, height, 1)
+                downsample(out, width, height, depth)
             }
 
             COMPRESSION_ZIP, COMPRESSION_ZIP_PREDICTION -> {
-                val size = reader.readInt()
-                if (size <= 0 || reader.remaining() < size) {
+                // A layer channel is one zlib stream whose length is the record's declared length, with no size prefix.
+                val size = min(declaredLength - 2, reader.remaining())
+                if (size <= 0) {
                     ByteArray(width * height)
                 } else {
-                    downsample(inflate(reader.readBytes(size)), width, height, depth)
+                    val bytesPerSample = if (depth == DEPTH_16) 2 else 1
+                    val plane = inflate(reader.readBytes(size)).copyOf(width * height * bytesPerSample)
+                    if (compression == COMPRESSION_ZIP_PREDICTION) undoPrediction(plane, width, height, bytesPerSample)
+                    downsample(plane, width, height, depth)
                 }
             }
 
@@ -914,10 +866,122 @@ object PsdCodec {
         return out
     }
 
+    /**
+     * The merged image's channel planes, one byte per sample: 16-bit samples keep their high byte.
+     * Null when the compression is not one this reader decodes.
+     */
+    private fun readMergedPlanes(
+        reader: PsdReader,
+        compression: Int,
+        channelCount: Int,
+        width: Int,
+        height: Int,
+        depth: Int,
+        colorMode: Int,
+    ): HashMap<Int, ByteArray>? {
+        val planes = HashMap<Int, ByteArray>()
+        val channelIds =
+            (0 until channelCount).map { index ->
+                when (colorMode) {
+                    COLOR_MODE_GRAYSCALE -> {
+                        if (index == 0) CHANNEL_RED else CHANNEL_ALPHA
+                    }
+
+                    COLOR_MODE_CMYK -> {
+                        index
+                    }
+
+                    else -> {
+                        when (index) {
+                            0 -> CHANNEL_RED
+                            1 -> CHANNEL_GREEN
+                            2 -> CHANNEL_BLUE
+                            else -> CHANNEL_ALPHA
+                        }
+                    }
+                }
+            }
+
+        val bytesPerSample = if (depth == 16) 2 else 1
+        when (compression) {
+            COMPRESSION_RAW -> {
+                channelIds.forEach { id ->
+                    val size = width * height * bytesPerSample
+                    planes[id] = reader.readBytes(min(size, reader.remaining()))
+                }
+            }
+
+            COMPRESSION_RLE -> {
+                // The byte-count table lists every row of every channel, then the row data follows.
+                repeat(channelCount * height) { reader.readShort() }
+                val rowBytes = width * bytesPerSample
+                channelIds.forEach { id ->
+                    val out = ByteArray(rowBytes * height)
+                    for (row in 0 until height) {
+                        val decoded = decodeRleRow(reader, rowBytes)
+                        System.arraycopy(decoded, 0, out, row * rowBytes, min(rowBytes, decoded.size))
+                    }
+                    planes[id] = out
+                }
+            }
+
+            COMPRESSION_ZIP, COMPRESSION_ZIP_PREDICTION -> {
+                // The merged image is one zlib stream: each channel's whole plane follows the one before it.
+                val planeBytes = width * height * bytesPerSample
+                val stream = inflate(reader.readBytes(reader.remaining()))
+                if (stream.size < planeBytes * channelIds.size) return null
+                channelIds.forEachIndexed { index, id ->
+                    val plane = stream.copyOfRange(index * planeBytes, (index + 1) * planeBytes)
+                    if (compression == COMPRESSION_ZIP_PREDICTION) undoPrediction(plane, width, height, bytesPerSample)
+                    planes[id] = plane
+                }
+            }
+
+            else -> {
+                return null
+            }
+        }
+
+        // 16-bit samples: the reader works with one byte per channel, so keep each sample's high byte.
+        if (bytesPerSample == 2) {
+            for (id in planes.keys.toList()) planes[id] = highBytes(planes.getValue(id))
+        }
+        return planes
+    }
+
     private fun decodeRleRow(
         reader: PsdReader,
         width: Int,
     ): ByteArray = unpackBits(reader, width)
+
+    /** Keeps the high byte of each 16-bit sample. */
+    private fun highBytes(samples: ByteArray): ByteArray = ByteArray(samples.size / 2) { samples[it * 2] }
+
+    /**
+     * Undoes ZIP prediction: each sample was stored as its difference from the sample before it in its row,
+     * modulo the sample size. A 16-bit sample is a big-endian pair of bytes, so its carry crosses the high byte.
+     */
+    private fun undoPrediction(
+        plane: ByteArray,
+        width: Int,
+        height: Int,
+        bytesPerSample: Int,
+    ) {
+        val rowBytes = width * bytesPerSample
+        for (row in 0 until height) {
+            val start = row * rowBytes
+            for (x in 1 until width) {
+                val at = start + x * bytesPerSample
+                val before = at - bytesPerSample
+                var carry = 0
+                for (b in bytesPerSample - 1 downTo 0) {
+                    val sum = (plane[at + b].toInt() and 0xFF) + (plane[before + b].toInt() and 0xFF) + carry
+                    plane[at + b] = sum.toByte()
+                    carry = sum ushr 8
+                }
+            }
+        }
+    }
 
     private fun inflate(bytes: ByteArray): ByteArray =
         try {

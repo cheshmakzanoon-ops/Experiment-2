@@ -34,10 +34,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.artflow.studio.R
 import com.artflow.studio.core.three.Mesh
 import com.artflow.studio.core.three.ModelLighting
 import com.artflow.studio.presentation.ui.components.canvas.ModelPainter
@@ -70,16 +72,28 @@ fun ModelCompanion(
         ) {
             Column {
                 Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("3D", style = MaterialTheme.typography.titleSmall)
+                    Text(stringResource(R.string.modelcompanion_3d), style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.width(8.dp))
                     Row(Modifier.weight(1f).horizontalScroll(rememberScrollState())) {
-                        FilterChip(selected = !painting, onClick = { painting = false }, label = { Text("Turn") })
+                        FilterChip(
+                            selected = !painting,
+                            onClick = { painting = false },
+                            label = { Text(stringResource(R.string.modelcompanion_turn)) },
+                        )
                         Spacer(Modifier.width(4.dp))
-                        FilterChip(selected = painting, onClick = { painting = true }, label = { Text("Paint") })
+                        FilterChip(
+                            selected = painting,
+                            onClick = { painting = true },
+                            label = { Text(stringResource(R.string.modelcompanion_paint)) },
+                        )
                         Spacer(Modifier.width(4.dp))
-                        FilterChip(selected = lightingOpen, onClick = { lightingOpen = !lightingOpen }, label = { Text("Light") })
+                        FilterChip(selected = lightingOpen, onClick = {
+                            lightingOpen = !lightingOpen
+                        }, label = { Text(stringResource(R.string.modelcompanion_light)) })
                     }
-                    IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = "Close 3D view") }
+                    IconButton(
+                        onClick = onClose,
+                    ) { Icon(Icons.Default.Close, contentDescription = stringResource(R.string.modelcompanion_close_3d_view)) }
                 }
                 Box(Modifier.weight(1f)) {
                     AndroidView(
@@ -148,13 +162,14 @@ private fun LightSlider(
     range: ClosedFloatingPointRange<Float>,
     onChange: (Float) -> Unit,
 ) {
+    val lightDescription = stringResource(R.string.modelcompanion_light_slider, label)
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(label, style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(64.dp))
         Slider(
             value = value.coerceIn(range),
             onValueChange = onChange,
             valueRange = range,
-            modifier = Modifier.weight(1f).height(32.dp).semantics { contentDescription = "Light $label" },
+            modifier = Modifier.weight(1f).height(32.dp).semantics { contentDescription = lightDescription },
         )
     }
 }

@@ -2,6 +2,7 @@ package com.artflow.studio.domain.repository.canvas
 
 import com.artflow.studio.core.animation.AnimationTimeline
 import com.artflow.studio.core.color.ColorProfile
+import com.artflow.studio.core.color.ColorProfiles
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.PixelBuffer
@@ -106,6 +107,8 @@ interface CanvasRepository {
         layerId: Long,
         isEraser: Boolean = false,
         destination: StrokeDestination = StrokeDestination.LAYER,
+        /** Wall-clock milliseconds of the first sample, normally the touch-down. */
+        timestamp: Long = System.currentTimeMillis(),
     ): Long
 
     fun continueStroke(
@@ -115,6 +118,8 @@ interface CanvasRepository {
         pressure: Float,
         tiltX: Float = 0f,
         tiltY: Float = 0f,
+        /** Wall-clock milliseconds of the sample, so speed is measured between the samples' own times. */
+        timestamp: Long = System.currentTimeMillis(),
     )
 
     fun endStroke(strokeId: Long)
@@ -511,7 +516,16 @@ interface CanvasRepository {
     /** The colour space pixel values are stored in. */
     fun getColorProfile(): ColorProfile = ColorProfile.SRGB
 
-    /** Assigns [profile]: pixel values stay as they are and are read in the new space. */
+    /** Converts an sRGB colour from the interface into the stored space, so it looks the same on this canvas. */
+    fun documentColor(srgb: Int): Int = ColorProfiles.convert(srgb, ColorProfile.SRGB, getColorProfile())
+
+    /** Converts a stored colour back to sRGB for display in the interface. */
+    fun displayColor(stored: Int): Int = ColorProfiles.convert(stored, getColorProfile(), ColorProfile.SRGB)
+
+    /**
+     * Switches [profile] and converts stored colours to it, so the canvas looks the same. Fails, changing
+     * nothing, while a stroke or edit is in progress.
+     */
     suspend fun setColorProfile(
         profile: ColorProfile,
         undoable: Boolean = true,
