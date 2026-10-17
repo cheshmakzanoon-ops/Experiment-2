@@ -109,6 +109,7 @@ internal class GalleryDragState {
     fun scrollStep(): Float {
         if (dragging == null || viewport == Rect.Zero) return 0f
         val band = (viewport.height * SCROLL_BAND).coerceAtMost(MAX_BAND_PX)
+        if (band <= 0f) return 0f
         val into =
             when {
                 pointer.y < viewport.top + band -> pointer.y - (viewport.top + band)
@@ -136,6 +137,14 @@ internal class GalleryDragState {
         bounds: Rect,
     ) {
         stacks[name] = bounds
+    }
+
+    fun forgetProject(projectId: Long) {
+        projects.remove(projectId)
+    }
+
+    fun forgetStack(name: String) {
+        stacks.remove(name)
     }
 
     private companion object {
@@ -197,14 +206,31 @@ internal fun Modifier.draggableArtwork(
             )
         }
 
-/** Keeps the card being dragged composed while the grid scrolls it out of view, which would otherwise end the drag. */
+/**
+ * Keeps the card [projectId] composed while it is held, because scrolling it out of view would end the drag, and forgets where it
+ * was once it leaves the screen so a stale position is never mistaken for a card under the finger.
+ */
 @Composable
-internal fun KeepWhile(held: Boolean) {
+internal fun TrackCard(
+    state: GalleryDragState,
+    projectId: Long,
+) {
     val container = LocalPinnableContainer.current
+    val held = state.dragging == projectId
     DisposableEffect(container, held) {
         val handle = if (held) container?.pin() else null
         onDispose { handle?.release() }
     }
+    DisposableEffect(projectId) { onDispose { state.forgetProject(projectId) } }
+}
+
+/** Forgets where a stack card was once it leaves the screen. */
+@Composable
+internal fun TrackStack(
+    state: GalleryDragState,
+    name: String,
+) {
+    DisposableEffect(name) { onDispose { state.forgetStack(name) } }
 }
 
 private fun DrawScope.drawDropHint(

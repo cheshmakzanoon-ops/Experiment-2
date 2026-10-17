@@ -217,6 +217,7 @@ fun GalleryScreen(
                         ) {
                             val layout = GalleryLayout.of(state.projects, openStack, searching = query.isNotEmpty())
                             items(layout.stacks, key = { "stack:${it.first}" }) { (name, members) ->
+                                TrackStack(drag, name)
                                 val menu =
                                     StackMenu(
                                         onRename = { dialogs.stackAction = StackAction(name, StackCommand.RENAME) },
@@ -228,7 +229,7 @@ fun GalleryScreen(
                             }
                             items(layout.projects, key = { it.id }) { project ->
                                 val chosen = selection
-                                KeepWhile(drag.dragging == project.id)
+                                TrackCard(drag, project.id)
                                 ProjectCard(
                                     project = project,
                                     onClick = {
