@@ -99,6 +99,8 @@ data class AppSettings(
     val quickPinchFit: Boolean = true,
     /** Gesture controls: a finger held still samples colour, like Procreate's touch-and-hold eyedropper. */
     val touchHoldEyedropper: Boolean = true,
+    /** Holding the pen still at the end of a stroke snaps it to a line or ellipse (QuickShape). */
+    val quickShape: Boolean = true,
     /** Gesture controls: a two-finger tap on a layer, then a slide, sets its opacity. */
     val layerTwoFingerOpacity: Boolean = true,
     /** Gesture controls: a two-finger swipe right on a layer toggles Alpha Lock. */

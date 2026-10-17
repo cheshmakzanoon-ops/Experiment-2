@@ -239,6 +239,7 @@ class SettingsRepositoryImpl
                 KEY_PINCH_NAV to settings.pinchNavigation.toString(),
                 KEY_QUICK_PINCH to settings.quickPinchFit.toString(),
                 KEY_TOUCH_HOLD_EYEDROPPER to settings.touchHoldEyedropper.toString(),
+                KEY_QUICK_SHAPE to settings.quickShape.toString(),
                 KEY_LAYER_OPACITY to settings.layerTwoFingerOpacity.toString(),
                 KEY_LAYER_ALPHA to settings.layerTwoFingerAlphaLock.toString(),
                 KEY_LAYER_SELECT to settings.layerTwoFingerSelect.toString(),
@@ -323,6 +324,7 @@ class SettingsRepositoryImpl
                 pinchNavigation = stored.flag(KEY_PINCH_NAV, defaults.pinchNavigation),
                 quickPinchFit = stored.flag(KEY_QUICK_PINCH, defaults.quickPinchFit),
                 touchHoldEyedropper = stored.flag(KEY_TOUCH_HOLD_EYEDROPPER, defaults.touchHoldEyedropper),
+                quickShape = stored.flag(KEY_QUICK_SHAPE, defaults.quickShape),
                 layerTwoFingerOpacity = stored.flag(KEY_LAYER_OPACITY, defaults.layerTwoFingerOpacity),
                 layerTwoFingerAlphaLock = stored.flag(KEY_LAYER_ALPHA, defaults.layerTwoFingerAlphaLock),
                 layerTwoFingerSelect = stored.flag(KEY_LAYER_SELECT, defaults.layerTwoFingerSelect),
@@ -416,6 +418,7 @@ class SettingsRepositoryImpl
             private const val KEY_PINCH_NAV = "gesture.pinchNavigation"
             private const val KEY_QUICK_PINCH = "gesture.quickPinchFit"
             private const val KEY_TOUCH_HOLD_EYEDROPPER = "gesture.touchHoldEyedropper"
+            private const val KEY_QUICK_SHAPE = "input.quickShape"
             private const val KEY_LAYER_OPACITY = "gesture.layerTwoFingerOpacity"
             private const val KEY_LAYER_ALPHA = "gesture.layerTwoFingerAlphaLock"
             private const val KEY_LAYER_SELECT = "gesture.layerTwoFingerSelect"

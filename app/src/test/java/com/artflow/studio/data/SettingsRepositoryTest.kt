@@ -1,10 +1,13 @@
 package com.artflow.studio.data
 
+import com.artflow.studio.core.canvas.StylusAction
+import com.artflow.studio.core.canvas.StylusEraserEnd
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.color.PaletteCodec
 import com.artflow.studio.data.local.dao.SettingsDao
 import com.artflow.studio.data.local.entity.SettingsEntity
 import com.artflow.studio.data.repository.settings.SettingsRepositoryImpl
+import com.artflow.studio.domain.model.settings.AppSettings
 import com.artflow.studio.domain.model.settings.ThemeMode
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -379,6 +382,114 @@ class SettingsRepositoryTest {
                 }.isFailure,
             )
             assertEquals(before, repository.current())
+        }
+
+    /** One boolean switch: its storage key, and how it reads and writes [AppSettings]. */
+    private class Switch(
+        val key: String,
+        val read: (AppSettings) -> Boolean,
+        val write: (AppSettings, Boolean) -> AppSettings,
+    )
+
+    private val switches =
+        listOf(
+            Switch("gesture.scrubToClear", { it.scrubToClear }, { s, v -> s.copy(scrubToClear = v) }),
+            Switch("gesture.swipeCopyPaste", { it.swipeCopyPaste }, { s, v -> s.copy(swipeCopyPaste = v) }),
+            Switch("gesture.fourFingerFullScreen", { it.fourFingerFullScreen }, { s, v -> s.copy(fourFingerFullScreen = v) }),
+            Switch("gesture.twoFingerTapUndo", { it.twoFingerTapUndo }, { s, v -> s.copy(twoFingerTapUndo = v) }),
+            Switch("gesture.threeFingerTapRedo", { it.threeFingerTapRedo }, { s, v -> s.copy(threeFingerTapRedo = v) }),
+            Switch("gesture.holdRapidUndoRedo", { it.holdRapidUndoRedo }, { s, v -> s.copy(holdRapidUndoRedo = v) }),
+            Switch("gesture.pinchNavigation", { it.pinchNavigation }, { s, v -> s.copy(pinchNavigation = v) }),
+            Switch("gesture.quickPinchFit", { it.quickPinchFit }, { s, v -> s.copy(quickPinchFit = v) }),
+            Switch("gesture.touchHoldEyedropper", { it.touchHoldEyedropper }, { s, v -> s.copy(touchHoldEyedropper = v) }),
+            Switch("gesture.layerTwoFingerOpacity", { it.layerTwoFingerOpacity }, { s, v -> s.copy(layerTwoFingerOpacity = v) }),
+            Switch(
+                "gesture.layerTwoFingerAlphaLock",
+                { it.layerTwoFingerAlphaLock },
+                { s, v -> s.copy(layerTwoFingerAlphaLock = v) },
+            ),
+            Switch("gesture.layerTwoFingerSelect", { it.layerTwoFingerSelect }, { s, v -> s.copy(layerTwoFingerSelect = v) }),
+            Switch("gesture.modifyHoldQuickMenu", { it.modifyHoldQuickMenu }, { s, v -> s.copy(modifyHoldQuickMenu = v) }),
+            Switch("input.quickShape", { it.quickShape }, { s, v -> s.copy(quickShape = v) }),
+        )
+
+    @Test
+    fun everyGestureAndQuickShapeSwitchDefaultsToOnWhenNothingIsStored() =
+        runTest {
+            val settings = SettingsRepositoryImpl(MemorySettingsDao()).settings.first()
+            for (switch in switches) assertTrue(switch.key, switch.read(settings))
+        }
+
+    @Test
+    fun everyGestureAndQuickShapeSwitchSavesItsOwnKeyAndSurvivesARestart() =
+        runTest {
+            for (toggle in switches) {
+                val dao = MemorySettingsDao()
+                val repository = SettingsRepositoryImpl(dao)
+                repository.update { toggle.write(it, false) }
+                assertEquals(toggle.key, "false", dao.rows[toggle.key]!!.value)
+                val reopened = SettingsRepositoryImpl(dao).settings.first()
+                assertFalse(toggle.key, toggle.read(reopened))
+                for (other in switches.filter { it !== toggle }) {
+                    assertTrue("${other.key} must not change with ${toggle.key}", other.read(reopened))
+                }
+                repository.update { toggle.write(it, true) }
+                assertEquals(toggle.key, "true", dao.rows[toggle.key]!!.value)
+                assertTrue(toggle.key, toggle.read(SettingsRepositoryImpl(dao).settings.first()))
+            }
+        }
+
+    @Test
+    fun aDamagedSwitchValueFallsBackToItsDefault() =
+        runTest {
+            val dao = MemorySettingsDao(mapOf("gesture.pinchNavigation" to "sometimes", "input.quickShape" to "2"))
+            val settings = SettingsRepositoryImpl(dao).settings.first()
+            assertTrue(settings.pinchNavigation)
+            assertTrue(settings.quickShape)
+        }
+
+    @Test
+    fun stylusButtonsDefaultToTheBehaviourTheSideButtonAlwaysHad() =
+        runTest {
+            val settings = SettingsRepositoryImpl(MemorySettingsDao()).settings.first()
+            assertEquals(StylusAction.EYEDROPPER, settings.stylusPrimaryButton)
+            assertEquals(StylusAction.NOTHING, settings.stylusSecondaryButton)
+            assertEquals(StylusEraserEnd.ERASER, settings.stylusEraserEnd)
+        }
+
+    @Test
+    fun everyStylusActionSurvivesARestartOnEachButtonAndIsStoredByName() =
+        runTest {
+            // A no-op edit is never written, so first move each button off its default; then every
+            // action is really stored, including the defaults themselves.
+            for (action in StylusAction.entries) {
+                val dao = MemorySettingsDao()
+                val repository = SettingsRepositoryImpl(dao)
+                repository.update { it.copy(stylusPrimaryButton = StylusAction.SMUDGE, stylusSecondaryButton = StylusAction.SMUDGE) }
+                repository.update { it.copy(stylusPrimaryButton = action, stylusSecondaryButton = action) }
+                assertEquals(action.name, dao.rows["input.stylusPrimaryButton"]!!.value)
+                assertEquals(action.name, dao.rows["input.stylusSecondaryButton"]!!.value)
+                val reopened = SettingsRepositoryImpl(dao).settings.first()
+                assertEquals(action, reopened.stylusPrimaryButton)
+                assertEquals(action, reopened.stylusSecondaryButton)
+            }
+            for (end in StylusEraserEnd.entries) {
+                val dao = MemorySettingsDao()
+                val repository = SettingsRepositoryImpl(dao)
+                repository.update { it.copy(stylusEraserEnd = StylusEraserEnd.NOTHING) }
+                repository.update { it.copy(stylusEraserEnd = end) }
+                assertEquals(end.name, dao.rows["input.stylusEraserEnd"]!!.value)
+                assertEquals(end, SettingsRepositoryImpl(dao).settings.first().stylusEraserEnd)
+            }
+        }
+
+    @Test
+    fun aStylusNameThatIsNoLongerKnownFallsBackToItsDefault() =
+        runTest {
+            val dao = MemorySettingsDao(mapOf("input.stylusPrimaryButton" to "LASER", "input.stylusEraserEnd" to "BOTH"))
+            val settings = SettingsRepositoryImpl(dao).settings.first()
+            assertEquals(StylusAction.EYEDROPPER, settings.stylusPrimaryButton)
+            assertEquals(StylusEraserEnd.ERASER, settings.stylusEraserEnd)
         }
 
     private class MemorySettingsDao(

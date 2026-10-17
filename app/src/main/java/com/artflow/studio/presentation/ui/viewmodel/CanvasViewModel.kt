@@ -244,6 +244,7 @@ class CanvasViewModel
                             brushCursor = stored.brushCursor,
                             gestures = stored.gestureControls(),
                             touchHoldEyedropper = stored.touchHoldEyedropper,
+                            quickShape = stored.quickShape,
                             dynamicBrushScaling = stored.dynamicBrushScaling,
                             stylus = stored.stylusButtons(),
                             haptics = stored.haptics,
@@ -594,7 +595,10 @@ class CanvasViewModel
 
         fun setLiquifySettings(settings: LiquifyTool.Settings) = updateInput { it.copy(liquify = settings) }
 
-        fun setQuickShape(enabled: Boolean) = updateInput { it.copy(quickShape = enabled) }
+        fun setQuickShape(enabled: Boolean) {
+            updateInput { it.copy(quickShape = enabled) }
+            viewModelScope.launch(editorErrors) { settingsRepository.update { it.copy(quickShape = enabled) } }
+        }
 
         fun setTouchHoldEyedropper(enabled: Boolean) {
             updateInput { it.copy(touchHoldEyedropper = enabled) }
