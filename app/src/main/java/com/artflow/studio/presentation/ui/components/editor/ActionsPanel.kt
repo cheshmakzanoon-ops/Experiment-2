@@ -56,6 +56,9 @@ data class VideoActions(
     /** Longest side of recorded frames, and how to change it. */
     val quality: Int = 1280,
     val onQuality: (Int) -> Unit = {},
+    /** Whether edits are being recorded, and how to switch that. */
+    val recording: Boolean = true,
+    val onRecording: (Boolean) -> Unit = {},
 )
 
 data class StudioPrefs(
@@ -143,6 +146,7 @@ fun ActionsPanel(
                 }
 
                 ActionsTab.Video -> {
+                    PrefSwitch(stringResource(R.string.actionspanel_timelapse_recording), video.recording, video.onRecording)
                     ActionRow("Time-lapse Replay", video.onReplay)
                     ActionRow("Export Time-lapse (Full length)", onClick = { video.onExport(true) })
                     ActionRow("Export Time-lapse (30 seconds)", onClick = { video.onExport(false) })

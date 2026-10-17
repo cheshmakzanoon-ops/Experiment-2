@@ -192,6 +192,7 @@ fun CanvasScreen(
     val activeLayerId by viewModel.activeLayerId.collectAsState()
     val recentColors by viewModel.recentColors.collectAsState()
     val palettes by viewModel.palettes.collectAsState()
+    val timelapseRecording by viewModel.timelapseRecording.collectAsState()
 
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
@@ -932,6 +933,8 @@ fun CanvasScreen(
                             onClear = viewModel::clearTimelapse,
                             quality = settings.timelapseMaxSide,
                             onQuality = { side -> viewModel.updateSettings { it.copy(timelapseMaxSide = side) } },
+                            recording = timelapseRecording,
+                            onRecording = viewModel::setTimelapseRecording,
                         ),
                     prefActions =
                         PrefActions(
@@ -1471,10 +1474,10 @@ fun CanvasScreen(
     replayFrames?.let { frames ->
         TimelapseReplay(
             frames = frames,
-            onExport = {
+            onExport = { fullLength ->
                 replayFrames = null
                 panel = EditorPanel.EXPORT
-                viewModel.exportTimelapse()
+                viewModel.exportTimelapse(fullLength)
             },
             onDismiss = { replayFrames = null },
         )

@@ -210,6 +210,10 @@ class CanvasViewModel
         private var playbackActive = false
         private var autosaveJob: Job? = null
         private var observationJob: Job? = null
+        private val _timelapseRecording = MutableStateFlow(true)
+
+        /** Whether the open artwork is being recorded (Actions > Video > Time-lapse recording). */
+        val timelapseRecording: StateFlow<Boolean> = _timelapseRecording.asStateFlow()
         private var timelapseJob: Job? = null
         private var timelapseRevision = -1L
         private val timelapseRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -288,6 +292,7 @@ class CanvasViewModel
                         refreshLayers()
                         refreshHistory()
                         refreshSelection()
+                        _timelapseRecording.value = timelapse.isRecording(projectId)
                         startObserving()
                         startAutosave()
                         PendingImports.takeProfile(projectId)?.let { canvasRepository.setColorProfile(it, undoable = false) }
@@ -337,7 +342,7 @@ class CanvasViewModel
             timelapseJob =
                 viewModelScope.launch {
                     timelapseRequests.collect {
-                        if (!timelapse.isEnabled) return@collect
+                        if (!timelapse.isEnabled || !_timelapseRecording.value) return@collect
                         // Let the edit settle so a burst of changes yields one frame.
                         delay(TIMELAPSE_INTERVAL_MS)
                         val projectId = currentProjectId
@@ -1395,6 +1400,13 @@ class CanvasViewModel
         }
 
         /** Frames for the in-app time-lapse replay (empty before anything was drawn). */
+        fun setTimelapseRecording(recording: Boolean) {
+            val projectId = currentProjectId
+            if (projectId == 0L) return
+            _timelapseRecording.value = recording
+            viewModelScope.launch(editorErrors) { timelapse.setRecording(projectId, recording) }
+        }
+
         suspend fun timelapseFrames(): List<java.io.File> {
             val projectId = currentProjectId
             return if (projectId == 0L) emptyList() else timelapse.frameFiles(projectId)

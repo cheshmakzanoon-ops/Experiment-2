@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="actionspanel_timelapse_recording">Time-lapse recording</string>
+    <string name="timelapsereplay_export_30">Export 30 s</string>
+    <string name="timelapsereplay_export_full">Export full length</string>
+    <string name="timelapsereplay_speed">Speed %1$s×</string>
+</resources>

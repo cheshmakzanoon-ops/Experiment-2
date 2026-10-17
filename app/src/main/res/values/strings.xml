@@ -270,7 +270,6 @@
     <string name="modelcompanion_paint">Paint</string>
     <string name="modelcompanion_light">Light</string>
     <string name="timelapsereplay_time_lapse_replay">Time-lapse Replay</string>
-    <string name="timelapsereplay_export_mp4">Export MP4</string>
     <string name="timelapsereplay_nothing_recorded_yet_every_edit_is">Nothing recorded yet. Every edit is recorded automatically.</string>
     <string name="radialquickmenu_more">More</string>
     <string name="referencecompanion_image">Image</string>

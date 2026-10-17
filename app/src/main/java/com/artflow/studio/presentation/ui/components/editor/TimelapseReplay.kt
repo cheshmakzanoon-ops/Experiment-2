@@ -24,17 +24,19 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.File
 
-/** Full-screen playback of the recorded drawing process, with play/pause and scrubbing. */
+/** Full-screen playback of the recorded drawing process, with play/pause, speed and scrubbing. */
 @Composable
 fun TimelapseReplay(
     frames: List<File>,
-    onExport: () -> Unit,
+    /** Exports the recording; true for full length, false for the 30-second version. */
+    onExport: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var index by remember(frames) { mutableIntStateOf(0) }
     var playing by remember(frames) { mutableStateOf(frames.size > 1) }
+    var speed by remember { mutableFloatStateOf(1f) }
     var image by remember { mutableStateOf<ImageBitmap?>(null) }
-    val frameDelay = (REPLAY_SECONDS * 1000L / frames.size.coerceAtLeast(1)).coerceIn(16L, 250L)
+    val frameDelay = ((REPLAY_SECONDS * 1000L / frames.size.coerceAtLeast(1)).coerceIn(16L, 250L) / speed).toLong().coerceAtLeast(8L)
 
     LaunchedEffect(frames, index) {
         val file = frames.getOrNull(index) ?: return@LaunchedEffect
@@ -59,7 +61,8 @@ fun TimelapseReplay(
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = onExport) { Text(stringResource(R.string.timelapsereplay_export_mp4)) }
+                TextButton(onClick = { onExport(false) }) { Text(stringResource(R.string.timelapsereplay_export_30)) }
+                TextButton(onClick = { onExport(true) }) { Text(stringResource(R.string.timelapsereplay_export_full)) }
                 IconButton(onClick = onDismiss) {
                     Icon(
                         Icons.Default.Close,
@@ -103,6 +106,9 @@ fun TimelapseReplay(
                         modifier = Modifier.weight(1f),
                     )
                     Text("${index + 1}/${frames.size}", color = Color.White, style = MaterialTheme.typography.labelMedium)
+                    TextButton(onClick = { speed = REPLAY_SPEEDS[(REPLAY_SPEEDS.indexOf(speed) + 1) % REPLAY_SPEEDS.size] }) {
+                        Text(stringResource(R.string.timelapsereplay_speed, REPLAY_SPEED_LABELS.getValue(speed)), color = Color.White)
+                    }
                 }
             }
         }
@@ -110,3 +116,7 @@ fun TimelapseReplay(
 }
 
 private const val REPLAY_SECONDS = 20
+
+/** Replay speeds the speed button cycles through, and how each is written. */
+private val REPLAY_SPEEDS = listOf(0.5f, 1f, 2f, 4f)
+private val REPLAY_SPEED_LABELS = mapOf(0.5f to "0.5", 1f to "1", 2f to "2", 4f to "4")
