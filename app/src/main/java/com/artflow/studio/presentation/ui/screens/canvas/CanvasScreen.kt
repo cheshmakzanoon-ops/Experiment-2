@@ -42,6 +42,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.artflow.studio.R
+import com.artflow.studio.core.canvas.CanvasInformation
 import com.artflow.studio.core.canvas.CropBox
 import com.artflow.studio.core.color.CmykProof
 import com.artflow.studio.core.color.ColorProfile
@@ -53,6 +54,7 @@ import com.artflow.studio.core.text.TextLayerContent
 import com.artflow.studio.core.tool.ToolGroup
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.data.local.FontLibrary
+import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.local.ReferenceImages
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.brush.StrokeDestination
@@ -820,10 +822,17 @@ fun CanvasScreen(
                             ready?.width ?: 0,
                             ready?.height ?: 0,
                             ready?.dpi ?: 72,
-                            layers.size,
+                            viewModel.layerTotal(),
                             ready?.frameCount ?: 1,
                             (ready?.colorProfile ?: ColorProfile.SRGB).label,
                             viewModel.trackedTimeMs(),
+                            layerLimit =
+                                CanvasInformation.layerLimit(
+                                    ready?.width ?: 0,
+                                    ready?.height ?: 0,
+                                    Runtime.getRuntime().maxMemory(),
+                                    ProjectStorage.MAX_LAYERS,
+                                ),
                         ),
                     prefs =
                         StudioPrefs(
