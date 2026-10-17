@@ -31,7 +31,6 @@ import com.artflow.studio.R
 import com.artflow.studio.core.color.ColorHarmony
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.color.PaletteLibrary
-import kotlin.math.roundToInt
 
 /**
  * Colour picker (Phases 31-32).

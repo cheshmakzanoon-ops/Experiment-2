@@ -27,8 +27,18 @@ internal fun runShortcut(
     action: ShortcutAction,
     env: ShortcutEnvironment,
 ) {
-    val viewModel = env.viewModel
-    val view = env.canvasView
+    when (action.group) {
+        ShortcutAction.Group.EDIT, ShortcutAction.Group.SELECTION -> runEdit(action, env.viewModel)
+        ShortcutAction.Group.TOOLS, ShortcutAction.Group.BRUSH -> runTool(action, env)
+        ShortcutAction.Group.VIEW -> runView(action, env)
+        ShortcutAction.Group.LAYERS, ShortcutAction.Group.DOCUMENT -> runDocument(action, env)
+    }
+}
+
+private fun runEdit(
+    action: ShortcutAction,
+    viewModel: CanvasViewModel,
+) {
     when (action) {
         ShortcutAction.UNDO -> viewModel.undo()
         ShortcutAction.REDO -> viewModel.redo()
@@ -40,6 +50,16 @@ internal fun runShortcut(
         ShortcutAction.SELECT_ALL -> viewModel.selectAll()
         ShortcutAction.DESELECT -> viewModel.clearSelection()
         ShortcutAction.INVERT_SELECTION -> viewModel.invertSelection()
+        else -> Unit
+    }
+}
+
+private fun runTool(
+    action: ShortcutAction,
+    env: ShortcutEnvironment,
+) {
+    val viewModel = env.viewModel
+    when (action) {
         ShortcutAction.TOOL_BRUSH -> viewModel.setTool(ToolType.BRUSH)
         ShortcutAction.TOOL_SMUDGE -> viewModel.setTool(ToolType.SMUDGE)
         ShortcutAction.TOOL_ERASER -> viewModel.setTool(ToolType.ERASER)
@@ -58,6 +78,16 @@ internal fun runShortcut(
         }
         ShortcutAction.OPACITY_UP -> viewModel.setBrushOpacity(env.input.brushParams.opacity + OPACITY_STEP)
         ShortcutAction.OPACITY_DOWN -> viewModel.setBrushOpacity(env.input.brushParams.opacity - OPACITY_STEP)
+        else -> Unit
+    }
+}
+
+private fun runView(
+    action: ShortcutAction,
+    env: ShortcutEnvironment,
+) {
+    val view = env.canvasView
+    when (action) {
         ShortcutAction.ZOOM_IN -> view?.zoomBy(ZOOM_STEP)
         ShortcutAction.ZOOM_OUT -> view?.zoomBy(1f / ZOOM_STEP)
         ShortcutAction.FIT_TO_SCREEN -> view?.fitToView()
@@ -69,13 +99,23 @@ internal fun runShortcut(
         ShortcutAction.PAN_UP -> view?.panBy(0f, PAN_STEP)
         ShortcutAction.PAN_DOWN -> view?.panBy(0f, -PAN_STEP)
         ShortcutAction.TOGGLE_INTERFACE -> env.toggleInterface()
+        else -> Unit
+    }
+}
+
+private fun runDocument(
+    action: ShortcutAction,
+    env: ShortcutEnvironment,
+) {
+    val viewModel = env.viewModel
+    when (action) {
         ShortcutAction.NEW_LAYER -> viewModel.addLayer()
         ShortcutAction.DUPLICATE_LAYER -> viewModel.duplicateActiveLayer()
         ShortcutAction.MERGE_DOWN -> viewModel.mergeLayerDown(env.activeLayerId)
         ShortcutAction.SAVE -> viewModel.save()
         ShortcutAction.EXPORT -> env.openExport()
-        // The screen handles this one itself, because it depends on what is open.
-        ShortcutAction.CLOSE_PANEL -> Unit
+        // CLOSE_PANEL is handled by the screen itself, because it depends on what is open.
+        else -> Unit
     }
 }
 

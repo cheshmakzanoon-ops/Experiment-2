@@ -466,7 +466,8 @@ object ColorHarmony {
         text: String,
     ): Float? {
         val display = channelDisplay(mode, index)
-        val typed = text.trim().removeSuffix(display.suffix).trim().replace(',', '.').toFloatOrNull() ?: return null
+        val cleaned = text.trim().removeSuffix(display.suffix).trim()
+        val typed = cleaned.replace(',', '.').toFloatOrNull() ?: return null
         val value = typed / display.scale
         val range = channelRange(mode, index)
         return value.takeIf { it.isFinite() && it >= range.start && it <= range.endInclusive }

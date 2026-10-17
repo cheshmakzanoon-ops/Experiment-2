@@ -58,7 +58,9 @@ class ProcreateSwatchesTest {
 
     @Test
     fun unreadableSwatchesAreSkippedAndAnEmptyPaletteIsDropped() {
-        val json = """[{"name":"Bad","swatches":[{"hue":"red"},{"saturation":1},7,"x"]},{"name":"","swatches":[{"hue":0,"saturation":0,"brightness":1}]}]"""
+        val json =
+            """[{"name":"Bad","swatches":[{"hue":"red"},{"saturation":1},7,"x"]},""" +
+                """{"name":"","swatches":[{"hue":0,"saturation":0,"brightness":1}]}]"""
         val palettes = ProcreateSwatches.read(archive(json), fallbackName = "Fallback")
         assertEquals(1, palettes.size)
         assertEquals("Fallback", palettes[0].name)

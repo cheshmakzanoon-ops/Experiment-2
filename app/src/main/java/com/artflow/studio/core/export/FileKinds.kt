@@ -38,7 +38,8 @@ object FileKinds {
         mimeType: String?,
         head: ByteArray,
     ): FileKind {
-        name?.substringAfterLast('.', "")?.lowercase()?.let { byExtension[it] }?.let { return it }
+        val extension = name?.substringAfterLast('.', "")?.lowercase()
+        extension?.let { byExtension[it] }?.let { return it }
         fromBytes(head)?.let { return it }
         val type = mimeType?.lowercase().orEmpty()
         return when {

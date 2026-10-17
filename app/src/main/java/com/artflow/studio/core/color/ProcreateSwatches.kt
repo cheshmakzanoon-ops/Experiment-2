@@ -41,10 +41,11 @@ object ProcreateSwatches {
     private const val ENTRY = "Swatches.json"
     private const val REFERENCE_DATE_OFFSET_SECONDS = 978_307_200.0
     private val json = Json { ignoreUnknownKeys = true }
+    private val ZIP_SIGNATURE = byteArrayOf('P'.code.toByte(), 'K'.code.toByte(), 3, 4)
 
     /** True for the ZIP signature every `.swatches` file starts with. */
     fun isArchive(bytes: ByteArray): Boolean =
-        bytes.size >= 4 && bytes[0] == 'P'.code.toByte() && bytes[1] == 'K'.code.toByte() && bytes[2] == 3.toByte() && bytes[3] == 4.toByte()
+        bytes.size >= ZIP_SIGNATURE.size && ZIP_SIGNATURE.indices.all { bytes[it] == ZIP_SIGNATURE[it] }
 
     /** The palettes in [bytes], in file order; empty when the archive is not a readable swatches file. */
     fun read(
@@ -119,7 +120,8 @@ object ProcreateSwatches {
         val swatches = palette["swatches"] as? JsonArray ?: return null
         val colors = swatches.take(MAX_SWATCHES).mapNotNull { (it as? JsonObject)?.let(::colorOf) }
         if (colors.isEmpty()) return null
-        val name = (palette["name"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim().orEmpty()
+        val label = (palette["name"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+        val name = label?.trim().orEmpty()
         return Palette(name = name.ifEmpty { fallbackName }.take(MAX_NAME), colors = colors, source = "Procreate import")
     }
 
