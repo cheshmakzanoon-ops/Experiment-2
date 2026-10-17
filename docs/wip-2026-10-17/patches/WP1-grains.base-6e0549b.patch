@@ -1,0 +1,1180 @@
+diff --git a/app/src/main/java/com/artflow/studio/core/render/BrushTexture.kt b/app/src/main/java/com/artflow/studio/core/render/BrushTexture.kt
+index d7bb28d..2abae7b 100644
+--- a/app/src/main/java/com/artflow/studio/core/render/BrushTexture.kt
++++ b/app/src/main/java/com/artflow/studio/core/render/BrushTexture.kt
+@@ -2,23 +2,24 @@ package com.artflow.studio.core.render
+ 
+ import com.artflow.studio.domain.model.brush.BrushParams
+ import kotlin.math.cos
+-import kotlin.math.floor
+ import kotlin.math.sin
+ 
+ /**
+- * Original procedural brush grains. Sampling is anchored to canvas pixels, not dab order, time,
+- * device RNG or thread: overlapping dabs cannot fill the grain and saved strokes replay exactly.
+- * Unrecognized legacy texture IDs remain neutral rather than silently changing old documents.
+- * Grains imported from photos come from [CustomGrains].
++ * Brush grain: paint coverage read from a seamlessly tiling map. Sampling is anchored to canvas
++ * pixels, not dab order, time, device RNG or thread: overlapping dabs cannot fill the grain and
++ * saved strokes replay exactly. The built-in maps are procedural ([GrainSynth]); grains imported
++ * from photos come from [CustomGrains]. Both are sampled bilinearly, from a smaller mip level when
++ * the grain is scaled down, so they stay smooth at every scale. Unrecognized legacy texture IDs
++ * remain neutral rather than silently changing old documents.
+  */
+ class BrushTexture private constructor(
+-    private val kind: Kind?,
+-    private val tile: CustomGrains.Tile?,
++    tile: CustomGrains.Tile,
+     scale: Float,
+     rotation: Float,
+     /** Procreate's grain Depth: 1 shows the grain fully, 0 not at all. */
+     private val depth: Float = 1f,
+ ) {
++    /** Built-in grains. Their [id]s are stored in saved brushes and must never change. */
+     enum class Kind(
+         val id: String,
+         val label: String,
+@@ -32,11 +33,28 @@ class BrushTexture private constructor(
+         HALFTONE("halftone", "Halftone"),
+         HATCH("hatch", "Hatching"),
+         SPECKLE("speckle", "Spray"),
++        PENCIL("pencil", "Drawing paper"),
++        PASTEL("pastel", "Pastel paper"),
++        SANDPAPER("sandpaper", "Sandpaper"),
++        CONCRETE("concrete", "Concrete"),
++        LINEN("linen", "Linen"),
++        BURLAP("burlap", "Burlap"),
++        CRACKLE("crackle", "Crackle"),
++        WOOD("wood", "Wood grain"),
+     }
+ 
++    // A grain scaled below about 3/4 reads from a halved (box-filtered) level, so texels never
++    // shrink much below a pixel and the grain does not alias.
++    private val level = mipLevel(scale, tile.levels)
++    private val map = tile.level(level)
+     private val radians = Math.toRadians(rotation.toDouble())
+-    private val cosine = cos(radians).toFloat() / scale
+-    private val sine = sin(radians).toFloat() / scale
++    private val cosine = cos(radians).toFloat() / (scale * (1 shl level))
++    private val sine = sin(radians).toFloat() / (scale * (1 shl level))
++
++    // Pixel centres (x + 0.5, y + 0.5) mapped into the map, less its half-texel centre offset, folded
++    // into constants so the per-pixel work is two multiply-adds per axis.
++    private val offsetU = 0.5f * (cosine + sine) - 0.5f
++    private val offsetV = 0.5f * (cosine - sine) - 0.5f
+ 
+     fun coverage(
+         x: Int,
+@@ -46,86 +64,36 @@ class BrushTexture private constructor(
+     private fun grain(
+         x: Int,
+         y: Int,
+-    ): Float {
+-        val u = (x + 0.5f) * cosine + (y + 0.5f) * sine
+-        val v = -(x + 0.5f) * sine + (y + 0.5f) * cosine
+-        val column = floor(u).toInt()
+-        val row = floor(v).toInt()
+-        if (tile != null) return tile.at(column, row)
+-        return when (checkNotNull(kind)) {
+-            Kind.PAPER -> 0.35f + 0.65f * noise(column, row)
+-            Kind.CANVAS -> {
+-                val horizontal = Math.floorMod(row, 6) < 2
+-                val vertical = Math.floorMod(column, 6) < 2
+-                if (horizontal && vertical) {
+-                    0.3f
+-                } else if (horizontal || vertical) {
+-                    0.6f
+-                } else {
+-                    1f
+-                }
+-            }
+-            Kind.CHARCOAL -> {
+-                val grain = noise(Math.floorDiv(column, 2), Math.floorDiv(row, 2))
+-                ((grain - 0.25f) / 0.75f).coerceIn(0f, 1f)
+-            }
+-            Kind.FINE -> 0.55f + 0.45f * noise(column, row)
+-            Kind.BLOTCH -> 0.3f + 0.7f * smoothNoise(u / BLOTCH_CELL, v / BLOTCH_CELL)
+-            Kind.BRISTLE -> {
+-                // Long streaks along u: each row band gets its own density, broken slightly along its length.
+-                val band = noise(row, 7)
+-                val breakup = noise(Math.floorDiv(column, 12), row)
+-                (0.15f + 0.85f * band * (0.7f + 0.3f * breakup)).coerceIn(0f, 1f)
+-            }
+-            Kind.HALFTONE -> {
+-                val cx = Math.floorMod(column, HALFTONE_CELL) - HALFTONE_CELL / 2f + 0.5f
+-                val cy = Math.floorMod(row, HALFTONE_CELL) - HALFTONE_CELL / 2f + 0.5f
+-                if (cx * cx + cy * cy <= HALFTONE_RADIUS * HALFTONE_RADIUS) 1f else 0.08f
+-            }
+-            Kind.HATCH -> if (Math.floorMod(column + row, 5) < 2 || Math.floorMod(column - row, 9) == 0) 1f else 0.15f
+-            Kind.SPECKLE -> if (noise(column, row) > 0.62f) 1f else 0.05f
+-        }
+-    }
+-
+-    /** Bilinearly interpolated lattice noise: soft, low-frequency blotches. */
+-    private fun smoothNoise(
+-        u: Float,
+-        v: Float,
+-    ): Float {
+-        val x0 = floor(u).toInt()
+-        val y0 = floor(v).toInt()
+-        val fx = u - x0
+-        val fy = v - y0
+-        val sx = fx * fx * (3f - 2f * fx)
+-        val sy = fy * fy * (3f - 2f * fy)
+-        val top = noise(x0, y0) + (noise(x0 + 1, y0) - noise(x0, y0)) * sx
+-        val bottom = noise(x0, y0 + 1) + (noise(x0 + 1, y0 + 1) - noise(x0, y0 + 1)) * sx
+-        return top + (bottom - top) * sy
+-    }
+-
+-    private fun noise(
+-        x: Int,
+-        y: Int,
+-    ): Float {
+-        // Overflow is intentional: a stable integer hash, not nondeterministic floating-point noise.
+-        var hash = x * 374761393 + y * 668265263 + 1442695041
+-        hash = (hash xor (hash ushr 13)) * 1274126177
+-        hash = hash xor (hash ushr 16)
+-        return (hash and 0xFFFF) / 65535f
+-    }
++    ): Float = map.blend(x * cosine + y * sine + offsetU, y * cosine - x * sine + offsetV)
+ 
+     companion object {
+-        private const val BLOTCH_CELL = 14f
+-        private const val HALFTONE_CELL = 6
+-        private const val HALFTONE_RADIUS = 2.2f
++        private const val MIN_SCALE = 0.25f
++        private const val MAX_SCALE = 8f
++
++        /** Texels per canvas pixel above which a halved level is sampled instead. */
++        private const val DENSEST = 1.34f
+ 
+         fun from(params: BrushParams): BrushTexture? {
+             if (!params.blendTexture) return null
+             val kind = Kind.entries.firstOrNull { it.id == params.textureId }
+-            val tile = if (kind == null) CustomGrains.get(params.textureId) ?: return null else null
++            val tile = if (kind != null) GrainSynth.tile(kind) else CustomGrains.get(params.textureId) ?: return null
+             require(params.textureScale.isFinite() && params.textureRotation.isFinite()) { "Texture settings must be finite" }
+             val depth = if (params.grainDepth.isFinite()) params.grainDepth.coerceIn(0f, 1f) else 1f
+-            return BrushTexture(kind, tile, params.textureScale.coerceIn(0.25f, 8f), params.textureRotation % 360f, depth)
++            return BrushTexture(tile, params.textureScale.coerceIn(MIN_SCALE, MAX_SCALE), params.textureRotation % 360f, depth)
++        }
++
++        /** The pyramid level whose texels are closest to, but not much smaller than, a canvas pixel. */
++        internal fun mipLevel(
++            scale: Float,
++            available: Int,
++        ): Int {
++            var level = 0
++            var density = 1f / scale
++            while (density > DENSEST && level < available) {
++                density /= 2f
++                level++
++            }
++            return level
+         }
+     }
+ }
+diff --git a/app/src/main/java/com/artflow/studio/core/render/CustomGrains.kt b/app/src/main/java/com/artflow/studio/core/render/CustomGrains.kt
+index 63db1d6..c15b9fc 100644
+--- a/app/src/main/java/com/artflow/studio/core/render/CustomGrains.kt
++++ b/app/src/main/java/com/artflow/studio/core/render/CustomGrains.kt
+@@ -15,6 +15,7 @@ import kotlin.math.min
+ object CustomGrains {
+     const val TILE = 256
+     const val PREFIX = "custom-"
++    private const val INV_255 = 1f / 255f
+     private val ID = Regex("custom-[0-9a-f]{1,32}")
+     private val tiles = ConcurrentHashMap<String, Tile>()
+ 
+@@ -26,10 +27,89 @@ object CustomGrains {
+             require(size > 0 && values.size == size * size) { "A grain tile is square" }
+         }
+ 
++        private val mask = if (size and (size - 1) == 0) size - 1 else -1
++
++        /** This tile and its successive 2 × 2 box-filtered halves, built on first use below level 0. */
++        private val pyramid: List<Tile> by lazy {
++            generateSequence(this) { tile -> if (tile.size % 2 == 0 && tile.size >= 2) tile.halved() else null }.toList()
++        }
++
+         fun at(
+             x: Int,
+             y: Int,
+-        ): Float = (values[Math.floorMod(y, size) * size + Math.floorMod(x, size)].toInt() and 0xFF) / 255f
++        ): Float = (values[Math.floorMod(y, size) * size + Math.floorMod(x, size)].toInt() and 0xFF) * INV_255
++
++        /**
++         * Bilinear coverage at (u, v) in texels, repeating the tile in every direction: texel (i, j)
++         * is centred on (i + 0.5, j + 0.5), so whole-texel centres return [at] exactly.
++         */
++        fun wrapped(
++            u: Float,
++            v: Float,
++        ): Float = blend(u - 0.5f, v - 0.5f)
++
++        /** [wrapped] at (x + 0.5, y + 0.5): x and y count from texel centres. Per-pixel hot path of [BrushTexture]. */
++        internal fun blend(
++            x: Float,
++            y: Float,
++        ): Float {
++            var x0 = x.toInt()
++            if (x < x0) x0--
++            var y0 = y.toInt()
++            if (y < y0) y0--
++            val tx = x - x0
++            val ty = y - y0
++            if (mask < 0) return blendAnySize(x0, y0, tx, ty)
++            val row0 = (y0 and mask) * size
++            val row1 = ((y0 + 1) and mask) * size
++            val x1 = (x0 + 1) and mask
++            x0 = x0 and mask
++            val a = (values[row0 + x0].toInt() and 0xFF).toFloat()
++            val b = (values[row0 + x1].toInt() and 0xFF).toFloat()
++            val c = (values[row1 + x0].toInt() and 0xFF).toFloat()
++            val d = (values[row1 + x1].toInt() and 0xFF).toFloat()
++            val top = a + (b - a) * tx
++            return (top + (c + (d - c) * tx - top) * ty) * INV_255
++        }
++
++        private fun blendAnySize(
++            column: Int,
++            row: Int,
++            tx: Float,
++            ty: Float,
++        ): Float {
++            val x0 = Math.floorMod(column, size)
++            val y0 = Math.floorMod(row, size)
++            val x1 = if (x0 + 1 == size) 0 else x0 + 1
++            val y1 = if (y0 + 1 == size) 0 else y0 + 1
++            val a = (values[y0 * size + x0].toInt() and 0xFF).toFloat()
++            val b = (values[y0 * size + x1].toInt() and 0xFF).toFloat()
++            val c = (values[y1 * size + x0].toInt() and 0xFF).toFloat()
++            val d = (values[y1 * size + x1].toInt() and 0xFF).toFloat()
++            val top = a + (b - a) * tx
++            return (top + (c + (d - c) * tx - top) * ty) * INV_255
++        }
++
++        /** Level [n] of the mip pyramid (0 is this tile; each level halves the size), clamped to the smallest. */
++        fun level(n: Int): Tile = if (n <= 0) this else pyramid[min(n, pyramid.lastIndex)]
++
++        /** How many levels below this one exist (each halving needs an even size), without building them. */
++        val levels: Int get() = Integer.numberOfTrailingZeros(size)
++
++        private fun halved(): Tile {
++            val half = size / 2
++            val out = ByteArray(half * half)
++            for (y in 0 until half) {
++                for (x in 0 until half) {
++                    val top = 2 * y * size + 2 * x
++                    val sum =
++                        (values[top].toInt() and 0xFF) + (values[top + 1].toInt() and 0xFF) +
++                            (values[top + size].toInt() and 0xFF) + (values[top + size + 1].toInt() and 0xFF)
++                    out[y * half + x] = ((sum + 2) / 4).toByte()
++                }
++            }
++            return Tile(half, out)
++        }
+ 
+         /** Bilinear coverage at (u, v) in 0..1 across the tile, transparent beyond its edges (for tips). */
+         fun sample(
+diff --git a/app/src/main/java/com/artflow/studio/core/render/GrainField.kt b/app/src/main/java/com/artflow/studio/core/render/GrainField.kt
+new file mode 100644
+index 0000000..fdcc4c5
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/core/render/GrainField.kt
+@@ -0,0 +1,131 @@
++package com.artflow.studio.core.render
++
++import kotlin.math.max
++import kotlin.math.min
++import kotlin.math.sqrt
++
++/**
++ * A square float map that procedural grains are built in. Drawing wraps around its edges, so
++ * marks crossing an edge continue on the opposite side and the finished tile repeats without a seam.
++ */
++internal class GrainField(
++    val size: Int,
++) {
++    val values = FloatArray(size * size)
++
++    init {
++        require(size > 0 && size and (size - 1) == 0) { "A wrapping field is a power of two" }
++    }
++
++    /** Sets every texel from [value] at its centre (x, y in texels). */
++    inline fun fill(value: (x: Float, y: Float) -> Float) {
++        for (y in 0 until size) {
++            val row = y * size
++            for (x in 0 until size) values[row + x] = value(x + 0.5f, y + 0.5f)
++        }
++    }
++
++    /** Replaces every texel with [transform] of itself. */
++    inline fun map(transform: (Float) -> Float) {
++        for (i in values.indices) values[i] = transform(values[i])
++    }
++
++    /** Index of texel ([x], [y]), wrapped onto the tile. */
++    fun index(
++        x: Int,
++        y: Int,
++    ): Int = (y and size - 1) * size + (x and size - 1)
++
++    /**
++     * Paints an anti-aliased segment whose width runs from [startWidth] to [endWidth], keeping the
++     * stronger of [strength] and what each texel already holds.
++     */
++    fun segment(
++        x0: Float,
++        y0: Float,
++        x1: Float,
++        y1: Float,
++        startWidth: Float,
++        endWidth: Float,
++        strength: Float,
++    ) {
++        val reach = max(startWidth, endWidth) / 2f + 1f
++        val left = TileNoise.floorToInt(min(x0, x1) - reach)
++        val right = TileNoise.floorToInt(max(x0, x1) + reach)
++        val top = TileNoise.floorToInt(min(y0, y1) - reach)
++        val bottom = TileNoise.floorToInt(max(y0, y1) + reach)
++        val dx = x1 - x0
++        val dy = y1 - y0
++        val lengthSquared = max(dx * dx + dy * dy, 1e-6f)
++        for (y in top..bottom) {
++            for (x in left..right) {
++                val px = x + 0.5f - x0
++                val py = y + 0.5f - y0
++                val t = ((px * dx + py * dy) / lengthSquared).coerceIn(0f, 1f)
++                val ex = px - dx * t
++                val ey = py - dy * t
++                val half = (startWidth + (endWidth - startWidth) * t) / 2f
++                val coverage = (half - sqrt(ex * ex + ey * ey) + 0.5f).coerceIn(0f, 1f) * min(1f, half * 2f)
++                if (coverage > 0f) put(index(x, y), coverage * strength)
++            }
++        }
++    }
++
++    /** Paints an anti-aliased disc, like [segment]. */
++    fun disc(
++        cx: Float,
++        cy: Float,
++        radius: Float,
++        strength: Float,
++    ) = segment(cx, cy, cx, cy, radius * 2f, radius * 2f, strength)
++
++    private fun put(
++        index: Int,
++        amount: Float,
++    ) {
++        values[index] = max(values[index], amount)
++    }
++
++    /**
++     * Stretches the values so that [lowShare] of the texels end at or below 0 and [highShare] at
++     * or below 1, clamping the rest: every recipe then spans the full range whatever its sums.
++     */
++    fun normalize(
++        lowShare: Float = 0.005f,
++        highShare: Float = 0.995f,
++    ) {
++        val low = percentile(lowShare)
++        val high = percentile(highShare)
++        val range = (high - low).takeIf { it > 1e-6f } ?: 1f
++        map { ((it - low) / range).coerceIn(0f, 1f) }
++    }
++
++    /** The value below which [share] of the texels lie (a 4096-bin histogram estimate). */
++    private fun percentile(share: Float): Float {
++        var low = Float.MAX_VALUE
++        var high = -Float.MAX_VALUE
++        for (value in values) {
++            low = min(low, value)
++            high = max(high, value)
++        }
++        if (high <= low) return low
++        val bins = IntArray(HISTOGRAM_BINS)
++        val scale = (HISTOGRAM_BINS - 1) / (high - low)
++        for (value in values) bins[((value - low) * scale).toInt()]++
++        val wanted = share * values.size
++        var seen = 0
++        for (bin in bins.indices) {
++            seen += bins[bin]
++            if (seen >= wanted) return low + bin / scale
++        }
++        return high
++    }
++
++    /** Quantizes to an 8-bit tile; values are clamped to 0..1. */
++    fun toTile(): CustomGrains.Tile =
++        CustomGrains.Tile(size, ByteArray(values.size) { (values[it].coerceIn(0f, 1f) * 255f + 0.5f).toInt().toByte() })
++
++    private companion object {
++        const val HISTOGRAM_BINS = 4096
++    }
++}
+diff --git a/app/src/main/java/com/artflow/studio/core/render/GrainSynth.kt b/app/src/main/java/com/artflow/studio/core/render/GrainSynth.kt
+new file mode 100644
+index 0000000..b69ccbd
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/core/render/GrainSynth.kt
+@@ -0,0 +1,368 @@
++package com.artflow.studio.core.render
++
++import com.artflow.studio.core.render.TileNoise.cellular
++import com.artflow.studio.core.render.TileNoise.fbm
++import com.artflow.studio.core.render.TileNoise.gradient
++import com.artflow.studio.core.render.TileNoise.smoothstep
++import kotlin.math.abs
++import kotlin.math.max
++import kotlin.math.round
++import kotlin.math.sqrt
++
++/**
++ * The procedural grains behind [BrushTexture.Kind]: seamlessly tiling 512 × 512 maps built from
++ * tileable gradient and cellular noise, threads and dots, each generated once on first use and
++ * shared by every brush. Values are paint coverage: 1 takes paint fully, 0 holds it back.
++ *
++ * Natural media come from thresholded fractal noise with soft shoulders (paper, charcoal, pastel)
++ * rather than from lattice cells, so no grid or block shows at any scale.
++ */
++internal object GrainSynth {
++    const val SIZE = 512
++    private const val K = 1f / SIZE
++
++    private val tiles = BrushTexture.Kind.entries.map { kind -> lazy { generate(kind).toTile() } }
++
++    fun tile(kind: BrushTexture.Kind): CustomGrains.Tile = tiles[kind.ordinal].value
++
++    /** The finished map before quantization, for tests and tuning. */
++    fun generate(kind: BrushTexture.Kind): GrainField =
++        when (kind) {
++            BrushTexture.Kind.PAPER -> paper()
++            BrushTexture.Kind.CANVAS -> weave(CANVAS)
++            BrushTexture.Kind.CHARCOAL -> charcoal()
++            BrushTexture.Kind.FINE -> fine()
++            BrushTexture.Kind.BLOTCH -> blotch()
++            BrushTexture.Kind.BRISTLE -> bristle()
++            BrushTexture.Kind.HALFTONE -> halftone()
++            BrushTexture.Kind.HATCH -> hatch()
++            BrushTexture.Kind.SPECKLE -> speckle()
++            BrushTexture.Kind.PENCIL -> pencil()
++            BrushTexture.Kind.PASTEL -> pastel()
++            BrushTexture.Kind.SANDPAPER -> sandpaper()
++            BrushTexture.Kind.CONCRETE -> concrete()
++            BrushTexture.Kind.LINEN -> weave(LINEN)
++            BrushTexture.Kind.BURLAP -> burlap()
++            BrushTexture.Kind.CRACKLE -> crackle()
++            BrushTexture.Kind.WOOD -> wood()
++        }
++
++    /** Gradient noise with [period] cells across the tile, at texel (x, y). */
++    private fun noise(
++        x: Float,
++        y: Float,
++        period: Int,
++        seed: Int,
++    ): Float = gradient(x * K * period, y * K * period, period, period, seed)
++
++    /** Fractal noise whose coarsest octave has [period] cells across the tile, at texel (x, y). */
++    private fun fractal(
++        x: Float,
++        y: Float,
++        period: Int,
++        octaves: Int,
++        gain: Float,
++        seed: Int,
++    ): Float = fbm(x * K * period, y * K * period, period, period, octaves, gain, seed)
++
++    /** Cold-press paper: an irregular tooth of soft bumps, a broad mottle and a fine surface grain. */
++    private fun paper(): GrainField =
++        GrainField(SIZE).apply {
++            fill { x, y -> 0.6f * fractal(x, y, 48, 3, 0.55f, 1) + 0.25f * fractal(x, y, 6, 3, 0.5f, 2) + 0.15f * noise(x, y, 170, 3) }
++            normalize()
++            map { 0.25f + 0.75f * smoothstep(0.2f, 0.8f, it) }
++        }
++
++    /** Drawing paper: a finer, flatter tooth than [paper] with faint horizontal fibres. */
++    private fun pencil(): GrainField =
++        GrainField(SIZE).apply {
++            fill { x, y ->
++                val tooth = fbm(x * K * 110, y * K * 110, 110, 110, 2, 0.45f, 21)
++                val fibres = gradient(x * K * 32, y * K * 200, 32, 200, 22)
++                0.6f * tooth + 0.2f * fibres + 0.2f * fractal(x, y, 8, 3, 0.5f, 23)
++            }
++            normalize()
++            map { 0.3f + 0.7f * smoothstep(0.2f, 0.8f, it) }
++        }
++
++    /** Charcoal paper: a coarse, slightly horizontal tooth that the stick only catches on its peaks. */
++    private fun charcoal(): GrainField =
++        GrainField(SIZE).apply {
++            fill { x, y ->
++                val ridges = fbm(x * K * 48, y * K * 96, 48, 96, 4, 0.6f, 31)
++                0.8f * ridges + 0.2f * noise(x, y, 220, 32) + 0.25f * fractal(x, y, 6, 2, 0.5f, 33)
++            }
++            normalize()
++            map { smoothstep(0.38f, 0.62f, it) }
++        }
++
++    /** Fine, even grain with little contrast, for smooth papers and gentle texture. */
++    private fun fine(): GrainField =
++        GrainField(SIZE).apply {
++            fill { x, y -> 0.6f * fbm(x * K * 170, y * K * 170, 170, 170, 2, 0.5f, 41) + 0.4f * fractal(x, y, 40, 2, 0.5f, 42) }
++            normalize()
++            map { 0.55f + 0.45f * it }
++        }
++
++    /** Watercolour: soft blooms of pigment, with darker granules settling into the paper. */
++    private fun blotch(): GrainField =
++        GrainField(SIZE).apply {
++            fill { x, y ->
++                val wx = fractal(x, y, 4, 2, 0.5f, 61) * 0.25f
++                val wy = fractal(x, y, 4, 2, 0.5f, 62) * 0.25f
++                val clouds = smoothstep(-0.6f, 0.6f, fbm(x * K * 4 + wx, y * K * 4 + wy, 4, 4, 4, 0.45f, 63))
++                val granules = smoothstep(0.2f, 0.9f, fbm(x * K * 170, y * K * 170, 170, 170, 2, 0.5f, 64))
++                0.62f + 0.38f * clouds + 0.14f * granules * (1.1f - clouds)
++            }
++            normalize(0.002f, 0.998f)
++            map { 0.3f + 0.7f * it }
++        }
++
++    /** Bristle streaks: long, uneven lines along u that thin out and break. */
++    private fun bristle(): GrainField =
++        GrainField(SIZE).apply {
++            fill { x, y -> 0.7f * fbm(x * K * 3, y * K * 220, 3, 220, 3, 0.6f, 81) + 0.3f * gradient(x * K * 8, y * K * 40, 8, 40, 82) }
++            normalize()
++            map { 0.12f + 0.88f * smoothstep(0.3f, 0.75f, it) }
++        }
++
++    /** A printed dot screen: anti-aliased dots on an eight-texel square grid. */
++    private fun halftone(): GrainField =
++        GrainField(SIZE).apply {
++            fill { x, y ->
++                val dx = x % HALFTONE_CELL - HALFTONE_CELL / 2f
++                val dy = y % HALFTONE_CELL - HALFTONE_CELL / 2f
++                0.08f + 0.92f * (HALFTONE_RADIUS - sqrt(dx * dx + dy * dy) + 0.5f).coerceIn(0f, 1f)
++            }
++        }
++
++    /**
++     * Engraved hatching: diagonal lines every eight texels along x + y, finer crossing lines every
++     * sixteen along x − y, both anti-aliased, with a slight hand-drawn wobble in weight and place.
++     */
++    private fun hatch(): GrainField =
++        GrainField(SIZE).apply {
++            fill { x, y ->
++                val wobble = noise(x, y, 16, 91) * 0.6f
++                val main = line(x + y + wobble, 8f, 2.1f + 0.5f * noise(x, y, 12, 92))
++                val cross = line(x - y + wobble, 16f, 1.2f + 0.4f * noise(x, y, 10, 93))
++                0.15f + 0.85f * max(main, 0.85f * cross)
++            }
++        }
++
++    /** Anti-aliased coverage of lines every [period] along [along] (measured on a diagonal), [width] texels wide. */
++    private fun line(
++        along: Float,
++        period: Float,
++        width: Float,
++    ): Float {
++        val phase = along / period
++        val offset = abs(phase - round(phase)) * period / SQRT2
++        return (width / 2f - offset + 0.5f).coerceIn(0f, 1f)
++    }
++
++    /** A spray of dots of many sizes, thinning and thickening in soft patches. */
++    private fun speckle(): GrainField =
++        GrainField(SIZE).apply {
++            repeat(SPECKLE_DOTS) { index ->
++                val h = TileNoise.hash(index, 1, 101)
++                val x = TileNoise.unit(h) * size
++                val y = TileNoise.unit(TileNoise.next(h)) * size
++                val pick = TileNoise.next(TileNoise.next(h))
++                if (TileNoise.unit(pick) < 0.6f + 0.4f * noise(x, y, 6, 102)) {
++                    val radius = 0.55f + 1.7f * cube(TileNoise.unit(TileNoise.next(pick)))
++                    disc(x, y, radius, 0.7f + 0.3f * TileNoise.unit(TileNoise.next(TileNoise.next(pick))))
++                }
++            }
++            map { 0.05f + 0.95f * it.coerceIn(0f, 1f) }
++        }
++
++    private fun cube(value: Float): Float = value * value * value
++
++    /** Pastel on toned paper: dense colour broken by small white pits where the paper's tooth stays bare. */
++    private fun pastel(): GrainField =
++        GrainField(SIZE).apply {
++            fill { x, y -> fractal(x, y, 40, 3, 0.5f, 111) + 0.35f * noise(x, y, 130, 112) + 0.25f * fractal(x, y, 5, 2, 0.5f, 113) }
++            normalize()
++            map { 0.06f + 0.94f * smoothstep(0.22f, 0.42f, it) }
++        }
++
++    /** Sandpaper: dense, sharp grit of mixed sizes. */
++    private fun sandpaper(): GrainField {
++        val cell = FloatArray(3)
++        return GrainField(SIZE).apply {
++            fill { x, y ->
++                cellular(x * K * 140, y * K * 140, 140, 121, cell)
++                val grit = 1f - smoothstep(0.05f, 0.5f, cell[0])
++                0.45f * noise(x, y, 220, 122) + 0.25f * noise(x, y, 110, 123) + 0.5f * grit * (0.4f + 0.6f * cell[2])
++            }
++            normalize()
++            map { 0.08f + 0.92f * smoothstep(0.45f, 0.62f, it) }
++        }
++    }
++
++    /** Concrete: a cold mottle with fine grit, pitted by air holes of many sizes. */
++    private fun concrete(): GrainField {
++        val cell = FloatArray(3)
++        return GrainField(SIZE).apply {
++            fill { x, y ->
++                val surface = 0.62f + 0.22f * fractal(x, y, 6, 5, 0.55f, 131) + 0.16f * noise(x, y, 220, 132)
++                cellular(x * K * 48 + noise(x, y, 64, 133) * 0.3f, y * K * 48 + noise(x, y, 64, 134) * 0.3f, 48, 135, cell)
++                val radius = max(0f, cell[2] - 0.55f) * 0.8f
++                val pit = if (radius <= 0f) 0f else 1f - smoothstep(radius * 0.6f, radius, cell[0])
++                surface * (1f - 0.85f * pit)
++            }
++            normalize(0.002f, 0.995f)
++            map { 0.2f + 0.8f * it }
++        }
++    }
++
++    /** Dried, cracked paint: plates of uneven tone split by wandering cracks. */
++    private fun crackle(): GrainField {
++        val cell = FloatArray(3)
++        return GrainField(SIZE).apply {
++            fill { x, y ->
++                val wx = fractal(x, y, 8, 3, 0.5f, 141) * 0.35f + fractal(x, y, 40, 2, 0.5f, 142) * 0.06f
++                val wy = fractal(x, y, 8, 3, 0.5f, 143) * 0.35f + fractal(x, y, 40, 2, 0.5f, 144) * 0.06f
++                cellular(x * K * 18 + wx, y * K * 18 + wy, 18, 145, cell)
++                val width = 0.025f + 0.0125f * (1f + noise(x, y, 24, 146))
++                val crack = 1f - smoothstep(width * 0.4f, width, cell[1] - cell[0])
++                (0.8f + 0.2f * cell[2] + 0.1f * noise(x, y, 48, 147)) * (1f - crack)
++            }
++            normalize(0.002f, 0.998f)
++        }
++    }
++
++    /** Wood: long rings that wander with the grain, crossed by fine fibres. */
++    private fun wood(): GrainField =
++        GrainField(SIZE).apply {
++            fill { x, y ->
++                val ring = y * K * 40 + fbm(x * K * 2, y * K * 3, 2, 3, 3, 0.5f, 151) * 3.5f
++                val phase = ring - TileNoise.floorToInt(ring)
++                val band = smoothstep(0f, 0.65f, phase) * (1f - smoothstep(0.8f, 1f, phase))
++                0.65f * band + 0.35f * (0.5f + 0.5f * gradient(x * K * 6, y * K * 256, 6, 256, 152))
++            }
++            normalize()
++            map { 0.25f + 0.75f * it }
++        }
++
++    /**
++     * Plain-weave settings: [threads] per tile side (even, so over and under alternate across the
++     * seam), thread [width] as a share of the pitch, its per-thread [widthJitter], how much threads
++     * swell into [slubs], and how far a thread dips where it passes under another ([lift]).
++     */
++    private class Weave(
++        val threads: Int,
++        val width: Float,
++        val widthJitter: Float,
++        val slubs: Float,
++        val lift: Float,
++        val seed: Int,
++    )
++
++    private val CANVAS = Weave(threads = 80, width = 0.9f, widthJitter = 0.14f, slubs = 0.3f, lift = 0.6f, seed = 21)
++    private val LINEN = Weave(threads = 128, width = 0.95f, widthJitter = 0.2f, slubs = 0.5f, lift = 0.4f, seed = 71)
++    private val BURLAP = Weave(threads = 32, width = 0.68f, widthJitter = 0.2f, slubs = 0.45f, lift = 0.6f, seed = 92)
++
++    /**
++     * A plain weave: warp and weft threads with rounded profiles pass alternately over and under
++     * each other; every thread wanders a little, varies in thickness and swells into slubs.
++     */
++    private fun weave(settings: Weave): GrainField {
++        val warp = Threads(settings, vertical = true)
++        val weft = Threads(settings, vertical = false)
++        return GrainField(SIZE).apply {
++            fill { x, y -> max(warp.height(x, y), weft.height(y, x)) }
++            normalize(0.01f, 0.99f)
++            map { 0.15f + 0.85f * smoothstep(0.05f, 0.85f, it) }
++        }
++    }
++
++    /** One direction of a weave, with each thread's wander and width tabulated along its length. */
++    private class Threads(
++        private val settings: Weave,
++        private val vertical: Boolean,
++    ) {
++        private val pitch = SIZE.toFloat() / settings.threads
++        private val seed = settings.seed + if (vertical) 0 else 1000
++        private val wander = FloatArray(settings.threads * SIZE)
++
++        // Phase of the yarn's twist per texel: a whole number of twists along the tile, so it wraps.
++        private val twists = 2f * round(SIZE / (pitch * 0.9f)) / SIZE
++        private val width = FloatArray(settings.threads * SIZE)
++
++        init {
++            for (index in 0 until settings.threads) {
++                val jitter = (TileNoise.unit(index, 0, seed + 2) - 0.5f) * 2f * settings.widthJitter
++                for (along in 0 until SIZE) {
++                    val position = along + 0.5f
++                    wander[index * SIZE + along] = gradient(position * K * 5, index + 0.5f, 5, settings.threads, seed) * pitch * 0.22f
++                    val slub = max(0f, gradient(position * K * 12, index + 0.5f, 12, settings.threads, seed + 1)) * settings.slubs
++                    width[index * SIZE + along] = pitch * settings.width * (1f + jitter + slub)
++                }
++            }
++        }
++
++        /** Height at [across] of the nearest thread, at texel centre [along] of its length. */
++        fun height(
++            across: Float,
++            along: Float,
++        ): Float {
++            val nearest = TileNoise.floorToInt(across / pitch)
++            val at = along.toInt()
++            var best = 0f
++            for (candidate in nearest - 1..nearest + 1) {
++                val index = Math.floorMod(candidate, settings.threads)
++                val centre = (candidate + 0.5f) * pitch + wander[index * SIZE + at]
++                val distance = abs(across - centre) * 2f / width[index * SIZE + at]
++                if (distance < 1f) best = max(best, surface(across, across - centre, along, index) * sqrt(1f - distance * distance))
++            }
++            return best
++        }
++
++        /**
++         * How high thread [index] stands at [along]: lifted where it passes over the other direction,
++         * with the diagonal twist and fibres of a yarn ([offset] is the distance from its centre line).
++         */
++        private fun surface(
++            across: Float,
++            offset: Float,
++            along: Float,
++            index: Int,
++        ): Float {
++            val over = wave(along / pitch - 0.5f - index) * if (vertical) 1f else -1f
++            val twist = 0.5f + 0.5f * wave((along + offset * 1.2f) * twists)
++            val fibre = 0.8f + 0.12f * twist + 0.12f * gradient(along * K * 96, across * K * 384, 96, 384, seed + 3)
++            return (1f - settings.lift + settings.lift * (0.5f + 0.5f * over)) * fibre
++        }
++    }
++
++    /** A smooth wave like cos(π × [phase]): 1 at even, −1 at odd phases, from arithmetic only so it is identical everywhere. */
++    private fun wave(phase: Float): Float {
++        val cycle = phase / 2f - TileNoise.floorToInt(phase / 2f)
++        val t = if (cycle <= 0.5f) cycle * 2f else 2f - cycle * 2f
++        return 1f - 2f * t * t * t * (t * (t * 6f - 15f) + 10f)
++    }
++
++    /** Burlap: a coarse, open weave of hairy threads with loose fibres across the gaps. */
++    private fun burlap(): GrainField {
++        val field = weave(BURLAP)
++        repeat(BURLAP_FIBRES) { index ->
++            val h = TileNoise.hash(index, 2, 162)
++            val x = TileNoise.unit(h) * SIZE
++            val y = TileNoise.unit(TileNoise.next(h)) * SIZE
++            val angle = TileNoise.unit(TileNoise.next(TileNoise.next(h))) * Math.PI
++            val length = 4f + 12f * TileNoise.unit(TileNoise.next(TileNoise.next(TileNoise.next(h))))
++            val dx = StrictMath.cos(angle).toFloat() * length / 2f
++            val dy = StrictMath.sin(angle).toFloat() * length / 2f
++            field.segment(x - dx, y - dy, x + dx, y + dy, 0.6f, 0.6f, 0.45f)
++        }
++        return field
++    }
++
++    private const val SQRT2 = 1.4142135f
++    private const val HALFTONE_CELL = 8f
++    private const val HALFTONE_RADIUS = 2.93f
++    private const val SPECKLE_DOTS = 64_000
++    private const val BURLAP_FIBRES = 700
++}
+diff --git a/app/src/main/java/com/artflow/studio/core/render/TileNoise.kt b/app/src/main/java/com/artflow/studio/core/render/TileNoise.kt
+new file mode 100644
+index 0000000..2b53621
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/core/render/TileNoise.kt
+@@ -0,0 +1,175 @@
++package com.artflow.studio.core.render
++
++import kotlin.math.sqrt
++
++/**
++ * Seamlessly tiling noise for the procedural grains and brush tips. Coordinates are in lattice
++ * cells and every function repeats after its period, so a map that spans whole periods wraps
++ * without a seam. Only integer hashing, IEEE float arithmetic, square roots and StrictMath enter,
++ * so the same call returns the same bits on every device and thread.
++ */
++internal object TileNoise {
++    private const val DIRECTIONS = 16
++    private const val SQRT2 = 1.4142135f
++    private const val INV_24_BITS = 1f / 16_777_216f
++    private const val JITTER_MIN = 0.08f
++    private const val JITTER_SPAN = 0.84f
++    private val GX = FloatArray(DIRECTIONS) { StrictMath.cos(it * 2.0 * Math.PI / DIRECTIONS).toFloat() }
++    private val GY = FloatArray(DIRECTIONS) { StrictMath.sin(it * 2.0 * Math.PI / DIRECTIONS).toFloat() }
++
++    /** A well-mixed 32-bit hash of a lattice point (Wellons' lowbias32 over a spread of the coordinates). */
++    fun hash(
++        x: Int,
++        y: Int,
++        seed: Int,
++    ): Int = mix(x * -0x61c88647 + y * 0x27d4eb2f + mix(seed))
++
++    /** Uniform in 0 until 1. */
++    fun unit(
++        x: Int,
++        y: Int,
++        seed: Int,
++    ): Float = unit(hash(x, y, seed))
++
++    fun unit(hash: Int): Float = (hash ushr 8) * INV_24_BITS
++
++    /** A second independent value from the same hash. */
++    fun next(hash: Int): Int = mix(hash xor 0x5bd1e995)
++
++    private fun mix(value: Int): Int {
++        var h = value
++        h = (h xor (h ushr 16)) * 0x7feb352d
++        h = (h xor (h ushr 15)) * 0x846ca68bL.toInt()
++        return h xor (h ushr 16)
++    }
++
++    /** Integer floor without the double round trip of kotlin.math.floor. */
++    fun floorToInt(value: Float): Int {
++        val truncated = value.toInt()
++        return if (value < truncated) truncated - 1 else truncated
++    }
++
++    private fun fade(t: Float): Float = t * t * t * (t * (t * 6f - 15f) + 10f)
++
++    /** [value] wrapped into 0 until [period]; most lattice points already are, which skips the division. */
++    private fun wrap(
++        value: Int,
++        period: Int,
++    ): Int = if (value in 0 until period) value else Math.floorMod(value, period)
++
++    private fun corner(
++        hash: Int,
++        dx: Float,
++        dy: Float,
++    ): Float {
++        val direction = hash and (DIRECTIONS - 1)
++        return GX[direction] * dx + GY[direction] * dy
++    }
++
++    /** Gradient (Perlin) noise in about -1..1, repeating every [periodX] × [periodY] cells. */
++    fun gradient(
++        x: Float,
++        y: Float,
++        periodX: Int,
++        periodY: Int,
++        seed: Int,
++    ): Float {
++        val ix = floorToInt(x)
++        val iy = floorToInt(y)
++        val fx = x - ix
++        val fy = y - iy
++        val x0 = wrap(ix, periodX)
++        val y0 = wrap(iy, periodY)
++        val x1 = if (x0 + 1 == periodX) 0 else x0 + 1
++        val y1 = if (y0 + 1 == periodY) 0 else y0 + 1
++        val a = corner(hash(x0, y0, seed), fx, fy)
++        val b = corner(hash(x1, y0, seed), fx - 1f, fy)
++        val c = corner(hash(x0, y1, seed), fx, fy - 1f)
++        val d = corner(hash(x1, y1, seed), fx - 1f, fy - 1f)
++        val u = fade(fx)
++        val top = a + (b - a) * u
++        val bottom = c + (d - c) * u
++        return (top + (bottom - top) * fade(fy)) * SQRT2
++    }
++
++    /**
++     * Fractal sum of [octaves] gradient octaves in about -1..1; each octave doubles both periods
++     * (so it still tiles) and keeps [gain] of the previous amplitude.
++     */
++    fun fbm(
++        x: Float,
++        y: Float,
++        periodX: Int,
++        periodY: Int,
++        octaves: Int,
++        gain: Float,
++        seed: Int,
++    ): Float {
++        var sum = 0f
++        var amplitude = 1f
++        var total = 0f
++        var scale = 1
++        for (octave in 0 until octaves) {
++            sum += amplitude * gradient(x * scale, y * scale, periodX * scale, periodY * scale, seed + octave * 101)
++            total += amplitude
++            amplitude *= gain
++            scale *= 2
++        }
++        return sum / total
++    }
++
++    /**
++     * Worley (cellular) noise over a [cells] × [cells] lattice of jittered feature points:
++     * writes the nearest distance, the second nearest and a 0..1 identity of the nearest cell
++     * into [out], all in cell units.
++     */
++    fun cellular(
++        x: Float,
++        y: Float,
++        cells: Int,
++        seed: Int,
++        out: FloatArray,
++    ) {
++        val cx = floorToInt(x)
++        val cy = floorToInt(y)
++        out[0] = Float.MAX_VALUE
++        out[1] = Float.MAX_VALUE
++        var identity = 0
++        for (row in cy - 1..cy + 1) {
++            val wrappedRow = wrap(row, cells)
++            for (column in cx - 1..cx + 1) {
++                val h = hash(wrap(column, cells), wrappedRow, seed)
++                val dx = column + JITTER_MIN + JITTER_SPAN * unit(h) - x
++                val dy = row + JITTER_MIN + JITTER_SPAN * unit(next(h)) - y
++                if (nearer(dx * dx + dy * dy, out)) identity = h
++            }
++        }
++        out[0] = sqrt(out[0])
++        out[1] = sqrt(out[1])
++        out[2] = unit(next(next(identity)))
++    }
++
++    /** Keeps the two smallest squared distances in [out]; true when [distance] is the new nearest. */
++    private fun nearer(
++        distance: Float,
++        out: FloatArray,
++    ): Boolean {
++        if (distance < out[0]) {
++            out[1] = out[0]
++            out[0] = distance
++            return true
++        }
++        if (distance < out[1]) out[1] = distance
++        return false
++    }
++
++    /** Hermite smoothstep of [x] between [edge0] and [edge1]. */
++    fun smoothstep(
++        edge0: Float,
++        edge1: Float,
++        x: Float,
++    ): Float {
++        val t = ((x - edge0) / (edge1 - edge0)).coerceIn(0f, 1f)
++        return t * t * (3f - 2f * t)
++    }
++}
+diff --git a/app/src/main/java/com/artflow/studio/domain/model/brush/BrushLibraryCodec.kt b/app/src/main/java/com/artflow/studio/domain/model/brush/BrushLibraryCodec.kt
+index 854822c..a5b2c55 100644
+--- a/app/src/main/java/com/artflow/studio/domain/model/brush/BrushLibraryCodec.kt
++++ b/app/src/main/java/com/artflow/studio/domain/model/brush/BrushLibraryCodec.kt
+@@ -8,7 +8,9 @@ object BrushLibraryCodec {
+     const val MAX_BRUSHES = 128
+     const val MAX_NAME = 80
+     private const val MAX_CHARACTERS = 524_288
+-    private val GRAIN_IDS = setOf(null, "paper", "charcoal", "canvas", "fine", "blotch", "bristle", "halftone", "hatch", "speckle")
++    private val GRAIN_IDS =
++        setOf(null, "paper", "charcoal", "canvas", "fine", "blotch", "bristle", "halftone", "hatch", "speckle") +
++            setOf("pencil", "pastel", "sandpaper", "concrete", "linen", "burlap", "crackle", "wood")
+ 
+     /** Grains imported from photos; their tiles live beside the library. */
+     private val IMPORTED_GRAIN = Regex("custom-[0-9a-f]{1,32}")
+diff --git a/app/src/test/java/com/artflow/studio/core/render/CustomGrainsTest.kt b/app/src/test/java/com/artflow/studio/core/render/CustomGrainsTest.kt
+index 11d7f4a..c20b881 100644
+--- a/app/src/test/java/com/artflow/studio/core/render/CustomGrainsTest.kt
++++ b/app/src/test/java/com/artflow/studio/core/render/CustomGrainsTest.kt
+@@ -9,6 +9,7 @@ import org.junit.Assert.assertNotNull
+ import org.junit.Assert.assertNull
+ import org.junit.Assert.assertTrue
+ import org.junit.Test
++import kotlin.math.abs
+ 
+ class CustomGrainsTest {
+     private fun stripes(): PixelBuffer =
+@@ -39,6 +40,46 @@ class CustomGrainsTest {
+         assertFalse(CustomGrains.isCustom("paper"))
+     }
+ 
++    @Test fun importedGrainIsSampledSmoothlyWhenScaledUp() {
++        // A smooth periodic ramp: 0 up to 255 and back across 30 texels.
++        val size = 30
++        val values = ByteArray(size * size) { ((if (it % size <= 15) it % size else 30 - it % size) * 17).toByte() }
++        val tile = CustomGrains.Tile(size, values)
++        var previous = tile.wrapped(0f, 0.5f)
++        var u = 0f
++        while (u < 3f * size) {
++            u += 1f / 64f
++            val sample = tile.wrapped(u, 0.5f)
++            assertTrue("step at $u", abs(sample - previous) <= 1f / 255f)
++            previous = sample
++        }
++        // Through a brush at 4x: neighbouring pixels differ by a quarter of a texel step at most.
++        val id = CustomGrains.idFor(tile)
++        CustomGrains.register(id, tile)
++        val texture = BrushTexture.from(BrushParams(textureId = id, blendTexture = true, textureScale = 4f))!!
++        for (x in 0 until 200) assertTrue(abs(texture.coverage(x, 3) - texture.coverage(x + 1, 3)) <= 17f / 255f / 4f + 1e-4f)
++    }
++
++    @Test fun scaledDownGrainReadsAFilteredLevelInsteadOfAliasing() {
++        // A one-texel checkerboard: sampled point by point at a quarter scale it would alias into a coarse pattern.
++        val tile = CustomGrains.Tile(64, ByteArray(64 * 64) { if ((it % 64 + it / 64) % 2 == 0) -1 else 0 })
++        assertEquals(6, tile.levels)
++        assertEquals(32, tile.level(1).size)
++        assertEquals(1, tile.level(99).size)
++        tile.level(1).values.forEach { assertEquals(128, it.toInt() and 0xFF) }
++        val id = CustomGrains.idFor(tile)
++        CustomGrains.register(id, tile)
++        val texture = BrushTexture.from(BrushParams(textureId = id, blendTexture = true, textureScale = 0.25f))!!
++        for (y in 0 until 40) for (x in 0 until 40) assertEquals(128f / 255f, texture.coverage(x, y), 0.01f)
++    }
++
++    @Test fun oddSizedTilesStillWrap() {
++        val tile = CustomGrains.Tile(3, ByteArray(9) { (it * 20).toByte() })
++        assertEquals(0, tile.levels)
++        assertEquals(tile.at(-1, -1), tile.wrapped(-0.5f, -0.5f), 0f)
++        assertEquals(tile.at(4, 7), tile.wrapped(4.5f, 7.5f), 0f)
++    }
++
+     @Test fun importedShapeStampsItsImage() {
+         // A tile that is white on its left half only: the dab paints only left of centre.
+         val values = ByteArray(16 * 16) { (if (it % 16 < 8) -1 else 0).toByte() }
+diff --git a/app/src/test/java/com/artflow/studio/core/render/GrainSynthTest.kt b/app/src/test/java/com/artflow/studio/core/render/GrainSynthTest.kt
+new file mode 100644
+index 0000000..0d73f26
+--- /dev/null
++++ b/app/src/test/java/com/artflow/studio/core/render/GrainSynthTest.kt
+@@ -0,0 +1,129 @@
++package com.artflow.studio.core.render
++
++import com.artflow.studio.domain.model.brush.BrushLibraryCodec
++import com.artflow.studio.domain.model.brush.BrushParams
++import com.artflow.studio.domain.model.brush.SavedBrush
++import org.junit.Assert.assertArrayEquals
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNotNull
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import java.util.concurrent.Callable
++import java.util.concurrent.Executors
++import java.util.concurrent.TimeUnit
++import kotlin.math.abs
++import kotlin.math.sqrt
++
++class GrainSynthTest {
++    private val legacyIds = listOf("paper", "canvas", "charcoal", "fine", "blotch", "bristle", "halftone", "hatch", "speckle")
++
++    @Test
++    fun savedGrainIdsStillResolveAndNewOnesAreStableLowercaseIds() {
++        val ids = BrushTexture.Kind.entries.map { it.id }
++        assertTrue("every id a saved brush may hold still resolves", ids.containsAll(legacyIds))
++        assertEquals(ids.size, ids.toSet().size)
++        ids.forEach { id ->
++            assertTrue(id, id.matches(Regex("[a-z]+")))
++            assertNotNull(id, BrushTexture.from(BrushParams(textureId = id, blendTexture = true)))
++        }
++    }
++
++    @Test
++    fun savedBrushesKeepEveryGrainByReference() {
++        BrushTexture.Kind.entries.forEach { kind ->
++            val brush = SavedBrush("grain", "Grain", BrushParams(textureId = kind.id, blendTexture = true))
++            assertEquals(kind.id, listOf(brush), BrushLibraryCodec.decode(BrushLibraryCodec.encode(listOf(brush))))
++        }
++    }
++
++    @Test
++    fun everyMapIsDeterministicAcrossThreads() {
++        val pool = Executors.newFixedThreadPool(3)
++        try {
++            BrushTexture.Kind.entries.forEach { kind ->
++                val runs = List(3) { pool.submit(Callable { GrainSynth.generate(kind).values }) }.map { it.get(60, TimeUnit.SECONDS) }
++                runs.drop(1).forEach { assertArrayEquals(kind.id, runs[0], it, 0f) }
++                assertArrayEquals(kind.id, runs[0].quantized(), GrainSynth.tile(kind).values)
++            }
++        } finally {
++            pool.shutdown()
++        }
++    }
++
++    private fun FloatArray.quantized(): ByteArray = ByteArray(size) { (this[it].coerceIn(0f, 1f) * 255f + 0.5f).toInt().toByte() }
++
++    @Test
++    fun valuesAreCoverageAndNoMapIsFlatOrSaturated() {
++        BrushTexture.Kind.entries.forEach { kind ->
++            val values = GrainSynth.generate(kind).values
++            assertTrue(kind.id, values.all { it in 0f..1f })
++            val mean = values.average()
++            val deviation = sqrt(values.sumOf { (it - mean) * (it - mean) } / values.size)
++            assertTrue("${kind.id} mean $mean", mean in 0.2..0.9)
++            assertTrue("${kind.id} deviation $deviation", deviation > 0.05)
++        }
++    }
++
++    @Test
++    fun everyTileWrapsWithoutASeam() {
++        BrushTexture.Kind.entries.forEach { kind ->
++            val tile = GrainSynth.tile(kind)
++            val size = tile.size
++
++            fun at(
++                x: Int,
++                y: Int,
++            ) = tile.values[y * size + x].toInt() and 0xFF
++            // Steps across the wrap edges are no bigger than steps between neighbours inside the tile,
++            // in general and along the middle lines, which meet a regular weave or screen in the same phase.
++            var inside = 0.0
++            var seam = 0.0
++            var middle = 0.0
++            val half = size / 2
++            for (i in 0 until size) {
++                for (j in 0 until size - 1) inside += abs(at(j, i) - at(j + 1, i)) + abs(at(i, j) - at(i, j + 1))
++                seam += abs(at(size - 1, i) - at(0, i)) + abs(at(i, size - 1) - at(i, 0))
++                middle += abs(at(half - 1, i) - at(half, i)) + abs(at(i, half - 1) - at(i, half))
++            }
++            val insideMean = inside / (2.0 * size * (size - 1))
++            val seamMean = seam / (2.0 * size)
++            val middleMean = middle / (2.0 * size)
++            val allowed = maxOf(insideMean, middleMean) * 1.3 + 1.0
++            assertTrue("${kind.id}: seam $seamMean, inside $insideMean, middle $middleMean", seamMean <= allowed)
++        }
++    }
++
++    @Test
++    fun scaledGrainsChangeSmoothlyBetweenPixels() {
++        // Nearest sampling drew each texel as a flat block; bilinear sampling never jumps far between neighbours.
++        BrushTexture.Kind.entries.filter { it != BrushTexture.Kind.HALFTONE }.forEach { kind ->
++            val texture = requireNotNull(BrushTexture.from(BrushParams(textureId = kind.id, blendTexture = true, textureScale = 4f)))
++            var largest = 0f
++            for (y in 0 until 64) {
++                for (x in 0 until 64) largest = maxOf(largest, abs(texture.coverage(x, y) - texture.coverage(x + 1, y)))
++            }
++            assertTrue("${kind.id} jumps $largest between neighbours at 4x", largest < 0.5f)
++        }
++    }
++
++    @Test
++    fun theSameCanvasPixelAlwaysReadsTheSameGrain() {
++        val params = BrushParams(textureId = "charcoal", blendTexture = true, textureScale = 1.7f, textureRotation = 33f)
++        val first = requireNotNull(BrushTexture.from(params))
++        val second = requireNotNull(BrushTexture.from(params))
++        for (i in 0 until 2000) {
++            val x = i * 37 % 1999 - 600
++            val y = i * 53 % 1777 - 400
++            assertEquals(first.coverage(x, y), second.coverage(x, y), 0f)
++        }
++    }
++
++    @Test
++    fun noiseRepeatsExactlyAfterItsPeriod() {
++        for (i in 0 until 200) {
++            val x = i * 0.37f
++            val y = i * 0.11f
++            assertEquals(TileNoise.gradient(x, y, 7, 5, 3), TileNoise.gradient(x + 7f, y + 5f, 7, 5, 3), 1e-4f)
++        }
++    }
++}

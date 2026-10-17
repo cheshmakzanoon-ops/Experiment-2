@@ -1,0 +1,359 @@
+diff --git a/app/src/main/java/com/artflow/studio/data/repository/canvas/CanvasRepositoryImpl.kt b/app/src/main/java/com/artflow/studio/data/repository/canvas/CanvasRepositoryImpl.kt
+index 7466605..25ef9ee 100644
+--- a/app/src/main/java/com/artflow/studio/data/repository/canvas/CanvasRepositoryImpl.kt
++++ b/app/src/main/java/com/artflow/studio/data/repository/canvas/CanvasRepositoryImpl.kt
+@@ -4,6 +4,8 @@ import com.artflow.studio.core.animation.AnimationTimeline
+ import com.artflow.studio.core.canvas.CanvasOperations
+ import com.artflow.studio.core.color.ColorProfile
+ import com.artflow.studio.core.color.ColorProfiles
++import com.artflow.studio.core.history.PlaneKey
++import com.artflow.studio.core.history.UndoHistory
+ import com.artflow.studio.core.pixels.AdjustmentProcessor
+ import com.artflow.studio.core.pixels.IntBounds
+ import com.artflow.studio.core.pixels.LayerMaskFactory
+@@ -71,8 +73,8 @@ import kotlin.math.roundToInt
+  *   same model, which is why the app is WYSIWYG.
+  * - **Copy-on-write undo.** A snapshot records the *current* pixel buffers by reference; before a
+  *   tool mutates pixels it clones the buffer, so the snapshot stays valid without re-encoding
+- *   anything. History is bounded by both step count and estimated pixel memory, because a 4K layer
+- *   is 32 MB and an unbounded stack would exhaust the heap.
++ *   anything. Deeper steps keep only the tiles they changed ([UndoHistory]), and history is bounded
++ *   by step count and by the memory it holds beyond the document, because a 4K layer is 32 MB.
+  * - **Pixel buffers are written to disk on save/autosave**, not on every edit, so painting never
+  *   blocks on I/O.
+  */
+@@ -135,8 +137,10 @@ class CanvasRepositoryImpl
+ 
+         private val invalidationFlow = MutableSharedFlow<CanvasInvalidationEvent>(replay = 1, extraBufferCapacity = 63)
+ 
+-        private val undoStack = ArrayDeque<Snapshot>()
+-        private val redoStack = ArrayDeque<Snapshot>()
++        /** Undo and redo steps; below the newest, they keep only the tiles they changed. */
++        private val history = UndoHistory<Snapshot>(MAX_HISTORY, ::historyBudget)
++
++        private fun historyBudget(): Long = minOf(MAX_RASTER_HISTORY_BYTES, Runtime.getRuntime().maxMemory() / 4)
+ 
+         private var editRevision = 0L
+         override val contentRevision: Long get() = editRevision
+@@ -248,9 +252,7 @@ class CanvasRepositoryImpl
+             strokeErasers.clear()
+             strokeSecondaries.clear()
+             strokeDestinations.clear()
+-            undoStack.clear()
+-            historyMark++
+-            redoStack.clear()
++            history.clear()
+             dirtyRasters.clear()
+             dirty = false
+             syncTimeline()
+@@ -377,9 +379,7 @@ class CanvasRepositoryImpl
+             strokeErasers.clear()
+             strokeSecondaries.clear()
+             strokeDestinations.clear()
+-            undoStack.clear()
+-            historyMark++
+-            redoStack.clear()
++            history.clear()
+             dirtyRasters.clear()
+             dirty = false
+             syncTimeline()
+@@ -543,12 +543,11 @@ class CanvasRepositoryImpl
+ 
+         override fun hasUnsavedChanges(): Boolean = dirty
+ 
+-        override val undoDepth: Int get() = undoStack.size
++        override val undoDepth: Int get() = history.undoDepth
+ 
+-        override var historyMark: Long = 0L
+-            private set
++        override val historyMark: Long get() = history.mark
+ 
+-        override val redoDepth: Int get() = redoStack.size
++        override val redoDepth: Int get() = history.redoDepth
+ 
+         override fun projectId(): Long = currentProjectId
+ 
+@@ -2817,10 +2816,8 @@ class CanvasRepositoryImpl
+ 
+         override fun undo(): Boolean {
+             opacityRun = null
+-            val snapshot = undoStack.removeLastOrNull() ?: return false
+-            historyMark++
+-            redoStack.addLast(currentSnapshot())
+-            restore(snapshot)
++            val step = history.undo(::historyStep) ?: return false
++            restore(step)
+             dirty = true
+             emitAsync(CanvasInvalidationEvent.Full)
+             return true
+@@ -2828,10 +2825,8 @@ class CanvasRepositoryImpl
+ 
+         override fun redo(): Boolean {
+             opacityRun = null
+-            val snapshot = redoStack.removeLastOrNull() ?: return false
+-            historyMark++
+-            undoStack.addLast(currentSnapshot())
+-            restore(snapshot)
++            val step = history.redo(::historyStep) ?: return false
++            restore(step)
+             dirty = true
+             emitAsync(CanvasInvalidationEvent.Full)
+             return true
+@@ -2839,34 +2834,24 @@ class CanvasRepositoryImpl
+ 
+         private fun pushUndo() {
+             undoPushes++
+-            historyMark++
+-            undoStack.addLast(currentSnapshot())
+-            while (undoStack.size > MAX_HISTORY) undoStack.removeFirst()
+-            // Trim by memory as well: a 4K layer is 32 MB, so 30 raster steps would be ~1 GB.
+-            while (undoStack.size > 1 && rasterBytes(undoStack) > minOf(MAX_RASTER_HISTORY_BYTES, Runtime.getRuntime().maxMemory() / 4)) {
+-                undoStack.removeFirst()
+-            }
+-            redoStack.clear()
++            history.record(current = ::historyStep)
+             // Any buffer captured by a snapshot is now shared and must be copied before the next
+             // in-place edit (masks are painted in place; layer pixels clone on `beginRasterEdit`).
+             allLayers().forEach { it.maskOwned = false }
+         }
+ 
+-        private fun rasterBytes(stack: ArrayDeque<Snapshot>): Long {
+-            val counted = java.util.IdentityHashMap<PixelBuffer, Boolean>()
+-            var total = 0L
+-            stack.forEach { snapshot ->
+-                snapshot.frames.forEach { frame ->
+-                    frame.layers.forEach { layer ->
+-                        listOfNotNull(layer.raster, layer.mask).forEach { buffer ->
+-                            if (counted.put(buffer, true) == null) {
+-                                total += buffer.pixels.size.toLong() * 4
+-                            }
+-                        }
+-                    }
++        /** The document as an undo step: the history keeps layer pixels and masks as planes, apart from the snapshot. */
++        private fun historyStep(): UndoHistory.Step<Snapshot> {
++            val snapshot = currentSnapshot()
++            val planes = HashMap<PlaneKey, PixelBuffer>()
++            snapshot.frames.forEach { frame ->
++                frame.layers.forEach { layer ->
++                    layer.raster?.let { planes[PlaneKey(layer.id, false)] = it }
++                    layer.mask?.let { planes[PlaneKey(layer.id, true)] = it }
++                    layer.setPixels(null, null)
+                 }
+             }
+-            return total
++            return UndoHistory.Step(snapshot, planes)
+         }
+ 
+         private data class FrameSnapshot(
+@@ -2929,7 +2914,8 @@ class CanvasRepositoryImpl
+                 selection = activeSelection,
+             ).also { markRastersShared() }
+ 
+-        private fun restore(snapshot: Snapshot) {
++        private fun restore(step: UndoHistory.Step<Snapshot>) {
++            val snapshot = step.state
+             frameList =
+                 snapshot.frames
+                     .map { frame ->
+@@ -2937,7 +2923,13 @@ class CanvasRepositoryImpl
+                             id = frame.id,
+                             name = frame.name,
+                             durationMs = frame.durationMs,
+-                            layers = frame.layers.map { it.snapshotCopy() }.toMutableList(),
++                            layers =
++                                frame.layers
++                                    .map { layer ->
++                                        layer.snapshotCopy().apply {
++                                            setPixels(step.planes[PlaneKey(id, false)], step.planes[PlaneKey(id, true)])
++                                        }
++                                    }.toMutableList(),
+                             activeLayerId = frame.activeLayerId,
+                             isKeyframe = frame.isKeyframe,
+                         )
+@@ -3104,9 +3096,7 @@ class CanvasRepositoryImpl
+             strokeErasers.clear()
+             strokeSecondaries.clear()
+             strokeDestinations.clear()
+-            undoStack.clear()
+-            historyMark++
+-            redoStack.clear()
++            history.clear()
+         }
+ 
+         /**
+@@ -3159,6 +3149,17 @@ class CanvasRepositoryImpl
+              */
+             var maskOwned: Boolean = true
+ 
++            /** Sets both buffers without turning a text layer into pixels, as moving them in and out of the undo history must. */
++            fun setPixels(
++                raster: PixelBuffer?,
++                mask: PixelBuffer?,
++            ) {
++                val kept = text
++                this.raster = raster
++                this.mask = mask
++                text = kept
++            }
++
+             fun canPaint(): Boolean =
+                 isVisible &&
+                     !isLocked &&
+@@ -3303,15 +3304,18 @@ class CanvasRepositoryImpl
+             private const val BYTES_PER_PIXEL = 4L
+             private const val BELOW_CACHE_HEAP_SHARE = 8L
+             private const val LIVE_HEAP_SHARE = 6L
+-            private const val MAX_HISTORY = 30
++
++            /** Undo steps kept, as in Procreate. */
++            private const val MAX_HISTORY = 250
+             private val NO_SYMMETRY = SymmetryEngine.Settings()
+             private const val OPACITY_MERGE_MS = 1_500L
+             private const val TEXT_LAYER_NAME = 32
+ 
+             /**
+-             * Cap on the pixel memory the undo stack may hold (192 MB). Beyond this the oldest steps
+-             * are dropped: keeping an artist's whole session of 4K layer snapshots in RAM is not
+-             * possible on a tablet, and silently failing to allocate is worse than a shorter history.
++             * Cap on the pixel memory the undo history may hold beyond the document's own buffers
++             * (192 MB, or a quarter of the heap when that is less). Deep steps keep only changed tiles,
++             * but deleted layers and resized canvases keep whole buffers; beyond the cap the oldest
++             * steps are dropped, because silently failing to allocate is worse than a shorter history.
+              */
+             private const val MAX_RASTER_HISTORY_BYTES = 192L * 1024 * 1024
+ 
+diff --git a/app/src/test/java/com/artflow/studio/data/DeepUndoTest.kt b/app/src/test/java/com/artflow/studio/data/DeepUndoTest.kt
+new file mode 100644
+index 0000000..f9f3d4e
+--- /dev/null
++++ b/app/src/test/java/com/artflow/studio/data/DeepUndoTest.kt
+@@ -0,0 +1,129 @@
++package com.artflow.studio.data
++
++import android.content.Context
++import com.artflow.studio.core.pixels.PixelBuffer
++import com.artflow.studio.core.text.TextLayerContent
++import com.artflow.studio.core.text.TextLayout
++import com.artflow.studio.data.local.ProjectStorage
++import com.artflow.studio.data.repository.canvas.CanvasRepositoryImpl
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.test.UnconfinedTestDispatcher
++import kotlinx.coroutines.test.resetMain
++import kotlinx.coroutines.test.runTest
++import kotlinx.coroutines.test.setMain
++import org.junit.After
++import org.junit.Assert.assertArrayEquals
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertNotNull
++import org.junit.Assert.assertTrue
++import org.junit.Before
++import org.junit.Test
++import org.mockito.Mockito.mock
++import kotlin.random.Random
++
++/**
++ * The history keeps steps deeper than the old 30-step limit as tile deltas; undoing and redoing all
++ * of them must still give back every earlier document exactly. Real document operations; only the
++ * Android Context and main dispatcher are replaced.
++ */
++@OptIn(ExperimentalCoroutinesApi::class)
++class DeepUndoTest {
++    private lateinit var repository: CanvasRepositoryImpl
++
++    @Before
++    fun setUp() {
++        Dispatchers.setMain(UnconfinedTestDispatcher())
++        repository = CanvasRepositoryImpl(ProjectStorage(mock(Context::class.java)))
++    }
++
++    @After
++    fun tearDown() {
++        repository.dispose()
++        Dispatchers.resetMain()
++    }
++
++    /** What the document looks like: its layers (with whether they have a mask), their pixels, and the composite. */
++    private class State(
++        val layers: List<Pair<Long, Boolean>>,
++        /** Null for a layer that has no pixels yet. */
++        val pixels: List<IntArray?>,
++        val composite: IntArray,
++    )
++
++    private suspend fun state(): State =
++        State(
++            repository.getAllLayers().map { it.id to it.hasMask() },
++            repository.getAllLayers().map { repository.layerPixels(it.id)?.pixels },
++            requireNotNull(repository.compositeFrame(0, transparentBackground = true)).pixels,
++        )
++
++    private fun assertSameState(
++        label: String,
++        expected: State,
++        actual: State,
++    ) {
++        assertEquals(label, expected.layers, actual.layers)
++        expected.pixels.zip(actual.pixels).forEach { (want, got) -> assertArrayEquals(label, want, got) }
++        assertArrayEquals(label, expected.composite, actual.composite)
++    }
++
++    private suspend fun dab(
++        layerId: Long,
++        random: Random,
++    ) {
++        val pixels = requireNotNull(repository.layerPixels(layerId))
++        val x = random.nextInt(pixels.width - 6)
++        val y = random.nextInt(pixels.height - 6)
++        val colour = random.nextInt() or 0xFF000000.toInt()
++        for (py in y until y + 6) for (px in x until x + 6) pixels.setUnchecked(px, py, colour)
++        assertTrue(repository.setLayerPixels(layerId, pixels, "Dab"))
++    }
++
++    @Test
++    fun everyStepOfALongSessionUndoesAndRedoesExactly() =
++        runTest {
++            // 260 x 130 spans 5 x 3 tiles, so most steps change one or two tiles of one layer.
++            repository.createCanvas(260, 130, 72)
++            val random = Random(17)
++            val states = mutableListOf(state())
++            repeat(60) { step ->
++                val layers = repository.getAllLayers()
++                when {
++                    step % 15 == 4 -> repository.addLayer("Layer $step")
++                    step % 15 == 9 -> assertTrue(repository.addLayerMask(layers.last().id))
++                    step % 15 == 14 && layers.size > 2 -> assertTrue(repository.removeLayer(layers[1].id))
++                    else -> dab(layers[random.nextInt(layers.size)].id, random)
++                }
++                states += state()
++            }
++            assertEquals("Sixty steps fit where thirty used to", 60, repository.undoDepth)
++            states.asReversed().drop(1).forEachIndexed { index, expected ->
++                assertTrue(repository.undo())
++                assertSameState("undo ${index + 1}", expected, state())
++            }
++            assertFalse(repository.undo())
++            states.drop(1).forEachIndexed { index, expected ->
++                assertTrue(repository.redo())
++                assertSameState("redo ${index + 1}", expected, state())
++            }
++            assertFalse(repository.redo())
++        }
++
++    @Test
++    fun aTextLayerStaysEditableThroughDeepUndo() =
++        runTest {
++            repository.createCanvas(200, 150, 72)
++            val text = TextLayerContent("Hi", TextLayout.TextStyle(), 0xFFFF0000.toInt(), 0f, 0f)
++            val glyphs = PixelBuffer(200, 150).also { it.setUnchecked(10, 10, 0xFF000000.toInt()) }
++            val layer = requireNotNull(repository.addTextLayer(text, glyphs))
++            val background = repository.getAllLayers().first().id
++            val random = Random(3)
++            repeat(12) { dab(background, random) }
++            repeat(12) { assertTrue(repository.undo()) }
++            val restored = repository.getAllLayers().first { it.id == layer }
++            assertNotNull("Moving through the history must not turn text into pixels", restored.textContent)
++            assertArrayEquals(glyphs.pixels, requireNotNull(repository.layerPixels(layer)).pixels)
++        }
++}

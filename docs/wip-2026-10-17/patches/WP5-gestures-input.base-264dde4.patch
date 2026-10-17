@@ -1,0 +1,1665 @@
+diff --git a/app/src/main/java/com/artflow/studio/core/canvas/GestureSettings.kt b/app/src/main/java/com/artflow/studio/core/canvas/GestureSettings.kt
+new file mode 100644
+index 0000000..6908e1b
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/core/canvas/GestureSettings.kt
+@@ -0,0 +1,118 @@
++package com.artflow.studio.core.canvas
++
++/** What a finger that stays still on the canvas does (Procreate assigns its touch-and-hold to one feature at a time). */
++enum class HoldAction {
++    EYEDROPPER,
++    QUICK_MENU,
++    SELECT_LAYER,
++    NONE,
++}
++
++/** What a stylus button, or the eraser end of the stylus, does. */
++enum class StylusAction {
++    /** A button does nothing and the pen paints as usual; for the eraser end this means it paints like the pen tip. */
++    NONE,
++
++    /** Hold the button and touch or drag to sample colour. */
++    EYEDROPPER,
++
++    /** Hold the button, or turn the pen over, and what it touches is erased. */
++    ERASE,
++
++    /** A click of the button switches between the eraser and the paint tool. */
++    TOGGLE_ERASER,
++
++    /** A click of the button undoes. */
++    UNDO,
++
++    /** A click of the button opens the QuickMenu. */
++    QUICK_MENU,
++
++    /** Hold the button and drag to move the canvas. */
++    PAN,
++}
++
++/** The three stylus inputs that can be given an action. */
++data class StylusMapping(
++    val primary: StylusAction = StylusAction.EYEDROPPER,
++    val secondary: StylusAction = StylusAction.NONE,
++    val eraserEnd: StylusAction = StylusAction.ERASE,
++)
++
++/** What the secondary (right) button of a mouse or trackpad does. */
++enum class MouseAction {
++    QUICK_MENU,
++    EYEDROPPER,
++    NONE,
++}
++
++/** Everything that can open the QuickMenu. */
++enum class QuickMenuTrigger {
++    HANDLE,
++    TOUCH_AND_HOLD,
++    STYLUS_BUTTON,
++    STYLUS_BUTTON_2,
++    ERASER_END,
++    RIGHT_CLICK,
++}
++
++/**
++ * Prefs > Gesture controls, as one value the sheet edits and the settings store keeps. The defaults are what the
++ * editor did before these options existed, except where a field's comment says otherwise.
++ */
++data class GestureSettings(
++    /** Rubbing three fingers side to side clears the layer. */
++    val scrubToClear: Boolean = true,
++    /** Dragging three fingers down opens Copy & Paste. */
++    val swipeCopyPaste: Boolean = true,
++    /** Tapping four fingers hides or shows the interface. */
++    val fourFingerFullScreen: Boolean = true,
++    /** While a stylus is in use, finger taps, holds and swipes do nothing; fingers still pinch, rotate and pan. */
++    val disableTouchActions: Boolean = false,
++    val holdAction: HoldAction = HoldAction.EYEDROPPER,
++    val holdDelayMs: Int = DEFAULT_HOLD_DELAY_MS,
++    /** Holding the pen still at the end of a stroke snaps it to a line, ellipse or polygon. */
++    val quickShape: Boolean = true,
++    val quickShapeDelayMs: Int = DEFAULT_QUICK_SHAPE_DELAY_MS,
++    /** Touching a second finger while the pen holds a snapped shape makes it exact: 15 degree lines, circles, squares. */
++    val quickShapeConstrain: Boolean = true,
++    /** How long two or three still fingers must rest before undo or redo starts repeating. */
++    val rapidUndoDelayMs: Int = DEFAULT_RAPID_UNDO_DELAY_MS,
++    /** Two-finger rotation clicks into place at multiples of 45 degrees. New: it was free rotation before. */
++    val rotationSnap: Boolean = true,
++    val stylus: StylusMapping = StylusMapping(),
++    /** New: a right-click used to paint like the left button. */
++    val rightClick: MouseAction = MouseAction.QUICK_MENU,
++    /** New: once a stylus has been seen, a palm-sized touch is ignored. */
++    val palmSizeRejection: Boolean = true,
++) {
++    /** The same settings with every delay inside its allowed range, as stored values may be anything. */
++    fun normalized(): GestureSettings =
++        copy(
++            holdDelayMs = holdDelayMs.coerceIn(MIN_DELAY_MS, MAX_DELAY_MS),
++            quickShapeDelayMs = quickShapeDelayMs.coerceIn(MIN_DELAY_MS, MAX_DELAY_MS),
++            rapidUndoDelayMs = rapidUndoDelayMs.coerceIn(MIN_DELAY_MS, MAX_DELAY_MS),
++        )
++
++    /** Every way the QuickMenu currently opens; the handle beside the sliders always does. */
++    fun quickMenuTriggers(): List<QuickMenuTrigger> =
++        buildList {
++            add(QuickMenuTrigger.HANDLE)
++            if (holdAction == HoldAction.QUICK_MENU) add(QuickMenuTrigger.TOUCH_AND_HOLD)
++            if (stylus.primary == StylusAction.QUICK_MENU) add(QuickMenuTrigger.STYLUS_BUTTON)
++            if (stylus.secondary == StylusAction.QUICK_MENU) add(QuickMenuTrigger.STYLUS_BUTTON_2)
++            if (stylus.eraserEnd == StylusAction.QUICK_MENU) add(QuickMenuTrigger.ERASER_END)
++            if (rightClick == MouseAction.QUICK_MENU) add(QuickMenuTrigger.RIGHT_CLICK)
++        }
++
++    companion object {
++        const val MIN_DELAY_MS = 200
++        const val MAX_DELAY_MS = 1500
++
++        /** The delay sliders move in steps of this many milliseconds. */
++        const val DELAY_STEP_MS = 50
++        const val DEFAULT_HOLD_DELAY_MS = 500
++        const val DEFAULT_QUICK_SHAPE_DELAY_MS = 650
++        const val DEFAULT_RAPID_UNDO_DELAY_MS = 650
++    }
++}
+diff --git a/app/src/main/java/com/artflow/studio/core/canvas/PalmRejection.kt b/app/src/main/java/com/artflow/studio/core/canvas/PalmRejection.kt
+new file mode 100644
+index 0000000..3e97113
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/core/canvas/PalmRejection.kt
+@@ -0,0 +1,63 @@
++package com.artflow.studio.core.canvas
++
++/**
++ * Decides whether a touch is a resting hand. Two things give a palm away: it is far bigger than a fingertip, and it
++ * arrives while someone is drawing with a stylus. Contact size alone would reject a thumb pressed flat, and
++ * the stylus alone would reject the finger of someone who also owns a pen, so both must hold. The pen-lift window in
++ * [PointerGestureRouter] catches the palm that lands just after the pen leaves; this catches the one that was
++ * there all along.
++ *
++ * A device that reports no contact size (zero) is never judged by it.
++ */
++class PalmRejection(
++    private val stylusMemoryMillis: Long = STYLUS_MEMORY_MILLIS,
++    private val palmMillimetres: Float = PALM_MILLIMETRES,
++) {
++    private var stylusAt = NEVER
++
++    /** The stylus touched or hovered over the screen at [timeMillis] (the clock of `MotionEvent.getEventTime`). */
++    fun stylusSeen(timeMillis: Long) {
++        stylusAt = timeMillis
++    }
++
++    /** True while a stylus has been in use lately: it was seen within the last few minutes. */
++    fun stylusInUse(timeMillis: Long): Boolean = stylusAt != NEVER && timeMillis - stylusAt in 0..stylusMemoryMillis
++
++    /**
++     * Whether a contact of [kind] whose long side measures [contactMillimetres] is a resting hand. [enabled] is the
++     * "reject large touches" setting; a contact the device itself calls a palm is one whatever that says.
++     */
++    fun isPalm(
++        kind: PointerKind,
++        contactMillimetres: Float,
++        timeMillis: Long,
++        enabled: Boolean,
++    ): Boolean =
++        when {
++            kind == PointerKind.PALM -> true
++            !enabled || kind.isPrecise -> false
++            else -> contactMillimetres >= palmMillimetres && stylusInUse(timeMillis)
++        }
++
++    companion object {
++        /** A stylus counts as in use for this long after it was last seen. */
++        const val STYLUS_MEMORY_MILLIS = 5 * 60_000L
++
++        /** Bigger than any fingertip or thumb pad (about 8 to 20 mm along the long side) and well under a palm (40 mm and up). */
++        const val PALM_MILLIMETRES = 24f
++        private const val NEVER = Long.MIN_VALUE
++        private const val MILLIMETRES_PER_INCH = 25.4f
++
++        /**
++         * The length of [pixels] on a screen of [dotsPerInch], or 0 when either is unusable. `MotionEvent.getTouchMajor`
++         * is in pixels on a touchscreen.
++         */
++        fun millimetres(
++            pixels: Float,
++            dotsPerInch: Float,
++        ): Float {
++            if (!pixels.isFinite() || pixels <= 0f || !dotsPerInch.isFinite() || dotsPerInch <= 0f) return 0f
++            return pixels / dotsPerInch * MILLIMETRES_PER_INCH
++        }
++    }
++}
+diff --git a/app/src/main/java/com/artflow/studio/core/canvas/PointerGestureRouter.kt b/app/src/main/java/com/artflow/studio/core/canvas/PointerGestureRouter.kt
+index 6bd9a22..0add49c 100644
+--- a/app/src/main/java/com/artflow/studio/core/canvas/PointerGestureRouter.kt
++++ b/app/src/main/java/com/artflow/studio/core/canvas/PointerGestureRouter.kt
+@@ -33,7 +33,14 @@ class PointerGestureRouter(
+         val x: Float,
+         val y: Float,
+         val stylus: Boolean = false,
+-    )
++        /** A mouse or trackpad: it aims exactly like a pen, but it is not one, so lifting it opens no palm window. */
++        val mouse: Boolean = false,
++        /** The contact is a resting hand: the device says so, or it is palm-sized while a stylus is in use. */
++        val palm: Boolean = false,
++    ) {
++        /** Aims exactly and is never a resting hand: a pen, its eraser end or a mouse. */
++        val precise: Boolean get() = stylus || mouse
++    }
+ 
+     data class Route(
+         val action: Action,
+@@ -56,6 +63,9 @@ class PointerGestureRouter(
+     private var palmPair = false
+     private var maxPointers = 0
+     private var tapEligible = false
++
++    /** Contacts taken for a resting hand since the touch began; they are left out of everything below. */
++    private val palmIds = mutableSetOf<Int>()
+     private val lastPositions = mutableMapOf<Int, Pointer>()
+     private val travel = mutableMapOf<Int, Float>()
+     private val firstPositions = mutableMapOf<Int, Pointer>()
+@@ -88,19 +98,26 @@ class PointerGestureRouter(
+ 
+     /** Include batched movement, including an excursion which returns to its initial position. */
+     fun observe(pointers: List<Pointer>) {
++        var live = 0
+         for (pointer in pointers) {
++            if (pointer.id in palmIds) continue
++            live++
+             val previous = lastPositions.put(pointer.id, pointer)
+             firstPositions.putIfAbsent(pointer.id, pointer)
+-            if (!pointer.x.isFinite() || !pointer.y.isFinite() || pointer.stylus) tapEligible = false
++            if (!pointer.x.isFinite() || !pointer.y.isFinite() || pointer.precise) tapEligible = false
+             if (previous != null) {
+                 val distance = (travel[pointer.id] ?: 0f) + hypot(pointer.x - previous.x, pointer.y - previous.y)
+                 travel[pointer.id] = distance
+                 if (!distance.isFinite() || distance > tapSlop) tapEligible = false
+             }
+         }
+-        maxPointers = max(maxPointers, pointers.size)
++        maxPointers = max(maxPointers, live)
+     }
+ 
++    /**
++     * Routes one event. A contact flagged [Pointer.palm] is a resting hand: it is remembered until it lifts, starts nothing,
++     * does not count as a finger, and a stroke it takes over is cancelled. `Route.index` always indexes [pointers].
++     */
+     fun route(
+         event: Event,
+         pointers: List<Pointer>,
+@@ -109,13 +126,69 @@ class PointerGestureRouter(
+         cancelled: Boolean = false,
+     ): Route {
+         if (event == Event.CANCEL || pointers.isEmpty() || changedIndex !in pointers.indices) {
++            palmIds.clear()
+             suppress()
+             return Route(Action.CANCEL)
+         }
++        if (event == Event.DOWN) palmIds.clear()
++        for (pointer in pointers) if (pointer.palm && !pointer.precise) palmIds.add(pointer.id)
++        val changed = pointers[changedIndex]
++        if (changed.id in palmIds && event != Event.MOVE) return restingPalm(event, changed.id, timeMillis)
++        if (palmIds.isEmpty()) return routeLive(event, pointers, changedIndex, timeMillis, cancelled)
++        val live = pointers.filter { it.id !in palmIds }
++        if (live.isEmpty()) {
++            // A stroke whose only contact has grown into a hand is cancelled, like one whose owner went missing.
++            if (mode != Mode.TOOL) return Route(Action.IGNORE)
++            suppress()
++            return Route(Action.CANCEL)
++        }
++        val liveIndex = if (event == Event.MOVE) 0 else live.indexOfFirst { it.id == changed.id }
++        val routed = routeLive(event, live, liveIndex, timeMillis, cancelled)
++        if (routed.index < 0) return routed
++        return routed.copy(index = pointers.indexOfFirst { it.id == live[routed.index].id })
++    }
++
++    /** An event about a contact taken for a resting hand: it changes nothing but the router's own record of it. */
++    private fun restingPalm(
++        event: Event,
++        id: Int,
++        timeMillis: Long,
++    ): Route {
++        if (event == Event.POINTER_UP) palmIds.remove(id)
++        return when (event) {
++            Event.DOWN -> {
++                // The first contact is a hand: nothing starts until it lifts, though a pen may still take over.
++                val cancelPrevious = mode == Mode.TOOL
++                suppress()
++                startedAt = timeMillis
++                maxPointers = 0
++                tapEligible = true
++                mode = Mode.REJECTED
++                Route(if (cancelPrevious) Action.CANCEL else Action.IGNORE)
++            }
++            Event.UP -> {
++                // The last contact to leave was the hand; a navigation the fingers had begun ends without a tap.
++                val navigating = mode == Mode.NAVIGATION
++                palmIds.clear()
++                mode = Mode.IDLE
++                palmPair = false
++                if (navigating) Route(Action.FINISH_NAVIGATION) else Route(Action.IGNORE)
++            }
++            else -> Route(Action.IGNORE)
++        }
++    }
++
++    private fun routeLive(
++        event: Event,
++        pointers: List<Pointer>,
++        changedIndex: Int,
++        timeMillis: Long,
++        cancelled: Boolean,
++    ): Route {
+         if (pointers[changedIndex].stylus && (event == Event.UP || event == Event.POINTER_UP)) penLiftedAt = timeMillis
+         if (event == Event.DOWN) {
+             val cancelPrevious = mode == Mode.TOOL
+-            val palm = !pointers[changedIndex].stylus && recentlyLifted(timeMillis)
++            val palm = !pointers[changedIndex].precise && recentlyLifted(timeMillis)
+             suppress()
+             startedAt = timeMillis
+             maxPointers = 0
+@@ -135,7 +208,7 @@ class PointerGestureRouter(
+             Mode.REJECTED -> routeRejected(event, pointers, changedIndex, timeMillis)
+             Mode.SUPPRESSED -> {
+                 when {
+-                    event == Event.POINTER_DOWN && pointers[changedIndex].stylus -> start(pointers, changedIndex, false)
++                    event == Event.POINTER_DOWN && pointers[changedIndex].precise -> start(pointers, changedIndex, false)
+                     event == Event.UP -> {
+                         mode = Mode.IDLE
+                         Route(Action.IGNORE)
+@@ -164,7 +237,7 @@ class PointerGestureRouter(
+         timeMillis: Long,
+     ): Route =
+         when {
+-            event == Event.POINTER_DOWN && pointers[changedIndex].stylus -> start(pointers, changedIndex, false)
++            event == Event.POINTER_DOWN && pointers[changedIndex].precise -> start(pointers, changedIndex, false)
+             // Only a pair landing inside the window is a gesture. A palm that rests on, or brings a third contact, stays ignored.
+             event == Event.POINTER_DOWN && pointers.size == 2 && recentlyLifted(timeMillis) -> {
+                 mode = Mode.NAVIGATION
+@@ -197,7 +270,7 @@ class PointerGestureRouter(
+                 owner = -1
+                 Route(if (cancelled) Action.CANCEL else Action.END_TOOL, ownerIndex)
+             }
+-            event == Event.POINTER_DOWN && changed.stylus && !pen -> start(pointers, changedIndex, true)
++            event == Event.POINTER_DOWN && changed.precise && !pen -> start(pointers, changedIndex, true)
+             event == Event.POINTER_DOWN && !pen -> {
+                 mode = Mode.NAVIGATION
+                 owner = -1
+@@ -220,7 +293,7 @@ class PointerGestureRouter(
+                 suppress()
+                 Route(Action.CANCEL)
+             }
+-            event == Event.POINTER_DOWN && pointers[changedIndex].stylus -> start(pointers, changedIndex, false)
++            event == Event.POINTER_DOWN && pointers[changedIndex].precise -> start(pointers, changedIndex, false)
+             event == Event.UP -> {
+                 mode = Mode.IDLE
+                 palmPair = false
+@@ -288,7 +361,7 @@ class PointerGestureRouter(
+     ): Route {
+         owner = pointers[index].id
+         palmPair = false
+-        pen = pointers[index].stylus
++        pen = pointers[index].precise
+         if (pen) tapEligible = false
+         mode = Mode.TOOL
+         return Route(Action.START_TOOL, index, cancelTool = cancelPrevious)
+diff --git a/app/src/main/java/com/artflow/studio/core/canvas/PointerIntents.kt b/app/src/main/java/com/artflow/studio/core/canvas/PointerIntents.kt
+new file mode 100644
+index 0000000..0e9ab3f
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/core/canvas/PointerIntents.kt
+@@ -0,0 +1,153 @@
++package com.artflow.studio.core.canvas
++
++/** What a pointer that has just touched the canvas is for. */
++enum class PointerIntent {
++    /** Use the tool as usual. */
++    DRAW,
++
++    /** Use the eraser, whatever tool is selected. */
++    ERASE,
++
++    /** Sample colour while the pointer is held and dragged. */
++    SAMPLE,
++
++    /** Move the canvas with the pointer. */
++    PAN,
++
++    /** Undo once. */
++    UNDO,
++    QUICK_MENU,
++
++    /** Switch between the eraser and the paint tool. */
++    TOGGLE_ERASER,
++
++    /** The touch is deliberately ignored. */
++    NOTHING,
++    ;
++
++    /** Acts once when the button is pressed instead of for as long as it is held. */
++    val isClick: Boolean get() = this == UNDO || this == QUICK_MENU || this == TOGGLE_ERASER
++}
++
++/** The two buttons a stylus can report. */
++enum class StylusButton { PRIMARY, SECONDARY }
++
++/**
++ * Reads tool types and button states into intents. Button numbers are the documented `MotionEvent.BUTTON_*` values, so
++ * this file stays free of Android imports.
++ *
++ * Android reports the barrel button of most pens as `BUTTON_STYLUS_PRIMARY`, and some devices and ChromeOS pens as the
++ * mouse buttons `BUTTON_SECONDARY` and `BUTTON_TERTIARY` instead; either way the first button is the stylus's primary
++ * one and the second its secondary one. I cannot check which devices send what, so both spellings are accepted.
++ */
++object PointerIntents {
++    const val BUTTON_PRIMARY = 0x01
++    const val BUTTON_SECONDARY = 0x02
++    const val BUTTON_TERTIARY = 0x04
++    const val BUTTON_STYLUS_PRIMARY = 0x20
++    const val BUTTON_STYLUS_SECONDARY = 0x40
++
++    /** The stylus button held in [buttons], the primary one when both are down, or null when none is. */
++    fun heldStylusButton(buttons: Int): StylusButton? =
++        when {
++            buttons and (BUTTON_STYLUS_PRIMARY or BUTTON_SECONDARY) != 0 -> StylusButton.PRIMARY
++            buttons and (BUTTON_STYLUS_SECONDARY or BUTTON_TERTIARY) != 0 -> StylusButton.SECONDARY
++            else -> null
++        }
++
++    /**
++     * The intent of a pointer that has just touched down. [fresh] says which stylus buttons this very touch was the
++     * first to see pressed; a click-style action whose press was already used while the pen hovered does not repeat,
++     * and the pen paints instead.
++     */
++    fun atContact(
++        kind: PointerKind,
++        buttons: Int,
++        settings: GestureSettings,
++        fresh: Set<StylusButton> = emptySet(),
++    ): PointerIntent =
++        when (kind) {
++            PointerKind.MOUSE -> mouse(buttons, settings.rightClick)
++            PointerKind.ERASER -> of(settings.stylus.eraserEnd)
++            PointerKind.STYLUS -> stylus(buttons, settings.stylus, fresh)
++            PointerKind.FINGER, PointerKind.PALM -> PointerIntent.DRAW
++        }
++
++    /** The click-style action a stylus button press starts while the pen hovers, or null when none is set. */
++    fun inTheAir(
++        pressed: Set<StylusButton>,
++        mapping: StylusMapping,
++    ): PointerIntent? =
++        pressed
++            .sorted()
++            .map { button -> of(if (button == StylusButton.PRIMARY) mapping.primary else mapping.secondary) }
++            .firstOrNull { it.isClick }
++
++    private fun stylus(
++        buttons: Int,
++        mapping: StylusMapping,
++        fresh: Set<StylusButton>,
++    ): PointerIntent {
++        val held = heldStylusButton(buttons) ?: return PointerIntent.DRAW
++        val intent = of(if (held == StylusButton.PRIMARY) mapping.primary else mapping.secondary)
++        return if (intent.isClick && held !in fresh) PointerIntent.DRAW else intent
++    }
++
++    private fun mouse(
++        buttons: Int,
++        rightClick: MouseAction,
++    ): PointerIntent =
++        when {
++            buttons == 0 || buttons and BUTTON_PRIMARY != 0 -> PointerIntent.DRAW
++            buttons and BUTTON_SECONDARY != 0 -> of(rightClick)
++            buttons and BUTTON_TERTIARY != 0 -> PointerIntent.PAN
++            else -> PointerIntent.NOTHING
++        }
++
++    private fun of(action: StylusAction): PointerIntent =
++        when (action) {
++            StylusAction.NONE -> PointerIntent.DRAW
++            StylusAction.EYEDROPPER -> PointerIntent.SAMPLE
++            StylusAction.ERASE -> PointerIntent.ERASE
++            StylusAction.TOGGLE_ERASER -> PointerIntent.TOGGLE_ERASER
++            StylusAction.UNDO -> PointerIntent.UNDO
++            StylusAction.QUICK_MENU -> PointerIntent.QUICK_MENU
++            StylusAction.PAN -> PointerIntent.PAN
++        }
++
++    private fun of(action: MouseAction): PointerIntent =
++        when (action) {
++            MouseAction.QUICK_MENU -> PointerIntent.QUICK_MENU
++            MouseAction.EYEDROPPER -> PointerIntent.SAMPLE
++            MouseAction.NONE -> PointerIntent.NOTHING
++        }
++}
++
++/**
++ * Tells a stylus button press apart from a button that is merely still held. Feed it the button state of every
++ * stylus event, hovering or touching; a press is reported once, whichever event first showed it.
++ */
++class StylusClicks {
++    private var primaryHeld = false
++    private var secondaryHeld = false
++
++    /** The buttons that [buttons] shows pressed and the previous reading did not. */
++    fun observe(buttons: Int): Set<StylusButton> {
++        val primary = buttons and (PointerIntents.BUTTON_STYLUS_PRIMARY or PointerIntents.BUTTON_SECONDARY) != 0
++        val secondary = buttons and (PointerIntents.BUTTON_STYLUS_SECONDARY or PointerIntents.BUTTON_TERTIARY) != 0
++        val fresh =
++            buildSet {
++                if (primary && !primaryHeld) add(StylusButton.PRIMARY)
++                if (secondary && !secondaryHeld) add(StylusButton.SECONDARY)
++            }
++        primaryHeld = primary
++        secondaryHeld = secondary
++        return fresh
++    }
++
++    /** Forgets what was held: the pen left the screen, so a release may have gone unseen. */
++    fun reset() {
++        primaryHeld = false
++        secondaryHeld = false
++    }
++}
+diff --git a/app/src/main/java/com/artflow/studio/core/canvas/PointerKind.kt b/app/src/main/java/com/artflow/studio/core/canvas/PointerKind.kt
+new file mode 100644
+index 0000000..3f4be9e
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/core/canvas/PointerKind.kt
+@@ -0,0 +1,41 @@
++package com.artflow.studio.core.canvas
++
++/**
++ * What produced a pointer, taken from Android's tool type. The numbers are the documented values of
++ * `MotionEvent.TOOL_TYPE_*`, so this file stays free of Android imports and can be tested on the JVM.
++ */
++enum class PointerKind {
++    FINGER,
++    STYLUS,
++
++    /** The eraser end of a stylus. */
++    ERASER,
++    MOUSE,
++
++    /** A contact the device itself has recognised as a resting hand (Android 14 and later). */
++    PALM,
++    ;
++
++    /** A pen, its eraser end or a mouse: pointers that aim exactly and are never a resting hand. */
++    val isPrecise: Boolean get() = this == STYLUS || this == ERASER || this == MOUSE
++
++    /** The pen, or the pen turned over. */
++    val isStylus: Boolean get() = this == STYLUS || this == ERASER
++
++    companion object {
++        private const val TOOL_STYLUS = 2
++        private const val TOOL_MOUSE = 3
++        private const val TOOL_ERASER = 4
++        private const val TOOL_PALM = 5
++
++        /** The kind for a `MotionEvent` tool type; a finger, and the "unknown" some touchscreens report, are fingers. */
++        fun ofToolType(toolType: Int): PointerKind =
++            when (toolType) {
++                TOOL_STYLUS -> STYLUS
++                TOOL_MOUSE -> MOUSE
++                TOOL_ERASER -> ERASER
++                TOOL_PALM -> PALM
++                else -> FINGER
++            }
++    }
++}
+diff --git a/app/src/main/java/com/artflow/studio/core/canvas/PointerPressure.kt b/app/src/main/java/com/artflow/studio/core/canvas/PointerPressure.kt
+index cf7ab7e..402dc51 100644
+--- a/app/src/main/java/com/artflow/studio/core/canvas/PointerPressure.kt
++++ b/app/src/main/java/com/artflow/studio/core/canvas/PointerPressure.kt
+@@ -15,6 +15,16 @@ object PointerPressure {
+         return 0.35f + (size * 3f).coerceAtMost(1f) * 0.65f
+     }
+ 
++    /**
++     * The pressure of a pointer of [kind]. A mouse or trackpad has no pressure to measure: it aims exactly like a pen, so a
++     * stroke it draws is made at full pressure, not at the contact-area guess that a finger gets.
++     */
++    fun normalize(
++        kind: PointerKind,
++        pressure: Float,
++        contactSize: Float,
++    ): Float = if (kind == PointerKind.MOUSE) 1f else normalize(kind.isStylus, pressure, contactSize)
++
+     /** Applies the artist's pressure curve: an exponent below 1 is softer, above 1 firmer. */
+     fun curve(
+         pressure: Float,
+diff --git a/app/src/main/java/com/artflow/studio/core/canvas/RotationSnap.kt b/app/src/main/java/com/artflow/studio/core/canvas/RotationSnap.kt
+new file mode 100644
+index 0000000..ed5894e
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/core/canvas/RotationSnap.kt
+@@ -0,0 +1,87 @@
++package com.artflow.studio.core.canvas
++
++import kotlin.math.abs
++import kotlin.math.roundToInt
++
++/**
++ * Two-finger canvas rotation that clicks into place at every multiple of [step] degrees, as Procreate's does.
++ *
++ * The fingers keep turning the whole time; what the canvas shows is held at the multiple while the fingers stay
++ * within [capture] degrees of it, and is let go once they are more than [release] degrees away. Catching at a small
++ * angle and letting go at a larger one is the hysteresis: a hand that wobbles around the edge of the catch zone
++ * cannot make the canvas flicker in and out of place.
++ *
++ * Use one instance per gesture: [begin] with the angle the canvas starts at, then [rotate] with each change of the
++ * fingers' angle. Angles are degrees, increasing clockwise as on screen, and are not wrapped.
++ */
++class RotationSnap(
++    private val step: Float = DEFAULT_STEP,
++    private val capture: Float = DEFAULT_CAPTURE,
++    private val release: Float = DEFAULT_RELEASE,
++) {
++    /** The angle to show, whether it is held on a multiple, and whether a multiple was caught by this very change. */
++    data class Result(
++        val angle: Float,
++        val snapped: Boolean,
++        val caught: Boolean,
++    )
++
++    init {
++        require(step > 0f && capture > 0f && release >= capture && release * 2f < step) { "Snap zones must fit inside one step" }
++    }
++
++    /** Where the fingers would have the canvas, ignoring the snap. */
++    private var raw = 0f
++    private var held = Float.NaN
++
++    /**
++     * Starts a gesture at [angle]. A canvas sitting exactly on a multiple (as a snapped one does) stays held there
++     * without a click; one that is merely near a multiple is left alone until the fingers bring it in.
++     */
++    fun begin(angle: Float) {
++        raw = angle
++        val nearest = nearestMultiple(angle)
++        held = if (abs(angle - nearest) <= EXACT) nearest else Float.NaN
++    }
++
++    /** Turns the fingers by [delta] degrees and returns what the canvas should now show. */
++    fun rotate(delta: Float): Result {
++        raw += delta
++        if (!held.isNaN()) {
++            if (abs(raw - held) <= release) return Result(held, snapped = true, caught = false)
++            held = Float.NaN
++            return Result(raw, snapped = false, caught = false)
++        }
++        val nearest = nearestMultiple(raw)
++        if (abs(raw - nearest) > capture) return Result(raw, snapped = false, caught = false)
++        held = nearest
++        return Result(nearest, snapped = true, caught = true)
++    }
++
++    private fun nearestMultiple(angle: Float): Float = (angle / step).roundToInt() * step
++
++    companion object {
++        const val DEFAULT_STEP = 45f
++        const val DEFAULT_CAPTURE = 3.5f
++        const val DEFAULT_RELEASE = 7f
++
++        /** How close to a multiple counts as sitting exactly on it, allowing for float rounding. */
++        private const val EXACT = 0.05f
++
++        /** A change of angle between two readings of the fingers, wrapped so that crossing 180 degrees is a small turn. */
++        fun shortestTurn(delta: Float): Float {
++            if (!delta.isFinite()) return 0f
++            val wrapped = (delta + HALF_TURN) % FULL_TURN
++            return (if (wrapped < 0f) wrapped + FULL_TURN else wrapped) - HALF_TURN
++        }
++
++        /** [angle] brought into 0 until 360. */
++        fun normalized(angle: Float): Float {
++            val wrapped = angle % FULL_TURN
++            return if (wrapped < 0f) wrapped + FULL_TURN else wrapped
++        }
++
++        private const val HALF_TURN = 180f
++        private const val FULL_TURN = 360f
++    }
++}
+diff --git a/app/src/main/java/com/artflow/studio/core/canvas/TouchGestures.kt b/app/src/main/java/com/artflow/studio/core/canvas/TouchGestures.kt
+new file mode 100644
+index 0000000..ece3a9e
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/core/canvas/TouchGestures.kt
+@@ -0,0 +1,145 @@
++package com.artflow.studio.core.canvas
++
++/** A gesture that Gesture controls knows by name; the practice pad calls it out as it is recognised. */
++enum class TouchGesture(
++    /** A finger shortcut: switched off by "Disable touch actions" while a stylus is in use. */
++    val isShortcut: Boolean = false,
++) {
++    DRAW_PEN,
++    DRAW_FINGER,
++    DRAW_MOUSE,
++    TAP_TWO(isShortcut = true),
++    TAP_THREE(isShortcut = true),
++    TAP_FOUR(isShortcut = true),
++    HOLD_TWO(isShortcut = true),
++    HOLD_THREE(isShortcut = true),
++    SWIPE_THREE(isShortcut = true),
++    SCRUB_THREE(isShortcut = true),
++    TOUCH_AND_HOLD(isShortcut = true),
++    PEN_HOLD,
++    PINCH,
++    ROTATE,
++    DRAG_TWO,
++    QUICK_PINCH,
++    STYLUS_BUTTON,
++    STYLUS_BUTTON_2,
++    ERASER_END,
++    RIGHT_CLICK,
++    MIDDLE_CLICK,
++}
++
++/** What a recognised gesture makes the editor do. */
++enum class GestureResult {
++    DRAW,
++    UNDO,
++    REDO,
++    RAPID_UNDO,
++    RAPID_REDO,
++    FULL_SCREEN,
++    COPY_PASTE,
++    CLEAR_LAYER,
++    FIT_TO_SCREEN,
++    EYEDROPPER,
++    QUICK_MENU,
++    SELECT_LAYER,
++    QUICK_SHAPE,
++    ZOOM_VIEW,
++    ROTATE_VIEW,
++    PAN_VIEW,
++    ERASE,
++    TOGGLE_ERASER,
++}
++
++/**
++ * Which gesture a router outcome is, and what it does under the current settings. The editor's canvas and the
++ * practice pad both ask here, so the pad shows exactly what the canvas would do.
++ */
++object TouchGestures {
++    /** The gesture a finished touch was: a tap of two, three or four fingers, or a quick pinch, else null. */
++    fun finished(
++        historyPointers: Int,
++        quickPinch: Boolean,
++    ): TouchGesture? =
++        when {
++            historyPointers == 2 -> TouchGesture.TAP_TWO
++            historyPointers == 3 -> TouchGesture.TAP_THREE
++            historyPointers == 4 -> TouchGesture.TAP_FOUR
++            quickPinch -> TouchGesture.QUICK_PINCH
++            else -> null
++        }
++
++    /** The gesture that resting two or three fingers become once the rapid-undo delay has passed. */
++    fun held(fingers: Int): TouchGesture? =
++        when (fingers) {
++            2 -> TouchGesture.HOLD_TWO
++            3 -> TouchGesture.HOLD_THREE
++            else -> null
++        }
++
++    /** The gesture the router reports for three fingers moving together, or null for any other action. */
++    fun threeFinger(action: PointerGestureRouter.Action): TouchGesture? =
++        when (action) {
++            PointerGestureRouter.Action.THREE_FINGER_SWIPE_DOWN -> TouchGesture.SWIPE_THREE
++            PointerGestureRouter.Action.THREE_FINGER_SCRUB -> TouchGesture.SCRUB_THREE
++            else -> null
++        }
++
++    /**
++     * What [gesture] does, or null when it does nothing: its switch is off, nothing is assigned to it, or
++     * [touchActionsOff] (Disable touch actions, with a stylus in use) silences finger shortcuts.
++     */
++    fun result(
++        gesture: TouchGesture,
++        settings: GestureSettings,
++        touchActionsOff: Boolean = false,
++    ): GestureResult? {
++        if (gesture.isShortcut && touchActionsOff) return null
++        return when (gesture) {
++            TouchGesture.DRAW_PEN, TouchGesture.DRAW_FINGER, TouchGesture.DRAW_MOUSE -> GestureResult.DRAW
++            TouchGesture.TAP_TWO -> GestureResult.UNDO
++            TouchGesture.TAP_THREE -> GestureResult.REDO
++            TouchGesture.TAP_FOUR -> GestureResult.FULL_SCREEN.takeIf { settings.fourFingerFullScreen }
++            TouchGesture.HOLD_TWO -> GestureResult.RAPID_UNDO
++            TouchGesture.HOLD_THREE -> GestureResult.RAPID_REDO
++            TouchGesture.SWIPE_THREE -> GestureResult.COPY_PASTE.takeIf { settings.swipeCopyPaste }
++            TouchGesture.SCRUB_THREE -> GestureResult.CLEAR_LAYER.takeIf { settings.scrubToClear }
++            TouchGesture.TOUCH_AND_HOLD -> holdResult(settings.holdAction)
++            TouchGesture.PEN_HOLD -> GestureResult.QUICK_SHAPE.takeIf { settings.quickShape }
++            TouchGesture.PINCH -> GestureResult.ZOOM_VIEW
++            TouchGesture.ROTATE -> GestureResult.ROTATE_VIEW
++            TouchGesture.DRAG_TWO -> GestureResult.PAN_VIEW
++            TouchGesture.QUICK_PINCH -> GestureResult.FIT_TO_SCREEN
++            TouchGesture.STYLUS_BUTTON -> stylusResult(settings.stylus.primary)
++            TouchGesture.STYLUS_BUTTON_2 -> stylusResult(settings.stylus.secondary)
++            TouchGesture.ERASER_END -> stylusResult(settings.stylus.eraserEnd)
++            TouchGesture.RIGHT_CLICK -> mouseResult(settings.rightClick)
++            TouchGesture.MIDDLE_CLICK -> GestureResult.PAN_VIEW
++        }
++    }
++
++    private fun holdResult(action: HoldAction): GestureResult? =
++        when (action) {
++            HoldAction.EYEDROPPER -> GestureResult.EYEDROPPER
++            HoldAction.QUICK_MENU -> GestureResult.QUICK_MENU
++            HoldAction.SELECT_LAYER -> GestureResult.SELECT_LAYER
++            HoldAction.NONE -> null
++        }
++
++    private fun stylusResult(action: StylusAction): GestureResult? =
++        when (action) {
++            StylusAction.NONE -> null
++            StylusAction.EYEDROPPER -> GestureResult.EYEDROPPER
++            StylusAction.ERASE -> GestureResult.ERASE
++            StylusAction.TOGGLE_ERASER -> GestureResult.TOGGLE_ERASER
++            StylusAction.UNDO -> GestureResult.UNDO
++            StylusAction.QUICK_MENU -> GestureResult.QUICK_MENU
++            StylusAction.PAN -> GestureResult.PAN_VIEW
++        }
++
++    private fun mouseResult(action: MouseAction): GestureResult? =
++        when (action) {
++            MouseAction.QUICK_MENU -> GestureResult.QUICK_MENU
++            MouseAction.EYEDROPPER -> GestureResult.EYEDROPPER
++            MouseAction.NONE -> null
++        }
++}
+diff --git a/app/src/main/java/com/artflow/studio/core/canvas/ViewMath.kt b/app/src/main/java/com/artflow/studio/core/canvas/ViewMath.kt
+new file mode 100644
+index 0000000..fddbf5c
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/core/canvas/ViewMath.kt
+@@ -0,0 +1,74 @@
++package com.artflow.studio.core.canvas
++
++import kotlin.math.exp
++import kotlin.math.roundToInt
++
++/** How far a pointer moves the view, in screen pixels, and by what factor it zooms. */
++data class WheelMove(
++    val zoomFactor: Float = 1f,
++    val panX: Float = 0f,
++    val panY: Float = 0f,
++) {
++    val isZoom: Boolean get() = zoomFactor != 1f
++}
++
++/** The arithmetic behind the view transform, kept apart from the view so it can be tested. */
++object ViewMath {
++    /**
++     * The zoom shown to the artist. The view scale is screen pixels per canvas pixel, so 100% puts one canvas pixel on
++     * one screen pixel (what Procreate calls actual size) and a 2000 px wide canvas on a 1200 px wide screen is 60%.
++     * It is measured against device pixels, not against the document's dpi.
++     */
++    fun zoomPercent(scale: Float): Int = if (scale.isFinite() && scale > 0f) (scale * PERCENT).roundToInt() else 0
++
++    /**
++     * The view offset that keeps the canvas point under ([pointerX], [pointerY]) where it is while the scale goes from
++     * [scale] to [newScale]. The pointer is relative to the middle of the view, and the offset is the one the view
++     * already uses (the canvas centre's distance from the view's centre). Rotation does not change the answer.
++     */
++    fun zoomAbout(
++        pointerX: Float,
++        pointerY: Float,
++        scale: Float,
++        newScale: Float,
++        offsetX: Float,
++        offsetY: Float,
++    ): Pair<Float, Float> {
++        if (!(scale > 0f) || !newScale.isFinite()) return offsetX to offsetY
++        val ratio = newScale / scale
++        return (pointerX - ratio * (pointerX - offsetX)) to (pointerY - ratio * (pointerY - offsetY))
++    }
++
++    /**
++     * What a scroll wheel or trackpad scroll does. Scrolling alone pans (vertical wheel up moves the artwork down, as
++     * in any scrolling list); Shift turns a vertical wheel into a horizontal pan; Ctrl zooms about the pointer, wheel
++     * up zooming in. [units] are `AXIS_VSCROLL` and `AXIS_HSCROLL` values, one per notch, and the pixel factors are
++     * how far Android scrolls a list for one unit.
++     */
++    fun wheel(
++        vertical: Float,
++        horizontal: Float,
++        ctrl: Boolean,
++        shift: Boolean,
++        pixelsPerVerticalUnit: Float,
++        pixelsPerHorizontalUnit: Float,
++    ): WheelMove {
++        val v = clean(vertical)
++        val h = clean(horizontal)
++        if (ctrl) return WheelMove(zoomFactor = exp((v + h) * ZOOM_PER_UNIT))
++        if (shift && h == 0f) return WheelMove(panX = v * pixelsPerHorizontalUnit)
++        return WheelMove(panX = -h * pixelsPerHorizontalUnit, panY = v * pixelsPerVerticalUnit)
++    }
++
++    /** The factor a trackpad pinch of [scaleChange] (1.1 = the fingers spread 10% further apart) zooms by; 1 when unusable. */
++    fun pinchFactor(scaleChange: Float): Float = if (scaleChange.isFinite() && scaleChange > 0f) scaleChange else 1f
++
++    /** A wheel reading, with a burst from a trackpad kept in range and anything unusable ignored. */
++    private fun clean(units: Float): Float = if (units.isFinite()) units.coerceIn(-MAX_UNITS, MAX_UNITS) else 0f
++
++    private const val PERCENT = 100f
++
++    /** One notch zooms about 12%, and a trackpad's small steps add up smoothly. */
++    private const val ZOOM_PER_UNIT = 0.115f
++    private const val MAX_UNITS = 8f
++}
+diff --git a/app/src/main/java/com/artflow/studio/presentation/ui/viewmodel/CanvasViewModel.kt b/app/src/main/java/com/artflow/studio/presentation/ui/viewmodel/CanvasViewModel.kt
+index d76ca94..c9d273f 100644
+--- a/app/src/main/java/com/artflow/studio/presentation/ui/viewmodel/CanvasViewModel.kt
++++ b/app/src/main/java/com/artflow/studio/presentation/ui/viewmodel/CanvasViewModel.kt
+@@ -563,7 +563,8 @@ class CanvasViewModel
+             viewModelScope.launch(editorErrors) { settingsRepository.setSnapToGuides(enabled) }
+         }
+ 
+-        fun setFingerPainting(enabled: Boolean) = updateInput { it.copy(fingerPainting = enabled) }
++        /** Stored as the inverse of "Stylus only", so the switch survives a restart and a later settings change cannot undo it. */
++        fun setFingerPainting(enabled: Boolean) = updateSettings { it.copy(stylusOnly = !enabled) }
+ 
+         fun setGradient(
+             gradient: GradientTool.Gradient,
+diff --git a/app/src/test/java/com/artflow/studio/core/canvas/GestureSettingsTest.kt b/app/src/test/java/com/artflow/studio/core/canvas/GestureSettingsTest.kt
+new file mode 100644
+index 0000000..7123b3d
+--- /dev/null
++++ b/app/src/test/java/com/artflow/studio/core/canvas/GestureSettingsTest.kt
+@@ -0,0 +1,59 @@
++package com.artflow.studio.core.canvas
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class GestureSettingsTest {
++    @Test
++    fun theDefaultsAreWhatTheEditorDidBeforeTheyWereOptions() {
++        val defaults = GestureSettings()
++        assertTrue(defaults.scrubToClear && defaults.swipeCopyPaste && defaults.fourFingerFullScreen)
++        assertEquals("Touch and hold sampled colour after half a second", HoldAction.EYEDROPPER, defaults.holdAction)
++        assertEquals(500, defaults.holdDelayMs)
++        assertEquals("QuickShape waited 650 ms", 650, defaults.quickShapeDelayMs)
++        assertEquals("Rapid undo waited 650 ms", 650, defaults.rapidUndoDelayMs)
++        assertEquals(StylusAction.EYEDROPPER, defaults.stylus.primary)
++        assertEquals(StylusAction.NONE, defaults.stylus.secondary)
++        assertEquals(StylusAction.ERASE, defaults.stylus.eraserEnd)
++        assertTrue(!defaults.disableTouchActions)
++    }
++
++    @Test
++    fun delaysAreKeptInsideTheirRange() {
++        val wild = GestureSettings(holdDelayMs = 5, quickShapeDelayMs = 99_999, rapidUndoDelayMs = -3).normalized()
++        assertEquals(GestureSettings.MIN_DELAY_MS, wild.holdDelayMs)
++        assertEquals(GestureSettings.MAX_DELAY_MS, wild.quickShapeDelayMs)
++        assertEquals(GestureSettings.MIN_DELAY_MS, wild.rapidUndoDelayMs)
++        val fine = GestureSettings(holdDelayMs = 700)
++        assertEquals(fine, fine.normalized())
++    }
++
++    @Test
++    fun theQuickMenuListsEveryWayToOpenIt() {
++        assertEquals(listOf(QuickMenuTrigger.HANDLE, QuickMenuTrigger.RIGHT_CLICK), GestureSettings().quickMenuTriggers())
++        val everywhere =
++            GestureSettings(
++                holdAction = HoldAction.QUICK_MENU,
++                stylus = StylusMapping(StylusAction.QUICK_MENU, StylusAction.QUICK_MENU, StylusAction.QUICK_MENU),
++                rightClick = MouseAction.QUICK_MENU,
++            )
++        assertEquals(QuickMenuTrigger.entries, everywhere.quickMenuTriggers())
++        val handleOnly = GestureSettings(rightClick = MouseAction.NONE)
++        assertEquals(listOf(QuickMenuTrigger.HANDLE), handleOnly.quickMenuTriggers())
++    }
++
++    @Test
++    fun toolTypesBecomePointerKinds() {
++        assertEquals(PointerKind.FINGER, PointerKind.ofToolType(1))
++        assertEquals(PointerKind.STYLUS, PointerKind.ofToolType(2))
++        assertEquals(PointerKind.MOUSE, PointerKind.ofToolType(3))
++        assertEquals(PointerKind.ERASER, PointerKind.ofToolType(4))
++        assertEquals(PointerKind.PALM, PointerKind.ofToolType(5))
++        assertEquals("Unknown tool types behave as fingers did before", PointerKind.FINGER, PointerKind.ofToolType(0))
++        assertEquals(PointerKind.FINGER, PointerKind.ofToolType(99))
++        assertTrue(PointerKind.MOUSE.isPrecise && PointerKind.STYLUS.isPrecise && PointerKind.ERASER.isPrecise)
++        assertTrue(!PointerKind.FINGER.isPrecise && !PointerKind.PALM.isPrecise)
++        assertTrue(PointerKind.ERASER.isStylus && !PointerKind.MOUSE.isStylus)
++    }
++}
+diff --git a/app/src/test/java/com/artflow/studio/core/canvas/PalmRejectionTest.kt b/app/src/test/java/com/artflow/studio/core/canvas/PalmRejectionTest.kt
+new file mode 100644
+index 0000000..a45b14d
+--- /dev/null
++++ b/app/src/test/java/com/artflow/studio/core/canvas/PalmRejectionTest.kt
+@@ -0,0 +1,72 @@
++package com.artflow.studio.core.canvas
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class PalmRejectionTest {
++    private val palm = PalmRejection()
++
++    private fun isPalm(
++        kind: PointerKind,
++        millimetres: Float,
++        time: Long,
++        enabled: Boolean = true,
++    ) = palm.isPalm(kind, millimetres, time, enabled)
++
++    @Test
++    fun aBigTouchIsOnlyAPalmOnceAStylusHasBeenSeen() {
++        assertFalse("Nobody has used a pen: a big finger is a finger", isPalm(PointerKind.FINGER, 40f, 1_000))
++        palm.stylusSeen(2_000)
++        assertTrue(isPalm(PointerKind.FINGER, 40f, 3_000))
++        assertTrue("The edge of the zone counts", isPalm(PointerKind.FINGER, PalmRejection.PALM_MILLIMETRES, 3_000))
++    }
++
++    @Test
++    fun fingertipsAndThumbPadsAreNeverPalms() {
++        palm.stylusSeen(0)
++        for (millimetres in listOf(6f, 10f, 14f, 20f, 23.9f)) assertFalse(isPalm(PointerKind.FINGER, millimetres, 1_000))
++    }
++
++    @Test
++    fun aDeviceThatReportsNoContactSizeIsNotJudgedBySize() {
++        palm.stylusSeen(0)
++        assertFalse(isPalm(PointerKind.FINGER, 0f, 1_000))
++        assertFalse(isPalm(PointerKind.FINGER, Float.NaN, 1_000))
++    }
++
++    @Test
++    fun theStylusIsRememberedForFiveMinutesAndNoLonger() {
++        palm.stylusSeen(10_000)
++        assertTrue(palm.stylusInUse(10_000))
++        assertTrue(palm.stylusInUse(10_000 + PalmRejection.STYLUS_MEMORY_MILLIS))
++        assertFalse(palm.stylusInUse(10_001 + PalmRejection.STYLUS_MEMORY_MILLIS))
++        assertFalse("A clock that steps back is not 'in use'", palm.stylusInUse(9_000))
++        assertFalse(PalmRejection().stylusInUse(0))
++        assertFalse(isPalm(PointerKind.FINGER, 40f, 20_000 + PalmRejection.STYLUS_MEMORY_MILLIS))
++    }
++
++    @Test
++    fun theSettingTurnsSizeRejectionOffButNotTheDevicesOwnPalmReport() {
++        palm.stylusSeen(0)
++        assertFalse(isPalm(PointerKind.FINGER, 40f, 1_000, enabled = false))
++        assertTrue(isPalm(PointerKind.PALM, 0f, 1_000, enabled = false))
++        assertTrue(isPalm(PointerKind.PALM, 0f, 1_000))
++    }
++
++    @Test
++    fun aPenAndAMouseAreNeverResting() {
++        palm.stylusSeen(0)
++        for (kind in listOf(PointerKind.STYLUS, PointerKind.ERASER, PointerKind.MOUSE)) assertFalse(isPalm(kind, 80f, 1_000))
++    }
++
++    @Test
++    fun contactSizeIsConvertedFromPixelsUsingTheScreenDensity() {
++        assertEquals(10f, PalmRejection.millimetres(100f, 254f), 0.0001f)
++        assertEquals(25.4f, PalmRejection.millimetres(160f, 160f), 0.0001f)
++        for ((pixels, dpi) in listOf(0f to 160f, -5f to 160f, 100f to 0f, Float.NaN to 160f, 100f to Float.POSITIVE_INFINITY)) {
++            assertEquals(0f, PalmRejection.millimetres(pixels, dpi), 0f)
++        }
++    }
++}
+diff --git a/app/src/test/java/com/artflow/studio/core/canvas/PointerGestureRouterTest.kt b/app/src/test/java/com/artflow/studio/core/canvas/PointerGestureRouterTest.kt
+index fb831c5..7ec8b7b 100644
+--- a/app/src/test/java/com/artflow/studio/core/canvas/PointerGestureRouterTest.kt
++++ b/app/src/test/java/com/artflow/studio/core/canvas/PointerGestureRouterTest.kt
+@@ -310,4 +310,97 @@ class PointerGestureRouterTest {
+     fun aFingerStartsAToolWhenNoPenHasLifted() {
+         assertEquals(Action.START_TOOL, send(Event.DOWN, finger).action)
+     }
++
++    private val mouse = Pointer(1, 40f, 40f, mouse = true)
++    private val palm = Pointer(30, 200f, 200f, palm = true)
++
++    @Test
++    fun aMouseDrawsAndOpensNoPalmWindowBehindIt() {
++        assertEquals(Action.START_TOOL, send(Event.DOWN, mouse).action)
++        assertEquals(Action.MOVE_TOOL, send(Event.MOVE, mouse.copy(x = 80f)).action)
++        assertEquals(Action.END_TOOL, send(Event.UP, mouse.copy(x = 80f)).action)
++        assertEquals("A touch straight after a click is a finger, not a palm", Action.START_TOOL, send(Event.DOWN, finger).action)
++    }
++
++    @Test
++    fun aMouseIsNeverTakenForAPalmAfterAPen() {
++        send(Event.DOWN, pen)
++        send(Event.UP, pen)
++        assertEquals(Action.START_TOOL, send(Event.DOWN, mouse).action)
++    }
++
++    @Test
++    fun aPalmThatLandsFirstStartsNothingAndLeavesNoTrace() {
++        assertEquals(Action.IGNORE, send(Event.DOWN, palm).action)
++        assertEquals(Action.IGNORE, send(Event.MOVE, palm.copy(x = 210f)).action)
++        assertEquals(Action.IGNORE, send(Event.UP, palm).action)
++        assertEquals(Action.START_TOOL, send(Event.DOWN, finger).action)
++    }
++
++    @Test
++    fun aPenTakesOverFromAPalmAndTheIndexStillPointsIntoTheEvent() {
++        send(Event.DOWN, palm)
++        val start = send(Event.POINTER_DOWN, palm, pen, changed = 1)
++        assertEquals(Action.START_TOOL, start.action)
++        assertEquals(1, start.index)
++        val move = send(Event.MOVE, palm, pen.copy(x = 90f))
++        assertEquals(Action.MOVE_TOOL, move.action)
++        assertEquals(1, move.index)
++    }
++
++    @Test
++    fun aPalmLandingOnATwoFingerTapDoesNotMakeItARedo() {
++        send(Event.DOWN, finger)
++        send(Event.POINTER_DOWN, finger, other, changed = 1)
++        assertEquals(Action.IGNORE, send(Event.POINTER_DOWN, finger, other, palm, changed = 2).action)
++        assertEquals(Action.IGNORE, send(Event.POINTER_UP, finger, other, palm, changed = 2).action)
++        send(Event.POINTER_UP, finger, other, changed = 1)
++        val up = send(Event.UP, finger)
++        assertEquals(Action.FINISH_NAVIGATION, up.action)
++        assertEquals(2, up.historyPointers)
++    }
++
++    @Test
++    fun aPalmBesideAFingerStrokeDoesNotTurnItIntoNavigation() {
++        assertEquals(Action.START_TOOL, send(Event.DOWN, finger).action)
++        assertEquals(Action.IGNORE, send(Event.POINTER_DOWN, finger, palm, changed = 1).action)
++        assertEquals(Action.MOVE_TOOL, send(Event.MOVE, finger.copy(x = 50f), palm).action)
++        assertEquals(Action.END_TOOL, send(Event.UP, finger.copy(x = 50f)).action)
++    }
++
++    @Test
++    fun aContactThatGrowsIntoAPalmCancelsItsStroke() {
++        assertEquals(Action.START_TOOL, send(Event.DOWN, finger).action)
++        assertEquals(Action.MOVE_TOOL, send(Event.MOVE, finger.copy(x = 30f)).action)
++        assertEquals(Action.CANCEL, send(Event.MOVE, finger.copy(x = 40f, palm = true)).action)
++        assertEquals(Action.IGNORE, send(Event.MOVE, finger.copy(x = 50f)).action)
++        assertEquals(Action.IGNORE, send(Event.UP, finger).action)
++    }
++
++    @Test
++    fun aReusedPointerIdIsNotStillAPalm() {
++        send(Event.DOWN, finger)
++        val hand = palm.copy(id = other.id)
++        send(Event.POINTER_DOWN, finger, hand, changed = 1)
++        send(Event.POINTER_UP, finger, hand, changed = 1)
++        assertEquals(Action.REBASE_NAVIGATION, send(Event.POINTER_DOWN, finger, other, changed = 1).action)
++    }
++
++    @Test
++    fun aPalmThatLiftsLastEndsTheNavigationWithoutATap() {
++        send(Event.DOWN, finger)
++        send(Event.POINTER_DOWN, finger, other, changed = 1)
++        send(Event.POINTER_DOWN, finger, other, palm, changed = 2)
++        send(Event.POINTER_UP, finger, other, palm, changed = 0)
++        send(Event.POINTER_UP, other, palm, changed = 0)
++        val up = send(Event.UP, palm)
++        assertEquals(Action.FINISH_NAVIGATION, up.action)
++        assertEquals(0, up.historyPointers)
++    }
++
++    @Test
++    fun aPalmIsIgnoredBySizeEvenWhenItIsTheOnlyContact() {
++        assertEquals(Action.IGNORE, send(Event.DOWN, palm).action)
++        assertEquals(0, router.heldFingers())
++    }
+ }
+diff --git a/app/src/test/java/com/artflow/studio/core/canvas/PointerIntentsTest.kt b/app/src/test/java/com/artflow/studio/core/canvas/PointerIntentsTest.kt
+new file mode 100644
+index 0000000..260db74
+--- /dev/null
++++ b/app/src/test/java/com/artflow/studio/core/canvas/PointerIntentsTest.kt
+@@ -0,0 +1,120 @@
++package com.artflow.studio.core.canvas
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNull
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class PointerIntentsTest {
++    private val defaults = GestureSettings()
++
++    private fun at(
++        kind: PointerKind,
++        buttons: Int = 0,
++        settings: GestureSettings = defaults,
++        fresh: Set<StylusButton> = emptySet(),
++    ) = PointerIntents.atContact(kind, buttons, settings, fresh)
++
++    @Test
++    fun fingersAlwaysDraw() {
++        assertEquals(PointerIntent.DRAW, at(PointerKind.FINGER, PointerIntents.BUTTON_STYLUS_PRIMARY))
++        assertEquals(PointerIntent.DRAW, at(PointerKind.PALM))
++    }
++
++    @Test
++    fun theDefaultsKeepTodaysStylusBehaviour() {
++        assertEquals("The tip paints", PointerIntent.DRAW, at(PointerKind.STYLUS))
++        assertEquals("The side button samples colour", PointerIntent.SAMPLE, at(PointerKind.STYLUS, PointerIntents.BUTTON_STYLUS_PRIMARY))
++        assertEquals("The eraser end erases", PointerIntent.ERASE, at(PointerKind.ERASER))
++        assertEquals("The second button is unassigned", PointerIntent.DRAW, at(PointerKind.STYLUS, PointerIntents.BUTTON_STYLUS_SECONDARY))
++    }
++
++    @Test
++    fun devicesThatSpellTheBarrelButtonAsMouseButtonsAreUnderstood() {
++        assertEquals(PointerIntent.SAMPLE, at(PointerKind.STYLUS, PointerIntents.BUTTON_SECONDARY))
++        val mapped = defaults.copy(stylus = StylusMapping(secondary = StylusAction.PAN))
++        assertEquals(PointerIntent.PAN, at(PointerKind.STYLUS, PointerIntents.BUTTON_TERTIARY, mapped))
++        assertEquals(PointerIntent.PAN, at(PointerKind.STYLUS, PointerIntents.BUTTON_STYLUS_SECONDARY, mapped))
++        // Both held: the primary button wins.
++        assertEquals(PointerIntent.SAMPLE, at(PointerKind.STYLUS, PointerIntents.BUTTON_STYLUS_PRIMARY or PointerIntents.BUTTON_STYLUS_SECONDARY, mapped))
++    }
++
++    @Test
++    fun everyActionBecomesItsIntent() {
++        val expected =
++            mapOf(
++                StylusAction.NONE to PointerIntent.DRAW,
++                StylusAction.EYEDROPPER to PointerIntent.SAMPLE,
++                StylusAction.ERASE to PointerIntent.ERASE,
++                StylusAction.TOGGLE_ERASER to PointerIntent.TOGGLE_ERASER,
++                StylusAction.UNDO to PointerIntent.UNDO,
++                StylusAction.QUICK_MENU to PointerIntent.QUICK_MENU,
++                StylusAction.PAN to PointerIntent.PAN,
++            )
++        assertEquals(StylusAction.entries.toSet(), expected.keys)
++        val fresh = setOf(StylusButton.PRIMARY)
++        for ((action, intent) in expected) {
++            val settings = defaults.copy(stylus = StylusMapping(primary = action, eraserEnd = action))
++            assertEquals(intent, at(PointerKind.STYLUS, PointerIntents.BUTTON_STYLUS_PRIMARY, settings, fresh))
++            assertEquals(intent, at(PointerKind.ERASER, 0, settings))
++        }
++    }
++
++    @Test
++    fun aClickActionFiresOnceEvenWhenThePressHappenedWhileHovering() {
++        val settings = defaults.copy(stylus = StylusMapping(primary = StylusAction.UNDO))
++        val held = PointerIntents.BUTTON_STYLUS_PRIMARY
++        assertEquals(PointerIntent.UNDO, at(PointerKind.STYLUS, held, settings, setOf(StylusButton.PRIMARY)))
++        assertEquals("The press was already used in the air", PointerIntent.DRAW, at(PointerKind.STYLUS, held, settings, emptySet()))
++        assertTrue(PointerIntent.UNDO.isClick && PointerIntent.QUICK_MENU.isClick && PointerIntent.TOGGLE_ERASER.isClick)
++        assertTrue(!PointerIntent.SAMPLE.isClick && !PointerIntent.PAN.isClick && !PointerIntent.ERASE.isClick)
++    }
++
++    @Test
++    fun aButtonPressedInTheAirOnlyStartsClickActions() {
++        val mapping = StylusMapping(primary = StylusAction.UNDO, secondary = StylusAction.QUICK_MENU)
++        assertEquals(PointerIntent.UNDO, PointerIntents.inTheAir(setOf(StylusButton.PRIMARY), mapping))
++        assertEquals(PointerIntent.QUICK_MENU, PointerIntents.inTheAir(setOf(StylusButton.SECONDARY), mapping))
++        assertEquals(PointerIntent.UNDO, PointerIntents.inTheAir(setOf(StylusButton.SECONDARY, StylusButton.PRIMARY), mapping))
++        assertNull("Sampling needs the pen on the canvas", PointerIntents.inTheAir(setOf(StylusButton.PRIMARY), StylusMapping()))
++        assertNull(PointerIntents.inTheAir(emptySet(), mapping))
++    }
++
++    @Test
++    fun mouseButtonsPaintMenuAndPan() {
++        assertEquals(PointerIntent.DRAW, at(PointerKind.MOUSE, 0))
++        assertEquals(PointerIntent.DRAW, at(PointerKind.MOUSE, PointerIntents.BUTTON_PRIMARY))
++        assertEquals(PointerIntent.QUICK_MENU, at(PointerKind.MOUSE, PointerIntents.BUTTON_SECONDARY))
++        assertEquals(PointerIntent.PAN, at(PointerKind.MOUSE, PointerIntents.BUTTON_TERTIARY))
++        assertEquals("Left plus right is still a stroke", PointerIntent.DRAW, at(PointerKind.MOUSE, 3))
++        assertEquals("Side buttons are not used", PointerIntent.NOTHING, at(PointerKind.MOUSE, 8))
++    }
++
++    @Test
++    fun theRightClickFollowsItsSetting() {
++        val sample = defaults.copy(rightClick = MouseAction.EYEDROPPER)
++        assertEquals(PointerIntent.SAMPLE, at(PointerKind.MOUSE, PointerIntents.BUTTON_SECONDARY, sample))
++        val off = defaults.copy(rightClick = MouseAction.NONE)
++        assertEquals(PointerIntent.NOTHING, at(PointerKind.MOUSE, PointerIntents.BUTTON_SECONDARY, off))
++    }
++
++    @Test
++    fun clicksAreCountedOncePerPress() {
++        val clicks = StylusClicks()
++        val primary = PointerIntents.BUTTON_STYLUS_PRIMARY
++        assertEquals(emptySet<StylusButton>(), clicks.observe(0))
++        assertEquals(setOf(StylusButton.PRIMARY), clicks.observe(primary))
++        assertEquals("Still held", emptySet<StylusButton>(), clicks.observe(primary))
++        assertEquals(emptySet<StylusButton>(), clicks.observe(0))
++        assertEquals("A second press", setOf(StylusButton.PRIMARY), clicks.observe(primary))
++        assertEquals(setOf(StylusButton.SECONDARY), clicks.observe(primary or PointerIntents.BUTTON_STYLUS_SECONDARY))
++    }
++
++    @Test
++    fun forgettingWhatWasHeldLetsTheNextPressCount() {
++        val clicks = StylusClicks()
++        clicks.observe(PointerIntents.BUTTON_STYLUS_PRIMARY)
++        clicks.reset()
++        assertEquals(setOf(StylusButton.PRIMARY), clicks.observe(PointerIntents.BUTTON_STYLUS_PRIMARY))
++    }
++}
+diff --git a/app/src/test/java/com/artflow/studio/core/canvas/PointerPressureTest.kt b/app/src/test/java/com/artflow/studio/core/canvas/PointerPressureTest.kt
+index ab6b3cf..8f8390b 100644
+--- a/app/src/test/java/com/artflow/studio/core/canvas/PointerPressureTest.kt
++++ b/app/src/test/java/com/artflow/studio/core/canvas/PointerPressureTest.kt
+@@ -34,6 +34,21 @@ class PointerPressureTest {
+         }
+     }
+ 
++    @Test
++    fun aMouseAlwaysPressesFully() {
++        for (size in listOf(0f, 0.1f, 1f, Float.NaN)) {
++            for (pressure in listOf(0f, 0.5f, 1f)) assertEquals(1f, PointerPressure.normalize(PointerKind.MOUSE, pressure, size), 0f)
++        }
++    }
++
++    @Test
++    fun otherKindsKeepTheirOldAnswers() {
++        assertEquals(0.3f, PointerPressure.normalize(PointerKind.STYLUS, 0.3f, 0.1f), 0f)
++        assertEquals(0.3f, PointerPressure.normalize(PointerKind.ERASER, 0.3f, 0.1f), 0f)
++        assertEquals(0.545f, PointerPressure.normalize(PointerKind.FINGER, 1f, 0.1f), 0.000001f)
++        assertEquals(0.35f, PointerPressure.normalize(PointerKind.PALM, 1f, 0f), 0f)
++    }
++
+     @Test
+     fun pressureCurveSoftensOrFirmsTheResponse() {
+         assertEquals(0.5f, PointerPressure.curve(0.5f, 1f), 0f)
+diff --git a/app/src/test/java/com/artflow/studio/core/canvas/RotationSnapTest.kt b/app/src/test/java/com/artflow/studio/core/canvas/RotationSnapTest.kt
+new file mode 100644
+index 0000000..7cafd1f
+--- /dev/null
++++ b/app/src/test/java/com/artflow/studio/core/canvas/RotationSnapTest.kt
+@@ -0,0 +1,115 @@
++package com.artflow.studio.core.canvas
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class RotationSnapTest {
++    private val snap = RotationSnap()
++
++    @Test
++    fun theCanvasClicksIntoPlaceWhenTheFingersComeWithinTheCatchAngle() {
++        snap.begin(30f)
++        val far = snap.rotate(11f) // 41: four degrees short of 45
++        assertEquals(41f, far.angle, 0f)
++        assertFalse(far.snapped)
++        val near = snap.rotate(1f) // 42: three degrees short
++        assertEquals(45f, near.angle, 0f)
++        assertTrue(near.snapped)
++        assertTrue("The click is reported once, at the moment of catching", near.caught)
++    }
++
++    @Test
++    fun itHoldsThroughTheReleaseAngleAndThenLetsGo() {
++        snap.begin(30f)
++        snap.rotate(14f) // 44: caught
++        assertEquals(45f, snap.rotate(3f).angle, 0f) // 47
++        val held = snap.rotate(4.9f) // 51.9: still within seven degrees
++        assertEquals(45f, held.angle, 0f)
++        assertFalse("It was caught already; holding is not a new click", held.caught)
++        val free = snap.rotate(0.6f) // 52.5: beyond seven degrees
++        assertEquals(52.5f, free.angle, 0.0001f)
++        assertFalse(free.snapped)
++    }
++
++    @Test
++    fun hysteresisKeepsAWobblingHandFromFlickering() {
++        snap.begin(30f)
++        snap.rotate(14f)
++        // The fingers wobble across the edge of the catch zone (48.5 degrees): the canvas must not move.
++        val angles = listOf(4f, -0.2f, 0.4f, -0.4f, 0.3f, -0.3f).map { snap.rotate(it).angle }
++        assertTrue(angles.all { it == 45f })
++    }
++
++    @Test
++    fun afterLettingGoItTakesTheSmallCatchAngleNotTheLargeReleaseAngleToClickInAgain() {
++        snap.begin(30f)
++        snap.rotate(14f) // 44: caught on 45
++        assertFalse(snap.rotate(9f).snapped) // 53: eight degrees off, let go
++        assertFalse(snap.rotate(-2f).snapped) // 51: six degrees off
++        assertFalse("Within the release angle but outside the catch angle", snap.rotate(-2f).snapped) // 49: four degrees off
++        val again = snap.rotate(-1f) // 48: three degrees off
++        assertTrue(again.snapped)
++        assertTrue(again.caught)
++        assertEquals(45f, again.angle, 0f)
++    }
++
++    @Test
++    fun aCanvasThatStartsOnAMultipleStaysThereWithoutAClick() {
++        snap.begin(90f)
++        val result = snap.rotate(2f)
++        assertEquals(90f, result.angle, 0f)
++        assertTrue(result.snapped)
++        assertFalse(result.caught)
++    }
++
++    @Test
++    fun aCanvasThatStartsNearAMultipleIsNotPulledToItAtOnce() {
++        snap.begin(93.4f)
++        val result = snap.rotate(0.1f)
++        assertEquals(93.5f, result.angle, 0.0001f)
++        assertFalse(result.snapped)
++    }
++
++    @Test
++    fun aFastTurnThatJumpsOverTheCatchZoneDoesNotSnap() {
++        snap.begin(30f)
++        val result = snap.rotate(25f) // 55: from 30 straight past 45
++        assertEquals(55f, result.angle, 0f)
++        assertFalse(result.snapped)
++    }
++
++    @Test
++    fun everyMultipleOf45CatchesInBothDirectionsAndAcrossZero() {
++        snap.begin(-40f)
++        val negative = snap.rotate(-3f) // -43
++        assertEquals(-45f, negative.angle, 0f)
++        assertTrue(negative.caught)
++
++        val across = RotationSnap()
++        across.begin(350f)
++        val results = listOf(5f, 3f, 3f).map { across.rotate(it) } // 355, 358, 361
++        assertEquals(355f, results[0].angle, 0f)
++        assertEquals(360f, results[1].angle, 0f)
++        assertTrue(results[1].caught)
++        assertEquals(360f, results[2].angle, 0f)
++        assertEquals(0f, RotationSnap.normalized(360f), 0f)
++    }
++
++    @Test
++    fun anAngleBetweenTwoReadingsTakesTheShortWayRound() {
++        assertEquals(-170f, RotationSnap.shortestTurn(190f), 0f)
++        assertEquals(170f, RotationSnap.shortestTurn(-190f), 0f)
++        assertEquals(10f, RotationSnap.shortestTurn(10f), 0f)
++        assertEquals(-20f, RotationSnap.shortestTurn(340f), 0f)
++        assertEquals(0f, RotationSnap.shortestTurn(Float.NaN), 0f)
++        assertEquals(350f, RotationSnap.normalized(-10f), 0f)
++        assertEquals(10f, RotationSnap.normalized(730f), 0f)
++    }
++
++    @Test(expected = IllegalArgumentException::class)
++    fun zonesThatCannotFitInsideOneStepAreRefused() {
++        RotationSnap(step = 10f, capture = 3f, release = 6f)
++    }
++}
+diff --git a/app/src/test/java/com/artflow/studio/core/canvas/TouchGesturesTest.kt b/app/src/test/java/com/artflow/studio/core/canvas/TouchGesturesTest.kt
+new file mode 100644
+index 0000000..48657a6
+--- /dev/null
++++ b/app/src/test/java/com/artflow/studio/core/canvas/TouchGesturesTest.kt
+@@ -0,0 +1,113 @@
++package com.artflow.studio.core.canvas
++
++import com.artflow.studio.core.canvas.PointerGestureRouter.Action
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNull
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class TouchGesturesTest {
++    private val defaults = GestureSettings()
++
++    private fun result(
++        gesture: TouchGesture,
++        settings: GestureSettings = defaults,
++        touchActionsOff: Boolean = false,
++    ) = TouchGestures.result(gesture, settings, touchActionsOff)
++
++    @Test
++    fun aFinishedTouchIsATapOfItsFingerCountOrAQuickPinch() {
++        assertEquals(TouchGesture.TAP_TWO, TouchGestures.finished(2, quickPinch = false))
++        assertEquals(TouchGesture.TAP_THREE, TouchGestures.finished(3, quickPinch = false))
++        assertEquals(TouchGesture.TAP_FOUR, TouchGestures.finished(4, quickPinch = false))
++        assertEquals(TouchGesture.QUICK_PINCH, TouchGestures.finished(0, quickPinch = true))
++        assertEquals("A tap wins over a pinch", TouchGesture.TAP_TWO, TouchGestures.finished(2, quickPinch = true))
++        assertNull(TouchGestures.finished(0, quickPinch = false))
++        assertNull(TouchGestures.finished(1, quickPinch = false))
++    }
++
++    @Test
++    fun restingFingersAreAHoldOnlyForTwoAndThree() {
++        assertEquals(TouchGesture.HOLD_TWO, TouchGestures.held(2))
++        assertEquals(TouchGesture.HOLD_THREE, TouchGestures.held(3))
++        for (fingers in listOf(0, 1, 4)) assertNull(TouchGestures.held(fingers))
++    }
++
++    @Test
++    fun threeFingerRoutesNameTheirGesture() {
++        assertEquals(TouchGesture.SWIPE_THREE, TouchGestures.threeFinger(Action.THREE_FINGER_SWIPE_DOWN))
++        assertEquals(TouchGesture.SCRUB_THREE, TouchGestures.threeFinger(Action.THREE_FINGER_SCRUB))
++        assertNull(TouchGestures.threeFinger(Action.NAVIGATE))
++    }
++
++    @Test
++    fun theDefaultsDoWhatTheEditorAlwaysDid() {
++        assertEquals(GestureResult.UNDO, result(TouchGesture.TAP_TWO))
++        assertEquals(GestureResult.REDO, result(TouchGesture.TAP_THREE))
++        assertEquals(GestureResult.FULL_SCREEN, result(TouchGesture.TAP_FOUR))
++        assertEquals(GestureResult.RAPID_UNDO, result(TouchGesture.HOLD_TWO))
++        assertEquals(GestureResult.RAPID_REDO, result(TouchGesture.HOLD_THREE))
++        assertEquals(GestureResult.COPY_PASTE, result(TouchGesture.SWIPE_THREE))
++        assertEquals(GestureResult.CLEAR_LAYER, result(TouchGesture.SCRUB_THREE))
++        assertEquals(GestureResult.EYEDROPPER, result(TouchGesture.TOUCH_AND_HOLD))
++        assertEquals(GestureResult.QUICK_SHAPE, result(TouchGesture.PEN_HOLD))
++        assertEquals(GestureResult.FIT_TO_SCREEN, result(TouchGesture.QUICK_PINCH))
++        assertEquals(GestureResult.EYEDROPPER, result(TouchGesture.STYLUS_BUTTON))
++        assertEquals(GestureResult.ERASE, result(TouchGesture.ERASER_END))
++        assertNull("The second pen button is unassigned", result(TouchGesture.STYLUS_BUTTON_2))
++    }
++
++    @Test
++    fun everyGestureHasAnAnswerSoThePadCanNameWhatItDoes() {
++        // Nothing may throw for any gesture; the only nulls are the ones that are switched off or unassigned.
++        val silent = TouchGesture.entries.filter { result(it) == null }
++        assertEquals(listOf(TouchGesture.STYLUS_BUTTON_2), silent)
++    }
++
++    @Test
++    fun theSwitchesTurnTheirGesturesOff() {
++        val off = defaults.copy(scrubToClear = false, swipeCopyPaste = false, fourFingerFullScreen = false, quickShape = false)
++        assertNull(result(TouchGesture.SCRUB_THREE, off))
++        assertNull(result(TouchGesture.SWIPE_THREE, off))
++        assertNull(result(TouchGesture.TAP_FOUR, off))
++        assertNull(result(TouchGesture.PEN_HOLD, off))
++        assertEquals("Undo has no switch", GestureResult.UNDO, result(TouchGesture.TAP_TWO, off))
++    }
++
++    @Test
++    fun touchAndHoldDoesWhatItIsAssignedTo() {
++        val expected =
++            mapOf(
++                HoldAction.EYEDROPPER to GestureResult.EYEDROPPER,
++                HoldAction.QUICK_MENU to GestureResult.QUICK_MENU,
++                HoldAction.SELECT_LAYER to GestureResult.SELECT_LAYER,
++                HoldAction.NONE to null,
++            )
++        assertEquals(HoldAction.entries.toSet(), expected.keys)
++        for ((action, outcome) in expected) assertEquals(outcome, result(TouchGesture.TOUCH_AND_HOLD, defaults.copy(holdAction = action)))
++    }
++
++    @Test
++    fun disableTouchActionsSilencesFingerShortcutsButNotNavigationOrDrawing() {
++        for (gesture in TouchGesture.entries) {
++            val outcome = result(gesture, touchActionsOff = true)
++            if (gesture.isShortcut) assertNull("$gesture is a finger shortcut", outcome) else assertEquals(result(gesture), outcome)
++        }
++        assertTrue(TouchGesture.TAP_TWO.isShortcut && TouchGesture.TOUCH_AND_HOLD.isShortcut)
++        assertTrue(!TouchGesture.PINCH.isShortcut && !TouchGesture.DRAW_FINGER.isShortcut && !TouchGesture.QUICK_PINCH.isShortcut)
++    }
++
++    @Test
++    fun stylusAndMouseAssignmentsAreShownAsTheirResults() {
++        val settings =
++            defaults.copy(
++                stylus = StylusMapping(StylusAction.UNDO, StylusAction.PAN, StylusAction.NONE),
++                rightClick = MouseAction.EYEDROPPER,
++            )
++        assertEquals(GestureResult.UNDO, result(TouchGesture.STYLUS_BUTTON, settings))
++        assertEquals(GestureResult.PAN_VIEW, result(TouchGesture.STYLUS_BUTTON_2, settings))
++        assertNull(result(TouchGesture.ERASER_END, settings))
++        assertEquals(GestureResult.EYEDROPPER, result(TouchGesture.RIGHT_CLICK, settings))
++        assertEquals(GestureResult.PAN_VIEW, result(TouchGesture.MIDDLE_CLICK, settings))
++    }
++}
+diff --git a/app/src/test/java/com/artflow/studio/core/canvas/ViewMathTest.kt b/app/src/test/java/com/artflow/studio/core/canvas/ViewMathTest.kt
+new file mode 100644
+index 0000000..afa1366
+--- /dev/null
++++ b/app/src/test/java/com/artflow/studio/core/canvas/ViewMathTest.kt
+@@ -0,0 +1,89 @@
++package com.artflow.studio.core.canvas
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class ViewMathTest {
++    @Test
++    fun zoomPercentIsScreenPixelsPerCanvasPixel() {
++        assertEquals(100, ViewMath.zoomPercent(1f))
++        assertEquals(60, ViewMath.zoomPercent(1200f / 2000f))
++        assertEquals(250, ViewMath.zoomPercent(2.5f))
++        assertEquals(0, ViewMath.zoomPercent(0.004f))
++        for (unusable in listOf(0f, -1f, Float.NaN, Float.POSITIVE_INFINITY)) assertEquals(0, ViewMath.zoomPercent(unusable))
++    }
++
++    @Test
++    fun zoomingAboutTheMiddleOfTheViewScalesTheOffset() {
++        val (x, y) = ViewMath.zoomAbout(0f, 0f, 1f, 2f, 10f, -20f)
++        assertEquals(20f, x, 0.0001f)
++        assertEquals(-40f, y, 0.0001f)
++    }
++
++    @Test
++    fun theCanvasPointUnderThePointerStaysPut() {
++        // A canvas point 100 px right of the canvas centre sits under a pointer 100 px right of the view centre.
++        val (x, _) = ViewMath.zoomAbout(100f, 0f, 1f, 2f, 0f, 0f)
++        assertEquals(-100f, x, 0.0001f)
++        // The point is still 100 canvas px from the centre, now drawn 200 px from it: -100 + 200 = 100, under the pointer.
++        assertEquals(100f, x + 2f * 100f, 0.0001f)
++    }
++
++    @Test
++    fun zoomingOutAndBackReturnsTheOffset() {
++        val (ox, oy) = ViewMath.zoomAbout(137f, -52f, 0.8f, 1.7f, 33f, 91f)
++        val (bx, by) = ViewMath.zoomAbout(137f, -52f, 1.7f, 0.8f, ox, oy)
++        assertEquals(33f, bx, 0.001f)
++        assertEquals(91f, by, 0.001f)
++    }
++
++    @Test
++    fun anUnusableScaleLeavesTheOffsetAlone() {
++        assertEquals(5f to 6f, ViewMath.zoomAbout(10f, 10f, 0f, 2f, 5f, 6f))
++        assertEquals(5f to 6f, ViewMath.zoomAbout(10f, 10f, 1f, Float.NaN, 5f, 6f))
++    }
++
++    @Test
++    fun theWheelPansAndCtrlZooms() {
++        val pan = ViewMath.wheel(vertical = 1f, horizontal = 0f, ctrl = false, shift = false, pixelsPerVerticalUnit = 48f, pixelsPerHorizontalUnit = 40f)
++        assertFalse(pan.isZoom)
++        assertEquals(48f, pan.panY, 0f)
++        assertEquals(0f, pan.panX, 0f)
++
++        val sideways = ViewMath.wheel(0f, 1f, ctrl = false, shift = false, pixelsPerVerticalUnit = 48f, pixelsPerHorizontalUnit = 40f)
++        assertEquals("Scrolling right moves the artwork left", -40f, sideways.panX, 0f)
++
++        val zoomIn = ViewMath.wheel(1f, 0f, ctrl = true, shift = false, pixelsPerVerticalUnit = 48f, pixelsPerHorizontalUnit = 40f)
++        assertTrue(zoomIn.isZoom)
++        assertTrue("Wheel up zooms in", zoomIn.zoomFactor > 1.1f && zoomIn.zoomFactor < 1.15f)
++        assertEquals(0f, zoomIn.panY, 0f)
++
++        val zoomOut = ViewMath.wheel(-1f, 0f, ctrl = true, shift = false, pixelsPerVerticalUnit = 48f, pixelsPerHorizontalUnit = 40f)
++        assertEquals("A notch back undoes a notch", 1f, zoomIn.zoomFactor * zoomOut.zoomFactor, 0.0001f)
++    }
++
++    @Test
++    fun shiftTurnsAVerticalWheelIntoAHorizontalPan() {
++        val move = ViewMath.wheel(2f, 0f, ctrl = false, shift = true, pixelsPerVerticalUnit = 48f, pixelsPerHorizontalUnit = 40f)
++        assertEquals(80f, move.panX, 0f)
++        assertEquals(0f, move.panY, 0f)
++    }
++
++    @Test
++    fun aBurstFromATrackpadIsKeptInRangeAndGarbageIsIgnored() {
++        val burst = ViewMath.wheel(500f, 0f, ctrl = true, shift = false, pixelsPerVerticalUnit = 48f, pixelsPerHorizontalUnit = 40f)
++        assertTrue(burst.zoomFactor < 3f)
++        val garbage = ViewMath.wheel(Float.NaN, Float.POSITIVE_INFINITY, ctrl = false, shift = false, 48f, 40f)
++        assertEquals(0f, garbage.panX, 0f)
++        assertEquals(0f, garbage.panY, 0f)
++        assertFalse(garbage.isZoom)
++    }
++
++    @Test
++    fun aTrackpadPinchIsAZoomFactorOrNothing() {
++        assertEquals(1.1f, ViewMath.pinchFactor(1.1f), 0f)
++        for (unusable in listOf(0f, -2f, Float.NaN, Float.POSITIVE_INFINITY)) assertEquals(1f, ViewMath.pinchFactor(unusable), 0f)
++    }
++}

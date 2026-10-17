@@ -1,0 +1,454 @@
+diff --git a/app/src/main/java/com/artflow/studio/core/symmetry/SymmetryEngine.kt b/app/src/main/java/com/artflow/studio/core/symmetry/SymmetryEngine.kt
+index 11dd4bf..77fc779 100644
+--- a/app/src/main/java/com/artflow/studio/core/symmetry/SymmetryEngine.kt
++++ b/app/src/main/java/com/artflow/studio/core/symmetry/SymmetryEngine.kt
+@@ -39,11 +39,13 @@ object SymmetryEngine {
+     /**
+      * Symmetry configuration.
+      *
+-     * @param centreX / [centreY] axis position as a fraction of the canvas (`0.5` = centred).
++     * @param centreX / [centreY] axis position as a fraction of the canvas (`0.5` = centred). The
++     *   radial copies turn about the point where the two axes cross.
+      * @param offsetX / [offsetY] extra offset in *fractions of the canvas*, matching Procreate's
+      *   "symmetry guide offset".
+      * @param radialCount number of copies for [SymmetryType.RADIAL] (2 = like vertical).
+-     * @param radialAngleDegrees rotation of the whole radial pattern.
++     * @param radialAngleDegrees which way the displayed radial rays point. The copies are the same
++     *   turns of the stroke whichever way the rays point, so this changes the overlay only.
+      * @param secondaryAxis adds a second mirrored axis (like a mandala with two guide pairs).
+      */
+     data class Settings(
+@@ -92,74 +94,87 @@ object SymmetryEngine {
+         brushRotation: Float = 0f,
+     ): List<Instance> {
+         if (!settings.isActive()) return listOf(Instance(x, y, brushRotation))
++        val axisX = axisX(settings, width)
++        val axisY = axisY(settings, height)
++        return copies(settings).map { copy ->
++            Instance(copy.x(x, y, axisX, axisY), copy.y(x, y, axisX, axisY), brushRotation * copy.brushScale + copy.brushTurnDegrees)
++        }
++    }
+ 
+-        val axisX = (settings.centreX + settings.offsetX) * width
+-        val axisY = (settings.centreY + settings.offsetY) * height
+-        val centreX = width / 2f
+-        val centreY = height / 2f
++    /**
++     * One symmetric copy as a reflection or rotation about the axis centre:
++     * `p' = centre + M (p - centre)` with `M = [[a, b], [c, d]]`.
++     *
++     * The brush rotation of the copy is `brushRotation * brushScale + brushTurnDegrees`.
++     */
++    private class Copy(
++        val a: Float,
++        val b: Float,
++        val c: Float,
++        val d: Float,
++        val brushScale: Float = 1f,
++        val brushTurnDegrees: Float = 0f,
++    ) {
++        val isIdentity: Boolean get() = a == 1f && b == 0f && c == 0f && d == 1f && brushScale == 1f && brushTurnDegrees == 0f
+ 
+-        val results = mutableListOf<Instance>()
++        fun x(
++            x: Float,
++            y: Float,
++            centreX: Float,
++            centreY: Float,
++        ): Float = if (isIdentity) x else centreX + a * (x - centreX) + b * (y - centreY)
+ 
+-        fun mirrorVertical(
+-            px: Float,
+-            py: Float,
+-            rotation: Float,
+-        ): Instance = Instance(2f * axisX - px, py, -rotation)
++        fun y(
++            x: Float,
++            y: Float,
++            centreX: Float,
++            centreY: Float,
++        ): Float = if (isIdentity) y else centreY + c * (x - centreX) + d * (y - centreY)
++    }
+ 
+-        fun mirrorHorizontal(
+-            px: Float,
+-            py: Float,
+-            rotation: Float,
+-        ): Instance = Instance(px, 2f * axisY - py, -rotation)
++    private val IDENTITY = Copy(1f, 0f, 0f, 1f)
++    private val MIRROR_VERTICAL = Copy(-1f, 0f, 0f, 1f, brushScale = -1f)
++    private val MIRROR_HORIZONTAL = Copy(1f, 0f, 0f, -1f, brushScale = -1f)
++    private val HALF_TURN = Copy(-1f, 0f, 0f, -1f)
++    private val VERTICAL_COPIES = listOf(IDENTITY, MIRROR_VERTICAL)
++    private val HORIZONTAL_COPIES = listOf(IDENTITY, MIRROR_HORIZONTAL)
++    private val VERTICAL_AND_HORIZONTAL_COPIES = listOf(IDENTITY, MIRROR_VERTICAL, MIRROR_HORIZONTAL, HALF_TURN)
++    private val HORIZONTAL_AND_VERTICAL_COPIES = listOf(IDENTITY, MIRROR_HORIZONTAL, MIRROR_VERTICAL, HALF_TURN)
+ 
++    /** The copies a pointer sample is stamped as, the sample itself first. */
++    private fun copies(settings: Settings): List<Copy> =
+         when (settings.type) {
+-            SymmetryType.NONE -> results += Instance(x, y, brushRotation)
+-            SymmetryType.VERTICAL -> {
+-                results += Instance(x, y, brushRotation)
+-                results += mirrorVertical(x, y, brushRotation)
+-                if (settings.secondaryAxis) {
+-                    results += mirrorHorizontal(x, y, brushRotation)
+-                    results += mirrorHorizontal(2f * axisX - x, y, -brushRotation)
+-                }
+-            }
+-            SymmetryType.HORIZONTAL -> {
+-                results += Instance(x, y, brushRotation)
+-                results += mirrorHorizontal(x, y, brushRotation)
+-                if (settings.secondaryAxis) {
+-                    results += mirrorVertical(x, y, brushRotation)
+-                    results += mirrorVertical(x, 2f * axisY - y, -brushRotation)
+-                }
+-            }
+-            SymmetryType.QUADRANT -> {
+-                results += Instance(x, y, brushRotation)
+-                results += mirrorVertical(x, y, brushRotation)
+-                results += mirrorHorizontal(x, y, brushRotation)
+-                results += Instance(2f * axisX - x, 2f * axisY - y, brushRotation)
+-            }
++            SymmetryType.NONE -> listOf(IDENTITY)
++            SymmetryType.VERTICAL -> if (settings.secondaryAxis) VERTICAL_AND_HORIZONTAL_COPIES else VERTICAL_COPIES
++            SymmetryType.HORIZONTAL -> if (settings.secondaryAxis) HORIZONTAL_AND_VERTICAL_COPIES else HORIZONTAL_COPIES
++            SymmetryType.QUADRANT -> VERTICAL_AND_HORIZONTAL_COPIES
+             SymmetryType.RADIAL -> {
+                 val count = settings.radialCount.coerceIn(2, 32)
+-                val baseAngle = Math.toRadians(settings.radialAngleDegrees.toDouble())
+-                for (i in 0 until count) {
+-                    val angle = baseAngle + (2.0 * Math.PI * i) / count
++                List(count) { i ->
++                    val angle = (2.0 * Math.PI * i) / count
+                     val cosA = cos(angle).toFloat()
+                     val sinA = sin(angle).toFloat()
+-                    val dx = x - centreX
+-                    val dy = y - centreY
+-                    results +=
+-                        Instance(
+-                            x = centreX + dx * cosA - dy * sinA,
+-                            y = centreY + dx * sinA + dy * cosA,
+-                            rotationDegrees = brushRotation + Math.toDegrees(angle).toFloat(),
+-                        )
++                    Copy(cosA, -sinA, sinA, cosA, brushTurnDegrees = Math.toDegrees(angle).toFloat())
+                 }
+             }
+         }
+-        return results
+-    }
++
++    /** The vertical axis, in canvas pixels. It is also the centre the radial copies turn about. */
++    private fun axisX(
++        settings: Settings,
++        width: Int,
++    ): Float = (settings.centreX + settings.offsetX) * width
++
++    /** The horizontal axis, in canvas pixels. */
++    private fun axisY(
++        settings: Settings,
++        height: Int,
++    ): Float = (settings.centreY + settings.offsetY) * height
+ 
+     /**
+-     * Mirrors a whole stroke. Used when symmetry is switched on after a stroke was drawn, and by
+-     * the tests that assert the replication matches stamp-for-stamp.
++     * Mirrors a whole stroke: every copy is the stroke's own points moved by the same reflection or
++     * rotation [instances] applies to one point, about the axes [guideLines] shows. The repository
++     * previews and commits strokes through this, so the copies bake into the layer with the original.
+      */
+     fun mirrorStroke(
+         stroke: Stroke,
+@@ -168,38 +183,21 @@ object SymmetryEngine {
+         settings: Settings,
+     ): List<Stroke> {
+         if (!settings.isActive()) return listOf(stroke)
+-        val mirrored =
+-            instances(
+-                x = stroke.points.firstOrNull()?.x ?: 0f,
+-                y = stroke.points.firstOrNull()?.y ?: 0f,
+-                width = width,
+-                height = height,
+-                settings = settings,
+-            )
+-        if (mirrored.size <= 1) return listOf(stroke)
++        val axisX = axisX(settings, width)
++        val axisY = axisY(settings, height)
++        val copies = copies(settings)
++        if (copies.size <= 1) return listOf(stroke)
+ 
+-        // Apply the same transform to every point so pressure/texture data is preserved.
+-        return mirrored.mapIndexed { index, instance ->
+-            if (index == 0) {
++        // Move every point so pressure, tilt and timing are preserved.
++        return copies.mapIndexed { index, copy ->
++            if (copy.isIdentity) {
+                 stroke
+             } else {
+-                val dx = instance.x - (stroke.points.firstOrNull()?.x ?: 0f)
+-                val dy = instance.y - (stroke.points.firstOrNull()?.y ?: 0f)
+-                val rotation = Math.toRadians(instance.rotationDegrees.toDouble())
+-                val cosR = cos(rotation).toFloat()
+-                val sinR = sin(rotation).toFloat()
+-                val originX = stroke.points.firstOrNull()?.x ?: 0f
+-                val originY = stroke.points.firstOrNull()?.y ?: 0f
+-                val transformed =
++                val moved =
+                     stroke.points.map { point ->
+-                        val localX = point.x - originX
+-                        val localY = point.y - originY
+-                        point.copy(
+-                            x = originX + dx + (localX * cosR - localY * sinR),
+-                            y = originY + dy + (localX * sinR + localY * cosR),
+-                        )
++                        point.copy(x = copy.x(point.x, point.y, axisX, axisY), y = copy.y(point.x, point.y, axisX, axisY))
+                     }
+-                stroke.copy(id = stroke.id + index, points = transformed)
++                stroke.copy(id = stroke.id + index, points = moved)
+             }
+         }
+     }
+@@ -220,10 +218,8 @@ object SymmetryEngine {
+         settings: Settings,
+     ): List<GuideLine> {
+         if (!settings.isActive()) return emptyList()
+-        val axisX = (settings.centreX + settings.offsetX) * width
+-        val axisY = (settings.centreY + settings.offsetY) * height
+-        val centreX = width / 2f
+-        val centreY = height / 2f
++        val axisX = axisX(settings, width)
++        val axisY = axisY(settings, height)
+         val lines = mutableListOf<GuideLine>()
+ 
+         when (settings.type) {
+@@ -242,17 +238,20 @@ object SymmetryEngine {
+             }
+             SymmetryType.RADIAL -> {
+                 val count = settings.radialCount.coerceIn(2, 32)
+-                val radius = sqrt(centreX * centreX + centreY * centreY)
++                // Long enough to reach the farthest corner, wherever the centre has been moved to.
++                val reachX = max(axisX, width - axisX)
++                val reachY = max(axisY, height - axisY)
++                val radius = sqrt(reachX * reachX + reachY * reachY)
+                 for (i in 0 until count) {
+                     val angle =
+                         Math.toRadians(settings.radialAngleDegrees.toDouble()) +
+                             (2.0 * Math.PI * i) / count
+                     lines +=
+                         GuideLine(
+-                            startX = centreX,
+-                            startY = centreY,
+-                            endX = centreX + radius * cos(angle).toFloat(),
+-                            endY = centreY + radius * sin(angle).toFloat(),
++                            startX = axisX,
++                            startY = axisY,
++                            endX = axisX + radius * cos(angle).toFloat(),
++                            endY = axisY + radius * sin(angle).toFloat(),
+                             isPrimary = i % 2 == 0,
+                         )
+                 }
+@@ -271,8 +270,8 @@ object SymmetryEngine {
+         tolerance: Float,
+     ): Pair<Float, Float> {
+         if (!settings.isActive()) return x to y
+-        val axisX = (settings.centreX + settings.offsetX) * width
+-        val axisY = (settings.centreY + settings.offsetY) * height
++        val axisX = axisX(settings, width)
++        val axisY = axisY(settings, height)
+         var resultX = x
+         var resultY = y
+         if (settings.type == SymmetryType.VERTICAL || settings.type == SymmetryType.QUADRANT) {
+diff --git a/app/src/test/java/com/artflow/studio/core/symmetry/SymmetryStrokeTest.kt b/app/src/test/java/com/artflow/studio/core/symmetry/SymmetryStrokeTest.kt
+new file mode 100644
+index 0000000..06a39a5
+--- /dev/null
++++ b/app/src/test/java/com/artflow/studio/core/symmetry/SymmetryStrokeTest.kt
+@@ -0,0 +1,188 @@
++package com.artflow.studio.core.symmetry
++
++import com.artflow.studio.core.symmetry.SymmetryEngine.SymmetryType
++import com.artflow.studio.domain.model.brush.BrushParams
++import com.artflow.studio.domain.model.brush.Stroke
++import com.artflow.studio.domain.model.brush.StrokePoint
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertSame
++import org.junit.Test
++import kotlin.math.hypot
++
++/**
++ * Whole strokes through the symmetry engine.
++ *
++ * [SymmetryEngine.mirrorStroke] is what the repository previews and commits, so every copy of a
++ * stroke has to be the image of the stroke under the same reflection or rotation that
++ * [SymmetryEngine.instances] applies to a single point, about the axes the guide actually shows.
++ */
++class SymmetryStrokeTest {
++    private val width = 200
++    private val height = 100
++
++    private val sample =
++        stroke(40f to 20f, 50f to 25f, 65f to 40f, 90f to 30f)
++
++    private fun stroke(vararg points: Pair<Float, Float>): Stroke =
++        Stroke(
++            id = 10L,
++            points =
++                points.mapIndexed { index, (x, y) ->
++                    StrokePoint(x = x, y = y, pressure = 0.25f + index * 0.1f, timestamp = index * 10L)
++                },
++            brushParams = BrushParams(),
++            layerId = 1L,
++            color = 0xFF112233.toInt(),
++            timestamp = 0L,
++        )
++
++    private fun assertPoint(
++        expectedX: Float,
++        expectedY: Float,
++        actual: StrokePoint,
++    ) {
++        assertEquals(expectedX, actual.x, 0.01f)
++        assertEquals(expectedY, actual.y, 0.01f)
++    }
++
++    @Test
++    fun `a vertical mirror reflects every point, not just the first`() {
++        val copies = SymmetryEngine.mirrorStroke(sample, width, height, SymmetryEngine.Settings(type = SymmetryType.VERTICAL))
++
++        assertEquals(2, copies.size)
++        assertSame(sample, copies[0])
++        // The axis is x = 100, so x becomes 200 - x and y stays.
++        sample.points.zip(copies[1].points).forEach { (original, mirrored) ->
++            assertPoint(200f - original.x, original.y, mirrored)
++        }
++    }
++
++    @Test
++    fun `a horizontal mirror reflects every point across the horizontal axis`() {
++        val copies = SymmetryEngine.mirrorStroke(sample, width, height, SymmetryEngine.Settings(type = SymmetryType.HORIZONTAL))
++
++        assertEquals(2, copies.size)
++        sample.points.zip(copies[1].points).forEach { (original, mirrored) ->
++            assertPoint(original.x, 100f - original.y, mirrored)
++        }
++    }
++
++    @Test
++    fun `a mirror about a moved axis reflects about that axis`() {
++        val settings = SymmetryEngine.Settings(type = SymmetryType.VERTICAL, centreX = 0.25f)
++
++        val copies = SymmetryEngine.mirrorStroke(sample, width, height, settings)
++
++        // The axis is x = 50.
++        sample.points.zip(copies[1].points).forEach { (original, mirrored) ->
++            assertPoint(100f - original.x, original.y, mirrored)
++        }
++    }
++
++    @Test
++    fun `quadrant symmetry draws all four reflections of the stroke`() {
++        val copies = SymmetryEngine.mirrorStroke(sample, width, height, SymmetryEngine.Settings(type = SymmetryType.QUADRANT))
++
++        assertEquals(4, copies.size)
++        val expected = listOf(0, 1, 2, 3).map { index -> copies[index].points.map { it.x to it.y } }
++        val original = sample.points
++        assertEquals(original.map { it.x to it.y }, expected[0])
++        val reflections =
++            setOf(
++                original.map { (200f - it.x) to it.y },
++                original.map { it.x to (100f - it.y) },
++                original.map { (200f - it.x) to (100f - it.y) },
++            )
++        assertEquals(reflections, expected.drop(1).toSet())
++    }
++
++    @Test
++    fun `radial symmetry turns the stroke about the axis centre`() {
++        val settings =
++            SymmetryEngine.Settings(
++                type = SymmetryType.RADIAL,
++                radialCount = 4,
++                centreX = 0.25f,
++                centreY = 0.75f,
++            )
++
++        val copies = SymmetryEngine.mirrorStroke(sample, width, height, settings)
++
++        assertEquals(4, copies.size)
++        // The axis centre is (50, 75); copy n is the stroke turned n quarter turns about it.
++        copies.forEachIndexed { turns, copy ->
++            sample.points.zip(copy.points).forEach { (original, turned) ->
++                val dx = original.x - 50f
++                val dy = original.y - 75f
++                val (turnedX, turnedY) =
++                    when (turns) {
++                        0 -> dx to dy
++                        1 -> -dy to dx
++                        2 -> -dx to -dy
++                        else -> dy to -dx
++                    }
++                assertPoint(50f + turnedX, 75f + turnedY, turned)
++            }
++        }
++    }
++
++    @Test
++    fun `every copy of a stroke is the image of its points under instances`() {
++        val settings =
++            listOf(
++                SymmetryEngine.Settings(type = SymmetryType.VERTICAL),
++                SymmetryEngine.Settings(type = SymmetryType.HORIZONTAL, centreY = 0.3f),
++                SymmetryEngine.Settings(type = SymmetryType.VERTICAL, secondaryAxis = true, centreX = 0.6f, centreY = 0.4f),
++                SymmetryEngine.Settings(type = SymmetryType.QUADRANT, centreX = 0.35f, centreY = 0.65f),
++                SymmetryEngine.Settings(type = SymmetryType.RADIAL, radialCount = 5),
++                SymmetryEngine.Settings(type = SymmetryType.RADIAL, radialCount = 7, centreX = 0.7f, centreY = 0.2f),
++            )
++        settings.forEach { setting ->
++            val copies = SymmetryEngine.mirrorStroke(sample, width, height, setting)
++            assertEquals(setting.type.name, setting.instanceCount(), copies.size)
++            sample.points.forEachIndexed { index, point ->
++                val expected = SymmetryEngine.instances(point.x, point.y, width, height, setting)
++                copies.forEachIndexed { copy, drawn ->
++                    assertPoint(expected[copy].x, expected[copy].y, drawn.points[index])
++                }
++            }
++        }
++    }
++
++    @Test
++    fun `copies keep the pressure and timing of the stroke and its segment lengths`() {
++        val copies = SymmetryEngine.mirrorStroke(sample, width, height, SymmetryEngine.Settings(type = SymmetryType.QUADRANT))
++
++        copies.forEach { copy ->
++            assertEquals(sample.points.map { it.pressure }, copy.points.map { it.pressure })
++            assertEquals(sample.points.map { it.timestamp }, copy.points.map { it.timestamp })
++            sample.points.zipWithNext().zip(copy.points.zipWithNext()).forEach { (before, after) ->
++                val original = hypot(before.second.x - before.first.x, before.second.y - before.first.y)
++                val copied = hypot(after.second.x - after.first.x, after.second.y - after.first.y)
++                assertEquals(original, copied, 0.01f)
++            }
++        }
++    }
++
++    @Test
++    fun `radial guide lines start at the axis centre and reach the farthest corner`() {
++        val settings =
++            SymmetryEngine.Settings(
++                type = SymmetryType.RADIAL,
++                radialCount = 6,
++                centreX = 0.25f,
++                centreY = 0.75f,
++            )
++
++        val lines = SymmetryEngine.guideLines(width, height, settings)
++
++        assertEquals(6, lines.size)
++        // From (50, 75) the farthest corner is (200, 0).
++        val reach = hypot(150f, 75f)
++        lines.forEach { line ->
++            assertEquals(50f, line.startX, 0.01f)
++            assertEquals(75f, line.startY, 0.01f)
++            assertEquals(reach, hypot(line.endX - line.startX, line.endY - line.startY), 0.01f)
++        }
++    }
++}

@@ -1,0 +1,747 @@
+diff --git a/app/src/main/java/com/artflow/studio/core/pixels/Bicubic.kt b/app/src/main/java/com/artflow/studio/core/pixels/Bicubic.kt
+new file mode 100644
+index 0000000..7d7ffe4
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/core/pixels/Bicubic.kt
+@@ -0,0 +1,101 @@
++package com.artflow.studio.core.pixels
++
++import kotlin.math.floor
++import kotlin.math.roundToInt
++
++/**
++ * Catmull-Rom bicubic sampling for [PixelBuffer], the "Bicubic" interpolation of the Transform tool.
++ *
++ * It reads the 4 x 4 texels around the sample, weights colour by alpha (as [PixelBuffer.sampleBilinear]
++ * does, so invisible RGB cannot bleed into the result) and returns straight ARGB. Catmull-Rom has
++ * small negative lobes, so a hard edge rings by a few percent; the result is clamped to a valid
++ * pixel and the colour is clamped to the colour range, which keeps ringing from wrapping around.
++ * Taps outside the buffer are transparent, like the bilinear sampler.
++ *
++ * One sampler belongs to one thread: it keeps its weights and sums in fields so that sampling a
++ * whole transform allocates nothing per pixel.
++ */
++internal class BicubicSampler(
++    private val buffer: PixelBuffer,
++) {
++    private val wx = FloatArray(TAPS)
++    private val wy = FloatArray(TAPS)
++    private var alpha = 0f
++    private var red = 0f
++    private var green = 0f
++    private var blue = 0f
++
++    fun sample(
++        xf: Float,
++        yf: Float,
++    ): Int {
++        require(xf.isFinite() && yf.isFinite()) { "Sampling coordinates must be finite" }
++        // The 4 x 4 footprint reaches two texels further than the bilinear one.
++        if (xf <= -OUTSIDE || xf >= buffer.width + OUTSIDE || yf <= -OUTSIDE || yf >= buffer.height + OUTSIDE) return 0
++        var x0 = floor(xf - 0.5f).toInt()
++        var y0 = floor(yf - 0.5f).toInt()
++        var fx = xf - 0.5f - x0
++        var fy = yf - 0.5f - y0
++        // A fraction this close to a texel centre is the texel itself: a 90 degree turn or an identity stays bit exact.
++        if (fx > 1f - SNAP) x0++
++        if (fy > 1f - SNAP) y0++
++        if (fx < SNAP || fx > 1f - SNAP) fx = 0f
++        if (fy < SNAP || fy > 1f - SNAP) fy = 0f
++        if (fx == 0f && fy == 0f) return buffer.getSafe(x0, y0)
++        weights(fx, wx)
++        weights(fy, wy)
++        alpha = 0f
++        red = 0f
++        green = 0f
++        blue = 0f
++        val inside = x0 >= 1 && y0 >= 1 && x0 + 2 < buffer.width && y0 + 2 < buffer.height
++        for (j in 0 until TAPS) {
++            if (wy[j] != 0f) addRow(x0 - 1, y0 - 1 + j, wy[j], inside)
++        }
++        return pack()
++    }
++
++    private fun addRow(
++        left: Int,
++        y: Int,
++        rowWeight: Float,
++        inside: Boolean,
++    ) {
++        for (i in 0 until TAPS) {
++            val pixel = if (inside) buffer.pixels[y * buffer.width + left + i] else buffer.getSafe(left + i, y)
++            val a = pixel ushr 24
++            if (a != 0 && wx[i] != 0f) {
++                val w = wx[i] * rowWeight * a
++                alpha += w
++                red += w * ((pixel ushr 16) and 0xFF)
++                green += w * ((pixel ushr 8) and 0xFF)
++                blue += w * (pixel and 0xFF)
++            }
++        }
++    }
++
++    private fun pack(): Int {
++        val outAlpha = alpha.coerceIn(0f, 255f).roundToInt()
++        if (outAlpha == 0) return 0
++        return (outAlpha shl 24) or (channel(red / alpha) shl 16) or (channel(green / alpha) shl 8) or channel(blue / alpha)
++    }
++
++    private fun channel(value: Float): Int = value.coerceIn(0f, 255f).roundToInt()
++
++    /** Catmull-Rom weights of the texels at -1, 0, 1 and 2 for the fraction [t] between texels 0 and 1. */
++    private fun weights(
++        t: Float,
++        into: FloatArray,
++    ) {
++        into[0] = ((-0.5f * t + 1f) * t - 0.5f) * t
++        into[1] = (1.5f * t - 2.5f) * t * t + 1f
++        into[2] = ((-1.5f * t + 2f) * t + 0.5f) * t
++        into[3] = (0.5f * t - 0.5f) * t * t
++    }
++
++    private companion object {
++        const val TAPS = 4
++        const val OUTSIDE = 1.5f
++        const val SNAP = 1f / 1024f
++    }
++}
+diff --git a/app/src/main/java/com/artflow/studio/core/pixels/LayerTransform.kt b/app/src/main/java/com/artflow/studio/core/pixels/LayerTransform.kt
+index f8860e6..46c1262 100644
+--- a/app/src/main/java/com/artflow/studio/core/pixels/LayerTransform.kt
++++ b/app/src/main/java/com/artflow/studio/core/pixels/LayerTransform.kt
+@@ -196,28 +196,9 @@ object LayerTransform {
+         target: PixelBuffer,
+         selection: SelectionMask?,
+     ): Pair<PixelBuffer, Boolean> {
+-        val mask = selection?.takeIf { it.width == source.width && it.height == source.height }
+-        if (mask == null) {
+-            target.clear()
+-            return source to false
+-        }
+-        val floating = PixelBuffer(source.width, source.height)
+-        for (i in source.pixels.indices) {
+-            val c = mask.alphaAt(i)
+-            val p = source.pixels[i]
+-            when {
+-                c <= 0f -> target.pixels[i] = p
+-                c >= 1f -> {
+-                    target.pixels[i] = 0
+-                    floating.pixels[i] = p
+-                }
+-                else -> {
+-                    target.pixels[i] = Channels.scaleAlpha(p, 1f - c)
+-                    floating.pixels[i] = Channels.scaleAlpha(p, c)
+-                }
+-            }
+-        }
+-        return floating to true
++        val prepared = TransformSource.of(source, selection)
++        prepared.begin(target)
++        return prepared.floating to prepared.blends
+     }
+ 
+     /** Bounding box of the pixels that would float, or null when there is nothing to transform. */
+diff --git a/app/src/main/java/com/artflow/studio/core/pixels/TransformQuad.kt b/app/src/main/java/com/artflow/studio/core/pixels/TransformQuad.kt
+index ef682fc..b77c33d 100644
+--- a/app/src/main/java/com/artflow/studio/core/pixels/TransformQuad.kt
++++ b/app/src/main/java/com/artflow/studio/core/pixels/TransformQuad.kt
+@@ -109,6 +109,13 @@ object TransformQuad {
+     ) {
+         NEAREST("Nearest neighbour"),
+         BILINEAR("Bilinear"),
++        BICUBIC("Bicubic"),
++        ;
++
++        companion object {
++            /** The two-way choice older callers made: bilinear when [highQuality], otherwise nearest neighbour. */
++            fun of(highQuality: Boolean): Interpolation = if (highQuality) BILINEAR else NEAREST
++        }
+     }
+ 
+     fun translate(
+@@ -482,32 +489,76 @@ object TransformQuad {
+         quad: Quad,
+         selection: SelectionMask?,
+         highQuality: Boolean,
++    ) = render(source, target, bounds, quad, selection, Interpolation.of(highQuality))
++
++    /** [render] resampling with [interpolation]; [checkActive] runs once per row so a long render can be cancelled. */
++    fun render(
++        source: PixelBuffer,
++        target: PixelBuffer,
++        bounds: IntBounds,
++        quad: Quad,
++        selection: SelectionMask?,
++        interpolation: Interpolation,
++        checkActive: () -> Unit = {},
+     ) {
+         require(source.width == target.width && source.height == target.height) { "Buffer sizes differ" }
+         // A collapsed quad has no placement, so nothing moves: the source stays where it was.
+-        // Checked before split, which clears the selected pixels out of target.
++        // Checked before the split, which clears the selected pixels out of target.
++        if (inverseMapping(quad) == null) {
++            source.pixels.copyInto(target.pixels)
++            return
++        }
++        render(TransformSource.of(source, selection), target, bounds, quad, interpolation, checkActive)
++    }
++
++    /**
++     * [render] for a layer that was split once: [prepared] holds the floating pixels and what stays behind. A collapsed
++     * quad leaves the pixels where they were.
++     */
++    fun render(
++        prepared: TransformSource,
++        target: PixelBuffer,
++        bounds: IntBounds,
++        quad: Quad,
++        interpolation: Interpolation,
++        checkActive: () -> Unit = {},
++    ) {
++        require(prepared.floating.width == target.width && prepared.floating.height == target.height) { "Buffer sizes differ" }
++        prepared.begin(target)
+         val inverse = inverseMapping(quad)
+         if (inverse == null) {
+-            source.pixels.copyInto(target.pixels)
++            place(prepared, target)
+             return
+         }
+-        val (floating, blend) = LayerTransform.split(source, target, selection)
+         val x0 = max(0, floor(min(min(quad.x0, quad.x1), min(quad.x2, quad.x3))).toInt() - 1)
+         val x1 = min(target.width - 1, ceil(max(max(quad.x0, quad.x1), max(quad.x2, quad.x3))).toInt() + 1)
+         val y0 = max(0, floor(min(min(quad.y0, quad.y1), min(quad.y2, quad.y3))).toInt() - 1)
+         val y1 = min(target.height - 1, ceil(max(max(quad.y0, quad.y1), max(quad.y2, quad.y3))).toInt() + 1)
+-        val sampler = Sampler(floating, inverse, bounds, highQuality)
++        val sampler = Sampler(prepared.floating, inverse, bounds, interpolation)
+         for (y in y0..y1) {
++            checkActive()
+             for (x in x0..x1) {
+                 val sample = sampler.sample(x + 0.5f, y + 0.5f)
+-                if ((sample ushr 24) == 0) continue
+-                val i = y * target.width + x
+-                target.pixels[i] = if (blend) BlendModes.sourceOver(target.pixels[i], sample) else sample
++                if ((sample ushr 24) != 0) {
++                    val i = y * target.width + x
++                    target.pixels[i] = if (prepared.blends) BlendModes.sourceOver(target.pixels[i], sample) else sample
++                }
+             }
+         }
+     }
+ 
+-    /** Renders with [mesh] when the content is warped, otherwise with [quad]. */
++    /** Lays the floating pixels back where they came from: the placement of a transform that could not be inverted. */
++    private fun place(
++        prepared: TransformSource,
++        target: PixelBuffer,
++    ) {
++        for (i in target.pixels.indices) {
++            val pixel = prepared.floating.pixels[i]
++            if ((pixel ushr 24) != 0) target.pixels[i] = if (prepared.blends) BlendModes.sourceOver(target.pixels[i], pixel) else pixel
++        }
++    }
++
++    /** Renders with [mesh] when the content is warped, otherwise with [quad], resampling with [interpolation]. */
+     fun renderShape(
+         source: PixelBuffer,
+         target: PixelBuffer,
+@@ -515,12 +566,12 @@ object TransformQuad {
+         quad: Quad,
+         mesh: WarpMesh?,
+         selection: SelectionMask?,
+-        highQuality: Boolean,
++        interpolation: Interpolation,
+     ) {
+         if (mesh != null) {
+-            WarpMesh.render(source, target, bounds, mesh, selection, highQuality)
++            WarpMesh.render(source, target, bounds, mesh, selection, interpolation)
+         } else {
+-            render(source, target, bounds, quad, selection, highQuality)
++            render(source, target, bounds, quad, selection, interpolation)
+         }
+     }
+ 
+@@ -529,11 +580,15 @@ object TransformQuad {
+         private val floating: PixelBuffer,
+         private val inverse: FloatArray,
+         private val bounds: IntBounds,
+-        private val highQuality: Boolean,
++        private val interpolation: Interpolation,
+     ) {
+         private val srcW = bounds.width.toFloat()
+         private val srcH = bounds.height.toFloat()
+-        private val inside = -1f / max(srcW, srcH)..1f + 1f / max(srcW, srcH)
++
++        // Bicubic reaches two texels past the box, the other kinds one.
++        private val reach = (if (interpolation == Interpolation.BICUBIC) 2f else 1f) / max(srcW, srcH)
++        private val inside = -reach..1f + reach
++        private val bicubic = BicubicSampler(floating)
+ 
+         fun sample(
+             px: Float,
+@@ -546,7 +601,11 @@ object TransformQuad {
+             if (u !in inside || v !in inside) return 0
+             val sx = bounds.left + u * srcW
+             val sy = bounds.top + v * srcH
+-            return if (highQuality) floating.sampleBilinear(sx, sy) else floating.sampleNearest(sx, sy)
++            return when (interpolation) {
++                Interpolation.NEAREST -> floating.sampleNearest(sx, sy)
++                Interpolation.BILINEAR -> floating.sampleBilinear(sx, sy)
++                Interpolation.BICUBIC -> bicubic.sample(sx, sy)
++            }
+         }
+     }
+ 
+diff --git a/app/src/main/java/com/artflow/studio/core/pixels/TransformSource.kt b/app/src/main/java/com/artflow/studio/core/pixels/TransformSource.kt
+new file mode 100644
+index 0000000..0248329
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/core/pixels/TransformSource.kt
+@@ -0,0 +1,57 @@
++package com.artflow.studio.core.pixels
++
++/**
++ * A layer split for a transform: the pixels that float and the pixels that stay behind.
++ *
++ * Splitting costs a pass over the whole layer, so a Transform session does it once and every
++ * preview and the final render start from the same two buffers. Without a selection everything
++ * floats and [floating] is the source itself, which is only ever read.
++ */
++class TransformSource private constructor(
++    val floating: PixelBuffer,
++    /** What stays in place beneath the floating pixels, or null when everything floats. */
++    private val remainder: PixelBuffer?,
++) {
++    /** True when the floating pixels must blend over [begin]'s remainder (a selection is present). */
++    val blends: Boolean get() = remainder != null
++
++    /** Puts what stays behind into [target]: the unselected pixels, or nothing when everything floats. */
++    fun begin(target: PixelBuffer) {
++        require(target.width == floating.width && target.height == floating.height) { "Buffer sizes differ" }
++        if (remainder == null) target.clear() else remainder.pixels.copyInto(target.pixels)
++    }
++
++    companion object {
++        /**
++         * Splits [source] by [selection]. A selection of another size is ignored; a present but empty selection floats
++         * nothing, so the whole layer stays behind. Soft edges split a pixel's alpha between the two parts.
++         */
++        fun of(
++            source: PixelBuffer,
++            selection: SelectionMask?,
++        ): TransformSource {
++            val mask = selection?.takeIf { it.width == source.width && it.height == source.height } ?: return TransformSource(source, null)
++            val floating = PixelBuffer(source.width, source.height)
++            val remainder = PixelBuffer(source.width, source.height)
++            for (i in source.pixels.indices) {
++                val coverage = mask.alphaAt(i)
++                val pixel = source.pixels[i]
++                when {
++                    coverage <= 0f -> {
++                        remainder.pixels[i] = pixel
++                    }
++
++                    coverage >= 1f -> {
++                        floating.pixels[i] = pixel
++                    }
++
++                    else -> {
++                        remainder.pixels[i] = Channels.scaleAlpha(pixel, 1f - coverage)
++                        floating.pixels[i] = Channels.scaleAlpha(pixel, coverage)
++                    }
++                }
++            }
++            return TransformSource(floating, remainder)
++        }
++    }
++}
+diff --git a/app/src/main/java/com/artflow/studio/core/pixels/WarpMesh.kt b/app/src/main/java/com/artflow/studio/core/pixels/WarpMesh.kt
+index 0da8e68..78fb341 100644
+--- a/app/src/main/java/com/artflow/studio/core/pixels/WarpMesh.kt
++++ b/app/src/main/java/com/artflow/studio/core/pixels/WarpMesh.kt
+@@ -253,10 +253,34 @@ class WarpMesh(
+             mesh: WarpMesh,
+             selection: SelectionMask?,
+             highQuality: Boolean,
++        ) = render(source, target, bounds, mesh, selection, TransformQuad.Interpolation.of(highQuality))
++
++        /** [render] resampling with [interpolation]; [checkActive] runs once per patch row so a long render can be cancelled. */
++        fun render(
++            source: PixelBuffer,
++            target: PixelBuffer,
++            bounds: IntBounds,
++            mesh: WarpMesh,
++            selection: SelectionMask?,
++            interpolation: TransformQuad.Interpolation,
++            checkActive: () -> Unit = {},
+         ) {
+             require(source.width == target.width && source.height == target.height) { "Buffer sizes differ" }
+-            val (floating, blend) = LayerTransform.split(source, target, selection)
+-            val raster = TriangleRaster(floating, target, bounds, blend, highQuality)
++            render(TransformSource.of(source, selection), target, bounds, mesh, interpolation, checkActive)
++        }
++
++        /** [render] for a layer that was split once: [prepared] holds the floating pixels and what stays behind. */
++        fun render(
++            prepared: TransformSource,
++            target: PixelBuffer,
++            bounds: IntBounds,
++            mesh: WarpMesh,
++            interpolation: TransformQuad.Interpolation,
++            checkActive: () -> Unit = {},
++        ) {
++            require(prepared.floating.width == target.width && prepared.floating.height == target.height) { "Buffer sizes differ" }
++            prepared.begin(target)
++            val raster = TriangleRaster(prepared.floating, target, bounds, prepared.blends, interpolation)
+             val n = SUBDIVISIONS
+             for (j in 0..n) {
+                 for (i in 0..n) {
+@@ -265,6 +289,7 @@ class WarpMesh(
+                 }
+             }
+             for (j in 0 until n) {
++                checkActive()
+                 for (i in 0 until n) {
+                     val a = j * (n + 1) + i
+                     val c = a + n + 2
+@@ -300,8 +325,9 @@ class WarpMesh(
+         private val target: PixelBuffer,
+         private val bounds: IntBounds,
+         private val blend: Boolean,
+-        private val highQuality: Boolean,
++        private val interpolation: TransformQuad.Interpolation,
+     ) {
++        private val bicubic = BicubicSampler(floating)
+         private val count = (SUBDIVISIONS + 1) * (SUBDIVISIONS + 1)
+         private val vx = FloatArray(count)
+         private val vy = FloatArray(count)
+@@ -355,7 +381,12 @@ class WarpMesh(
+             written.set(index)
+             val sx = bounds.left + u.coerceIn(0f, 1f) * bounds.width
+             val sy = bounds.top + v.coerceIn(0f, 1f) * bounds.height
+-            val sample = if (highQuality) floating.sampleBilinear(sx, sy) else floating.sampleNearest(sx, sy)
++            val sample =
++                when (interpolation) {
++                    TransformQuad.Interpolation.NEAREST -> floating.sampleNearest(sx, sy)
++                    TransformQuad.Interpolation.BILINEAR -> floating.sampleBilinear(sx, sy)
++                    TransformQuad.Interpolation.BICUBIC -> bicubic.sample(sx, sy)
++                }
+             if ((sample ushr 24) == 0) return
+             target.pixels[index] = if (blend) BlendModes.sourceOver(target.pixels[index], sample) else sample
+         }
+diff --git a/app/src/main/java/com/artflow/studio/presentation/ui/components/canvas/ArtFlowCanvasView.kt b/app/src/main/java/com/artflow/studio/presentation/ui/components/canvas/ArtFlowCanvasView.kt
+index a01858e..1336cf6 100644
+--- a/app/src/main/java/com/artflow/studio/presentation/ui/components/canvas/ArtFlowCanvasView.kt
++++ b/app/src/main/java/com/artflow/studio/presentation/ui/components/canvas/ArtFlowCanvasView.kt
+@@ -1045,8 +1045,17 @@ class ArtFlowCanvasView
+             lastTransformPreview = now
+             val quad = transformPreviewQuad ?: session.quad
+             val mesh = transformPreviewMesh
+-            TransformQuad.renderShape(session.base, buffer, session.bounds, quad, mesh, session.selection, highQuality = false)
+-            companions.render(session.bounds, quad, mesh, highQuality = false)
++            // Previews are throttled and always nearest neighbour; the interpolation chosen applies when the gesture is committed.
++            TransformQuad.renderShape(
++                session.base,
++                buffer,
++                session.bounds,
++                quad,
++                mesh,
++                session.selection,
++                TransformQuad.Interpolation.NEAREST,
++            )
++            companions.render(session.bounds, quad, mesh, TransformQuad.Interpolation.NEAREST)
+         }
+ 
+         private fun applyTransformQuad(
+@@ -1056,7 +1065,7 @@ class ArtFlowCanvasView
+             ensureTransformSession { session ->
+                 val quad = if (warping) session.quad else change(session)
+                 val mesh = if (warping) changeMesh(session.meshOrBox()) else null
+-                val highQuality = input.transformInterpolation == TransformQuad.Interpolation.BILINEAR
++                val interpolation = input.transformInterpolation
+                 transformCommitting = true
+                 coroutineScope.launch {
+                     try {
+@@ -1066,7 +1075,7 @@ class ArtFlowCanvasView
+                                 val companion = session.companions.firstOrNull { it.layerId == id }
+                                 val source = companion?.base ?: session.base
+                                 val selection = if (companion == null) session.selection else null
+-                                TransformQuad.renderShape(source, buffer, session.bounds, quad, mesh, selection, highQuality)
++                                TransformQuad.renderShape(source, buffer, session.bounds, quad, mesh, selection, interpolation)
+                             }
+                         if (placed) {
+                             session.quad = quad
+@@ -2388,7 +2397,6 @@ class ArtFlowCanvasView
+                         if (transform != null) {
+                             // Previews are throttled and nearest-neighbour; commit the exact final placement.
+                             withContext(Dispatchers.Default) {
+-                                val highQuality = interpolation == TransformQuad.Interpolation.BILINEAR
+                                 val quad = finalQuad ?: transform.quad
+                                 TransformQuad.renderShape(
+                                     transform.base,
+@@ -2397,9 +2405,9 @@ class ArtFlowCanvasView
+                                     quad,
+                                     finalMesh,
+                                     transform.selection,
+-                                    highQuality,
++                                    interpolation,
+                                 )
+-                                companions.render(transform.bounds, quad, finalMesh, highQuality)
++                                companions.render(transform.bounds, quad, finalMesh, interpolation)
+                             }
+                         }
+                         if (finalLiquify != null && original != null) {
+diff --git a/app/src/main/java/com/artflow/studio/presentation/ui/components/canvas/TransformCompanions.kt b/app/src/main/java/com/artflow/studio/presentation/ui/components/canvas/TransformCompanions.kt
+index f725f42..c89c2f2 100644
+--- a/app/src/main/java/com/artflow/studio/presentation/ui/components/canvas/TransformCompanions.kt
++++ b/app/src/main/java/com/artflow/studio/presentation/ui/components/canvas/TransformCompanions.kt
+@@ -51,10 +51,10 @@ internal class TransformCompanions {
+         bounds: IntBounds,
+         quad: Quad,
+         mesh: WarpMesh?,
+-        highQuality: Boolean,
++        interpolation: TransformQuad.Interpolation,
+     ) {
+         open.forEach { (layer, session) ->
+-            TransformQuad.renderShape(layer.base, session.buffer, bounds, quad, mesh, null, highQuality)
++            TransformQuad.renderShape(layer.base, session.buffer, bounds, quad, mesh, null, interpolation)
+         }
+     }
+ 
+diff --git a/app/src/main/java/com/artflow/studio/presentation/ui/components/editor/StudioChrome.kt b/app/src/main/java/com/artflow/studio/presentation/ui/components/editor/StudioChrome.kt
+index 30ff385..f9a0ba3 100644
+--- a/app/src/main/java/com/artflow/studio/presentation/ui/components/editor/StudioChrome.kt
++++ b/app/src/main/java/com/artflow/studio/presentation/ui/components/editor/StudioChrome.kt
+@@ -421,6 +421,7 @@ fun TransformToolbar(
+     modifier: Modifier = Modifier,
+     assist: TransformQuad.Assist = TransformQuad.Assist(),
+ ) {
++    var interpolationMenu by remember { mutableStateOf(false) }
+     FloatingBar(modifier) {
+         TransformQuad.Mode.entries.forEach { entry ->
+             FilterChip(selected = mode == entry, onClick = { actions.onMode(entry) }, label = { Text(entry.displayName) })
+@@ -442,19 +443,26 @@ fun TransformToolbar(
+         AssistChip(onClick = { actions.onRotate(45f) }, label = { Text(stringResource(R.string.chip_rotate_45)) })
+         AssistChip(onClick = actions.onFit, label = { Text(stringResource(R.string.chip_fit_screen)) })
+         AssistChip(onClick = actions.onReset, label = { Text(stringResource(R.string.chip_reset)) })
+-        FilterChip(
+-            selected = interpolation == TransformQuad.Interpolation.BILINEAR,
+-            onClick = {
+-                actions.onInterpolation(
+-                    if (interpolation == TransformQuad.Interpolation.BILINEAR) {
+-                        TransformQuad.Interpolation.NEAREST
+-                    } else {
+-                        TransformQuad.Interpolation.BILINEAR
+-                    },
+-                )
+-            },
+-            label = { Text(stringResource(R.string.chip_interpolation, interpolation.displayName)) },
+-        )
++        Box {
++            AssistChip(
++                onClick = { interpolationMenu = true },
++                label = { Text(stringResource(R.string.chip_interpolation, interpolation.displayName)) },
++            )
++            DropdownMenu(expanded = interpolationMenu, onDismissRequest = { interpolationMenu = false }) {
++                TransformQuad.Interpolation.entries.forEach { entry ->
++                    DropdownMenuItem(
++                        text = { Text(entry.displayName) },
++                        onClick = {
++                            actions.onInterpolation(entry)
++                            interpolationMenu = false
++                        },
++                        trailingIcon = {
++                            if (entry == interpolation) Icon(Icons.Default.Check, contentDescription = null)
++                        },
++                    )
++                }
++            }
++        }
+     }
+ }
+ 
+diff --git a/app/src/test/java/com/artflow/studio/core/pixels/BicubicTransformTest.kt b/app/src/test/java/com/artflow/studio/core/pixels/BicubicTransformTest.kt
+new file mode 100644
+index 0000000..5ef947f
+--- /dev/null
++++ b/app/src/test/java/com/artflow/studio/core/pixels/BicubicTransformTest.kt
+@@ -0,0 +1,180 @@
++package com.artflow.studio.core.pixels
++
++import com.artflow.studio.core.pixels.TransformQuad.Interpolation
++import org.junit.Assert.assertArrayEquals
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNotSame
++import org.junit.Assert.assertSame
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import kotlin.math.abs
++import kotlin.random.Random
++
++/** The Bicubic (Catmull-Rom) interpolation of Transform, checked against images whose right answer is known. */
++class BicubicTransformTest {
++    private val red = 0xFFFF0000.toInt()
++
++    private fun channels(argb: Int): IntArray = intArrayOf(argb ushr 24, (argb shr 16) and 0xFF, (argb shr 8) and 0xFF, argb and 0xFF)
++
++    @Test fun texelCentresComeBackBitForBit() {
++        val random = Random(41)
++        val buffer = PixelBuffer(7, 6, IntArray(42) { random.nextInt() })
++        val sampler = BicubicSampler(buffer)
++        for (y in 0 until 6) {
++            for (x in 0 until 7) assertEquals(buffer.pixels[y * 7 + x], sampler.sample(x + 0.5f, y + 0.5f))
++        }
++    }
++
++    @Test fun flatColourStaysFlatEverywhereInsideTheImage() {
++        val random = Random(5)
++        for (colour in listOf(0xFF3366CC.toInt(), 0x80FF8800.toInt(), 0x2A102030)) {
++            val sampler = BicubicSampler(PixelBuffer.filled(12, 12, colour))
++            repeat(500) {
++                // Two texels in from every edge, so the whole 4 x 4 footprint is image.
++                val x = 2f + random.nextFloat() * 8f
++                val y = 2f + random.nextFloat() * 8f
++                assertEquals("at $x,$y", colour, sampler.sample(x, y))
++            }
++        }
++    }
++
++    @Test fun aLinearRampIsReproducedExactly() {
++        // Catmull-Rom interpolates straight lines exactly, which checks the weights add up and sit at the right taps.
++        val width = 16
++        val buffer = PixelBuffer(width, 6, IntArray(width * 6) { 0xFF000000.toInt() or ((it % width) * 10 * 0x010101) })
++        val sampler = BicubicSampler(buffer)
++        val random = Random(9)
++        repeat(300) {
++            val x = 2f + random.nextFloat() * 11f
++            val expected = ((x - 0.5f) * 10f).let { Math.round(it) }
++            val got = channels(sampler.sample(x, 3f))
++            assertEquals("alpha at $x", 255, got[0])
++            for (c in 1..3) assertTrue("channel $c at $x: expected $expected got ${got[c]}", abs(got[c] - expected) <= 1)
++        }
++    }
++
++    @Test fun aHardEdgeRingsButNeverLeavesTheColourRange() {
++        // Black beside white: the negative lobes would overshoot past 0 and 255 and wrap around if they were not clamped.
++        val buffer = PixelBuffer(10, 8, IntArray(80) { if (it % 10 < 5) 0xFF000000.toInt() else 0xFFFFFFFF.toInt() })
++        val sampler = BicubicSampler(buffer)
++        var sawBlack = false
++        var sawWhite = false
++        var x = 2.5f
++        while (x < 7.5f) {
++            val got = channels(sampler.sample(x, 4f))
++            assertEquals(255, got[0])
++            for (c in 1..3) assertTrue("channel ${got[c]} at $x", got[c] in 0..255)
++            if (x < 4.4f) sawBlack = sawBlack || got[1] == 0
++            if (x > 5.6f) sawWhite = sawWhite || got[1] == 255
++            x += 0.037f
++        }
++        assertTrue("the clamped undershoot lands exactly on black", sawBlack)
++        assertTrue("the clamped overshoot lands exactly on white", sawWhite)
++    }
++
++    @Test fun softEdgesKeepTheColourOfTheirNeighbours() {
++        // Premultiplied weights: a red block on transparency fades out as red, not as a dark fringe.
++        val buffer = PixelBuffer(10, 10)
++        for (y in 3 until 7) for (x in 3 until 7) buffer.pixels[y * 10 + x] = red
++        val sampler = BicubicSampler(buffer)
++        var x = 1.2f
++        while (x < 8.8f) {
++            val got = sampler.sample(x, 5f)
++            if ((got ushr 24) != 0) assertEquals("at $x", 0xFF0000, got and 0xFFFFFF)
++            x += 0.05f
++        }
++    }
++
++    @Test fun samplesFarOutsideAreTransparentAndNonFiniteOnesAreRejected() {
++        val sampler = BicubicSampler(PixelBuffer.filled(4, 4, red))
++        assertEquals(0, sampler.sample(-3f, 2f))
++        assertEquals(0, sampler.sample(2f, 9f))
++        assertTrue(runCatching { sampler.sample(Float.NaN, 1f) }.isFailure)
++    }
++
++    @Test fun anIdentityRenderIsExactForEveryInterpolation() {
++        val random = Random(77)
++        val source = PixelBuffer(12, 12)
++        for (y in 3 until 9) for (x in 2 until 10) source.pixels[y * 12 + x] = (random.nextInt(1, 256) shl 24) or (random.nextInt() and 0xFFFFFF)
++        val bounds = LayerTransform.floatingBounds(source, null)!!
++        for (interpolation in Interpolation.entries) {
++            val out = PixelBuffer(12, 12)
++            TransformQuad.render(source, out, bounds, Quad.fromBounds(bounds), null, interpolation)
++            assertArrayEquals(interpolation.name, source.pixels, out.pixels)
++        }
++    }
++
++    @Test fun aQuarterTurnIsExactWithBicubic() {
++        val random = Random(3)
++        val source = PixelBuffer(11, 11)
++        for (y in 3 until 8) for (x in 3 until 8) source.pixels[y * 11 + x] = 0xFF000000.toInt() or (random.nextInt() and 0xFFFFFF)
++        val bounds = LayerTransform.floatingBounds(source, null)!!
++        val out = PixelBuffer(11, 11)
++        TransformQuad.render(source, out, bounds, TransformQuad.rotate(Quad.fromBounds(bounds), 90f), null, Interpolation.BICUBIC)
++        val expected = PixelBuffer(11, 11)
++        expected.drawInto(source.crop(bounds).rotated(90), 3, 3)
++        assertArrayEquals(expected.pixels, out.pixels)
++    }
++
++    @Test fun anUnbentMeshIsExactWithBicubicToo() {
++        val random = Random(12)
++        val source = PixelBuffer(16, 16)
++        for (y in 4 until 12) for (x in 5 until 13) source.pixels[y * 16 + x] = 0xFF000000.toInt() or (random.nextInt() and 0xFFFFFF)
++        val bounds = LayerTransform.floatingBounds(source, null)!!
++        val out = PixelBuffer(16, 16)
++        WarpMesh.render(source, out, bounds, WarpMesh.fromBounds(bounds), null, Interpolation.BICUBIC)
++        assertArrayEquals(source.pixels, out.pixels)
++    }
++
++    @Test fun theTwoWayChoiceStillMapsToNearestAndBilinear() {
++        assertEquals(Interpolation.BILINEAR, Interpolation.of(true))
++        assertEquals(Interpolation.NEAREST, Interpolation.of(false))
++    }
++
++    @Test fun aSplitLayerKeepsWhatIsNotSelectedAndFloatsWhatIs() {
++        val source = PixelBuffer(4, 1, intArrayOf(red, red, red, red))
++        val mask = SelectionMask(4, 1).also {
++            it.coverage[1] = 255.toByte()
++            it.coverage[2] = 128.toByte()
++        }
++        val split = TransformSource.of(source, mask)
++        assertTrue(split.blends)
++        val target = PixelBuffer(4, 1)
++        split.begin(target)
++        assertEquals(red, target.pixels[0])
++        assertEquals(0, target.pixels[1])
++        assertEquals(Channels.scaleAlpha(red, 1f - 128 / 255f), target.pixels[2])
++        assertEquals(Channels.scaleAlpha(red, 128 / 255f), split.floating.pixels[2])
++        assertEquals(red, split.floating.pixels[1])
++        assertEquals(0, split.floating.pixels[0])
++    }
++
++    @Test fun withoutASelectionEverythingFloatsAndNothingStaysBehind() {
++        val source = PixelBuffer.filled(3, 3, red)
++        val split = TransformSource.of(source, null)
++        assertSame(source, split.floating)
++        assertTrue(!split.blends)
++        val target = PixelBuffer.filled(3, 3, 0xFF00FF00.toInt())
++        split.begin(target)
++        assertTrue(target.isEmpty())
++        // A selection of another size is ignored in the same way.
++        assertSame(source, TransformSource.of(source, SelectionMask(2, 2)).floating)
++        assertNotSame(source, TransformSource.of(source, SelectionMask(3, 3)).floating)
++    }
++
++    @Test fun aRenderFromAPreparedSourceMatchesTheOneShotRender() {
++        val source = PixelBuffer(20, 20)
++        for (y in 4 until 12) for (x in 6 until 15) source.pixels[y * 20 + x] = red
++        val mask = SelectionMask.rectangle(20, 20, 5f, 3f, 11f, 13f)
++        val bounds = LayerTransform.floatingBounds(source, mask)!!
++        val quad = TransformQuad.rotate(TransformQuad.translate(Quad.fromBounds(bounds), 3f, 2f), 25f)
++        val direct = PixelBuffer(20, 20)
++        TransformQuad.render(source, direct, bounds, quad, mask, Interpolation.BICUBIC)
++        val prepared = PixelBuffer(20, 20)
++        val split = TransformSource.of(source, mask)
++        // Rendering twice from the same split must not accumulate: the second pass starts from the remainder again.
++        TransformQuad.render(split, prepared, bounds, TransformQuad.translate(quad, 4f, 4f), Interpolation.BICUBIC)
++        TransformQuad.render(split, prepared, bounds, quad, Interpolation.BICUBIC)
++        assertArrayEquals(direct.pixels, prepared.pixels)
++    }
++}

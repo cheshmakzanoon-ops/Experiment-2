@@ -1,0 +1,1536 @@
+diff --git a/app/src/main/java/com/artflow/studio/core/animation/AnimationTimeline.kt b/app/src/main/java/com/artflow/studio/core/animation/AnimationTimeline.kt
+index a600713..961b691 100644
+--- a/app/src/main/java/com/artflow/studio/core/animation/AnimationTimeline.kt
++++ b/app/src/main/java/com/artflow/studio/core/animation/AnimationTimeline.kt
+@@ -2,18 +2,11 @@ package com.artflow.studio.core.animation
+ 
+ import com.artflow.studio.domain.model.animation.AnimationFrame
+ import com.artflow.studio.domain.model.animation.AnimationSettings
+-import com.artflow.studio.domain.model.layer.Layer
+-import kotlin.math.abs
+-import kotlin.math.max
+-import kotlin.math.min
+-import kotlin.math.roundToInt
+ 
+ /**
+- * Timeline operations for frame-by-frame animation (Phase 43).
+- *
+- * All of it is pure list maths over [AnimationFrame]s plus playback arithmetic, which means the
+- * timeline behaviour (durations, looping, ping-pong, onion-skin ranges) is verified by unit tests
+- * rather than by hand on a device.
++ * The state the timeline UI reads: the frames, which one is shown, how they play and whether
++ * playback is running. The document itself lives in the canvas repository; this is its read-only
++ * view, plus the playback range arithmetic that both the player and the timeline strip use.
+  */
+ object AnimationTimeline {
+     /** A timeline plus the settings that describe how it plays. */
+@@ -28,248 +21,10 @@ object AnimationTimeline {
+         val canGoPrevious: Boolean get() = activeIndex > 0
+         val canGoNext: Boolean get() = activeIndex < frames.lastIndex
+ 
+-        /** Total clip length in milliseconds. */
++        /** Total clip length in milliseconds, every frame held for its own duration. */
+         val durationMs: Long get() = frames.sumOf { it.durationMs.toLong() }
+     }
+ 
+-    /** Creates the first frame from a starting layer stack. */
+-    fun initialState(
+-        layers: List<Layer>,
+-        settings: AnimationSettings = AnimationSettings(),
+-    ): State {
+-        val frame =
+-            AnimationFrame(
+-                id = 1L,
+-                name = "Frame 1",
+-                layers = layers,
+-                durationMs = settings.frameDurationMs,
+-                createdAt = System.currentTimeMillis(),
+-            )
+-        return State(frames = listOf(frame), activeIndex = 0, settings = settings)
+-    }
+-
+-    /** Appends a blank frame after the active one, copying nothing. */
+-    fun addBlankFrame(
+-        state: State,
+-        backgroundLayerName: String = "Background",
+-    ): State {
+-        val nextId = (state.frames.maxOfOrNull { it.id } ?: 0L) + 1
+-        val blank =
+-            AnimationFrame(
+-                id = nextId,
+-                name = "Frame ${state.frames.size + 1}",
+-                layers =
+-                    listOf(
+-                        Layer(
+-                            id = 1L,
+-                            name = backgroundLayerName,
+-                            index = 0,
+-                        ),
+-                    ),
+-                durationMs = state.settings.frameDurationMs,
+-                createdAt = System.currentTimeMillis(),
+-            )
+-        return insert(state, blank, state.activeIndex + 1)
+-    }
+-
+-    /**
+-     * Duplicates the active frame. Layer and stroke ids are remapped so the two frames do not
+-     * share identity (which would break per-frame undo and layer selection).
+-     */
+-    fun duplicateFrame(state: State): State {
+-        val source = state.activeFrame ?: return state
+-        val nextFrameId = (state.frames.maxOfOrNull { it.id } ?: 0L) + 1
+-        val nextLayerId = (source.layers.maxOfOrNull { it.id } ?: 0L) + 1
+-        val nextStrokeId =
+-            source.layers
+-                .flatMap { it.strokes }
+-                .maxOfOrNull { it.id }
+-                ?.plus(1) ?: 1L
+-
+-        var layerIdCursor = nextLayerId
+-        var strokeIdCursor = nextStrokeId
+-        val remapped =
+-            source.layers.map { layer ->
+-                val newLayerId = layerIdCursor++
+-                layer.copy(
+-                    id = newLayerId,
+-                    strokes =
+-                        layer.strokes.map { stroke ->
+-                            stroke.copy(id = strokeIdCursor++, layerId = newLayerId)
+-                        },
+-                )
+-            }
+-
+-        val duplicate =
+-            source.copy(
+-                id = nextFrameId,
+-                name = "${source.name} copy",
+-                layers = remapped,
+-                createdAt = System.currentTimeMillis(),
+-            )
+-        return insert(state, duplicate, state.activeIndex + 1)
+-    }
+-
+-    /** Inserts [frame] at [index], keeping the active index on the newly inserted frame. */
+-    fun insert(
+-        state: State,
+-        frame: AnimationFrame,
+-        index: Int,
+-    ): State {
+-        val frames = state.frames.toMutableList()
+-        val target = index.coerceIn(0, frames.size)
+-        frames.add(target, frame)
+-        return state.copy(frames = frames, activeIndex = target)
+-    }
+-
+-    /** Deletes the frame at [index]. The last remaining frame can never be deleted. */
+-    fun deleteFrame(
+-        state: State,
+-        index: Int,
+-    ): State {
+-        if (state.frames.size <= 1) return state
+-        if (index !in state.frames.indices) return state
+-        val frames = state.frames.toMutableList().apply { removeAt(index) }
+-        val active =
+-            when {
+-                index < state.activeIndex -> state.activeIndex - 1
+-                index == state.activeIndex -> index.coerceAtMost(frames.lastIndex)
+-                else -> state.activeIndex
+-            }
+-        return state.copy(frames = frames, activeIndex = active)
+-    }
+-
+-    /** Moves a frame from [from] to [to] and keeps the moved frame active. */
+-    fun moveFrame(
+-        state: State,
+-        from: Int,
+-        to: Int,
+-    ): State {
+-        if (from !in state.frames.indices) return state
+-        val target = to.coerceIn(0, state.frames.lastIndex)
+-        if (from == target) return state
+-        val frames = state.frames.toMutableList()
+-        val frame = frames.removeAt(from)
+-        frames.add(target, frame)
+-        return state.copy(frames = frames, activeIndex = target)
+-    }
+-
+-    /** Adds a layer to every frame (used by "add a persistent background"). */
+-    fun addLayerToAllFrames(
+-        state: State,
+-        layerFactory: (frameIndex: Int) -> Layer,
+-    ): State {
+-        val frames =
+-            state.frames.mapIndexed { index, frame ->
+-                frame.copy(layers = frame.layers + layerFactory(index))
+-            }
+-        return state.copy(frames = frames)
+-    }
+-
+-    /** Replaces the layer stack of the active frame. */
+-    fun updateActiveFrameLayers(
+-        state: State,
+-        layers: List<Layer>,
+-    ): State {
+-        val frame = state.activeFrame ?: return state
+-        val frames = state.frames.toMutableList()
+-        frames[state.activeIndex] = frame.copy(layers = layers)
+-        return state.copy(frames = frames)
+-    }
+-
+-    /** Sets the hold duration of a frame. */
+-    fun setFrameDuration(
+-        state: State,
+-        index: Int,
+-        durationMs: Int,
+-    ): State {
+-        if (index !in state.frames.indices) return state
+-        val frames = state.frames.toMutableList()
+-        frames[index] =
+-            frames[index].copy(
+-                durationMs = durationMs.coerceIn(AnimationFrame.MIN_DURATION_MS, AnimationFrame.MAX_DURATION_MS),
+-            )
+-        return state.copy(frames = frames)
+-    }
+-
+-    /** Applies the FPS to every frame that still uses the default duration. */
+-    fun applyFps(
+-        state: State,
+-        fps: Int,
+-    ): State {
+-        val clamped = fps.coerceIn(AnimationSettings.MIN_FPS, AnimationSettings.MAX_FPS)
+-        val settings = state.settings.copy(fps = clamped)
+-        val duration = settings.frameDurationMs
+-        val frames =
+-            state.frames.map { frame ->
+-                if (frame.durationMs == AnimationFrame.DEFAULT_DURATION_MS) frame.copy(durationMs = duration) else frame
+-            }
+-        return state.copy(frames = frames, settings = settings)
+-    }
+-
+-    /** Selects a frame by index (clamped). */
+-    fun select(
+-        state: State,
+-        index: Int,
+-    ): State = state.copy(activeIndex = index.coerceIn(0, max(0, state.frames.lastIndex)))
+-
+-    /** Moves the selection by [delta] frames, wrapping when the animation loops. */
+-    fun step(
+-        state: State,
+-        delta: Int,
+-        wrap: Boolean = true,
+-    ): State {
+-        if (state.frames.isEmpty()) return state
+-        var index = state.activeIndex + delta
+-        if (wrap) {
+-            val count = state.frames.size
+-            index = ((index % count) + count) % count
+-        } else {
+-            index = index.coerceIn(0, state.frames.lastIndex)
+-        }
+-        return state.copy(activeIndex = index)
+-    }
+-
+-    /**
+-     * The next frame index during playback, honouring the playback range, looping and ping-pong.
+-     *
+-     * @param direction +1 for forward, -1 for backwards during a ping-pong return leg.
+-     */
+-    fun nextPlaybackIndex(
+-        state: State,
+-        direction: Int,
+-    ): Pair<Int, Int> {
+-        val range = playbackRange(state)
+-        if (range.isEmpty()) return state.activeIndex to direction
+-        var index = state.activeIndex
+-        var nextDirection = direction
+-
+-        when {
+-            direction >= 0 && index >= range.last -> {
+-                when {
+-                    state.settings.pingPong -> {
+-                        index = (range.last - 1).coerceAtLeast(range.first)
+-                        nextDirection = -1
+-                    }
+-                    state.settings.loop -> index = range.first
+-                    else -> return index to direction
+-                }
+-            }
+-            direction < 0 && index <= range.first -> {
+-                when {
+-                    state.settings.pingPong -> {
+-                        index = (range.first + 1).coerceAtMost(range.last)
+-                        nextDirection = 1
+-                    }
+-                    state.settings.loop -> index = range.last
+-                    else -> return index to direction
+-                }
+-            }
+-            else -> index += direction
+-        }
+-        return index.coerceIn(range.first, range.last) to nextDirection
+-    }
+-
+     /** Inclusive playback range, defaulting to the whole timeline. */
+     fun playbackRange(state: State): IntRange {
+         if (state.frames.isEmpty()) return IntRange.EMPTY
+@@ -282,185 +37,4 @@ object AnimationTimeline {
+             }
+         return start..end
+     }
+-
+-    /** Frame index displayed at [elapsedMs] of playback, respecting per-frame durations. */
+-    fun frameIndexAtElapsed(
+-        state: State,
+-        elapsedMs: Long,
+-    ): Int {
+-        val range = playbackRange(state)
+-        if (range.isEmpty()) return 0
+-        val total = (range.first..range.last).sumOf { state.frames[it].durationMs.toLong() }
+-        if (total <= 0) return range.first
+-        var position = if (state.settings.loop) elapsedMs.mod(total) else elapsedMs.coerceAtMost(total - 1)
+-        for (index in range) {
+-            val duration = state.frames[index].durationMs.toLong()
+-            if (position < duration) return index
+-            position -= duration
+-        }
+-        return range.last
+-    }
+-
+-    /**
+-     * Onion-skin frames: `previous` are the frames before the active one, `next` the ones after.
+-     * `alpha` is already scaled by the configured opacity, so the renderer can use it directly.
+-     */
+-    data class OnionSkin(
+-        val previous: List<Pair<Int, Float>>,
+-        val next: List<Pair<Int, Float>>,
+-    )
+-
+-    fun onionSkin(state: State): OnionSkin {
+-        if (!state.settings.onionSkinEnabled || state.frames.isEmpty()) return OnionSkin(emptyList(), emptyList())
+-        val count = state.settings.onionSkinFrames.coerceIn(0, AnimationSettings.MAX_ONION_SKIN_FRAMES)
+-        if (count == 0) return OnionSkin(emptyList(), emptyList())
+-
+-        val baseOpacity = state.settings.onionSkinOpacity.coerceIn(0.05f, 1f)
+-        val previous = mutableListOf<Pair<Int, Float>>()
+-        val next = mutableListOf<Pair<Int, Float>>()
+-
+-        for (offset in 1..count) {
+-            val before = state.activeIndex - offset
+-            if (before >= 0) {
+-                // Older frames fade out faster.
+-                previous += before to (baseOpacity / offset)
+-            }
+-            val after = state.activeIndex + offset
+-            if (after <= state.frames.lastIndex) {
+-                next += after to (baseOpacity / offset)
+-            }
+-        }
+-        return OnionSkin(previous, next)
+-    }
+-
+-    /** Frame names for the timeline strip; ensures they stay unique after edits. */
+-    fun normalizeNames(state: State): State {
+-        val frames =
+-            state.frames.mapIndexed { index, frame ->
+-                val expected = "Frame ${index + 1}"
+-                // Only rename untouched default names so user names survive.
+-                if (frame.name.startsWith("Frame ") && frame.name != expected) {
+-                    frame.copy(name = expected)
+-                } else {
+-                    frame
+-                }
+-            }
+-        return state.copy(frames = frames)
+-    }
+-
+-    /** Total number of stroke objects across all frames (used by the memory readout). */
+-    fun totalStrokeCount(state: State): Int = state.frames.sumOf { frame -> frame.layers.sumOf { it.strokes.size } }
+-
+-    /** Number of frames that still have no content. */
+-    fun emptyFrameIndices(state: State): List<Int> = state.frames.mapIndexedNotNull { index, frame -> index.takeIf { frame.isEmpty() } }
+-
+-    /** Estimated memory for all frames, in megabytes. */
+-    fun estimatedMemoryMb(
+-        state: State,
+-        width: Int,
+-        height: Int,
+-    ): Float {
+-        val bytesPerLayer = width.toLong() * height * 4
+-        val layerCount = state.frames.sumOf { it.layerCount }
+-        return (bytesPerLayer * layerCount) / (1024f * 1024f)
+-    }
+-
+-    /** Timeline summary for the info pill. */
+-    fun describe(state: State): String {
+-        val seconds = state.durationMs / 1000f
+-        return "${state.frameCount} frames · ${state.settings.fps} fps · %.1fs".format(seconds)
+-    }
+-
+-    /** Playback position in `0..1` for a scrubber. */
+-    fun progress(
+-        state: State,
+-        elapsedMs: Long,
+-    ): Float {
+-        val total = state.durationMs
+-        if (total <= 0) return 0f
+-        return (elapsedMs.toFloat() / total).coerceIn(0f, 1f)
+-    }
+-
+-    /** Frame index closest to a scrubber position in `0..1`. */
+-    fun frameIndexAtProgress(
+-        state: State,
+-        progress: Float,
+-    ): Int {
+-        if (state.frames.isEmpty()) return 0
+-        val clamped = progress.coerceIn(0f, 1f)
+-        val targetMs = (state.durationMs * clamped)
+-        var accumulated = 0L
+-        state.frames.forEachIndexed { index, frame ->
+-            accumulated += frame.durationMs
+-            if (accumulated >= targetMs) return index
+-        }
+-        return state.frames.lastIndex
+-    }
+-
+-    /** Exports the durations of every frame, for the GIF encoder. */
+-    fun frameDurations(
+-        state: State,
+-        overrideFps: Int? = null,
+-    ): List<Int> {
+-        val fallback = overrideFps?.let { (1000f / it.coerceIn(1, 60)).roundToInt().coerceAtLeast(16) }
+-        return state.frames.map { fallback ?: it.durationMs }
+-    }
+-
+-    /** Weighted average FPS implied by the frame durations. */
+-    fun effectiveFps(state: State): Float {
+-        if (state.frames.isEmpty()) return 0f
+-        val average = state.frames.map { it.durationMs }.average()
+-        if (average <= 0.0) return 0f
+-        return (1000.0 / average).toFloat()
+-    }
+-
+-    /** True when every frame has the same duration (so a constant FPS export is lossless). */
+-    fun hasUniformDurations(state: State): Boolean {
+-        val durations = state.frames.map { it.durationMs }.distinct()
+-        return durations.size <= 1
+-    }
+-
+-    /** Longest common frame duration, used to pick a sensible FPS for exports. */
+-    fun suggestedFps(state: State): Int {
+-        val durations = state.frames.map { it.durationMs }.filter { it > 0 }
+-        if (durations.isEmpty()) return state.settings.fps
+-        val median = durations.sorted()[durations.size / 2]
+-        return (1000f / median).roundToInt().coerceIn(AnimationSettings.MIN_FPS, AnimationSettings.MAX_FPS)
+-    }
+-
+-    /** Clamps a scrub position to the nearest frame boundary. */
+-    fun snapToFrameBoundary(
+-        state: State,
+-        progress: Float,
+-    ): Float {
+-        val index = frameIndexAtProgress(state, progress)
+-        val before = state.frames.take(index).sumOf { it.durationMs.toLong() }
+-        val total = state.durationMs
+-        if (total <= 0) return 0f
+-        return (before.toFloat() / total).coerceIn(0f, 1f)
+-    }
+-
+-    /** Frame count range used by the timeline UI's quick actions. */
+-    val FRAME_LIMITS = 1..600
+-
+-    /** Difference between two frame durations, for the "hold" readout. */
+-    fun durationDelta(
+-        a: AnimationFrame,
+-        b: AnimationFrame,
+-    ): Int = abs(a.durationMs - b.durationMs)
+-
+-    /** Ensures a frame index is valid for [state] (used when the frame count shrinks). */
+-    fun clampIndex(
+-        state: State,
+-        index: Int,
+-    ): Int = index.coerceIn(0, max(0, state.frames.lastIndex))
+-
+-    /** Smallest sensible duration for a frame given the loop time budget. */
+-    fun minDurationForLoop(
+-        totalMs: Long,
+-        frames: Int,
+-    ): Int {
+-        if (frames <= 0) return AnimationFrame.MIN_DURATION_MS
+-        return max(AnimationFrame.MIN_DURATION_MS, min(AnimationFrame.MAX_DURATION_MS, (totalMs / frames).toInt()))
+-    }
+ }
+diff --git a/app/src/main/java/com/artflow/studio/core/animation/HoldDuration.kt b/app/src/main/java/com/artflow/studio/core/animation/HoldDuration.kt
+new file mode 100644
+index 0000000..4d8b7c3
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/core/animation/HoldDuration.kt
+@@ -0,0 +1,37 @@
++package com.artflow.studio.core.animation
++
++import com.artflow.studio.domain.model.animation.AnimationFrame
++import com.artflow.studio.domain.model.animation.AnimationSettings
++import kotlin.math.roundToInt
++
++/**
++ * A frame's hold counted in frames, the way Procreate's Hold Duration is: holding a frame for 3
++ * means it stays up for three frame times at the artwork's frame rate. The document stores the
++ * time in milliseconds, so a hold set some other way (the exact-time slider) rounds to the nearest
++ * whole number of frames here. No control uses it yet; the animation sheet still sets milliseconds.
++ */
++object HoldDuration {
++    /** The number of frames [durationMs] holds at [fps]; at least 1. */
++    fun frames(
++        durationMs: Int,
++        fps: Int,
++    ): Int = (durationMs.toFloat() / frameMs(fps)).roundToInt().coerceAtLeast(1)
++
++    /** The time a hold of [frames] frames lasts at [fps], within the limits a frame can be held for. */
++    fun duration(
++        frames: Int,
++        fps: Int,
++    ): Int =
++        (frames.coerceAtLeast(1).toLong() * frameMs(fps))
++            .coerceIn(AnimationFrame.MIN_DURATION_MS.toLong(), AnimationFrame.MAX_DURATION_MS.toLong())
++            .toInt()
++
++    /** [durationMs] made [delta] frames longer (or shorter), never below one frame. */
++    fun step(
++        durationMs: Int,
++        fps: Int,
++        delta: Int,
++    ): Int = duration(frames(durationMs, fps) + delta, fps)
++
++    private fun frameMs(fps: Int): Int = AnimationSettings(fps = fps).frameDurationMs
++}
+diff --git a/app/src/main/java/com/artflow/studio/core/animation/OnionSkin.kt b/app/src/main/java/com/artflow/studio/core/animation/OnionSkin.kt
+new file mode 100644
+index 0000000..170fa16
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/core/animation/OnionSkin.kt
+@@ -0,0 +1,82 @@
++package com.artflow.studio.core.animation
++
++import com.artflow.studio.core.pixels.PixelBuffer
++import com.artflow.studio.domain.model.animation.AnimationSettings
++
++/**
++ * Onion skin: the frames next to the current one, drawn as tinted ghosts over it so the drawing can
++ * be traced and timed. Previous frames take one colour and following frames another, as in
++ * Procreate's Animation Assist; nearer frames are stronger than farther ones.
++ *
++ * The ghost list and the tint are not drawn by the canvas yet: it still shows untinted ghosts.
++ */
++object OnionSkin {
++    /** The lowest strength a ghost can be given, so switching ghosts on always shows something. */
++    const val MIN_OPACITY = 0.05f
++
++    private const val ALPHA_MASK = 0xFF000000.toInt()
++    private const val RGB_MASK = 0x00FFFFFF
++
++    /** What the ghosts look like; the part of [AnimationSettings] that is saved with each artwork. */
++    data class Style(
++        val frames: Int,
++        val opacity: Float,
++        val previousColor: Int,
++        val nextColor: Int,
++    ) {
++        companion object {
++            fun of(settings: AnimationSettings): Style =
++                Style(settings.onionSkinFrames, settings.onionSkinOpacity, settings.onionSkinPreviousColor, settings.onionSkinNextColor)
++        }
++    }
++
++    /** One ghost: the frame to show, how strongly (0..1) and in which colour. */
++    data class Ghost(
++        val frameIndex: Int,
++        val alpha: Float,
++        val color: Int,
++    )
++
++    /**
++     * The ghosts around frame [activeIndex] of [frameCount], farthest first so nearer ghosts end up
++     * on top: up to [Style.frames] frames before it in the previous colour, then after it in the
++     * next colour. The strength falls off with distance (one over the distance).
++     */
++    fun ghosts(
++        activeIndex: Int,
++        frameCount: Int,
++        style: Style,
++    ): List<Ghost> {
++        val count = style.frames.coerceIn(0, AnimationSettings.MAX_ONION_SKIN_FRAMES)
++        val base = style.opacity.coerceIn(MIN_OPACITY, 1f)
++        val ghosts = ArrayList<Ghost>(count * 2)
++        for (distance in count downTo 1) {
++            val index = activeIndex - distance
++            if (index in 0 until frameCount) ghosts += Ghost(index, base / distance, style.previousColor)
++        }
++        for (distance in count downTo 1) {
++            val index = activeIndex + distance
++            if (index in 0 until frameCount) ghosts += Ghost(index, base / distance, style.nextColor)
++        }
++        return ghosts
++    }
++
++    /**
++     * A flat-colour copy of [source]: every pixel takes [argb]'s colour and keeps its own opacity, so
++     * the drawing's shape survives and its colours do not. [argb]'s alpha is ignored (strength is
++     * the ghost's [Ghost.alpha]); fully transparent pixels stay transparent.
++     */
++    fun tint(
++        source: PixelBuffer,
++        argb: Int,
++    ): PixelBuffer {
++        val colour = argb and RGB_MASK
++        val from = source.pixels
++        val to = IntArray(from.size)
++        for (i in from.indices) {
++            val pixel = from[i]
++            if ((pixel ushr 24) != 0) to[i] = (pixel and ALPHA_MASK) or colour
++        }
++        return PixelBuffer(source.width, source.height, to)
++    }
++}
+diff --git a/app/src/main/java/com/artflow/studio/core/animation/PinnedLayers.kt b/app/src/main/java/com/artflow/studio/core/animation/PinnedLayers.kt
+new file mode 100644
+index 0000000..8947eb2
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/core/animation/PinnedLayers.kt
+@@ -0,0 +1,80 @@
++package com.artflow.studio.core.animation
++
++import com.artflow.studio.domain.model.animation.FramePin
++
++/**
++ * Which layers Animation Assist shows around a frame.
++ *
++ * A layer is pinned by its own [FramePin] or, when it has none, by the nearest pinned group around
++ * it, so pinning a group pins everything inside. Each pinned layer stays in the stack of the frame
++ * that holds it and appears on every other frame: Background layers below that frame's own layers,
++ * Foreground layers above them, frame by frame and in stack order.
++ *
++ * This is the selection rule only. The editor's layers do not carry a [FramePin] yet, so the
++ * compositor does not call it; a caller supplies a [Reader] for its own layer type.
++ */
++object PinnedLayers {
++    /** How to read what pinning depends on from a layer of any representation. */
++    class Reader<T>(
++        val id: (T) -> Long,
++        val parentGroupId: (T) -> Long?,
++        val pin: (T) -> FramePin,
++    )
++
++    /** The layers of the other frames that frame being shown has below and above its own. */
++    class Around<T>(
++        val below: List<T>,
++        val above: List<T>,
++    )
++
++    /** The pin that applies to each of [layers] (one frame's stack), after the groups around them. */
++    fun <T> effectivePins(
++        layers: List<T>,
++        reader: Reader<T>,
++    ): List<FramePin> {
++        if (layers.none { reader.pin(it) != FramePin.NONE }) return List(layers.size) { FramePin.NONE }
++        val byId = layers.associateBy(reader.id)
++        return layers.map { layer ->
++            var pin = FramePin.NONE
++            var current: T? = layer
++            var steps = 0
++            // The step bound stops a corrupt cycle of groups from looping forever.
++            while (current != null && pin == FramePin.NONE && steps++ <= layers.size) {
++                pin = reader.pin(current)
++                current = reader.parentGroupId(current)?.let(byId::get)
++            }
++            pin
++        }
++    }
++
++    /** What frame [index] of [frames] shows from the other frames; its own pinned layers stay in its own stack. */
++    fun <T> around(
++        index: Int,
++        frames: List<List<T>>,
++        reader: Reader<T>,
++    ): Around<T> {
++        val below = ArrayList<T>()
++        val above = ArrayList<T>()
++        frames.forEachIndexed { position, layers ->
++            if (position == index || layers.none { reader.pin(it) != FramePin.NONE }) return@forEachIndexed
++            effectivePins(layers, reader).forEachIndexed { at, pin ->
++                when (pin) {
++                    FramePin.BACKGROUND -> below += layers[at]
++                    FramePin.FOREGROUND -> above += layers[at]
++                    FramePin.NONE -> Unit
++                }
++            }
++        }
++        return Around(below, above)
++    }
++
++    /** [layers] without the pinned ones: what belongs to this frame alone (onion-skin ghosts show only that). */
++    fun <T> unpinned(
++        layers: List<T>,
++        reader: Reader<T>,
++    ): List<T> {
++        if (layers.none { reader.pin(it) != FramePin.NONE }) return layers
++        val pins = effectivePins(layers, reader)
++        return layers.filterIndexed { at, _ -> pins[at] == FramePin.NONE }
++    }
++}
+diff --git a/app/src/main/java/com/artflow/studio/core/animation/PlaybackRange.kt b/app/src/main/java/com/artflow/studio/core/animation/PlaybackRange.kt
+new file mode 100644
+index 0000000..c79f64c
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/core/animation/PlaybackRange.kt
+@@ -0,0 +1,88 @@
++package com.artflow.studio.core.animation
++
++import com.artflow.studio.domain.model.animation.AnimationSettings
++import kotlin.math.max
++
++/**
++ * Editing the playback range kept in [AnimationSettings] (`playbackRangeStart` to `playbackRangeEnd`,
++ * the end being -1 for "to the last frame"). The range is stored as frame positions, so adding,
++ * deleting and moving frames has to carry it along or it would quietly cover other frames.
++ * Playback already honours the stored range; nothing sets it yet, and the repository's frame
++ * operations do not call the shift functions here yet.
++ */
++object PlaybackRange {
++    /** Starts the range at [index]; an end before it moves up to it. */
++    fun withStart(
++        settings: AnimationSettings,
++        index: Int,
++    ): AnimationSettings {
++        val start = max(0, index)
++        val end = settings.playbackRangeEnd
++        return settings.copy(playbackRangeStart = start, playbackRangeEnd = if (end in 0 until start) start else end)
++    }
++
++    /**
++     * Ends the range at [index], a position among [frameCount] frames. The last frame is stored as
++     * "to the end", so frames added later at the end are played too. A start after it moves down.
++     */
++    fun withEnd(
++        settings: AnimationSettings,
++        index: Int,
++        frameCount: Int,
++    ): AnimationSettings {
++        val end = max(0, index)
++        return settings.copy(
++            playbackRangeStart = minOf(settings.playbackRangeStart, end),
++            playbackRangeEnd = if (end >= frameCount - 1) -1 else end,
++        )
++    }
++
++    /** Plays the whole timeline. */
++    fun whole(settings: AnimationSettings): AnimationSettings = settings.copy(playbackRangeStart = 0, playbackRangeEnd = -1)
++
++    /** After a frame was inserted at [at]: the frames of the range keep their place, and a frame inserted inside joins it. */
++    fun afterInsert(
++        settings: AnimationSettings,
++        at: Int,
++    ): AnimationSettings {
++        val start = settings.playbackRangeStart
++        val end = settings.playbackRangeEnd
++        return settings.copy(
++            playbackRangeStart = if (start > 0 && at <= start) start + 1 else start,
++            playbackRangeEnd = if (end >= 0 && at <= end) end + 1 else end,
++        )
++    }
++
++    /** After the frame at [at] was removed. A range left with no frame of its own plays the whole timeline. */
++    fun afterDelete(
++        settings: AnimationSettings,
++        at: Int,
++    ): AnimationSettings {
++        val start = settings.playbackRangeStart
++        val end = settings.playbackRangeEnd
++        val newStart = if (at < start) start - 1 else start
++        val newEnd = if (end >= 0 && at <= end) end - 1 else end
++        val emptied = end >= 0 && newEnd < newStart
++        return if (emptied) whole(settings) else settings.copy(playbackRangeStart = newStart, playbackRangeEnd = newEnd)
++    }
++
++    /**
++     * After the frame at [from] was moved to [to]: the range stays on the same frames; the moved one
++     * leaves it if it lands outside, joins it if it lands inside and stays in it if it moved within.
++     */
++    fun afterMove(
++        settings: AnimationSettings,
++        from: Int,
++        to: Int,
++    ): AnimationSettings =
++        if (contains(settings, from) && contains(settings, to)) {
++            settings
++        } else {
++            afterInsert(afterDelete(settings, from), to)
++        }
++
++    private fun contains(
++        settings: AnimationSettings,
++        index: Int,
++    ): Boolean = index >= settings.playbackRangeStart && (settings.playbackRangeEnd < 0 || index <= settings.playbackRangeEnd)
++}
+diff --git a/app/src/main/java/com/artflow/studio/core/animation/TimelineStrip.kt b/app/src/main/java/com/artflow/studio/core/animation/TimelineStrip.kt
+new file mode 100644
+index 0000000..bb11d4d
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/core/animation/TimelineStrip.kt
+@@ -0,0 +1,61 @@
++package com.artflow.studio.core.animation
++
++import kotlin.math.floor
++import kotlin.math.max
++import kotlin.math.min
++
++/**
++ * The index and scroll arithmetic behind the timeline strip's touch handling (scrubbing,
++ * reordering and keeping the current frame in view), kept out of the composable so it can be
++ * tested. All distances are in pixels. There is no timeline strip yet; this is the part of it that
++ * can be checked without a device.
++ */
++object TimelineStrip {
++    /**
++     * The frame under a pointer [x] pixels from the strip's left edge when the strip is scrolled by
++     * [scrollPx]. Frame tiles sit [extentPx] apart (tile plus gap) and the first one starts
++     * [startPx] in. Dragging past either end gives the first or last frame.
++     */
++    fun indexAt(
++        x: Float,
++        scrollPx: Float,
++        extentPx: Float,
++        startPx: Float,
++        count: Int,
++    ): Int {
++        if (count <= 0 || extentPx <= 0f) return 0
++        return floor((x + scrollPx - startPx) / extentPx).toInt().coerceIn(0, count - 1)
++    }
++
++    /**
++     * How far to scroll per animation frame while a finger is held at [x] in a strip [viewportPx]
++     * wide: nothing in the middle, then faster as it nears an edge, up to [maxStepPx] at the edge.
++     * Negative scrolls towards the start. Lets one drag reach frames that are off screen.
++     */
++    fun edgeScroll(
++        x: Float,
++        viewportPx: Float,
++        edgePx: Float,
++        maxStepPx: Float,
++    ): Float {
++        if (edgePx <= 0f || viewportPx <= 2 * edgePx) return 0f
++        val fromStart = max(0f, edgePx - x)
++        val fromEnd = max(0f, x - (viewportPx - edgePx))
++        return maxStepPx * (min(fromEnd, edgePx) - min(fromStart, edgePx)) / edgePx
++    }
++
++    /**
++     * The first tile to scroll to so that [active] is visible when tiles [firstVisible]..[lastVisible]
++     * are showing, or null when it already is. A frame off to the right ends up the last one showing.
++     */
++    fun revealFrom(
++        active: Int,
++        firstVisible: Int,
++        lastVisible: Int,
++    ): Int? =
++        when {
++            active < firstVisible -> active
++            active > lastVisible -> max(0, active - (lastVisible - firstVisible))
++            else -> null
++        }
++}
+diff --git a/app/src/main/java/com/artflow/studio/domain/model/animation/AnimationFrame.kt b/app/src/main/java/com/artflow/studio/domain/model/animation/AnimationFrame.kt
+index a0e4229..c5706f2 100644
+--- a/app/src/main/java/com/artflow/studio/domain/model/animation/AnimationFrame.kt
++++ b/app/src/main/java/com/artflow/studio/domain/model/animation/AnimationFrame.kt
+@@ -35,6 +35,9 @@ data class AnimationFrame(
+     }
+ }
+ 
++/** What playback does at the ends of its range: Procreate's Loop, Ping-Pong and One Shot. */
++enum class LoopMode { LOOP, PING_PONG, ONE_SHOT }
++
+ /** Playback and onion-skinning configuration (Phases 43-44). */
+ @Serializable
+ data class AnimationSettings(
+@@ -61,6 +64,28 @@ data class AnimationSettings(
+     /** Milliseconds a single frame is displayed, derived from [fps]. */
+     val frameDurationMs: Int get() = (1000f / fps.coerceIn(1, 60)).toInt().coerceAtLeast(16)
+ 
++    /**
++     * The one choice a Loop | Ping-Pong | One Shot control shows, read from the two stored flags
++     * ([loop] and [pingPong]), which keep their meaning so saved artworks play as before. Ping-pong
++     * without loop (one pass forward and back, possible with the old two-switch control) still plays
++     * that way and reads as [LoopMode.PING_PONG] until a mode is picked.
++     */
++    val loopMode: LoopMode
++        get() =
++            when {
++                pingPong -> LoopMode.PING_PONG
++                loop -> LoopMode.LOOP
++                else -> LoopMode.ONE_SHOT
++            }
++
++    /** These settings with the flags that make playback follow [mode]. */
++    fun withLoopMode(mode: LoopMode): AnimationSettings =
++        when (mode) {
++            LoopMode.LOOP -> copy(loop = true, pingPong = false)
++            LoopMode.PING_PONG -> copy(loop = true, pingPong = true)
++            LoopMode.ONE_SHOT -> copy(loop = false, pingPong = false)
++        }
++
+     companion object {
+         const val MIN_FPS = 1
+         const val MAX_FPS = 60
+diff --git a/app/src/main/java/com/artflow/studio/domain/model/animation/FramePin.kt b/app/src/main/java/com/artflow/studio/domain/model/animation/FramePin.kt
+new file mode 100644
+index 0000000..4d409bd
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/domain/model/animation/FramePin.kt
+@@ -0,0 +1,19 @@
++package com.artflow.studio.domain.model.animation
++
++import kotlinx.serialization.Serializable
++
++/**
++ * Animation Assist's Background and Foreground for one layer.
++ *
++ * A pinned layer belongs to the frame whose stack holds it (that is where it is edited, once) and is
++ * shown on every other frame as well: [BACKGROUND] layers beneath the frame's own layers,
++ * [FOREGROUND] layers above them. Pinning a group pins everything inside it. The selection rules
++ * are in [com.artflow.studio.core.animation.PinnedLayers]; layers do not carry a pin in the document
++ * yet, so nothing in the editor sets or reads one.
++ */
++@Serializable
++enum class FramePin {
++    NONE,
++    BACKGROUND,
++    FOREGROUND,
++}
+diff --git a/app/src/test/java/com/artflow/studio/core/animation/HoldDurationTest.kt b/app/src/test/java/com/artflow/studio/core/animation/HoldDurationTest.kt
+new file mode 100644
+index 0000000..0d31bab
+--- /dev/null
++++ b/app/src/test/java/com/artflow/studio/core/animation/HoldDurationTest.kt
+@@ -0,0 +1,55 @@
++package com.artflow.studio.core.animation
++
++import com.artflow.studio.domain.model.animation.AnimationFrame
++import org.junit.Assert.assertEquals
++import org.junit.Test
++
++class HoldDurationTest {
++    @Test
++    fun aFrameHeldForOneFrameLastsOneFrameTime() {
++        // 12 fps is 83 ms a frame.
++        assertEquals(83, HoldDuration.duration(1, 12))
++        assertEquals(1, HoldDuration.frames(83, 12))
++    }
++
++    @Test
++    fun longerHoldsAreWholeMultiplesOfTheFrameTime() {
++        assertEquals(3 * 83, HoldDuration.duration(3, 12))
++        assertEquals(3, HoldDuration.frames(3 * 83, 12))
++    }
++
++    @Test
++    fun aHoldSetByTheExactTimeSliderRoundsToTheNearestFrame() {
++        assertEquals(2, HoldDuration.frames(150, 12))
++        // Just over and just under one and a half frames of 83 ms.
++        assertEquals(2, HoldDuration.frames(125, 12))
++        assertEquals(1, HoldDuration.frames(124, 12))
++        assertEquals(1, HoldDuration.frames(100, 12))
++    }
++
++    @Test
++    fun aHoldIsNeverLessThanOneFrame() {
++        assertEquals(1, HoldDuration.frames(16, 12))
++        assertEquals(83, HoldDuration.duration(0, 12))
++        assertEquals(83, HoldDuration.duration(-4, 12))
++    }
++
++    @Test
++    fun steppingMovesByWholeFramesFromTheRoundedHold() {
++        assertEquals(3 * 83, HoldDuration.step(150, 12, +1))
++        assertEquals(83, HoldDuration.step(150, 12, -1))
++        assertEquals(83, HoldDuration.step(83, 12, -5))
++    }
++
++    @Test
++    fun theFrameRateScalesTheHold() {
++        assertEquals(2 * 41, HoldDuration.duration(2, 24))
++        assertEquals(2 * 1000, HoldDuration.duration(2, 1))
++    }
++
++    @Test
++    fun aHoldStopsAtTheLongestAFrameCanBeHeld() {
++        assertEquals(AnimationFrame.MAX_DURATION_MS, HoldDuration.duration(10_000, 12))
++        assertEquals(AnimationFrame.MAX_DURATION_MS, HoldDuration.step(AnimationFrame.MAX_DURATION_MS, 1, +1))
++    }
++}
+diff --git a/app/src/test/java/com/artflow/studio/core/animation/OnionSkinTest.kt b/app/src/test/java/com/artflow/studio/core/animation/OnionSkinTest.kt
+new file mode 100644
+index 0000000..33dbeef
+--- /dev/null
++++ b/app/src/test/java/com/artflow/studio/core/animation/OnionSkinTest.kt
+@@ -0,0 +1,101 @@
++package com.artflow.studio.core.animation
++
++import com.artflow.studio.core.pixels.PixelBuffer
++import com.artflow.studio.core.render.Compositor
++import com.artflow.studio.domain.model.animation.AnimationSettings
++import com.artflow.studio.domain.model.layer.Layer
++import org.junit.Assert.assertArrayEquals
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class OnionSkinTest {
++    private val red = 0xFFFF0000.toInt()
++    private val green = 0xFF00FF00.toInt()
++    private val style = OnionSkin.Style(frames = 2, opacity = 0.4f, previousColor = red, nextColor = green)
++
++    @Test
++    fun ghostsAreTheNeighboursInTheirOwnColoursFarthestFirst() {
++        val ghosts = OnionSkin.ghosts(activeIndex = 5, frameCount = 10, style = style)
++        assertEquals(listOf(3, 4, 7, 6), ghosts.map { it.frameIndex })
++        assertEquals(listOf(red, red, green, green), ghosts.map { it.color })
++    }
++
++    @Test
++    fun strengthFallsOffWithDistanceFromTheCurrentFrame() {
++        val ghosts = OnionSkin.ghosts(activeIndex = 5, frameCount = 10, style = style)
++        assertEquals(listOf(0.2f, 0.4f, 0.2f, 0.4f), ghosts.map { it.alpha })
++    }
++
++    @Test
++    fun noGhostsReachPastEitherEndOfTheTimeline() {
++        assertEquals(listOf(2, 1), OnionSkin.ghosts(activeIndex = 0, frameCount = 3, style = style).map { it.frameIndex })
++        assertEquals(listOf(0, 1), OnionSkin.ghosts(activeIndex = 2, frameCount = 3, style = style).map { it.frameIndex })
++        assertTrue(OnionSkin.ghosts(activeIndex = 0, frameCount = 1, style = style).isEmpty())
++    }
++
++    @Test
++    fun zeroFramesShowsNothingAndTheCountIsCapped() {
++        assertTrue(OnionSkin.ghosts(3, 10, style.copy(frames = 0)).isEmpty())
++        val capped = OnionSkin.ghosts(8, 20, style.copy(frames = 99))
++        assertEquals(2 * AnimationSettings.MAX_ONION_SKIN_FRAMES, capped.size)
++    }
++
++    @Test
++    fun opacityHasAFloorSoGhostsNeverVanishCompletely() {
++        val ghosts = OnionSkin.ghosts(1, 3, style.copy(frames = 1, opacity = 0f))
++        assertEquals(OnionSkin.MIN_OPACITY, ghosts.first().alpha, 0f)
++    }
++
++    @Test
++    fun styleComesFromTheArtworksSettings() {
++        val settings =
++            AnimationSettings(onionSkinFrames = 3, onionSkinOpacity = 0.6f, onionSkinPreviousColor = green, onionSkinNextColor = red)
++        assertEquals(OnionSkin.Style(3, 0.6f, green, red), OnionSkin.Style.of(settings))
++    }
++
++    @Test
++    fun tintKeepsTheShapeAndReplacesTheColour() {
++        val source = PixelBuffer(3, 1, intArrayOf(0xFF102030.toInt(), 0x80FFFFFF.toInt(), 0))
++        val tinted = OnionSkin.tint(source, 0xFFAA5500.toInt())
++        // Each pixel keeps its alpha; the colour is the tint's whatever the drawing's colour was.
++        assertArrayEquals(intArrayOf(0xFFAA5500.toInt(), 0x80AA5500.toInt(), 0), tinted.pixels)
++        // The source is left alone.
++        assertEquals(0xFF102030.toInt(), source.pixels[0])
++    }
++
++    @Test
++    fun tintIgnoresTheColoursOwnAlpha() {
++        val source = PixelBuffer(1, 1, intArrayOf(0xC0000000.toInt()))
++        assertEquals(0xC000FF00.toInt(), OnionSkin.tint(source, 0x1100FF00).pixels[0])
++    }
++
++    @Test
++    fun transparentPixelsStayTransparentWhateverTheirHiddenColour() {
++        val source = PixelBuffer(1, 1, intArrayOf(0x00FF00FF))
++        assertEquals(0, OnionSkin.tint(source, red).pixels[0])
++    }
++
++    @Test
++    fun aTintedGhostOverPaperIsTheColourAtTheGhostsStrength() {
++        // A ghost drawn the way the canvas shows it: the tinted frame at its strength over white paper.
++        val ghost = OnionSkin.tint(PixelBuffer.filled(2, 2, 0xFF000000.toInt()), red)
++        val compositor = Compositor()
++        val shown =
++            try {
++                compositor.composite(
++                    listOf(Compositor.LayerInput(Layer(id = 1, name = "Ghost", index = 0, opacity = 0.3f), ghost)),
++                    2,
++                    2,
++                    backgroundColor = 0xFFFFFFFF.toInt(),
++                )
++            } finally {
++                compositor.release()
++            }
++        val pixel = shown.pixels[0]
++        assertEquals(255, (pixel shr 16) and 0xFF)
++        // White paper keeps 70% of its green and blue: 255 * 0.7 = 178.5.
++        assertEquals(178.5, ((pixel shr 8) and 0xFF).toDouble(), 1.0)
++        assertEquals(178.5, (pixel and 0xFF).toDouble(), 1.0)
++    }
++}
+diff --git a/app/src/test/java/com/artflow/studio/core/animation/PinnedLayersTest.kt b/app/src/test/java/com/artflow/studio/core/animation/PinnedLayersTest.kt
+new file mode 100644
+index 0000000..b231ffc
+--- /dev/null
++++ b/app/src/test/java/com/artflow/studio/core/animation/PinnedLayersTest.kt
+@@ -0,0 +1,101 @@
++package com.artflow.studio.core.animation
++
++import com.artflow.studio.domain.model.animation.FramePin
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertSame
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class PinnedLayersTest {
++    private data class Item(
++        val id: Long,
++        val pin: FramePin = FramePin.NONE,
++        val parent: Long? = null,
++    )
++
++    private val reader = PinnedLayers.Reader<Item>({ it.id }, { it.parent }, { it.pin })
++
++    private fun ids(items: List<Item>) = items.map { it.id }
++
++    @Test
++    fun noPinsMeansNothingAroundAnyFrame() {
++        val frames = listOf(listOf(Item(1), Item(2)), listOf(Item(3)))
++        val around = PinnedLayers.around(0, frames, reader)
++        assertTrue(around.below.isEmpty())
++        assertTrue(around.above.isEmpty())
++    }
++
++    @Test
++    fun aPinnedLayerShowsOnEveryOtherFrameButStaysInItsOwnStack() {
++        val frames =
++            listOf(
++                listOf(Item(1, FramePin.BACKGROUND), Item(2)),
++                listOf(Item(3)),
++                listOf(Item(4)),
++            )
++        assertTrue(PinnedLayers.around(0, frames, reader).below.isEmpty())
++        assertEquals(listOf(1L), ids(PinnedLayers.around(1, frames, reader).below))
++        assertEquals(listOf(1L), ids(PinnedLayers.around(2, frames, reader).below))
++    }
++
++    @Test
++    fun backgroundsGoBelowAndForegroundsAboveInFrameThenStackOrder() {
++        val frames =
++            listOf(
++                listOf(Item(1), Item(2, FramePin.FOREGROUND), Item(3, FramePin.BACKGROUND)),
++                listOf(Item(4)),
++                listOf(Item(5, FramePin.BACKGROUND), Item(6, FramePin.FOREGROUND)),
++            )
++        val around = PinnedLayers.around(1, frames, reader)
++        assertEquals(listOf(3L, 5L), ids(around.below))
++        assertEquals(listOf(2L, 6L), ids(around.above))
++    }
++
++    @Test
++    fun pinningAGroupPinsEverythingInsideAtAnyDepth() {
++        val frame =
++            listOf(
++                Item(10, FramePin.BACKGROUND),
++                Item(11, parent = 10),
++                Item(12, parent = 10),
++                Item(13, parent = 12),
++                Item(14),
++            )
++        assertEquals(
++            listOf(FramePin.BACKGROUND, FramePin.BACKGROUND, FramePin.BACKGROUND, FramePin.BACKGROUND, FramePin.NONE),
++            PinnedLayers.effectivePins(frame, reader),
++        )
++        assertEquals(listOf(10L, 11L, 12L, 13L), ids(PinnedLayers.around(1, listOf(frame, listOf(Item(20))), reader).below))
++    }
++
++    @Test
++    fun aMembersOwnPinWinsOverItsGroups() {
++        val frame = listOf(Item(10, FramePin.BACKGROUND), Item(11, FramePin.FOREGROUND, parent = 10))
++        assertEquals(listOf(FramePin.BACKGROUND, FramePin.FOREGROUND), PinnedLayers.effectivePins(frame, reader))
++    }
++
++    @Test
++    fun aPinnedMemberOfAnUnpinnedGroupIsPinnedAlone() {
++        val frame = listOf(Item(10), Item(11, FramePin.BACKGROUND, parent = 10), Item(12, parent = 10))
++        val around = PinnedLayers.around(1, listOf(frame, listOf(Item(20))), reader)
++        assertEquals(listOf(11L), ids(around.below))
++    }
++
++    @Test
++    fun aCycleOfGroupsCannotHangTheLookup() {
++        val frame = listOf(Item(1, parent = 2), Item(2, parent = 1), Item(3, FramePin.BACKGROUND, parent = 1))
++        assertEquals(listOf(FramePin.NONE, FramePin.NONE, FramePin.BACKGROUND), PinnedLayers.effectivePins(frame, reader))
++    }
++
++    @Test
++    fun unpinnedLeavesOnlyTheFramesOwnLayers() {
++        val frame = listOf(Item(1, FramePin.BACKGROUND), Item(2), Item(3, FramePin.FOREGROUND), Item(4, parent = 3))
++        assertEquals(listOf(2L), ids(PinnedLayers.unpinned(frame, reader)))
++    }
++
++    @Test
++    fun unpinnedReturnsTheSameListWhenNothingIsPinned() {
++        val frame = listOf(Item(1), Item(2))
++        assertSame(frame, PinnedLayers.unpinned(frame, reader))
++    }
++}
+diff --git a/app/src/test/java/com/artflow/studio/core/animation/PlaybackRangeTest.kt b/app/src/test/java/com/artflow/studio/core/animation/PlaybackRangeTest.kt
+new file mode 100644
+index 0000000..f4fa064
+--- /dev/null
++++ b/app/src/test/java/com/artflow/studio/core/animation/PlaybackRangeTest.kt
+@@ -0,0 +1,126 @@
++package com.artflow.studio.core.animation
++
++import com.artflow.studio.domain.model.animation.AnimationFrame
++import com.artflow.studio.domain.model.animation.AnimationSettings
++import org.junit.Assert.assertEquals
++import org.junit.Test
++
++class PlaybackRangeTest {
++    private fun range(
++        start: Int,
++        end: Int = -1,
++    ) = AnimationSettings(playbackRangeStart = start, playbackRangeEnd = end)
++
++    private fun pair(settings: AnimationSettings) = settings.playbackRangeStart to settings.playbackRangeEnd
++
++    /** The frames playback covers on a timeline of [count] frames. */
++    private fun played(
++        count: Int,
++        settings: AnimationSettings,
++    ): IntRange {
++        val frames = List(count) { AnimationFrame(it + 1L, "Frame", emptyList()) }
++        return AnimationTimeline.playbackRange(AnimationTimeline.State(frames, settings = settings))
++    }
++
++    @Test
++    fun startMovesAnEarlierEndUpWithIt() {
++        assertEquals(2 to -1, pair(PlaybackRange.withStart(range(0), 2)))
++        assertEquals(4 to 4, pair(PlaybackRange.withStart(range(0, 2), 4)))
++        assertEquals(1 to 3, pair(PlaybackRange.withStart(range(0, 3), 1)))
++    }
++
++    @Test
++    fun endMovesALaterStartDownWithIt() {
++        assertEquals(1 to 3, pair(PlaybackRange.withEnd(range(1), 3, frameCount = 8)))
++        assertEquals(2 to 2, pair(PlaybackRange.withEnd(range(5), 2, frameCount = 8)))
++    }
++
++    @Test
++    fun endingOnTheLastFrameKeepsPlayingFramesAddedAfterIt() {
++        assertEquals(1 to -1, pair(PlaybackRange.withEnd(range(1), 7, frameCount = 8)))
++    }
++
++    @Test
++    fun wholeTimelineClearsTheRange() {
++        assertEquals(0 to -1, pair(PlaybackRange.whole(range(2, 4))))
++        assertEquals(0..5, played(6, PlaybackRange.whole(range(2, 4))))
++        assertEquals(2..4, played(6, range(2, 4)))
++    }
++
++    @Test
++    fun theStoredRangeIsWhatPlaybackPlays() {
++        // End of -1 plays to the last frame, so frames added later are played too.
++        assertEquals(1..5, played(6, PlaybackRange.withEnd(range(1), 5, frameCount = 6)))
++        assertEquals(1..7, played(8, PlaybackRange.withEnd(range(1), 5, frameCount = 6)))
++        assertEquals(1..2, played(8, PlaybackRange.withEnd(range(1), 2, frameCount = 8)))
++    }
++
++    @Test
++    fun framesInsertedBeforeTheRangeShiftIt() {
++        assertEquals(3 to 5, pair(PlaybackRange.afterInsert(range(2, 4), 1)))
++        assertEquals(3 to 5, pair(PlaybackRange.afterInsert(range(2, 4), 2)))
++    }
++
++    @Test
++    fun aFrameInsertedInsideTheRangeJoinsIt() {
++        assertEquals(2 to 5, pair(PlaybackRange.afterInsert(range(2, 4), 3)))
++        assertEquals(2 to 5, pair(PlaybackRange.afterInsert(range(2, 4), 4)))
++    }
++
++    @Test
++    fun framesInsertedAfterTheRangeLeaveItAlone() {
++        assertEquals(2 to 4, pair(PlaybackRange.afterInsert(range(2, 4), 5)))
++    }
++
++    @Test
++    fun insertingAtTheVeryStartOfAWholeTimelineKeepsItWhole() {
++        assertEquals(0 to -1, pair(PlaybackRange.afterInsert(range(0), 0)))
++        assertEquals(0 to -1, pair(PlaybackRange.afterInsert(range(0), 3)))
++    }
++
++    @Test
++    fun deletingBeforeTheRangeShiftsIt() {
++        assertEquals(1 to 3, pair(PlaybackRange.afterDelete(range(2, 4), 0)))
++    }
++
++    @Test
++    fun deletingInsideTheRangeShrinksIt() {
++        assertEquals(2 to 3, pair(PlaybackRange.afterDelete(range(2, 4), 3)))
++        assertEquals(2 to 3, pair(PlaybackRange.afterDelete(range(2, 4), 4)))
++        assertEquals(2 to 3, pair(PlaybackRange.afterDelete(range(2, 4), 2)))
++    }
++
++    @Test
++    fun deletingAfterTheRangeLeavesItAlone() {
++        assertEquals(2 to 4, pair(PlaybackRange.afterDelete(range(2, 4), 5)))
++    }
++
++    @Test
++    fun aRangeLeftWithNoFramePlaysTheWholeTimeline() {
++        assertEquals(0 to -1, pair(PlaybackRange.afterDelete(range(2, 2), 2)))
++    }
++
++    @Test
++    fun anOpenEndedRangeKeepsItsStartAsFramesComeAndGo() {
++        assertEquals(3 to -1, pair(PlaybackRange.afterInsert(range(2), 0)))
++        assertEquals(1 to -1, pair(PlaybackRange.afterDelete(range(2), 0)))
++        assertEquals(2 to -1, pair(PlaybackRange.afterDelete(range(2), 6)))
++    }
++
++    @Test
++    fun movingAFrameIntoTheRangeBringsItAlong() {
++        // Frames 2..4 play; frame 1 is dragged to position 3.
++        assertEquals(1 to 4, pair(PlaybackRange.afterMove(range(2, 4), from = 1, to = 3)))
++    }
++
++    @Test
++    fun movingAFrameOutOfTheRangeLeavesItBehind() {
++        // Frame 3 is dragged to the very end: the others close up.
++        assertEquals(2 to 3, pair(PlaybackRange.afterMove(range(2, 4), from = 3, to = 7)))
++    }
++
++    @Test
++    fun movingAFrameWithinTheRangeKeepsTheRange() {
++        assertEquals(2 to 4, pair(PlaybackRange.afterMove(range(2, 4), from = 2, to = 4)))
++    }
++}
+diff --git a/app/src/test/java/com/artflow/studio/core/animation/PlaybackStepperTest.kt b/app/src/test/java/com/artflow/studio/core/animation/PlaybackStepperTest.kt
+index f7ce2e1..75db293 100644
+--- a/app/src/test/java/com/artflow/studio/core/animation/PlaybackStepperTest.kt
++++ b/app/src/test/java/com/artflow/studio/core/animation/PlaybackStepperTest.kt
+@@ -2,6 +2,7 @@ package com.artflow.studio.core.animation
+ 
+ import com.artflow.studio.domain.model.animation.AnimationFrame
+ import com.artflow.studio.domain.model.animation.AnimationSettings
++import com.artflow.studio.domain.model.animation.LoopMode
+ import org.junit.Assert.*
+ import org.junit.Test
+ 
+@@ -44,6 +45,57 @@ class PlaybackStepperTest {
+         assertEquals(listOf(2, 3, 0, 1), sequence(state, 4))
+     }
+ 
++    @Test
++    fun eachLoopModePlaysInItsOwnOrder() {
++        val base = AnimationSettings()
++        assertEquals(listOf(0, 1, 2, 0, 1, 2, 0), sequence(state(3, base.withLoopMode(LoopMode.LOOP)), 7))
++        assertEquals(listOf(0, 1, 2, 1, 0, 1, 2), sequence(state(3, base.withLoopMode(LoopMode.PING_PONG)), 7))
++        assertEquals(listOf(0, 1, 2), sequence(state(3, base.withLoopMode(LoopMode.ONE_SHOT)), 7))
++    }
++
++    @Test
++    fun theModeReadsBackFromTheTwoStoredFlags() {
++        LoopMode.entries.forEach { mode -> assertEquals(mode, AnimationSettings().withLoopMode(mode).loopMode) }
++        assertEquals(LoopMode.LOOP, AnimationSettings().loopMode)
++        assertEquals(LoopMode.ONE_SHOT, AnimationSettings(loop = false, pingPong = false).loopMode)
++    }
++
++    @Test
++    fun anOldPingPongWithoutLoopStillPlaysOnePassAndReadsAsPingPong() {
++        val once = AnimationSettings(loop = false, pingPong = true)
++        assertEquals(LoopMode.PING_PONG, once.loopMode)
++        assertEquals(listOf(0, 1, 2, 1, 0), sequence(state(3, once), 9))
++        // Picking Ping-Pong turns it into the repeating mode the control describes.
++        assertEquals(listOf(0, 1, 2, 1, 0, 1, 2), sequence(state(3, once.withLoopMode(LoopMode.PING_PONG)), 7))
++    }
++
++    @Test
++    fun everyModeStaysInsideARestrictedRange() {
++        val range = AnimationSettings(playbackRangeStart = 1, playbackRangeEnd = 3)
++        assertEquals(listOf(1, 2, 3, 1, 2), sequence(state(6, range.withLoopMode(LoopMode.LOOP)), 5))
++        assertEquals(listOf(1, 2, 3, 2, 1, 2), sequence(state(6, range.withLoopMode(LoopMode.PING_PONG)), 6))
++        assertEquals(listOf(1, 2, 3), sequence(state(6, range.withLoopMode(LoopMode.ONE_SHOT)), 6))
++    }
++
++    @Test
++    fun eachFrameIsHeldForItsOwnDurationAndAPassLastsTheirSum() {
++        val oneShot = held(100, 300, 50).let { it.copy(settings = it.settings.withLoopMode(LoopMode.ONE_SHOT)) }
++        val holds = sequence(oneShot, 9).map { oneShot.frames[it].durationMs }
++        assertEquals(listOf(100, 300, 50), holds)
++        assertEquals(oneShot.durationMs, holds.sumOf { it.toLong() })
++    }
++
++    @Test
++    fun aPingPongTurnaroundHoldsTheEndFrameOnlyOncePerVisit() {
++        val pingPong = held(100, 300, 50).let { it.copy(settings = it.settings.withLoopMode(LoopMode.PING_PONG)) }
++        assertEquals(listOf(100, 300, 50, 300, 100, 300, 50), sequence(pingPong, 7).map { pingPong.frames[it].durationMs })
++    }
++
++    private fun held(vararg holds: Int): AnimationTimeline.State =
++        AnimationTimeline.State(
++            frames = holds.mapIndexed { index, hold -> AnimationFrame(index + 1L, "Frame", emptyList(), durationMs = hold) },
++        )
++
+     private fun state(
+         count: Int,
+         settings: AnimationSettings = AnimationSettings(),
+diff --git a/app/src/test/java/com/artflow/studio/core/animation/TimelineStripTest.kt b/app/src/test/java/com/artflow/studio/core/animation/TimelineStripTest.kt
+new file mode 100644
+index 0000000..88dba10
+--- /dev/null
++++ b/app/src/test/java/com/artflow/studio/core/animation/TimelineStripTest.kt
+@@ -0,0 +1,84 @@
++package com.artflow.studio.core.animation
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNull
++import org.junit.Test
++
++class TimelineStripTest {
++    // Tiles 72 px wide with 8 px gaps are 80 px apart; the first starts 16 px in.
++    private fun at(
++        x: Float,
++        scroll: Float = 0f,
++        count: Int = 10,
++    ) = TimelineStrip.indexAt(x, scroll, extentPx = 80f, startPx = 16f, count = count)
++
++    @Test
++    fun aPointerMapsToTheTileUnderIt() {
++        assertEquals(0, at(16f))
++        assertEquals(0, at(95f))
++        assertEquals(1, at(96f))
++        assertEquals(3, at(16f + 3 * 80f + 10f))
++    }
++
++    @Test
++    fun scrollingShiftsWhichTileIsUnderThePointer() {
++        assertEquals(4, at(16f, scroll = 320f))
++        assertEquals(5, at(96f, scroll = 320f))
++    }
++
++    @Test
++    fun dragPastEitherEndHoldsTheFirstOrLastFrame() {
++        assertEquals(0, at(-200f))
++        assertEquals(0, at(0f))
++        assertEquals(9, at(5000f))
++        assertEquals(2, at(5000f, count = 3))
++    }
++
++    @Test
++    fun anEmptyTimelineMapsToTheFirstFrame() {
++        assertEquals(0, at(300f, count = 0))
++    }
++
++    @Test
++    fun edgeScrollIsStillInTheMiddleOfTheStrip() {
++        assertEquals(0f, TimelineStrip.edgeScroll(x = 200f, viewportPx = 400f, edgePx = 60f, maxStepPx = 30f), 0f)
++        assertEquals(0f, TimelineStrip.edgeScroll(x = 60f, viewportPx = 400f, edgePx = 60f, maxStepPx = 30f), 0f)
++    }
++
++    @Test
++    fun edgeScrollSpeedsUpTowardsTheEdgeAndPointsTheRightWay() {
++        assertEquals(-15f, TimelineStrip.edgeScroll(x = 30f, viewportPx = 400f, edgePx = 60f, maxStepPx = 30f), 1e-4f)
++        assertEquals(-30f, TimelineStrip.edgeScroll(x = 0f, viewportPx = 400f, edgePx = 60f, maxStepPx = 30f), 1e-4f)
++        assertEquals(15f, TimelineStrip.edgeScroll(x = 370f, viewportPx = 400f, edgePx = 60f, maxStepPx = 30f), 1e-4f)
++        assertEquals(30f, TimelineStrip.edgeScroll(x = 400f, viewportPx = 400f, edgePx = 60f, maxStepPx = 30f), 1e-4f)
++    }
++
++    @Test
++    fun edgeScrollIsCappedWhenThePointerLeavesTheStrip() {
++        assertEquals(-30f, TimelineStrip.edgeScroll(x = -500f, viewportPx = 400f, edgePx = 60f, maxStepPx = 30f), 1e-4f)
++        assertEquals(30f, TimelineStrip.edgeScroll(x = 900f, viewportPx = 400f, edgePx = 60f, maxStepPx = 30f), 1e-4f)
++    }
++
++    @Test
++    fun aStripTooNarrowForTwoEdgesDoesNotScroll() {
++        assertEquals(0f, TimelineStrip.edgeScroll(x = 10f, viewportPx = 100f, edgePx = 60f, maxStepPx = 30f), 0f)
++    }
++
++    @Test
++    fun aVisibleFrameNeedsNoScrolling() {
++        assertNull(TimelineStrip.revealFrom(active = 4, firstVisible = 2, lastVisible = 6))
++        assertNull(TimelineStrip.revealFrom(active = 2, firstVisible = 2, lastVisible = 6))
++        assertNull(TimelineStrip.revealFrom(active = 6, firstVisible = 2, lastVisible = 6))
++    }
++
++    @Test
++    fun aFrameOffTheLeftBecomesTheFirstShown() {
++        assertEquals(1, TimelineStrip.revealFrom(active = 1, firstVisible = 3, lastVisible = 7))
++    }
++
++    @Test
++    fun aFrameOffTheRightBecomesTheLastShown() {
++        // Five tiles show (3..7); frame 12 scrolls in at the right edge, so 8..12 show.
++        assertEquals(8, TimelineStrip.revealFrom(active = 12, firstVisible = 3, lastVisible = 7))
++    }
++}
+diff --git a/app/src/test/java/com/artflow/studio/domain/model/animation/AnimationSettingsFormatTest.kt b/app/src/test/java/com/artflow/studio/domain/model/animation/AnimationSettingsFormatTest.kt
+new file mode 100644
+index 0000000..704d5e1
+--- /dev/null
++++ b/app/src/test/java/com/artflow/studio/domain/model/animation/AnimationSettingsFormatTest.kt
+@@ -0,0 +1,55 @@
++package com.artflow.studio.domain.model.animation
++
++import kotlinx.serialization.json.Json
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++/** The loop mode is derived from the two stored flags, so artworks saved before it existed play as they did. */
++class AnimationSettingsFormatTest {
++    // The configuration ProjectStorage reads and writes .artflow documents with.
++    private val json =
++        Json {
++            ignoreUnknownKeys = true
++            encodeDefaults = true
++            isLenient = false
++        }
++
++    private fun decode(text: String) = json.decodeFromString(AnimationSettings.serializer(), text)
++
++    @Test
++    fun theLoopModeIsNotWrittenToTheDocument() {
++        val text = json.encodeToString(AnimationSettings.serializer(), AnimationSettings().withLoopMode(LoopMode.PING_PONG))
++        assertFalse("loopMode" in text)
++        assertTrue("\"loop\":true" in text)
++        assertTrue("\"pingPong\":true" in text)
++    }
++
++    @Test
++    fun anArtworkSavedWithTheTwoSwitchesKeepsItsPlayback() {
++        val saved = """{"fps":24,"loop":false,"pingPong":true,"onionSkinEnabled":false,"onionSkinFrames":2}"""
++        val settings = decode(saved)
++        assertEquals(24, settings.fps)
++        assertFalse(settings.loop)
++        assertTrue(settings.pingPong)
++        assertEquals(2, settings.onionSkinFrames)
++        assertEquals(LoopMode.PING_PONG, settings.loopMode)
++    }
++
++    @Test
++    fun everyModeSurvivesASaveAndLoad() {
++        LoopMode.entries.forEach { mode ->
++            val original = AnimationSettings(fps = 8).withLoopMode(mode)
++            val restored = decode(json.encodeToString(AnimationSettings.serializer(), original))
++            assertEquals(original, restored)
++            assertEquals(mode, restored.loopMode)
++        }
++    }
++
++    @Test
++    fun anArtworkWithNoAnimationSettingsGetsTheDefaults() {
++        assertEquals(AnimationSettings(), decode("{}"))
++        assertEquals(LoopMode.LOOP, decode("{}").loopMode)
++    }
++}

@@ -16,18 +16,23 @@ session), [RELEASE_READINESS.md](RELEASE_READINESS.md) (release evidence), [AUDI
 * The branch was fast-forwarded onto the October audit branch (123 commits ahead of `main` at
   `23f0554`); the first commit of this session sits on `6217937` ("docs(audit): record run 213 results…").
 * The request was to keep developing until parity with Procreate, without stopping early. Mid-session
-  the owner asked to wind development down, record everything and push; every running work package was
-  told to finish its current change, commit and report, and no new feature was started afterwards.
-* Work was done by the lead directly and by parallel work packages (WP1–WP7), each in its own git
-  worktree and each merged by the lead after review. Commit trailers are
-  `Co-Authored-By: Claude <noreply@anthropic.com>` and `Claude-Session: …`; no model name is recorded in
-  any commit, comment or document.
+  the owner asked twice to wind development down, record every development, commit and push. The running
+  work packages were asked to finish their current change and report; the second request stopped them.
+  After the first request the lead started no new feature: it fixed a defect in its own latest code,
+  committed the verification harness, and wrote this record.
+* Work was done by the lead directly (everything in section 3, committed and pushed) and by seven
+  parallel work packages (WP1–WP7, section 4), each started in its own git worktree. The wind-down
+  request stopped those packages before any of them finished, so **none of their work is merged into
+  the application tree**; every line they had written is preserved as a patch in
+  [wip-2026-10-17/](wip-2026-10-17/README.md) together with the briefs they were given and the audits
+  those briefs came from. Commit trailers are `Co-Authored-By: Claude <noreply@anthropic.com>` and
+  `Claude-Session: …`; no model name is recorded in any commit, comment or document.
 
 ## 2. How things were verified (read this before trusting any line below)
 
 | Level | What it means | Used for |
 | --- | --- | --- |
-| **JVM-executed** | JUnit tests run with the Kotlin compiler from the Gradle distribution against `core/` and `domain/` (no Android classes). 578 tests passed before the gallery commit; the exact final count is in section 7. | Pure logic: codecs, maths, parsers, state machines |
+| **JVM-executed** | JUnit tests run with the Kotlin compiler from the Gradle distribution against `core/` and `domain/` (no Android classes). 578 tests passed before the gallery commit; the run on the final head was cut short, so 578 is the last full count. | Pure logic: codecs, maths, parsers, state machines |
 | **Compile-checked (offline)** | The whole `app/src/main` tree compiled with Kotlin 2.0.21 (K2) plus the Compose and serialization compiler plugins against the real Android, Compose, Hilt and AndroidX jars, with a resource check. A deliberately injected type error in a Compose file was detected. | Every Android/Compose change |
 | **Lint-checked (offline)** | ktlint 1.3.1 and detekt 1.23.6 with the repository's `.editorconfig`, `config/detekt/detekt.yml` and baseline, run over the whole tree. | Style, complexity, naming, unused imports |
 | **CI** | The repository's Android CI (Gradle unit tests, ktlint/detekt, build, device tests on an emulator matrix). | The only gate that runs Android unit tests and device tests |
@@ -155,9 +160,10 @@ Each entry: commit, what changed, evidence, limits.
   that had slipped onto the wrong function in `CanvasViewModel` is back on `timelapseFrames`. Behaviour
   unchanged.
 
-### 3.8 Verification tooling (not in the repository until section 6 says so)
+### 3.8 Verification tooling
 
-See section 6.
+* **`bb0264c` `tools/offline-check`** — the compile / lint / unit-test harness described in section 6,
+  committed with its README, shims and self-tests (downloaded libraries are not committed).
 
 ### 3.9 Structure changes that are not features
 
@@ -165,9 +171,28 @@ See section 6.
 `ShortcutEnvironment` (shortcut runner), `CanvasUnit`/`CanvasPresets`/`GalleryOrder` (pure logic). They
 exist to keep `CanvasViewModel`, `GalleryScreen` and the shortcut runner inside the detekt limits.
 
-## 4. Developments by parallel work packages
+## 4. Parallel work packages (stopped before completion; not merged)
 
-*(Filled in from the work packages' reports; see below.)*
+Seven packages were briefed from the audits ([wip-2026-10-17/briefs](wip-2026-10-17/briefs/)). They
+were stopped by the owner's request while still working; the lead did not restart them. What each had
+on disk when it stopped is archived verbatim as a patch in [wip-2026-10-17/patches](wip-2026-10-17/patches/),
+and [wip-2026-10-17/README.md](wip-2026-10-17/README.md) records, per package, the base commit, the
+contents, what was *not* done, the JVM-test and offline-compile result of the snapshot, and how to apply it.
+In short:
+
+| Package | Scope | What the snapshot holds | Wired into the app? |
+| --- | --- | --- | --- |
+| WP1 grains | Believable procedural grains, shape tips, preset retune | `GrainSynth`/`GrainField`/`TileNoise` (seamlessly tiling fractal and cellular grains), changes to `BrushTexture`, `CustomGrains`, `BrushLibraryCodec`, tests | Replaces the grain generator in place; no preset retune, no visual sign-off |
+| WP2 adjustments | Curves, Colour Balance ranges, Gradient Map, Bloom, Glitch, Halftone, Chromatic Aberration, Noise, Perspective Blur | Engine classes for each (`CurveSet`, `ColorBalance`, `GradientMap`, `BloomEffect`, `GlitchEffect`, `HalftoneEffect`, `NoiseEffect`, `ChromaticAberration`, `AdjustmentOptions`) and tests that also pin the old maths | Engine only; no Curves editor, no Gradient Map editor, no overlay changes |
+| WP3 history | Undo depth 250 through tile deltas, coalesced slider edits | Two commits (`RasterDelta`, `core/history`) with tests, plus an unfinished edit of `CanvasRepositoryImpl` and a `DeepUndoTest` | Not wired; undo depth is still 30 |
+| WP4 transform | Modal Transform, numeric entry, Bicubic, selection leftovers | A Catmull-Rom `Bicubic` sampler, `TransformSource`, edits to `TransformQuad`, `WarpMesh`, `LayerTransform`, the canvas view and the transform bar, a bicubic test | Partly (interpolation path); no Done/Cancel, numeric entry or selection work |
+| WP5 gestures | Gesture Controls, rotate snap, mouse/trackpad, stylus buttons | Pure logic: `GestureSettings`, `PalmRejection`, `PointerIntents`/`PointerKind`, `RotationSnap`, `TouchGestures`, `ViewMath`, router and pressure edits, tests | No sheet, no settings persistence, no manifest change |
+| WP6 guides | Editable, styled, persisted drawing guides | A rewrite of part of `SymmetryEngine` and a stroke test | No |
+| WP7 animation | Timeline strip, loop modes, onion-skin colours, pinned layers | Pure logic: `HoldDuration`, `OnionSkin`, `PinnedLayers`, `PlaybackRange`, `TimelineStrip`, `FramePin`, `AnimationFrame` additions, tests; a large deletion in `AnimationTimeline` | No (the code comments say so) |
+
+Treat the snapshots as drafts: each is a work-in-progress state taken at the moment of stopping, was
+written by an agent whose output has not been reviewed line by line, and has not been seen working in
+the app.
 
 ## 5. Defects found and fixed along the way
 
@@ -184,7 +209,24 @@ exist to keep `CanvasViewModel`, `GalleryScreen` and the shortcut runner inside 
 
 ## 6. Verification tooling developed
 
-*(To be completed once the harness agent's report is in.)*
+`tools/offline-check/` (commit `bb0264c`; full description in its README) lets the repository be checked
+in a sandbox with no Android SDK and no Google Maven:
+
+* `compile.sh` — stands in for `compileDebugKotlin`: Kotlin 2.0.21 (K2) with the Compose and serialization
+  plugins against Android 16 framework classes from `org.robolectric:android-all`, JetBrains Compose
+  Multiplatform 1.7.3 desktop jars (the same common `androidx.compose.*` API as Jetpack Compose 1.7) and
+  hand-written shims for the AndroidX pieces that exist only on Google Maven; generates `R` and
+  `BuildConfig`; runs an aapt2-style resource check.
+* `lint.sh` — ktlint 1.3.1 and detekt 1.23.6 with the repository's own configuration and baseline.
+* `unit.sh` — compiles and runs the JUnit tests, including the data- and presentation-layer ones, against a
+  mockable Android jar. 784 tests in 132 classes passed when it was last run by its author (the
+  figure for the final head is in section 7).
+* `tests/` — self-tests that inject mistakes into a copy of `app/src` and check they are reported.
+
+Limits, from its README: no KSP (so no Hilt graph or Room SQL validation), no manifest merge, no Android
+Lint, no packaging, no `androidTest` compile; the shims are written from public APIs and can be too
+permissive. A clean run is strong evidence, not proof. The earlier, simpler JVM harness used for the first
+part of the session (core and domain only) is superseded by `unit.sh` and is not committed.
 
 ## 7. CI evidence
 
@@ -258,3 +300,7 @@ recognition, drag behaviour, rendering speed and visual quality.
 * The work packages' worktrees were created from different commits (one from `main`); the lead
   fast-forwarded a worktree that held only untracked files rather than asking the agent to rebase.
 * No pull request was created; everything is on the working branch.
+
+## 10. State at the stop
+
+The owner stopped the session while offline checks of the archived snapshots and a full unit run on the final head were still running; they were abandoned and are not recorded. Last known offline results on the lead's code: whole-app compile 0 errors (before the final small drag-tracking fix, `7ebeb8e`, which is lint-clean but was not recompiled alone), ktlint and detekt 0 findings over the whole tree, 578 JVM tests passed (before `GalleryOrderTest`'s 8, which also passed). No CI run exists for any commit after `6e0549b`.
