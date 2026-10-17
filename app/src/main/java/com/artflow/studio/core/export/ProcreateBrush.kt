@@ -1,6 +1,7 @@
 package com.artflow.studio.core.export
 
 import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.RenderingMode
 import com.artflow.studio.domain.model.layer.BlendMode
 import kotlin.math.roundToInt
 
@@ -77,6 +78,8 @@ object ProcreateBrush {
                 tipFlipY = flag("shapeFlipYJitter"),
                 tipRandomized = flag("shapeRandomise"),
                 buildUp = flag("renderingRecursiveMixing"),
+                renderingMode =
+                    if (flag("renderingRecursiveMixing")) RenderingMode.BLEND_UNIFORM else RenderingMode.GLAZE_UNIFORM,
                 grainMoving = unit("textureMovement") >= MOVING_GRAIN,
                 secondaryPressure = unit("dynamicsPressureSecondaryColor"),
                 secondaryJitter = unit("jitterSecondary"),

@@ -521,6 +521,7 @@ class StrokeRasterizer(
 
         // Scatter offsets each dab; count repeats it along a random perpendicular offset.
         val dabs = params.count.coerceIn(1, 32)
+        val rendering = params.effectiveRenderingMode
         repeat(dabs) { index ->
             val scatter = params.scatter.coerceIn(0f, 4f) * params.size
             val jitterX = if (scatter > 0f) ((random.nextFloat() * 2f - 1f) * scatter / 2f) else 0f
@@ -534,11 +535,15 @@ class StrokeRasterizer(
                 x = x + offsetX,
                 y = y + offsetY,
                 radius = radius,
-                color = Channels.withAlpha(color, (Channels.alpha(color) * dabOpacity).roundToInt().coerceIn(0, 255)),
+                color =
+                    Channels.withAlpha(
+                        color,
+                        (Channels.alpha(color) * dabOpacity * rendering.strength).roundToInt().coerceIn(0, 255),
+                    ),
                 strength = 1f,
                 // Flow controls deposited coverage. Glazing caps it within a stroke; blending builds it up.
                 hardness = hardnessForFlow(params),
-                mode = if (params.buildUp) Stamping.Mode.SOURCE_OVER else Stamping.Mode.MAX_COVERAGE,
+                mode = if (rendering.blends) Stamping.Mode.SOURCE_OVER else Stamping.Mode.MAX_COVERAGE,
                 alphaLock = alphaLock,
                 mask = mask,
                 tip = tipFor(context.tip, params, current),
@@ -720,7 +725,11 @@ class StrokeRasterizer(
                 x = start.x,
                 y = start.y,
                 radius = max(0.35f, startSize / 2f),
-                color = Channels.withAlpha(color, (Channels.alpha(color) * startAlpha).roundToInt().coerceIn(0, 255)),
+                color =
+                    Channels.withAlpha(
+                        color,
+                        (Channels.alpha(color) * startAlpha * params.effectiveRenderingMode.strength).roundToInt().coerceIn(0, 255),
+                    ),
                 hardness = hardnessForFlow(params),
                 mode = Stamping.Mode.MAX_COVERAGE,
                 alphaLock = alphaLock,
@@ -738,7 +747,11 @@ class StrokeRasterizer(
             y1 = end.y,
             radiusStart = max(0.35f, startSize / 2f),
             radiusEnd = max(0.35f, endSize / 2f),
-            color = Channels.withAlpha(color, (Channels.alpha(color) * averageAlpha).roundToInt().coerceIn(0, 255)),
+            color =
+                Channels.withAlpha(
+                    color,
+                    (Channels.alpha(color) * averageAlpha * params.effectiveRenderingMode.strength).roundToInt().coerceIn(0, 255),
+                ),
             hardness = hardnessForFlow(params),
             mode = Stamping.Mode.MAX_COVERAGE,
             alphaLock = alphaLock,

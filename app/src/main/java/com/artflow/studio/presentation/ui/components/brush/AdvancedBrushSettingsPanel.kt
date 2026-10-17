@@ -35,6 +35,7 @@ import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.DualBrush
 import com.artflow.studio.domain.model.brush.PressureResponse
+import com.artflow.studio.domain.model.brush.RenderingMode
 import com.artflow.studio.domain.model.brush.StudioBrushes
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.presentation.ui.theme.LocalArtFlowFlags
@@ -503,42 +504,42 @@ private fun BrushWetSettings(
             valueDisplay = "%.0f%%".format(brushParams.wetMix * 100),
         )
         BrushParameterSlider(
-            label = "Dilution",
+            label = stringResource(R.string.brush_adv_wet_dilution),
             value = brushParams.wetDilution,
             onValueChange = { onBrushParamsChanged(brushParams.copy(wetDilution = it.coerceIn(0f, 1f))) },
             valueRange = 0f..1f,
             valueDisplay = "%.0f%%".format(brushParams.wetDilution * 100),
         )
         BrushParameterSlider(
-            label = "Charge",
+            label = stringResource(R.string.brush_adv_wet_charge),
             value = brushParams.wetCharge,
             onValueChange = { onBrushParamsChanged(brushParams.copy(wetCharge = it.coerceIn(0f, 1f))) },
             valueRange = 0f..1f,
             valueDisplay = "%.0f%%".format(brushParams.wetCharge * 100),
         )
         BrushParameterSlider(
-            label = "Attack",
+            label = stringResource(R.string.brush_adv_wet_attack),
             value = brushParams.wetAttack,
             onValueChange = { onBrushParamsChanged(brushParams.copy(wetAttack = it.coerceIn(0f, 1f))) },
             valueRange = 0f..1f,
             valueDisplay = "%.0f%%".format(brushParams.wetAttack * 100),
         )
         BrushParameterSlider(
-            label = "Pull",
+            label = stringResource(R.string.brush_adv_wet_pull),
             value = brushParams.wetPull,
             onValueChange = { onBrushParamsChanged(brushParams.copy(wetPull = it.coerceIn(0f, 1f))) },
             valueRange = 0f..1f,
             valueDisplay = "%.0f%%".format(brushParams.wetPull * 100),
         )
         BrushParameterSlider(
-            label = "Blur",
+            label = stringResource(R.string.brush_adv_wet_blur),
             value = brushParams.wetBlur,
             onValueChange = { onBrushParamsChanged(brushParams.copy(wetBlur = it.coerceIn(0f, 1f))) },
             valueRange = 0f..1f,
             valueDisplay = "%.0f%%".format(brushParams.wetBlur * 100),
         )
         BrushParameterSlider(
-            label = "Blur jitter",
+            label = stringResource(R.string.brush_adv_wet_blur_jitter),
             value = brushParams.wetBlurJitter,
             onValueChange = { onBrushParamsChanged(brushParams.copy(wetBlurJitter = it.coerceIn(0f, 1f))) },
             valueRange = 0f..1f,
@@ -558,10 +559,18 @@ private fun BrushWetSettings(
             valueRange = 0f..1f,
             valueDisplay = "%.0f%%".format(brushParams.burntEdges * 100),
         )
-        ShapeSwitch(
-            stringResource(R.string.brush_adv_build_up_within_a_stroke),
-            brushParams.buildUp,
-        ) { onBrushParamsChanged(brushParams.copy(buildUp = it)) }
+        RenderingModeRow(
+            title = stringResource(R.string.brush_adv_render_glaze),
+            modes = listOf(RenderingMode.GLAZE_LIGHT, RenderingMode.GLAZE_UNIFORM, RenderingMode.GLAZE_INTENSE, RenderingMode.GLAZE_HEAVY),
+            selected = brushParams.effectiveRenderingMode,
+            onSelect = { onBrushParamsChanged(brushParams.copy(renderingMode = it, buildUp = it.blends)) },
+        )
+        RenderingModeRow(
+            title = stringResource(R.string.brush_adv_render_blending),
+            modes = listOf(RenderingMode.BLEND_UNIFORM, RenderingMode.BLEND_INTENSE, RenderingMode.BLEND_HEAVY),
+            selected = brushParams.effectiveRenderingMode,
+            onSelect = { onBrushParamsChanged(brushParams.copy(renderingMode = it, buildUp = it.blends)) },
+        )
         Text(stringResource(R.string.brush_adv_blend_mode), style = MaterialTheme.typography.labelLarge)
         Row(
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag("brush-blend-modes"),
@@ -577,6 +586,38 @@ private fun BrushWetSettings(
         }
     }
 }
+
+/** One family of rendering modes as a row of chips: how overlapping dabs inside one stroke combine. */
+@Composable
+private fun RenderingModeRow(
+    title: String,
+    modes: List<RenderingMode>,
+    selected: RenderingMode,
+    onSelect: (RenderingMode) -> Unit,
+) {
+    Text(title, style = MaterialTheme.typography.labelLarge)
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        modes.forEach { mode ->
+            FilterChip(
+                selected = selected == mode,
+                onClick = { onSelect(mode) },
+                label = { Text(renderingModeLabel(mode)) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun renderingModeLabel(mode: RenderingMode): String =
+    when (mode) {
+        RenderingMode.GLAZE_LIGHT -> stringResource(R.string.brush_adv_render_light)
+        RenderingMode.GLAZE_UNIFORM, RenderingMode.BLEND_UNIFORM -> stringResource(R.string.brush_adv_render_uniform)
+        RenderingMode.GLAZE_INTENSE, RenderingMode.BLEND_INTENSE -> stringResource(R.string.brush_adv_render_intense)
+        RenderingMode.GLAZE_HEAVY, RenderingMode.BLEND_HEAVY -> stringResource(R.string.brush_adv_render_heavy)
+    }
 
 @Composable
 private fun BrushSpeedSettings(

@@ -85,10 +85,20 @@ data class BrushParams(
     val wetBlur: Float = 0f,
     // Wet mix Blur jitter, 0..1: each dab varies its blur radius by up to this share, at random.
     val wetBlurJitter: Float = 0f,
+    // How overlapping dabs combine within one stroke. Null derives it from [buildUp], so brushes saved before
+    // this field existed render as they did; see [effectiveRenderingMode].
+    val renderingMode: RenderingMode? = null,
 ) {
     /** Imported grain and shape images this brush (and its second brush) paints with. */
     val imageIds: List<String>
         get() = listOfNotNull(textureId, shapeId) + (dual?.params?.imageIds ?: emptyList())
+
+    /**
+     * The rendering mode in force: the explicit [renderingMode] when set, otherwise blending when
+     * [buildUp] is on and uniform glazing when it is off.
+     */
+    val effectiveRenderingMode: RenderingMode
+        get() = renderingMode ?: if (buildUp) RenderingMode.BLEND_UNIFORM else RenderingMode.GLAZE_UNIFORM
 
     /**
      * Whether dabs read the canvas under them, so they can change colour from paint already on the
