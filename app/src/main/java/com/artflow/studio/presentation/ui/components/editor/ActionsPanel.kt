@@ -9,6 +9,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.core.canvas.StylusAction
+import com.artflow.studio.core.canvas.StylusButtons
+import com.artflow.studio.core.canvas.StylusEraserEnd
 import com.artflow.studio.core.color.CmykProof
 import com.artflow.studio.domain.model.settings.PressureAndSmoothing
 import com.artflow.studio.presentation.ui.components.canvas.GestureControls
@@ -66,6 +69,7 @@ data class StudioPrefs(
     val lightInterface: Boolean = false,
     val brushCursor: Boolean = true,
     val dynamicBrushScaling: Boolean = false,
+    val stylus: StylusButtons = StylusButtons(),
 )
 
 data class PrefActions(
@@ -81,6 +85,8 @@ data class PrefActions(
     val onLightInterface: (Boolean) -> Unit = {},
     val onBrushCursor: (Boolean) -> Unit = {},
     val onDynamicBrushScaling: (Boolean) -> Unit = {},
+    /** Prefs > Stylus: the primary and secondary button actions, and the eraser end, saved together. */
+    val onStylus: (StylusButtons) -> Unit = {},
 )
 
 /** Canvas facts shown under Canvas > Canvas information. */
@@ -299,6 +305,30 @@ private fun PrefsTab(
         changeGestures(gestures.copy(modifyHoldQuickMenu = it))
     }
     HorizontalDivider()
+    Text("Stylus", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
+    val stylus = prefs.stylus
+    ChoiceRow(
+        label = "Primary button",
+        selected = stylus.primary,
+        options = StylusAction.entries,
+        optionLabel = { it.label },
+        onSelect = { actions.onStylus(stylus.copy(primary = it)) },
+    )
+    ChoiceRow(
+        label = "Secondary button",
+        selected = stylus.secondary,
+        options = StylusAction.entries,
+        optionLabel = { it.label },
+        onSelect = { actions.onStylus(stylus.copy(secondary = it)) },
+    )
+    ChoiceRow(
+        label = "Eraser end",
+        selected = stylus.eraserEnd,
+        options = StylusEraserEnd.entries,
+        optionLabel = { it.label },
+        onSelect = { actions.onStylus(stylus.copy(eraserEnd = it)) },
+    )
+    HorizontalDivider()
     ActionRow("Full screen", actions.onFullScreen)
     ActionRow("More preferences…", actions.onMoreSettings)
 }
@@ -365,6 +395,35 @@ private fun PrefSlider(
             modifier = Modifier.weight(1f),
         )
         Text(readout, style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(48.dp))
+    }
+}
+
+/** A label with the current choice on a button; tapping it opens the choices, as the canvas preset menu does. */
+@Composable
+private fun <T> ChoiceRow(
+    label: String,
+    selected: T,
+    options: List<T>,
+    optionLabel: (T) -> String,
+    onSelect: (T) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Box {
+            OutlinedButton(onClick = { open = true }) { Text(optionLabel(selected)) }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                options.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(optionLabel(option)) },
+                        onClick = {
+                            open = false
+                            onSelect(option)
+                        },
+                    )
+                }
+            }
+        }
     }
 }
 

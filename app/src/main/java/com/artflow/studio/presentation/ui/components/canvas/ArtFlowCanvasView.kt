@@ -11,12 +11,18 @@ import android.view.MotionEvent
 import android.view.animation.DecelerateInterpolator
 import androidx.core.math.MathUtils
 import com.artflow.studio.core.canvas.MotionFilter
+import com.artflow.studio.core.canvas.PalmRejection
 import com.artflow.studio.core.canvas.PointerGestureRouter
+import com.artflow.studio.core.canvas.PointerKind
 import com.artflow.studio.core.canvas.PointerPressure
 import com.artflow.studio.core.canvas.PressureSmoother
 import com.artflow.studio.core.canvas.QuickShape
 import com.artflow.studio.core.canvas.StrokePredictor
 import com.artflow.studio.core.canvas.StrokeStabilizer
+import com.artflow.studio.core.canvas.StylusAction
+import com.artflow.studio.core.canvas.StylusButtonMapper
+import com.artflow.studio.core.canvas.StylusButtons
+import com.artflow.studio.core.canvas.StylusDecision
 import com.artflow.studio.core.color.CmykProof
 import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.Channels
@@ -146,6 +152,8 @@ data class EditorInput(
     val gestures: GestureControls = GestureControls(),
     /** Prefs > Dynamic brush scaling: brush size follows the zoom so it looks the same on screen. */
     val dynamicBrushScaling: Boolean = false,
+    /** Prefs > Stylus: what the stylus buttons and the eraser end do. */
+    val stylus: StylusButtons = StylusButtons(),
 )
 
 /** Which touch gestures are active, from Prefs > Gesture controls. Each one can be switched off. */
@@ -237,6 +245,16 @@ class ArtFlowCanvasView
         // --- Editor state -------------------------------------------------------------------------
 
         private var input = EditorInput()
+
+        /** Turns the stylus buttons and eraser end into what a touch does; rebuilt when Prefs > Stylus changes. */
+        private var stylusMapper = StylusButtonMapper()
+
+        /** The tool chosen before the current one, which a held stylus button can return to. */
+        private var previousTool = ToolType.BRUSH
+
+        /** Ignores a resting palm while the stylus hovers or touches; see [PalmRejection]. */
+        private val palmRejection = PalmRejection()
+
         private var activeLayerId = 0L
         private var canvasWidth = 1920
         private var canvasHeight = 1080
@@ -279,7 +297,8 @@ class ArtFlowCanvasView
         override fun onHoverEvent(event: MotionEvent): Boolean {
             val type = event.getToolType(0)
             if (type != MotionEvent.TOOL_TYPE_STYLUS && type != MotionEvent.TOOL_TYPE_ERASER) return super.onHoverEvent(event)
-            val tool = if (type == MotionEvent.TOOL_TYPE_ERASER) ToolType.ERASER else input.tool
+            palmRejection.stylusHover(event.actionMasked != MotionEvent.ACTION_HOVER_EXIT)
+            val tool = stylusMapper.toolFor(pointerKind(type), input.tool)
             val showing = input.brushCursor && tool in CURSOR_TOOLS && event.actionMasked != MotionEvent.ACTION_HOVER_EXIT
             val size = if (tool == ToolType.ERASER) input.eraserSize else input.brushParams.size
             // With dynamic brush scaling the brush keeps its size on screen, whatever the zoom.
@@ -383,6 +402,10 @@ class ArtFlowCanvasView
         var onRedoRequested: (() -> Unit)? = null
         var onFullscreenRequested: (() -> Unit)? = null
         var onCopyPasteMenuRequested: (() -> Unit)? = null
+
+        /** A stylus button set to QuickMenu opens the QuickMenu once per press. */
+        var onQuickMenuRequested: (() -> Unit)? = null
+
         var onClearLayerRequested: (() -> Unit)? = null
         var onViewChanged: ((scale: Float, offsetX: Float, offsetY: Float, rotation: Float) -> Unit)? = null
         var onTextPlacementRequested: ((x: Float, y: Float) -> Unit)? = null
@@ -464,6 +487,7 @@ class ArtFlowCanvasView
         }
 
         private fun cancelToolInteraction() {
+            stylusMapper.end()
             // A node drag keeps the shape it has reached rather than losing the stroke.
             if (draggedNode >= 0) dropShapeNode()
             gestureTool = null
@@ -524,6 +548,8 @@ class ArtFlowCanvasView
             if (destinationChanged || newInput.fingerPainting != input.fingerPainting) cancelActiveGesture()
             if (destinationChanged) resetLiquifyReference()
             pointerRouter.enabled = newInput.gestures.canvasGestures()
+            if (newInput.tool != input.tool) previousTool = input.tool
+            if (newInput.stylus != input.stylus) stylusMapper = StylusButtonMapper(newInput.stylus)
             val enteringTransform = newInput.tool == ToolType.TRANSFORM && input.tool != ToolType.TRANSFORM
             val leavingTransform = newInput.tool != ToolType.TRANSFORM && input.tool == ToolType.TRANSFORM
             val warpToggled = (newInput.transformMode == TransformQuad.Mode.WARP) != (input.transformMode == TransformQuad.Mode.WARP)
@@ -1227,6 +1253,7 @@ class ArtFlowCanvasView
                     MotionEvent.ACTION_CANCEL -> PointerGestureRouter.Event.CANCEL
                     else -> return false
                 }
+            if (observePalm(event, action)) return true
             if (action == PointerGestureRouter.Event.MOVE) {
                 for (history in 0 until event.historySize) pointerRouter.observe(pointers(event, history))
             }
@@ -1307,6 +1334,60 @@ class ArtFlowCanvasView
             return true
         }
 
+        /** Runs a one-shot stylus action: Undo, or the QuickMenu. Hold-style actions never reach here. */
+        private fun performStylusAction(action: StylusAction) {
+            when (action) {
+                StylusAction.UNDO -> onUndoRequested?.invoke()
+                StylusAction.QUICK_MENU -> onQuickMenuRequested?.invoke()
+                else -> Unit
+            }
+        }
+
+        private fun pointerKind(toolType: Int): PointerKind =
+            if (toolType == MotionEvent.TOOL_TYPE_ERASER) {
+                PointerKind.STYLUS_ERASER
+            } else if (toolType == MotionEvent.TOOL_TYPE_STYLUS) {
+                PointerKind.STYLUS_TIP
+            } else {
+                PointerKind.FINGER
+            }
+
+        /**
+         * Palm rejection for one pointer event: the pen's contact is recorded, and a finger that lands while the
+         * pen hovers or touches, and is palm-sized or lands next to the pen's contact, is ignored entirely.
+         * Returns true when this event belongs to such a finger and must not reach the router.
+         */
+        private fun observePalm(
+            event: MotionEvent,
+            action: PointerGestureRouter.Event,
+        ): Boolean {
+            when (action) {
+                PointerGestureRouter.Event.DOWN, PointerGestureRouter.Event.POINTER_DOWN -> {
+                    if (isStylusTool(event.getToolType(event.actionIndex))) {
+                        palmRejection.stylusContact(down = true, timeMs = event.eventTime)
+                    } else if (action == PointerGestureRouter.Event.DOWN &&
+                        palmRejection.rejectsFinger(event.getSize(event.actionIndex), event.eventTime)
+                    ) {
+                        pointerRouter.suppress()
+                        return true
+                    }
+                }
+
+                PointerGestureRouter.Event.POINTER_UP, PointerGestureRouter.Event.UP -> {
+                    if (isStylusTool(event.getToolType(event.actionIndex))) {
+                        palmRejection.stylusContact(down = false, timeMs = event.eventTime)
+                    }
+                }
+
+                PointerGestureRouter.Event.CANCEL -> palmRejection.stylusContact(down = false, timeMs = event.eventTime)
+                PointerGestureRouter.Event.MOVE -> Unit
+            }
+            return false
+        }
+
+        private fun isStylusTool(toolType: Int): Boolean =
+            toolType == MotionEvent.TOOL_TYPE_STYLUS || toolType == MotionEvent.TOOL_TYPE_ERASER
+
         private fun pointers(
             event: MotionEvent,
             history: Int = -1,
@@ -1333,6 +1414,8 @@ class ArtFlowCanvasView
             gestureStartTime = event.eventTime
             gestureMoved = 0f
             gestureStartView = x to y
+            // The stylus buttons and eraser end choose this touch's tool, read as the touch starts.
+            val choice = stylusMapper.down(event.buttonState, pointerKind(event.getToolType(index)), input.tool, previousTool)
 
             onBrushCursorChanged?.invoke(null)
             if (shapeEdit != null && grabShapeNode(x, y)) {
@@ -1345,15 +1428,25 @@ class ArtFlowCanvasView
                 gestureTool = null
                 return true
             }
-            // The stylus side button samples colour, the usual Android pen shortcut.
-            if (isStylus && (event.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY) != 0) {
-                val (canvasX, canvasY) = viewToCanvas(x, y)
-                startSampling()
-                pickColor(canvasX, canvasY)
-                gestureTool = null
-                return true
+            // The primary side button samples colour by default, the usual Android pen shortcut.
+            when (choice) {
+                is StylusDecision.Fire -> {
+                    performStylusAction(choice.action)
+                    gestureTool = null
+                    return true
+                }
+
+                StylusDecision.Sample -> {
+                    val (canvasX, canvasY) = viewToCanvas(x, y)
+                    startSampling()
+                    pickColor(canvasX, canvasY)
+                    gestureTool = null
+                    return true
+                }
+
+                is StylusDecision.Use, StylusDecision.Ignore -> Unit
             }
-            val tool = if (event.getToolType(index) == MotionEvent.TOOL_TYPE_ERASER) ToolType.ERASER else input.tool
+            val tool = (choice as? StylusDecision.Use)?.tool ?: input.tool
             armHoldEyedropper(isStylus, x, y)
             // Palm rejection: a stylus always paints, fingers only when finger painting is on.
             if (!isStylus && !input.fingerPainting) {
@@ -1436,6 +1529,15 @@ class ArtFlowCanvasView
             y: Float,
             history: Int = -1,
         ): Boolean {
+            // A one-shot stylus button pressed during the touch fires once and ends this touch's stroke.
+            if (history < 0 && isStylusTool(event.getToolType(index))) {
+                val decision = stylusMapper.move(event.buttonState)
+                if (decision is StylusDecision.Fire) {
+                    cancelActiveGesture()
+                    performStylusAction(decision.action)
+                    return true
+                }
+            }
             val dx = x - lastPointerX
             val dy = y - lastPointerY
             gestureMoved += sqrt(dx * dx + dy * dy)
@@ -1522,6 +1624,7 @@ class ArtFlowCanvasView
             cancelled: Boolean,
         ) {
             removeCallbacks(holdEyedropper)
+            stylusMapper.end()
             if (holdSampling) {
                 endSampling()
                 gestureTool = null

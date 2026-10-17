@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.artflow.studio.core.animation.AnimationTimeline
 import com.artflow.studio.core.animation.PlaybackStepper
+import com.artflow.studio.core.canvas.StylusButtons
 import com.artflow.studio.core.color.ColorHarmony
 import com.artflow.studio.core.color.ColorProfile
 import com.artflow.studio.core.color.Palette
@@ -50,6 +51,7 @@ import com.artflow.studio.presentation.ui.components.canvas.GestureControls
 import com.artflow.studio.presentation.ui.components.canvas.SelectionCombineMode
 import com.artflow.studio.presentation.ui.components.canvas.ShapeKind
 import com.artflow.studio.presentation.ui.components.canvas.gestureControls
+import com.artflow.studio.presentation.ui.components.canvas.stylusButtons
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -242,6 +244,7 @@ class CanvasViewModel
                             gestures = stored.gestureControls(),
                             touchHoldEyedropper = stored.touchHoldEyedropper,
                             dynamicBrushScaling = stored.dynamicBrushScaling,
+                            stylus = stored.stylusButtons(),
                         )
                 }
             }
@@ -590,6 +593,19 @@ class CanvasViewModel
 
         fun setRightHandedInterface(enabled: Boolean) {
             viewModelScope.launch(editorErrors) { settingsRepository.update { it.copy(rightHandedInterface = enabled) } }
+        }
+
+        /** Prefs > Stylus: the buttons and eraser end are saved, and reach the canvas through the settings stream. */
+        fun setStylusButtons(buttons: StylusButtons) {
+            viewModelScope.launch(editorErrors) {
+                settingsRepository.update {
+                    it.copy(
+                        stylusPrimaryButton = buttons.primary,
+                        stylusSecondaryButton = buttons.secondary,
+                        stylusEraserEnd = buttons.eraserEnd,
+                    )
+                }
+            }
         }
 
         fun setGestureControls(controls: GestureControls) {

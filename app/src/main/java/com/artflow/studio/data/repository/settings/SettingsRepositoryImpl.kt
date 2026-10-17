@@ -1,5 +1,7 @@
 package com.artflow.studio.data.repository.settings
 
+import com.artflow.studio.core.canvas.StylusAction
+import com.artflow.studio.core.canvas.StylusEraserEnd
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.color.PaletteCodec
 import com.artflow.studio.data.local.dao.SettingsDao
@@ -241,6 +243,9 @@ class SettingsRepositoryImpl
                 KEY_LAYER_ALPHA to settings.layerTwoFingerAlphaLock.toString(),
                 KEY_LAYER_SELECT to settings.layerTwoFingerSelect.toString(),
                 KEY_MODIFY_QUICK_MENU to settings.modifyHoldQuickMenu.toString(),
+                KEY_STYLUS_PRIMARY to settings.stylusPrimaryButton.name,
+                KEY_STYLUS_SECONDARY to settings.stylusSecondaryButton.name,
+                KEY_STYLUS_ERASER_END to settings.stylusEraserEnd.name,
                 KEY_TIMELAPSE_SIDE to settings.timelapseMaxSide.toString(),
                 KEY_DYNAMIC_BRUSH to settings.dynamicBrushScaling.toString(),
                 KEY_QUICK_MENU to settings.quickMenu.joinToString("|"),
@@ -322,6 +327,15 @@ class SettingsRepositoryImpl
                 layerTwoFingerAlphaLock = stored.flag(KEY_LAYER_ALPHA, defaults.layerTwoFingerAlphaLock),
                 layerTwoFingerSelect = stored.flag(KEY_LAYER_SELECT, defaults.layerTwoFingerSelect),
                 modifyHoldQuickMenu = stored.flag(KEY_MODIFY_QUICK_MENU, defaults.modifyHoldQuickMenu),
+                stylusPrimaryButton =
+                    stored[KEY_STYLUS_PRIMARY]?.let { name -> StylusAction.entries.firstOrNull { it.name == name } }
+                        ?: defaults.stylusPrimaryButton,
+                stylusSecondaryButton =
+                    stored[KEY_STYLUS_SECONDARY]?.let { name -> StylusAction.entries.firstOrNull { it.name == name } }
+                        ?: defaults.stylusSecondaryButton,
+                stylusEraserEnd =
+                    stored[KEY_STYLUS_ERASER_END]?.let { name -> StylusEraserEnd.entries.firstOrNull { it.name == name } }
+                        ?: defaults.stylusEraserEnd,
                 timelapseMaxSide =
                     stored[KEY_TIMELAPSE_SIDE]?.toIntOrNull()?.takeIf { it in TIMELAPSE_SIDES } ?: defaults.timelapseMaxSide,
                 dynamicBrushScaling = stored.flag(KEY_DYNAMIC_BRUSH, defaults.dynamicBrushScaling),
@@ -406,6 +420,9 @@ class SettingsRepositoryImpl
             private const val KEY_LAYER_ALPHA = "gesture.layerTwoFingerAlphaLock"
             private const val KEY_LAYER_SELECT = "gesture.layerTwoFingerSelect"
             private const val KEY_MODIFY_QUICK_MENU = "gesture.modifyHoldQuickMenu"
+            private const val KEY_STYLUS_PRIMARY = "input.stylusPrimaryButton"
+            private const val KEY_STYLUS_SECONDARY = "input.stylusSecondaryButton"
+            private const val KEY_STYLUS_ERASER_END = "input.stylusEraserEnd"
             private const val KEY_TIMELAPSE_SIDE = "timelapse.maxSide"
             private const val KEY_DYNAMIC_BRUSH = "brush.dynamicScaling"
 

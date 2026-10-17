@@ -1,5 +1,7 @@
 package com.artflow.studio.domain.model.settings
 
+import com.artflow.studio.core.canvas.StylusAction
+import com.artflow.studio.core.canvas.StylusEraserEnd
 import com.artflow.studio.core.color.Palette
 
 /** Which theme the app follows. */
@@ -105,6 +107,12 @@ data class AppSettings(
     val layerTwoFingerSelect: Boolean = true,
     /** Gesture controls: touching and holding the modify button opens the QuickMenu. */
     val modifyHoldQuickMenu: Boolean = true,
+    /** Prefs > Stylus: what the primary (side) button does; eyedropper keeps the existing behaviour. */
+    val stylusPrimaryButton: StylusAction = StylusAction.EYEDROPPER,
+    /** Prefs > Stylus: what the secondary button does; nothing, since no button had a behaviour before. */
+    val stylusSecondaryButton: StylusAction = StylusAction.NOTHING,
+    /** Prefs > Stylus: what the eraser end of the stylus does. */
+    val stylusEraserEnd: StylusEraserEnd = StylusEraserEnd.ERASER,
     /** Longest side, in pixels, of recorded time-lapse frames (720p, 1080p or 1440p). */
     val timelapseMaxSide: Int = 1280,
     /** Brush size follows the zoom so the brush looks the same size on screen. */

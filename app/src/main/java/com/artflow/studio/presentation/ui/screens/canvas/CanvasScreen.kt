@@ -70,6 +70,7 @@ import com.artflow.studio.presentation.ui.components.canvas.ShapeEditState
 import com.artflow.studio.presentation.ui.components.canvas.gestureControls
 import com.artflow.studio.presentation.ui.components.canvas.imageDropTarget
 import com.artflow.studio.presentation.ui.components.canvas.layerGestures
+import com.artflow.studio.presentation.ui.components.canvas.stylusButtons
 import com.artflow.studio.presentation.ui.components.color.ColorPanel
 import com.artflow.studio.presentation.ui.components.color.SecondarySwatch
 import com.artflow.studio.presentation.ui.components.editor.ActionsPanel
@@ -819,6 +820,7 @@ fun CanvasScreen(
                             lightInterface = settings.themeMode == ThemeMode.LIGHT,
                             brushCursor = settings.brushCursor,
                             dynamicBrushScaling = settings.dynamicBrushScaling,
+                            stylus = settings.stylusButtons(),
                         ),
                     add =
                         AddActions(
@@ -899,6 +901,7 @@ fun CanvasScreen(
                             },
                             onBrushCursor = { on -> viewModel.updateSettings { it.copy(brushCursor = on) } },
                             onDynamicBrushScaling = { on -> viewModel.updateSettings { it.copy(dynamicBrushScaling = on) } },
+                            onStylus = viewModel::setStylusButtons,
                         ),
                     onShare = { panel = EditorPanel.EXPORT },
                     canPaste = hasClipboard,
@@ -1078,6 +1081,10 @@ fun CanvasScreen(
                                 onCloneSourceChanged = { viewModel.onCloneSourceChanged(it) }
                                 onStatusMessage = { viewModel.notify(it) }
                                 onFillToleranceChanged = viewModel::setFillTolerance
+                                onQuickMenuRequested = {
+                                    canvasView?.cancelActiveGesture()
+                                    quickMenu = true
+                                }
                                 setEditorInput(input)
                                 setOnionSkinEnabled(settings.onionSkin)
                                 setCheckerboardVisible(settings.checkerboard)
