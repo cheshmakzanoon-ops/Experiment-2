@@ -103,6 +103,9 @@ class CanvasRepositoryImpl
         private var backgroundColor = 0xFFFFFFFF.toInt()
 
         private var frameList: MutableList<FrameData> = mutableListOf()
+
+        /** The frame last copied with [copyFrame]; cleared when another artwork is opened. */
+        private var frameClipboard: FrameData? = null
         private var activeFrame = 0
         private var animationSettings = AnimationSettings()
         private var nextLayerId = 1L
@@ -309,6 +312,7 @@ class CanvasRepositoryImpl
             document: CanvasDocument,
         ) {
             val frames = document.resolvedFrames()
+            frameClipboard = null
             requireCanvasMemory(document.width, document.height)
             val rasterCount = frames.sumOf { frame -> frame.layers.sumOf { listOfNotNull(it.rasterFile, it.maskFile).size } }
             val rasterBytes = document.width.toLong() * document.height * 4L * rasterCount
@@ -2213,6 +2217,75 @@ class CanvasRepositoryImpl
                 dirty = true
                 syncTimeline()
                 emit(CanvasInvalidationEvent.FrameChanged(activeFrame))
+            }
+
+        /**
+         * Copies the frame at [index] to the frame clipboard. The copy owns its pixels, so later edits
+         * to the source frame do not change what Paste inserts.
+         */
+        override suspend fun copyFrame(index: Int): Boolean =
+            withState {
+                val source = frameList.getOrNull(index) ?: return@withState false
+                var strokeCursor = 0L
+                frameClipboard =
+                    FrameData(
+                        id = source.id,
+                        name = source.name,
+                        durationMs = source.durationMs,
+                        isKeyframe = source.isKeyframe,
+                        layers =
+                            source.layers
+                                .map { layer ->
+                                    layer.duplicate(layer.id, layer.name) { ++strokeCursor }.also { fresh ->
+                                        fresh.raster = fresh.raster?.copy()
+                                        fresh.mask = fresh.mask?.copy()
+                                    }
+                                }.toMutableList(),
+                    )
+                true
+            }
+
+        /**
+         * Inserts a copy of the clipboard frame at [insertAt] and makes it the active frame. Nothing is
+         * pasted when no frame was copied, when the copy was made for a canvas of another size, or when
+         * the frame or layer limits are reached.
+         */
+        override suspend fun pasteFrame(insertAt: Int): Boolean =
+            withState {
+                val clip = frameClipboard ?: return@withState false
+                val fitsCanvas =
+                    clip.layers.all { layer ->
+                        listOfNotNull(layer.raster, layer.mask).all { it.width == canvasWidth && it.height == canvasHeight }
+                    }
+                if (!fitsCanvas) return@withState false
+                require(frameList.size < ProjectStorage.MAX_FRAMES) { "Maximum ${ProjectStorage.MAX_FRAMES} frames reached" }
+                require(hasLayerCapacity(clip.layers.size)) { "Maximum project layer count reached" }
+                require(nextFrameId in 1 until Long.MAX_VALUE) { "Frame identifiers are exhausted" }
+                pushUndo()
+                val frame =
+                    FrameData(
+                        id = nextFrameId++,
+                        name = "${clip.name} copy",
+                        durationMs = clip.durationMs,
+                        isKeyframe = clip.isKeyframe,
+                        layers =
+                            clip.layers
+                                .map { layer ->
+                                    val newId = nextLayerId++
+                                    layer.duplicate(newId, layer.name) { nextStrokeId++ }.also { fresh ->
+                                        fresh.raster = fresh.raster?.copy()
+                                        fresh.mask = fresh.mask?.copy()
+                                        dirtyRasters += newId
+                                    }
+                                }.toMutableList(),
+                    )
+                val target = insertAt.coerceIn(0, frameList.size)
+                frameList.add(target, frame)
+                activeFrame = target
+                dirty = true
+                syncTimeline()
+                emit(CanvasInvalidationEvent.FrameChanged(activeFrame))
+                true
             }
 
         override suspend fun deleteFrame(index: Int): Boolean =

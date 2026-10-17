@@ -243,8 +243,6 @@
     <string name="editorsheets_clear_to_transparency">Clear to transparency</string>
     <string name="editorsheets_fill_with_background">Fill with background</string>
     <string name="editorsheets_animation">Animation</string>
-    <string name="editorsheets_loop_playback">Loop playback</string>
-    <string name="editorsheets_ping_pong_playback">Ping-pong playback</string>
     <string name="editorsheets_first_frame_is_the_background">First frame is the background</string>
     <string name="editorsheets_last_frame_is_the_foreground">Last frame is the foreground</string>
     <string name="editorsheets_onion_skin">Onion skin</string>
@@ -257,6 +255,11 @@
     <string name="editorsheets_snap_strokes_to_guides">Snap strokes to guides</string>
     <string name="editorsheets_show_symmetry_guides">Show symmetry guides</string>
     <string name="editorsheets_show_perspective_guides">Show perspective guides</string>
+    <string name="editorsheets_grid_size_px">Grid size (px)</string>
+    <string name="editorsheets_line_thickness">Line thickness</string>
+    <string name="editorsheets_line_opacity">Line opacity</string>
+    <string name="editorsheets_line_colour">Line colour</string>
+    <string name="editorsheets_colour_swatch">%1$s %2$s</string>
     <string name="editorsheets_text">Text</string>
     <string name="editorsheets_place_on_canvas">Place on canvas</string>
     <string name="editorsheets_content">Content</string>
@@ -273,6 +276,7 @@
     <string name="editorsheets_tap_the_colour_chip_in_the_toolbar_for">Tap the colour chip in the toolbar for the full picker.</string>
     <string name="cropoverlay_crop_settings">Crop settings</string>
     <string name="actionspanel_canvas_information">Canvas information</string>
+    <string name="actionspanel_layers_of_limit">%1$d of %2$d layers</string>
     <string name="actionspanel_pressure_and_smoothing">Pressure and Smoothing</string>
     <string name="actionspanel_gesture_controls">Gesture controls</string>
     <string name="actionspanel_recording_quality">Recording quality</string>
@@ -404,6 +408,11 @@
     <string name="editorsheets_layer_actions">Layer actions</string>
     <string name="editorsheets_new_frame">New frame</string>
     <string name="editorsheets_duplicate_frame">Duplicate frame</string>
+    <string name="editorsheets_copy_frame">Copy frame</string>
+    <string name="editorsheets_paste_frame">Paste frame after this one</string>
+    <string name="editorsheets_play_mode">Play mode</string>
+    <string name="editorsheets_before_colour">Before colour</string>
+    <string name="editorsheets_after_colour">After colour</string>
     <string name="editorsheets_move_earlier">Move earlier</string>
     <string name="editorsheets_move_later">Move later</string>
     <string name="editorsheets_delete_frame">Delete frame</string>

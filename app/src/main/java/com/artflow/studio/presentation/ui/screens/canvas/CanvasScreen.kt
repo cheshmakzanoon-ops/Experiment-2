@@ -93,6 +93,7 @@ import com.artflow.studio.presentation.ui.components.editor.CopyPasteActions
 import com.artflow.studio.presentation.ui.components.editor.CopyPasteMenu
 import com.artflow.studio.presentation.ui.components.editor.CropBar
 import com.artflow.studio.presentation.ui.components.editor.CropOverlay
+import com.artflow.studio.presentation.ui.components.editor.FrameClipboard
 import com.artflow.studio.presentation.ui.components.editor.GuideAssist
 import com.artflow.studio.presentation.ui.components.editor.GuidesOverlay
 import com.artflow.studio.presentation.ui.components.editor.GuidesSheet
@@ -104,6 +105,7 @@ import com.artflow.studio.presentation.ui.components.editor.LayerStackActions
 import com.artflow.studio.presentation.ui.components.editor.LayersSheet
 import com.artflow.studio.presentation.ui.components.editor.ModelCompanion
 import com.artflow.studio.presentation.ui.components.editor.NoticePill
+import com.artflow.studio.presentation.ui.components.editor.OnionSwitch
 import com.artflow.studio.presentation.ui.components.editor.PageAssistActions
 import com.artflow.studio.presentation.ui.components.editor.PageAssistBar
 import com.artflow.studio.presentation.ui.components.editor.PrefActions
@@ -180,6 +182,7 @@ fun CanvasScreen(
     val layers by viewModel.layers.collectAsState()
     val history by viewModel.history.collectAsState()
     val settings by viewModel.settings.collectAsState()
+    val canPasteFrame by viewModel.frameClipboard.canPaste.collectAsState()
     val timeline by viewModel.timeline.collectAsState()
     val exportState by viewModel.exportState.collectAsState()
     val pendingText by viewModel.pendingText.collectAsState()
@@ -700,15 +703,24 @@ fun CanvasScreen(
             EditorPanel.ANIMATION -> {
                 AnimationSheet(
                     timeline = timeline,
-                    onionEnabled = settings.onionSkin,
+                    onion =
+                        OnionSwitch(
+                            enabled = settings.onionSkin,
+                            onToggle = { viewModel.toggleOnionSkin(it) },
+                        ),
                     onSelectFrame = { viewModel.selectFrame(it) },
                     onAddFrame = { viewModel.addFrame(it) },
                     onDeleteFrame = { viewModel.deleteFrame(it) },
                     onMoveFrame = { from, to -> viewModel.moveFrame(from, to) },
                     onFrameDuration = { index, duration -> viewModel.setFrameDuration(index, duration) },
                     onSettings = { viewModel.updateAnimationSettings(it) },
-                    onToggleOnion = { viewModel.toggleOnionSkin(it) },
                     onTogglePlayback = { viewModel.togglePlayback() },
+                    clipboard =
+                        FrameClipboard(
+                            canPaste = canPasteFrame,
+                            onCopy = { viewModel.frameClipboard.copy(it) },
+                            onPaste = { viewModel.frameClipboard.paste(it) },
+                        ),
                 )
             }
 

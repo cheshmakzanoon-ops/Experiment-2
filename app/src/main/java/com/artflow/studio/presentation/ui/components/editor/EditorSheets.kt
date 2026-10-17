@@ -856,18 +856,31 @@ fun CanvasOpsSheet(
 // Animation
 // ---------------------------------------------------------------------------------------------
 
+/** Frame copy and paste for the Animation panel: whether a frame is on the clipboard, and the two actions. */
+data class FrameClipboard(
+    val canPaste: Boolean,
+    val onCopy: (Int) -> Unit,
+    val onPaste: (Int) -> Unit,
+)
+
+/** The app-wide onion skin switch as the Animation panel shows it. */
+data class OnionSwitch(
+    val enabled: Boolean,
+    val onToggle: (Boolean) -> Unit,
+)
+
 @Composable
 fun AnimationSheet(
     timeline: AnimationTimeline.State,
-    onionEnabled: Boolean,
+    onion: OnionSwitch,
     onSelectFrame: (Int) -> Unit,
     onAddFrame: (Boolean) -> Unit,
     onDeleteFrame: (Int) -> Unit,
     onMoveFrame: (Int, Int) -> Unit,
     onFrameDuration: (Int, Int) -> Unit,
     onSettings: (AnimationSettings) -> Unit,
-    onToggleOnion: (Boolean) -> Unit,
     onTogglePlayback: () -> Unit,
+    clipboard: FrameClipboard,
     modifier: Modifier = Modifier,
 ) {
     val settings = timeline.settings
@@ -890,7 +903,13 @@ fun AnimationSheet(
                     Icon(Icons.Default.Add, contentDescription = stringResource(R.string.editorsheets_new_frame))
                 }
                 IconButton(onClick = { onAddFrame(true) }) {
-                    Icon(Icons.Default.ContentCopy, contentDescription = stringResource(R.string.editorsheets_duplicate_frame))
+                    Icon(Icons.Default.FilterNone, contentDescription = stringResource(R.string.editorsheets_duplicate_frame))
+                }
+                IconButton(onClick = { clipboard.onCopy(timeline.activeIndex) }) {
+                    Icon(Icons.Default.ContentCopy, contentDescription = stringResource(R.string.editorsheets_copy_frame))
+                }
+                IconButton(onClick = { clipboard.onPaste(timeline.activeIndex + 1) }, enabled = clipboard.canPaste) {
+                    Icon(Icons.Default.ContentPaste, contentDescription = stringResource(R.string.editorsheets_paste_frame))
                 }
                 IconButton(onClick = onTogglePlayback) {
                     Icon(
@@ -901,63 +920,12 @@ fun AnimationSheet(
             }
         }
 
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(timeline.frames.size) { index ->
-                val frame = timeline.frames[index]
-                Card(
-                    modifier =
-                        Modifier
-                            .width(84.dp)
-                            .clickable { onSelectFrame(index) },
-                    colors =
-                        CardDefaults.cardColors(
-                            containerColor =
-                                if (index == timeline.activeIndex) {
-                                    MaterialTheme.colorScheme.primaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceVariant
-                                },
-                        ),
-                ) {
-                    Column(modifier = Modifier.padding(6.dp)) {
-                        Text("${index + 1}", style = MaterialTheme.typography.labelLarge)
-                        Text(
-                            "${frame.durationMs} ms",
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                        Row {
-                            IconButton(
-                                onClick = { if (index > 0) onMoveFrame(index, index - 1) },
-                                modifier = Modifier.size(24.dp),
-                            ) {
-                                Icon(
-                                    Icons.Default.ChevronLeft,
-                                    contentDescription = stringResource(R.string.editorsheets_move_earlier),
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            }
-                            IconButton(
-                                onClick = { if (index < timeline.frames.lastIndex) onMoveFrame(index, index + 1) },
-                                modifier = Modifier.size(24.dp),
-                            ) {
-                                Icon(
-                                    Icons.Default.ChevronRight,
-                                    contentDescription = stringResource(R.string.editorsheets_move_later),
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            }
-                            IconButton(onClick = { onDeleteFrame(index) }, modifier = Modifier.size(48.dp)) {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = stringResource(R.string.editorsheets_delete_frame),
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        FrameStrip(
+            timeline = timeline,
+            onSelectFrame = onSelectFrame,
+            onMoveFrame = onMoveFrame,
+            onDeleteFrame = onDeleteFrame,
+        )
 
         Text(
             stringResource(R.string.editorsheets_total_duration_and_frames, timeline.durationMs, timeline.frameCount),
@@ -980,7 +948,7 @@ fun AnimationSheet(
             range = 1f..60f,
             onChange = { onSettings(settings.copy(fps = it.toInt())) },
         )
-        Text("Play mode", style = MaterialTheme.typography.labelMedium)
+        Text(stringResource(R.string.editorsheets_play_mode), style = MaterialTheme.typography.labelMedium)
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1005,7 +973,7 @@ fun AnimationSheet(
             Text(stringResource(R.string.editorsheets_last_frame_is_the_foreground), style = MaterialTheme.typography.bodySmall)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Switch(checked = onionEnabled, onCheckedChange = onToggleOnion)
+            Switch(checked = onion.enabled, onCheckedChange = onion.onToggle)
             Spacer(Modifier.width(8.dp))
             Text(stringResource(R.string.editorsheets_onion_skin), style = MaterialTheme.typography.bodySmall)
         }
@@ -1022,13 +990,13 @@ fun AnimationSheet(
             onChange = { onSettings(settings.copy(onionSkinOpacity = it)) },
         )
         ColourSwatches(
-            label = "Before colour",
+            label = stringResource(R.string.editorsheets_before_colour),
             selected = settings.onionSkinPreviousColor,
             choices = OnionSkinTint.COLOUR_CHOICES,
             onSelect = { onSettings(settings.copy(onionSkinPreviousColor = it)) },
         )
         ColourSwatches(
-            label = "After colour",
+            label = stringResource(R.string.editorsheets_after_colour),
             selected = settings.onionSkinNextColor,
             choices = OnionSkinTint.COLOUR_CHOICES,
             onSelect = { onSettings(settings.copy(onionSkinNextColor = it)) },
@@ -1149,7 +1117,7 @@ fun GuidesSheet(
         )
         if (perspective.type == PerspectiveGuide.GuideType.GRID || perspective.type == PerspectiveGuide.GuideType.ISOMETRIC) {
             LabeledSlider(
-                label = "Grid size (px)",
+                label = stringResource(R.string.editorsheets_grid_size_px),
                 value = perspective.gridSpacing.toFloat(),
                 range = 8f..512f,
                 onChange = { onPerspective(perspective.copy(gridSpacing = it.toInt())) },
@@ -1220,19 +1188,19 @@ private fun GuideLineStyleControls(
     onStyle: (GuideLineStyle) -> Unit,
 ) {
     LabeledSlider(
-        label = "Line thickness",
+        label = stringResource(R.string.editorsheets_line_thickness),
         value = style.thickness,
         range = GuideLineStyle.THICKNESS_RANGE,
         onChange = { onStyle(style.copy(thickness = it)) },
     )
     LabeledSlider(
-        label = "Line opacity",
+        label = stringResource(R.string.editorsheets_line_opacity),
         value = style.opacity,
         range = GuideLineStyle.OPACITY_RANGE,
         onChange = { onStyle(style.copy(opacity = it)) },
     )
     ColourSwatches(
-        label = "Line colour",
+        label = stringResource(R.string.editorsheets_line_colour),
         selected = style.colour or OPAQUE,
         choices = GuideLineStyle.COLOUR_CHOICES.map { it or OPAQUE },
         onSelect = { onStyle(style.copy(colour = it and RGB_ONLY)) },
@@ -1254,6 +1222,7 @@ private fun ColourSwatches(
     ) {
         Text(label, style = MaterialTheme.typography.labelMedium)
         choices.forEach { choice ->
+            val description = stringResource(R.string.editorsheets_colour_swatch, label, choice.toUInt().toString(16).padStart(8, '0'))
             Box(
                 modifier =
                     Modifier
@@ -1262,7 +1231,7 @@ private fun ColourSwatches(
                         .background(Color(choice))
                         .border(if (choice == selected) 3.dp else 1.dp, MaterialTheme.colorScheme.outline, CircleShape)
                         .clickable { onSelect(choice) }
-                        .semantics { contentDescription = "$label ${choice.toUInt().toString(16).padStart(8, '0')}" },
+                        .semantics { contentDescription = description },
             )
         }
     }
@@ -1270,6 +1239,103 @@ private fun ColourSwatches(
 
 private const val OPAQUE = -0x1000000
 private const val RGB_ONLY = 0x00FFFFFF
+
+/**
+ * The frame strip: tap a frame to select it, press and hold then drag to reorder, and use its
+ * buttons to step a frame earlier or later or to delete it.
+ */
+@Composable
+private fun FrameStrip(
+    timeline: AnimationTimeline.State,
+    onSelectFrame: (Int) -> Unit,
+    onMoveFrame: (Int, Int) -> Unit,
+    onDeleteFrame: (Int) -> Unit,
+) {
+    var dragging by remember { mutableStateOf<Int?>(null) }
+    var travel by remember { mutableFloatStateOf(0f) }
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        items(timeline.frames.size) { index ->
+            val frame = timeline.frames[index]
+            Card(
+                modifier =
+                    Modifier
+                        .width(84.dp)
+                        .zIndex(if (dragging == index) 1f else 0f)
+                        .graphicsLayer { translationX = if (dragging == index) travel else 0f }
+                        .clickable { onSelectFrame(index) }
+                        .pointerInput(index, timeline.frames.size) {
+                            val gap = 6.dp.toPx()
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = {
+                                    dragging = index
+                                    travel = 0f
+                                },
+                                onDragEnd = {
+                                    val steps = (travel / (size.width + gap)).roundToInt()
+                                    val target = (index + steps).coerceIn(0, timeline.frames.lastIndex)
+                                    if (target != index) onMoveFrame(index, target)
+                                    dragging = null
+                                    travel = 0f
+                                },
+                                onDragCancel = {
+                                    dragging = null
+                                    travel = 0f
+                                },
+                            ) { change, amount ->
+                                change.consume()
+                                travel += amount.x
+                            }
+                        },
+                colors =
+                    CardDefaults.cardColors(
+                        containerColor =
+                            if (index == timeline.activeIndex) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant
+                            },
+                    ),
+            ) {
+                Column(modifier = Modifier.padding(6.dp)) {
+                    Text("${index + 1}", style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        "${frame.durationMs} ms",
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                    Row {
+                        IconButton(
+                            onClick = { if (index > 0) onMoveFrame(index, index - 1) },
+                            modifier = Modifier.size(24.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.ChevronLeft,
+                                contentDescription = stringResource(R.string.editorsheets_move_earlier),
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                        IconButton(
+                            onClick = { if (index < timeline.frames.lastIndex) onMoveFrame(index, index + 1) },
+                            modifier = Modifier.size(24.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.ChevronRight,
+                                contentDescription = stringResource(R.string.editorsheets_move_later),
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                        IconButton(onClick = { onDeleteFrame(index) }, modifier = Modifier.size(48.dp)) {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = stringResource(R.string.editorsheets_delete_frame),
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------------------------
 // Text

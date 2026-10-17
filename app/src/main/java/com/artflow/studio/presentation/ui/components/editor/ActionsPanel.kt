@@ -11,7 +11,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.artflow.studio.R
-import com.artflow.studio.core.canvas.CanvasInformation
 import com.artflow.studio.core.canvas.StylusAction
 import com.artflow.studio.core.canvas.StylusButtons
 import com.artflow.studio.core.canvas.StylusEraserEnd
@@ -102,7 +101,7 @@ data class CanvasInfo(
     val frames: Int,
     val profile: String = "sRGB IEC61966-2.1",
     val trackedMs: Long = 0L,
-    /** Most layers this canvas size can hold on this device, see [CanvasInformation]. */
+    /** Most layers this canvas size can hold on this device; worked out in core/canvas CanvasInformation. */
     val layerLimit: Int = 0,
 )
 
@@ -221,7 +220,7 @@ private fun CanvasTab(
     )
     Text(
         "${info.width} × ${info.height} px · ${info.dpi} dpi · " +
-            "${CanvasInformation.layerSummary(info.layers, info.layerLimit)} · ${info.frames} frame(s) · " +
+            "${stringResource(R.string.actionspanel_layers_of_limit, info.layers, info.layerLimit)} · ${info.frames} frame(s) · " +
             "${info.profile} · tracked time ${trackedLabel(info.trackedMs)}",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,

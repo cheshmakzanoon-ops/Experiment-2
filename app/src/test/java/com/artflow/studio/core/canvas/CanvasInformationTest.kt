@@ -45,8 +45,4 @@ class CanvasInformationTest {
         assertEquals(7, CanvasInformation.layerTotal(listOf(3, 0, 4)))
         assertEquals(0, CanvasInformation.layerTotal(emptyList()))
     }
-
-    @Test fun summaryNamesUsedAndMaximum() {
-        assertEquals("3 of 1024 layers", CanvasInformation.layerSummary(3, 1024))
-    }
 }

@@ -53,10 +53,4 @@ object CanvasInformation {
 
     /** Layers across every frame of the artwork, as the hard limit counts them. */
     fun layerTotal(layerCountsPerFrame: List<Int>): Int = layerCountsPerFrame.sumOf { it.coerceAtLeast(0) }
-
-    /** The panel's layer figure, for example `3 of 1024 layers`. */
-    fun layerSummary(
-        used: Int,
-        limit: Int,
-    ): String = "$used of $limit layers"
 }

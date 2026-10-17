@@ -558,6 +558,15 @@ interface CanvasRepository {
     /** @return true when a frame was actually removed (never removes the last frame). */
     suspend fun deleteFrame(index: Int): Boolean
 
+    /** Copies the frame at [index] to the frame clipboard. @return false when there is no such frame. */
+    suspend fun copyFrame(index: Int): Boolean
+
+    /**
+     * Inserts a copy of the copied frame at [insertAt], which becomes the active frame.
+     * @return false when nothing is copied or the copy does not fit this canvas.
+     */
+    suspend fun pasteFrame(insertAt: Int): Boolean
+
     suspend fun moveFrame(
         from: Int,
         to: Int,

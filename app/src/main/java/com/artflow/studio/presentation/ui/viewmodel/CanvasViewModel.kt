@@ -836,6 +836,19 @@ class CanvasViewModel
         val canvasPreview = CanvasPreviewController(canvasRepository, viewModelScope)
         val pageThumbnails = PageThumbnailController(canvasRepository, viewModelScope)
 
+        /** Copy and paste of whole animation frames for the Animation panel. */
+        val frameClipboard =
+            FrameClipboardController(
+                canvasRepository,
+                viewModelScope + editorErrors,
+                ::notify,
+                {
+                    refreshLayers()
+                    refreshUiStateFrames()
+                },
+                ::stopPlayback,
+            )
+
         val layerThumbnails = LayerThumbnailController(canvasRepository, viewModelScope)
 
         fun duplicateActiveLayer() = duplicateLayer(canvasRepository.getActiveLayerId())
