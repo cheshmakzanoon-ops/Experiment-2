@@ -146,7 +146,7 @@ internal fun LayerRow(
                                 modifier = Modifier.size(18.dp),
                             )
                         }
-                        LayerMenu(layer, menuVisible, actions, options, onBlendMode, onRename) { menuVisible = false }
+                        LayerMenu(layer, isActive, menuVisible, actions, options, onBlendMode, onRename) { menuVisible = false }
                     }
                 }
             }
@@ -284,6 +284,7 @@ private fun LayerStatus(layer: Layer) {
 @Composable
 private fun LayerMenu(
     layer: Layer,
+    isActive: Boolean,
     expanded: Boolean,
     actions: LayerRowActions,
     options: LayerOptionActions?,
@@ -296,12 +297,15 @@ private fun LayerMenu(
             action()
             dismiss()
         }
+    // Select, Copy, Fill, Clear, Mask and Invert act on the selected layer, so they are offered only
+    // on it; the other items take this row's layer id.
+    val onSelectedLayer = options != null && isActive
     DropdownMenu(expanded = expanded, onDismissRequest = dismiss) {
         DropdownMenuItem(text = { Text(stringResource(R.string.layer_rename)) }, onClick = item(onRename))
         if (options != null && layer.textContent != null) {
             DropdownMenuItem(text = { Text(stringResource(R.string.layer_edit_text)) }, onClick = item { options.onEditText(layer) })
         }
-        if (options != null) {
+        if (options != null && onSelectedLayer) {
             DropdownMenuItem(text = { Text(stringResource(R.string.layer_select)) }, onClick = item(options.onSelectContents))
             DropdownMenuItem(text = { Text(stringResource(R.string.layer_copy)) }, onClick = item(options.onCopy))
             DropdownMenuItem(text = { Text(stringResource(R.string.layer_fill)) }, onClick = item(options.onFill))
@@ -319,7 +323,9 @@ private fun LayerMenu(
             },
             onClick = item { actions.onAlphaLock(layer.id, !layer.isAlphaLocked) },
         )
-        if (options != null) DropdownMenuItem(text = { Text(stringResource(R.string.layer_mask)) }, onClick = item(options.onMask))
+        if (options != null && onSelectedLayer) {
+            DropdownMenuItem(text = { Text(stringResource(R.string.layer_mask)) }, onClick = item(options.onMask))
+        }
         DropdownMenuItem(
             text = {
                 Text(
@@ -332,8 +338,10 @@ private fun LayerMenu(
             },
             onClick = item { actions.onClipping(layer.id, !layer.isClippingMask) },
         )
-        if (options != null) {
+        if (options != null && onSelectedLayer) {
             DropdownMenuItem(text = { Text(stringResource(R.string.layer_invert)) }, onClick = item(options.onInvert))
+        }
+        if (options != null) {
             DropdownMenuItem(
                 text = {
                     Text(
