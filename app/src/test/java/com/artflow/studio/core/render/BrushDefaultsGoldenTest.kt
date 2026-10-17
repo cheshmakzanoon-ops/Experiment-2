@@ -51,7 +51,8 @@ class BrushDefaultsGoldenTest {
         return hash
     }
 
-    private fun paintedHash(params: BrushParams): Long = fingerprint(layer.copy().also { StrokeRasterizer().draw(it, stroke(params)) }.pixels)
+    private fun paintedHash(params: BrushParams): Long =
+        fingerprint(layer.copy().also { StrokeRasterizer().draw(it, stroke(params)) }.pixels)
 
     @Test
     fun presetsPaintTheCapturedPixels() {
