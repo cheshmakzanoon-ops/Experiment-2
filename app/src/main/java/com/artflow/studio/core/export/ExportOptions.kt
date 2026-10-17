@@ -27,6 +27,7 @@ enum class ExportFormat(
     TIFF("TIFF", "tif", "image/tiff"),
     LAYER_PNGS("PNG layers (zip)", "zip", "application/zip"),
     ARTFLOW("ArtFlow artwork (all layers and frames)", "artflow", "application/octet-stream"),
+    PROCREATE("Procreate document (.procreate)", "procreate", "application/octet-stream"),
     MODEL_OBJ("3D model (OBJ, material and texture)", "zip", "application/zip"),
     GIF("Animated GIF", "gif", "image/gif", requiresAnimation = true),
     MP4("MP4 video", "mp4", "video/mp4", requiresAnimation = true),
@@ -38,14 +39,14 @@ enum class ExportFormat(
     val keepsColorProfile: Boolean get() = this == PNG || this == JPEG || this == LAYER_PNGS
 
     /** Formats built from the individual layers as well as the composite. */
-    val needsLayers: Boolean get() = this == PSD || this == LAYER_PNGS
+    val needsLayers: Boolean get() = this == PSD || this == LAYER_PNGS || this == PROCREATE
 
     /** MediaStore accepts these image/video types; PSD/PDF/ZIP use the document picker. */
     val supportsGallery: Boolean get() = this in setOf(PNG, JPEG, WEBP, GIF, MP4, APNG)
 
     companion object {
         /** Formats offered for a still image. */
-        fun stillFormats(): List<ExportFormat> = listOf(PNG, JPEG, WEBP, PDF, PSD, TIFF, LAYER_PNGS, ARTFLOW)
+        fun stillFormats(): List<ExportFormat> = listOf(PNG, JPEG, WEBP, PDF, PSD, TIFF, LAYER_PNGS, ARTFLOW, PROCREATE)
 
         /** Formats offered for an animation. */
         fun animationFormats(): List<ExportFormat> = listOf(GIF, MP4, APNG, FRAME_SEQUENCE)
