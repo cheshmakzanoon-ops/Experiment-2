@@ -659,6 +659,16 @@ class ArtFlowCanvasView
             pushTransform()
         }
 
+        /** Moves the view by [dx], [dy] screen pixels, as a keyboard pan does. */
+        fun panBy(
+            dx: Float,
+            dy: Float,
+        ) {
+            offsetX += dx
+            offsetY += dy
+            pushTransform()
+        }
+
         fun currentScale(): Float = scale
 
         fun currentRotation(): Float = rotationDegrees
