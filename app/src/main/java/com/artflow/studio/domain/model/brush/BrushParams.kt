@@ -63,10 +63,39 @@ data class BrushParams(
     val secondaryJitter: Float = 0f, // 0..1: each dab blends a random amount toward the secondary colour
     val burntEdges: Float = 0f, // 0..1: paint darkens where the stroke's coverage falls off, like a scorched rim
     val grainDepth: Float = 1f, // 0..1: how strongly the grain shows; 0 paints as if there were no grain
+    // Wet mix Dilution, 0..1: each dab leans toward the canvas colour under it, and loses the same
+    // share of its own alpha, so paint laid over paint thins toward what is beneath. Acts on the
+    // canvas sample of the dab (see [picksUpCanvas]), and builds up from the stroke's start with [wetAttack].
+    val wetDilution: Float = 0f,
+    // Wet mix Charge, 0..1: how much of the brush's own colour a dab keeps. At 1 (the default) the dab
+    // paints its colour as chosen. Below 1 the rest of the mix is canvas colour taken from under the dab,
+    // so a low charge picks up paint even when Wetness is zero. At 0 the dab carries only canvas colour.
+    val wetCharge: Float = 1f,
+    // Wet mix Attack, 0..1: how quickly pickup reaches full strength after the stroke starts. At 1 (the
+    // default) the first dab already picks up at full strength. Lower values ramp pickup in over
+    // (1 - attack) x 4 brush sizes of travel, so the start of a stroke stays the brush's own colour.
+    val wetAttack: Float = 1f,
+    // Wet mix Pull, 0..1: how far back along the path a dab reads the canvas it picks up from, up to
+    // two brush sizes. Pulled pickup is taken from where the brush has been, so picked-up colour
+    // drags forward along the stroke. Zero reads the canvas under the dab itself.
+    val wetPull: Float = 0f,
+    // Wet mix Blur, 0..1: softens the picked-up canvas colour. A dab averages five canvas samples,
+    // its centre and four points half a brush size times this value away, so a thin line under the
+    // brush contributes a share of its colour instead of all or nothing.
+    val wetBlur: Float = 0f,
+    // Wet mix Blur jitter, 0..1: each dab varies its blur radius by up to this share, at random.
+    val wetBlurJitter: Float = 0f,
 ) {
     /** Imported grain and shape images this brush (and its second brush) paints with. */
     val imageIds: List<String>
         get() = listOfNotNull(textureId, shapeId) + (dual?.params?.imageIds ?: emptyList())
+
+    /**
+     * Whether dabs read the canvas under them, so they can change colour from paint already on the
+     * layer. Such brushes cannot take the capsule fast path and their live frames depend on the layer.
+     */
+    val picksUpCanvas: Boolean
+        get() = wetMix > 0f || wetCharge < 1f || wetDilution > 0f
 
     /**
      * Pressure curve types for mapping stylus pressure

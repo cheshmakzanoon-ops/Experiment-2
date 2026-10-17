@@ -79,6 +79,12 @@ object BrushLibraryCodec {
                 params.velocityToSize,
                 params.velocityToOpacity,
                 params.velocityToHue,
+                params.wetDilution,
+                params.wetCharge,
+                params.wetAttack,
+                params.wetPull,
+                params.wetBlur,
+                params.wetBlurJitter,
             )
         require(unitValues.all { it in 0f..1f }) { "Brush dynamics must be finite values between zero and one" }
         // PressureResponse validates finite, monotone control points during deserialization.
