@@ -199,6 +199,15 @@ private fun BrushPressureSettings(
             valueDisplay = "%.0f%%".format(brushParams.pressureToOpacity * 100),
         )
 
+        // Pressure to Bleed
+        BrushParameterSlider(
+            label = stringResource(R.string.brush_adv_pressure_bleed),
+            value = brushParams.bleed,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(bleed = it.coerceIn(0f, 1f))) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(brushParams.bleed * 100),
+        )
+
         // Pressure Curve Selection
         PressureCurveSelector(
             brushParams = brushParams,

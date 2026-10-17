@@ -513,6 +513,7 @@ class StrokeRasterizer(
                 params.applyColorJitter(stroke.color, pressure, velocity, random, stroke.secondaryColor),
                 x,
                 y,
+                pressure,
                 accumulatedDistance,
                 dirX,
                 dirY,
@@ -579,6 +580,7 @@ class StrokeRasterizer(
         color: Int,
         x: Float,
         y: Float,
+        pressure: Float,
         travelled: Float,
         dirX: Float,
         dirY: Float,
@@ -591,7 +593,8 @@ class StrokeRasterizer(
         val under = canvasUnder(canvas, x - dirX * pullDistance, y - dirY * pullDistance, params, random)
         val underAlpha = (under ushr 24) / 255f
         val ramp = pickupRamp(params, travelled)
-        val pickup = params.wetMix.coerceIn(0f, 1f) * WET_PICKUP * underAlpha * ramp
+        val wetness = params.wetMix + params.bleed.coerceIn(0f, 1f) * params.pressureResponse(pressure)
+        val pickup = wetness.coerceIn(0f, 1f) * WET_PICKUP * underAlpha * ramp
         val canvasColour = under or OPAQUE_ALPHA
         var mixed = ImageFilters.lerpArgb(color or OPAQUE_ALPHA, canvasColour, pickup)
         val chargeLoss = (1f - params.wetCharge.coerceIn(0f, 1f)) * underAlpha * ramp

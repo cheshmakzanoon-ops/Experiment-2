@@ -597,6 +597,7 @@ class CanvasRepositoryImpl
                         wetMix = 0f,
                         wetDilution = 0f,
                         wetCharge = 1f,
+                        bleed = 0f,
                         secondaryPressure = 0f,
                         secondaryJitter = 0f,
                     )

@@ -112,6 +112,7 @@
     <string name="brush_adv_pressure_dynamics">Pressure Dynamics</string>
     <string name="brush_adv_pressure_size">Pressure → Size</string>
     <string name="brush_adv_pressure_opacity">Pressure → Opacity</string>
+    <string name="brush_adv_pressure_bleed">Pressure → Bleed</string>
     <string name="brush_adv_brush_grain">Brush Grain</string>
     <string name="brush_adv_import_photo">Import photo…</string>
     <string name="brush_adv_that_image_could_not_be_used_as_a_grain">That image could not be used as a grain</string>

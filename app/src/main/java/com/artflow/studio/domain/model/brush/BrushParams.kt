@@ -88,6 +88,10 @@ data class BrushParams(
     // How overlapping dabs combine within one stroke. Null derives it from [buildUp], so brushes saved before
     // this field existed render as they did; see [effectiveRenderingMode].
     val renderingMode: RenderingMode? = null,
+    // Pressure bleed, 0..1: how much firmer pressure makes a dab take up canvas colour. It adds to Wetness in
+    // proportion to the pressure curve, so a light touch leaves the brush's own colour and a firm press
+    // mixes in the paint under it, whatever Wetness is set to.
+    val bleed: Float = 0f,
 ) {
     /** Imported grain and shape images this brush (and its second brush) paints with. */
     val imageIds: List<String>
@@ -105,7 +109,7 @@ data class BrushParams(
      * layer. Such brushes cannot take the capsule fast path and their live frames depend on the layer.
      */
     val picksUpCanvas: Boolean
-        get() = wetMix > 0f || wetCharge < 1f || wetDilution > 0f
+        get() = wetMix > 0f || wetCharge < 1f || wetDilution > 0f || bleed > 0f
 
     /**
      * Pressure curve types for mapping stylus pressure
