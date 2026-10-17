@@ -144,7 +144,7 @@ internal fun LayerRow(
                                 modifier = Modifier.size(18.dp),
                             )
                         }
-                        LayerMenu(layer, menuVisible, actions, options, onBlendMode, onRename) { menuVisible = false }
+                        LayerMenu(layer, isActive, menuVisible, actions, options, onBlendMode, onRename) { menuVisible = false }
                     }
                 }
             }
@@ -273,6 +273,7 @@ private fun LayerStatus(layer: Layer) {
 @Composable
 private fun LayerMenu(
     layer: Layer,
+    isActive: Boolean,
     expanded: Boolean,
     actions: LayerRowActions,
     options: LayerOptionActions?,
@@ -285,16 +286,23 @@ private fun LayerMenu(
             action()
             dismiss()
         }
+
+    // These options act on the selected layer, so choosing one from another row selects that row first.
+    fun onSelected(action: () -> Unit): () -> Unit =
+        item {
+            if (!isActive) actions.onSelect(layer.id)
+            action()
+        }
     DropdownMenu(expanded = expanded, onDismissRequest = dismiss) {
         DropdownMenuItem(text = { Text(stringResource(R.string.layer_rename)) }, onClick = item(onRename))
         if (options != null && layer.textContent != null) {
             DropdownMenuItem(text = { Text(stringResource(R.string.layer_edit_text)) }, onClick = item { options.onEditText(layer) })
         }
         if (options != null) {
-            DropdownMenuItem(text = { Text(stringResource(R.string.layer_select)) }, onClick = item(options.onSelectContents))
-            DropdownMenuItem(text = { Text(stringResource(R.string.layer_copy)) }, onClick = item(options.onCopy))
-            DropdownMenuItem(text = { Text(stringResource(R.string.layer_fill)) }, onClick = item(options.onFill))
-            DropdownMenuItem(text = { Text(stringResource(R.string.layer_clear)) }, onClick = item(options.onClear))
+            DropdownMenuItem(text = { Text(stringResource(R.string.layer_select)) }, onClick = onSelected(options.onSelectContents))
+            DropdownMenuItem(text = { Text(stringResource(R.string.layer_copy)) }, onClick = onSelected(options.onCopy))
+            DropdownMenuItem(text = { Text(stringResource(R.string.layer_fill)) }, onClick = onSelected(options.onFill))
+            DropdownMenuItem(text = { Text(stringResource(R.string.layer_clear)) }, onClick = onSelected(options.onClear))
         }
         DropdownMenuItem(
             text = {
@@ -308,7 +316,7 @@ private fun LayerMenu(
             },
             onClick = item { actions.onAlphaLock(layer.id, !layer.isAlphaLocked) },
         )
-        if (options != null) DropdownMenuItem(text = { Text(stringResource(R.string.layer_mask)) }, onClick = item(options.onMask))
+        if (options != null) DropdownMenuItem(text = { Text(stringResource(R.string.layer_mask)) }, onClick = onSelected(options.onMask))
         DropdownMenuItem(
             text = {
                 Text(
@@ -322,7 +330,7 @@ private fun LayerMenu(
             onClick = item { actions.onClipping(layer.id, !layer.isClippingMask) },
         )
         if (options != null) {
-            DropdownMenuItem(text = { Text(stringResource(R.string.layer_invert)) }, onClick = item(options.onInvert))
+            DropdownMenuItem(text = { Text(stringResource(R.string.layer_invert)) }, onClick = onSelected(options.onInvert))
             DropdownMenuItem(
                 text = {
                     Text(
