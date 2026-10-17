@@ -51,25 +51,51 @@ object TextRasterizer {
             return result
         }
         val maxWidth = style.maxWidth ?: (width - content.x - 8f)
-        val lines = mutableListOf<String>()
-        text.split('\n').forEach { paragraph ->
-            lines += TextLayout.wrap(paragraph, maxWidth, style) { candidate -> paint.measureText(candidate) }
-        }
+        // Justify needs a box to fill, so it applies only when a wrap width has been set.
+        val justify = style.alignment == TextLayout.Alignment.JUSTIFY && style.maxWidth != null
         var baseline = content.y + TextLayout.estimatedAscent(style)
-        lines.forEach { line ->
-            val measured = paint.measureText(line)
-            val startX =
-                when (style.alignment) {
-                    TextLayout.Alignment.CENTER -> content.x + (maxWidth - measured) / 2f
-                    TextLayout.Alignment.RIGHT -> content.x + maxWidth - measured
-                    else -> content.x
-                }
-            canvas.drawText(line, startX, baseline, paint)
-            baseline += style.lineHeightPx
+        text.split('\n').forEach { paragraph ->
+            val lines = TextLayout.wrap(paragraph, maxWidth, style) { candidate -> paint.measureText(candidate) }
+            lines.forEachIndexed { index, line ->
+                // A paragraph's last line keeps its natural spacing, as justified text does everywhere.
+                val spread = justify && index < lines.lastIndex
+                drawLine(canvas, paint, line, Placement(content.x, maxWidth, baseline, style.alignment, spread))
+                baseline += style.lineHeightPx
+            }
         }
         val result = BitmapPixelBridge.fromBitmap(bitmap)
         bitmap.recycle()
         return result
+    }
+
+    private class Placement(
+        val x: Float,
+        val boxWidth: Float,
+        val baseline: Float,
+        val alignment: TextLayout.Alignment,
+        val justified: Boolean,
+    )
+
+    private fun drawLine(
+        canvas: Canvas,
+        paint: Paint,
+        line: String,
+        at: Placement,
+    ) {
+        if (at.justified) {
+            TextLayout.justify(line, { paint.measureText(it) }, at.boxWidth, at.x).forEach {
+                canvas.drawText(it.text, it.x, at.baseline, paint)
+            }
+            return
+        }
+        val measured = paint.measureText(line)
+        val startX =
+            when (at.alignment) {
+                TextLayout.Alignment.CENTER -> at.x + (at.boxWidth - measured) / 2f
+                TextLayout.Alignment.RIGHT -> at.x + at.boxWidth - measured
+                else -> at.x
+            }
+        canvas.drawText(line, startX, at.baseline, paint)
     }
 
     /** Vertical text: each paragraph is a column of centred letters, columns running left to right. */

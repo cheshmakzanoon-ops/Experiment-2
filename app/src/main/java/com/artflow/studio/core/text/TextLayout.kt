@@ -213,8 +213,12 @@ object TextLayout {
         return lines.ifEmpty { listOf("") }
     }
 
-    /** Distributes leftover width across the gaps of an already-wrapped line. */
-    private fun justify(
+    /**
+     * Distributes leftover width across the gaps of an already-wrapped line, so the first word starts at [startX]
+     * and the last one ends at [startX] + [targetWidth]. A line with one word, or one wider than [targetWidth],
+     * keeps its natural spacing. The runs carry a baseline of 0; the caller places them on the line.
+     */
+    fun justify(
         lineText: String,
         measureWidth: (String) -> Float,
         targetWidth: Float,
@@ -224,7 +228,8 @@ object TextLayout {
         if (words.size < 2) return listOf(PositionedText(lineText, startX, 0f, measureWidth(lineText)))
 
         val wordsWidth = words.sumOf { measureWidth(it).toDouble() }.toFloat()
-        val gap = (targetWidth - wordsWidth) / (words.size - 1)
+        val naturalGap = (measureWidth(lineText) - wordsWidth) / (words.size - 1)
+        val gap = ((targetWidth - wordsWidth) / (words.size - 1)).coerceAtLeast(naturalGap)
         var cursor = startX
         return words.map { word ->
             val width = measureWidth(word)
