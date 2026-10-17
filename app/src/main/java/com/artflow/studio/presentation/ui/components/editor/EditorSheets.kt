@@ -33,6 +33,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.artflow.studio.core.animation.AnimationTimeline
+import com.artflow.studio.core.animation.OnionSkinTint
+import com.artflow.studio.core.animation.PlayMode
+import com.artflow.studio.core.animation.withPlayMode
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.canvas.TwoFingerLayerGesture
 import com.artflow.studio.core.perspective.GuideLineStyle
@@ -944,15 +947,19 @@ fun AnimationSheet(
             range = 1f..60f,
             onChange = { onSettings(settings.copy(fps = it.toInt())) },
         )
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Switch(checked = settings.loop, onCheckedChange = { onSettings(settings.copy(loop = it)) })
-            Spacer(Modifier.width(8.dp))
-            Text("Loop playback", style = MaterialTheme.typography.bodySmall)
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Switch(checked = settings.pingPong, onCheckedChange = { onSettings(settings.copy(pingPong = it)) })
-            Spacer(Modifier.width(8.dp))
-            Text("Ping-pong playback", style = MaterialTheme.typography.bodySmall)
+        Text("Play mode", style = MaterialTheme.typography.labelMedium)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            val playMode = PlayMode.of(settings)
+            PlayMode.entries.forEach { mode ->
+                FilterChip(
+                    selected = playMode == mode,
+                    onClick = { onSettings(settings.withPlayMode(mode)) },
+                    label = { Text(mode.displayName, style = MaterialTheme.typography.labelSmall) },
+                )
+            }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(checked = settings.backgroundFrame, onCheckedChange = { onSettings(settings.copy(backgroundFrame = it)) })
@@ -980,6 +987,18 @@ fun AnimationSheet(
             value = settings.onionSkinOpacity,
             range = 0.05f..1f,
             onChange = { onSettings(settings.copy(onionSkinOpacity = it)) },
+        )
+        ColourSwatches(
+            label = "Before colour",
+            selected = settings.onionSkinPreviousColor,
+            choices = OnionSkinTint.COLOUR_CHOICES,
+            onSelect = { onSettings(settings.copy(onionSkinPreviousColor = it)) },
+        )
+        ColourSwatches(
+            label = "After colour",
+            selected = settings.onionSkinNextColor,
+            choices = OnionSkinTint.COLOUR_CHOICES,
+            onSelect = { onSettings(settings.copy(onionSkinNextColor = it)) },
         )
     }
 }
@@ -1179,26 +1198,45 @@ private fun GuideLineStyleControls(
         range = GuideLineStyle.OPACITY_RANGE,
         onChange = { onStyle(style.copy(opacity = it)) },
     )
+    ColourSwatches(
+        label = "Line colour",
+        selected = style.colour or OPAQUE,
+        choices = GuideLineStyle.COLOUR_CHOICES.map { it or OPAQUE },
+        onSelect = { onStyle(style.copy(colour = it and RGB_ONLY)) },
+    )
+}
+
+/** A label and a row of colour swatches; the selected one has a heavier outline. Colours are ARGB. */
+@Composable
+private fun ColourSwatches(
+    label: String,
+    selected: Int,
+    choices: List<Int>,
+    onSelect: (Int) -> Unit,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("Line colour", style = MaterialTheme.typography.labelMedium)
-        GuideLineStyle.COLOUR_CHOICES.forEach { choice ->
+        Text(label, style = MaterialTheme.typography.labelMedium)
+        choices.forEach { choice ->
             Box(
                 modifier =
                     Modifier
-                        .size(28.dp)
+                        .size(24.dp)
                         .clip(CircleShape)
-                        .background(Color(choice or 0xFF000000.toInt()))
-                        .border(if (choice == style.colour) 3.dp else 1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                        .clickable { onStyle(style.copy(colour = choice)) }
-                        .semantics { contentDescription = "Line colour ${choice.toString(16).padStart(6, '0')}" },
+                        .background(Color(choice))
+                        .border(if (choice == selected) 3.dp else 1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                        .clickable { onSelect(choice) }
+                        .semantics { contentDescription = "$label ${choice.toUInt().toString(16).padStart(8, '0')}" },
             )
         }
     }
 }
+
+private const val OPAQUE = -0x1000000
+private const val RGB_ONLY = 0x00FFFFFF
 
 // ---------------------------------------------------------------------------------------------
 // Text
