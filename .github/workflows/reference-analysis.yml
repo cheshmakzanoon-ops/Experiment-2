@@ -1,0 +1,138 @@
+name: Reference static analysis
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/reference-analysis.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reference-static-analysis
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Prepare tools and source snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/reference-evidence"
+          git archive HEAD | gzip -n > "$RUNNER_TEMP/reference-evidence/source.tar.gz"
+          npm install --prefix "$RUNNER_TEMP/rea" --ignore-scripts rea-agents@6.7.0
+          python -m pip install --disable-pip-version-check 'gdown==5.2.0'
+          "$RUNNER_TEMP/rea/node_modules/.bin/rea" --version > "$RUNNER_TEMP/reference-evidence/rea-version.txt"
+          "$RUNNER_TEMP/rea/node_modules/.bin/rea" inventory-artifact --help > "$RUNNER_TEMP/reference-evidence/rea-inventory-help.txt"
+      - name: Download and inspect supplied reference without execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import collections, hashlib, json, os, pathlib, plistlib, re, struct, subprocess, zipfile
+          import gdown
+          root = pathlib.Path(os.environ['RUNNER_TEMP'])
+          out = root / 'reference-evidence'
+          target = root / 'reference.ipa'
+          # User-supplied reference; never upload the archive, executable, fonts, or artwork.
+          gdown.download(id='1xPr6e53L76Cq8exGFWOSvq96wt-NlLVC', output=str(target), quiet=True)
+          if not target.is_file() or target.stat().st_size != 777430382:
+              raise RuntimeError('Reference download missing or size differs from supplied metadata')
+          digest = hashlib.file_digest(target.open('rb'), 'sha256').hexdigest()
+          summary = {'sha256': digest, 'size': target.stat().st_size, 'runtime_executed': False,
+                     'limitations': ['Static observations do not prove runtime or visual parity.']}
+          with zipfile.ZipFile(target) as archive:
+              entries = archive.infolist()
+              if len(entries) > 100000 or sum(i.file_size for i in entries) > 8 * 1024**3:
+                  raise RuntimeError('Archive exceeds inspection budget')
+              summary['entry_count'] = len(entries)
+              summary['extensions'] = dict(collections.Counter(pathlib.PurePosixPath(i.filename).suffix for i in entries))
+              roots = [i for i in entries if re.fullmatch(r'Payload/[^/]+\.app/Info\.plist', i.filename)]
+              if len(roots) != 1:
+                  summary['app_candidates'] = [i.filename for i in roots]
+                  summary['nested_ipa_candidates'] = [i.filename for i in entries if i.filename.lower().endswith('.ipa')]
+                  (out / 'summary.json').write_text(json.dumps(summary, indent=2))
+                  raise RuntimeError('Expected one top-level IPA app; inspect archive layout before proceeding')
+              info_entry = roots[0]
+              if info_entry.file_size > 4 * 1024**2:
+                  raise RuntimeError('Info.plist exceeds budget')
+              info_bytes = archive.read(info_entry)
+              info = plistlib.loads(info_bytes)
+              allowed = ['CFBundleDisplayName', 'CFBundleName', 'CFBundleIdentifier',
+                         'CFBundleShortVersionString', 'CFBundleVersion', 'MinimumOSVersion', 'UIDeviceFamily']
+              summary['app'] = {k: info[k] for k in allowed if k in info}
+              prefix = info_entry.filename.rsplit('/', 1)[0] + '/'
+              exe_name = info.get('CFBundleExecutable', '')
+              if not isinstance(exe_name, str) or '/' in exe_name or not exe_name:
+                  raise RuntimeError('Invalid executable basename')
+              executable = archive.getinfo(prefix + exe_name)
+              if executable.file_size > 512 * 1024**2:
+                  raise RuntimeError('Executable exceeds budget')
+              binary = archive.read(executable)
+              summary['executable_sha256'] = hashlib.sha256(binary).hexdigest()
+              summary['executable_size'] = len(binary)
+              summary['executable_magic'] = binary[:4].hex()
+              thin = binary
+              if binary[:4] == b'\xca\xfe\xba\xbe':
+                  count = struct.unpack_from('>I', binary, 4)[0]
+                  if count < 1 or count > 32:
+                      raise RuntimeError('Invalid Mach-O slice count')
+                  cpu, subtype, offset, size, align = struct.unpack_from('>IIIII', binary, 8)
+                  thin = binary[offset:offset+size]
+              encryption = []
+              if thin[:4] in (b'\xcf\xfa\xed\xfe', b'\xce\xfa\xed\xfe'):
+                  ncmds = struct.unpack_from('<I', thin, 16)[0]
+                  cursor = 32 if thin[:4] == b'\xcf\xfa\xed\xfe' else 28
+                  if ncmds > 10000:
+                      raise RuntimeError('Invalid load command count')
+                  for _ in range(ncmds):
+                      cmd, size = struct.unpack_from('<II', thin, cursor)
+                      if size < 8 or cursor + size > len(thin):
+                          raise RuntimeError('Malformed load command')
+                      if cmd in (0x21, 0x2c):
+                          cryptoff, cryptsize, cryptid = struct.unpack_from('<III', thin, cursor+8)
+                          encryption.append({'offset': cryptoff, 'size': cryptsize, 'cryptid': cryptid})
+                      cursor += size
+              summary['encryption_commands_first_slice'] = encryption
+              # Feature-name evidence only; not a dump of all strings or embedded credentials.
+              pattern = re.compile(r'brush|quickshape|colordrop|selection|timelapse|perspective|symmetry|warp|liquify|palette|gradient|clipping|tilt|azimuth|stabili|smudge|reference.?layer', re.I)
+              names = []
+              for match in re.finditer(rb'[ -~]{5,180}', binary):
+                  value = match.group().decode('ascii')
+                  if pattern.search(value) and re.fullmatch(r'[A-Za-z0-9_ .:()<>+\-/]{5,160}', value) and 'http' not in value.lower():
+                      names.append({'offset': match.start(), 'value': value})
+              summary['feature_strings'] = names[:2500]
+              summary['feature_strings_total'] = len(names)
+              summary['resource_feature_paths'] = [i.filename for i in entries if pattern.search(i.filename)][:1500]
+              plist_path = root / 'reference-info.plist'
+              plist_path.write_bytes(info_bytes)
+          (out / 'summary.json').write_text(json.dumps(summary, indent=2))
+          rea = str(root / 'rea/node_modules/.bin/rea')
+          for name, args in [('rea-inventory', ['inventory-artifact', str(target), '--json']),
+                             ('rea-plist', ['inspect-plist', str(plist_path), '--json'])]:
+              with (out / (name + '.json')).open('w') as stdout, (out / (name + '.stderr')).open('w') as stderr:
+                  try:
+                      result = subprocess.run([rea, *args], stdout=stdout, stderr=stderr, timeout=240, check=False)
+                      (out / (name + '.exit')).write_text(str(result.returncode))
+                  except subprocess.TimeoutExpired:
+                      (out / (name + '.exit')).write_text('timeout')
+          print(json.dumps({k: v for k, v in summary.items() if k not in ('feature_strings', 'resource_feature_paths')}, indent=2))
+          PY
+      - name: Retain bounded analysis and repository snapshot only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reference-static-evidence
+          path: ${{ runner.temp }}/reference-evidence/
+          retention-days: 3
+          if-no-files-found: error
