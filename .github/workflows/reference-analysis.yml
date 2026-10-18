@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   inspect:
-    runs-on: ubuntu-latest
+    runs-on: macos-14
     timeout-minutes: 18
     steps:
       - uses: actions/checkout@v4
@@ -24,115 +24,139 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Prepare tools and source snapshot
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare pinned REA and isolated downloader
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/reference-evidence"
-          git archive HEAD | gzip -n > "$RUNNER_TEMP/reference-evidence/source.tar.gz"
           npm install --prefix "$RUNNER_TEMP/rea" --ignore-scripts rea-agents@6.7.0
           python -m pip install --disable-pip-version-check 'gdown==5.2.0'
           "$RUNNER_TEMP/rea/node_modules/.bin/rea" --version > "$RUNNER_TEMP/reference-evidence/rea-version.txt"
-          "$RUNNER_TEMP/rea/node_modules/.bin/rea" inventory-artifact --help > "$RUNNER_TEMP/reference-evidence/rea-inventory-help.txt"
-      - name: Download and inspect supplied reference without execution
+      - name: Read brush settings and native metadata without executing reference code
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
-          import collections, hashlib, json, os, pathlib, plistlib, re, struct, subprocess, zipfile
+          import collections, hashlib, io, json, math, os, pathlib, plistlib, re, struct, subprocess, zipfile
           import gdown
           root = pathlib.Path(os.environ['RUNNER_TEMP'])
           out = root / 'reference-evidence'
           target = root / 'reference.ipa'
-          # User-supplied reference; never upload the archive, executable, fonts, or artwork.
           gdown.download(id='1xPr6e53L76Cq8exGFWOSvq96wt-NlLVC', output=str(target), quiet=True)
-          if not target.is_file() or target.stat().st_size != 777430382:
-              raise RuntimeError('Reference download missing or size differs from supplied metadata')
-          digest = hashlib.file_digest(target.open('rb'), 'sha256').hexdigest()
-          summary = {'sha256': digest, 'size': target.stat().st_size, 'runtime_executed': False,
-                     'limitations': ['Static observations do not prove runtime or visual parity.']}
+          with target.open('rb') as stream:
+              digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+          if digest != '7b1dad3ac95f8aeca3c22b432b5d6fd94182a3bf9f84fb93588adb126368b54e':
+              raise RuntimeError('Reference identity changed')
+          def safe_value(value, objects, depth=0):
+              if depth > 12:
+                  return {'unresolved': 'depth limit'}
+              if isinstance(value, plistlib.UID):
+                  index = value.data
+                  if not 0 <= index < len(objects):
+                      raise ValueError('invalid archive reference')
+                  return safe_value(objects[index], objects, depth + 1)
+              if isinstance(value, bytes):
+                  return {'bytes': len(value), 'sha256': hashlib.sha256(value).hexdigest()}
+              if isinstance(value, dict):
+                  return {str(k): safe_value(v, objects, depth + 1) for k,v in value.items() if k != '$class'}
+              if isinstance(value, list):
+                  return [safe_value(v, objects, depth + 1) for v in value[:512]]
+              if isinstance(value, float) and not math.isfinite(value):
+                  return str(value)
+              if isinstance(value, str):
+                  return value[:1024]
+              if value is None or isinstance(value, (bool,int,float)):
+                  return value
+              return {'type': type(value).__name__}
+          records, errors, samples = [], [], []
           with zipfile.ZipFile(target) as archive:
               entries = archive.infolist()
               if len(entries) > 100000 or sum(i.file_size for i in entries) > 8 * 1024**3:
-                  raise RuntimeError('Archive exceeds inspection budget')
-              summary['entry_count'] = len(entries)
-              summary['extensions'] = dict(collections.Counter(pathlib.PurePosixPath(i.filename).suffix for i in entries))
-              roots = [i for i in entries if re.fullmatch(r'Payload/[^/]+\.app/Info\.plist', i.filename)]
-              if len(roots) != 1:
-                  summary['app_candidates'] = [i.filename for i in roots]
-                  summary['nested_ipa_candidates'] = [i.filename for i in entries if i.filename.lower().endswith('.ipa')]
-                  (out / 'summary.json').write_text(json.dumps(summary, indent=2))
-                  raise RuntimeError('Expected one top-level IPA app; inspect archive layout before proceeding')
-              info_entry = roots[0]
-              if info_entry.file_size > 4 * 1024**2:
-                  raise RuntimeError('Info.plist exceeds budget')
-              info_bytes = archive.read(info_entry)
-              info = plistlib.loads(info_bytes)
-              allowed = ['CFBundleDisplayName', 'CFBundleName', 'CFBundleIdentifier',
-                         'CFBundleShortVersionString', 'CFBundleVersion', 'MinimumOSVersion', 'UIDeviceFamily']
-              summary['app'] = {k: info[k] for k in allowed if k in info}
-              prefix = info_entry.filename.rsplit('/', 1)[0] + '/'
-              exe_name = info.get('CFBundleExecutable', '')
-              if not isinstance(exe_name, str) or '/' in exe_name or not exe_name:
-                  raise RuntimeError('Invalid executable basename')
-              executable = archive.getinfo(prefix + exe_name)
-              if executable.file_size > 512 * 1024**2:
-                  raise RuntimeError('Executable exceeds budget')
-              binary = archive.read(executable)
-              summary['executable_sha256'] = hashlib.sha256(binary).hexdigest()
-              summary['executable_size'] = len(binary)
-              summary['executable_magic'] = binary[:4].hex()
-              thin = binary
-              if binary[:4] == b'\xca\xfe\xba\xbe':
-                  count = struct.unpack_from('>I', binary, 4)[0]
-                  if count < 1 or count > 32:
-                      raise RuntimeError('Invalid Mach-O slice count')
-                  cpu, subtype, offset, size, align = struct.unpack_from('>IIIII', binary, 8)
-                  thin = binary[offset:offset+size]
-              encryption = []
-              if thin[:4] in (b'\xcf\xfa\xed\xfe', b'\xce\xfa\xed\xfe'):
-                  ncmds = struct.unpack_from('<I', thin, 16)[0]
-                  cursor = 32 if thin[:4] == b'\xcf\xfa\xed\xfe' else 28
-                  if ncmds > 10000:
-                      raise RuntimeError('Invalid load command count')
-                  for _ in range(ncmds):
-                      cmd, size = struct.unpack_from('<II', thin, cursor)
-                      if size < 8 or cursor + size > len(thin):
-                          raise RuntimeError('Malformed load command')
-                      if cmd in (0x21, 0x2c):
-                          cryptoff, cryptsize, cryptid = struct.unpack_from('<III', thin, cursor+8)
-                          encryption.append({'offset': cryptoff, 'size': cryptsize, 'cryptid': cryptid})
-                      cursor += size
-              summary['encryption_commands_first_slice'] = encryption
-              # Feature-name evidence only; not a dump of all strings or embedded credentials.
+                  raise RuntimeError('Archive budget exceeded')
+              plist_name = 'Payload/Procreate.app/Info.plist'
+              info = archive.read(plist_name)
+              (root / 'reference-info.plist').write_bytes(info)
+              metadata = plistlib.loads(info)
+              prefix = 'Payload/Procreate.app/'
+              exe = metadata['CFBundleExecutable']
+              if '/' in exe or '\\' in exe:
+                  raise RuntimeError('Invalid executable name')
+              binary = archive.read(prefix + exe)
+              (root / 'reference-macho').write_bytes(binary)
+              for entry in entries:
+                  if not entry.filename.endswith('.brush'):
+                      continue
+                  if entry.file_size > 32 * 1024**2:
+                      errors.append({'path':entry.filename,'error':'brush budget exceeded'})
+                      continue
+                  try:
+                      data = archive.read(entry)
+                      with zipfile.ZipFile(io.BytesIO(data)) as brush_zip:
+                          inner = brush_zip.infolist()
+                          if len(inner) > 1000:
+                              raise ValueError('inner entry budget exceeded')
+                          candidates = [i for i in inner if i.filename.rsplit('/',1)[-1] == 'Brush.archive']
+                          if len(candidates) != 1 or candidates[0].file_size > 2 * 1024**2:
+                              raise ValueError('missing or oversized brush settings')
+                          raw = brush_zip.read(candidates[0])
+                          plist = plistlib.loads(raw)
+                          objects = plist.get('$objects', [])
+                          settings = safe_value(plist.get('$top',{}).get('root'), objects)
+                          record = {'path':entry.filename,'archive_sha256':hashlib.sha256(raw).hexdigest(),
+                                    'settings':settings,'members':[i.filename for i in inner]}
+                          records.append(record)
+                          if len(samples) < 3:
+                              sample = root / ('brush-' + str(len(samples)) + '.archive')
+                              sample.write_bytes(raw)
+                              samples.append(sample)
+                  except (ValueError,KeyError,zipfile.BadZipFile,plistlib.InvalidFileException) as exc:
+                      errors.append({'path':entry.filename,'error':str(exc)})
               pattern = re.compile(r'brush|quickshape|colordrop|selection|timelapse|perspective|symmetry|warp|liquify|palette|gradient|clipping|tilt|azimuth|stabili|smudge|reference.?layer', re.I)
-              names = []
+              strings = []
               for match in re.finditer(rb'[ -~]{5,180}', binary):
                   value = match.group().decode('ascii')
-                  if pattern.search(value) and re.fullmatch(r'[A-Za-z0-9_ .:()<>+\-/]{5,160}', value) and 'http' not in value.lower():
-                      names.append({'offset': match.start(), 'value': value})
-              summary['feature_strings'] = names[:2500]
-              summary['feature_strings_total'] = len(names)
-              summary['resource_feature_paths'] = [i.filename for i in entries if pattern.search(i.filename)][:1500]
-              plist_path = root / 'reference-info.plist'
-              plist_path.write_bytes(info_bytes)
-          (out / 'summary.json').write_text(json.dumps(summary, indent=2))
+                  if pattern.search(value) and re.fullmatch(r'[A-Za-z0-9_ .:()<>+\-/]{5,160}',value) and 'http' not in value.lower():
+                      strings.append({'offset':match.start(),'value':value})
+              (out / 'feature-strings.json').write_text(json.dumps(strings,indent=2))
+          (out / 'brush-settings.json').write_text(json.dumps({'reference_sha256':digest,'brushes':records,'errors':errors},indent=2))
+          summary = {'reference_sha256':digest,'app_version':metadata['CFBundleShortVersionString'],
+                     'build':metadata['CFBundleVersion'],'brushes_read':len(records),'brush_errors':len(errors),
+                     'runtime_executed':False,'source_code_recovered':False}
+          (out / 'summary.json').write_text(json.dumps(summary,indent=2))
+          print(json.dumps(summary,indent=2))
           rea = str(root / 'rea/node_modules/.bin/rea')
-          for name, args in [('rea-inventory', ['inventory-artifact', str(target), '--json']),
-                             ('rea-plist', ['inspect-plist', str(plist_path), '--json'])]:
-              with (out / (name + '.json')).open('w') as stdout, (out / (name + '.stderr')).open('w') as stderr:
+          commands = [
+              ('rea-artifact', ['inspect-artifact',str(target),'--json']),
+              ('rea-macho', ['inspect-macho',str(root/'reference-macho'),'--json']),
+              ('rea-layout', ['inspect-binary-layout',str(root/'reference-macho'),'--json']),
+              ('rea-plist', ['inspect-plist',str(root/'reference-info.plist'),'--json']),
+          ]
+          for index,sample in enumerate(samples):
+              commands.append(('rea-brush-'+str(index),['inspect-keyed-archive',str(sample),'--json']))
+          for name,args in commands:
+              with (out/(name+'.json')).open('w') as stdout,(out/(name+'.stderr')).open('w') as stderr:
                   try:
-                      result = subprocess.run([rea, *args], stdout=stdout, stderr=stderr, timeout=240, check=False)
-                      (out / (name + '.exit')).write_text(str(result.returncode))
+                      result = subprocess.run([rea,*args],stdout=stdout,stderr=stderr,timeout=180,check=False)
+                      code = result.returncode
                   except subprocess.TimeoutExpired:
-                      (out / (name + '.exit')).write_text('timeout')
-          print(json.dumps({k: v for k, v in summary.items() if k not in ('feature_strings', 'resource_feature_paths')}, indent=2))
+                      code = 'timeout'
+              (out/(name+'.exit')).write_text(str(code))
+              print(name, code)
+          # System-provided static ObjC metadata. No reference binary is launched.
+          result = subprocess.run(['/usr/bin/otool','-ov',str(root/'reference-macho')],capture_output=True,text=True,timeout=90)
+          if result.returncode == 0:
+              (out/'objc-metadata.txt').write_text(result.stdout)
+          else:
+              (out/'objc-metadata.error').write_text(result.stderr)
           PY
-      - name: Retain bounded analysis and repository snapshot only
+      - name: Retain analysis only, never reference binaries, artwork or fonts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: reference-static-evidence
+          name: reference-static-evidence-deep
           path: ${{ runner.temp }}/reference-evidence/
           retention-days: 3
           if-no-files-found: error
