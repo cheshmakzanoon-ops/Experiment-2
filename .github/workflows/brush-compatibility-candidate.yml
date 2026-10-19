@@ -20,12 +20,24 @@ jobs:
         run: |
           set -euo pipefail
           test -f .github/brush-import.patch
-          git apply --numstat .github/brush-import.patch | cut -f3 > "$RUNNER_TEMP/candidate-files.txt"
+          python - <<'PY'
+          import base64, gzip, hashlib, io, os, pathlib
+          encoded = pathlib.Path('.github/brush-import.patch').read_bytes().strip()
+          if len(encoded) > 131072:
+              raise RuntimeError('Candidate transport exceeds budget')
+          with gzip.GzipFile(fileobj=io.BytesIO(base64.b64decode(encoded, validate=True))) as stream:
+              patch = stream.read(262145)
+          if len(patch) > 262144 or hashlib.sha256(patch).hexdigest() != '200a6c04da57d6a6cc0878a306dddd61b4251e58e4e9260bd35f8025ea3f64e8':
+              raise RuntimeError('Candidate identity changed')
+          (pathlib.Path(os.environ['RUNNER_TEMP']) / 'brush-import.patch').write_bytes(patch)
+          PY
+          patch="$RUNNER_TEMP/brush-import.patch"
+          git apply --numstat "$patch" | cut -f3 > "$RUNNER_TEMP/candidate-files.txt"
           mapfile -t files < "$RUNNER_TEMP/candidate-files.txt"
           git fetch --no-tags --depth=1 origin f312926474a68278f9b03b17fc2999124f0cb0b1
           git diff --exit-code f312926474a68278f9b03b17fc2999124f0cb0b1 HEAD -- "${files[@]}"
-          git apply --unidiff-zero --check .github/brush-import.patch
-          git apply --unidiff-zero .github/brush-import.patch
+          git apply --unidiff-zero --check "$patch"
+          git apply --unidiff-zero "$patch"
           git add --intent-to-add -- "${files[@]}"
       - uses: actions/setup-java@v4
         with:
