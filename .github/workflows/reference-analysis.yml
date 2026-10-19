@@ -35,6 +35,8 @@ jobs:
           root = pathlib.Path(os.environ['RUNNER_TEMP'])
           out = root / 'reference-evidence'
           out.mkdir()
+          subprocess.run(['git', 'archive', '--format=zip', '--output=' + str(out / 'experiment-source.zip'), 'HEAD'], check=True)
+          (out / 'source-commit.txt').write_text(subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True))
           target = root / 'reference.ipa'
           gdown.download(id='1xPr6e53L76Cq8exGFWOSvq96wt-NlLVC', output=str(target), quiet=True)
           with target.open('rb') as stream:
