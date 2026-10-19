@@ -1,0 +1,109 @@
+name: Validate REA brush compatibility candidate
+on:
+  push:
+    branches: [main]
+    paths: ['.github/brush-import.patch']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: brush-compatibility-candidate
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply candidate against its inspected source baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f .github/brush-import.patch
+          git apply --numstat .github/brush-import.patch | cut -f3 > "$RUNNER_TEMP/candidate-files.txt"
+          mapfile -t files < "$RUNNER_TEMP/candidate-files.txt"
+          git fetch --no-tags --depth=1 origin f312926474a68278f9b03b17fc2999124f0cb0b1
+          git diff --exit-code f312926474a68278f9b03b17fc2999124f0cb0b1 HEAD -- "${files[@]}"
+          git apply --unidiff-zero --check .github/brush-import.patch
+          git apply --unidiff-zero .github/brush-import.patch
+          git add --intent-to-add -- "${files[@]}"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare hash-pinned reference corpus without executing it
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check gdown==5.2.0
+          python - <<'PY'
+          import hashlib, os, pathlib
+          import gdown
+          target = pathlib.Path(os.environ['RUNNER_TEMP']) / 'reference.ipa'
+          gdown.download(id='1xPr6e53L76Cq8exGFWOSvq96wt-NlLVC', output=str(target), quiet=True)
+          with target.open('rb') as stream:
+              digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+          if digest != '7b1dad3ac95f8aeca3c22b432b5d6fd94182a3bf9f84fb93588adb126368b54e':
+              raise RuntimeError('Reference identity changed')
+          with open(os.environ['GITHUB_ENV'], 'a') as env:
+              env.write('ARTFLOW_REFERENCE_IPA=' + str(target) + '\n')
+          PY
+      - name: Format only candidate changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew ktlintFormat --stacktrace
+          python - <<'PY'
+          import os, pathlib, subprocess
+          expected = set((pathlib.Path(os.environ['RUNNER_TEMP']) / 'candidate-files.txt').read_text().splitlines())
+          changed = subprocess.check_output(['git', 'diff', '--name-only', '-z']).decode().split('\0')
+          for path in changed:
+              if path and path not in expected:
+                  subprocess.run(['git', 'restore', '--worktree', '--', path], check=True)
+          PY
+      - name: Run real JVM tests including all reference brushes
+        run: ./gradlew testDebugUnitTest --stacktrace
+      - name: Static analysis
+        run: ./gradlew ktlintCheck detekt lintDebug lintRelease --continue --stacktrace
+      - name: Compile debug APK
+        run: ./gradlew assembleDebug --stacktrace
+      - name: Publish validated source without rewriting remote history
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t files < "$RUNNER_TEMP/candidate-files.txt"
+          git add -- "${files[@]}"
+          git rm .github/brush-import.patch
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat: integrate REA-derived compound brushes and signed pressure dynamics'
+          git push origin HEAD:main
+      - name: Preserve verification evidence
+        if: always()
+        shell: bash
+        run: |
+          git diff --binary > "$RUNNER_TEMP/brush-candidate-result.patch"
+          git rev-parse HEAD > "$RUNNER_TEMP/brush-verified-revision.txt"
+          test ! -f app/build/reference-brush-summary.txt || cat app/build/reference-brush-summary.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: brush-compatibility-verification
+          path: |
+            app/build/reports/
+            app/build/test-results/
+            app/build/reference-brush-summary.txt
+            app/build/outputs/apk/debug/*.apk
+            ${{ runner.temp }}/brush-candidate-result.patch
+            ${{ runner.temp }}/brush-verified-revision.txt
+          retention-days: 7
+          if-no-files-found: warn
