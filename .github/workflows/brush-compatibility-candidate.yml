@@ -2,7 +2,7 @@ name: Validate REA brush compatibility candidate
 on:
   push:
     branches: [main]
-    paths: ['.github/brush-import.patch']
+    paths: ['.github/brush-import.patch', '.github/brush-reference-corpus-test.kt']
   workflow_dispatch:
 permissions:
   contents: write
@@ -38,6 +38,13 @@ jobs:
           git diff --exit-code f312926474a68278f9b03b17fc2999124f0cb0b1 HEAD -- "${files[@]}"
           git apply --unidiff-zero --check "$patch"
           git apply --unidiff-zero "$patch"
+          python - <<'PY'
+          import hashlib, pathlib
+          corrected = pathlib.Path('.github/brush-reference-corpus-test.kt').read_bytes()
+          if hashlib.sha256(corrected).hexdigest() != 'd9dc3f86e552847dc306990e3881f28cb92bb4cf97f1194736f44a6b17497087':
+              raise RuntimeError('Corpus-test correction identity changed')
+          pathlib.Path('app/src/test/java/com/artflow/studio/data/local/ReferenceBrushCorpusTest.kt').write_bytes(corrected)
+          PY
           git add --intent-to-add -- "${files[@]}"
       - uses: actions/setup-java@v4
         with:
@@ -102,7 +109,7 @@ jobs:
           set -euo pipefail
           mapfile -t files < "$RUNNER_TEMP/candidate-files.txt"
           git add -- "${files[@]}"
-          git rm .github/brush-import.patch
+          git rm .github/brush-import.patch .github/brush-reference-corpus-test.kt
           git diff --cached --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
