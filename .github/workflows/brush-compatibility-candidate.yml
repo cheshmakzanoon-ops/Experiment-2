@@ -27,7 +27,7 @@ jobs:
               raise RuntimeError('Candidate transport exceeds budget')
           with gzip.GzipFile(fileobj=io.BytesIO(base64.b64decode(encoded, validate=True))) as stream:
               patch = stream.read(262145)
-          if len(patch) > 262144 or hashlib.sha256(patch).hexdigest() != '200a6c04da57d6a6cc0878a306dddd61b4251e58e4e9260bd35f8025ea3f64e8':
+          if len(patch) > 262144 or hashlib.sha256(patch).hexdigest() != '65af26c2517e9927bf376605c11fb3852227f39cc5370078c88a3a57b57da3c2':
               raise RuntimeError('Candidate identity changed')
           (pathlib.Path(os.environ['RUNNER_TEMP']) / 'brush-import.patch').write_bytes(patch)
           PY
@@ -82,11 +82,20 @@ jobs:
                   subprocess.run(['git', 'restore', '--worktree', '--', path], check=True)
           PY
       - name: Run real JVM tests including all reference brushes
-        run: ./gradlew testDebugUnitTest --stacktrace
+        run: ./gradlew :app:cleanTestDebugUnitTest :app:testDebugUnitTest --no-build-cache --stacktrace
       - name: Static analysis
         run: ./gradlew ktlintCheck detekt lintDebug lintRelease --continue --stacktrace
       - name: Compile debug APK
         run: ./gradlew assembleDebug --stacktrace
+      - name: Require executed corpus evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s app/build/reference-brush-summary.txt
+          grep -qx 'metadata_import_and_persistence=PASS' app/build/reference-brush-summary.txt
+          grep -qx 'brushes=394' app/build/reference-brush-summary.txt
+          grep -qx 'compound_brushes=140' app/build/reference-brush-summary.txt
+          grep -qx 'components=534' app/build/reference-brush-summary.txt
       - name: Publish validated source without rewriting remote history
         shell: bash
         run: |
