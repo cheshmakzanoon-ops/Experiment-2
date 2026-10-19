@@ -47,9 +47,9 @@ object BrushLibraryCodec {
 
     private fun validateParameters(params: BrushParams) {
         require(params.size in 1f..512f && params.spacing in 0.01f..1f) { "Unsupported brush size or spacing" }
-        require(params.count in 1..5 && params.scatter in 0f..2f) { "Unsupported brush scatter or dab count" }
+        require(params.count in 1..16 && params.scatter in 0f..2f) { "Unsupported brush scatter or dab count" }
         require(params.rotation in 0f..360f && params.textureRotation in 0f..360f) { "Unsupported brush rotation" }
-        require(params.textureScale in 0.25f..8f) { "Unsupported grain scale" }
+        require(params.textureScale in 0.05f..8f) { "Unsupported grain scale" }
         require(params.textureId in GRAIN_IDS || params.textureId?.matches(IMPORTED_GRAIN) == true) { "Unsupported grain source" }
         require(params.roundness in 0.05f..1f) { "Unsupported tip roundness" }
         require(params.wetEdges in 0f..1f) { "Unsupported wet edges" }
@@ -65,8 +65,6 @@ object BrushLibraryCodec {
                 params.taperEnd,
                 params.taperOpacity,
                 params.falloff,
-                params.pressureToSize,
-                params.pressureToOpacity,
                 params.hueJitter,
                 params.saturationJitter,
                 params.brightnessJitter,
@@ -76,11 +74,15 @@ object BrushLibraryCodec {
                 params.wetMix,
                 params.flow,
                 params.tiltInfluence,
-                params.velocityToSize,
-                params.velocityToOpacity,
                 params.velocityToHue,
+                params.secondaryPressure,
+                params.secondaryJitter,
+                params.burntEdges,
+                params.grainDepth,
             )
         require(unitValues.all { it in 0f..1f }) { "Brush dynamics must be finite values between zero and one" }
-        // PressureResponse validates finite, monotone control points during deserialization.
+        val signedValues = listOf(params.pressureToSize, params.pressureToOpacity, params.velocityToSize, params.velocityToOpacity)
+        require(signedValues.all { it in -1f..1f }) { "Signed brush dynamics must be finite values between minus one and one" }
+        // Both pressure response types validate their control points during deserialization.
     }
 }

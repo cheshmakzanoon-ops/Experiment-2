@@ -52,8 +52,10 @@ class ReferenceBrushCorpusTest {
                 val params = primary.parameters { error("This check does not load images") }
                 val all = listOfNotNull(params, params.dual?.params)
                 components += all.size
-                signed += all.count { it.pressureToSize < 0 || it.pressureToOpacity < 0 || it.velocityToSize < 0 || it.velocityToOpacity < 0 }
-                curves += all.sumOf { listOfNotNull(it.importedPressure?.overall, it.importedPressure?.size, it.importedPressure?.opacity).size }
+                signed +=
+                    all.count { it.pressureToSize < 0 || it.pressureToOpacity < 0 || it.velocityToSize < 0 || it.velocityToOpacity < 0 }
+                curves +=
+                    all.sumOf { listOfNotNull(it.importedPressure?.overall, it.importedPressure?.size, it.importedPressure?.opacity).size }
                 val saved = listOf(SavedBrush("reference-$brushes", "Reference brush $brushes", params))
                 assertEquals(entry.name, saved, BrushLibraryCodec.decode(BrushLibraryCodec.encode(saved)))
                 assertFiniteDynamics(entry.name, all)
@@ -65,7 +67,8 @@ class ReferenceBrushCorpusTest {
         assertEquals(534, components)
         assertTrue(signed > 0)
         assertTrue(curves > 1_000)
-        val summary = """
+        val summary =
+            """
             reference_sha256=$sha
             brushes=$brushes
             compound_brushes=$compound
@@ -76,12 +79,15 @@ class ReferenceBrushCorpusTest {
             image_decode_tested=false
             reference_runtime_executed=false
             pixel_parity_verified=false
-        """.trimIndent()
+            """.trimIndent()
         File("build/reference-brush-summary.txt").also { it.parentFile?.mkdirs() }.writeText(summary + "\n")
         println(summary)
     }
 
-    private fun assertFiniteDynamics(name: String, brushes: List<BrushParams>) {
+    private fun assertFiniteDynamics(
+        name: String,
+        brushes: List<BrushParams>,
+    ) {
         brushes.forEach { brush ->
             for (pressure in listOf(0f, 0.25f, 0.5f, 0.75f, 1f)) {
                 assertTrue(name, brush.calculateEffectiveSize(pressure, 5f).isFinite())

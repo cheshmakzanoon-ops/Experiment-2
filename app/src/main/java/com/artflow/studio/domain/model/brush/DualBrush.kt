@@ -7,6 +7,8 @@ import kotlinx.serialization.Serializable
 data class DualBrush(
     val params: BrushParams,
     val mode: Mode = Mode.MULTIPLY,
+    /** Source mode when a reference compound brush currently uses an approximate ArtFlow combine mode. */
+    val sourceBlendMode: Int? = null,
 ) {
     @Serializable
     enum class Mode(

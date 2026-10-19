@@ -178,7 +178,7 @@ private fun BrushPressureSettings(
             label = "Pressure → Size",
             value = brushParams.pressureToSize,
             onValueChange = { onBrushParamsChanged(brushParams.copy(pressureToSize = it)) },
-            valueRange = 0f..1f,
+            valueRange = -1f..1f,
             valueDisplay = "%.0f%%".format(brushParams.pressureToSize * 100),
         )
 
@@ -187,9 +187,19 @@ private fun BrushPressureSettings(
             label = "Pressure → Opacity",
             value = brushParams.pressureToOpacity,
             onValueChange = { onBrushParamsChanged(brushParams.copy(pressureToOpacity = it)) },
-            valueRange = 0f..1f,
+            valueRange = -1f..1f,
             valueDisplay = "%.0f%%".format(brushParams.pressureToOpacity * 100),
         )
+
+        if (brushParams.importedPressure != null) {
+            Text(
+                "Imported overall, size and opacity curves remain active. ArtFlow interpolates their saved points linearly.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            TextButton(onClick = { onBrushParamsChanged(brushParams.copy(importedPressure = null)) }) {
+                Text("Reset imported pressure curves")
+            }
+        }
 
         // Pressure Curve Selection
         PressureCurveSelector(
@@ -259,9 +269,9 @@ private fun BrushGrainSettings(
         if (brushParams.blendTexture && brushParams.textureId != null) {
             BrushParameterSlider(
                 label = "Grain scale",
-                value = brushParams.textureScale.coerceIn(0.25f, 8f),
+                value = brushParams.textureScale.coerceIn(0.05f, 8f),
                 onValueChange = { onBrushParamsChanged(brushParams.copy(textureScale = it)) },
-                valueRange = 0.25f..8f,
+                valueRange = 0.05f..8f,
                 valueDisplay = "%.2f×".format(brushParams.textureScale),
             )
             BrushParameterSlider(
@@ -305,7 +315,7 @@ private fun BrushScatterSettings(
             label = "Count",
             value = brushParams.count.toFloat(),
             onValueChange = { onBrushParamsChanged(brushParams.copy(count = it.toInt())) },
-            valueRange = 1f..5f,
+            valueRange = 1f..16f,
             valueDisplay = "%d".format(brushParams.count),
             isInteger = true,
         )
@@ -449,6 +459,12 @@ private fun BrushRotationSettings(
         ShapeSwitch("Randomized", brushParams.tipRandomized) { onBrushParamsChanged(brushParams.copy(tipRandomized = it)) }
         ShapeSwitch("Flip X", brushParams.tipFlipX) { onBrushParamsChanged(brushParams.copy(tipFlipX = it)) }
         ShapeSwitch("Flip Y", brushParams.tipFlipY) { onBrushParamsChanged(brushParams.copy(tipFlipY = it)) }
+        ShapeSwitch("Random flip X per dab", brushParams.tipFlipXJitter) {
+            onBrushParamsChanged(brushParams.copy(tipFlipXJitter = it))
+        }
+        ShapeSwitch("Random flip Y per dab", brushParams.tipFlipYJitter) {
+            onBrushParamsChanged(brushParams.copy(tipFlipYJitter = it))
+        }
     }
 }
 
@@ -525,7 +541,7 @@ private fun BrushSpeedSettings(
     val touchSize = if (LocalArtFlowFlags.current.largeTouchTargets) 56.dp else 48.dp
     BrushSettingsSection(title = "Speed and colour dynamics") {
         Text(
-            "Faster strokes can become thinner, lighter or shift hue. Test the response in the drawing pad.",
+            "Positive size/opacity values reduce fast marks; negative values reduce slow marks. Test the response in the drawing pad.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -533,14 +549,14 @@ private fun BrushSpeedSettings(
             label = "Speed → size",
             value = brushParams.velocityToSize,
             onValueChange = { onBrushParamsChanged(brushParams.copy(velocityToSize = it)) },
-            valueRange = 0f..1f,
+            valueRange = -1f..1f,
             valueDisplay = "%.0f%%".format(brushParams.velocityToSize * 100),
         )
         BrushParameterSlider(
             label = "Speed → opacity",
             value = brushParams.velocityToOpacity,
             onValueChange = { onBrushParamsChanged(brushParams.copy(velocityToOpacity = it)) },
-            valueRange = 0f..1f,
+            valueRange = -1f..1f,
             valueDisplay = "%.0f%%".format(brushParams.velocityToOpacity * 100),
         )
         BrushParameterSlider(
@@ -638,11 +654,17 @@ private fun DualBrushOptions(
             valueDisplay = "%.0f px".format(dual.params.size),
         )
         Text("Combine", style = MaterialTheme.typography.labelLarge)
+        dual.sourceBlendMode?.let { source ->
+            Text(
+                "Imported combine mode $source is approximated by ${dual.mode.displayName}. Choose a mode to replace it.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DualBrush.Mode.entries.forEach { mode ->
                 FilterChip(
                     selected = dual.mode == mode,
-                    onClick = { onChange(dual.copy(mode = mode)) },
+                    onClick = { onChange(dual.copy(mode = mode, sourceBlendMode = null)) },
                     label = { Text(mode.displayName) },
                 )
             }

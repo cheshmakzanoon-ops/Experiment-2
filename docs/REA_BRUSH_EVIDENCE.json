@@ -1,0 +1,37 @@
+{
+  "reference_sha256": "7b1dad3ac95f8aeca3c22b432b5d6fd94182a3bf9f84fb93588adb126368b54e",
+  "source_baseline": "f312926474a68278f9b03b17fc2999124f0cb0b1",
+  "tool": "morluto/rea (rea-agents@6.7.0), inspect-keyed-archive",
+  "workflow_run": 39179569624,
+  "artifact_id": 12155827024,
+  "brushes": 394,
+  "single_brushes": 254,
+  "compound_brushes": 140,
+  "settings_archives": 534,
+  "negative_setting_counts": {
+    "dynamicsPressureSize": 3,
+    "dynamicsPressureOpacity": 17,
+    "dynamicsSpeedSize": 6,
+    "dynamicsSpeedOpacity": 14
+  },
+  "compound_primary_mode_counts": {
+    "0": 26,
+    "1": 4,
+    "4": 2,
+    "6": 5,
+    "7": 3,
+    "8": 16,
+    "9": 6,
+    "10": 18,
+    "11": 8,
+    "19": 1,
+    "20": 13,
+    "26": 8,
+    "28": 30
+  },
+  "interpretation_limits": [
+    "Static data does not establish native interpolation or rendering equivalence.",
+    "Bundled textures are not redistributed.",
+    "No reference runtime, device latency, signing or release approval was verified."
+  ]
+}

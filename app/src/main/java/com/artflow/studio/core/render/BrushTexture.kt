@@ -125,7 +125,7 @@ class BrushTexture private constructor(
             val tile = if (kind == null) CustomGrains.get(params.textureId) ?: return null else null
             require(params.textureScale.isFinite() && params.textureRotation.isFinite()) { "Texture settings must be finite" }
             val depth = if (params.grainDepth.isFinite()) params.grainDepth.coerceIn(0f, 1f) else 1f
-            return BrushTexture(kind, tile, params.textureScale.coerceIn(0.25f, 8f), params.textureRotation % 360f, depth)
+            return BrushTexture(kind, tile, params.textureScale.coerceIn(0.05f, 8f), params.textureRotation % 360f, depth)
         }
     }
 }

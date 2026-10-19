@@ -3,6 +3,7 @@ package com.artflow.studio.domain.model.brush
 import com.artflow.studio.domain.model.layer.BlendMode
 import kotlinx.serialization.Serializable
 import java.util.Random
+import kotlin.math.abs
 
 /**
  * Domain model representing brush parameters
@@ -24,6 +25,7 @@ data class BrushParams(
     val pressureToOpacity: Float = 0.3f, // How much pressure affects opacity
     val pressureCurve: PressureCurve = PressureCurve.LINEAR,
     val customPressure: PressureResponse = PressureResponse(),
+    val importedPressure: ImportedPressure? = null, // Preserved independent per-brush and per-channel responses
     // Color dynamics - Phase 9: Advanced Brush Parameters
     val hueJitter: Float = 0f, // Hue variation (0.0 - 1.0)
     val saturationJitter: Float = 0f, // Saturation variation (0.0 - 1.0)
@@ -44,8 +46,8 @@ data class BrushParams(
     // Advanced
     val tiltInfluence: Float = 0f, // How much tilt affects brush
     val tiltToRotation: Boolean = false, // Map tilt to brush rotation
-    val velocityToSize: Float = 0f, // Speed affects size (0.0 - 1.0)
-    val velocityToOpacity: Float = 0f, // Speed affects opacity (0.0 - 1.0)
+    val velocityToSize: Float = 0f, // -1 shrinks slow marks; +1 shrinks fast marks
+    val velocityToOpacity: Float = 0f, // -1 fades slow marks; +1 fades fast marks
     val velocityToHue: Float = 0f, // Speed affects hue shift (0.0 - 1.0)
     val roundness: Float = 1f, // Tip shape: 1 is round, lower values flatten it along [rotation]
     val shapeId: String? = null, // Imported tip image ("custom-…"); null stamps the round/flat tip
@@ -56,6 +58,8 @@ data class BrushParams(
     val falloff: Float = 0f, // 0..1: the stroke fades out along its path; 1 fades within one brush size
     val tipFlipX: Boolean = false, // Mirror the shape image across its vertical axis
     val tipFlipY: Boolean = false, // Mirror the shape image across its horizontal axis
+    val tipFlipXJitter: Boolean = false, // Seeded horizontal mirror choice per dab, separate from a fixed flip
+    val tipFlipYJitter: Boolean = false, // Seeded vertical mirror choice per dab, separate from a fixed flip
     val tipRandomized: Boolean = false, // Each stroke starts the tip at a random angle
     val buildUp: Boolean = false, // Blending rendering: overlapping dabs build up within one stroke instead of glazing
     val grainMoving: Boolean = false, // Grain starts afresh with each stroke instead of staying fixed to the canvas
@@ -92,16 +96,15 @@ data class BrushParams(
         var effectiveSize = size.coerceAtLeast(1f)
 
         // Apply pressure dynamics
-        if (pressureToSize > 0f) {
-            val pressureFactor = pressureResponse(pressure)
-            val influence = pressureToSize.coerceIn(0f, 1f)
-            effectiveSize *= 1f - influence + pressureFactor * influence
+        if (pressureToSize != 0f) {
+            val overall = pressureResponse(pressure)
+            val response = importedPressure?.size?.map(overall) ?: overall
+            effectiveSize *= pressureFactor(response, pressureToSize)
         }
 
         // Apply velocity dynamics
-        if (velocityToSize > 0f && velocity > 0f) {
-            val normalizedVelocity = velocity.coerceIn(0f, 10f) / 10f
-            effectiveSize *= (1f - normalizedVelocity * velocityToSize * 0.5f)
+        if (velocityToSize != 0f) {
+            effectiveSize *= speedFactor(velocity, velocityToSize, 0.5f)
         }
 
         // Apply size jitter
@@ -125,16 +128,15 @@ data class BrushParams(
         var effectiveOpacity = opacity.coerceIn(0f, 1f)
 
         // Apply pressure dynamics
-        if (pressureToOpacity > 0f) {
-            val pressureFactor = pressureResponse(pressure)
-            val influence = pressureToOpacity.coerceIn(0f, 1f)
-            effectiveOpacity *= 1f - influence + pressureFactor * influence
+        if (pressureToOpacity != 0f) {
+            val overall = pressureResponse(pressure)
+            val response = importedPressure?.opacity?.map(overall) ?: overall
+            effectiveOpacity *= pressureFactor(response, pressureToOpacity)
         }
 
         // Apply velocity dynamics
-        if (velocityToOpacity > 0f && velocity > 0f) {
-            val normalizedVelocity = velocity.coerceIn(0f, 10f) / 10f
-            effectiveOpacity *= (1f - normalizedVelocity * velocityToOpacity * 0.3f)
+        if (velocityToOpacity != 0f) {
+            effectiveOpacity *= speedFactor(velocity, velocityToOpacity, 0.3f)
         }
 
         // Apply opacity jitter
@@ -150,19 +152,43 @@ data class BrushParams(
     fun pressureResponse(pressure: Float): Float {
         require(pressure.isFinite()) { "Pressure must be finite" }
         val input = pressure.coerceIn(0f, 1f)
-        return when (pressureCurve) {
-            PressureCurve.LINEAR -> input
-            PressureCurve.EASE_IN -> input * input
-            PressureCurve.EASE_OUT -> input * (2f - input)
-            PressureCurve.EASE_IN_OUT -> {
-                if (input < 0.5f) {
-                    2f * input * input
-                } else {
-                    1f - (-2f * input + 2f).let { it * it } / 2f
+        val mapped =
+            when (pressureCurve) {
+                PressureCurve.LINEAR -> input
+                PressureCurve.EASE_IN -> input * input
+                PressureCurve.EASE_OUT -> input * (2f - input)
+                PressureCurve.EASE_IN_OUT -> {
+                    if (input < 0.5f) {
+                        2f * input * input
+                    } else {
+                        1f - (-2f * input + 2f).let { it * it } / 2f
+                    }
                 }
+                PressureCurve.CUSTOM -> customPressure.map(input)
             }
-            PressureCurve.CUSTOM -> customPressure.map(input)
-        }
+        return importedPressure?.overall?.map(mapped) ?: mapped
+    }
+
+    private fun pressureFactor(
+        response: Float,
+        amount: Float,
+    ): Float {
+        val influence = amount.coerceIn(-1f, 1f)
+        val value = if (influence < 0f) 1f - response else response
+        return 1f - abs(influence) + value * abs(influence)
+    }
+
+    private fun speedFactor(
+        velocity: Float,
+        amount: Float,
+        reduction: Float,
+    ): Float {
+        require(velocity.isFinite()) { "Velocity must be finite" }
+        val normalized = velocity.coerceIn(0f, 10f) / 10f
+        val influence = amount.coerceIn(-1f, 1f)
+        // Negative settings reduce the slow end; positive settings reduce the fast end.
+        val value = if (influence < 0f) 1f - normalized else normalized
+        return 1f - value * abs(influence) * reduction
     }
 
     /**

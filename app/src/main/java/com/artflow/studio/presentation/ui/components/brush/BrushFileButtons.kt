@@ -44,7 +44,7 @@ internal fun BrushFileButtons(
                 val brushes =
                     withContext(Dispatchers.IO) {
                         runCatching {
-                            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                            val bytes = context.contentResolver.openInputStream(uri)?.use { BrushArchives.readInput(it) }
                             require(bytes != null && bytes.size <= MAX_ARCHIVE_BYTES) { "Unreadable brush file" }
                             if (BrushArchives.isArchive(bytes)) {
                                 importArchive(context, bytes)
@@ -84,9 +84,8 @@ private fun importArchive(
 ): List<SavedBrush> {
     val directory = GrainStorage.directory(context.filesDir)
     return BrushArchives.read(bytes, BitmapPixelBridge::fromEncodedBytes).mapIndexed { index, brush ->
-        val shape = brush.shape?.let { GrainStorage.save(directory, it) }
-        val grain = brush.grain?.let { GrainStorage.save(directory, it) }
-        SavedBrush("imported-$index", brush.name ?: "Imported brush ${index + 1}", BrushArchives.parameters(shape, grain, brush.settings))
+        val parameters = brush.parameters { GrainStorage.save(directory, it) }
+        SavedBrush("imported-$index", brush.name ?: "Imported brush ${index + 1}", parameters)
     }
 }
 
@@ -113,16 +112,19 @@ private fun importBrushes(
     val directory = GrainStorage.directory(context.filesDir)
     val renamed = images.mapValues { (_, tile) -> GrainStorage.save(directory, tile) }
     return brushes.map { brush ->
-        val params = brush.parameters
-        brush.copy(
-            parameters =
-                params.copy(
-                    textureId = params.textureId?.let { renamed[it] ?: it },
-                    shapeId = params.shapeId?.let { renamed[it] ?: it },
-                ),
-        )
+        brush.copy(parameters = remapImages(brush.parameters, renamed))
     }
 }
+
+private fun remapImages(
+    params: BrushParams,
+    renamed: Map<String, String>,
+): BrushParams =
+    params.copy(
+        textureId = params.textureId?.let { renamed[it] ?: it },
+        shapeId = params.shapeId?.let { renamed[it] ?: it },
+        dual = params.dual?.let { it.copy(params = remapImages(it.params, renamed)) },
+    )
 
 private fun share(
     context: Context,

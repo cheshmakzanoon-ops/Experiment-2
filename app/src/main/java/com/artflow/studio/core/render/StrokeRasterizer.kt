@@ -213,7 +213,12 @@ class StrokeRasterizer(
                 System.arraycopy(kept.pixels, (y - end.top) * kept.width, coverage.pixels, y * coverage.width + end.left, kept.width)
             }
         }
-        depositCoverage(target, buffer, reach, Deposit(params, strokeAlpha, mask, alphaLock, grainOrigin(params, points)))
+        depositCoverage(
+            target,
+            buffer,
+            reach,
+            Deposit(params, strokeAlpha, mask, alphaLock, grainOrigin(params, points, canvasCoordinates = true)),
+        )
     }
 
     /** Merges [paint] into [backdrop] with the brush's blend mode; alpha lock keeps the backdrop's alpha. */
@@ -280,11 +285,12 @@ class StrokeRasterizer(
         // Erasing depends on brush coverage, never on the selected ink color's alpha.
         val eraseShape = stroke.copy(color = 0xFFFFFFFF.toInt())
         drawStrokeInto(buffer, eraseShape, params, points, alphaLock = false, mask = null, random = random)
+        val dual = params.dual?.let { drawDual(target, eraseShape, it, reach) }
         val texture = BrushTexture.from(params)
         val (grainX, grainY) = grainOrigin(params, points)
         for (y in reach.top..reach.bottom) {
             for (i in y * target.width + reach.left..y * target.width + reach.right) {
-                val source = buffer.pixels[i]
+                val source = dual?.combine(buffer.pixels[i], i, originX + i % target.width, originY + i / target.width) ?: buffer.pixels[i]
                 val sourceCoverage = ((source ushr 24) and 0xFF) / 255f
                 if (sourceCoverage <= 0f) continue
                 val selectionCoverage = selectionCoverage(mask, target, i)
@@ -497,7 +503,7 @@ class StrokeRasterizer(
                 mode = if (params.buildUp) Stamping.Mode.SOURCE_OVER else Stamping.Mode.MAX_COVERAGE,
                 alphaLock = alphaLock,
                 mask = mask,
-                tip = tipFor(context.tip, params, current),
+                tip = tipFor(context.tip, params, current, random),
             )
             dabCount.incrementAndGet()
         }
@@ -508,9 +514,19 @@ class StrokeRasterizer(
         tip: Stamping.TipShape,
         params: BrushParams,
         point: StrokePoint,
+        random: Random,
     ): Stamping.TipShape {
-        if (!params.tiltToRotation) return tip
-        return tip.copy(angleDegrees = tip.angleDegrees + Math.toDegrees(point.tiltY.toDouble()).toFloat())
+        val turned =
+            if (params.tiltToRotation) {
+                tip.copy(angleDegrees = tip.angleDegrees + Math.toDegrees(point.tiltY.toDouble()).toFloat())
+            } else {
+                tip
+            }
+        val flipX = params.tipFlipXJitter && random.nextBoolean()
+        val flipY = params.tipFlipYJitter && random.nextBoolean()
+        val image = turned.image
+        if (image == null || (!flipX && !flipY)) return turned
+        return turned.copy(image = { u, v -> image(if (flipX) 1f - u else u, if (flipY) 1f - v else v) })
     }
 
     /** Wet mix: the dab picks up some of the paint already on the layer under it. */
@@ -647,7 +663,13 @@ class StrokeRasterizer(
     private fun grainOrigin(
         params: BrushParams,
         points: List<StrokePoint>,
-    ): Pair<Int, Int> = if (params.grainMoving) points.first().x.toInt() to points.first().y.toInt() else 0 to 0
+        canvasCoordinates: Boolean = false,
+    ): Pair<Int, Int> {
+        if (!params.grainMoving) return 0 to 0
+        val offsetX = if (canvasCoordinates) 0 else originX
+        val offsetY = if (canvasCoordinates) 0 else originY
+        return floor(points.first().x + offsetX).toInt() to floor(points.first().y + offsetY).toInt()
+    }
 
     /** Fall off: the stroke fades to nothing over one brush size at 1, and over 40 sizes near 0. */
     private fun falloffFactor(
@@ -715,7 +737,7 @@ class StrokeRasterizer(
         // [reach] already covers the second brush; marks are read only inside it.
         clear(marks, reach)
         drawStrokeInto(marks, stroke, params, stroke.points, alphaLock = false, mask = null, random = Random(stroke.id + DUAL_SEED))
-        return DualMarks(dual.mode, marks, BrushTexture.from(params))
+        return DualMarks(dual.mode, marks, BrushTexture.from(params), dual.params.opacity, grainOrigin(params, stroke.points))
     }
 
     /** The second brush's marks, combined with the main brush's coverage pixel by pixel. */
@@ -723,6 +745,8 @@ class StrokeRasterizer(
         val mode: DualBrush.Mode,
         val marks: PixelBuffer,
         val texture: BrushTexture?,
+        val opacity: Float,
+        val grain: Pair<Int, Int>,
     ) {
         fun combine(
             primary: Int,
@@ -732,7 +756,9 @@ class StrokeRasterizer(
         ): Int {
             val second = marks.pixels[index]
             val own = (primary ushr 24) / 255f
-            val other = (second ushr 24) / 255f * (texture?.coverage(x, y) ?: 1f)
+            val other =
+                (second ushr 24) / 255f * opacity.coerceIn(0f, 1f) *
+                    (texture?.coverage(x - grain.first, y - grain.second) ?: 1f)
             val alpha =
                 when (mode) {
                     DualBrush.Mode.MULTIPLY -> own * other

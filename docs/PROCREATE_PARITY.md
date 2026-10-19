@@ -1,5 +1,13 @@
 # ArtFlow / Procreate workflow comparison
 
+## REA brush compatibility follow-through
+
+The [REA-derived brush integration](REA_BRUSH_COMPATIBILITY.md) adds compound archive grouping,
+signed size/opacity dynamics, independent imported pressure curves, and secondary rendering fixes.
+It retains unresolved source combine IDs rather than claiming exact rendering. The hash-pinned
+reference corpus checks metadata and serialization only; **overall and pixel parity remain unverified**.
+
+
 Assessed 19 September 2026 against **Procreate for iPad**, not Dreams or Pocket.
 Original comparison baseline: `c2e4eee1ef0cc1e65ebfd49ca7c01b9f2b94d5df`.
 **Overall parity has not been reached.** This is a workflow gap register and acceptance contract,

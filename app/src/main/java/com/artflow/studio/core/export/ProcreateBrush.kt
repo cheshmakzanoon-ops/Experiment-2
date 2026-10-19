@@ -1,6 +1,8 @@
 package com.artflow.studio.core.export
 
 import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.ImportedPressure
+import com.artflow.studio.domain.model.brush.PressureMapping
 import com.artflow.studio.domain.model.layer.BlendMode
 import kotlin.math.roundToInt
 
@@ -22,6 +24,8 @@ object ProcreateBrush {
         /** The brush uses one of Procreate's own bundled shapes or grains, which files do not carry. */
         val bundledShape: Boolean,
         val bundledGrain: Boolean,
+        /** Raw combine-mode identifier; retained even when no equivalent is available yet. */
+        val dualBlendMode: Int? = null,
     )
 
     fun read(archive: ByteArray): Settings {
@@ -33,6 +37,8 @@ object ProcreateBrush {
         fun unit(key: String): Float = number(key)?.coerceIn(0f, 1f) ?: 0f
 
         fun flag(key: String): Boolean = brush[key] == true
+
+        fun signed(key: String): Float = number(key)?.coerceIn(-1f, 1f) ?: 0f
 
         val mode =
             number("extendedBlend")?.roundToInt()?.let(ProcreateBlendModes::of)
@@ -48,12 +54,18 @@ object ProcreateBrush {
                 spacing = (number("plotSpacing") ?: DEFAULT_SPACING).coerceIn(MIN_SPACING, 1f),
                 scatter = unit("plotJitter"),
                 count = 1 + (unit("shapeCount") * (MAX_COUNT - 1)).roundToInt(),
-                rotation = Math.toDegrees((number("shapeAngle") ?: 0f).toDouble()).toFloat() % FULL_TURN,
+                rotation = normalizedAngle(number("shapeAngle") ?: 0f),
                 taperStart = unit("pencilTaperStartLength"),
                 taperEnd = unit("pencilTaperEndLength"),
                 taperOpacity = unit("pencilTaperOpacity"),
-                pressureToSize = unit("dynamicsPressureSize"),
-                pressureToOpacity = unit("dynamicsPressureOpacity"),
+                pressureToSize = signed("dynamicsPressureSize"),
+                pressureToOpacity = signed("dynamicsPressureOpacity"),
+                importedPressure =
+                    ImportedPressure(
+                        overall = curve(keyed, brush["dynamicsPressureOverall"]),
+                        size = curve(keyed, brush["dynamicsPressureSizeCurve"]),
+                        opacity = curve(keyed, brush["dynamicsPressureOpacityCurve"]),
+                    ).takeIf { it.overall != null || it.size != null || it.opacity != null },
                 hueJitter = unit("dynamicsJitterHue"),
                 saturationJitter = unit("dynamicsJitterSaturation"),
                 brightnessJitter = maxOf(unit("dynamicsJitterLightness"), unit("dynamicsJitterDarkness")),
@@ -73,8 +85,8 @@ object ProcreateBrush {
                 burntEdges = unit("burntEdgesAmount"),
                 grainDepth = number("grainDepth")?.coerceIn(0f, 1f) ?: 1f,
                 falloff = unit("dynamicsFalloff"),
-                tipFlipX = flag("shapeFlipXJitter"),
-                tipFlipY = flag("shapeFlipYJitter"),
+                tipFlipXJitter = flag("shapeFlipXJitter"),
+                tipFlipYJitter = flag("shapeFlipYJitter"),
                 tipRandomized = flag("shapeRandomise"),
                 buildUp = flag("renderingRecursiveMixing"),
                 grainMoving = unit("textureMovement") >= MOVING_GRAIN,
@@ -88,7 +100,39 @@ object ProcreateBrush {
             grainInverted = flag("textureInverted"),
             bundledShape = keyed.string(brush["bundledShapePath"]) != null,
             bundledGrain = keyed.string(brush["bundledGrainPath"]) != null,
+            dualBlendMode = number("dualBlendMode")?.roundToInt(),
         )
+    }
+
+    private fun normalizedAngle(radians: Float): Float {
+        val degrees = Math.toDegrees(radians.toDouble()) % FULL_TURN
+        return ((degrees + FULL_TURN) % FULL_TURN).toFloat()
+    }
+
+    /** REA shows NSArray point strings, not three evenly spaced monotone controls. */
+    private fun curve(
+        keyed: KeyedArchive,
+        value: Any?,
+    ): PressureMapping? {
+        val curve = keyed.map(value) ?: return null
+        val values = keyed.array(curve["points"])
+        if (values.size !in 2..PressureMapping.MAX_POINTS) return null
+        val points =
+            values
+                .map { item ->
+                    val text = keyed.string(item)?.trim() ?: return null
+                    if (!text.startsWith("{") || !text.endsWith("}")) return null
+                    val coordinates = text.substring(1, text.lastIndex).split(',')
+                    if (coordinates.size != 2) return null
+                    val input = coordinates[0].trim().toFloatOrNull() ?: return null
+                    val output = coordinates[1].trim().toFloatOrNull() ?: return null
+                    PressureMapping.Point(input, output)
+                }.sortedBy { it.input }
+        return try {
+            PressureMapping(points)
+        } catch (invalid: IllegalArgumentException) {
+            null
+        }
     }
 
     /** Procreate's size slider tops out at maxSize; 1.0 is taken as a medium brush. */
