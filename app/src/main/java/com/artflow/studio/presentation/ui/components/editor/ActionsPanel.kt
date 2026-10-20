@@ -1,5 +1,6 @@
 package com.artflow.studio.presentation.ui.components.editor
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -8,12 +9,21 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.R
+import com.artflow.studio.core.canvas.StylusAction
+import com.artflow.studio.core.canvas.StylusButtons
+import com.artflow.studio.core.canvas.StylusEraserEnd
 import com.artflow.studio.core.color.CmykProof
+import com.artflow.studio.core.color.ViewFilter
+import com.artflow.studio.core.pixels.AreaSample
+import com.artflow.studio.domain.model.brush.PressureResponse
 import com.artflow.studio.domain.model.settings.PressureAndSmoothing
 import com.artflow.studio.presentation.ui.components.canvas.GestureControls
 import kotlin.math.exp
 import kotlin.math.ln
+import kotlin.math.roundToInt
 
 data class AddActions(
     val onInsertFile: () -> Unit,
@@ -42,6 +52,9 @@ data class CanvasActions(
     /** On-screen print proof; a view setting that never changes the artwork. */
     val proof: CmykProof.Mode = CmykProof.Mode.OFF,
     val onProof: (CmykProof.Mode) -> Unit = {},
+    /** On-screen greyscale or colour-vision check; never changes the artwork. */
+    val viewFilter: ViewFilter = ViewFilter.OFF,
+    val onViewFilter: (ViewFilter) -> Unit = {},
     /** Reopens the 3D window; null when the artwork has no model. */
     val onModelView: (() -> Unit)? = null,
 )
@@ -54,6 +67,9 @@ data class VideoActions(
     /** Longest side of recorded frames, and how to change it. */
     val quality: Int = 1280,
     val onQuality: (Int) -> Unit = {},
+    /** Time-lapse Recording: whether new edits are recorded. */
+    val recording: Boolean = true,
+    val onRecording: (Boolean) -> Unit = {},
 )
 
 data class StudioPrefs(
@@ -66,6 +82,8 @@ data class StudioPrefs(
     val lightInterface: Boolean = false,
     val brushCursor: Boolean = true,
     val dynamicBrushScaling: Boolean = false,
+    val selectionMaskVisibility: Float = 0.28f,
+    val projectCanvas: Boolean = false,
 )
 
 data class PrefActions(
@@ -81,6 +99,8 @@ data class PrefActions(
     val onLightInterface: (Boolean) -> Unit = {},
     val onBrushCursor: (Boolean) -> Unit = {},
     val onDynamicBrushScaling: (Boolean) -> Unit = {},
+    val onSelectionMaskVisibility: (Float) -> Unit = {},
+    val onProjectCanvas: (Boolean) -> Unit = {},
 )
 
 /** Canvas facts shown under Canvas > Canvas information. */
@@ -88,10 +108,13 @@ data class CanvasInfo(
     val width: Int,
     val height: Int,
     val dpi: Int,
+    /** Layers used across every frame. */
     val layers: Int,
     val frames: Int,
     val profile: String = "sRGB IEC61966-2.1",
     val trackedMs: Long = 0L,
+    /** Most layers this canvas size can hold on this device; worked out in core/canvas CanvasInformation. */
+    val layerLimit: Int = 0,
 )
 
 private enum class ActionsTab { Add, Canvas, Share, Video, Prefs, Help }
@@ -141,6 +164,7 @@ fun ActionsPanel(
                 }
 
                 ActionsTab.Video -> {
+                    PrefSwitch("Time-lapse Recording", video.recording, video.onRecording)
                     ActionRow("Time-lapse Replay", video.onReplay)
                     ActionRow("Export Time-lapse (Full length)", onClick = { video.onExport(true) })
                     ActionRow("Export Time-lapse (30 seconds)", onClick = { video.onExport(false) })
@@ -201,10 +225,25 @@ private fun CanvasTab(
             canvas.onProof(if (on) CmykProof.Mode.GAMUT_WARNING else CmykProof.Mode.PROOF)
         }
     }
+    Text("View check", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 8.dp))
+    Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        ViewFilter.entries.forEach { filter ->
+            FilterChip(
+                selected = canvas.viewFilter == filter,
+                onClick = { canvas.onViewFilter(filter) },
+                label = { Text(filter.displayName) },
+            )
+        }
+    }
     HorizontalDivider()
-    Text("Canvas information", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
     Text(
-        "${info.width} × ${info.height} px · ${info.dpi} dpi · ${info.layers} layers · ${info.frames} frame(s) · " +
+        stringResource(R.string.actionspanel_canvas_information),
+        style = MaterialTheme.typography.titleSmall,
+        modifier = Modifier.padding(8.dp),
+    )
+    Text(
+        "${info.width} × ${info.height} px · ${info.dpi} dpi · " +
+            "${stringResource(R.string.actionspanel_layers_of_limit, info.layers, info.layerLimit)} · ${info.frames} frame(s) · " +
             "${info.profile} · tracked time ${trackedLabel(info.trackedMs)}",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -228,10 +267,21 @@ private fun PrefsTab(
     PrefSwitch("Brush cursor", prefs.brushCursor, actions.onBrushCursor)
     PrefSwitch("Dynamic brush scaling", prefs.dynamicBrushScaling, actions.onDynamicBrushScaling)
     PrefSwitch("QuickShape (hold at the end of a stroke)", prefs.quickShape, actions.onQuickShape)
-    PrefSwitch("Touch and hold for eyedropper", prefs.holdEyedropper, actions.onHoldEyedropper)
     PrefSwitch("Paint with a finger", prefs.fingerPainting, actions.onFingerPainting)
+    PrefSwitch("Project canvas on a second screen", prefs.projectCanvas, actions.onProjectCanvas)
+    PrefSlider(
+        label = "Selection mask",
+        value = prefs.selectionMaskVisibility,
+        range = 0f..1f,
+        readout = "${(prefs.selectionMaskVisibility * 100).roundToInt()}%",
+        onChange = actions.onSelectionMaskVisibility,
+    )
     HorizontalDivider()
-    Text("Pressure and Smoothing", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
+    Text(
+        stringResource(R.string.actionspanel_pressure_and_smoothing),
+        style = MaterialTheme.typography.titleSmall,
+        modifier = Modifier.padding(8.dp),
+    )
     val smoothing = prefs.smoothing
     val change = actions.onPressureAndSmoothing
     PrefSlider("Stabilization", smoothing.stabilization, 0f..1f, percent(smoothing.stabilization)) {
@@ -246,9 +296,12 @@ private fun PrefsTab(
     PrefSlider("Pressure smoothing", smoothing.pressureSmoothing, 0f..1f, percent(smoothing.pressureSmoothing)) {
         change(smoothing.copy(pressureSmoothing = it))
     }
+    PrefSlider("Pulled string", smoothing.pulledString, 0f..1f, percent(smoothing.pulledString)) {
+        change(smoothing.copy(pulledString = it))
+    }
     // The slider reads soft (left) to firm (right) on a logarithmic scale centred on linear.
     PrefSlider(
-        label = "Pressure",
+        label = stringResource(R.string.actionspanel_pressure),
         value = ln(smoothing.pressureCurve),
         range = ln(0.3f)..ln(3f),
         readout =
@@ -258,16 +311,62 @@ private fun PrefsTab(
                 else -> "Linear"
             },
     ) { change(smoothing.copy(pressureCurve = exp(it))) }
+    // The curve's three points stay in order: moving one pushes its neighbours along.
+    val response = smoothing.pressureResponse
+    PrefSlider("Light press", response.low, 0f..1f, percent(response.low)) { value ->
+        change(smoothing.copy(pressureResponse = PressureResponse(value, maxOf(value, response.middle), maxOf(value, response.high))))
+    }
+    PrefSlider("Medium press", response.middle, 0f..1f, percent(response.middle)) { value ->
+        change(smoothing.copy(pressureResponse = PressureResponse(minOf(response.low, value), value, maxOf(value, response.high))))
+    }
+    PrefSlider("Firm press", response.high, 0f..1f, percent(response.high)) { value ->
+        change(smoothing.copy(pressureResponse = PressureResponse(minOf(response.low, value), minOf(response.middle, value), value)))
+    }
     HorizontalDivider()
-    Text("Gesture controls", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
+    Text(
+        stringResource(R.string.actionspanel_gesture_controls),
+        style = MaterialTheme.typography.titleSmall,
+        modifier = Modifier.padding(8.dp),
+    )
     val gestures = prefs.gestures
-    PrefSwitch("Three-finger scrub clears the layer", gestures.scrubToClear) { actions.onGestures(gestures.copy(scrubToClear = it)) }
-    PrefSwitch("Three-finger swipe opens Copy & Paste", gestures.swipeCopyPaste) {
-        actions.onGestures(gestures.copy(swipeCopyPaste = it))
+    val changeGestures = actions.onGestures
+    PrefSwitch(stringResource(R.string.actionspanel_gesture_two_finger_undo), gestures.twoFingerTapUndo) {
+        changeGestures(gestures.copy(twoFingerTapUndo = it))
     }
-    PrefSwitch("Four-finger tap toggles full screen", gestures.fourFingerFullScreen) {
-        actions.onGestures(gestures.copy(fourFingerFullScreen = it))
+    PrefSwitch(stringResource(R.string.actionspanel_gesture_three_finger_redo), gestures.threeFingerTapRedo) {
+        changeGestures(gestures.copy(threeFingerTapRedo = it))
     }
+    PrefSwitch("Touch and hold selects the layer under your finger", gestures.holdSelectsLayer) {
+        actions.onGestures(gestures.copy(holdSelectsLayer = it))
+    }
+    PrefSlider(
+        label = "Rapid undo delay",
+        value = gestures.rapidUndoDelayMs.toFloat(),
+        range = 200f..1500f,
+        readout = "%.2f s".format(gestures.rapidUndoDelayMs / 1000f),
+    ) { actions.onGestures(gestures.copy(rapidUndoDelayMs = (it / 50f).roundToInt() * 50)) }
+    PrefSlider(
+        label = "Eyedropper delay",
+        value = gestures.eyedropperDelayMs.toFloat(),
+        range = 200f..1500f,
+        readout = "%.2f s".format(gestures.eyedropperDelayMs / 1000f),
+    ) { actions.onGestures(gestures.copy(eyedropperDelayMs = (it / 50f).roundToInt() * 50)) }
+    Text("Eyedropper sample", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 8.dp))
+    Row(Modifier.padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        AreaSample.SIZES.forEach { size ->
+            FilterChip(
+                selected = gestures.eyedropperSample == size,
+                onClick = { actions.onGestures(gestures.copy(eyedropperSample = size)) },
+                label = { Text(if (size == 1) "1 px" else "$size×$size") },
+            )
+        }
+    }
+    PrefSlider(
+        label = "QuickShape delay",
+        value = gestures.quickShapeDelayMs.toFloat(),
+        range = 200f..1500f,
+        readout = "%.2f s".format(gestures.quickShapeDelayMs / 1000f),
+    ) { actions.onGestures(gestures.copy(quickShapeDelayMs = (it / 50f).roundToInt() * 50)) }
     HorizontalDivider()
     ActionRow("Full screen", actions.onFullScreen)
     ActionRow("More preferences…", actions.onMoreSettings)
@@ -297,7 +396,11 @@ private fun TimelapseQuality(
     quality: Int,
     onQuality: (Int) -> Unit,
 ) {
-    Text("Recording quality", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
+    Text(
+        stringResource(R.string.actionspanel_recording_quality),
+        style = MaterialTheme.typography.titleSmall,
+        modifier = Modifier.padding(8.dp),
+    )
     Row(Modifier.padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf(1280 to "720p", 1920 to "1080p", 2560 to "1440p").forEach { (side, label) ->
             FilterChip(selected = quality == side, onClick = { onQuality(side) }, label = { Text(label) })
@@ -335,6 +438,54 @@ private fun PrefSlider(
             modifier = Modifier.weight(1f),
         )
         Text(readout, style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(48.dp))
+    }
+}
+
+/** The menu label for each stylus button action. */
+private fun StylusAction.labelRes(): Int =
+    when (this) {
+        StylusAction.EYEDROPPER -> R.string.actionspanel_stylus_eyedropper
+        StylusAction.ERASER -> R.string.actionspanel_stylus_eraser_while_held
+        StylusAction.SMUDGE -> R.string.actionspanel_stylus_smudge_while_held
+        StylusAction.PREVIOUS_TOOL -> R.string.actionspanel_stylus_previous_tool_while_held
+        StylusAction.QUICK_MENU -> R.string.actionspanel_stylus_quick_menu
+        StylusAction.UNDO -> R.string.actionspanel_stylus_undo
+        StylusAction.NOTHING -> R.string.actionspanel_stylus_nothing
+    }
+
+/** The menu label for each eraser-end choice. */
+private fun StylusEraserEnd.labelRes(): Int =
+    when (this) {
+        StylusEraserEnd.ERASER -> R.string.actionspanel_stylus_eraser
+        StylusEraserEnd.NOTHING -> R.string.actionspanel_stylus_nothing
+    }
+
+/** A label with the current choice on a button; tapping it opens the choices, as the canvas preset menu does. */
+@Composable
+private fun <T> ChoiceRow(
+    label: String,
+    selected: T,
+    options: List<T>,
+    optionLabel: (T) -> Int,
+    onSelect: (T) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Box {
+            OutlinedButton(onClick = { open = true }) { Text(stringResource(optionLabel(selected))) }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                options.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(stringResource(optionLabel(option))) },
+                        onClick = {
+                            open = false
+                            onSelect(option)
+                        },
+                    )
+                }
+            }
+        }
     }
 }
 

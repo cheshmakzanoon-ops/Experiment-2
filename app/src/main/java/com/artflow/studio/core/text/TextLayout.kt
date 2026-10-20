@@ -214,7 +214,7 @@ object TextLayout {
     }
 
     /** Distributes leftover width across the gaps of an already-wrapped line. */
-    private fun justify(
+    internal fun justify(
         lineText: String,
         measureWidth: (String) -> Float,
         targetWidth: Float,
@@ -224,7 +224,8 @@ object TextLayout {
         if (words.size < 2) return listOf(PositionedText(lineText, startX, 0f, measureWidth(lineText)))
 
         val wordsWidth = words.sumOf { measureWidth(it).toDouble() }.toFloat()
-        val gap = (targetWidth - wordsWidth) / (words.size - 1)
+        val naturalGap = (measureWidth(lineText) - wordsWidth) / (words.size - 1)
+        val gap = ((targetWidth - wordsWidth) / (words.size - 1)).coerceAtLeast(naturalGap)
         var cursor = startX
         return words.map { word ->
             val width = measureWidth(word)

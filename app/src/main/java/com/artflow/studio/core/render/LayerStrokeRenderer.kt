@@ -22,9 +22,10 @@ object LayerStrokeRenderer {
         originX: Int = 0,
         originY: Int = 0,
         region: IntBounds? = null,
+        ownedBase: Boolean = false,
     ): PixelBuffer {
         if (region != null && historicalStrokes.isEmpty() && fitsRegion(base, selection, width, height, region)) {
-            return renderRegion(base, incomingStrokes, width, height, alphaLock, selection, region)
+            return renderRegion(base, incomingStrokes, width, height, alphaLock, selection, region, ownedBase)
         }
         val result = PixelBuffer(width, height)
         if (base != null) result.drawInto(base, 0, 0)
@@ -55,7 +56,8 @@ object LayerStrokeRenderer {
 
     /**
      * Same pixels as a full render when [region] covers everything the strokes can reach: only that
-     * rectangle is rasterised, the rest is copied from [base].
+     * rectangle is rasterised, the rest is copied from [base]. When [ownedBase] is set, [base] is the
+     * caller's private copy and is painted in place rather than copied again.
      */
     private fun renderRegion(
         base: PixelBuffer?,
@@ -65,8 +67,9 @@ object LayerStrokeRenderer {
         alphaLock: Boolean,
         selection: SelectionMask?,
         region: IntBounds,
+        ownedBase: Boolean,
     ): PixelBuffer {
-        val result = base?.copy() ?: PixelBuffer(width, height)
+        val result = if (ownedBase && base != null) base else base?.copy() ?: PixelBuffer(width, height)
         val part = result.crop(region)
         val mask = selection?.crop(region)
         val renderer = StrokeRasterizer(region.left, region.top)

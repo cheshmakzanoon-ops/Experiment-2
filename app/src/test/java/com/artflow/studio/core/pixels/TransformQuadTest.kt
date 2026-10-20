@@ -20,12 +20,31 @@ class TransformQuadTest {
 
     private fun render(
         source: PixelBuffer,
+        interpolation: TransformQuad.Interpolation = TransformQuad.Interpolation.NEAREST,
         quad: (Quad) -> Quad,
     ): PixelBuffer {
         val bounds = LayerTransform.floatingBounds(source, null)!!
         return PixelBuffer(source.width, source.height).also {
-            TransformQuad.render(source, it, bounds, quad(Quad.fromBounds(bounds)), null, highQuality = false)
+            TransformQuad.render(source, it, bounds, quad(Quad.fromBounds(bounds)), null, interpolation)
         }
+    }
+
+    @Test fun aCollapsedQuadLeavesTheSourceWhereItWas() {
+        // Two corners on one point have no inverse; the selected pixels must not be erased.
+        val source = block(16, 2, 2, 4)
+        val target = PixelBuffer(16, 16)
+        val bounds = LayerTransform.floatingBounds(source, null)!!
+        TransformQuad.render(source, target, bounds, Quad(2f, 2f, 2f, 2f, 10f, 2f, 10f, 10f), null, highQuality = false)
+        assertTrue(source.pixels.contentEquals(target.pixels))
+    }
+
+    @Test fun anEmptySelectionMovesNothing() {
+        val source = block(16, 2, 2, 4)
+        val target = PixelBuffer(16, 16)
+        val bounds = LayerTransform.floatingBounds(source, null)!!
+        val moved = TransformQuad.translate(Quad.fromBounds(bounds), 6f, 3f)
+        TransformQuad.render(source, target, bounds, moved, SelectionMask(16, 16), highQuality = false)
+        assertTrue(source.pixels.contentEquals(target.pixels))
     }
 
     @Test fun identityQuadReproducesPixels() {
@@ -112,5 +131,37 @@ class TransformQuadTest {
         val (columns, rows) = TransformQuad.alignedGuides(moved, 100, 80)
         assertEquals(listOf(50f), columns)
         assertTrue(rows.isEmpty())
+    }
+
+    @Test fun aLargerSnappingDistanceReachesFartherLines() {
+        val box = Quad(10f, 10f, 30f, 10f, 30f, 30f, 10f, 30f)
+        val assist = TransformQuad.Assist(snapping = true, snapDistance = 10f)
+        // The bottom edge ends at 71, 9 pixels above the canvas edge: within 10, so it snaps there.
+        val area = TransformQuad.SnapArea(100, 80, assist.snapDistance)
+        val moved = TransformQuad.drag(box, Target.Body, TransformQuad.Mode.FREEFORM, 0f to 0f, 28f to 41f, assist, area)
+        assertEquals(70f, moved.centerY, 1e-3f)
+    }
+
+    @Test
+    fun aTapOutsideTheBoxNudgesItOnePixelTowardTheTap() {
+        val box = Quad.fromBounds(IntBounds(10, 10, 29, 29))
+        assertEquals(null, TransformQuad.nudgeToward(box, 20f, 20f))
+        assertEquals(1f to 0f, TransformQuad.nudgeToward(box, 60f, 22f))
+        assertEquals(0f to -1f, TransformQuad.nudgeToward(box, 18f, -40f))
+        assertEquals(-1f to 0f, TransformQuad.nudgeToward(box, 0f, 15f))
+    }
+
+    @Test fun bicubicIdentityKeepsExactPixels() {
+        val source = block(16, 4, 4, 4)
+        val out = render(source, TransformQuad.Interpolation.BICUBIC) { it }
+        assertTrue(source.pixels.contentEquals(out.pixels))
+    }
+
+    @Test fun bicubicHalfPixelShiftStaysWithinTheSourceColour() {
+        val out = render(block(16, 4, 4, 4), TransformQuad.Interpolation.BICUBIC) { TransformQuad.translate(it, 0.5f, 0f) }
+        for (pixel in out.pixels) {
+            if (pixel != 0) assertEquals(0xFF0000, pixel and 0xFFFFFF)
+        }
+        assertEquals(0xFF, out.pixels[5 * 16 + 6] ushr 24)
     }
 }

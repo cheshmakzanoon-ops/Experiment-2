@@ -113,6 +113,23 @@ class BrushLibraryTest {
         }
 
     @Test(timeout = 10_000)
+    fun recentBrushesComeNewestFirstWithoutRepeats() =
+        runBlocking {
+            val dao = MemoryDao()
+            val store = BrushLibraryStore(dao)
+            assertTrue(store.recent.first().isEmpty())
+            store.markUsed("fine-liner")
+            store.markUsed("soft-airbrush")
+            store.markUsed("fine-liner")
+            assertEquals(listOf("fine-liner", "soft-airbrush"), store.recent.first())
+            assertEquals(listOf("fine-liner", "soft-airbrush"), BrushLibraryStore(dao).recent.first())
+            repeat(20) { store.markUsed("brush-$it") }
+            assertEquals(12, store.recent.first().size)
+            assertEquals("brush-19", store.recent.first().first())
+            assertTrue(runCatching { store.markUsed("../escape") }.isFailure)
+        }
+
+    @Test(timeout = 10_000)
     fun favouritesPersistAndRejectUnknownIdentities() =
         runBlocking {
             val dao = MemoryDao()

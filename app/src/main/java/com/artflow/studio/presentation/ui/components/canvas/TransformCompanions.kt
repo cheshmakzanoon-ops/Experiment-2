@@ -51,10 +51,10 @@ internal class TransformCompanions {
         bounds: IntBounds,
         quad: Quad,
         mesh: WarpMesh?,
-        highQuality: Boolean,
+        interpolation: TransformQuad.Interpolation,
     ) {
         open.forEach { (layer, session) ->
-            TransformQuad.renderShape(layer.base, session.buffer, bounds, quad, mesh, null, highQuality)
+            TransformQuad.renderShape(layer.base, session.buffer, bounds, quad, mesh, null, interpolation)
         }
     }
 

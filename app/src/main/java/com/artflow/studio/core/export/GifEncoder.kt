@@ -16,6 +16,10 @@ import kotlin.math.min
  * expose, and it makes the encoder fully unit-testable on the JVM.
  */
 object GifEncoder {
+    /** With transparency kept, alpha from this value up is opaque; below it the pixel is transparent. */
+    private const val HARD_EDGE_ALPHA = 128
+    private val OPAQUE_ALPHA = 0xFF000000.toInt()
+
     /**
      * Encodes [frames] into an animated GIF.
      *
@@ -25,6 +29,7 @@ object GifEncoder {
      * @param matteColor colour composited behind semi-transparent pixels (GIF has no alpha ramp).
      * @param keepTransparency when true, fully transparent pixels become the GIF transparent index.
      */
+
     fun encode(
         frames: List<IntArray>,
         width: Int,
@@ -47,8 +52,15 @@ object GifEncoder {
         writeHeader(out, width, height, loop)
 
         val transparentIndex = if (keepTransparency) 0 else -1
+        // GIF holds are whole centiseconds. Each delay is the gap between rounded cumulative times, so a
+        // clip keeps its total length instead of drifting by the truncation of every frame.
+        var targetMs = 0L
+        var emittedCs = 0
         frames.forEachIndexed { index, frame ->
-            val delay = (delaysMs.getOrNull(index) ?: 100).coerceIn(20, 100_000)
+            val delayMs = (delaysMs.getOrNull(index) ?: 100).coerceIn(20, 100_000)
+            targetMs += delayMs
+            val delayCs = (((targetMs + 5) / 10).toInt() - emittedCs).coerceAtLeast(2)
+            emittedCs += delayCs
             val quantized =
                 Quantizer.quantize(
                     frame = frame,
@@ -62,7 +74,7 @@ object GifEncoder {
                 height = height,
                 indexed = quantized.indices,
                 palette = quantized.palette,
-                delayMs = delay,
+                delayCs = delayCs,
                 transparentIndex = transparentIndex,
             )
         }
@@ -104,7 +116,7 @@ object GifEncoder {
         height: Int,
         indexed: ByteArray,
         palette: IntArray,
-        delayMs: Int,
+        delayCs: Int,
         transparentIndex: Int,
     ) {
         // Graphics control extension: delay + transparency.
@@ -114,7 +126,7 @@ object GifEncoder {
         val transparencyFlag = if (transparentIndex >= 0) 0x01 else 0x00
         // Disposal method 2 (restore to background) keeps transparent areas clean between frames.
         out.write(0x04 or transparencyFlag)
-        writeShort(out, (delayMs / 10).coerceAtLeast(2)) // GIF delays are in centiseconds
+        writeShort(out, delayCs)
         out.write(if (transparentIndex >= 0) transparentIndex else 0)
         out.write(0x00)
 
@@ -192,13 +204,20 @@ object GifEncoder {
             for (i in frame.indices) {
                 val pixel = frame[i]
                 val alpha = (pixel ushr 24) and 0xFF
-                if (alpha == 0) {
-                    transparentCount++
-                    opaque[i] = matteColor
-                } else if (alpha == 255) {
-                    opaque[i] = pixel
-                } else {
-                    opaque[i] = blend(matteColor, pixel, alpha / 255f)
+                when {
+                    // A GIF pixel is either transparent or opaque. Below the threshold it is transparent; at or
+                    // above it, it keeps its own colour. Blending onto the matte would tint the edge.
+                    reserveTransparent && alpha < HARD_EDGE_ALPHA -> {
+                        transparentCount++
+                        opaque[i] = matteColor
+                    }
+                    reserveTransparent -> opaque[i] = pixel or OPAQUE_ALPHA
+                    alpha == 0 -> {
+                        transparentCount++
+                        opaque[i] = matteColor
+                    }
+                    alpha == 255 -> opaque[i] = pixel
+                    else -> opaque[i] = blend(matteColor, pixel, alpha / 255f)
                 }
             }
 
@@ -240,7 +259,7 @@ object GifEncoder {
             val cache = HashMap<Int, Byte>(1 shl 14)
             val indices = ByteArray(frame.size)
             for (i in opaque.indices) {
-                if (reserveTransparent && (frame[i] ushr 24) == 0) {
+                if (reserveTransparent && ((frame[i] ushr 24) and 0xFF) < HARD_EDGE_ALPHA) {
                     indices[i] = 0
                     continue
                 }
@@ -440,9 +459,9 @@ object GifEncoder {
                     writeCode(prefix)
                     if (nextCode < MAX_CODE) {
                         dictionary[key] = nextCode++
-                        // Standard GIF rule: widen as soon as the next code would not fit in the
-                        // current width. The decoder widens at exactly the same point.
-                        if (nextCode > (1 shl codeSize) - 1 && codeSize < MAX_CODE_SIZE) codeSize++
+                        // The decoder adds its entry one code later than the encoder, so it widens
+                        // once the code after next would not fit; widen at that same point.
+                        if (nextCode > (1 shl codeSize) && codeSize < MAX_CODE_SIZE) codeSize++
                     } else {
                         // The dictionary is full: tell the decoder to start over.
                         writeCode(clearCode)

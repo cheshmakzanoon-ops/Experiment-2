@@ -1,10 +1,12 @@
 package com.artflow.studio.core.pixels
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SelectionClipboardTest {
     private val red = 0xFFFF0000.toInt()
+    private val blue = 0xFF0000FF.toInt()
 
     @Test fun cutMovesOnlySelectedPixels() {
         val layer = PixelBuffer.filled(2, 1, red)
@@ -17,10 +19,32 @@ class SelectionClipboardTest {
         assertEquals(0, layer.pixels[1] ushr 24)
     }
 
+    @Test fun anEmptySelectionSelectsNothing() {
+        // A selection left empty by subtracting everything must not act as the whole layer.
+        val empty = SelectionMask(2, 1)
+        val layer = PixelBuffer.filled(2, 1, red)
+        SelectionClipboard.erase(layer, empty)
+        SelectionClipboard.fill(layer, empty, 0xFF00FF00.toInt())
+        assertEquals(red, layer.pixels[0])
+        assertEquals(red, layer.pixels[1])
+        assertEquals(0, SelectionClipboard.extract(layer, empty).opaquePixelCount())
+    }
+
     @Test fun noSelectionCopiesWholeLayer() {
         val layer = PixelBuffer.filled(2, 2, red)
         assertEquals(4, SelectionClipboard.extract(layer, null).opaquePixelCount())
         SelectionClipboard.erase(layer, null)
         assertEquals(0, layer.opaquePixelCount())
+    }
+
+    /** An emptied selection (for example Remove of the same area) is "select nothing", never the whole layer. */
+    @Test fun emptySelectionTouchesNothing() {
+        val layer = PixelBuffer.filled(2, 2, red)
+        val empty = SelectionMask(2, 2)
+        assertEquals(0, SelectionClipboard.extract(layer, empty).opaquePixelCount())
+        SelectionClipboard.fill(layer, empty, blue)
+        assertTrue(layer.pixels.all { it == red })
+        SelectionClipboard.erase(layer, empty)
+        assertTrue(layer.pixels.all { it == red })
     }
 }

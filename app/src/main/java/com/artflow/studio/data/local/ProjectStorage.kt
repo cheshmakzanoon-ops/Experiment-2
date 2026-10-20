@@ -1,16 +1,9 @@
 package com.artflow.studio.data.local
 
 import android.content.Context
-import com.artflow.studio.core.canvas.CanvasOperations
-import com.artflow.studio.domain.model.animation.AnimationFrame
-import com.artflow.studio.domain.model.animation.AnimationSettings
-import com.artflow.studio.domain.model.animation.TimelapseRecording
-import com.artflow.studio.domain.model.layer.Layer
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 import timber.log.Timber
 import java.io.File
 import java.io.FileOutputStream
@@ -21,62 +14,6 @@ import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
-
-/**
- * The on-disk representation of a project.
- *
- * Version history:
- * - **v1** stored a single layer stack with no pixel data (strokes only).
- * - **v2** adds per-layer pixel files ([Layer.rasterFile]), layer masks, adjustment/filter layer
- *   parameters, animation frames and the timelapse recording. v1 documents still load: their
- *   single layer list becomes frame 0.
- *
- * Kept in the data layer because it is purely a storage concern.
- */
-@Serializable
-data class CanvasDocument(
-    val version: Int = CURRENT_VERSION,
-    val width: Int,
-    val height: Int,
-    val dpi: Int,
-    /** A [com.artflow.studio.core.color.ColorProfile] name; documents before profiles are sRGB. */
-    val colorProfile: String = "SRGB",
-    /** Time spent changing the artwork, in milliseconds. */
-    val trackedMs: Long = 0L,
-    val backgroundColor: Int,
-    val activeLayerId: Long,
-    val nextLayerId: Long,
-    /** Layer stack of the first frame (v1 compatibility and the non-animated case). */
-    val layers: List<Layer>,
-    val frames: List<AnimationFrame> = emptyList(),
-    val activeFrameIndex: Int = 0,
-    val animation: AnimationSettings = AnimationSettings(),
-    val timelapse: TimelapseRecording = TimelapseRecording(),
-    val savedAt: Long = System.currentTimeMillis(),
-) {
-    /**
-     * Frames in a canonical form. Documents written before animation existed have no [frames], so
-     * their [layers] become frame 0 — this is what makes old projects load without a migration.
-     */
-    fun resolvedFrames(): List<AnimationFrame> {
-        if (frames.isNotEmpty()) return frames
-        return listOf(
-            AnimationFrame(
-                id = 1L,
-                name = "Frame 1",
-                layers = layers,
-                durationMs = animation.frameDurationMs,
-            ),
-        )
-    }
-
-    fun resolvedActiveFrameIndex(): Int = activeFrameIndex.coerceIn(0, (resolvedFrames().size - 1).coerceAtLeast(0))
-
-    companion object {
-        /** Bump when the JSON shape changes in a way that needs migration code. */
-        const val CURRENT_VERSION = 2
-    }
-}
 
 /**
  * Reads and writes everything that belongs to one project inside the app's private storage.
@@ -100,13 +37,6 @@ class ProjectStorage
     constructor(
         @ApplicationContext private val context: Context,
     ) {
-        private val json =
-            Json {
-                ignoreUnknownKeys = true
-                encodeDefaults = true
-                isLenient = false
-            }
-
         // -----------------------------------------------------------------------------------------
         // Paths
         // -----------------------------------------------------------------------------------------
@@ -175,9 +105,7 @@ class ProjectStorage
         ): File =
             withContext(Dispatchers.IO) {
                 val file = documentFile(projectId)
-                writeAtomically(file) { out ->
-                    out.write(json.encodeToString(CanvasDocument.serializer(), document).toByteArray())
-                }
+                writeAtomically(file) { out -> out.write(CanvasDocumentCodec.encode(document)) }
                 Timber.d("Saved project $projectId (v${document.version}, ${document.resolvedFrames().size} frames)")
                 file
             }
@@ -189,9 +117,7 @@ class ProjectStorage
         ): File =
             withContext(Dispatchers.IO) {
                 val file = autosaveFile(projectId)
-                writeAtomically(file) { out ->
-                    out.write(json.encodeToString(CanvasDocument.serializer(), document).toByteArray())
-                }
+                writeAtomically(file) { out -> out.write(CanvasDocumentCodec.encode(document)) }
                 file
             }
 
@@ -223,23 +149,10 @@ class ProjectStorage
             require(file.length() in 1..MAX_DOCUMENT_BYTES) { "Project $projectId metadata is empty or too large" }
             // Missing is different from corrupt. Propagate invalid data; callers must NEVER replace it
             // with a new blank canvas or silently discard a newer format's fields on the next save.
-            val document = json.decodeFromString(CanvasDocument.serializer(), file.readText())
-            require(document.version in 1..CanvasDocument.CURRENT_VERSION) { "Unsupported project version ${document.version}" }
-            require(CanvasOperations.isSizeSafe(document.width, document.height)) { "Invalid project dimensions" }
-            require(document.dpi in CanvasOperations.MIN_DPI..CanvasOperations.MAX_DPI) { "Invalid project DPI" }
-            val frames = document.resolvedFrames()
-            require(frames.size in 1..MAX_FRAMES) { "Project has too many animation frames" }
-            require(frames.map { it.id }.distinct().size == frames.size) { "Duplicate frame identifiers" }
-            val layers = frames.flatMap { it.layers }
-            require(layers.size <= MAX_LAYERS) { "Project has too many layers" }
-            require(layers.all { it.id > 0 && it.id < Long.MAX_VALUE }) { "Invalid layer identifier" }
-            require(layers.map { it.id }.distinct().size == layers.size) { "Duplicate layer identifiers" }
-            require(frames.all { it.layers.isNotEmpty() }) { "A frame must contain a layer" }
-            require(frames.all { it.durationMs in AnimationFrame.MIN_DURATION_MS..AnimationFrame.MAX_DURATION_MS }) {
-                "Invalid animation frame duration"
-            }
-            layers.forEach { layer ->
-                require(layer.opacity.isFinite() && layer.opacity in 0f..1f) { "Invalid layer opacity" }
+            val document = CanvasDocumentCodec.decode(file.readText())
+            CanvasDocumentCodec.requireValidHeader(document)
+            CanvasDocumentCodec.requireValidStructure(document)
+            document.resolvedFrames().flatMap { it.layers }.forEach { layer ->
                 listOfNotNull(layer.rasterFile, layer.maskFile).forEach { resolve(projectId, it) }
             }
             return document
@@ -420,10 +333,8 @@ class ProjectStorage
         /** The manifest of an `.artflow` package, checked before any project is created for it. */
         fun decodePackagedDocument(bytes: ByteArray): CanvasDocument {
             require(bytes.size in 1..MAX_DOCUMENT_BYTES) { "The artwork's document is empty or too large" }
-            val document = json.decodeFromString(CanvasDocument.serializer(), bytes.decodeToString())
-            require(document.version in 1..CanvasDocument.CURRENT_VERSION) { "Unsupported project version ${document.version}" }
-            require(CanvasOperations.isSizeSafe(document.width, document.height)) { "Invalid project dimensions" }
-            require(document.dpi in CanvasOperations.MIN_DPI..CanvasOperations.MAX_DPI) { "Invalid project DPI" }
+            val document = CanvasDocumentCodec.decode(bytes.decodeToString())
+            CanvasDocumentCodec.requireValidHeader(document)
             return document
         }
 
@@ -646,8 +557,8 @@ class ProjectStorage
         companion object {
             private const val MAX_DOCUMENT_BYTES = 32L * 1024 * 1024
             private const val MAX_RASTER_BYTES = 192L * 1024 * 1024
-            const val MAX_FRAMES = 240
-            const val MAX_LAYERS = 1024
+            const val MAX_FRAMES = CanvasDocumentCodec.MAX_FRAMES
+            const val MAX_LAYERS = CanvasDocumentCodec.MAX_LAYERS
             const val DOCUMENT_NAME = "canvas.artflow"
             const val AUTOSAVE_NAME = "autosave.artflow"
             const val FLATTENED_NAME = "canvas.png"

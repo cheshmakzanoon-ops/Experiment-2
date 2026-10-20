@@ -58,6 +58,6 @@ class ModelPackageTest {
             skin,
             ModelPackage.read(zip("box.obj" to obj.toByteArray(), "box.mtl" to mtl.toByteArray(), "skin.jpg" to skin)).texture,
         )
-        assertThrows(IllegalStateException::class.java) { ModelPackage.read(zip("notes.txt" to byteArrayOf(1))) }
+        assertThrows(IllegalArgumentException::class.java) { ModelPackage.read(zip("notes.txt" to byteArrayOf(1))) }
     }
 }

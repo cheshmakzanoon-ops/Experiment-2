@@ -17,11 +17,13 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.R
 import com.artflow.studio.core.render.BrushPractice
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.brush.BrushParams
@@ -78,16 +80,22 @@ fun BrushPracticePad(
 
     Column(modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Try your brush", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            Text(
+                stringResource(R.string.brushpracticepad_try_your_brush),
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.weight(1f),
+            )
             TextButton(onClick = {
                 active = null
                 suppress = true
                 onChange(emptyList())
-            }) { Text("Clear pad") }
+            }) { Text(stringResource(R.string.brushpracticepad_clear_pad)) }
         }
         BoxWithConstraints(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
             val ratio = BrushPractice.WIDTH.toFloat() / BrushPractice.HEIGHT
             val padWidth = minOf(maxWidth, maxHeight * ratio)
+            val padDescription = stringResource(R.string.brushpracticepad_practice_pad)
+            val padState = stringResource(R.string.brushpracticepad_test_strokes, strokes.size)
             Canvas(
                 Modifier
                     .size(padWidth, padWidth / ratio)
@@ -98,8 +106,8 @@ fun BrushPracticePad(
                         size = it
                     }.testTag("brush-practice-pad")
                     .semantics {
-                        contentDescription = "Brush practice pad"
-                        stateDescription = "${strokes.size} test strokes; not part of artwork"
+                        contentDescription = padDescription
+                        stateDescription = padState
                     }.pointerInteropFilter { event ->
                         when (event.actionMasked) {
                             MotionEvent.ACTION_DOWN -> {
@@ -135,7 +143,7 @@ fun BrushPracticePad(
             }
         }
         Text(
-            "Test only · Last 8 strokes · Preview size capped at 48 px",
+            stringResource(R.string.brushpracticepad_test_only_last_8_strokes_preview_size),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

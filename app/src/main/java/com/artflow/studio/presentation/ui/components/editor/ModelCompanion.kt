@@ -34,10 +34,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.artflow.studio.R
 import com.artflow.studio.core.three.Mesh
 import com.artflow.studio.core.three.ModelLighting
 import com.artflow.studio.presentation.ui.components.canvas.ModelPainter
@@ -57,6 +59,7 @@ fun ModelCompanion(
 ) {
     var painting by rememberSaveable { mutableStateOf(false) }
     var lightingOpen by rememberSaveable { mutableStateOf(false) }
+    var showMesh by rememberSaveable { mutableStateOf(false) }
     var lighting by remember { mutableStateOf(ModelLighting()) }
     // The texture is sent to the view only when the artwork actually changes.
     val sent = remember { arrayOfNulls<Bitmap>(1) }
@@ -70,16 +73,28 @@ fun ModelCompanion(
         ) {
             Column {
                 Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("3D", style = MaterialTheme.typography.titleSmall)
+                    Text(stringResource(R.string.modelcompanion_3d), style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.width(8.dp))
                     Row(Modifier.weight(1f).horizontalScroll(rememberScrollState())) {
-                        FilterChip(selected = !painting, onClick = { painting = false }, label = { Text("Turn") })
+                        FilterChip(
+                            selected = !painting,
+                            onClick = { painting = false },
+                            label = { Text(stringResource(R.string.modelcompanion_turn)) },
+                        )
                         Spacer(Modifier.width(4.dp))
-                        FilterChip(selected = painting, onClick = { painting = true }, label = { Text("Paint") })
+                        FilterChip(
+                            selected = painting,
+                            onClick = { painting = true },
+                            label = { Text(stringResource(R.string.modelcompanion_paint)) },
+                        )
                         Spacer(Modifier.width(4.dp))
                         FilterChip(selected = lightingOpen, onClick = { lightingOpen = !lightingOpen }, label = { Text("Light") })
+                        Spacer(Modifier.width(4.dp))
+                        FilterChip(selected = showMesh, onClick = { showMesh = !showMesh }, label = { Text("Mesh") })
                     }
-                    IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = "Close 3D view") }
+                    IconButton(
+                        onClick = onClose,
+                    ) { Icon(Icons.Default.Close, contentDescription = stringResource(R.string.modelcompanion_close_3d_view)) }
                 }
                 Box(Modifier.weight(1f)) {
                     AndroidView(
@@ -89,6 +104,7 @@ fun ModelCompanion(
                             view.painting = painting
                             view.painter = painter
                             view.lighting = lighting
+                            view.showMesh = showMesh
                             if (artwork != null && sent[0] !== artwork) {
                                 sent[0] = artwork
                                 view.setTexture(artwork)
@@ -137,6 +153,16 @@ private fun LightingPanel(
             LightSlider("Roughness", lighting.roughness, 0f..1f) { onChange(lighting.copy(roughness = it)) }
             LightSlider("Warmth", lighting.warmth, -1f..1f) { onChange(lighting.copy(warmth = it)) }
             LightSlider("Exposure", lighting.exposure, MIN_EXPOSURE..MAX_EXPOSURE) { onChange(lighting.copy(exposure = it)) }
+            // Procreate's Add light: a second light, off until it is given some strength.
+            LightSlider("Light 2", lighting.secondIntensity, 0f..ModelLighting.MAX_INTENSITY) {
+                onChange(lighting.copy(secondIntensity = it))
+            }
+            if (lighting.secondIntensity > 0f) {
+                LightSlider("Angle 2", lighting.secondAzimuth, -180f..180f) { onChange(lighting.copy(secondAzimuth = it)) }
+                LightSlider("Height 2", lighting.secondElevation, -ModelLighting.MAX_ELEVATION..ModelLighting.MAX_ELEVATION) {
+                    onChange(lighting.copy(secondElevation = it))
+                }
+            }
         }
     }
 }
@@ -148,13 +174,14 @@ private fun LightSlider(
     range: ClosedFloatingPointRange<Float>,
     onChange: (Float) -> Unit,
 ) {
+    val lightDescription = stringResource(R.string.modelcompanion_light_slider, label)
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(label, style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(64.dp))
         Slider(
             value = value.coerceIn(range),
             onValueChange = onChange,
             valueRange = range,
-            modifier = Modifier.weight(1f).height(32.dp).semantics { contentDescription = "Light $label" },
+            modifier = Modifier.weight(1f).height(32.dp).semantics { contentDescription = lightDescription },
         )
     }
 }

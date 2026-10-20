@@ -181,7 +181,7 @@ presence is not execution evidence; use the publication's exact completed valida
 
 | Goal | Current limitation |
 | --- | --- |
-| Advanced transform tools | MOVE/TRANSFORM translate pixels; general scale/skew/perspective/distortion is not implemented. Canvas-wide operations are separate. |
+| Advanced transform tools | Whole-layer numerical move/scale/rotate/horizontal-skew/flip with editable-mask resampling is implemented. Handles, selected-pixel transforms, perspective, distortion and snapping remain missing. Canvas-wide operations are separate. |
 | Layer groups, linking and references | Grouping UI and operations are absent; linking/reference model support is not a complete user workflow. |
 | Custom texture workflows | Three procedural grains and editable monotone custom pressure are implemented. Imported/dual textures and a user texture library remain absent. |
 | Native engine and benchmarks | C++ is an unintegrated prototype. No benchmark module or measured device-performance acceptance report exists. |

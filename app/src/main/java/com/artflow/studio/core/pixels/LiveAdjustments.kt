@@ -2,9 +2,12 @@ package com.artflow.studio.core.pixels
 
 import com.artflow.studio.domain.model.Color
 import com.artflow.studio.domain.model.layer.AdjustmentType
+import kotlin.math.PI
+import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
@@ -25,6 +28,9 @@ object LiveAdjustments {
         COLOR_BALANCE("Color Balance", false, AdjustmentType.COLOR_BALANCE),
         CURVES("Curves", false, AdjustmentType.CURVES),
         GRADIENT_MAP("Gradient Map", false, AdjustmentType.GRADIENT_MAP),
+
+        /** Fades the layer: sliding further makes it more transparent. */
+        OPACITY("Opacity", true),
         GAUSSIAN_BLUR("Gaussian Blur", true),
         MOTION_BLUR("Motion Blur", true),
         NOISE("Noise", true),
@@ -44,11 +50,17 @@ object LiveAdjustments {
         val angleDegrees: Float = 0f,
     )
 
+    /**
+     * [checkpoint] is called as a blur progresses; a throw from it abandons the work, so a preview that has been
+     * superseded stops early instead of running to completion.
+     */
     fun apply(
         kind: Kind,
         source: PixelBuffer,
         settings: Settings,
         selection: SelectionMask? = null,
+        alphaLocked: Boolean = false,
+        checkpoint: () -> Unit = {},
     ): PixelBuffer {
         val amount = settings.amount.coerceIn(0f, 1f)
         val type = kind.adjustmentType
@@ -58,9 +70,10 @@ object LiveAdjustments {
                 kind == Kind.RECOLOR -> recolor(source, settings)
                 kind == Kind.PERSPECTIVE_BLUR -> perspectiveBlur(source, settings)
                 amount <= 0f -> source.copy()
-                else -> filter(kind, source, amount, settings.angleDegrees)
+                kind == Kind.NOISE -> noise(source, amount, settings.parameters)
+                else -> filter(kind, source, amount, settings.angleDegrees, settings.parameters)
             }
-        val mask = selection?.takeIf { it.width == source.width && it.height == source.height && it.isActive() } ?: return filtered
+        val mask = selection?.takeIf { it.width == source.width && it.height == source.height } ?: return filtered
         for (i in filtered.pixels.indices) {
             filtered.pixels[i] = ImageFilters.lerpArgb(source.pixels[i], filtered.pixels[i], mask.alphaAt(i))
         }
@@ -72,19 +85,42 @@ object LiveAdjustments {
         source: PixelBuffer,
         amount: Float,
         angle: Float,
+        parameters: Map<String, Float>,
     ): PixelBuffer =
         when (kind) {
+            Kind.OPACITY -> faded(source, 1f - amount)
             Kind.GAUSSIAN_BLUR -> ImageFilters.gaussianBlur(source, amount * MAX_BLUR_RADIUS)
             Kind.MOTION_BLUR -> ImageFilters.motionBlur(source, amount * MAX_MOTION_DISTANCE, angle)
-            Kind.NOISE -> ImageFilters.addNoise(source, amount, monochrome = true)
             Kind.SHARPEN -> ImageFilters.sharpen(source, amount * 2f)
             Kind.CHROMATIC_ABERRATION ->
                 ImageFilters.chromaticAberration(source, amount * MAX_ABERRATION, source.width / 2f, source.height / 2f)
-            Kind.BLOOM -> bloom(source, amount)
-            Kind.GLITCH -> glitch(source, amount)
-            Kind.HALFTONE -> halftone(source, amount)
+            Kind.BLOOM ->
+                bloom(
+                    source,
+                    amount,
+                    transition = parameters[BLOOM_TRANSITION] ?: DEFAULT_BLOOM_TRANSITION,
+                    size = parameters[BLOOM_SIZE] ?: 1f,
+                    burn = parameters[BLOOM_BURN] ?: 0f,
+                )
+            Kind.GLITCH -> glitch(source, amount, glitchStyle(parameters))
+            Kind.HALFTONE -> halftone(source, amount, halftoneStyle(parameters))
             else -> source.copy()
         }
+
+    /** Noise of the type and size in [parameters] ([NOISE_TYPE], [NOISE_SCALE]); plain grain by default. */
+    private fun noise(
+        source: PixelBuffer,
+        amount: Float,
+        parameters: Map<String, Float>,
+    ): PixelBuffer {
+        val type = FractalNoise.Type.entries.getOrElse(parameters[NOISE_TYPE]?.toInt() ?: 0) { FractalNoise.Type.GRAIN }
+        return FractalNoise.apply(source, type, amount, parameters[NOISE_SCALE] ?: DEFAULT_NOISE_SCALE)
+    }
+
+    private fun faded(
+        source: PixelBuffer,
+        keep: Float,
+    ): PixelBuffer = PixelBuffer(source.width, source.height, IntArray(source.pixels.size) { Channels.scaleAlpha(source.pixels[it], keep) })
 
     /**
      * Procreate's Recolor: the area around the crosshair (`x`, `y` parameters) whose colour is within
@@ -118,8 +154,10 @@ object LiveAdjustments {
     }
 
     /**
-     * Procreate's positional Perspective Blur: everything streaks toward the focus point (`x`, `y`
-     * parameters, the centre by default), more strongly the farther it is from it.
+     * Procreate's Perspective Blur. Positional: everything streaks toward the focus point (`x`, `y`
+     * parameters, the centre by default), more strongly the farther it is from it. Directional
+     * ([PERSPECTIVE_DIRECTIONAL] set): only what lies ahead of the point along [PERSPECTIVE_ANGLE]
+     * streaks, straight back along that direction, so the picture seems to rush one way.
      */
     fun perspectiveBlur(
         source: PixelBuffer,
@@ -130,10 +168,22 @@ object LiveAdjustments {
         val cx = settings.parameters[RECOLOR_X] ?: (source.width / 2f)
         val cy = settings.parameters[RECOLOR_Y] ?: (source.height / 2f)
         val reach = amount * MAX_PERSPECTIVE_PULL
+        val directional = (settings.parameters[PERSPECTIVE_DIRECTIONAL] ?: 0f) >= 0.5f
+        val radians = Math.toRadians((settings.parameters[PERSPECTIVE_ANGLE] ?: 0f).toDouble())
+        val ux = cos(radians).toFloat()
+        val uy = sin(radians).toFloat()
         val out = PixelBuffer(source.width, source.height)
         for (y in 0 until source.height) {
             for (x in 0 until source.width) {
-                out.pixels[y * source.width + x] = streak(source, x + 0.5f, y + 0.5f, (cx - x - 0.5f) * reach, (cy - y - 0.5f) * reach)
+                val px = x + 0.5f
+                val py = y + 0.5f
+                val ahead = if (directional) max(0f, (px - cx) * ux + (py - cy) * uy) * reach else 0f
+                out.pixels[y * source.width + x] =
+                    when {
+                        !directional -> streak(source, px, py, (cx - px) * reach, (cy - py) * reach)
+                        ahead <= 0f -> source.pixels[y * source.width + x]
+                        else -> streak(source, px, py, -ux * ahead, -uy * ahead)
+                    }
             }
         }
         return out
@@ -175,18 +225,54 @@ object LiveAdjustments {
     const val RECOLOR_Y = "y"
     const val RECOLOR_RGB = "rgb"
 
-    /** Bright areas glow: a blurred bright pass is screened back over the image. */
+    /** Noise: which [FractalNoise.Type] (by ordinal) and its feature size in pixels. */
+    const val NOISE_TYPE = "noise_type"
+    const val NOISE_SCALE = "noise_scale"
+    const val DEFAULT_NOISE_SCALE = 48f
+
+    /** Halftone: which [HalftoneStyle] (by ordinal). */
+    const val HALFTONE_STYLE = "halftone_style"
+
+    /** Bloom: the brightness where glow begins (0 to 1), the glow's size and its burn toward white (0 to 1). */
+    const val BLOOM_TRANSITION = "bloom_transition"
+    const val BLOOM_SIZE = "bloom_size"
+    const val BLOOM_BURN = "bloom_burn"
+    const val DEFAULT_BLOOM_TRANSITION = 0.6f
+
+    /** Perspective Blur: 1 for Directional, 0 (the default) for Positional. */
+    const val PERSPECTIVE_DIRECTIONAL = "perspective_directional"
+
+    /** Perspective Blur: the Directional mode's direction in degrees (0 points right, 90 down). */
+    const val PERSPECTIVE_ANGLE = "perspective_angle"
+
+    /** Glitch: which [GlitchStyle] (by ordinal). */
+    const val GLITCH_STYLE = "glitch_style"
+
+    /** Dots grow a little past the cell's inscribed circle so fully inked cells join up. */
+    private const val DOT_REACH = 1.15f
+
+    /**
+     * Bright areas glow: a blurred bright pass is screened back over the image. Procreate's options:
+     * [transition] is the brightness where the glow begins, [size] scales its spread and [burn]
+     * pushes the glow toward white.
+     */
     fun bloom(
         source: PixelBuffer,
         amount: Float,
+        transition: Float = DEFAULT_BLOOM_TRANSITION,
+        size: Float = 1f,
+        burn: Float = 0f,
     ): PixelBuffer {
+        val threshold = transition.coerceIn(0f, MAX_BLOOM_TRANSITION)
+        val white = burn.coerceIn(0f, 1f)
         val bright = PixelBuffer(source.width, source.height)
         for (i in source.pixels.indices) {
             val p = source.pixels[i]
-            val excess = ((Channels.luminance(p) - BLOOM_THRESHOLD) / (1f - BLOOM_THRESHOLD)).coerceIn(0f, 1f)
-            bright.pixels[i] = Channels.scaleAlpha(p, excess)
+            val excess = ((Channels.luminance(p) - threshold) / (1f - threshold)).coerceIn(0f, 1f)
+            val lit = if (white > 0f) ImageFilters.lerpArgb(p, p or 0x00FFFFFF, white) else p
+            bright.pixels[i] = Channels.scaleAlpha(lit, excess)
         }
-        val glow = ImageFilters.gaussianBlur(bright, 4f + amount * MAX_BLOOM_RADIUS)
+        val glow = ImageFilters.gaussianBlur(bright, 4f + amount * size.coerceIn(0f, 1f) * MAX_BLOOM_RADIUS)
         val out = source.copy()
         for (i in out.pixels.indices) {
             val g = glow.pixels[i]
@@ -211,8 +297,107 @@ object LiveAdjustments {
         return Channels.argb(alpha, channel(16), channel(8), channel(0))
     }
 
-    /** Digital corruption: bands of rows slip sideways and the red channel separates. */
+    /** Procreate's Glitch styles. */
+    enum class GlitchStyle(
+        val displayName: String,
+    ) {
+        /** Bands of rows slip sideways and the red channel separates. */
+        SIGNAL("Signal"),
+
+        /** Square blocks are replaced by pixels from nearby, like a damaged compressed image. */
+        ARTIFACT("Artifact"),
+
+        /** Rows ripple sideways along a wave. */
+        WAVE("Wave"),
+
+        /** Red and blue pull apart to either side. */
+        DIVERGE("Diverge"),
+    }
+
+    fun glitchStyle(parameters: Map<String, Float>): GlitchStyle =
+        GlitchStyle.entries.getOrElse(parameters[GLITCH_STYLE]?.toInt() ?: 0) { GlitchStyle.SIGNAL }
+
+    /** Digital corruption in one of the [GlitchStyle]s, stronger with [amount]. */
     fun glitch(
+        source: PixelBuffer,
+        amount: Float,
+        style: GlitchStyle = GlitchStyle.SIGNAL,
+    ): PixelBuffer =
+        when (style) {
+            GlitchStyle.SIGNAL -> signalGlitch(source, amount)
+            GlitchStyle.ARTIFACT -> artifactGlitch(source, amount)
+            GlitchStyle.WAVE -> waveGlitch(source, amount)
+            GlitchStyle.DIVERGE -> divergeGlitch(source, amount)
+        }
+
+    private fun artifactGlitch(
+        source: PixelBuffer,
+        amount: Float,
+    ): PixelBuffer {
+        val out = source.copy()
+        val block = (ARTIFACT_MIN_BLOCK + amount * ARTIFACT_BLOCK_RANGE).roundToInt()
+        val damaged = (amount * ARTIFACT_MAX_SHARE * HASH_BUCKETS).roundToInt()
+        for (top in 0 until source.height step block) {
+            for (left in 0 until source.width step block) {
+                val cell = (top / block) * BLOCK_ROW_STRIDE + left / block
+                if (hash(cell) % HASH_BUCKETS < damaged) {
+                    val dx = hash(cell * 3 + 1) % (4 * block + 1) - 2 * block
+                    val dy = hash(cell * 5 + 2) % (2 * block + 1) - block
+                    copyBlock(source, out, left, top, block, dx, dy)
+                }
+            }
+        }
+        return out
+    }
+
+    /** Fills the [size] square at ([left], [top]) of [out] with [source]'s pixels offset by ([dx], [dy]). */
+    private fun copyBlock(
+        source: PixelBuffer,
+        out: PixelBuffer,
+        left: Int,
+        top: Int,
+        size: Int,
+        dx: Int,
+        dy: Int,
+    ) {
+        for (y in top until minOf(top + size, source.height)) {
+            for (x in left until minOf(left + size, source.width)) out.pixels[y * source.width + x] = source.getSafe(x + dx, y + dy)
+        }
+    }
+
+    private fun waveGlitch(
+        source: PixelBuffer,
+        amount: Float,
+    ): PixelBuffer {
+        val out = PixelBuffer(source.width, source.height)
+        val reach = source.width * WAVE_REACH * amount
+        for (y in 0 until source.height) {
+            val shift = (sin(y * 2.0 * PI / WAVE_PERIOD) * reach).roundToInt()
+            for (x in 0 until source.width) out.pixels[y * source.width + x] = source.getSafe(x - shift, y)
+        }
+        return out
+    }
+
+    private fun divergeGlitch(
+        source: PixelBuffer,
+        amount: Float,
+    ): PixelBuffer {
+        val out = PixelBuffer(source.width, source.height)
+        val split = (source.width * DIVERGE_REACH * amount).roundToInt()
+        for (y in 0 until source.height) {
+            for (x in 0 until source.width) {
+                val p = source.getSafe(x, y)
+                val red = source.getSafe(x + split, y)
+                val blue = source.getSafe(x - split, y)
+                val alpha = maxOf(p ushr 24, red ushr 24, blue ushr 24)
+                out.pixels[y * source.width + x] =
+                    (alpha shl 24) or (red and 0x00FF0000) or (p and 0x0000FF00) or (blue and 0x000000FF)
+            }
+        }
+        return out
+    }
+
+    private fun signalGlitch(
         source: PixelBuffer,
         amount: Float,
     ): PixelBuffer {
@@ -231,12 +416,26 @@ object LiveAdjustments {
         return out
     }
 
-    /** Newsprint dots: each cell becomes a dot whose size follows the cell's darkness. */
+    /** Procreate's Halftone styles: dots in each area's colour, CMY screen print, or black newspaper dots. */
+    enum class HalftoneStyle(
+        val displayName: String,
+    ) {
+        FULL_COLOUR("Full colour"),
+        SCREEN_PRINT("Screen print"),
+        NEWSPAPER("Newspaper"),
+    }
+
+    fun halftoneStyle(parameters: Map<String, Float>): HalftoneStyle =
+        HalftoneStyle.entries.getOrElse(parameters[HALFTONE_STYLE]?.toInt() ?: 0) { HalftoneStyle.FULL_COLOUR }
+
+    /** Halftone dots: each cell becomes a dot whose size follows the cell's darkness. */
     fun halftone(
         source: PixelBuffer,
         amount: Float,
+        style: HalftoneStyle = HalftoneStyle.FULL_COLOUR,
     ): PixelBuffer {
         val cell = (4 + amount * 16f).roundToInt().coerceAtLeast(2)
+        if (style != HalftoneStyle.FULL_COLOUR) return printedHalftone(source, cell, style)
         val out = PixelBuffer(source.width, source.height)
         for (cy in 0 until source.height step cell) {
             for (cx in 0 until source.width step cell) {
@@ -244,6 +443,92 @@ object LiveAdjustments {
             }
         }
         return out
+    }
+
+    /**
+     * Ink on paper: white wherever the layer has paint, then one screen of dots per ink, each
+     * multiplied over the paper. Screen print uses cyan, magenta and yellow screens offset from
+     * one another, as separations are; Newspaper prints black dots sized by darkness.
+     */
+    private fun printedHalftone(
+        source: PixelBuffer,
+        cell: Int,
+        style: HalftoneStyle,
+    ): PixelBuffer {
+        val out = PixelBuffer(source.width, source.height)
+        for (i in source.pixels.indices) {
+            val alpha = source.pixels[i] ushr 24
+            if (alpha != 0) out.pixels[i] = (alpha shl 24) or 0xFFFFFF
+        }
+        val inks =
+            if (style == HalftoneStyle.NEWSPAPER) {
+                listOf(Ink(0x000000, 0f) { 1f - Channels.luminance(it) })
+            } else {
+                listOf(
+                    Ink(0x00FFFF, 0f) { 1f - Channels.red(it) / 255f },
+                    Ink(0xFF00FF, 1f / 3f) { 1f - Channels.green(it) / 255f },
+                    Ink(0xFFFF00, 2f / 3f) { 1f - Channels.blue(it) / 255f },
+                )
+            }
+        for (ink in inks) {
+            val offset = (cell * ink.offset).roundToInt()
+            for (cy in -offset until source.height step cell) {
+                for (cx in -offset until source.width step cell) {
+                    inkCell(source, out, cx, cy, cell, ink)
+                }
+            }
+        }
+        return out
+    }
+
+    /** One ink of a printed halftone: its colour, how far its screen is shifted, and its coverage of a colour. */
+    private class Ink(
+        val rgb: Int,
+        val offset: Float,
+        val coverage: (Int) -> Float,
+    )
+
+    private fun inkCell(
+        source: PixelBuffer,
+        out: PixelBuffer,
+        cx: Int,
+        cy: Int,
+        cell: Int,
+        ink: Ink,
+    ) {
+        val x0 = max(0, cx)
+        val y0 = max(0, cy)
+        val x1 = min(source.width, cx + cell)
+        val y1 = min(source.height, cy + cell)
+        if (x1 <= x0 || y1 <= y0) return
+        var total = 0f
+        var count = 0
+        for (y in y0 until y1) {
+            for (x in x0 until x1) {
+                val p = source.pixels[y * source.width + x]
+                if ((p ushr 24) == 0) continue
+                total += ink.coverage(p)
+                count++
+            }
+        }
+        if (count == 0) return
+        val radius = cell * 0.5f * sqrt((total / count).coerceIn(0f, 1f)) * DOT_REACH
+        val centerX = cx + cell / 2f
+        val centerY = cy + cell / 2f
+        for (y in y0 until y1) {
+            for (x in x0 until x1) {
+                val i = y * source.width + x
+                val paper = out.pixels[i]
+                val dx = x + 0.5f - centerX
+                val dy = y + 0.5f - centerY
+                if ((paper ushr 24) == 0 || dx * dx + dy * dy > radius * radius) continue
+                // Inks multiply over the paper and over each other.
+                val r = ((paper shr 16) and 0xFF) * ((ink.rgb shr 16) and 0xFF) / 255
+                val g = ((paper shr 8) and 0xFF) * ((ink.rgb shr 8) and 0xFF) / 255
+                val b = (paper and 0xFF) * (ink.rgb and 0xFF) / 255
+                out.pixels[i] = (paper and 0xFF000000.toInt()) or (r shl 16) or (g shl 8) or b
+            }
+        }
     }
 
     private fun halftoneCell(
@@ -294,7 +579,15 @@ object LiveAdjustments {
     private const val MAX_BLUR_RADIUS = 60f
     private const val MAX_MOTION_DISTANCE = 120f
     private const val MAX_BLOOM_RADIUS = 40f
-    private const val BLOOM_THRESHOLD = 0.6f
+    private const val MAX_BLOOM_TRANSITION = 0.95f
+    private const val ARTIFACT_MIN_BLOCK = 8f
+    private const val ARTIFACT_BLOCK_RANGE = 24f
+    private const val ARTIFACT_MAX_SHARE = 0.5f
+    private const val HASH_BUCKETS = 1000
+    private const val BLOCK_ROW_STRIDE = 4099
+    private const val WAVE_REACH = 0.05f
+    private const val WAVE_PERIOD = 48.0
+    private const val DIVERGE_REACH = 0.02f
     private const val GLITCH_BAND = 6
     private const val MAX_ABERRATION = 0.05f
     private const val RECOLOR_MAX_TOLERANCE = 128f

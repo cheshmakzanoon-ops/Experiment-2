@@ -33,6 +33,14 @@
         android:required="true" />
 
     <!--
+      A mouse, trackpad or keyboard-only computer (ChromeOS, DeX, a desktop window) can run the editor. Touch
+      becomes optional on top of the multi-touch requirement above, so those devices are not filtered out.
+    -->
+    <uses-feature
+        android:name="android.hardware.touchscreen"
+        android:required="false" />
+
+    <!--
       Edge-to-edge. Apps targeting API 35+ draw under the system bars, and from API 36
       `android:windowOptOutEdgeToEdgeEnforcement` is deprecated and ignored, so the UI handles the
       insets instead: the Material3 top app bars consume the top/horizontal insets themselves,
@@ -60,11 +68,88 @@
             android:exported="true"
             android:theme="@style/Theme.ArtFlow.Starting"
             android:windowSoftInputMode="adjustResize"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|keyboard|smallestScreenSize"
+            android:resizeableActivity="true"
             android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!--
+              Files other apps open or share with ArtFlow. Pictures arrive by Edit with or Share; ArtFlow's own and
+              Procreate's file types arrive by Open with, matched by name because file managers hand most of them over
+              as application/octet-stream. A path pattern's wildcard does not backtrack, so each extension is listed for
+              names with up to three extra dots.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.EDIT" />
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="image/vnd.adobe.photoshop" />
+                <data android:mimeType="model/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.procreate" />
+                <data android:pathPattern=".*\\..*\\.procreate" />
+                <data android:pathPattern=".*\\..*\\..*\\.procreate" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.procreate" />
+                <data android:pathPattern=".*\\.psd" />
+                <data android:pathPattern=".*\\..*\\.psd" />
+                <data android:pathPattern=".*\\..*\\..*\\.psd" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.psd" />
+                <data android:pathPattern=".*\\.artflow" />
+                <data android:pathPattern=".*\\..*\\.artflow" />
+                <data android:pathPattern=".*\\..*\\..*\\.artflow" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.artflow" />
+                <data android:pathPattern=".*\\.brush" />
+                <data android:pathPattern=".*\\..*\\.brush" />
+                <data android:pathPattern=".*\\..*\\..*\\.brush" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.brush" />
+                <data android:pathPattern=".*\\.brushset" />
+                <data android:pathPattern=".*\\..*\\.brushset" />
+                <data android:pathPattern=".*\\..*\\..*\\.brushset" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.brushset" />
+                <data android:pathPattern=".*\\.swatches" />
+                <data android:pathPattern=".*\\..*\\.swatches" />
+                <data android:pathPattern=".*\\..*\\..*\\.swatches" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.swatches" />
+                <data android:pathPattern=".*\\.abr" />
+                <data android:pathPattern=".*\\..*\\.abr" />
+                <data android:pathPattern=".*\\..*\\..*\\.abr" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.abr" />
+                <data android:pathPattern=".*\\.artbrush" />
+                <data android:pathPattern=".*\\..*\\.artbrush" />
+                <data android:pathPattern=".*\\..*\\..*\\.artbrush" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.artbrush" />
+                <data android:pathPattern=".*\\.glb" />
+                <data android:pathPattern=".*\\..*\\.glb" />
+                <data android:pathPattern=".*\\..*\\..*\\.glb" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.glb" />
+                <data android:pathPattern=".*\\.gltf" />
+                <data android:pathPattern=".*\\..*\\.gltf" />
+                <data android:pathPattern=".*\\..*\\..*\\.gltf" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.gltf" />
+                <data android:pathPattern=".*\\.usdz" />
+                <data android:pathPattern=".*\\..*\\.usdz" />
+                <data android:pathPattern=".*\\..*\\..*\\.usdz" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.usdz" />
             </intent-filter>
         </activity>
 

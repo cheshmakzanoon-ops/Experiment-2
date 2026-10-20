@@ -193,6 +193,7 @@ class Compositor(
         var completed = false
         try {
             compositeEntries(merged, entry.members, options)
+            applyMask(merged, entry.mask, entry.layer)
             completed = true
             return merged
         } finally {
@@ -304,6 +305,7 @@ class Compositor(
         if (layer.maskEnabled && input.mask != null) {
             applyMask(content, input.mask, layer)
         }
+        layer.effects?.let { LayerEffectsRenderer.apply(content, it) }
         return content
     }
 

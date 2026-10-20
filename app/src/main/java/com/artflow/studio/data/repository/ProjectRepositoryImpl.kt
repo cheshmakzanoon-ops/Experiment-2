@@ -202,5 +202,12 @@ class ProjectRepositoryImpl
             projectDao.setStack(projectIds, stack)
         }
 
+        override suspend fun renameStack(
+            from: String,
+            to: String?,
+        ) {
+            projectDao.renameStack(from, to)
+        }
+
         override fun getProjectCount(): Flow<Int> = projectDao.getProjectCount()
     }

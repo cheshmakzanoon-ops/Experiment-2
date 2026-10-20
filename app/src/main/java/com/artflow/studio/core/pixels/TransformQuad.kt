@@ -9,6 +9,7 @@ import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sign
 import kotlin.math.sin
 
 /**
@@ -109,6 +110,19 @@ object TransformQuad {
     ) {
         NEAREST("Nearest neighbour"),
         BILINEAR("Bilinear"),
+        BICUBIC("Bicubic"),
+        ;
+
+        fun sample(
+            buffer: PixelBuffer,
+            x: Float,
+            y: Float,
+        ): Int =
+            when (this) {
+                NEAREST -> buffer.sampleNearest(x, y)
+                BILINEAR -> buffer.sampleBilinear(x, y)
+                BICUBIC -> buffer.sampleBicubic(x, y)
+            }
     }
 
     fun translate(
@@ -116,6 +130,37 @@ object TransformQuad {
         dx: Float,
         dy: Float,
     ): Quad = q.map { x, y -> (x + dx) to (y + dy) }
+
+    /** Whether ([x], [y]) lies inside [q], by counting how many edges a ray from it crosses. */
+    fun contains(
+        q: Quad,
+        x: Float,
+        y: Float,
+    ): Boolean {
+        var inside = false
+        for (i in 0 until CORNERS) {
+            val j = (i + CORNERS - 1) % CORNERS
+            val (xi, yi) = q.x(i) to q.y(i)
+            val (xj, yj) = q.x(j) to q.y(j)
+            if ((yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside
+        }
+        return inside
+    }
+
+    /**
+     * Procreate's nudge: a tap outside the box moves it one pixel toward the tap, along whichever
+     * axis the tap lies further out on. Null for a tap inside the box.
+     */
+    fun nudgeToward(
+        q: Quad,
+        x: Float,
+        y: Float,
+    ): Pair<Float, Float>? {
+        if (contains(q, x, y)) return null
+        val dx = x - q.centerX
+        val dy = y - q.centerY
+        return if (abs(dx) >= abs(dy)) sign(dx) to 0f else 0f to sign(dy)
+    }
 
     fun rotate(
         q: Quad,
@@ -235,7 +280,14 @@ object TransformQuad {
         val magnetics: Boolean = false,
         /** The box's edges and centre snap to the canvas edges and centre lines. */
         val snapping: Boolean = false,
-    )
+        /** Snapping's Distance: how close (screen pixels) the box must come before it snaps. */
+        val snapDistance: Float = DEFAULT_SNAP_DISTANCE,
+    ) {
+        companion object {
+            const val DEFAULT_SNAP_DISTANCE = 12f
+            const val MAX_SNAP_DISTANCE = 60f
+        }
+    }
 
     /** Canvas size and snap distance (canvas pixels) for [Assist.snapping]. */
     data class SnapArea(
@@ -481,16 +533,22 @@ object TransformQuad {
         bounds: IntBounds,
         quad: Quad,
         selection: SelectionMask?,
-        highQuality: Boolean,
+        interpolation: Interpolation,
     ) {
         require(source.width == target.width && source.height == target.height) { "Buffer sizes differ" }
+        // A collapsed quad has no placement, so nothing moves: the source stays where it was.
+        // Checked before split, which clears the selected pixels out of target.
+        val inverse = inverseMapping(quad)
+        if (inverse == null) {
+            source.pixels.copyInto(target.pixels)
+            return
+        }
         val (floating, blend) = LayerTransform.split(source, target, selection)
-        val inverse = inverseMapping(quad) ?: return
         val x0 = max(0, floor(min(min(quad.x0, quad.x1), min(quad.x2, quad.x3))).toInt() - 1)
         val x1 = min(target.width - 1, ceil(max(max(quad.x0, quad.x1), max(quad.x2, quad.x3))).toInt() + 1)
         val y0 = max(0, floor(min(min(quad.y0, quad.y1), min(quad.y2, quad.y3))).toInt() - 1)
         val y1 = min(target.height - 1, ceil(max(max(quad.y0, quad.y1), max(quad.y2, quad.y3))).toInt() + 1)
-        val sampler = Sampler(floating, inverse, bounds, highQuality)
+        val sampler = Sampler(floating, inverse, bounds, interpolation)
         for (y in y0..y1) {
             for (x in x0..x1) {
                 val sample = sampler.sample(x + 0.5f, y + 0.5f)
@@ -509,12 +567,12 @@ object TransformQuad {
         quad: Quad,
         mesh: WarpMesh?,
         selection: SelectionMask?,
-        highQuality: Boolean,
+        interpolation: Interpolation,
     ) {
         if (mesh != null) {
-            WarpMesh.render(source, target, bounds, mesh, selection, highQuality)
+            WarpMesh.render(source, target, bounds, mesh, selection, interpolation)
         } else {
-            render(source, target, bounds, quad, selection, highQuality)
+            render(source, target, bounds, quad, selection, interpolation)
         }
     }
 
@@ -523,7 +581,7 @@ object TransformQuad {
         private val floating: PixelBuffer,
         private val inverse: FloatArray,
         private val bounds: IntBounds,
-        private val highQuality: Boolean,
+        private val interpolation: Interpolation,
     ) {
         private val srcW = bounds.width.toFloat()
         private val srcH = bounds.height.toFloat()
@@ -540,11 +598,12 @@ object TransformQuad {
             if (u !in inside || v !in inside) return 0
             val sx = bounds.left + u * srcW
             val sy = bounds.top + v * srcH
-            return if (highQuality) floating.sampleBilinear(sx, sy) else floating.sampleNearest(sx, sy)
+            return interpolation.sample(floating, sx, sy)
         }
     }
 
     private const val MIN_FACTOR = 0.02f
     private const val ROTATION_STEP = 15f
     private const val GUIDE_EPSILON = 0.5f
+    private const val CORNERS = 4
 }

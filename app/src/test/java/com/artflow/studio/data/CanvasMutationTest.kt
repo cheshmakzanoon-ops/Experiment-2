@@ -15,6 +15,7 @@ import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.model.brush.StrokePoint
 import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.layer.FilterType
+import com.artflow.studio.domain.model.layer.LayerEffects
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -149,6 +150,28 @@ class CanvasMutationTest {
         }
 
     @Test
+    fun layerEffectsDrawAroundThePixelsAndAreUndoable() =
+        runTest {
+            val layer = open()
+            val dot = PixelBuffer(8, 6).also { it.pixels[2 * 8 + 3] = blue }
+            assertTrue(repository.setLayerPixels(layer, dot, "Fixture"))
+            val outline = LayerEffects(outline = LayerEffects.Outline(color = red, width = 2f))
+            assertTrue(repository.setLayerEffects(layer, outline))
+            assertEquals(outline, repository.getAllLayers().first { it.id == layer }.effects)
+            val pixels = image().pixels
+            assertEquals(blue, pixels[2 * 8 + 3])
+            assertEquals(red, pixels[2 * 8 + 4])
+            assertEquals(0, pixels[0] ushr 24)
+            // Duplicates keep the effects; undo removes them from the original.
+            val copy = requireNotNull(repository.duplicateLayer(layer))
+            assertEquals(outline, repository.getAllLayers().first { it.id == copy }.effects)
+            assertTrue(repository.undo())
+            assertTrue(repository.undo())
+            assertEquals(null, repository.getAllLayers().first { it.id == layer }.effects)
+            assertEquals(0, image().pixels[2 * 8 + 4] ushr 24)
+        }
+
+    @Test
     fun symmetryMirrorsOnlyOnAssistedLayers() =
         runTest {
             val layer = open()
@@ -279,6 +302,47 @@ class CanvasMutationTest {
             assertEquals(1f, baked.opacity, 0f)
             assertFalse(baked.hasMask())
             assertTrue(baked.strokes.isEmpty())
+        }
+
+    @Test
+    fun mergeDownKeepsTheMergedLayerInItsGroup() =
+        runTest {
+            val lower = open()
+            paint(lower, blue)
+            val upper = repository.addLayer("Upper").id
+            paint(upper, 0x80FF0000.toInt())
+            val group = requireNotNull(repository.groupLayers(listOf(lower, upper)))
+            val before = image()
+            assertTrue(repository.mergeLayerDown(upper))
+            assertArrayEquals(before.pixels, image().pixels)
+            assertEquals(group, repository.getAllLayers().first { it.id == lower }.parentGroupId)
+        }
+
+    @Test
+    fun mergeDownDoesNotDissolveTheGroupAboveTheLayerBelow() =
+        runTest {
+            val lower = open()
+            paint(lower, blue)
+            val inner = repository.addLayer("Inner").id
+            paint(inner, red)
+            val group = requireNotNull(repository.groupLayers(listOf(lower, inner)))
+            val above = repository.addLayer("Above", 3).id
+            val depth = repository.undoDepth
+            assertFalse(repository.mergeLayerDown(above))
+            assertEquals(depth, repository.undoDepth)
+            assertTrue(repository.getAllLayers().any { it.id == group && it.isGroup })
+        }
+
+    @Test
+    fun mergingAPrivateLayerKeepsItOutOfTheTimelapse() =
+        runTest {
+            val lower = open()
+            paint(lower, blue)
+            val upper = repository.addLayer("Upper").id
+            paint(upper, red)
+            assertTrue(repository.setLayerPrivate(upper, true))
+            assertTrue(repository.mergeLayerDown(upper))
+            assertTrue(repository.getAllLayers().first { it.id == lower }.isPrivate)
         }
 
     @Test
@@ -664,6 +728,27 @@ class CanvasMutationTest {
             assertEquals(listOf(middle, top, inner, bottom, outer), repository.getAllLayers().sortedBy { it.index }.map { it.id })
             assertEquals(null, parent(inner))
             assertEquals(inner, parent(middle))
+        }
+
+    @Test
+    fun duplicatingAGroupOrAFrameKeepsItsMembersInTheCopiedGroup() =
+        runTest {
+            val bottom = open()
+            val top = repository.addLayer("Top").id
+            val group = requireNotNull(repository.groupLayers(listOf(bottom, top)))
+            val copy = requireNotNull(repository.duplicateLayer(group))
+            val layers = repository.getAllLayers()
+            val copiedMembers = layers.filter { it.parentGroupId == copy }
+            assertEquals(2, copiedMembers.size)
+            assertEquals(2, layers.count { it.parentGroupId == group })
+            assertTrue(layers.first { it.id == copy }.isGroup)
+
+            repository.addFrame(duplicateCurrent = true)
+            val frame = repository.getAllLayers()
+            val groups = frame.filter { it.isGroup }.map { it.id }.toSet()
+            // Every grouped layer in the copied frame belongs to a group in that frame.
+            assertTrue(frame.filter { it.parentGroupId != null }.all { it.parentGroupId in groups })
+            assertTrue(frame.none { it.id == group || it.id == copy })
         }
 
     @Test

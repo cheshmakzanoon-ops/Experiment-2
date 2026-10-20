@@ -67,10 +67,43 @@ data class BrushParams(
     val secondaryJitter: Float = 0f, // 0..1: each dab blends a random amount toward the secondary colour
     val burntEdges: Float = 0f, // 0..1: paint darkens where the stroke's coverage falls off, like a scorched rim
     val grainDepth: Float = 1f, // 0..1: how strongly the grain shows; 0 paints as if there were no grain
+    val tiltOpacityInfluence: Float? = null, // 0..1: how much tilt lightens the paint; null follows tiltInfluence
 ) {
+    /** Flow at [pressure], after Pressure → Flow thins it for lighter presses. */
+    fun flowAt(pressure: Float): Float = flow.coerceIn(0f, 1f) * (1f - pressureToFlow.coerceIn(0f, 1f) * (1f - pressureResponse(pressure)))
+
+    /** These settings for a finger stroke: the Touch taper replaces the stylus (pressure) taper. */
+    fun forTouch(): BrushParams = copy(taperStart = touchTaperStart ?: taperStart, taperEnd = touchTaperEnd ?: taperEnd)
+
+    /** How dabs accumulate within one stroke. */
+    val rendering: RenderingMode
+        get() = renderingMode ?: if (buildUp) RenderingMode.UNIFORM_BLENDING else RenderingMode.LIGHT_GLAZE
+
+    /** The sizes the sidebar offers for this brush (Procreate's Min and Max size). */
+    val sizeLimits: ClosedFloatingPointRange<Float>
+        get() = limits(minSize, maxSize, MIN_BRUSH_SIZE, MAX_BRUSH_SIZE)
+
+    /** The opacities the sidebar offers for this brush (Procreate's Min and Max opacity). */
+    val opacityLimits: ClosedFloatingPointRange<Float>
+        get() = limits(minOpacity, maxOpacity, MIN_BRUSH_OPACITY, 1f)
+
     /** Imported grain and shape images this brush (and its second brush) paints with. */
     val imageIds: List<String>
         get() = listOfNotNull(textureId, shapeId) + (dual?.params?.imageIds ?: emptyList())
+
+    /**
+     * The rendering mode in force: the explicit [renderingMode] when set, otherwise blending when
+     * [buildUp] is on and uniform glazing when it is off.
+     */
+    val effectiveRenderingMode: RenderingMode
+        get() = renderingMode ?: if (buildUp) RenderingMode.BLEND_UNIFORM else RenderingMode.GLAZE_UNIFORM
+
+    /**
+     * Whether dabs read the canvas under them, so they can change colour from paint already on the
+     * layer. Such brushes cannot take the capsule fast path and their live frames depend on the layer.
+     */
+    val picksUpCanvas: Boolean
+        get() = wetMix > 0f || wetCharge < 1f || wetDilution > 0f || bleed > 0f
 
     /**
      * Pressure curve types for mapping stylus pressure
@@ -200,9 +233,10 @@ data class BrushParams(
         velocity: Float = 0f,
         random: Random? = null,
         secondary: Int? = null,
+        tilt: Float = 0f,
     ): Int {
         val mixed = towardSecondary(baseColor, secondary, pressure, random)
-        return jittered(mixed, pressure, velocity, random)
+        return colorDynamics.apply(jittered(mixed, pressure, velocity, random), pressureResponse(pressure), tilt)
     }
 
     /** Procreate's secondary colour dynamics: pressure and per-dab jitter blend toward [secondary]. */
@@ -284,4 +318,118 @@ data class BrushParams(
                 .hsvToRgb(hsv[0], hsv[1], hsv[2])
         return (baseColor and 0xFF000000.toInt()) or (rgb and 0x00FFFFFF)
     }
+}
+
+/** The smallest and largest brush sizes the app offers, in pixels. */
+const val MIN_BRUSH_SIZE = 1f
+const val MAX_BRUSH_SIZE = 512f
+
+/** The faintest opacity a brush slider offers. */
+const val MIN_BRUSH_OPACITY = 0.01f
+
+/** [low]..[high] kept finite, within [floor]..[ceiling] and in order; the full range when they are not. */
+private fun limits(
+    low: Float,
+    high: Float,
+    floor: Float,
+    ceiling: Float,
+): ClosedFloatingPointRange<Float> {
+    val from = if (low.isFinite()) low.coerceIn(floor, ceiling) else floor
+    val to = if (high.isFinite()) high.coerceIn(floor, ceiling) else ceiling
+    return if (from < to) from..to else floor..ceiling
+}
+
+/**
+ * Procreate's Colour Pressure and Colour Tilt: how far a light press (and a pen tilted toward flat)
+ * moves the colour from the one chosen. Each amount is 0 to 1; at full press and upright pen the
+ * colour is exactly the chosen one.
+ */
+@Serializable
+data class ColorDynamics(
+    val pressureHue: Float = 0f,
+    val pressureSaturation: Float = 0f,
+    val pressureBrightness: Float = 0f,
+    val tiltHue: Float = 0f,
+    val tiltSaturation: Float = 0f,
+    val tiltBrightness: Float = 0f,
+) {
+    val isActive: Boolean get() = amounts().any { it > 0f }
+
+    fun amounts(): List<Float> = listOf(pressureHue, pressureSaturation, pressureBrightness, tiltHue, tiltSaturation, tiltBrightness)
+
+    /** [color] moved by a press of [pressure] (after the pressure curve) with the pen [tilt] from upright (0) to flat (1). */
+    fun apply(
+        color: Int,
+        pressure: Float,
+        tilt: Float,
+    ): Int {
+        if (!isActive) return color
+        val light = 1f - pressure.coerceIn(0f, 1f)
+        val flat = tilt.coerceIn(0f, 1f)
+        val hsv =
+            com.artflow.studio.domain.model.Color
+                .rgbToHsv(color)
+        val hueShift = (unit(pressureHue) * light + unit(tiltHue) * flat) * HALF_TURN
+        hsv[0] = ((hsv[0] + hueShift) % FULL_TURN + FULL_TURN) % FULL_TURN
+        hsv[1] *= (1f - unit(pressureSaturation) * light) * (1f - unit(tiltSaturation) * flat)
+        hsv[2] *= (1f - unit(pressureBrightness) * light) * (1f - unit(tiltBrightness) * flat)
+        val rgb =
+            com.artflow.studio.domain.model.Color
+                .hsvToRgb(hsv[0], hsv[1].coerceIn(0f, 1f), hsv[2].coerceIn(0f, 1f))
+        return (color and 0xFF000000.toInt()) or (rgb and 0x00FFFFFF)
+    }
+
+    private fun unit(value: Float): Float = if (value.isFinite()) value.coerceIn(0f, 1f) else 0f
+
+    private companion object {
+        const val HALF_TURN = 180f
+        const val FULL_TURN = 360f
+    }
+}
+
+/**
+ * Procreate's rendering modes. Glazes cap the paint a stroke lays down at its strongest dab; blendings
+ * let overlapping dabs build up. Intense modes lay more paint per dab; uniform and heavy modes keep
+ * the dab's edge as hard at low flow as at full flow.
+ */
+@Serializable
+enum class RenderingMode(
+    val displayName: String,
+    val blending: Boolean,
+    val intense: Boolean,
+    val uniformEdges: Boolean,
+) {
+    LIGHT_GLAZE("Light glaze", blending = false, intense = false, uniformEdges = false),
+    UNIFORM_GLAZE("Uniform glaze", blending = false, intense = false, uniformEdges = true),
+    INTENSE_GLAZE("Intense glaze", blending = false, intense = true, uniformEdges = false),
+    HEAVY_GLAZE("Heavy glaze", blending = false, intense = true, uniformEdges = true),
+    UNIFORM_BLENDING("Uniform blending", blending = true, intense = false, uniformEdges = false),
+    INTENSE_BLENDING("Intense blending", blending = true, intense = true, uniformEdges = false),
+}
+
+/** Procreate's grain blend modes: how the grain value combines with the stroke's own coverage. */
+@Serializable
+enum class GrainBlend(
+    val displayName: String,
+) {
+    /** Grain scales the coverage: the classic look. */
+    MULTIPLY("Multiply"),
+
+    /** Grain is taken away from the coverage, eating into soft edges first. */
+    SUBTRACT("Subtract"),
+
+    /** Coverage and grain together either paint fully or not at all: crisp, printed texture. */
+    HARD_MIX("Hard mix"),
+    ;
+
+    /** The stroke's [coverage] (0..1) after the grain value [grain] (0..1). */
+    fun combine(
+        coverage: Float,
+        grain: Float,
+    ): Float =
+        when (this) {
+            MULTIPLY -> coverage * grain
+            SUBTRACT -> (coverage - (1f - grain)).coerceAtLeast(0f)
+            HARD_MIX -> if (coverage + grain > 1f) 1f else 0f
+        }
 }

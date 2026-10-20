@@ -34,6 +34,11 @@ Allow at least 6 GB RAM for builds and additional memory for an emulator.
 ./gradlew connectedDebugAndroidTest # real device/emulator regression suite
 ```
 
+Without the Android SDK (a sandbox, say), `python3 tools/jvm_check.py` downloads a bare Kotlin
+compiler and JUnit, compiles every source file that does not import Android and runs the unit tests
+that resolve against them (pixel, render, export, colour, canvas and brush logic; `--test Name`
+narrows it). It is a quick check, not a substitute for the Gradle tasks above.
+
 Release builds need signing credentials in a git-ignored `keystore.properties` at the repository
 root; without it `./gradlew assembleRelease` produces an unsigned APK. See
 ["Building for release"](README.md#-building-for-release). Use

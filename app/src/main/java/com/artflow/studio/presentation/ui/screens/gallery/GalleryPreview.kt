@@ -20,11 +20,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
+import com.artflow.studio.R
 import com.artflow.studio.domain.model.Project
 import java.io.File
 
@@ -52,7 +54,7 @@ internal fun GalleryPreview(
                             modifier = Modifier.fillMaxSize(),
                         )
                     } else {
-                        Text("No preview yet", color = Color.White)
+                        Text(stringResource(R.string.gallerypreview_no_preview_yet), color = Color.White)
                     }
                     Text(
                         "${project.name} · ${project.width}×${project.height}",
@@ -63,7 +65,7 @@ internal fun GalleryPreview(
                 }
             }
             IconButton(onClick = onDismiss, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
-                Icon(Icons.Default.Close, contentDescription = "Close preview", tint = Color.White)
+                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.gallerypreview_close_preview), tint = Color.White)
             }
         }
     }

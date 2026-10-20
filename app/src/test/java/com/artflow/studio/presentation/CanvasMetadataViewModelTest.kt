@@ -3,11 +3,13 @@ package com.artflow.studio.presentation
 import androidx.lifecycle.viewModelScope
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.pixels.IntBounds
+import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.data.export.ArtworkExporter
 import com.artflow.studio.data.export.TimelapseRecorder
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.repository.canvas.CanvasRepositoryImpl
 import com.artflow.studio.domain.model.Project
+import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.settings.AppSettings
 import com.artflow.studio.domain.repository.ProjectRepository
@@ -51,6 +53,29 @@ class CanvasMetadataViewModelTest {
                 assertTrue(fixture.viewModel.dirty.value)
                 assertEquals(1, fixture.viewModel.history.value.undoDepth)
                 assertEquals(300, (fixture.viewModel.uiState.value as CanvasUiState.Ready).dpi)
+            } finally {
+                fixture.close()
+                Dispatchers.resetMain()
+            }
+        }
+
+    @Test
+    fun smudgeKeepsItsOwnBrushSizeWithinItsLimits() =
+        runTest {
+            Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+            val fixture = Fixture()
+            try {
+                val vm = fixture.viewModel
+                val paintSize = vm.input.value.brushParams.size
+                vm.setTool(ToolType.SMUDGE)
+                vm.setSmudgeParams(BrushParams(size = 30f, maxSize = 60f))
+                vm.setBrushSize(100f)
+                val smudge = vm.input.value.smudgeParams
+                assertEquals(60f, smudge?.size)
+                assertEquals(paintSize, vm.input.value.brushParams.size)
+                vm.setSmudgeParams(null)
+                vm.setBrushSize(40f)
+                assertEquals(40f, vm.input.value.brushParams.size)
             } finally {
                 fixture.close()
                 Dispatchers.resetMain()

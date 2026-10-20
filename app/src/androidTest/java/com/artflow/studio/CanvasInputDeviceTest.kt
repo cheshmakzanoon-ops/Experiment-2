@@ -197,17 +197,34 @@ class CanvasInputDeviceTest {
             for (tool in listOf(ToolType.SELECT_RECTANGLE, ToolType.SELECT_ELLIPSE, ToolType.SELECT_LASSO, ToolType.SELECT_FREEHAND)) {
                 canvas.clearSelection()
                 canvas.setEditorInput(brush.copy(tool = tool))
+                // Freehand and Lasso select what the dragged path encloses, so they draw three sides and close on release.
+                val encloses = tool == ToolType.SELECT_LASSO || tool == ToolType.SELECT_FREEHAND
                 send(canvas, MotionEvent.ACTION_DOWN, Touch(1, 10f, 10f))
-                if (tool == ToolType.SELECT_LASSO) {
+                if (encloses) {
                     send(canvas, MotionEvent.ACTION_MOVE, Touch(1, 42f, 10f))
                     send(canvas, MotionEvent.ACTION_MOVE, Touch(1, 42f, 42f))
                 }
-                send(canvas, MotionEvent.ACTION_UP, Touch(1, 10f.takeIf { tool == ToolType.SELECT_LASSO } ?: 42f, 42f))
+                send(canvas, MotionEvent.ACTION_UP, Touch(1, 10f.takeIf { encloses } ?: 42f, 42f))
                 await { repository.selection() != null }
                 val mask = requireNotNull(repository.selection())
                 assertTrue("$tool must produce a nonempty selection", mask.selectedPixelCount() > 10)
                 assertTrue("$tool must include the center of the drag", mask.coverageAt(25, 25) > 0)
             }
+        }
+
+    @Test
+    fun aTapWithFreehandKeepsTheSelectionInsteadOfReplacingItWithNothing() =
+        withCanvas(7) { canvas ->
+            canvas.setEditorInput(brush.copy(tool = ToolType.SELECT_RECTANGLE))
+            send(canvas, MotionEvent.ACTION_DOWN, Touch(1, 10f, 10f))
+            send(canvas, MotionEvent.ACTION_UP, Touch(1, 42f, 42f))
+            await { repository.selection() != null }
+            val before = requireNotNull(repository.selection()).selectedPixelCount()
+            canvas.setEditorInput(brush.copy(tool = ToolType.SELECT_FREEHAND))
+            send(canvas, MotionEvent.ACTION_DOWN, Touch(1, 20f, 20f))
+            send(canvas, MotionEvent.ACTION_UP, Touch(1, 20f, 20f))
+            delay(150)
+            assertEquals(before, requireNotNull(repository.selection()).selectedPixelCount())
         }
 
     @Test

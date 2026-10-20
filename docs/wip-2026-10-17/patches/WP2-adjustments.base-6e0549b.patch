@@ -1,0 +1,3610 @@
+diff --git a/app/src/main/java/com/artflow/studio/core/pixels/AdjustmentOptions.kt b/app/src/main/java/com/artflow/studio/core/pixels/AdjustmentOptions.kt
+new file mode 100644
+index 0000000..5a819b6
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/core/pixels/AdjustmentOptions.kt
+@@ -0,0 +1,193 @@
++package com.artflow.studio.core.pixels
++
++import com.artflow.studio.core.pixels.LiveAdjustments.Kind
++import kotlin.math.roundToInt
++
++/**
++ * The controls a live adjustment has besides its amount: a mode and sliders, with their parameter keys, ranges and
++ * defaults. Effects read them through [value], so a missing, non-finite or out-of-range entry means the default.
++ */
++object AdjustmentOptions {
++    /**
++     * A slider over [min]..[max] or, when [modes] is above zero, a choice of [modes] named modes (values 0 until [modes]).
++     * [shownIn] lists the values of the kind's first mode option that the control applies to; empty means all of them.
++     */
++    data class Option(
++        val key: String,
++        val min: Float,
++        val max: Float,
++        val default: Float,
++        val modes: Int = 0,
++        val wholeNumbers: Boolean = false,
++        val shownIn: Set<Int> = emptySet(),
++    ) {
++        val isMode: Boolean get() = modes > 0
++    }
++
++    /** How a touch on the canvas drives an adjustment. */
++    enum class Gesture {
++        /** Nothing on the canvas; the bottom bar holds every control. */
++        NONE,
++
++        /** Slide left or right to set the amount. */
++        AMOUNT,
++
++        /** Slide in a direction: the slide's length is the amount and its direction the angle. */
++        VECTOR,
++
++        /** Touch to place the effect's point. */
++        POINT,
++    }
++
++    enum class GlitchMode { ARTIFACT, WAVE, SIGNAL, DIVERGE, DISPLACE }
++
++    enum class HalftoneMode { FULL_COLOUR, SCREEN_PRINT, NEWSPAPER }
++
++    enum class AberrationMode { PERSPECTIVE, DISPLACE }
++
++    enum class NoiseMode { CLOUDS, BILLOW, RIDGES, WHITE }
++
++    enum class PerspectiveMode { POSITIONAL, DIRECTIONAL }
++
++    const val BLOOM_TRANSITION = "bloom_transition"
++    const val BLOOM_SIZE = "bloom_size"
++    const val BLOOM_BURN = "bloom_burn"
++    const val GLITCH_MODE = "glitch_mode"
++    const val GLITCH_SIZE = "glitch_size"
++
++    /** Varies a glitch's pattern; it has no slider, the bar's shuffle button changes it. */
++    const val GLITCH_SEED = "glitch_seed"
++    const val HALFTONE_MODE = "halftone_mode"
++    const val HALFTONE_SHARPNESS = "halftone_sharpness"
++    const val ABERRATION_MODE = "aberration_mode"
++    const val ABERRATION_FALLOFF = "aberration_falloff"
++    const val NOISE_MODE = "noise_mode"
++    const val NOISE_SCALE = "noise_scale"
++    const val NOISE_OCTAVES = "noise_octaves"
++    const val NOISE_ROUGHNESS = "noise_roughness"
++
++    /** 0 for one grey noise over all channels, 1 for a separate noise per channel. */
++    const val NOISE_COLOUR = "noise_colour"
++    const val PERSPECTIVE_MODE = "perspective_mode"
++    const val PERSPECTIVE_ANGLE = "perspective_angle"
++    const val MAX_SEED = 9999f
++
++    private val NOISE_FIELDS = setOf(NoiseMode.CLOUDS.ordinal, NoiseMode.BILLOW.ordinal, NoiseMode.RIDGES.ordinal)
++
++    private val BLOOM =
++        listOf(
++            Option(BLOOM_TRANSITION, 0f, 1f, 0.5f),
++            Option(BLOOM_SIZE, 0f, 1f, 0.35f),
++            Option(BLOOM_BURN, 0f, 1f, 0f),
++        )
++    private val GLITCH =
++        listOf(
++            mode(GLITCH_MODE, GlitchMode.entries.size),
++            Option(GLITCH_SIZE, 0f, 1f, 0.4f),
++        )
++    private val HALFTONE =
++        listOf(
++            mode(HALFTONE_MODE, HalftoneMode.entries.size),
++            Option(HALFTONE_SHARPNESS, 0f, 1f, 0.7f),
++        )
++    private val ABERRATION =
++        listOf(
++            mode(ABERRATION_MODE, AberrationMode.entries.size),
++            Option(ABERRATION_FALLOFF, 0f, 1f, 0f, shownIn = setOf(AberrationMode.PERSPECTIVE.ordinal)),
++        )
++    private val NOISE =
++        listOf(
++            mode(NOISE_MODE, NoiseMode.entries.size),
++            Option(NOISE_SCALE, 0f, 1f, 0.35f, shownIn = NOISE_FIELDS),
++            Option(NOISE_OCTAVES, 1f, 8f, 4f, wholeNumbers = true, shownIn = NOISE_FIELDS),
++            Option(NOISE_ROUGHNESS, 0f, 1f, 0.5f, shownIn = NOISE_FIELDS),
++            mode(NOISE_COLOUR, 2),
++        )
++    private val PERSPECTIVE =
++        listOf(
++            mode(PERSPECTIVE_MODE, PerspectiveMode.entries.size),
++            Option(PERSPECTIVE_ANGLE, 0f, 360f, 0f, shownIn = setOf(PerspectiveMode.DIRECTIONAL.ordinal)),
++        )
++
++    /** Every control of [kind] besides its amount, modes first. */
++    fun forKind(kind: Kind): List<Option> =
++        when (kind) {
++            Kind.BLOOM -> BLOOM
++            Kind.GLITCH -> GLITCH
++            Kind.HALFTONE -> HALFTONE
++            Kind.CHROMATIC_ABERRATION -> ABERRATION
++            Kind.NOISE -> NOISE
++            Kind.PERSPECTIVE_BLUR -> PERSPECTIVE
++            else -> emptyList()
++        }
++
++    /** The controls of [kind] that apply in the mode [parameters] select. */
++    fun visible(
++        kind: Kind,
++        parameters: Map<String, Float>,
++    ): List<Option> {
++        val options = forKind(kind)
++        val mode = options.firstOrNull { it.isMode }?.let { value(parameters, it).toInt() }
++        return options.filter { it.shownIn.isEmpty() || mode in it.shownIn }
++    }
++
++    /** [option]'s value in [parameters]: its default when missing or not finite, clamped, whole for modes. */
++    fun value(
++        parameters: Map<String, Float>,
++        option: Option,
++    ): Float {
++        val raw = parameters[option.key]?.takeIf { it.isFinite() } ?: return option.default
++        val clamped = raw.coerceIn(option.min, option.max)
++        return if (option.wholeNumbers || option.isMode) clamped.roundToInt().toFloat() else clamped
++    }
++
++    /** The value of [kind]'s option [key] in [parameters]. */
++    fun value(
++        kind: Kind,
++        parameters: Map<String, Float>,
++        key: String,
++    ): Float = value(parameters, forKind(kind).first { it.key == key })
++
++    /** How a canvas touch drives [kind] in the mode [parameters] select. */
++    fun gesture(
++        kind: Kind,
++        parameters: Map<String, Float>,
++    ): Gesture =
++        when {
++            kind.usesPoint -> Gesture.POINT
++            kind == Kind.MOTION_BLUR -> Gesture.VECTOR
++            kind == Kind.CHROMATIC_ABERRATION && aberrationMode(parameters) == AberrationMode.DISPLACE -> Gesture.VECTOR
++            kind.slidesAmount -> Gesture.AMOUNT
++            else -> Gesture.NONE
++        }
++
++    /** True when [kind] has a centre to drag on the canvas while a slide anywhere else sets the amount. */
++    fun hasMovableCentre(
++        kind: Kind,
++        parameters: Map<String, Float>,
++    ): Boolean = kind == Kind.CHROMATIC_ABERRATION && aberrationMode(parameters) == AberrationMode.PERSPECTIVE
++
++    fun glitchMode(parameters: Map<String, Float>): GlitchMode = GlitchMode.entries[modeIndex(GLITCH, parameters)]
++
++    fun halftoneMode(parameters: Map<String, Float>): HalftoneMode = HalftoneMode.entries[modeIndex(HALFTONE, parameters)]
++
++    fun aberrationMode(parameters: Map<String, Float>): AberrationMode = AberrationMode.entries[modeIndex(ABERRATION, parameters)]
++
++    fun noiseMode(parameters: Map<String, Float>): NoiseMode = NoiseMode.entries[modeIndex(NOISE, parameters)]
++
++    fun perspectiveMode(parameters: Map<String, Float>): PerspectiveMode = PerspectiveMode.entries[modeIndex(PERSPECTIVE, parameters)]
++
++    /** The glitch pattern's seed, a whole number from 0 to [MAX_SEED]. */
++    fun glitchSeed(parameters: Map<String, Float>): Int =
++        (parameters[GLITCH_SEED]?.takeIf { it.isFinite() } ?: 0f).coerceIn(0f, MAX_SEED).roundToInt()
++
++    private fun modeIndex(
++        options: List<Option>,
++        parameters: Map<String, Float>,
++    ): Int = value(parameters, options.first { it.isMode }).toInt()
++
++    private fun mode(
++        key: String,
++        count: Int,
++    ): Option = Option(key, 0f, (count - 1).toFloat(), 0f, modes = count)
++}
+diff --git a/app/src/main/java/com/artflow/studio/core/pixels/AdjustmentProcessor.kt b/app/src/main/java/com/artflow/studio/core/pixels/AdjustmentProcessor.kt
+index a5200e9..52d7082 100644
+--- a/app/src/main/java/com/artflow/studio/core/pixels/AdjustmentProcessor.kt
++++ b/app/src/main/java/com/artflow/studio/core/pixels/AdjustmentProcessor.kt
+@@ -23,6 +23,7 @@ object AdjustmentProcessor {
+      * @param intensity 0..1 global mix, used for adjustment-layer opacity and live previews.
+      * @param mask optional per-pixel coverage (`0..255`) restricting the effect, e.g. from a
+      *   selection or the layer's own mask.
++     * @param checkpoint called once per row; a throw from it abandons the work (a superseded live preview).
+      */
+     fun apply(
+         source: PixelBuffer,
+@@ -30,6 +31,7 @@ object AdjustmentProcessor {
+         parameters: Map<String, Float>,
+         intensity: Float = 1f,
+         mask: ByteArray? = null,
++        checkpoint: () -> Unit = {},
+     ): PixelBuffer {
+         val mixed = intensity.coerceIn(0f, 1f)
+         if (mixed <= 0f) return source.copy()
+@@ -39,7 +41,7 @@ object AdjustmentProcessor {
+ 
+         when (type) {
+             AdjustmentType.INVERT ->
+-                perPixel(source, out, mixed, mask) { _, p ->
++                perPixel(source, out, mixed, mask, checkpoint) { _, p ->
+                     Channels.argb(
+                         Channels.alpha(p).toInt(),
+                         255 - Channels.red(p).toInt(),
+@@ -50,7 +52,7 @@ object AdjustmentProcessor {
+             AdjustmentType.BRIGHTNESS_CONTRAST -> {
+                 val brightness = merged.float("brightness", 0f) * 2.55f
+                 val contrast = contrastFactor(merged.float("contrast", 0f))
+-                perPixel(source, out, mixed, mask) { _, p ->
++                perPixel(source, out, mixed, mask, checkpoint) { _, p ->
+                     Channels.argb(
+                         Channels.alpha(p).toInt(),
+                         applyContrast(Channels.red(p) + brightness, contrast),
+@@ -63,7 +65,7 @@ object AdjustmentProcessor {
+                 val hueShift = merged.float("hue", 0f)
+                 val saturation = 1f + merged.float("saturation", 0f) / 100f
+                 val lightness = merged.float("lightness", 0f) / 100f
+-                perPixel(source, out, mixed, mask) { _, p ->
++                perPixel(source, out, mixed, mask, checkpoint) { _, p ->
+                     val hsv =
+                         com.artflow.studio.domain.model.Color
+                             .rgbToHsv(p)
+@@ -79,26 +81,18 @@ object AdjustmentProcessor {
+                 }
+             }
+             AdjustmentType.COLOR_BALANCE -> {
+-                val cyanRed = merged.float("cyan_red", 0f) / 100f * 255f
+-                val magentaGreen = merged.float("magenta_green", 0f) / 100f * 255f
+-                val yellowBlue = merged.float("yellow_blue", 0f) / 100f * 255f
+-                perPixel(source, out, mixed, mask) { _, p ->
+-                    Channels.argb(
+-                        Channels.alpha(p).toInt(),
+-                        clamp(Channels.red(p) + cyanRed),
+-                        clamp(Channels.green(p) + magentaGreen),
+-                        clamp(Channels.blue(p) + yellowBlue),
+-                    )
+-                }
++                val shifts = ColorBalance.Shifts(merged)
++                if (!shifts.isIdentity) perPixel(source, out, mixed, mask, checkpoint) { _, p -> shifts.apply(p) }
+             }
+             AdjustmentType.CURVES -> {
+-                val lut = buildCurveLut(merged)
+-                perPixel(source, out, mixed, mask) { _, p ->
++                // The raw map, not one filled with defaults: older maps hold their single curve in the legacy keys.
++                val (red, green, blue) = CurveSet.decode(parameters).channelLuts()
++                perPixel(source, out, mixed, mask, checkpoint) { _, p ->
+                     Channels.argb(
+                         Channels.alpha(p).toInt(),
+-                        lut[Channels.red(p).toInt().coerceIn(0, 255)],
+-                        lut[Channels.green(p).toInt().coerceIn(0, 255)],
+-                        lut[Channels.blue(p).toInt().coerceIn(0, 255)],
++                        red[Channels.red(p).toInt().coerceIn(0, 255)],
++                        green[Channels.green(p).toInt().coerceIn(0, 255)],
++                        blue[Channels.blue(p).toInt().coerceIn(0, 255)],
+                     )
+                 }
+             }
+@@ -109,7 +103,7 @@ object AdjustmentProcessor {
+                 val outputBlack = merged.float("output_black", 0f)
+                 val outputWhite = merged.float("output_white", 255f)
+                 val lut = buildLevelsLut(inputBlack, inputWhite, gamma, outputBlack, outputWhite)
+-                perPixel(source, out, mixed, mask) { _, p ->
++                perPixel(source, out, mixed, mask, checkpoint) { _, p ->
+                     Channels.argb(
+                         Channels.alpha(p).toInt(),
+                         lut[Channels.red(p).toInt().coerceIn(0, 255)],
+@@ -121,7 +115,7 @@ object AdjustmentProcessor {
+             AdjustmentType.POSTERIZE -> {
+                 val levels = merged.float("levels", 4f).roundToInt().coerceIn(2, 256)
+                 val step = 255f / (levels - 1)
+-                perPixel(source, out, mixed, mask) { _, p ->
++                perPixel(source, out, mixed, mask, checkpoint) { _, p ->
+                     Channels.argb(
+                         Channels.alpha(p).toInt(),
+                         posterizeChannel(Channels.red(p), step),
+@@ -131,23 +125,18 @@ object AdjustmentProcessor {
+                 }
+             }
+             AdjustmentType.SELECTIVE_COLOR -> {
+-                perPixel(source, out, mixed, mask) { _, p ->
++                perPixel(source, out, mixed, mask, checkpoint) { _, p ->
+                     applySelectiveColor(p, merged)
+                 }
+             }
+             AdjustmentType.GRADIENT_MAP -> {
+-                val startHue = merged.float("gradient_start_hue", 0f)
+-                val endHue = merged.float("gradient_end_hue", 360f)
+-                perPixel(source, out, mixed, mask) { _, p ->
+-                    val luminance = Channels.luminance(p)
+-                    val hue = startHue + (endHue - startHue) * luminance
+-                    val mapped =
+-                        com.artflow.studio.domain.model.Color.hsvToRgb(
+-                            hue,
+-                            if (luminance > 0.5f) 1f - (luminance - 0.5f) * 2f * 0.2f else 1f,
+-                            1f,
+-                        )
+-                    Channels.withAlpha(mapped, Channels.alpha(p).toInt())
++                // The raw map again: without stop keys it is the original two-hue map, whatever the defaults hold.
++                val gradient = GradientMap.decode(parameters)
++                if (gradient != null) {
++                    val table = GradientMap.table(gradient)
++                    perPixel(source, out, mixed, mask, checkpoint) { _, p -> GradientMap.map(p, table) }
++                } else {
++                    legacyGradientMap(source, out, mixed, mask, checkpoint, merged)
+                 }
+             }
+         }
+@@ -182,9 +171,9 @@ object AdjustmentProcessor {
+     }
+ 
+     /**
+-     * Build the 256-entry lookup table used by the Curves adjustment from up to five control
+-     * points (keys `point_N_x` / `point_N_y`). Uses monotone cubic interpolation so the curve
+-     * cannot overshoot into artifacts.
++     * The 256-entry table of a Curves map from before per-channel curves: up to five control points (keys
++     * `point_N_x` / `point_N_y`) through a monotone cubic, so the curve cannot overshoot into artifacts.
++     * [CurveSet.decode] reads these keys as the Gamma curve of maps that have no newer curve keys.
+      */
+     fun buildCurveLut(parameters: Map<String, Float>): IntArray {
+         val points =
+@@ -194,62 +183,31 @@ object AdjustmentProcessor {
+                     val y = parameters["point_${index}_y"] ?: return@mapNotNull null
+                     (x.coerceIn(0f, 255f) to y.coerceIn(0f, 255f))
+                 }.sortedBy { it.first }
++        return ToneCurve.monotoneLut(FloatArray(points.size) { points[it].first }, FloatArray(points.size) { points[it].second })
++    }
+ 
+-        val lut = IntArray(256)
+-        if (points.size < 2) {
+-            for (i in 0..255) lut[i] = i
+-            return lut
+-        }
+-
+-        // Monotone cubic Hermite (Fritsch-Carlson) through the control points.
+-        val xs = FloatArray(points.size) { points[it].first }
+-        val ys = FloatArray(points.size) { points[it].second }
+-        val n = points.size
+-        val slopes =
+-            FloatArray(n - 1) { i ->
+-                val dx = xs[i + 1] - xs[i]
+-                if (abs(dx) < 1e-4f) 0f else (ys[i + 1] - ys[i]) / dx
+-            }
+-        val tangents = FloatArray(n)
+-        tangents[0] = slopes[0]
+-        tangents[n - 1] = slopes[n - 2]
+-        for (i in 1 until n - 1) {
+-            tangents[i] = if (slopes[i - 1] * slopes[i] <= 0f) 0f else (slopes[i - 1] + slopes[i]) / 2f
+-        }
+-        for (i in 0 until n - 1) {
+-            if (abs(slopes[i]) < 1e-5f) {
+-                tangents[i] = 0f
+-                tangents[i + 1] = 0f
+-            } else {
+-                val a = tangents[i] / slopes[i]
+-                val b = tangents[i + 1] / slopes[i]
+-                val h = a * a + b * b
+-                if (h > 9f) {
+-                    val t = 3f / kotlin.math.sqrt(h)
+-                    tangents[i] = t * a * slopes[i]
+-                    tangents[i + 1] = t * b * slopes[i]
+-                }
+-            }
+-        }
+-
+-        var segment = 0
+-        for (x in 0..255) {
+-            val xf = x.toFloat()
+-            while (segment < n - 2 && xf > xs[segment + 1]) segment++
+-            val h = (xs[segment + 1] - xs[segment]).coerceAtLeast(1e-4f)
+-            val t = ((xf - xs[segment]) / h).coerceIn(0f, 1f)
+-            val t2 = t * t
+-            val t3 = t2 * t
+-            val h00 = 2f * t3 - 3f * t2 + 1f
+-            val h10 = t3 - 2f * t2 + t
+-            val h01 = -2f * t3 + 3f * t2
+-            val h11 = t3 - t2
+-            val value =
+-                h00 * ys[segment] + h10 * h * tangents[segment] +
+-                    h01 * ys[segment + 1] + h11 * h * tangents[segment + 1]
+-            lut[x] = value.roundToInt().coerceIn(0, 255)
++    /** The original two-hue Gradient Map, kept for maps saved before gradient stops. */
++    private fun legacyGradientMap(
++        source: PixelBuffer,
++        out: PixelBuffer,
++        intensity: Float,
++        mask: ByteArray?,
++        checkpoint: () -> Unit,
++        merged: Map<String, Float>,
++    ) {
++        val startHue = merged.float(GradientMap.LEGACY_START_HUE, 0f)
++        val endHue = merged.float(GradientMap.LEGACY_END_HUE, 360f)
++        perPixel(source, out, intensity, mask, checkpoint) { _, p ->
++            val luminance = Channels.luminance(p)
++            val hue = startHue + (endHue - startHue) * luminance
++            val mapped =
++                com.artflow.studio.domain.model.Color.hsvToRgb(
++                    hue,
++                    if (luminance > 0.5f) 1f - (luminance - 0.5f) * 2f * 0.2f else 1f,
++                    1f,
++                )
++            Channels.withAlpha(mapped, Channels.alpha(p).toInt())
+         }
+-        return lut
+     }
+ 
+     /** 256-entry LUT for the Levels adjustment. */
+@@ -331,25 +289,34 @@ object AdjustmentProcessor {
+         target: PixelBuffer,
+         intensity: Float,
+         mask: ByteArray?,
++        checkpoint: () -> Unit,
+         transform: (Int, Int) -> Int,
+     ) {
+-        for (i in source.pixels.indices) {
+-            val original = source.pixels[i]
+-            if ((original ushr 24) == 0) continue
+-            val adjusted = transform(i, original)
+-            val coverage = if (mask != null) (mask[i].toInt() and 0xFF) / 255f else 1f
+-            val effective = intensity * coverage
+-            target.pixels[i] =
+-                if (effective >= 1f) {
+-                    adjusted
+-                } else if (effective <= 0f) {
+-                    original
+-                } else {
+-                    ImageFilters.lerpArgb(original, adjusted, effective)
+-                }
++        for (y in 0 until source.height) {
++            checkpoint()
++            for (i in y * source.width until (y + 1) * source.width) {
++                val original = source.pixels[i]
++                if ((original ushr 24) == 0) continue
++                val adjusted = transform(i, original)
++                val coverage = if (mask != null) (mask[i].toInt() and 0xFF) / 255f else 1f
++                target.pixels[i] = mix(original, adjusted, intensity * coverage)
++            }
+         }
+     }
+ 
++    private fun mix(
++        original: Int,
++        adjusted: Int,
++        effective: Float,
++    ): Int =
++        if (effective >= 1f) {
++            adjusted
++        } else if (effective <= 0f) {
++            original
++        } else {
++            ImageFilters.lerpArgb(original, adjusted, effective)
++        }
++
+     /** Quantises one channel into [step]-sized bands (Posterize). */
+     private fun posterizeChannel(
+         value: Float,
+@@ -363,8 +330,6 @@ object AdjustmentProcessor {
+         factor: Float,
+     ): Int = ((value / 255f - 0.5f) * factor + 0.5f).let { (it * 255f) }.roundToInt().coerceIn(0, 255)
+ 
+-    private fun clamp(value: Float): Int = value.roundToInt().coerceIn(0, 255)
+-
+     private fun Map<String, Float>.float(
+         key: String,
+         default: Float,
+diff --git a/app/src/main/java/com/artflow/studio/core/pixels/BloomEffect.kt b/app/src/main/java/com/artflow/studio/core/pixels/BloomEffect.kt
+new file mode 100644
+index 0000000..538f4aa
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/core/pixels/BloomEffect.kt
+@@ -0,0 +1,121 @@
++package com.artflow.studio.core.pixels
++
++import kotlin.math.max
++import kotlin.math.min
++import kotlin.math.roundToInt
++
++/**
++ * Procreate's Bloom: bright areas glow. Pixels above a luminance threshold set by Transition form a light pass, blurred
++ * to Size and screened back over the image at a strength set by the amount; Burn turns the screen into an additive
++ * blow-out. The light pass is blurred on a reduced grid, so a wide bloom costs little more than a narrow one.
++ */
++internal object BloomEffect {
++    /** Light-pass threshold at Transition 0 (only near-white glows) and how far Transition 1 lowers it. */
++    private const val HIGHEST_THRESHOLD = 0.9f
++    private const val THRESHOLD_RANGE = 0.8f
++    private const val KNEE = 0.12f
++
++    /** Glow size as a fraction of the canvas's shorter side, at Size 0 and the extra at Size 1. */
++    private const val SMALLEST_GLOW = 0.004f
++    private const val GLOW_RANGE = 0.06f
++
++    /** The reduced grid keeps at least this blur radius in its own cells. */
++    private const val GRID_SIGMA = 4f
++    private const val STRENGTH = 1.6f
++    private const val BURN_GAIN = 1.5f
++
++    /** How far full Burn turns the screen into an add. */
++    private const val BURN_ADD = 0.6f
++
++    fun apply(
++        source: PixelBuffer,
++        amount: Float,
++        transition: Float,
++        size: Float,
++        burn: Float,
++        checkpoint: () -> Unit,
++    ): PixelBuffer {
++        val sigma = max(1.5f, min(source.width, source.height) * (SMALLEST_GLOW + GLOW_RANGE * size.coerceIn(0f, 1f)))
++        val factor = max(1, (sigma / GRID_SIGMA).toInt())
++        val threshold = HIGHEST_THRESHOLD - THRESHOLD_RANGE * transition.coerceIn(0f, 1f)
++        val glow = lightPass(source, factor, threshold - KNEE, threshold + KNEE, checkpoint)
++        glow.blur(sigma / factor, checkpoint)
++        val clampedBurn = burn.coerceIn(0f, 1f)
++        return composite(source, glow, factor, amount * STRENGTH * (1f + BURN_GAIN * clampedBurn), clampedBurn, checkpoint)
++    }
++
++    /** The bright part of [source] at 1/[factor] scale, each pixel weighted by how far it clears the threshold. */
++    private fun lightPass(
++        source: PixelBuffer,
++        factor: Int,
++        low: Float,
++        high: Float,
++        checkpoint: () -> Unit,
++    ): ColorPlanes {
++        val planes = ColorPlanes((source.width + factor - 1) / factor, (source.height + factor - 1) / factor)
++        val counts = FloatArray(planes.width * planes.height)
++        for (y in 0 until source.height) {
++            checkpoint()
++            val row = (y / factor) * planes.width
++            for (x in 0 until source.width) {
++                val pixel = source.pixels[y * source.width + x]
++                val t = ((Channels.luminance(pixel) - low) / (high - low)).coerceIn(0f, 1f)
++                planes.add(row + x / factor, pixel, t * t * (3f - 2f * t))
++                counts[row + x / factor] += 1f
++            }
++        }
++        planes.divide(counts)
++        return planes
++    }
++
++    private fun composite(
++        source: PixelBuffer,
++        glow: ColorPlanes,
++        factor: Int,
++        gain: Float,
++        burn: Float,
++        checkpoint: () -> Unit,
++    ): PixelBuffer {
++        val out = source.copy()
++        val light = FloatArray(4)
++        for (y in 0 until source.height) {
++            checkpoint()
++            for (x in 0 until source.width) {
++                glow.sample((x + 0.5f) / factor, (y + 0.5f) / factor, light)
++                if (light[3] * gain < 1f / 512f) continue
++                val index = y * source.width + x
++                out.pixels[index] = screen(source.pixels[index], light, gain, burn)
++            }
++        }
++        return out
++    }
++
++    /** [base] with the premultiplied [light] screened over it (added, as [burn] rises), in premultiplied space. */
++    private fun screen(
++        base: Int,
++        light: FloatArray,
++        gain: Float,
++        burn: Float,
++    ): Int {
++        val baseAlpha = (base ushr 24) / 255f
++        val glowAlpha = min(1f, light[3] * gain)
++        val alpha = baseAlpha + glowAlpha - baseAlpha * glowAlpha
++        val keep = 1f - BURN_ADD * burn
++        val r = channel((base shr 16) and 0xFF, baseAlpha, min(1f, light[0] * gain), keep, alpha)
++        val g = channel((base shr 8) and 0xFF, baseAlpha, min(1f, light[1] * gain), keep, alpha)
++        val b = channel(base and 0xFF, baseAlpha, min(1f, light[2] * gain), keep, alpha)
++        return Channels.argb((alpha * 255f).roundToInt().coerceIn(0, 255), r, g, b)
++    }
++
++    private fun channel(
++        value: Int,
++        baseAlpha: Float,
++        glow: Float,
++        keep: Float,
++        alpha: Float,
++    ): Int {
++        val base = value / 255f * baseAlpha
++        val mixed = min(alpha, base + glow - keep * base * glow)
++        return (mixed / alpha * 255f).roundToInt().coerceIn(0, 255)
++    }
++}
+diff --git a/app/src/main/java/com/artflow/studio/core/pixels/ChromaticAberration.kt b/app/src/main/java/com/artflow/studio/core/pixels/ChromaticAberration.kt
+new file mode 100644
+index 0000000..d02f165
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/core/pixels/ChromaticAberration.kt
+@@ -0,0 +1,105 @@
++package com.artflow.studio.core.pixels
++
++import kotlin.math.cos
++import kotlin.math.max
++import kotlin.math.min
++import kotlin.math.pow
++import kotlin.math.sin
++import kotlin.math.sqrt
++
++/**
++ * Procreate's Chromatic Aberration. Perspective spreads red outward and blue inward from a centre point, more the farther
++ * a pixel is from it (Falloff keeps the middle cleaner and pushes the fringes to the edges); Displace offsets red and blue
++ * in opposite directions along one angle. A bright edge's fringe can spill onto transparent pixels (see [combine]), and
++ * samples beyond the canvas repeat its edge.
++ */
++internal object ChromaticAberration {
++    /** Largest radial spread at amount 1, as a fraction of a pixel's distance from the centre. */
++    private const val MAX_SPREAD = 0.05f
++
++    /** Largest Displace offset at amount 1, as a fraction of the canvas's shorter side. */
++    private const val MAX_OFFSET = 0.03f
++
++    fun perspective(
++        source: PixelBuffer,
++        amount: Float,
++        centreX: Float,
++        centreY: Float,
++        falloff: Float,
++        checkpoint: () -> Unit,
++    ): PixelBuffer {
++        val spread = amount.coerceIn(0f, 1f) * MAX_SPREAD
++        val power = 2f * falloff.coerceIn(0f, 1f)
++        val reach = max(1f, sqrt(source.width * source.width + source.height * source.height.toFloat()) / 2f)
++        val out = PixelBuffer(source.width, source.height)
++        for (y in 0 until source.height) {
++            checkpoint()
++            for (x in 0 until source.width) {
++                val dx = x + 0.5f - centreX
++                val dy = y + 0.5f - centreY
++                val k = if (power > 0f) spread * (sqrt(dx * dx + dy * dy) / reach).pow(power) else spread
++                out.pixels[y * source.width + x] =
++                    combine(
++                        sample(source, centreX + dx * (1f + k), centreY + dy * (1f + k)),
++                        sample(source, x + 0.5f, y + 0.5f),
++                        sample(source, centreX + dx * (1f - k), centreY + dy * (1f - k)),
++                    )
++            }
++        }
++        return out
++    }
++
++    fun displace(
++        source: PixelBuffer,
++        amount: Float,
++        angleDegrees: Float,
++        checkpoint: () -> Unit,
++    ): PixelBuffer {
++        val distance = amount.coerceIn(0f, 1f) * MAX_OFFSET * min(source.width, source.height)
++        val radians = Math.toRadians(angleDegrees.toDouble())
++        val offsetX = (cos(radians) * distance).toFloat()
++        val offsetY = (sin(radians) * distance).toFloat()
++        val out = PixelBuffer(source.width, source.height)
++        for (y in 0 until source.height) {
++            checkpoint()
++            for (x in 0 until source.width) {
++                val px = x + 0.5f
++                val py = y + 0.5f
++                out.pixels[y * source.width + x] =
++                    combine(
++                        sample(source, px - offsetX, py - offsetY),
++                        source.pixels[y * source.width + x],
++                        sample(source, px + offsetX, py + offsetY),
++                    )
++            }
++        }
++        return out
++    }
++
++    private fun sample(
++        source: PixelBuffer,
++        x: Float,
++        y: Float,
++    ): Int = source.sampleBilinear(x.coerceIn(0.5f, source.width - 0.5f), y.coerceIn(0.5f, source.height - 0.5f))
++
++    /**
++     * Red from [red], green from [green] and blue from [blue]. The green sample keeps the layer's coverage; the red and
++     * blue samples add coverage only as far as they carry light in their own channel, so a bright edge can throw a
++     * coloured fringe onto transparent pixels without dark ghosts of the other channels, and dark line art stays as it is.
++     */
++    fun combine(
++        red: Int,
++        green: Int,
++        blue: Int,
++    ): Int {
++        val ra = red ushr 24
++        val ga = green ushr 24
++        val ba = blue ushr 24
++        val r = (red shr 16) and 0xFF
++        val g = (green shr 8) and 0xFF
++        val b = blue and 0xFF
++        val alpha = max(ga, max(ra * r / 255, ba * b / 255))
++        if (alpha == 0) return 0
++        return Channels.argb(alpha, min(255, r * ra / alpha), min(255, g * ga / alpha), min(255, b * ba / alpha))
++    }
++}
+diff --git a/app/src/main/java/com/artflow/studio/core/pixels/ColorBalance.kt b/app/src/main/java/com/artflow/studio/core/pixels/ColorBalance.kt
+new file mode 100644
+index 0000000..1e3af3d
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/core/pixels/ColorBalance.kt
+@@ -0,0 +1,123 @@
++package com.artflow.studio.core.pixels
++
++import kotlin.math.roundToInt
++
++/**
++ * Colour Balance with Procreate's Shadows, Midtones and Highlights. Each range has a Cyan-Red, a Magenta-Green and a
++ * Yellow-Blue shift from -100 to 100, weighted by the pixel's luminance with smooth curves that add up to one: Shadows
++ * acts on dark pixels, Midtones on the middle and Highlights on light pixels, and the same shift in all three ranges moves
++ * every pixel alike. Alpha never changes.
++ *
++ * Range shifts are stored as `<range>_<axis>`, for example `shadows_cyan_red`. The keys `cyan_red`, `magenta_green` and
++ * `yellow_blue` from before the ranges existed still shift every pixel evenly, exactly as they did, so older Colour
++ * Balance layers look unchanged.
++ */
++object ColorBalance {
++    enum class Range(
++        val key: String,
++    ) {
++        SHADOWS("shadows"),
++        MIDTONES("midtones"),
++        HIGHLIGHTS("highlights"),
++    }
++
++    /** A slider's axis; positive values move toward the second colour (Red, Green, Blue). */
++    enum class Axis(
++        val key: String,
++    ) {
++        CYAN_RED("cyan_red"),
++        MAGENTA_GREEN("magenta_green"),
++        YELLOW_BLUE("yellow_blue"),
++    }
++
++    fun key(
++        range: Range,
++        axis: Axis,
++    ): String = "${range.key}_${axis.key}"
++
++    /** The even, all-tones shift of older Colour Balance layers. */
++    fun legacyKey(axis: Axis): String = axis.key
++
++    const val MAX_SHIFT = 100f
++
++    /** Levels a full-strength range shift moves a channel where its weight is one. */
++    private const val RANGE_LEVELS = 0.55f * 255f
++
++    val DEFAULT_PARAMETERS: Map<String, Float> =
++        buildMap {
++            Axis.entries.forEach { put(legacyKey(it), 0f) }
++            Range.entries.forEach { range -> Axis.entries.forEach { put(key(range, it), 0f) } }
++        }
++
++    val PARAMETER_RANGES: Map<String, ClosedFloatingPointRange<Float>> = DEFAULT_PARAMETERS.mapValues { -MAX_SHIFT..MAX_SHIFT }
++
++    /** How much Shadows acts at [luminance] (0..1): fully on black, fading out by the middle grey. */
++    fun shadowWeight(luminance: Float): Float = 1f - smoothstep(0f, 0.5f, luminance)
++
++    /** How much Highlights acts at [luminance] (0..1): none up to the middle grey, fully on white. */
++    fun highlightWeight(luminance: Float): Float = smoothstep(0.5f, 1f, luminance)
++
++    /** How much Midtones acts at [luminance]: whatever Shadows and Highlights leave, peaking at the middle grey. */
++    fun midtoneWeight(luminance: Float): Float = 1f - shadowWeight(luminance) - highlightWeight(luminance)
++
++    private fun smoothstep(
++        edge0: Float,
++        edge1: Float,
++        value: Float,
++    ): Float {
++        val t = ((value - edge0) / (edge1 - edge0)).coerceIn(0f, 1f)
++        return t * t * (3f - 2f * t)
++    }
++
++    /** The shifts of one Colour Balance map, in channel levels, ready to apply to many pixels. */
++    class Shifts(
++        parameters: Map<String, Float>,
++    ) {
++        // The even shift keeps the arithmetic it always had, so older layers render bit for bit as before.
++        private val evenRed = even(parameters, Axis.CYAN_RED)
++        private val evenGreen = even(parameters, Axis.MAGENTA_GREEN)
++        private val evenBlue = even(parameters, Axis.YELLOW_BLUE)
++
++        /** Shadows, Midtones and Highlights shifts for red, green and blue: index `range * 3 + axis`. */
++        private val ranged =
++            FloatArray(Range.entries.size * Axis.entries.size) { index ->
++                val shift = finite(parameters[key(Range.entries[index / 3], Axis.entries[index % 3])])
++                shift.coerceIn(-MAX_SHIFT, MAX_SHIFT) / MAX_SHIFT * RANGE_LEVELS
++            }
++
++        private val hasRanges = ranged.any { it != 0f }
++
++        /** True when no shift is set, so every pixel stays as it is. */
++        val isIdentity: Boolean get() = !hasRanges && evenRed == 0f && evenGreen == 0f && evenBlue == 0f
++
++        fun apply(pixel: Int): Int {
++            var r = Channels.red(pixel) + evenRed
++            var g = Channels.green(pixel) + evenGreen
++            var b = Channels.blue(pixel) + evenBlue
++            if (hasRanges) {
++                val luminance = Channels.luminance(pixel)
++                val shadows = shadowWeight(luminance)
++                val highlights = highlightWeight(luminance)
++                val midtones = 1f - shadows - highlights
++                r += shadows * ranged[0] + midtones * ranged[3] + highlights * ranged[6]
++                g += shadows * ranged[1] + midtones * ranged[4] + highlights * ranged[7]
++                b += shadows * ranged[2] + midtones * ranged[5] + highlights * ranged[8]
++            }
++            return Channels.argb(
++                pixel ushr 24,
++                r.roundToInt().coerceIn(0, 255),
++                g.roundToInt().coerceIn(0, 255),
++                b.roundToInt().coerceIn(0, 255),
++            )
++        }
++
++        private companion object {
++            fun finite(value: Float?): Float = value?.takeIf { it.isFinite() } ?: 0f
++
++            fun even(
++                parameters: Map<String, Float>,
++                axis: Axis,
++            ): Float = finite(parameters[legacyKey(axis)]) / 100f * 255f
++        }
++    }
++}
+diff --git a/app/src/main/java/com/artflow/studio/core/pixels/ColorPlanes.kt b/app/src/main/java/com/artflow/studio/core/pixels/ColorPlanes.kt
+new file mode 100644
+index 0000000..b14b640
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/core/pixels/ColorPlanes.kt
+@@ -0,0 +1,175 @@
++package com.artflow.studio.core.pixels
++
++import kotlin.math.ceil
++import kotlin.math.exp
++import kotlin.math.max
++
++/**
++ * Premultiplied colour as four float planes (0..1), for effects that work on a reduced-resolution copy of a layer:
++ * a wide blur on a small grid costs a fraction of the same blur at full size and looks the same once sampled back.
++ */
++internal class ColorPlanes(
++    val width: Int,
++    val height: Int,
++) {
++    val red = FloatArray(width * height)
++    val green = FloatArray(width * height)
++    val blue = FloatArray(width * height)
++    val alpha = FloatArray(width * height)
++
++    /** Gaussian blur in place, [sigma] in grid cells; the edges extend outward. [checkpoint] runs once per row. */
++    fun blur(
++        sigma: Float,
++        checkpoint: () -> Unit,
++    ) {
++        if (sigma < MIN_SIGMA) return
++        val kernel = kernel(sigma)
++        val scratch = FloatArray(width * height)
++        for (plane in arrayOf(red, green, blue, alpha)) {
++            horizontal(plane, scratch, kernel, checkpoint)
++            vertical(scratch, plane, kernel, checkpoint)
++        }
++    }
++
++    /**
++     * Bilinear sample at grid position ([x], [y]), where cell i covers i..i+1, clamped to the edges; writes premultiplied
++     * red, green, blue and alpha into [out] so that sampling allocates nothing.
++     */
++    fun sample(
++        x: Float,
++        y: Float,
++        out: FloatArray,
++    ) {
++        val gx = (x - 0.5f).coerceIn(0f, (width - 1).toFloat())
++        val gy = (y - 0.5f).coerceIn(0f, (height - 1).toFloat())
++        val x0 = gx.toInt()
++        val y0 = gy.toInt()
++        val x1 = if (x0 + 1 < width) x0 + 1 else x0
++        val y1 = if (y0 + 1 < height) y0 + 1 else y0
++        val fx = gx - x0
++        val fy = gy - y0
++        val i00 = y0 * width + x0
++        val i10 = y0 * width + x1
++        val i01 = y1 * width + x0
++        val i11 = y1 * width + x1
++        out[0] = mix(red, i00, i10, i01, i11, fx, fy)
++        out[1] = mix(green, i00, i10, i01, i11, fx, fy)
++        out[2] = mix(blue, i00, i10, i01, i11, fx, fy)
++        out[3] = mix(alpha, i00, i10, i01, i11, fx, fy)
++    }
++
++    private fun mix(
++        plane: FloatArray,
++        i00: Int,
++        i10: Int,
++        i01: Int,
++        i11: Int,
++        fx: Float,
++        fy: Float,
++    ): Float {
++        val top = plane[i00] + (plane[i10] - plane[i00]) * fx
++        val bottom = plane[i01] + (plane[i11] - plane[i01]) * fx
++        return top + (bottom - top) * fy
++    }
++
++    private fun horizontal(
++        source: FloatArray,
++        target: FloatArray,
++        kernel: FloatArray,
++        checkpoint: () -> Unit,
++    ) {
++        val radius = kernel.size / 2
++        for (y in 0 until height) {
++            checkpoint()
++            val row = y * width
++            for (x in 0 until width) {
++                var sum = 0f
++                for (k in -radius..radius) sum += source[row + (x + k).coerceIn(0, width - 1)] * kernel[k + radius]
++                target[row + x] = sum
++            }
++        }
++    }
++
++    private fun vertical(
++        source: FloatArray,
++        target: FloatArray,
++        kernel: FloatArray,
++        checkpoint: () -> Unit,
++    ) {
++        val radius = kernel.size / 2
++        for (y in 0 until height) {
++            checkpoint()
++            for (x in 0 until width) {
++                var sum = 0f
++                for (k in -radius..radius) sum += source[(y + k).coerceIn(0, height - 1) * width + x] * kernel[k + radius]
++                target[y * width + x] = sum
++            }
++        }
++    }
++
++    /** Adds [pixel] (straight ARGB) to cell [index] premultiplied, scaled by [weight]. */
++    fun add(
++        index: Int,
++        pixel: Int,
++        weight: Float,
++    ) {
++        val a = (pixel ushr 24) / 255f * weight
++        if (a <= 0f) return
++        alpha[index] += a
++        red[index] += ((pixel shr 16) and 0xFF) / 255f * a
++        green[index] += ((pixel shr 8) and 0xFF) / 255f * a
++        blue[index] += (pixel and 0xFF) / 255f * a
++    }
++
++    /** Divides every cell by its entry in [counts], turning sums into averages. */
++    fun divide(counts: FloatArray) {
++        for (i in counts.indices) {
++            val count = counts[i]
++            if (count > 0f) {
++                red[i] /= count
++                green[i] /= count
++                blue[i] /= count
++                alpha[i] /= count
++            }
++        }
++    }
++
++    companion object {
++        private const val MIN_SIGMA = 0.2f
++
++        /** [source] averaged over [factor] × [factor] blocks (the last row and column of blocks may be partial). */
++        fun downsample(
++            source: PixelBuffer,
++            factor: Int,
++            checkpoint: () -> Unit,
++        ): ColorPlanes {
++            val step = max(1, factor)
++            val planes = ColorPlanes(ceil(source.width / step.toFloat()).toInt(), ceil(source.height / step.toFloat()).toInt())
++            val counts = FloatArray(planes.width * planes.height)
++            for (y in 0 until source.height) {
++                checkpoint()
++                val row = (y / step) * planes.width
++                for (x in 0 until source.width) {
++                    planes.add(row + x / step, source.pixels[y * source.width + x], 1f)
++                    counts[row + x / step] += 1f
++                }
++            }
++            planes.divide(counts)
++            return planes
++        }
++
++        /** Normalised Gaussian weights out to three standard deviations. */
++        fun kernel(sigma: Float): FloatArray {
++            val half = max(1, ceil(sigma * 3f).toInt())
++            val weights = FloatArray(half * 2 + 1)
++            var sum = 0f
++            for (i in -half..half) {
++                val weight = exp(-(i * i) / (2f * sigma * sigma))
++                weights[i + half] = weight
++                sum += weight
++            }
++            for (i in weights.indices) weights[i] /= sum
++            return weights
++        }
++    }
++}
+diff --git a/app/src/main/java/com/artflow/studio/core/pixels/CurveSet.kt b/app/src/main/java/com/artflow/studio/core/pixels/CurveSet.kt
+new file mode 100644
+index 0000000..005c4ba
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/core/pixels/CurveSet.kt
+@@ -0,0 +1,324 @@
++package com.artflow.studio.core.pixels
++
++import kotlin.math.abs
++import kotlin.math.roundToInt
++import kotlin.math.sqrt
++
++/**
++ * One tone curve: control points on a 0..255 by 0..255 graph, sorted by input ([Point.x]). The curve runs through every
++ * point by monotone cubic interpolation, so it never overshoots between two points, and it stays flat beyond the first
++ * and the last point.
++ */
++data class ToneCurve(
++    val points: List<Point>,
++) {
++    data class Point(
++        val x: Float,
++        val y: Float,
++    )
++
++    /** The 256-entry table this curve maps 8-bit channel values through. */
++    fun lut(): IntArray = monotoneLut(FloatArray(points.size) { points[it].x }, FloatArray(points.size) { points[it].y })
++
++    /** True when the curve maps every value to itself, whatever its points. */
++    fun isIdentity(): Boolean {
++        val lut = lut()
++        return lut.indices.all { lut[it] == it }
++    }
++
++    /** Index of the point nearest ([x], [y]) no farther than [radius] graph units, or null. */
++    fun pointNear(
++        x: Float,
++        y: Float,
++        radius: Float,
++    ): Int? {
++        var best: Int? = null
++        var bestDistance = radius
++        points.forEachIndexed { index, point ->
++            val distance = sqrt((point.x - x) * (point.x - x) + (point.y - y) * (point.y - y))
++            if (distance <= bestDistance) {
++                best = index
++                bestDistance = distance
++            }
++        }
++        return best
++    }
++
++    /**
++     * This curve with a new point at input [x], placed on the curve so that adding it changes nothing until it is
++     * dragged, and the new point's index; null when the curve is full or [x] is too close to an existing point.
++     */
++    fun withPointAt(x: Float): Pair<ToneCurve, Int>? {
++        val input = x.coerceIn(0f, MAX_VALUE)
++        if (points.size >= MAX_POINTS || points.any { abs(it.x - input) < MIN_GAP }) return null
++        val output = lut()[input.roundToInt()].toFloat()
++        val index = points.indexOfFirst { it.x > input }.let { if (it < 0) points.size else it }
++        val added = points.toMutableList().apply { add(index, Point(input, output)) }
++        return ToneCurve(added) to index
++    }
++
++    /**
++     * This curve with point [index] dragged to ([x], [y]). The first and the last point move only up and down; the
++     * others stay between their neighbours, at least [MIN_GAP] from each.
++     */
++    fun withPointMoved(
++        index: Int,
++        x: Float,
++        y: Float,
++    ): ToneCurve {
++        if (index !in points.indices || !x.isFinite() || !y.isFinite()) return this
++        val input =
++            if (index == 0 || index == points.lastIndex) {
++                points[index].x
++            } else {
++                val low = points[index - 1].x + MIN_GAP
++                val high = points[index + 1].x - MIN_GAP
++                if (low <= high) x.coerceIn(low, high) else points[index].x
++            }
++        val moved = points.toMutableList().apply { set(index, Point(input, y.coerceIn(0f, MAX_VALUE))) }
++        return ToneCurve(moved)
++    }
++
++    /** This curve without point [index]. The first and the last point always stay. */
++    fun withoutPoint(index: Int): ToneCurve =
++        if (index <= 0 || index >= points.lastIndex || points.size <= MIN_POINTS) {
++            this
++        } else {
++            ToneCurve(points.filterIndexed { i, _ -> i != index })
++        }
++
++    companion object {
++        const val MIN_POINTS = 2
++        const val MAX_POINTS = 16
++        const val MAX_VALUE = 255f
++
++        /** Smallest input gap kept between neighbouring points while editing. */
++        const val MIN_GAP = 4f
++
++        val IDENTITY = ToneCurve(listOf(Point(0f, 0f), Point(MAX_VALUE, MAX_VALUE)))
++
++        /**
++         * 256-entry table through points sorted by x, by monotone cubic Hermite interpolation (Fritsch-Carlson), so the
++         * curve cannot overshoot into artifacts. Fewer than two points give the identity.
++         */
++        fun monotoneLut(
++            xs: FloatArray,
++            ys: FloatArray,
++        ): IntArray {
++            val lut = IntArray(256)
++            val n = xs.size
++            if (n < 2) {
++                for (i in 0..255) lut[i] = i
++                return lut
++            }
++            val tangents = tangents(xs, ys)
++            var segment = 0
++            for (x in 0..255) {
++                val xf = x.toFloat()
++                while (segment < n - 2 && xf > xs[segment + 1]) segment++
++                val h = (xs[segment + 1] - xs[segment]).coerceAtLeast(1e-4f)
++                val t = ((xf - xs[segment]) / h).coerceIn(0f, 1f)
++                val t2 = t * t
++                val t3 = t2 * t
++                val h00 = 2f * t3 - 3f * t2 + 1f
++                val h10 = t3 - 2f * t2 + t
++                val h01 = -2f * t3 + 3f * t2
++                val h11 = t3 - t2
++                val value =
++                    h00 * ys[segment] + h10 * h * tangents[segment] +
++                        h01 * ys[segment + 1] + h11 * h * tangents[segment + 1]
++                lut[x] = value.roundToInt().coerceIn(0, 255)
++            }
++            return lut
++        }
++
++        private fun tangents(
++            xs: FloatArray,
++            ys: FloatArray,
++        ): FloatArray {
++            val n = xs.size
++            val slopes =
++                FloatArray(n - 1) { i ->
++                    val dx = xs[i + 1] - xs[i]
++                    if (abs(dx) < 1e-4f) 0f else (ys[i + 1] - ys[i]) / dx
++                }
++            val tangents = FloatArray(n)
++            tangents[0] = slopes[0]
++            tangents[n - 1] = slopes[n - 2]
++            for (i in 1 until n - 1) {
++                tangents[i] = if (slopes[i - 1] * slopes[i] <= 0f) 0f else (slopes[i - 1] + slopes[i]) / 2f
++            }
++            for (i in 0 until n - 1) {
++                if (abs(slopes[i]) < 1e-5f) {
++                    tangents[i] = 0f
++                    tangents[i + 1] = 0f
++                } else {
++                    val a = tangents[i] / slopes[i]
++                    val b = tangents[i + 1] / slopes[i]
++                    val h = a * a + b * b
++                    if (h > 9f) {
++                        val t = 3f / sqrt(h)
++                        tangents[i] = t * a * slopes[i]
++                        tangents[i + 1] = t * b * slopes[i]
++                    }
++                }
++            }
++            return tangents
++        }
++    }
++}
++
++/**
++ * Procreate's Curves: a Gamma curve for all three colour channels plus a curve each for Red, Green and Blue. A channel
++ * goes through its own curve first and then through Gamma.
++ *
++ * An adjustment's parameter map stores channel `c` (`rgb`, `r`, `g` or `b`) as `curve_c_n`, the point count, and
++ * `curve_c_<i>_x` / `curve_c_<i>_y` (0..255) for each point i below the count; keys at or past the count are ignored, so
++ * removing a point only lowers the count. Maps written before these keys existed hold a single curve as `point_<i>_x` /
++ * `point_<i>_y` (i = 0..4); while there is no `curve_rgb_n`, those points are the Gamma curve, so older Curves layers
++ * render exactly as they did.
++ */
++data class CurveSet(
++    val gamma: ToneCurve = ToneCurve.IDENTITY,
++    val red: ToneCurve = ToneCurve.IDENTITY,
++    val green: ToneCurve = ToneCurve.IDENTITY,
++    val blue: ToneCurve = ToneCurve.IDENTITY,
++) {
++    enum class Channel(
++        val key: String,
++    ) {
++        GAMMA("rgb"),
++        RED("r"),
++        GREEN("g"),
++        BLUE("b"),
++    }
++
++    operator fun get(channel: Channel): ToneCurve =
++        when (channel) {
++            Channel.GAMMA -> gamma
++            Channel.RED -> red
++            Channel.GREEN -> green
++            Channel.BLUE -> blue
++        }
++
++    fun with(
++        channel: Channel,
++        curve: ToneCurve,
++    ): CurveSet =
++        when (channel) {
++            Channel.GAMMA -> copy(gamma = curve)
++            Channel.RED -> copy(red = curve)
++            Channel.GREEN -> copy(green = curve)
++            Channel.BLUE -> copy(blue = curve)
++        }
++
++    /** The red, green and blue tables to apply: each channel's own curve followed by Gamma. */
++    fun channelLuts(): Array<IntArray> {
++        val shared = gamma.lut()
++        return arrayOf(red, green, blue)
++            .map { curve ->
++                val own = curve.lut()
++                IntArray(256) { shared[own[it]] }
++            }.toTypedArray()
++    }
++
++    /** Parameter entries for [channel]'s curve. */
++    fun encode(channel: Channel): Map<String, Float> {
++        val curve = get(channel)
++        val entries = LinkedHashMap<String, Float>()
++        entries[countKey(channel)] = curve.points.size.toFloat()
++        curve.points.forEachIndexed { index, point ->
++            entries[xKey(channel, index)] = point.x
++            entries[yKey(channel, index)] = point.y
++        }
++        return entries
++    }
++
++    /** Parameter entries for all four curves. */
++    fun encode(): Map<String, Float> = Channel.entries.fold(emptyMap()) { entries, channel -> entries + encode(channel) }
++
++    companion object {
++        val IDENTITY = CurveSet()
++
++        fun countKey(channel: Channel): String = "curve_${channel.key}_n"
++
++        fun xKey(
++            channel: Channel,
++            index: Int,
++        ): String = "curve_${channel.key}_${index}_x"
++
++        fun yKey(
++            channel: Channel,
++            index: Int,
++        ): String = "curve_${channel.key}_${index}_y"
++
++        /** The five-point curve every Curves map held before per-channel curves, as it was by default. */
++        val LEGACY_DEFAULTS: Map<String, Float> =
++            mapOf(
++                "point_0_x" to 0f,
++                "point_0_y" to 0f,
++                "point_1_x" to 64f,
++                "point_1_y" to 64f,
++                "point_2_x" to 128f,
++                "point_2_y" to 128f,
++                "point_3_x" to 192f,
++                "point_3_y" to 192f,
++                "point_4_x" to 255f,
++                "point_4_y" to 255f,
++            )
++
++        /** Four straight curves. */
++        val DEFAULT_PARAMETERS: Map<String, Float> = IDENTITY.encode()
++
++        /** Every key a Curves map may hold, legacy points included. */
++        val PARAMETER_RANGES: Map<String, ClosedFloatingPointRange<Float>> =
++            buildMap {
++                LEGACY_DEFAULTS.keys.forEach { put(it, 0f..ToneCurve.MAX_VALUE) }
++                Channel.entries.forEach { channel ->
++                    put(countKey(channel), ToneCurve.MIN_POINTS.toFloat()..ToneCurve.MAX_POINTS.toFloat())
++                    for (index in 0 until ToneCurve.MAX_POINTS) {
++                        put(xKey(channel, index), 0f..ToneCurve.MAX_VALUE)
++                        put(yKey(channel, index), 0f..ToneCurve.MAX_VALUE)
++                    }
++                }
++            }
++
++        /** The curves stored in [parameters]; anything missing or malformed is a straight line. */
++        fun decode(parameters: Map<String, Float>): CurveSet =
++            CurveSet(
++                gamma = channel(parameters, Channel.GAMMA) ?: legacy(parameters),
++                red = channel(parameters, Channel.RED) ?: ToneCurve.IDENTITY,
++                green = channel(parameters, Channel.GREEN) ?: ToneCurve.IDENTITY,
++                blue = channel(parameters, Channel.BLUE) ?: ToneCurve.IDENTITY,
++            )
++
++        private fun channel(
++            parameters: Map<String, Float>,
++            channel: Channel,
++        ): ToneCurve? {
++            val count = parameters[countKey(channel)]?.takeIf { it.isFinite() }?.roundToInt() ?: return null
++            if (count !in ToneCurve.MIN_POINTS..ToneCurve.MAX_POINTS) return null
++            val points = ArrayList<ToneCurve.Point>(count)
++            for (index in 0 until count) {
++                val x = parameters[xKey(channel, index)]?.takeIf { it.isFinite() }
++                val y = parameters[yKey(channel, index)]?.takeIf { it.isFinite() }
++                if (x == null || y == null) return null
++                points += ToneCurve.Point(x.coerceIn(0f, ToneCurve.MAX_VALUE), y.coerceIn(0f, ToneCurve.MAX_VALUE))
++            }
++            return ToneCurve(points.sortedBy { it.x })
++        }
++
++        /** The curve of a map from before per-channel curves: its points over the old defaults, sorted by input. */
++        private fun legacy(parameters: Map<String, Float>): ToneCurve {
++            val merged = LEGACY_DEFAULTS + parameters
++            val points =
++                (0..4)
++                    .mapNotNull { index ->
++                        val x = merged["point_${index}_x"] ?: return@mapNotNull null
++                        val y = merged["point_${index}_y"] ?: return@mapNotNull null
++                        ToneCurve.Point(x.coerceIn(0f, ToneCurve.MAX_VALUE), y.coerceIn(0f, ToneCurve.MAX_VALUE))
++                    }.sortedBy { it.x }
++            return ToneCurve(points)
++        }
++    }
++}
+diff --git a/app/src/main/java/com/artflow/studio/core/pixels/GlitchEffect.kt b/app/src/main/java/com/artflow/studio/core/pixels/GlitchEffect.kt
+new file mode 100644
+index 0000000..5d88540
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/core/pixels/GlitchEffect.kt
+@@ -0,0 +1,165 @@
++package com.artflow.studio.core.pixels
++
++import com.artflow.studio.core.pixels.AdjustmentOptions.GlitchMode
++import com.artflow.studio.core.pixels.PixelHash.hash
++import com.artflow.studio.core.pixels.PixelHash.unit
++import kotlin.math.PI
++import kotlin.math.max
++import kotlin.math.min
++import kotlin.math.roundToInt
++import kotlin.math.sin
++
++/**
++ * Procreate-style Glitch in five modes. Every random choice comes from a hash of its position and the seed, so the same
++ * settings always give the same pixels and a preview does not flicker between slider moves. Pixels wrap around the
++ * canvas edges, and the colour channels keep their own coverage when they separate.
++ */
++internal object GlitchEffect {
++    fun apply(
++        source: PixelBuffer,
++        amount: Float,
++        mode: GlitchMode,
++        size: Float,
++        seed: Int,
++        checkpoint: () -> Unit,
++    ): PixelBuffer {
++        val glitch = Glitch(source, amount.coerceIn(0f, 1f), size.coerceIn(0f, 1f), seed)
++        for (y in 0 until source.height) {
++            checkpoint()
++            when (mode) {
++                GlitchMode.ARTIFACT -> glitch.artifactRow(y)
++                GlitchMode.WAVE -> glitch.waveRow(y)
++                GlitchMode.SIGNAL -> glitch.signalRow(y)
++                GlitchMode.DIVERGE -> glitch.divergeRow(y)
++                GlitchMode.DISPLACE -> glitch.displaceRow(y)
++            }
++        }
++        return glitch.out
++    }
++
++    private class Glitch(
++        val source: PixelBuffer,
++        val amount: Float,
++        val size: Float,
++        val seed: Int,
++    ) {
++        val out = PixelBuffer(source.width, source.height)
++        private val width = source.width
++        private val height = source.height
++        private val shortSide = min(width, height).toFloat()
++
++        /** Artifact: runs of blocks jump to other places, smear, split their channels or turn coarse, like a broken JPEG. */
++        fun artifactRow(y: Int) {
++            val block = max(4, (shortSide * (0.012f + 0.07f * size)).roundToInt())
++            val blockY = y / block
++            val run = 1 + hash(blockY, seed, 11) % 4
++            for (x in 0 until width) {
++                val h = hash(x / block / run, blockY, seed)
++                out.pixels[y * width + x] =
++                    if (unit(h) >= amount * 0.6f) {
++                        source.pixels[y * width + x]
++                    } else {
++                        corruptPixel(x, y, block, h)
++                    }
++            }
++        }
++
++        private fun corruptPixel(
++            x: Int,
++            y: Int,
++            block: Int,
++            h: Int,
++        ): Int =
++            when ((h ushr 8) and 3) {
++                0 -> at(x + ((h ushr 10) % 9 - 4) * block, y + ((h ushr 14) % 3 - 1) * block)
++                1 -> at((x / block) * block, y)
++                2 -> split(x + block / 3, x, x - block / 3, y)
++                else -> {
++                    val coarse = max(2, block / 4)
++                    at((x / coarse) * coarse, (y / coarse) * coarse)
++                }
++            }
++
++        /** Wave: rows sway sideways along a wavy line, each colour channel a little out of step. */
++        fun waveRow(y: Int) {
++            val wavelength = shortSide * (0.03f + 0.4f * size)
++            val amplitude = amount * shortSide * 0.05f
++            val phase = unit(hash(seed, 3, 5)) * 2f * PI.toFloat()
++            val angle = 2f * PI.toFloat() * y / wavelength + phase
++            val sway = sin(angle) + 0.35f * sin(angle * 2.7f + phase)
++            val green = (amplitude * sway).roundToInt()
++            val red = (amplitude * sin(angle + 0.45f) * 1.1f).roundToInt()
++            val blue = (amplitude * sin(angle - 0.45f) * 0.9f).roundToInt()
++            for (x in 0 until width) out.pixels[y * width + x] = split(x - red, x - green, x - blue, y)
++        }
++
++        /** Signal: a bad video signal, with split channels, jittering bands, dark scan lines and bright noise rows. */
++        fun signalRow(y: Int) {
++            val spacing = max(2, (shortSide * (0.003f + 0.02f * size)).roundToInt())
++            val band = y / (spacing * 6)
++            val jumps = unit(hash(band, seed, 17)) < amount * 0.35f
++            val jitter = if (jumps) ((unit(hash(band, seed, 19)) - 0.5f) * amount * shortSide * 0.06f).roundToInt() else 0
++            val offset = (amount * shortSide * 0.01f).roundToInt()
++            val dim = if ((y / spacing) % 2 == 1) 1f - 0.4f * amount else 1f
++            val flare = if (unit(hash(y, seed, 23)) < amount * 0.015f) 90f * amount else 0f
++            for (x in 0 until width) {
++                val pixel = split(x + jitter + offset, x + jitter, x + jitter - offset, y)
++                out.pixels[y * width + x] = shade(pixel, dim, flare)
++            }
++        }
++
++        /** Diverge: red and blue pull apart sideways by a different distance in every band. */
++        fun divergeRow(y: Int) {
++            val band = max(2, (shortSide * (0.01f + 0.12f * size)).roundToInt())
++            val spread = (amount * shortSide * 0.04f * (0.3f + 0.7f * unit(hash(y / band, seed, 29)))).roundToInt()
++            for (x in 0 until width) out.pixels[y * width + x] = split(x + spread, x, x - spread, y)
++        }
++
++        /** Displace: thin bands of rows slip sideways and the red channel lags behind. */
++        fun displaceRow(y: Int) {
++            val bandHeight = max(2, (shortSide * (0.004f + 0.04f * size)).roundToInt())
++            val band = y / bandHeight
++            val reach = (width * 0.08f * amount).roundToInt()
++            val shift = if (hash(band, seed, 31) % 3 == 0) hash(band, seed, 37) % (2 * reach + 1) - reach else 0
++            val lag = max(1, (amount * shortSide * 0.006f).roundToInt())
++            for (x in 0 until width) out.pixels[y * width + x] = split(x - shift + lag, x - shift, x - shift, y)
++        }
++
++        private fun at(
++            x: Int,
++            y: Int,
++        ): Int = source.pixels[wrap(y, height) * width + wrap(x, width)]
++
++        /** A pixel whose red, green and blue come from different columns of row [y]; see [ChromaticAberration.combine]. */
++        private fun split(
++            redX: Int,
++            greenX: Int,
++            blueX: Int,
++            y: Int,
++        ): Int {
++            val row = wrap(y, height) * width
++            return ChromaticAberration.combine(
++                source.pixels[row + wrap(redX, width)],
++                source.pixels[row + wrap(greenX, width)],
++                source.pixels[row + wrap(blueX, width)],
++            )
++        }
++
++        private fun shade(
++            pixel: Int,
++            dim: Float,
++            flare: Float,
++        ): Int =
++            Channels.argb(
++                pixel ushr 24,
++                (((pixel shr 16) and 0xFF) * dim + flare).roundToInt().coerceIn(0, 255),
++                (((pixel shr 8) and 0xFF) * dim + flare).roundToInt().coerceIn(0, 255),
++                ((pixel and 0xFF) * dim + flare).roundToInt().coerceIn(0, 255),
++            )
++    }
++
++    private fun wrap(
++        value: Int,
++        size: Int,
++    ): Int = ((value % size) + size) % size
++}
+diff --git a/app/src/main/java/com/artflow/studio/core/pixels/GradientMap.kt b/app/src/main/java/com/artflow/studio/core/pixels/GradientMap.kt
+new file mode 100644
+index 0000000..884ca38
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/core/pixels/GradientMap.kt
+@@ -0,0 +1,135 @@
++package com.artflow.studio.core.pixels
++
++import com.artflow.studio.core.tool.GradientTool
++import com.artflow.studio.core.tool.GradientTool.Gradient
++import com.artflow.studio.core.tool.GradientTool.Stop
++import kotlin.math.abs
++import kotlin.math.roundToInt
++
++/**
++ * Procreate's Gradient Map: every pixel takes the colour a gradient has at the pixel's luminance, dark pixels from the
++ * left end and light pixels from the right, and keeps its own alpha.
++ *
++ * An adjustment's parameter map stores the gradient as `gradient_stops` (the stop count, 2..16) and, for each stop i
++ * below the count, `gradient_<i>_position` (0..1) and `gradient_<i>_rgb` (its opaque colour as 0xRRGGBB, which a Float
++ * holds exactly). Keys at or past the count are ignored, so deleting a stop only lowers the count. A map without
++ * `gradient_stops` is the original two-hue map (`gradient_start_hue`, `gradient_end_hue`) and renders as it always did.
++ */
++object GradientMap {
++    const val STOPS = "gradient_stops"
++    const val LEGACY_START_HUE = "gradient_start_hue"
++    const val LEGACY_END_HUE = "gradient_end_hue"
++    const val MAX_STOPS = GradientTool.MAX_STOPS
++    private const val MIN_STOPS = 2
++    private const val RGB_MAX = 0xFFFFFF.toFloat()
++
++    /** Entries in the colour table over luminance: finer than 8 bits so smooth ramps do not band. */
++    const val TABLE_SIZE = 1024
++
++    fun positionKey(index: Int): String = "gradient_${index}_position"
++
++    fun colorKey(index: Int): String = "gradient_${index}_rgb"
++
++    /** The built-in gradients, darkest stop first. Their names are stable identifiers the interface translates. */
++    val LIBRARY: List<Gradient> =
++        listOf(
++            gradient("Noir", 0f to 0x000000, 1f to 0xFFFFFF),
++            gradient("Sepia", 0f to 0x1E120A, 0.45f to 0x7D5A3C, 0.8f to 0xCDB08A, 1f to 0xF6ECD6),
++            gradient("Midnight", 0f to 0x050A1F, 0.5f to 0x2A4A8C, 1f to 0xD6E6FF),
++            gradient("Rose Duotone", 0f to 0x2B0F3A, 1f to 0xFFB7C9),
++            gradient("Teal Duotone", 0f to 0x0B2027, 1f to 0x9EF0E0),
++            gradient("Sunset", 0f to 0x1B0A33, 0.35f to 0xB5297A, 0.7f to 0xF26B38, 1f to 0xFFE08A),
++            gradient(
++                "Thermal",
++                0f to 0x000000,
++                0.25f to 0x2A12A8,
++                0.5f to 0xC2187A,
++                0.75f to 0xFF7A00,
++                0.92f to 0xFFE14D,
++                1f to 0xFFFFFF,
++            ),
++            gradient("Cool", 0f to 0x08162B, 0.5f to 0x2E8B9A, 1f to 0xE8F7FF),
++            gradient("Warm", 0f to 0x2A0E0A, 0.5f to 0xD9822B, 1f to 0xFFF1D6),
++            gradient("Neon", 0f to 0x14002B, 0.5f to 0xFF2E97, 1f to 0x3CF5FF),
++            gradient("Ocean", 0f to 0x02111B, 0.35f to 0x0B3954, 0.7f to 0x087E8B, 1f to 0xBFD7EA),
++            gradient("Forest", 0f to 0x0B1A0E, 0.4f to 0x2F5D34, 0.75f to 0x9BBF6A, 1f to 0xF0F5D8),
++            gradient("Golden Hour", 0f to 0x1E0F1C, 0.35f to 0x7A2E3A, 0.7f to 0xE08A3C, 1f to 0xFFE7A8),
++            gradient("Cyanotype", 0f to 0x062A4D, 0.55f to 0x2F6F9F, 1f to 0xEAF4F8),
++            gradient("Synthwave", 0f to 0x2B1055, 0.45f to 0xD53A9D, 0.75f to 0xFFB86C, 1f to 0xF9F871),
++            gradient("Vintage", 0f to 0x2E2A24, 0.4f to 0x8C7A5B, 0.75f to 0xD8C7A0, 1f to 0xF4EDE0),
++        )
++
++    /** A new Gradient Map starts as Noir, which has the same numbers in every colour profile. */
++    val DEFAULT_PARAMETERS: Map<String, Float> = encode(LIBRARY.first())
++
++    /** Every key a Gradient Map map may hold, the original two hues included. */
++    val PARAMETER_RANGES: Map<String, ClosedFloatingPointRange<Float>> =
++        buildMap {
++            put(LEGACY_START_HUE, 0f..360f)
++            put(LEGACY_END_HUE, 0f..360f)
++            put(STOPS, MIN_STOPS.toFloat()..MAX_STOPS.toFloat())
++            for (index in 0 until MAX_STOPS) {
++                put(positionKey(index), 0f..1f)
++                put(colorKey(index), 0f..RGB_MAX)
++            }
++        }
++
++    /** Parameter entries for [gradient]; stop colours lose their alpha, as a gradient map's colours are opaque. */
++    fun encode(gradient: Gradient): Map<String, Float> {
++        val stops = gradient.sortedStops
++        val entries = LinkedHashMap<String, Float>()
++        entries[STOPS] = stops.size.toFloat()
++        stops.forEachIndexed { index, stop ->
++            entries[positionKey(index)] = stop.position.coerceIn(0f, 1f)
++            entries[colorKey(index)] = (stop.color and 0xFFFFFF).toFloat()
++        }
++        return entries
++    }
++
++    /** The gradient stored in [parameters], or null when they hold the original two-hue map. */
++    fun decode(parameters: Map<String, Float>): Gradient? {
++        val count = parameters[STOPS]?.takeIf { it.isFinite() }?.roundToInt() ?: return null
++        if (count !in MIN_STOPS..MAX_STOPS) return null
++        val stops = ArrayList<Stop>(count)
++        for (index in 0 until count) {
++            val position = parameters[positionKey(index)]?.takeIf { it.isFinite() }
++            val rgb = parameters[colorKey(index)]?.takeIf { it.isFinite() }
++            if (position == null || rgb == null) return null
++            stops += Stop(position.coerceIn(0f, 1f), ALPHA or rgb.coerceIn(0f, RGB_MAX).roundToInt())
++        }
++        return Gradient("", GradientTool.GradientType.LINEAR, stops.sortedBy { it.position })
++    }
++
++    /** Colours (opaque ARGB) of [gradient] at [TABLE_SIZE] even steps from its dark end to its light end. */
++    fun table(gradient: Gradient): IntArray {
++        val sorted = Gradient(gradient.name, gradient.type, gradient.sortedStops)
++        return IntArray(TABLE_SIZE) { ALPHA or sorted.colorAt(it / (TABLE_SIZE - 1f)) }
++    }
++
++    /** [pixel] recoloured from [table] by its luminance, keeping its alpha. */
++    fun map(
++        pixel: Int,
++        table: IntArray,
++    ): Int {
++        val index = (Channels.luminance(pixel) * (TABLE_SIZE - 1)).roundToInt().coerceIn(0, TABLE_SIZE - 1)
++        return (pixel and ALPHA) or (table[index] and 0xFFFFFF)
++    }
++
++    /** True when [gradient] has the same stops as [other], ignoring names. */
++    fun sameStops(
++        gradient: Gradient,
++        other: Gradient,
++    ): Boolean {
++        val a = gradient.sortedStops
++        val b = other.sortedStops
++        return a.size == b.size &&
++            a.indices.all { (a[it].color and 0xFFFFFF) == (b[it].color and 0xFFFFFF) && abs(a[it].position - b[it].position) < 1e-4f }
++    }
++
++    private fun gradient(
++        name: String,
++        vararg stops: Pair<Float, Int>,
++    ): Gradient = Gradient(name, GradientTool.GradientType.LINEAR, stops.map { (position, rgb) -> Stop(position, ALPHA or rgb) })
++
++    private const val ALPHA = 0xFF000000.toInt()
++}
+diff --git a/app/src/main/java/com/artflow/studio/core/pixels/HalftoneEffect.kt b/app/src/main/java/com/artflow/studio/core/pixels/HalftoneEffect.kt
+new file mode 100644
+index 0000000..7ca632d
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/core/pixels/HalftoneEffect.kt
+@@ -0,0 +1,271 @@
++package com.artflow.studio.core.pixels
++
++import com.artflow.studio.core.pixels.AdjustmentOptions.HalftoneMode
++import kotlin.math.PI
++import kotlin.math.acos
++import kotlin.math.cos
++import kotlin.math.floor
++import kotlin.math.max
++import kotlin.math.min
++import kotlin.math.roundToInt
++import kotlin.math.sin
++import kotlin.math.sqrt
++
++/**
++ * Procreate's Halftone. Full Colour prints cyan, magenta, yellow and black dot screens at their classic angles (15, 75,
++ * 0 and 45 degrees); Screen Print prints one 45-degree screen whose dots are each spot's own ink colour; Newspaper prints
++ * black dots at 45 degrees. A dot covers as much of its cell as the ink it stands for, its edge is anti-aliased (Sharpness
++ * sets how soft), and the layer keeps its alpha. The amount sets the dot size.
++ */
++internal object HalftoneEffect {
++    /** Dot spacing as a fraction of the canvas's shorter side at amount 0, and the extra at amount 1. */
++    private const val SMALLEST_CELL = 0.006f
++    private const val CELL_RANGE = 0.04f
++
++    /** Edge softness in pixels at full Sharpness, and as a fraction of the cell at none. */
++    private const val CRISP_EDGE = 0.6f
++    private const val SOFT_EDGE = 0.45f
++
++    private val SQRT_HALF = sqrt(0.5f)
++
++    /** Dot radius (in cells) whose share of its cell is i / 255. */
++    private val RADII = FloatArray(256) { radiusFor(it / 255f) }
++
++    fun apply(
++        source: PixelBuffer,
++        amount: Float,
++        mode: HalftoneMode,
++        sharpness: Float,
++        checkpoint: () -> Unit,
++    ): PixelBuffer {
++        val cell = max(3f, min(source.width, source.height) * (SMALLEST_CELL + CELL_RANGE * amount.coerceIn(0f, 1f)))
++        val softness = CRISP_EDGE + (SOFT_EDGE * cell - CRISP_EDGE) * (1f - sharpness.coerceIn(0f, 1f))
++        val factor = max(1, (cell / 2f).toInt())
++        val average = ColorPlanes.downsample(source, factor, checkpoint)
++        val screens = inksFor(mode).map { Screen(source.width, source.height, cell, it, average, factor, checkpoint) }
++        val coverage = FloatArray(screens.size)
++        val out = PixelBuffer(source.width, source.height)
++        for (y in 0 until source.height) {
++            checkpoint()
++            for (x in 0 until source.width) {
++                val index = y * source.width + x
++                val alpha = source.pixels[index] ushr 24
++                if (alpha == 0) continue
++                for (s in screens.indices) coverage[s] = screens[s].coverage(x + 0.5f, y + 0.5f, softness)
++                out.pixels[index] = print(mode, coverage, screens[0].dotColour, alpha)
++            }
++        }
++        return out
++    }
++
++    /** The ink a dot screen prints and the angle of its rows. */
++    private enum class Ink(
++        val angleDegrees: Float,
++    ) {
++        CYAN(15f),
++        MAGENTA(75f),
++        YELLOW(0f),
++        BLACK(45f),
++        SPOT(45f),
++        GREY(45f),
++        ;
++
++        /** How much of this ink a colour (straight red, green, blue in 0..1) needs, with black replacing the shared grey. */
++        fun amount(
++            r: Float,
++            g: Float,
++            b: Float,
++        ): Float {
++            val brightest = max(r, max(g, b))
++            return when (this) {
++                CYAN -> brightest - r
++                MAGENTA -> brightest - g
++                YELLOW -> brightest - b
++                BLACK -> 1f - brightest
++                SPOT -> 1f - min(r, min(g, b))
++                GREY -> 1f - (0.2126f * r + 0.7152f * g + 0.0722f * b)
++            }
++        }
++    }
++
++    private fun inksFor(mode: HalftoneMode): List<Ink> =
++        when (mode) {
++            HalftoneMode.FULL_COLOUR -> listOf(Ink.CYAN, Ink.MAGENTA, Ink.YELLOW, Ink.BLACK)
++            HalftoneMode.SCREEN_PRINT -> listOf(Ink.SPOT)
++            HalftoneMode.NEWSPAPER -> listOf(Ink.GREY)
++        }
++
++    /** The printed colour of one pixel from its screens' dot coverage, over white paper. */
++    private fun print(
++        mode: HalftoneMode,
++        coverage: FloatArray,
++        spot: Int,
++        alpha: Int,
++    ): Int =
++        when (mode) {
++            HalftoneMode.FULL_COLOUR -> {
++                val paper = 1f - coverage[3]
++                rgb(alpha, (1f - coverage[0]) * paper, (1f - coverage[1]) * paper, (1f - coverage[2]) * paper)
++            }
++            HalftoneMode.NEWSPAPER -> {
++                val paper = 1f - coverage[0]
++                rgb(alpha, paper, paper, paper)
++            }
++            HalftoneMode.SCREEN_PRINT -> {
++                val ink = coverage[0]
++                rgb(
++                    alpha,
++                    1f - ink * (1f - ((spot shr 16) and 0xFF) / 255f),
++                    1f - ink * (1f - ((spot shr 8) and 0xFF) / 255f),
++                    1f - ink * (1f - (spot and 0xFF) / 255f),
++                )
++            }
++        }
++
++    private fun rgb(
++        alpha: Int,
++        r: Float,
++        g: Float,
++        b: Float,
++    ): Int = Channels.argb(alpha, (r * 255f).roundToInt(), (g * 255f).roundToInt(), (b * 255f).roundToInt())
++
++    /** Share of a unit cell covered by a centred dot of radius [r] (dots of neighbouring cells meet past 0.5). */
++    private fun area(r: Float): Float =
++        when {
++            r <= 0.5f -> PI.toFloat() * r * r
++            r >= SQRT_HALF -> 1f
++            else -> PI.toFloat() * r * r - 4f * (r * r * acos(0.5f / r) - 0.5f * sqrt(r * r - 0.25f))
++        }
++
++    private fun radiusFor(share: Float): Float {
++        var low = 0f
++        var high = SQRT_HALF
++        repeat(32) {
++            val middle = (low + high) / 2f
++            if (area(middle) < share) low = middle else high = middle
++        }
++        return (low + high) / 2f
++    }
++
++    /** Dot radius, in cells, for [ink] (0..1). */
++    private fun radius(ink: Float): Float = RADII[(ink.coerceIn(0f, 1f) * 255f).roundToInt()]
++
++    /**
++     * One rotated dot screen over the canvas. Each cell's dot size (and, for spot colour, its colour) is worked out once
++     * from the layer's average colour at the cell's centre; a pixel then takes the strongest of its four nearest dots.
++     */
++    private class Screen(
++        width: Int,
++        height: Int,
++        private val cell: Float,
++        ink: Ink,
++        average: ColorPlanes,
++        factor: Int,
++        checkpoint: () -> Unit,
++    ) {
++        private val cos = cos(Math.toRadians(ink.angleDegrees.toDouble())).toFloat()
++        private val sin = sin(Math.toRadians(ink.angleDegrees.toDouble())).toFloat()
++        private val firstColumn: Int
++        private val firstRow: Int
++        private val columns: Int
++        private val rows: Int
++        private val radii: FloatArray
++        private val colours: IntArray?
++
++        /** The colour of the dot that won the last [coverage] call; spot screens only. */
++        var dotColour = 0
++            private set
++
++        init {
++            val us = floatArrayOf(0f, width * cos, height * sin, width * cos + height * sin)
++            val vs = floatArrayOf(0f, -width * sin, height * cos, -width * sin + height * cos)
++            firstColumn = floor(us.min() / cell).toInt() - 1
++            firstRow = floor(vs.min() / cell).toInt() - 1
++            columns = floor(us.max() / cell).toInt() + 2 - firstColumn
++            rows = floor(vs.max() / cell).toInt() + 2 - firstRow
++            radii = FloatArray(columns * rows)
++            colours = if (ink == Ink.SPOT) IntArray(columns * rows) else null
++            val sample = FloatArray(4)
++            for (row in 0 until rows) {
++                checkpoint()
++                for (column in 0 until columns) {
++                    val u = (firstColumn + column + 0.5f) * cell
++                    val v = (firstRow + row + 0.5f) * cell
++                    average.sample((u * cos - v * sin) / factor, (u * sin + v * cos) / factor, sample)
++                    measure(row * columns + column, ink, sample)
++                }
++            }
++        }
++
++        private fun measure(
++            index: Int,
++            ink: Ink,
++            sample: FloatArray,
++        ) {
++            val alpha = sample[3]
++            if (alpha <= 1f / 255f) return
++            val r = (sample[0] / alpha).coerceIn(0f, 1f)
++            val g = (sample[1] / alpha).coerceIn(0f, 1f)
++            val b = (sample[2] / alpha).coerceIn(0f, 1f)
++            val amount = ink.amount(r, g, b)
++            radii[index] = cell * radius(amount)
++            colours?.set(index, spotColour(r, g, b, amount))
++        }
++
++        /** The ink colour whose dots, covering [amount] of white paper, average to ([r], [g], [b]). */
++        private fun spotColour(
++            r: Float,
++            g: Float,
++            b: Float,
++            amount: Float,
++        ): Int {
++            if (amount <= 1e-3f) return 0xFFFFFF
++
++            fun channel(value: Float): Int = ((1f - (1f - value) / amount).coerceIn(0f, 1f) * 255f).roundToInt()
++            return (channel(r) shl 16) or (channel(g) shl 8) or channel(b)
++        }
++
++        /** How much of the pixel centred at ([x], [y]) the screen's dots cover, 0..1. */
++        fun coverage(
++            x: Float,
++            y: Float,
++            softness: Float,
++        ): Float {
++            val u = (x * cos + y * sin) / cell - firstColumn
++            val v = (-x * sin + y * cos) / cell - firstRow
++            val column = floor(u).toInt()
++            val row = floor(v).toInt()
++            val du = u - column - 0.5f
++            val dv = v - row - 0.5f
++            val stepU = if (du >= 0f) 1 else -1
++            val stepV = if (dv >= 0f) 1 else -1
++            var best = 0f
++            var winner = -1
++            for (k in 0 until 4) {
++                val c = column + (k and 1) * stepU
++                val r = row + (k shr 1) * stepV
++                val index = if (c in 0 until columns && r in 0 until rows) r * columns + c else -1
++                val dot = if (index < 0) 0f else dot(radii[index], du - (k and 1) * stepU, dv - (k shr 1) * stepV, softness)
++                if (dot > best) {
++                    best = dot
++                    winner = index
++                }
++            }
++            if (colours != null && winner >= 0) dotColour = colours[winner]
++            return best
++        }
++
++        /** Coverage of a dot of [radius] pixels at offset ([du], [dv]) cells, faded out while it is smaller than its edge. */
++        private fun dot(
++            radius: Float,
++            du: Float,
++            dv: Float,
++            softness: Float,
++        ): Float {
++            if (radius <= 0f) return 0f
++            val distance = sqrt(du * du + dv * dv) * cell
++            val edge = ((radius - distance) / softness + 0.5f).coerceIn(0f, 1f)
++            return edge * min(1f, 2f * radius / softness)
++        }
++    }
++}
+diff --git a/app/src/main/java/com/artflow/studio/core/pixels/ImageFilters.kt b/app/src/main/java/com/artflow/studio/core/pixels/ImageFilters.kt
+index 81a8801..42226fd 100644
+--- a/app/src/main/java/com/artflow/studio/core/pixels/ImageFilters.kt
++++ b/app/src/main/java/com/artflow/studio/core/pixels/ImageFilters.kt
+@@ -115,32 +115,36 @@ object ImageFilters {
+ 
+     /**
+      * Additive noise. [seed] keeps the result deterministic, which matters for tests and for the
+-     * live preview matching the committed pixels.
++     * live preview matching the committed pixels. [checkpoint] runs once per row.
+      */
+     fun addNoise(
+         source: PixelBuffer,
+         amount: Float,
+         monochrome: Boolean = true,
+         seed: Long = 1234L,
++        checkpoint: () -> Unit = {},
+     ): PixelBuffer {
+         if (amount <= 0f) return source.copy()
+         val out = source.copy()
+         val random = java.util.Random(seed)
+         val scale = amount * 255f
+-        for (i in out.pixels.indices) {
+-            val pixel = source.pixels[i]
+-            if ((pixel ushr 24) == 0) continue
+-            val noise = (random.nextFloat() - 0.5f) * scale
+-            val nr = if (monochrome) noise else (random.nextFloat() - 0.5f) * scale
+-            val ng = if (monochrome) noise else (random.nextFloat() - 0.5f) * scale
+-            val nb = if (monochrome) noise else (random.nextFloat() - 0.5f) * scale
+-            out.pixels[i] =
+-                Channels.argb(
+-                    Channels.alpha(pixel).toInt(),
+-                    clampByte(Channels.red(pixel) + nr),
+-                    clampByte(Channels.green(pixel) + ng),
+-                    clampByte(Channels.blue(pixel) + nb),
+-                )
++        for (y in 0 until source.height) {
++            checkpoint()
++            for (i in y * source.width until (y + 1) * source.width) {
++                val pixel = source.pixels[i]
++                if ((pixel ushr 24) == 0) continue
++                val noise = (random.nextFloat() - 0.5f) * scale
++                val nr = if (monochrome) noise else (random.nextFloat() - 0.5f) * scale
++                val ng = if (monochrome) noise else (random.nextFloat() - 0.5f) * scale
++                val nb = if (monochrome) noise else (random.nextFloat() - 0.5f) * scale
++                out.pixels[i] =
++                    Channels.argb(
++                        Channels.alpha(pixel).toInt(),
++                        clampByte(Channels.red(pixel) + nr),
++                        clampByte(Channels.green(pixel) + ng),
++                        clampByte(Channels.blue(pixel) + nb),
++                    )
++            }
+         }
+         return out
+     }
+diff --git a/app/src/main/java/com/artflow/studio/core/pixels/LiveAdjustments.kt b/app/src/main/java/com/artflow/studio/core/pixels/LiveAdjustments.kt
+index 91412fe..794578e 100644
+--- a/app/src/main/java/com/artflow/studio/core/pixels/LiveAdjustments.kt
++++ b/app/src/main/java/com/artflow/studio/core/pixels/LiveAdjustments.kt
+@@ -2,9 +2,10 @@ package com.artflow.studio.core.pixels
+ 
+ import com.artflow.studio.domain.model.Color
+ import com.artflow.studio.domain.model.layer.AdjustmentType
+-import kotlin.math.max
+-import kotlin.math.min
++import kotlin.math.cos
++import kotlin.math.hypot
+ import kotlin.math.roundToInt
++import kotlin.math.sin
+ import kotlin.math.sqrt
+ 
+ /**
+@@ -37,7 +38,10 @@ object LiveAdjustments {
+         PERSPECTIVE_BLUR("Perspective Blur", false, usesPoint = true),
+     }
+ 
+-    /** Settings for one preview or commit. [angleDegrees] orients Motion Blur. */
++    /**
++     * Settings for one preview or commit. [parameters] hold colour adjustments' values and the modes and sliders of
++     * [AdjustmentOptions]; [angleDegrees] orients Motion Blur and Chromatic Aberration's Displace.
++     */
+     data class Settings(
+         val amount: Float,
+         val parameters: Map<String, Float> = emptyMap(),
+@@ -60,11 +64,11 @@ object LiveAdjustments {
+         val type = kind.adjustmentType
+         val filtered =
+             when {
+-                type != null -> AdjustmentProcessor.apply(source, type, settings.parameters)
++                type != null -> AdjustmentProcessor.apply(source, type, settings.parameters, checkpoint = checkpoint)
+                 kind == Kind.RECOLOR -> recolor(source, settings)
+-                kind == Kind.PERSPECTIVE_BLUR -> perspectiveBlur(source, settings)
++                kind == Kind.PERSPECTIVE_BLUR -> perspectiveBlur(source, settings, checkpoint)
+                 amount <= 0f -> source.copy()
+-                else -> filter(kind, source, amount, settings.angleDegrees, checkpoint)
++                else -> filter(kind, source, settings.copy(amount = amount), checkpoint)
+             }
+         if (alphaLocked) {
+             // An alpha-locked layer keeps its transparency: an effect may change colour, never coverage.
+@@ -84,22 +88,22 @@ object LiveAdjustments {
+     private fun filter(
+         kind: Kind,
+         source: PixelBuffer,
+-        amount: Float,
+-        angle: Float,
++        settings: Settings,
+         checkpoint: () -> Unit,
+-    ): PixelBuffer =
+-        when (kind) {
++    ): PixelBuffer {
++        val amount = settings.amount
++        return when (kind) {
+             Kind.GAUSSIAN_BLUR -> ImageFilters.gaussianBlur(source, amount * MAX_BLUR_RADIUS, checkpoint)
+-            Kind.MOTION_BLUR -> ImageFilters.motionBlur(source, amount * MAX_MOTION_DISTANCE, angle, checkpoint)
+-            Kind.NOISE -> ImageFilters.addNoise(source, amount, monochrome = true)
++            Kind.MOTION_BLUR -> ImageFilters.motionBlur(source, amount * MAX_MOTION_DISTANCE, settings.angleDegrees, checkpoint)
++            Kind.NOISE -> noise(source, settings, checkpoint)
+             Kind.SHARPEN -> ImageFilters.sharpen(source, amount * 2f)
+-            Kind.CHROMATIC_ABERRATION ->
+-                ImageFilters.chromaticAberration(source, amount * MAX_ABERRATION, source.width / 2f, source.height / 2f)
+-            Kind.BLOOM -> bloom(source, amount)
+-            Kind.GLITCH -> glitch(source, amount)
+-            Kind.HALFTONE -> halftone(source, amount)
++            Kind.CHROMATIC_ABERRATION -> aberration(source, settings, checkpoint)
++            Kind.BLOOM -> bloom(source, amount, settings.parameters, checkpoint)
++            Kind.GLITCH -> glitch(source, settings, checkpoint)
++            Kind.HALFTONE -> halftone(source, settings, checkpoint)
+             else -> source.copy()
+         }
++    }
+ 
+     /**
+      * Procreate's Recolor: the area around the crosshair (`x`, `y` parameters) whose colour is within
+@@ -133,44 +137,75 @@ object LiveAdjustments {
+     }
+ 
+     /**
+-     * Procreate's positional Perspective Blur: everything streaks toward the focus point (`x`, `y`
+-     * parameters, the centre by default), more strongly the farther it is from it.
++     * Procreate's Perspective Blur around the focus point (`x`, `y` parameters, the centre by default). Positional
++     * streaks everything toward the point; Directional streaks along one angle (`perspective_angle`). Either way the
++     * streaks grow with the distance from the point, so it stays sharp.
+      */
+     fun perspectiveBlur(
+         source: PixelBuffer,
+         settings: Settings,
++        checkpoint: () -> Unit = {},
+     ): PixelBuffer {
+         val amount = settings.amount.coerceIn(0f, 1f)
+         if (amount <= 0f) return source.copy()
+-        val cx = settings.parameters[RECOLOR_X] ?: (source.width / 2f)
+-        val cy = settings.parameters[RECOLOR_Y] ?: (source.height / 2f)
++        val cx = point(settings.parameters, RECOLOR_X, source.width)
++        val cy = point(settings.parameters, RECOLOR_Y, source.height)
+         val reach = amount * MAX_PERSPECTIVE_PULL
++        val directional = AdjustmentOptions.perspectiveMode(settings.parameters) == AdjustmentOptions.PerspectiveMode.DIRECTIONAL
++        val angle = AdjustmentOptions.value(Kind.PERSPECTIVE_BLUR, settings.parameters, AdjustmentOptions.PERSPECTIVE_ANGLE)
++        val radians = Math.toRadians(angle.toDouble())
++        val ux = cos(radians).toFloat()
++        val uy = sin(radians).toFloat()
+         val out = PixelBuffer(source.width, source.height)
+         for (y in 0 until source.height) {
++            checkpoint()
+             for (x in 0 until source.width) {
+-                out.pixels[y * source.width + x] = streak(source, x + 0.5f, y + 0.5f, (cx - x - 0.5f) * reach, (cy - y - 0.5f) * reach)
++                val px = x + 0.5f
++                val py = y + 0.5f
++                // A different start along the streak for every pixel turns the taps' ghost copies into fine grain.
++                val jitter = PixelHash.unit(PixelHash.hash(x, y, PERSPECTIVE_SEED))
++                out.pixels[y * source.width + x] =
++                    if (directional) {
++                        val length = hypot(cx - px, cy - py) * reach
++                        streak(source, px - ux * length / 2f, py - uy * length / 2f, ux * length, uy * length, jitter)
++                    } else {
++                        streak(source, px, py, (cx - px) * reach, (cy - py) * reach, jitter)
++                    }
+             }
+         }
+         return out
+     }
+ 
+-    /** Average of samples along a line from (px, py) by (dx, dy), weighted by alpha so edges stay clean. */
++    /** A point coordinate from [parameters], or the middle of [extent] when it is missing or not finite. */
++    private fun point(
++        parameters: Map<String, Float>,
++        key: String,
++        extent: Int,
++    ): Float = parameters[key]?.takeIf { it.isFinite() } ?: (extent / 2f)
++
++    /**
++     * Average of samples along a line from (px, py) by (dx, dy), weighted by alpha so edges stay clean. [jitter] (0..1)
++     * shifts where the taps fall; taps beyond the canvas repeat its edge.
++     */
+     private fun streak(
+         source: PixelBuffer,
+         px: Float,
+         py: Float,
+         dx: Float,
+         dy: Float,
++        jitter: Float,
+     ): Int {
+         // Short streaks near the focus need only a few taps; long ones far away use the most.
+         val count = ((sqrt(dx * dx + dy * dy) / PERSPECTIVE_TAP_SPACING).toInt() + 1).coerceAtMost(PERSPECTIVE_SAMPLES)
++        val right = source.width - 0.5f
++        val bottom = source.height - 0.5f
+         var a = 0f
+         var r = 0f
+         var g = 0f
+         var b = 0f
+         for (k in 0 until count) {
+-            val t = k / count.toFloat()
+-            val sample = source.sampleNearest(px + dx * t, py + dy * t)
++            val t = (k + if (count > 1) jitter else 0f) / count.toFloat()
++            val sample = source.sampleNearest((px + dx * t).coerceIn(0f, right), (py + dy * t).coerceIn(0f, bottom))
+             val alpha = (sample ushr 24) / 255f
+             a += alpha
+             r += ((sample shr 16) and 0xFF) * alpha
+@@ -190,130 +225,101 @@ object LiveAdjustments {
+     const val RECOLOR_Y = "y"
+     const val RECOLOR_RGB = "rgb"
+ 
+-    /** Bright areas glow: a blurred bright pass is screened back over the image. */
++    /** Procreate's Bloom: see [BloomEffect]; Transition, Size and Burn come from [parameters]. */
+     fun bloom(
+         source: PixelBuffer,
+         amount: Float,
++        parameters: Map<String, Float> = emptyMap(),
++        checkpoint: () -> Unit = {},
+     ): PixelBuffer {
+-        val bright = PixelBuffer(source.width, source.height)
+-        for (i in source.pixels.indices) {
+-            val p = source.pixels[i]
+-            val excess = ((Channels.luminance(p) - BLOOM_THRESHOLD) / (1f - BLOOM_THRESHOLD)).coerceIn(0f, 1f)
+-            bright.pixels[i] = Channels.scaleAlpha(p, excess)
+-        }
+-        val glow = ImageFilters.gaussianBlur(bright, 4f + amount * MAX_BLOOM_RADIUS)
+-        val out = source.copy()
+-        for (i in out.pixels.indices) {
+-            val g = glow.pixels[i]
+-            val strength = Channels.alpha(g) / 255f * amount * 1.5f
+-            if (strength > 0f) out.pixels[i] = screen(out.pixels[i], g, strength.coerceAtMost(1f))
+-        }
+-        return out
+-    }
++        if (amount <= 0f) return source.copy()
+ 
+-    private fun screen(
+-        base: Int,
+-        light: Int,
+-        strength: Float,
+-    ): Int {
+-        fun channel(shift: Int): Int {
+-            val b = (base shr shift) and 0xFF
+-            val l = (light shr shift) and 0xFF
+-            val screened = 255 - (255 - b) * (255 - l) / 255
+-            return (b + (screened - b) * strength).roundToInt().coerceIn(0, 255)
+-        }
+-        val alpha = max((base ushr 24) and 0xFF, ((light ushr 24) * strength).roundToInt())
+-        return Channels.argb(alpha, channel(16), channel(8), channel(0))
++        fun option(key: String) = AdjustmentOptions.value(Kind.BLOOM, parameters, key)
++        return BloomEffect.apply(
++            source,
++            amount.coerceIn(0f, 1f),
++            option(AdjustmentOptions.BLOOM_TRANSITION),
++            option(AdjustmentOptions.BLOOM_SIZE),
++            option(AdjustmentOptions.BLOOM_BURN),
++            checkpoint,
++        )
+     }
+ 
+-    /** Digital corruption: bands of rows slip sideways and the red channel separates. */
+-    fun glitch(
++    private fun glitch(
+         source: PixelBuffer,
+-        amount: Float,
++        settings: Settings,
++        checkpoint: () -> Unit,
+     ): PixelBuffer {
+-        val out = PixelBuffer(source.width, source.height)
+-        val maxShift = (source.width * 0.08f * amount).roundToInt()
+-        val split = (8f * amount).roundToInt()
+-        for (y in 0 until source.height) {
+-            val band = y / GLITCH_BAND
+-            val shift = if (hash(band) % 3 == 0) (hash(band * 7 + 1) % (2 * maxShift + 1)) - maxShift else 0
+-            for (x in 0 until source.width) {
+-                val p = source.getSafe(x - shift, y)
+-                val red = source.getSafe(x - shift - split, y)
+-                out.pixels[y * source.width + x] = (p and 0xFF00FFFF.toInt()) or (red and 0x00FF0000)
+-            }
+-        }
+-        return out
++        val parameters = settings.parameters
++        return GlitchEffect.apply(
++            source,
++            settings.amount,
++            AdjustmentOptions.glitchMode(parameters),
++            AdjustmentOptions.value(Kind.GLITCH, parameters, AdjustmentOptions.GLITCH_SIZE),
++            AdjustmentOptions.glitchSeed(parameters),
++            checkpoint,
++        )
+     }
+ 
+-    /** Newsprint dots: each cell becomes a dot whose size follows the cell's darkness. */
+-    fun halftone(
++    private fun halftone(
+         source: PixelBuffer,
+-        amount: Float,
++        settings: Settings,
++        checkpoint: () -> Unit,
++    ): PixelBuffer =
++        HalftoneEffect.apply(
++            source,
++            settings.amount,
++            AdjustmentOptions.halftoneMode(settings.parameters),
++            AdjustmentOptions.value(Kind.HALFTONE, settings.parameters, AdjustmentOptions.HALFTONE_SHARPNESS),
++            checkpoint,
++        )
++
++    private fun aberration(
++        source: PixelBuffer,
++        settings: Settings,
++        checkpoint: () -> Unit,
+     ): PixelBuffer {
+-        val cell = (4 + amount * 16f).roundToInt().coerceAtLeast(2)
+-        val out = PixelBuffer(source.width, source.height)
+-        for (cy in 0 until source.height step cell) {
+-            for (cx in 0 until source.width step cell) {
+-                halftoneCell(source, out, cx, cy, cell)
+-            }
++        val parameters = settings.parameters
++        return when (AdjustmentOptions.aberrationMode(parameters)) {
++            AdjustmentOptions.AberrationMode.DISPLACE ->
++                ChromaticAberration.displace(source, settings.amount, settings.angleDegrees, checkpoint)
++            AdjustmentOptions.AberrationMode.PERSPECTIVE ->
++                ChromaticAberration.perspective(
++                    source,
++                    settings.amount,
++                    point(parameters, RECOLOR_X, source.width),
++                    point(parameters, RECOLOR_Y, source.height),
++                    AdjustmentOptions.value(Kind.CHROMATIC_ABERRATION, parameters, AdjustmentOptions.ABERRATION_FALLOFF),
++                    checkpoint,
++                )
+         }
+-        return out
+     }
+ 
+-    private fun halftoneCell(
++    private fun noise(
+         source: PixelBuffer,
+-        out: PixelBuffer,
+-        cx: Int,
+-        cy: Int,
+-        cell: Int,
+-    ) {
+-        val x1 = min(source.width, cx + cell)
+-        val y1 = min(source.height, cy + cell)
+-        var a = 0L
+-        var r = 0L
+-        var g = 0L
+-        var b = 0L
+-        var count = 0
+-        for (y in cy until y1) {
+-            for (x in cx until x1) {
+-                val p = source.pixels[y * source.width + x]
+-                a += (p ushr 24) and 0xFF
+-                r += (p shr 16) and 0xFF
+-                g += (p shr 8) and 0xFF
+-                b += p and 0xFF
+-                count++
+-            }
+-        }
+-        if (count == 0 || a == 0L) return
+-        val color = Channels.argb((a / count).toInt(), (r / count).toInt(), (g / count).toInt(), (b / count).toInt())
+-        val darkness = 1f - Channels.luminance(color)
+-        val radius = cell * 0.5f * sqrt(darkness.coerceIn(0.05f, 1f)) * 1.15f
+-        val centerX = cx + cell / 2f
+-        val centerY = cy + cell / 2f
+-        for (y in cy until y1) {
+-            for (x in cx until x1) {
+-                val dx = x + 0.5f - centerX
+-                val dy = y + 0.5f - centerY
+-                if (dx * dx + dy * dy <= radius * radius) out.pixels[y * source.width + x] = color
+-            }
+-        }
+-    }
++        settings: Settings,
++        checkpoint: () -> Unit,
++    ): PixelBuffer {
++        val parameters = settings.parameters
+ 
+-    private fun hash(value: Int): Int {
+-        var h = value * 374761393 + 668265263
+-        h = (h xor (h ushr 13)) * 1274126177
+-        return (h xor (h ushr 16)) and 0x7FFFFFFF
++        fun option(key: String) = AdjustmentOptions.value(Kind.NOISE, parameters, key)
++        val field =
++            NoiseEffect.Field(
++                source.width,
++                source.height,
++                option(AdjustmentOptions.NOISE_SCALE),
++                option(AdjustmentOptions.NOISE_OCTAVES).toInt(),
++                option(AdjustmentOptions.NOISE_ROUGHNESS),
++            )
++        val colour = option(AdjustmentOptions.NOISE_COLOUR) >= 1f
++        return NoiseEffect.apply(source, settings.amount, AdjustmentOptions.noiseMode(parameters), field, colour, checkpoint)
+     }
+ 
+     private const val MAX_BLUR_RADIUS = 60f
+     private const val MAX_MOTION_DISTANCE = 120f
+-    private const val MAX_BLOOM_RADIUS = 40f
+-    private const val BLOOM_THRESHOLD = 0.6f
+-    private const val GLITCH_BAND = 6
+-    private const val MAX_ABERRATION = 0.05f
+     private const val RECOLOR_MAX_TOLERANCE = 128f
+     private const val MAX_PERSPECTIVE_PULL = 0.35f
+     private const val PERSPECTIVE_SAMPLES = 16
+     private const val PERSPECTIVE_TAP_SPACING = 3f
++    private const val PERSPECTIVE_SEED = 7919
+ }
+diff --git a/app/src/main/java/com/artflow/studio/core/pixels/NoiseEffect.kt b/app/src/main/java/com/artflow/studio/core/pixels/NoiseEffect.kt
+new file mode 100644
+index 0000000..3c5193b
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/core/pixels/NoiseEffect.kt
+@@ -0,0 +1,253 @@
++package com.artflow.studio.core.pixels
++
++import com.artflow.studio.core.pixels.AdjustmentOptions.NoiseMode
++import kotlin.math.PI
++import kotlin.math.abs
++import kotlin.math.cos
++import kotlin.math.floor
++import kotlin.math.ln
++import kotlin.math.max
++import kotlin.math.min
++import kotlin.math.roundToInt
++import kotlin.math.sin
++
++/**
++ * Procreate-style Noise. Clouds, Billow and Ridges are fractal Perlin noise (several octaves, each twice as fine as the
++ * last and weaker by the Roughness factor): soft clouds, puffy billows, or sharp ridges. White is per-pixel grain. The
++ * fractal noise tiles: its lattice repeats exactly across the canvas, so the image's opposite edges join seamlessly.
++ * Grey noise moves all three channels together; colour noise gives each its own field. The amount sets the strength.
++ */
++internal object NoiseEffect {
++    /** Feature size as a fraction of the canvas's shorter side at Scale 0, and the extra at Scale 1 (squared). */
++    private const val FINEST_FEATURE = 0.01f
++    private const val FEATURE_RANGE = 0.5f
++
++    /** Octaves finer than this many pixels only alias, so they are left out. */
++    private const val FINEST_WAVELENGTH = 2f
++
++    /** The field is sampled on a grid this many times finer than the finest octave, then interpolated. */
++    private const val SAMPLES_PER_WAVELENGTH = 3f
++    private const val MAX_GRID_STEP = 16
++
++    /** Channel levels a full-strength noise value moves a pixel. */
++    private const val LEVELS = 140f
++
++    /** Average of |noise| and of the ridge shape, so Billow and Ridges neither darken nor lighten the image overall. */
++    private const val BILLOW_MEAN = 0.178f
++    private const val RIDGES_MEAN = 0.546f
++
++    private const val GRADIENTS = 16
++    private val GRADIENT_X = FloatArray(GRADIENTS) { cos(2.0 * PI * it / GRADIENTS).toFloat() }
++    private val GRADIENT_Y = FloatArray(GRADIENTS) { sin(2.0 * PI * it / GRADIENTS).toFloat() }
++
++    fun apply(
++        source: PixelBuffer,
++        amount: Float,
++        mode: NoiseMode,
++        field: Field,
++        colour: Boolean,
++        checkpoint: () -> Unit,
++    ): PixelBuffer {
++        if (mode == NoiseMode.WHITE) return ImageFilters.addNoise(source, amount, monochrome = !colour, checkpoint = checkpoint)
++        val channels = if (colour) 3 else 1
++        val sampler = GridSampler(source.width, field, mode, channels)
++        val out = source.copy()
++        val values = FloatArray(channels)
++        val strength = amount.coerceIn(0f, 1f) * LEVELS
++        for (y in 0 until source.height) {
++            checkpoint()
++            sampler.moveTo(y)
++            for (x in 0 until source.width) {
++                val index = y * source.width + x
++                val pixel = source.pixels[index]
++                if ((pixel ushr 24) == 0) continue
++                sampler.values(x, values)
++                out.pixels[index] = shift(pixel, values, strength)
++            }
++        }
++        return out
++    }
++
++    private fun shift(
++        pixel: Int,
++        values: FloatArray,
++        strength: Float,
++    ): Int {
++        val red = values[0] * strength
++        val green = values[min(1, values.size - 1)] * strength
++        val blue = values[min(2, values.size - 1)] * strength
++        return Channels.argb(
++            pixel ushr 24,
++            (((pixel shr 16) and 0xFF) + red).roundToInt().coerceIn(0, 255),
++            (((pixel shr 8) and 0xFF) + green).roundToInt().coerceIn(0, 255),
++            ((pixel and 0xFF) + blue).roundToInt().coerceIn(0, 255),
++        )
++    }
++
++    /**
++     * The fractal noise's settings for a canvas: the lattice cells across and down (so the field tiles), how many
++     * octaves are worth computing, and the weight of each octave relative to the one before.
++     */
++    class Field(
++        val width: Int,
++        val height: Int,
++        scale: Float,
++        octaves: Int,
++        roughness: Float,
++    ) {
++        val feature = min(width, height) * (FINEST_FEATURE + FEATURE_RANGE * scale.coerceIn(0f, 1f).let { it * it })
++        val cellsAcross = max(1, (width / feature).roundToInt())
++        val cellsDown = max(1, (height / feature).roundToInt())
++        val octaves = octaves.coerceIn(1, max(1, 1 + floor(ln(feature / FINEST_WAVELENGTH) / ln(2f)).toInt()))
++        val persistence = 0.25f + 0.5f * roughness.coerceIn(0f, 1f)
++
++        /** Grid spacing, in pixels, fine enough for the finest octave. */
++        val gridStep: Int = ((feature / (1 shl (this.octaves - 1))) / SAMPLES_PER_WAVELENGTH).toInt().coerceIn(1, MAX_GRID_STEP)
++
++        /** The fractal value at pixel position ([x], [y]) for [channel], roughly -1..1. */
++        fun value(
++            x: Float,
++            y: Float,
++            mode: NoiseMode,
++            channel: Int,
++        ): Float {
++            var sum = 0f
++            var weight = 1f
++            var total = 0f
++            var across = cellsAcross
++            var down = cellsDown
++            for (octave in 0 until octaves) {
++                val n = perlin(x / width * across, y / height * down, across, down, channel * 92821 + octave * 68917)
++                sum += weight * shape(n, mode)
++                total += weight
++                weight *= persistence
++                across *= 2
++                down *= 2
++            }
++            return finish(sum / total, mode)
++        }
++
++        private fun shape(
++            n: Float,
++            mode: NoiseMode,
++        ): Float =
++            when (mode) {
++                NoiseMode.BILLOW -> abs(n)
++                NoiseMode.RIDGES -> (1f - abs(n) * 1.6f).coerceAtLeast(0f).let { it * it }
++                else -> n
++            }
++
++        /** Centres each shape on zero (the averages measured over many fields) and scales it to about the same spread. */
++        private fun finish(
++            value: Float,
++            mode: NoiseMode,
++        ): Float =
++            when (mode) {
++                NoiseMode.BILLOW -> (value - BILLOW_MEAN) * 3.6f
++                NoiseMode.RIDGES -> (value - RIDGES_MEAN) * 1.8f
++                else -> value * 2.2f
++            }.coerceIn(-1f, 1f)
++    }
++
++    /**
++     * Samples a [Field] on a grid of [Field.gridStep] pixels and interpolates between grid rows, holding just two grid
++     * rows per channel, so memory stays proportional to the canvas width.
++     */
++    private class GridSampler(
++        width: Int,
++        private val field: Field,
++        private val mode: NoiseMode,
++        private val channels: Int,
++    ) {
++        private val step = field.gridStep
++        private val columns = width / step + 2
++        private var above = Array(channels) { FloatArray(columns) }
++        private var below = Array(channels) { FloatArray(columns) }
++        private var gridRow = -1
++        private var rowWeight = 0f
++
++        fun moveTo(y: Int) {
++            val row = y / step
++            if (row != gridRow) {
++                if (row == gridRow + 1) {
++                    val swap = above
++                    above = below
++                    below = swap
++                } else {
++                    fill(above, row)
++                }
++                fill(below, row + 1)
++                gridRow = row
++            }
++            rowWeight = (y - row * step) / step.toFloat()
++        }
++
++        fun values(
++            x: Int,
++            out: FloatArray,
++        ) {
++            val column = x / step
++            val t = (x - column * step) / step.toFloat()
++            for (c in 0 until channels) {
++                val top = above[c][column] + (above[c][column + 1] - above[c][column]) * t
++                val bottom = below[c][column] + (below[c][column + 1] - below[c][column]) * t
++                out[c] = top + (bottom - top) * rowWeight
++            }
++        }
++
++        private fun fill(
++            target: Array<FloatArray>,
++            row: Int,
++        ) {
++            val y = row * step + 0.5f
++            for (c in 0 until channels) {
++                for (column in 0 until columns) target[c][column] = field.value(column * step + 0.5f, y, mode, c)
++            }
++        }
++    }
++
++    /** Tileable 2D gradient noise: the lattice repeats every [periodX] by [periodY] cells. Roughly -0.7..0.7. */
++    fun perlin(
++        x: Float,
++        y: Float,
++        periodX: Int,
++        periodY: Int,
++        seed: Int,
++    ): Float {
++        val x0 = floor(x).toInt()
++        val y0 = floor(y).toInt()
++        val fx = x - x0
++        val fy = y - y0
++        val ix0 = wrap(x0, periodX)
++        val ix1 = wrap(x0 + 1, periodX)
++        val iy0 = wrap(y0, periodY)
++        val iy1 = wrap(y0 + 1, periodY)
++        val n00 = gradient(ix0, iy0, seed, fx, fy)
++        val n10 = gradient(ix1, iy0, seed, fx - 1f, fy)
++        val n01 = gradient(ix0, iy1, seed, fx, fy - 1f)
++        val n11 = gradient(ix1, iy1, seed, fx - 1f, fy - 1f)
++        val u = fade(fx)
++        val v = fade(fy)
++        val top = n00 + (n10 - n00) * u
++        val bottom = n01 + (n11 - n01) * u
++        return top + (bottom - top) * v
++    }
++
++    private fun gradient(
++        ix: Int,
++        iy: Int,
++        seed: Int,
++        dx: Float,
++        dy: Float,
++    ): Float {
++        val h = PixelHash.hash(ix, iy, seed) and (GRADIENTS - 1)
++        return GRADIENT_X[h] * dx + GRADIENT_Y[h] * dy
++    }
++
++    private fun fade(t: Float): Float = t * t * t * (t * (t * 6f - 15f) + 10f)
++
++    private fun wrap(
++        value: Int,
++        period: Int,
++    ): Int = ((value % period) + period) % period
++}
+diff --git a/app/src/main/java/com/artflow/studio/core/pixels/PixelHash.kt b/app/src/main/java/com/artflow/studio/core/pixels/PixelHash.kt
+new file mode 100644
+index 0000000..6d7ef6d
+--- /dev/null
++++ b/app/src/main/java/com/artflow/studio/core/pixels/PixelHash.kt
+@@ -0,0 +1,19 @@
++package com.artflow.studio.core.pixels
++
++/** Position hashing for effects that need randomness that is the same on every run, preview and commit alike. */
++internal object PixelHash {
++    /** A well-mixed non-negative hash of three integers. */
++    fun hash(
++        a: Int,
++        b: Int,
++        c: Int,
++    ): Int {
++        var h = a * 374761393 + b * 668265263 + c * 1274126177
++        h = (h xor (h ushr 13)) * 1103515245
++        h = h xor (h ushr 16)
++        return h and 0x7FFFFFFF
++    }
++
++    /** [h] as a fraction from 0 (inclusive) to 1 (exclusive). */
++    fun unit(h: Int): Float = (h and 0xFFFFFF) / 16777216f
++}
+diff --git a/app/src/main/java/com/artflow/studio/domain/model/layer/AdjustmentType.kt b/app/src/main/java/com/artflow/studio/domain/model/layer/AdjustmentType.kt
+index fff56e0..7f1e489 100644
+--- a/app/src/main/java/com/artflow/studio/domain/model/layer/AdjustmentType.kt
++++ b/app/src/main/java/com/artflow/studio/domain/model/layer/AdjustmentType.kt
+@@ -1,5 +1,9 @@
+ package com.artflow.studio.domain.model.layer
+ 
++import com.artflow.studio.core.pixels.ColorBalance
++import com.artflow.studio.core.pixels.CurveSet
++import com.artflow.studio.core.pixels.GradientMap
++
+ /**
+  * Enumeration of available adjustment types for adjustment layers.
+  *
+@@ -30,50 +34,24 @@ enum class AdjustmentType(
+                 "lightness" to -100f..100f,
+             ),
+     ),
++
++    /** Shadows, Midtones and Highlights shifts; see [ColorBalance] for the keys and the older even shift. */
+     COLOR_BALANCE(
+         displayName = "Color Balance",
+-        defaultParameters =
+-            mapOf(
+-                "cyan_red" to 0f,
+-                "magenta_green" to 0f,
+-                "yellow_blue" to 0f,
+-            ),
+-        parameterRanges =
+-            mapOf(
+-                "cyan_red" to -100f..100f,
+-                "magenta_green" to -100f..100f,
+-                "yellow_blue" to -100f..100f,
+-            ),
++        defaultParameters = ColorBalance.DEFAULT_PARAMETERS,
++        parameterRanges = ColorBalance.PARAMETER_RANGES,
+     ),
++
++    /**
++     * The five-point curve the current sliders edit. [CurveSet] also renders per-channel Gamma, Red, Green and Blue
++     * curves (`curve_*` keys) once an editor writes them.
++     */
+     CURVES(
+         displayName = "Curves",
+-        defaultParameters =
+-            mapOf(
+-                "point_0_x" to 0f,
+-                "point_0_y" to 0f,
+-                "point_1_x" to 64f,
+-                "point_1_y" to 64f,
+-                "point_2_x" to 128f,
+-                "point_2_y" to 128f,
+-                "point_3_x" to 192f,
+-                "point_3_y" to 192f,
+-                "point_4_x" to 255f,
+-                "point_4_y" to 255f,
+-            ),
+-        parameterRanges =
+-            mapOf(
+-                "point_0_x" to 0f..255f,
+-                "point_0_y" to 0f..255f,
+-                "point_1_x" to 0f..255f,
+-                "point_1_y" to 0f..255f,
+-                "point_2_x" to 0f..255f,
+-                "point_2_y" to 0f..255f,
+-                "point_3_x" to 0f..255f,
+-                "point_3_y" to 0f..255f,
+-                "point_4_x" to 0f..255f,
+-                "point_4_y" to 0f..255f,
+-            ),
++        defaultParameters = CurveSet.LEGACY_DEFAULTS,
++        parameterRanges = CurveSet.LEGACY_DEFAULTS.mapValues { 0f..255f },
+     ),
++
+     LEVELS(
+         displayName = "Levels",
+         defaultParameters =
+@@ -154,13 +132,18 @@ enum class AdjustmentType(
+             }
+         ),
+     ),
++
++    /**
++     * The two-hue map the current sliders edit. [GradientMap] also renders a gradient of colour stops
++     * (`gradient_stops` and `gradient_<i>_*` keys) once an editor writes them.
++     */
+     GRADIENT_MAP(
+         displayName = "Gradient Map",
+-        defaultParameters = mapOf("gradient_start_hue" to 0f, "gradient_end_hue" to 360f),
++        defaultParameters = mapOf(GradientMap.LEGACY_START_HUE to 0f, GradientMap.LEGACY_END_HUE to 360f),
+         parameterRanges =
+             mapOf(
+-                "gradient_start_hue" to 0f..360f,
+-                "gradient_end_hue" to 0f..360f,
++                GradientMap.LEGACY_START_HUE to 0f..360f,
++                GradientMap.LEGACY_END_HUE to 0f..360f,
+             ),
+     ),
+     ;
+diff --git a/app/src/test/java/com/artflow/studio/core/pixels/ColorBalanceTest.kt b/app/src/test/java/com/artflow/studio/core/pixels/ColorBalanceTest.kt
+new file mode 100644
+index 0000000..e697375
+--- /dev/null
++++ b/app/src/test/java/com/artflow/studio/core/pixels/ColorBalanceTest.kt
+@@ -0,0 +1,115 @@
++package com.artflow.studio.core.pixels
++
++import com.artflow.studio.core.pixels.ColorBalance.Axis
++import com.artflow.studio.core.pixels.ColorBalance.Range
++import com.artflow.studio.domain.model.layer.AdjustmentType
++import org.junit.Assert.assertArrayEquals
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import java.util.Random
++
++class ColorBalanceTest {
++    private fun balance(
++        pixel: Int,
++        parameters: Map<String, Float>,
++    ): Int = AdjustmentProcessor.apply(PixelBuffer.filled(1, 1, pixel), AdjustmentType.COLOR_BALANCE, parameters).pixels[0]
++
++    private fun red(pixel: Int) = (pixel shr 16) and 0xFF
++
++    private fun grey(level: Int) = Channels.argb(255, level, level, level)
++
++    @Test
++    fun allZeroChangesNothing() {
++        val image = LegacyAdjustmentMaths.sampleImage()
++        val out = AdjustmentProcessor.apply(image, AdjustmentType.COLOR_BALANCE, AdjustmentType.COLOR_BALANCE.defaultParameters)
++        assertArrayEquals(image.pixels, out.pixels)
++    }
++
++    @Test
++    fun theRangeWeightsAddUpToOneAndPeakWhereTheyShould() {
++        for (step in 0..100) {
++            val l = step / 100f
++            val sum = ColorBalance.shadowWeight(l) + ColorBalance.midtoneWeight(l) + ColorBalance.highlightWeight(l)
++            assertEquals(1f, sum, 1e-5f)
++        }
++        assertEquals(1f, ColorBalance.shadowWeight(0f), 0f)
++        assertEquals(1f, ColorBalance.midtoneWeight(0.5f), 0f)
++        assertEquals(1f, ColorBalance.highlightWeight(1f), 0f)
++    }
++
++    @Test
++    fun shadowsMoveDarkPixelsMoreThanLightOnes() {
++        val shadows = mapOf(ColorBalance.key(Range.SHADOWS, Axis.CYAN_RED) to 60f)
++        val darkGain = red(balance(grey(30), shadows)) - 30
++        val lightGain = red(balance(grey(220), shadows)) - 220
++        assertTrue("dark +$darkGain vs light +$lightGain", darkGain > 40 && lightGain == 0)
++    }
++
++    @Test
++    fun highlightsMoveLightPixelsMoreThanDarkOnes() {
++        val highlights = mapOf(ColorBalance.key(Range.HIGHLIGHTS, Axis.CYAN_RED) to -60f)
++        val darkLoss = 30 - red(balance(grey(30), highlights))
++        val lightLoss = 220 - red(balance(grey(220), highlights))
++        assertTrue("dark -$darkLoss vs light -$lightLoss", lightLoss > 40 && darkLoss == 0)
++    }
++
++    @Test
++    fun midtonesLeaveBlackAndWhiteAlone() {
++        val midtones = mapOf(ColorBalance.key(Range.MIDTONES, Axis.YELLOW_BLUE) to 100f)
++        assertEquals(grey(0), balance(grey(0), midtones))
++        assertEquals(grey(255), balance(grey(255), midtones))
++        assertTrue(balance(grey(128), midtones) and 0xFF > 200)
++    }
++
++    @Test
++    fun eachAxisMovesItsOwnChannel() {
++        val pixel = grey(128)
++        for (axis in Axis.entries) {
++            val out = balance(pixel, mapOf(ColorBalance.key(Range.MIDTONES, axis) to -50f))
++            Axis.entries.forEach { other ->
++                // Cyan-Red moves red, Magenta-Green green and Yellow-Blue blue.
++                val channel = (out shr (16 - 8 * other.ordinal)) and 0xFF
++                if (other == axis) assertTrue(channel < 100) else assertEquals(128, channel)
++            }
++        }
++    }
++
++    @Test
++    fun alphaNeverChanges() {
++        val image = LegacyAdjustmentMaths.sampleImage()
++        val parameters = Range.entries.associate { ColorBalance.key(it, Axis.MAGENTA_GREEN) to 70f } + ("yellow_blue" to -40f)
++        val out = AdjustmentProcessor.apply(image, AdjustmentType.COLOR_BALANCE, parameters)
++        for (i in image.pixels.indices) assertEquals(image.pixels[i] ushr 24, out.pixels[i] ushr 24)
++    }
++
++    @Test
++    fun theSameShiftInAllThreeRangesMovesEveryLevelAlike() {
++        val all = Range.entries.associate { ColorBalance.key(it, Axis.CYAN_RED) to 40f }
++        val shifts = (0..255 step 5).map { red(balance(grey(it).let { p -> p and 0xFF00FFFF.toInt() }, all)) }
++        // Red starts at 0 for every pixel here, so every level gets the same lift.
++        assertTrue(shifts.toString(), shifts.all { kotlin.math.abs(it - shifts[0]) <= 1 })
++    }
++
++    @Test
++    fun olderEvenShiftsRenderExactlyAsBefore() {
++        val random = Random(8)
++        val image = LegacyAdjustmentMaths.sampleImage()
++        repeat(40) {
++            val parameters =
++                listOf("cyan_red", "magenta_green", "yellow_blue")
++                    .filter { random.nextInt(4) != 0 }
++                    .associateWith { random.nextFloat() * 200f - 100f }
++            val expected = LegacyAdjustmentMaths.applyAll(image) { LegacyAdjustmentMaths.colorBalance(it, parameters) }
++            assertArrayEquals(expected, AdjustmentProcessor.apply(image, AdjustmentType.COLOR_BALANCE, parameters).pixels)
++        }
++    }
++
++    @Test
++    fun everyKeyIsInTheParameterRanges() {
++        Range.entries.forEach { range ->
++            Axis.entries.forEach { axis -> assertTrue(ColorBalance.key(range, axis) in AdjustmentType.COLOR_BALANCE.parameterRanges) }
++        }
++        Axis.entries.forEach { assertTrue(ColorBalance.legacyKey(it) in AdjustmentType.COLOR_BALANCE.parameterRanges) }
++    }
++}
+diff --git a/app/src/test/java/com/artflow/studio/core/pixels/CurveSetTest.kt b/app/src/test/java/com/artflow/studio/core/pixels/CurveSetTest.kt
+new file mode 100644
+index 0000000..ab5a9f4
+--- /dev/null
++++ b/app/src/test/java/com/artflow/studio/core/pixels/CurveSetTest.kt
+@@ -0,0 +1,175 @@
++package com.artflow.studio.core.pixels
++
++import com.artflow.studio.core.pixels.CurveSet.Channel
++import com.artflow.studio.domain.model.layer.AdjustmentType
++import org.junit.Assert.assertArrayEquals
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNull
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import java.util.Random
++
++class CurveSetTest {
++    private fun curve(vararg points: Pair<Float, Float>) = ToneCurve(points.map { ToneCurve.Point(it.first, it.second) })
++
++    private fun identity() = IntArray(256) { it }
++
++    @Test
++    fun theDefaultsAreStraightCurvesThatChangeNothing() {
++        val decoded = CurveSet.decode(CurveSet.DEFAULT_PARAMETERS)
++        assertEquals(CurveSet.IDENTITY, decoded)
++        val image = LegacyAdjustmentMaths.sampleImage()
++        for (defaults in listOf(CurveSet.DEFAULT_PARAMETERS, AdjustmentType.CURVES.defaultParameters)) {
++            CurveSet.decode(defaults).channelLuts().forEach { assertArrayEquals(identity(), it) }
++            assertArrayEquals(image.pixels, AdjustmentProcessor.apply(image, AdjustmentType.CURVES, defaults).pixels)
++        }
++    }
++
++    @Test
++    fun anEmptyMapIsStraightToo() {
++        CurveSet.decode(emptyMap()).channelLuts().forEach { assertArrayEquals(identity(), it) }
++    }
++
++    @Test
++    fun risingPointsGiveARisingTableThroughEveryPoint() {
++        val random = Random(5)
++        repeat(200) {
++            val count = 2 + random.nextInt(ToneCurve.MAX_POINTS - 1)
++            val xs = (List(count - 2) { 1f + random.nextInt(253) } + listOf(0f, 255f)).distinct().sorted()
++            val ys = xs.map { random.nextFloat() * 255f }.sorted()
++            val lut = ToneCurve(xs.zip(ys).map { ToneCurve.Point(it.first, it.second) }).lut()
++            for (i in 1..255) assertTrue("table falls at $i", lut[i] >= lut[i - 1])
++            xs.zip(ys).forEach { (x, y) -> assertEquals(y, lut[x.toInt()].toFloat(), 0.51f) }
++        }
++    }
++
++    @Test
++    fun aChannelCurveChangesOnlyItsChannelAndGammaFollowsIt() {
++        val brighterRed = CurveSet(red = curve(0f to 0f, 128f to 200f, 255f to 255f))
++        val pixel = 0xFF808080.toInt()
++        val parameters = brighterRed.encode()
++        val out = AdjustmentProcessor.apply(PixelBuffer.filled(1, 1, pixel), AdjustmentType.CURVES, parameters).pixels[0]
++        assertEquals(200, (out shr 16) and 0xFF)
++        assertEquals(128, (out shr 8) and 0xFF)
++        assertEquals(128, out and 0xFF)
++        assertEquals(0xFF, out ushr 24)
++
++        // Gamma inverts after the red curve: red 128 -> 200 -> 55, the others 128 -> 127.
++        val inverted = brighterRed.copy(gamma = curve(0f to 255f, 255f to 0f))
++        val both = AdjustmentProcessor.apply(PixelBuffer.filled(1, 1, pixel), AdjustmentType.CURVES, inverted.encode()).pixels[0]
++        assertEquals(55, (both shr 16) and 0xFF)
++        assertEquals(127, (both shr 8) and 0xFF)
++        assertEquals(127, both and 0xFF)
++    }
++
++    @Test
++    fun curvesKeepAlphaAndLeaveTransparentPixelsAlone() {
++        val image = LegacyAdjustmentMaths.sampleImage()
++        val out = AdjustmentProcessor.apply(image, AdjustmentType.CURVES, CurveSet(gamma = curve(0f to 255f, 255f to 0f)).encode())
++        for (i in image.pixels.indices) {
++            assertEquals(image.pixels[i] ushr 24, out.pixels[i] ushr 24)
++            if (image.pixels[i] ushr 24 == 0) assertEquals(image.pixels[i], out.pixels[i])
++        }
++    }
++
++    @Test
++    fun encodingRoundTripsEveryChannel() {
++        val random = Random(11)
++        repeat(50) {
++            val set =
++                Channel.entries.fold(CurveSet()) { acc, channel ->
++                    val count = 2 + random.nextInt(ToneCurve.MAX_POINTS - 1)
++                    val xs = (List(count - 2) { 1f + random.nextInt(253) } + listOf(0f, 255f)).distinct().sorted()
++                    acc.with(channel, ToneCurve(xs.map { ToneCurve.Point(it, random.nextInt(256).toFloat()) }))
++                }
++            assertEquals(set, CurveSet.decode(set.encode()))
++            set.encode().keys.forEach { assertTrue(it, it in CurveSet.PARAMETER_RANGES) }
++        }
++    }
++
++    @Test
++    fun keysPastTheCountAreIgnoredSoRemovingAPointOnlyLowersIt() {
++        val three = CurveSet(gamma = curve(0f to 0f, 100f to 200f, 255f to 255f))
++        val two = CurveSet(gamma = ToneCurve.IDENTITY)
++        // Merging the shorter curve over the longer leaves point 2 behind, as an adjustment layer's map would.
++        assertEquals(two, CurveSet.decode(three.encode() + two.encode()))
++    }
++
++    @Test
++    fun malformedChannelsFallBackToStraight() {
++        val good = CurveSet(red = curve(0f to 0f, 128f to 200f, 255f to 255f)).encode(Channel.RED)
++        val missing = good - CurveSet.yKey(Channel.RED, 1)
++        assertEquals(ToneCurve.IDENTITY, CurveSet.decode(missing).red)
++        assertEquals(ToneCurve.IDENTITY, CurveSet.decode(good + (CurveSet.countKey(Channel.RED) to 40f)).red)
++        assertEquals(ToneCurve.IDENTITY, CurveSet.decode(good + (CurveSet.countKey(Channel.RED) to Float.NaN)).red)
++        assertEquals(ToneCurve.IDENTITY, CurveSet.decode(good + (CurveSet.xKey(Channel.RED, 0) to Float.POSITIVE_INFINITY)).red)
++    }
++
++    @Test
++    fun olderFivePointMapsRenderExactlyAsBefore() {
++        val random = Random(3)
++        val image = LegacyAdjustmentMaths.sampleImage()
++        repeat(60) { round ->
++            val parameters =
++                (0..4)
++                    .flatMap { i ->
++                        listOfNotNull(
++                            ("point_${i}_x" to random.nextFloat() * 300f - 20f).takeIf { round % 3 != 0 || i != 2 },
++                            "point_${i}_y" to random.nextFloat() * 255f,
++                        )
++                    }.toMap()
++            val expected = LegacyAdjustmentMaths.applyAll(image) { LegacyAdjustmentMaths.curves(it, parameters) }
++            assertArrayEquals("round $round", expected, AdjustmentProcessor.apply(image, AdjustmentType.CURVES, parameters).pixels)
++            assertArrayEquals(LegacyAdjustmentMaths.curveLut(parameters), AdjustmentProcessor.buildCurveLut(parameters))
++        }
++    }
++
++    @Test
++    fun newGammaKeysWinOverOlderPointsLeftInTheMap() {
++        val legacy = mapOf("point_2_x" to 128f, "point_2_y" to 255f)
++        val straight = legacy + CurveSet.IDENTITY.encode()
++        CurveSet.decode(straight).channelLuts().forEach { assertArrayEquals(identity(), it) }
++        // Without the new keys the older points still count.
++        assertEquals(255, CurveSet.decode(legacy).channelLuts()[0][128])
++    }
++
++    @Test
++    fun addingAPointPutsItOnTheCurveInOrder() {
++        val (added, index) = requireNotNull(ToneCurve.IDENTITY.withPointAt(100f))
++        assertEquals(1, index)
++        assertEquals(ToneCurve.Point(100f, 100f), added.points[1])
++        assertArrayEquals(identity(), added.lut())
++        assertNull("too close to a point", added.withPointAt(101f))
++        var full = ToneCurve.IDENTITY
++        for (x in 1 until ToneCurve.MAX_POINTS - 1) full = requireNotNull(full.withPointAt(x * 15f)).first
++        assertEquals(ToneCurve.MAX_POINTS, full.points.size)
++        assertNull("a curve holds at most 16 points", full.withPointAt(250f))
++    }
++
++    @Test
++    fun endpointsMoveOnlyUpAndDownAndInnerPointsStayBetweenTheirNeighbours() {
++        val curve = curve(0f to 0f, 100f to 100f, 200f to 200f, 255f to 255f)
++        assertEquals(ToneCurve.Point(0f, 80f), curve.withPointMoved(0, 50f, 80f).points[0])
++        assertEquals(ToneCurve.Point(255f, 0f), curve.withPointMoved(3, 10f, -20f).points[3])
++        val dragged = curve.withPointMoved(1, 250f, 300f).points[1]
++        assertEquals(200f - ToneCurve.MIN_GAP, dragged.x, 0f)
++        assertEquals(255f, dragged.y, 0f)
++        assertEquals(curve, curve.withPointMoved(1, Float.NaN, 3f))
++    }
++
++    @Test
++    fun removingKeepsTheEndpoints() {
++        val curve = curve(0f to 0f, 100f to 150f, 255f to 255f)
++        assertEquals(ToneCurve.IDENTITY, curve.withoutPoint(1))
++        assertEquals(curve, curve.withoutPoint(0))
++        assertEquals(curve, curve.withoutPoint(2))
++        assertEquals(ToneCurve.IDENTITY, ToneCurve.IDENTITY.withoutPoint(1))
++    }
++
++    @Test
++    fun theNearestPointWithinReachIsFound() {
++        val curve = curve(0f to 0f, 100f to 150f, 255f to 255f)
++        assertEquals(1, curve.pointNear(104f, 147f, 10f))
++        assertNull(curve.pointNear(160f, 40f, 10f))
++    }
++}
+diff --git a/app/src/test/java/com/artflow/studio/core/pixels/GradientMapTest.kt b/app/src/test/java/com/artflow/studio/core/pixels/GradientMapTest.kt
+new file mode 100644
+index 0000000..5b6e0e9
+--- /dev/null
++++ b/app/src/test/java/com/artflow/studio/core/pixels/GradientMapTest.kt
+@@ -0,0 +1,123 @@
++package com.artflow.studio.core.pixels
++
++import com.artflow.studio.core.tool.GradientTool
++import com.artflow.studio.domain.model.layer.AdjustmentType
++import org.junit.Assert.assertArrayEquals
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNotNull
++import org.junit.Assert.assertNull
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import java.util.Random
++
++class GradientMapTest {
++    private val navy = 0xFF102040.toInt()
++    private val orange = 0xFFFF8000.toInt()
++    private val twoTone =
++        GradientTool.Gradient("", GradientTool.GradientType.LINEAR, listOf(GradientTool.Stop(0f, navy), GradientTool.Stop(1f, orange)))
++
++    private fun map(
++        pixel: Int,
++        parameters: Map<String, Float> = GradientMap.encode(twoTone),
++    ): Int = AdjustmentProcessor.apply(PixelBuffer.filled(1, 1, pixel), AdjustmentType.GRADIENT_MAP, parameters).pixels[0]
++
++    @Test
++    fun blackTakesTheFirstStopAndWhiteTheLast() {
++        assertEquals(navy, map(0xFF000000.toInt()))
++        assertEquals(orange, map(0xFFFFFFFF.toInt()))
++    }
++
++    @Test
++    fun middleGreyTakesTheColourHalfwayAlong() {
++        val mid = map(0xFF808080.toInt())
++        val expected = GradientTool.lerpColor(navy, orange, Channels.luminance(0xFF808080.toInt()))
++        for (shift in listOf(16, 8, 0)) assertEquals(((expected shr shift) and 0xFF).toFloat(), ((mid shr shift) and 0xFF).toFloat(), 1f)
++    }
++
++    @Test
++    fun alphaIsKept() {
++        val image = LegacyAdjustmentMaths.sampleImage()
++        val out = AdjustmentProcessor.apply(image, AdjustmentType.GRADIENT_MAP, GradientMap.encode(GradientMap.LIBRARY[5]))
++        for (i in image.pixels.indices) assertEquals(image.pixels[i] ushr 24, out.pixels[i] ushr 24)
++    }
++
++    @Test
++    fun theLibraryHoldsAtLeastTwelveWellFormedGradients() {
++        assertTrue(GradientMap.LIBRARY.size >= 12)
++        val names = GradientMap.LIBRARY.map { it.name }
++        assertEquals("names are unique", names.size, names.toSet().size)
++        GradientMap.LIBRARY.forEach { gradient ->
++            val stops = gradient.stops
++            assertTrue(gradient.name, stops.size in 2..GradientMap.MAX_STOPS)
++            assertEquals(gradient.name, 0f, stops.first().position, 0f)
++            assertEquals(gradient.name, 1f, stops.last().position, 0f)
++            assertEquals(gradient.name, stops.sortedBy { it.position }, stops)
++            stops.forEach { assertEquals(gradient.name, 0xFF, it.color ushr 24) }
++            assertTrue(gradient.name, GradientMap.sameStops(gradient, requireNotNull(GradientMap.decode(GradientMap.encode(gradient)))))
++            // Darkest stop first, so a gradient maps shadows to its dark end.
++            assertTrue(gradient.name, Channels.luminance(stops.first().color) < Channels.luminance(stops.last().color))
++        }
++    }
++
++    @Test
++    fun encodingRoundTripsColoursExactly() {
++        val random = Random(2)
++        repeat(100) {
++            val count = 2 + random.nextInt(GradientMap.MAX_STOPS - 1)
++            val stops = List(count) { GradientTool.Stop(random.nextFloat(), 0xFF000000.toInt() or random.nextInt(0x1000000)) }
++            val gradient = GradientTool.Gradient("", GradientTool.GradientType.LINEAR, stops)
++            val decoded = requireNotNull(GradientMap.decode(GradientMap.encode(gradient)))
++            assertEquals(gradient.sortedStops.map { it.color }, decoded.stops.map { it.color })
++            assertTrue(GradientMap.sameStops(gradient, decoded))
++            GradientMap.encode(gradient).keys.forEach { assertTrue(it, it in GradientMap.PARAMETER_RANGES) }
++        }
++    }
++
++    @Test
++    fun stopsPastTheCountAreIgnored() {
++        val three = GradientMap.LIBRARY.first { it.stops.size >= 3 }
++        val merged = GradientMap.encode(three) + GradientMap.encode(twoTone)
++        assertTrue(GradientMap.sameStops(twoTone, requireNotNull(GradientMap.decode(merged))))
++    }
++
++    @Test
++    fun malformedStopsAreTheOriginalTwoHueMap() {
++        assertNull(GradientMap.decode(emptyMap()))
++        assertNull(GradientMap.decode(mapOf(GradientMap.STOPS to 1f)))
++        assertNull(GradientMap.decode(GradientMap.encode(twoTone) - GradientMap.colorKey(1)))
++        assertNull(GradientMap.decode(GradientMap.encode(twoTone) + (GradientMap.STOPS to Float.NaN)))
++        assertNotNull(GradientMap.decode(GradientMap.encode(twoTone)))
++    }
++
++    @Test
++    fun olderTwoHueMapsRenderExactlyAsBefore() {
++        val random = Random(4)
++        val image = LegacyAdjustmentMaths.sampleImage()
++        val maps =
++            listOf(emptyMap(), mapOf("gradient_start_hue" to 0f, "gradient_end_hue" to 360f)) +
++                List(20) {
++                    listOf("gradient_start_hue", "gradient_end_hue")
++                        .filter { random.nextInt(3) != 0 }
++                        .associateWith { random.nextFloat() * 360f }
++                }
++        maps.forEach { parameters ->
++            val expected = LegacyAdjustmentMaths.applyAll(image) { LegacyAdjustmentMaths.gradientMap(it, parameters) }
++            val actual = AdjustmentProcessor.apply(image, AdjustmentType.GRADIENT_MAP, parameters).pixels
++            assertArrayEquals(parameters.toString(), expected, actual)
++        }
++    }
++
++    @Test
++    fun theStopDefaultsAreNoir() {
++        val grey = 0xFF6A6A6A.toInt()
++        assertEquals(grey, map(grey, GradientMap.DEFAULT_PARAMETERS))
++    }
++
++    @Test
++    fun theLayerDefaultsAreStillTheOriginalTwoHueMap() {
++        val image = LegacyAdjustmentMaths.sampleImage()
++        val defaults = AdjustmentType.GRADIENT_MAP.defaultParameters
++        val expected = LegacyAdjustmentMaths.applyAll(image) { LegacyAdjustmentMaths.gradientMap(it, defaults) }
++        assertArrayEquals(expected, AdjustmentProcessor.apply(image, AdjustmentType.GRADIENT_MAP, defaults).pixels)
++    }
++}
+diff --git a/app/src/test/java/com/artflow/studio/core/pixels/LegacyAdjustmentMaths.kt b/app/src/test/java/com/artflow/studio/core/pixels/LegacyAdjustmentMaths.kt
+new file mode 100644
+index 0000000..69c269b
+--- /dev/null
++++ b/app/src/test/java/com/artflow/studio/core/pixels/LegacyAdjustmentMaths.kt
+@@ -0,0 +1,154 @@
++package com.artflow.studio.core.pixels
++
++import com.artflow.studio.domain.model.Color
++import kotlin.math.abs
++import kotlin.math.roundToInt
++import kotlin.math.sqrt
++
++/**
++ * The Curves, Colour Balance and Gradient Map maths exactly as they were before per-channel curves, tonal ranges and
++ * gradient stops, copied here so tests can prove that maps saved back then still render bit for bit the same.
++ */
++object LegacyAdjustmentMaths {
++    private val CURVE_DEFAULTS =
++        mapOf(
++            "point_0_x" to 0f,
++            "point_0_y" to 0f,
++            "point_1_x" to 64f,
++            "point_1_y" to 64f,
++            "point_2_x" to 128f,
++            "point_2_y" to 128f,
++            "point_3_x" to 192f,
++            "point_3_y" to 192f,
++            "point_4_x" to 255f,
++            "point_4_y" to 255f,
++        )
++
++    /** Curves: one table from the five points over their old defaults, applied to red, green and blue. */
++    fun curves(
++        pixel: Int,
++        parameters: Map<String, Float>,
++    ): Int {
++        val lut = curveLut(CURVE_DEFAULTS + parameters)
++        return Channels.argb(
++            Channels.alpha(pixel).toInt(),
++            lut[Channels.red(pixel).toInt().coerceIn(0, 255)],
++            lut[Channels.green(pixel).toInt().coerceIn(0, 255)],
++            lut[Channels.blue(pixel).toInt().coerceIn(0, 255)],
++        )
++    }
++
++    /** Colour Balance: one even shift of each channel. */
++    fun colorBalance(
++        pixel: Int,
++        parameters: Map<String, Float>,
++    ): Int {
++        val cyanRed = (parameters["cyan_red"] ?: 0f) / 100f * 255f
++        val magentaGreen = (parameters["magenta_green"] ?: 0f) / 100f * 255f
++        val yellowBlue = (parameters["yellow_blue"] ?: 0f) / 100f * 255f
++        return Channels.argb(
++            Channels.alpha(pixel).toInt(),
++            clamp(Channels.red(pixel) + cyanRed),
++            clamp(Channels.green(pixel) + magentaGreen),
++            clamp(Channels.blue(pixel) + yellowBlue),
++        )
++    }
++
++    /** Gradient Map: a hue sweep from `gradient_start_hue` (0) to `gradient_end_hue` (360) by luminance. */
++    fun gradientMap(
++        pixel: Int,
++        parameters: Map<String, Float>,
++    ): Int {
++        val startHue = parameters["gradient_start_hue"] ?: 0f
++        val endHue = parameters["gradient_end_hue"] ?: 360f
++        val luminance = Channels.luminance(pixel)
++        val hue = startHue + (endHue - startHue) * luminance
++        val mapped = Color.hsvToRgb(hue, if (luminance > 0.5f) 1f - (luminance - 0.5f) * 2f * 0.2f else 1f, 1f)
++        return Channels.withAlpha(mapped, Channels.alpha(pixel).toInt())
++    }
++
++    /** What the old per-pixel pass did with a transform: transparent pixels kept, the rest replaced. */
++    fun applyAll(
++        source: PixelBuffer,
++        transform: (Int) -> Int,
++    ): IntArray = IntArray(source.pixels.size) { i -> source.pixels[i].let { if ((it ushr 24) == 0) it else transform(it) } }
++
++    private fun clamp(value: Float): Int = value.roundToInt().coerceIn(0, 255)
++
++    fun curveLut(parameters: Map<String, Float>): IntArray {
++        val points =
++            (0..4)
++                .mapNotNull { index ->
++                    val x = parameters["point_${index}_x"] ?: return@mapNotNull null
++                    val y = parameters["point_${index}_y"] ?: return@mapNotNull null
++                    (x.coerceIn(0f, 255f) to y.coerceIn(0f, 255f))
++                }.sortedBy { it.first }
++
++        val lut = IntArray(256)
++        if (points.size < 2) {
++            for (i in 0..255) lut[i] = i
++            return lut
++        }
++        val xs = FloatArray(points.size) { points[it].first }
++        val ys = FloatArray(points.size) { points[it].second }
++        val n = points.size
++        val slopes =
++            FloatArray(n - 1) { i ->
++                val dx = xs[i + 1] - xs[i]
++                if (abs(dx) < 1e-4f) 0f else (ys[i + 1] - ys[i]) / dx
++            }
++        val tangents = FloatArray(n)
++        tangents[0] = slopes[0]
++        tangents[n - 1] = slopes[n - 2]
++        for (i in 1 until n - 1) {
++            tangents[i] = if (slopes[i - 1] * slopes[i] <= 0f) 0f else (slopes[i - 1] + slopes[i]) / 2f
++        }
++        for (i in 0 until n - 1) {
++            if (abs(slopes[i]) < 1e-5f) {
++                tangents[i] = 0f
++                tangents[i + 1] = 0f
++            } else {
++                val a = tangents[i] / slopes[i]
++                val b = tangents[i + 1] / slopes[i]
++                val h = a * a + b * b
++                if (h > 9f) {
++                    val t = 3f / sqrt(h)
++                    tangents[i] = t * a * slopes[i]
++                    tangents[i + 1] = t * b * slopes[i]
++                }
++            }
++        }
++        var segment = 0
++        for (x in 0..255) {
++            val xf = x.toFloat()
++            while (segment < n - 2 && xf > xs[segment + 1]) segment++
++            val h = (xs[segment + 1] - xs[segment]).coerceAtLeast(1e-4f)
++            val t = ((xf - xs[segment]) / h).coerceIn(0f, 1f)
++            val t2 = t * t
++            val t3 = t2 * t
++            val h00 = 2f * t3 - 3f * t2 + 1f
++            val h10 = t3 - 2f * t2 + t
++            val h01 = -2f * t3 + 3f * t2
++            val h11 = t3 - t2
++            val value = h00 * ys[segment] + h10 * h * tangents[segment] + h01 * ys[segment + 1] + h11 * h * tangents[segment + 1]
++            lut[x] = value.roundToInt().coerceIn(0, 255)
++        }
++        return lut
++    }
++
++    /** A varied test image: every 8-bit level in each channel somewhere, some translucent and transparent pixels. */
++    fun sampleImage(): PixelBuffer {
++        val random = java.util.Random(99)
++        return PixelBuffer(64, 64).also { buffer ->
++            for (i in buffer.pixels.indices) {
++                val alpha =
++                    when {
++                        i % 17 == 0 -> 0
++                        i % 5 == 0 -> 40 + random.nextInt(200)
++                        else -> 255
++                    }
++                buffer.pixels[i] = Channels.argb(alpha, (i * 7) and 0xFF, random.nextInt(256), (i / 64 * 4 + i % 3) and 0xFF)
++            }
++        }
++    }
++}
+diff --git a/app/src/test/java/com/artflow/studio/core/pixels/LiveEffectsTest.kt b/app/src/test/java/com/artflow/studio/core/pixels/LiveEffectsTest.kt
+new file mode 100644
+index 0000000..b3030b1
+--- /dev/null
++++ b/app/src/test/java/com/artflow/studio/core/pixels/LiveEffectsTest.kt
+@@ -0,0 +1,255 @@
++package com.artflow.studio.core.pixels
++
++import com.artflow.studio.core.pixels.AdjustmentOptions.AberrationMode
++import com.artflow.studio.core.pixels.AdjustmentOptions.GlitchMode
++import com.artflow.studio.core.pixels.AdjustmentOptions.HalftoneMode
++import com.artflow.studio.core.pixels.AdjustmentOptions.NoiseMode
++import com.artflow.studio.core.pixels.AdjustmentOptions.PerspectiveMode
++import com.artflow.studio.core.pixels.LiveAdjustments.Kind
++import com.artflow.studio.core.pixels.LiveAdjustments.Settings
++import org.junit.Assert.assertArrayEquals
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertThrows
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import kotlin.math.abs
++
++class LiveEffectsTest {
++    private class Superseded : RuntimeException()
++
++    /** A colourful, partly translucent picture with a bright spot, sharp edges and a dark block. */
++    private fun picture(
++        width: Int = 48,
++        height: Int = 40,
++    ): PixelBuffer =
++        PixelBuffer(width, height).also { buffer ->
++            for (y in 0 until height) {
++                for (x in 0 until width) {
++                    val alpha =
++                        when {
++                            x > width - 6 && y < 6 -> 0
++                            y > height - 4 -> 120
++                            else -> 255
++                        }
++                    val bright = (x - 30) * (x - 30) + (y - 12) * (y - 12) < 30
++                    val dark = x in 6..14 && y in 20..30
++                    buffer.pixels[y * width + x] =
++                        when {
++                            bright -> Channels.argb(alpha, 255, 255, 240)
++                            dark -> Channels.argb(alpha, 20, 20, 30)
++                            else -> Channels.argb(alpha, x * 255 / width, y * 255 / height, 128)
++                        }
++                }
++            }
++        }
++
++    /** Every live effect in every mode, with settings that change the picture. */
++    private val cases: List<Pair<Kind, Settings>> =
++        buildList {
++            add(Kind.BLOOM to Settings(0.8f, mapOf(AdjustmentOptions.BLOOM_TRANSITION to 0.8f, AdjustmentOptions.BLOOM_BURN to 0.5f)))
++            GlitchMode.entries.forEach { add(Kind.GLITCH to Settings(0.7f, mapOf(AdjustmentOptions.GLITCH_MODE to it.ordinal.toFloat()))) }
++            HalftoneMode.entries.forEach {
++                add(Kind.HALFTONE to Settings(0.3f, mapOf(AdjustmentOptions.HALFTONE_MODE to it.ordinal.toFloat())))
++            }
++            NoiseMode.entries.forEach { mode ->
++                listOf(0f, 1f).forEach { colour ->
++                    val parameters = mapOf(AdjustmentOptions.NOISE_MODE to mode.ordinal.toFloat(), AdjustmentOptions.NOISE_COLOUR to colour)
++                    add(Kind.NOISE to Settings(0.6f, parameters))
++                }
++            }
++            AberrationMode.entries.forEach {
++                val parameters = mapOf(AdjustmentOptions.ABERRATION_MODE to it.ordinal.toFloat())
++                add(Kind.CHROMATIC_ABERRATION to Settings(1f, parameters, angleDegrees = 30f))
++            }
++            PerspectiveMode.entries.forEach {
++                add(Kind.PERSPECTIVE_BLUR to Settings(0.8f, mapOf(AdjustmentOptions.PERSPECTIVE_MODE to it.ordinal.toFloat())))
++            }
++        }
++
++    private fun label(
++        kind: Kind,
++        settings: Settings,
++    ) = "$kind ${settings.parameters}"
++
++    @Test
++    fun theSameSettingsAlwaysGiveTheSamePixels() {
++        val source = picture()
++        cases.forEach { (kind, settings) ->
++            val first = LiveAdjustments.apply(kind, source, settings)
++            val second = LiveAdjustments.apply(kind, picture(), settings)
++            assertArrayEquals(label(kind, settings), first.pixels, second.pixels)
++        }
++    }
++
++    @Test
++    fun everyModeChangesThePictureAndNoneTouchesItsSource() {
++        cases.forEach { (kind, settings) ->
++            val source = picture()
++            val out = LiveAdjustments.apply(kind, source, settings)
++            assertFalse(label(kind, settings), out.pixels.contentEquals(source.pixels))
++            assertArrayEquals(label(kind, settings), picture().pixels, source.pixels)
++        }
++    }
++
++    @Test
++    fun noAmountLeavesEveryModeAlone() {
++        val source = picture()
++        cases.forEach { (kind, settings) ->
++            val out = LiveAdjustments.apply(kind, source, settings.copy(amount = 0f))
++            assertArrayEquals(label(kind, settings), source.pixels, out.pixels)
++        }
++    }
++
++    @Test
++    fun pixelsOutsideTheSelectionStayAsTheyWere() {
++        val source = picture()
++        val selection = SelectionMask(source.width, source.height)
++        for (i in 0 until source.width * 20) selection.coverage[i] = -1
++        cases.forEach { (kind, settings) ->
++            val out = LiveAdjustments.apply(kind, source, settings, selection)
++            for (i in source.width * 20 until source.pixels.size) assertEquals(label(kind, settings), source.pixels[i], out.pixels[i])
++        }
++    }
++
++    @Test
++    fun alphaLockKeepsEveryPixelsCoverage() {
++        val source = picture()
++        cases.forEach { (kind, settings) ->
++            val out = LiveAdjustments.apply(kind, source, settings, alphaLocked = true)
++            for (i in source.pixels.indices) assertEquals(label(kind, settings), source.pixels[i] ushr 24, out.pixels[i] ushr 24)
++        }
++    }
++
++    @Test
++    fun colourEffectsKeepAlphaEvenWithoutAlphaLock() {
++        val source = picture()
++        cases.filter { it.first == Kind.HALFTONE || it.first == Kind.NOISE }.forEach { (kind, settings) ->
++            val out = LiveAdjustments.apply(kind, source, settings)
++            for (i in source.pixels.indices) assertEquals(label(kind, settings), source.pixels[i] ushr 24, out.pixels[i] ushr 24)
++        }
++    }
++
++    @Test
++    fun aThrowFromTheCheckpointStopsEveryEffectPartWay() {
++        cases.forEach { (kind, settings) ->
++            var calls = 0
++            assertThrows(label(kind, settings), Superseded::class.java) {
++                LiveAdjustments.apply(kind, picture(400, 300), settings, checkpoint = { if (++calls == 5) throw Superseded() })
++            }
++            assertEquals(label(kind, settings), 5, calls)
++        }
++    }
++
++    @Test
++    fun colourAdjustmentsCheckInOncePerRow() {
++        var calls = 0
++        LiveAdjustments.apply(Kind.CURVES, picture(), Settings(1f, CurveSet.IDENTITY.encode()), checkpoint = { calls++ })
++        assertEquals(40, calls)
++    }
++
++    @Test
++    fun anotherGlitchSeedGivesAnotherPattern() {
++        val settings = Settings(0.8f, mapOf(AdjustmentOptions.GLITCH_MODE to GlitchMode.ARTIFACT.ordinal.toFloat()))
++        val first = LiveAdjustments.apply(Kind.GLITCH, picture(), settings)
++        val reseed = settings.copy(parameters = settings.parameters + (AdjustmentOptions.GLITCH_SEED to 7f))
++        val reseeded = LiveAdjustments.apply(Kind.GLITCH, picture(), reseed)
++        assertFalse(first.pixels.contentEquals(reseeded.pixels))
++    }
++
++    @Test
++    fun aWiderBloomReachesFarther() {
++        val source = PixelBuffer.filled(80, 80, 0xFF000000.toInt())
++        for (y in 36..44) for (x in 36..44) source.pixels[y * 80 + x] = -1
++
++        fun glowAt(size: Float): Int {
++            val settings = Settings(1f, mapOf(AdjustmentOptions.BLOOM_SIZE to size, AdjustmentOptions.BLOOM_TRANSITION to 0.5f))
++            return LiveAdjustments.apply(Kind.BLOOM, source, settings).pixels[40 * 80 + 52] and 0xFF
++        }
++        assertTrue("${glowAt(0f)} vs ${glowAt(1f)}", glowAt(1f) > glowAt(0f))
++    }
++
++    @Test
++    fun greyNoiseKeepsGreyPixelsGreyAndColourNoiseDoesNot() {
++        val grey = PixelBuffer.filled(32, 32, 0xFF808080.toInt())
++        val mono = LiveAdjustments.apply(Kind.NOISE, grey, Settings(0.8f))
++        assertTrue(mono.pixels.all { ((it shr 16) and 0xFF) == (it and 0xFF) && ((it shr 8) and 0xFF) == (it and 0xFF) })
++        val colour = LiveAdjustments.apply(Kind.NOISE, grey, Settings(0.8f, mapOf(AdjustmentOptions.NOISE_COLOUR to 1f)))
++        assertTrue(colour.pixels.any { ((it shr 16) and 0xFF) != (it and 0xFF) })
++    }
++
++    @Test
++    fun fractalNoiseTilesAcrossTheCanvas() {
++        val field = NoiseEffect.Field(200, 120, 0.3f, 5, 0.6f)
++        for (y in 0 until 120 step 7) {
++            assertEquals(field.value(0f, y.toFloat(), NoiseMode.CLOUDS, 0), field.value(200f, y.toFloat(), NoiseMode.CLOUDS, 0), 1e-4f)
++        }
++        for (x in 0 until 200 step 9) {
++            assertEquals(field.value(x.toFloat(), 0f, NoiseMode.RIDGES, 1), field.value(x.toFloat(), 120f, NoiseMode.RIDGES, 1), 1e-4f)
++        }
++    }
++
++    @Test
++    fun billowsAndRidgesNeitherDarkenNorLightenOnAverage() {
++        val grey = PixelBuffer.filled(256, 256, 0xFF808080.toInt())
++        NoiseMode.entries.forEach { mode ->
++            val out = LiveAdjustments.apply(Kind.NOISE, grey, Settings(1f, mapOf(AdjustmentOptions.NOISE_MODE to mode.ordinal.toFloat())))
++            val mean = out.pixels.map { (it and 0xFF) - 128 }.average()
++            assertTrue("$mode mean $mean", abs(mean) < 12)
++        }
++    }
++
++    @Test
++    fun perspectiveAberrationLeavesItsCentreAlone() {
++        val source = picture()
++        val settings = Settings(1f, mapOf(LiveAdjustments.RECOLOR_X to 30.5f, LiveAdjustments.RECOLOR_Y to 20.5f))
++        val out = LiveAdjustments.apply(Kind.CHROMATIC_ABERRATION, source, settings)
++        assertEquals(source.pixels[20 * source.width + 30], out.pixels[20 * source.width + 30])
++        assertFalse(out.pixels.contentEquals(source.pixels))
++    }
++
++    @Test
++    fun displacedAberrationMovesRedAndBlueOppositeWays() {
++        // A white bar on black: red shifts one way along the angle and blue the other.
++        val source = PixelBuffer.filled(60, 60, 0xFF000000.toInt())
++        for (y in 0 until 60) for (x in 25 until 35) source.pixels[y * 60 + x] = -1
++        val displace = Settings(1f, mapOf(AdjustmentOptions.ABERRATION_MODE to 1f), angleDegrees = 0f)
++        val out = LiveAdjustments.apply(Kind.CHROMATIC_ABERRATION, source, displace)
++        val leftOfBar = out.pixels[5 * 60 + 24]
++        val rightOfBar = out.pixels[5 * 60 + 35]
++        assertTrue((leftOfBar and 0xFF) > 200 && ((leftOfBar shr 16) and 0xFF) < 50)
++        assertTrue(((rightOfBar shr 16) and 0xFF) > 200 && (rightOfBar and 0xFF) < 50)
++    }
++
++    @Test
++    fun directionalPerspectiveBlurStreaksAlongItsAngle() {
++        // A vertical edge far from the focus point: horizontal streaks smear it, vertical ones do not.
++        val source = PixelBuffer.filled(60, 60, 0xFF000000.toInt())
++        for (y in 0 until 60) for (x in 45 until 60) source.pixels[y * 60 + x] = -1
++
++        fun blurred(angle: Float) =
++            LiveAdjustments.apply(
++                Kind.PERSPECTIVE_BLUR,
++                source,
++                Settings(
++                    1f,
++                    mapOf(AdjustmentOptions.PERSPECTIVE_MODE to 1f, AdjustmentOptions.PERSPECTIVE_ANGLE to angle, "x" to 5f, "y" to 30f),
++                ),
++            )
++        val across = blurred(0f).pixels[30 * 60 + 43] and 0xFF
++        val along = blurred(90f).pixels[30 * 60 + 43] and 0xFF
++        assertTrue("across $across along $along", across > 40 && along == 0)
++    }
++
++    @Test
++    fun halftoneDotsAreBlackOnWhitePaperForNewspaper() {
++        val grey = PixelBuffer.filled(120, 120, 0xFF808080.toInt())
++        val newspaper = mapOf(AdjustmentOptions.HALFTONE_MODE to 2f, AdjustmentOptions.HALFTONE_SHARPNESS to 1f)
++        val out = LiveAdjustments.apply(Kind.HALFTONE, grey, Settings(1f, newspaper))
++        assertTrue(out.pixels.any { (it and 0xFFFFFF) == 0 })
++        assertTrue(out.pixels.any { (it and 0xFFFFFF) == 0xFFFFFF })
++        // About as much ink as the grey it stands for.
++        val mean = out.pixels.map { it and 0xFF }.average()
++        assertTrue("mean $mean", abs(mean - 128) < 20)
++    }
++}

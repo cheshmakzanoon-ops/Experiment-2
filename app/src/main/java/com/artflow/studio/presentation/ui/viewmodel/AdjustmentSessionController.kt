@@ -1,5 +1,7 @@
 package com.artflow.studio.presentation.ui.viewmodel
 
+import com.artflow.studio.core.color.GradientMaps
+import com.artflow.studio.core.pixels.AdjustmentProcessor
 import com.artflow.studio.core.pixels.LiveAdjustments
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
@@ -30,6 +32,8 @@ class AdjustmentSessionController(
         val settings: LiveAdjustments.Settings,
         /** Pencil mode: the effect shows only where it has been painted on, as in Procreate. */
         val pencil: Boolean = false,
+        /** Curves: the layer's brightness histogram, drawn behind the curve. */
+        val histogram: List<Int>? = null,
     )
 
     private val _state = MutableStateFlow<State?>(null)
@@ -62,6 +66,8 @@ class AdjustmentSessionController(
             val parameters =
                 if (kind == LiveAdjustments.Kind.RECOLOR) {
                     mapOf(LiveAdjustments.RECOLOR_RGB to (color and 0xFFFFFF).toFloat())
+                } else if (kind == LiveAdjustments.Kind.GRADIENT_MAP) {
+                    GradientMaps.toParameters(GradientMaps.PRESETS.first())
                 } else {
                     kind.adjustmentType?.defaultParameters.orEmpty()
                 }
@@ -71,10 +77,19 @@ class AdjustmentSessionController(
                     kind.slidesAmount -> 0f
                     else -> 1f
                 }
-            _state.value = State(kind, LiveAdjustments.Settings(amount = amount, parameters = parameters))
+            val histogram =
+                if (kind == LiveAdjustments.Kind.CURVES) {
+                    withContext(Dispatchers.Default) { AdjustmentProcessor.histogram(opened.buffer) }
+                } else {
+                    null
+                }
+            _state.value = State(kind, LiveAdjustments.Settings(amount = amount, parameters = parameters), histogram = histogram)
             render()
         }
     }
+
+    /** Replaces every parameter at once, rendering a single preview. */
+    fun setParameters(parameters: Map<String, Float>) = update { it.copy(parameters = parameters) }
 
     fun setAmount(amount: Float) = update { it.copy(amount = amount.coerceIn(0f, 1f)) }
 
@@ -123,7 +138,8 @@ class AdjustmentSessionController(
         previewJob?.cancel()
         previewJob =
             scope.launch {
-                val result = withContext(Dispatchers.Default) { result(current) } ?: return@launch
+                // A superseded preview throws from its next checkpoint, so it stops within a row instead of finishing.
+                val result = withContext(Dispatchers.Default) { result(current) { ensureActive() } } ?: return@launch
                 ensureActive()
                 result.pixels.copyInto(target.buffer.pixels)
                 repository.requestPreviewRefresh()
@@ -131,13 +147,33 @@ class AdjustmentSessionController(
     }
 
     /** The layer as it would be applied: the effect, limited to the selection and any painted area. */
-    private fun result(current: State): PixelBuffer? {
+    private fun result(
+        current: State,
+        checkpoint: () -> Unit = {},
+    ): PixelBuffer? {
         val source = original ?: return null
         val settingsState = current.copy(pencil = false)
-        val effect =
-            filtered?.takeIf { it.first == settingsState }?.second
-                ?: LiveAdjustments.apply(current.kind, source, current.settings, null).also { filtered = settingsState to it }
+        val effect = filtered?.takeIf { it.first == settingsState }?.second ?: filterFor(settingsState, source, checkpoint)
         return AdjustmentPaint.mix(source, effect, selection, painted.takeIf { current.pencil })
+    }
+
+    /** The whole-layer effect for [state]; it is kept with its settings so Pencil mode and repeat previews reuse it. */
+    private fun filterFor(
+        state: State,
+        source: PixelBuffer,
+        checkpoint: () -> Unit,
+    ): PixelBuffer {
+        val effect =
+            LiveAdjustments.apply(
+                state.kind,
+                source,
+                state.settings,
+                null,
+                alphaLocked = session?.alphaLocked == true,
+                checkpoint = checkpoint,
+            )
+        filtered = state to effect
+        return effect
     }
 
     /** Records the adjustment as one undoable step; an untouched preview is simply closed. */

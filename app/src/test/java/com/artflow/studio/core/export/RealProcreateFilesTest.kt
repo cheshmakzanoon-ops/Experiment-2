@@ -12,7 +12,7 @@ import kotlin.math.abs
 
 /**
  * Opens documents saved by Procreate itself. They are not committed: CI downloads them and points
- * PROCREATE_SAMPLES at their folder, and the test is skipped elsewhere. Each document must
+ * PROCREATE_SAMPLES at their folder; outside CI the test is skipped when no samples are available. Each document must
  * calibrate against its own thumbnail and decode every layer and mask; how closely ArtFlow's
  * composite of the imported layers matches the flattened image Procreate saved is reported to
  * build/procreate-samples.txt.
@@ -21,9 +21,9 @@ class RealProcreateFilesTest {
     @Test
     fun `documents saved by Procreate import`() {
         val folder = System.getenv("PROCREATE_SAMPLES")?.let(::File)
-        assumeTrue("No Procreate samples were downloaded", folder?.isDirectory == true)
+        requireSamples("No Procreate samples were downloaded", folder?.isDirectory == true)
         val samples = folder!!.listFiles { file -> file.name.endsWith(".procreate") }.orEmpty().sortedBy { it.name }
-        assumeTrue("The samples folder holds no documents", samples.isNotEmpty())
+        requireSamples("The samples folder holds no documents", samples.isNotEmpty())
         val report = StringBuilder()
         val failures = mutableListOf<String>()
         samples.forEach { sample ->
@@ -33,6 +33,17 @@ class RealProcreateFilesTest {
         File("build/procreate-samples.txt").writeText(report.toString() + failures.joinToString("\n", prefix = "\n"))
         println(report)
         assertTrue(failures.joinToString("\n"), failures.isEmpty())
+    }
+
+    /**
+     * In CI a missing sample fails the test rather than skipping it, because android-ci.yml already
+     * fails the job when the samples cannot be fetched. Elsewhere the checks are skipped as before.
+     */
+    private fun requireSamples(
+        message: String,
+        condition: Boolean,
+    ) {
+        if (System.getenv("CI") == "true") assertTrue(message, condition) else assumeTrue(message, condition)
     }
 
     private fun check(

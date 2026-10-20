@@ -16,6 +16,23 @@ import org.junit.Test
  * pin down both the pixel result and the reported canvas properties.
  */
 class CanvasOperationsTest {
+    @Test
+    fun savedPresetsRoundTripAndDropInvalidLines() {
+        val presets =
+            listOf(
+                CanvasOperations.Preset("Comic\tstrip", 3000, 1000, 300),
+                CanvasOperations.Preset("Icon", 512, 512, 72),
+            )
+        val decoded = CanvasOperations.decodePresets(CanvasOperations.encodePresets(presets))
+        assertEquals(listOf("Comicstrip", "Icon"), decoded.map { it.name })
+        assertEquals(presets.map { Triple(it.width, it.height, it.dpi) }, decoded.map { Triple(it.width, it.height, it.dpi) })
+
+        val stored = "Huge\t90000\t90000\t72\nNo dpi\t100\t100\nLow dpi\t100\t100\t1\n\t100\t100\t72\nOk\t100\t100\t72\nOk\t200\t200\t72"
+        assertEquals(listOf(CanvasOperations.Preset("Ok", 100, 100, 72)), CanvasOperations.decodePresets(stored))
+        assertEquals("Ok", CanvasOperations.presetByName("Ok", CanvasOperations.decodePresets(stored))?.name)
+        assertNull(CanvasOperations.presetByName("Missing"))
+    }
+
     private val red = 0xFFFF0000.toInt()
     private val blue = 0xFF0000FF.toInt()
 
@@ -190,10 +207,23 @@ class CanvasOperationsTest {
     fun `expandToContent pads the canvas out around the artwork`() {
         val result = CanvasOperations.expandToContent(dotBuffer(), properties(), margin = 32)
 
-        // Content spans (2,3)-(5,6); inflated by 32 that is a 68x68 canvas with a 30px offset.
+        // Content spans (2,3)-(5,6); inflated by 32 that is a 68x68 canvas, with the content starting at (32,32).
         assertEquals(68, result.buffer.width)
         assertEquals(68, result.buffer.height)
-        assertEquals(red, result.buffer.getUnchecked(32, 33))
+        assertEquals(red, result.buffer.getUnchecked(32, 32))
+        assertEquals(red, result.buffer.getUnchecked(35, 35))
+    }
+
+    @Test
+    fun `expandToContent keeps artwork that sits far from the buffer centre`() {
+        val offCentre = PixelBuffer(20, 20).apply { setUnchecked(13, 4, red) }
+
+        val result = CanvasOperations.expandToContent(offCentre, properties(20, 20), margin = 2)
+
+        assertEquals(5, result.buffer.width)
+        assertEquals(5, result.buffer.height)
+        assertEquals(red, result.buffer.getUnchecked(2, 2))
+        assertEquals(1, result.buffer.pixels.count { (it ushr 24) != 0 })
     }
 
     // ---------------------------------------------------------------------------------------

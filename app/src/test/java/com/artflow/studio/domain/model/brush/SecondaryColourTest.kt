@@ -83,8 +83,12 @@ class BurntEdgesTest {
 
     @Test
     fun fullyCoveredPaintKeepsItsColour() {
-        // A hard tip covers each pixel fully or not at all, so nothing burns.
-        assertTrue(paint(1f, 0f).pixels.contentEquals(paint(1f, 1f).pixels))
+        // Burning darkens only the partly covered anti-aliased rim of a hard tip; fully covered pixels keep their colour.
+        val plain = paint(1f, 0f)
+        val burnt = paint(1f, 1f)
+        val covered = plain.pixels.indices.filter { plain.pixels[it] ushr 24 == 0xFF }
+        assertTrue(covered.isNotEmpty())
+        covered.forEach { assertEquals(plain.pixels[it].toLong(), burnt.pixels[it].toLong()) }
     }
 }
 

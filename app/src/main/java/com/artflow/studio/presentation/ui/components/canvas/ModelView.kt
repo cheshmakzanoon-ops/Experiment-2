@@ -39,6 +39,13 @@ class ModelView(
             renderer.lighting = value
             requestRender()
         }
+    var showMesh: Boolean
+        get() = renderer.showMesh
+        set(value) {
+            if (value == renderer.showMesh) return
+            renderer.showMesh = value
+            requestRender()
+        }
     var painting = false
     var painter: ModelPainter? = null
     private val stroker =

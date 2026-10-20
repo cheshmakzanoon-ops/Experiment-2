@@ -7,10 +7,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.R
 import com.artflow.studio.domain.model.brush.BrushLibraryCodec
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.SavedBrush
@@ -34,7 +36,7 @@ fun SavedBrushToolbar(
             TextButton(
                 onClick = { naming = true },
                 enabled = available && state.brushes.size < BrushLibraryCodec.MAX_BRUSHES,
-            ) { Text("Save a copy") }
+            ) { Text(stringResource(R.string.savedbrushcontrols_save_a_copy)) }
             BrushFileButtons(parameters, controls, available) { fileError = it }
         }
         (state.error ?: fileError)?.let { error ->
@@ -44,7 +46,10 @@ fun SavedBrushToolbar(
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             )
-            TextButton(onClick = controls.retry, enabled = !state.busy) { Text("Retry saved library") }
+            TextButton(
+                onClick = controls.retry,
+                enabled = !state.busy,
+            ) { Text(stringResource(R.string.savedbrushcontrols_retry_saved_library)) }
         }
     }
     if (naming) {
@@ -63,14 +68,14 @@ fun SavedBrushMenu(
     var deleting by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { expanded = true }, enabled = !controls.state.busy) {
-            Icon(Icons.Default.MoreVert, contentDescription = "Saved brush actions ${brush.name}")
+            Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.savedbrushcontrols_actions_for_brush, brush.name))
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            DropdownMenuItem(text = { Text("Rename saved brush") }, onClick = {
+            DropdownMenuItem(text = { Text(stringResource(R.string.savedbrushcontrols_rename_saved_brush)) }, onClick = {
                 expanded = false
                 renaming = true
             })
-            DropdownMenuItem(text = { Text("Delete saved brush") }, onClick = {
+            DropdownMenuItem(text = { Text(stringResource(R.string.savedbrushcontrols_delete_saved_brush)) }, onClick = {
                 expanded = false
                 deleting = true
             })
@@ -84,18 +89,20 @@ fun SavedBrushMenu(
         LaunchedEffect(controls.state.revision) { if (controls.state.revision != revision) deleting = false }
         AlertDialog(
             onDismissRequest = { if (!controls.state.busy) deleting = false },
-            title = { Text("Delete saved brush?") },
+            title = { Text(stringResource(R.string.savedbrushcontrols_delete_saved_brush_2)) },
             text = {
                 Column {
-                    Text("Remove “${brush.name}” from the saved library? Existing artwork and the current brush draft will not change.")
+                    Text(stringResource(R.string.savedbrushcontrols_remove_from_saved_library, brush.name))
                     controls.state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { controls.delete(brush.id) }, enabled = !controls.state.busy) { Text("Delete copy") }
+                TextButton(onClick = {
+                    controls.delete(brush.id)
+                }, enabled = !controls.state.busy) { Text(stringResource(R.string.savedbrushcontrols_delete_copy)) }
             },
             dismissButton = {
-                TextButton(onClick = { deleting = false }, enabled = !controls.state.busy) { Text("Cancel") }
+                TextButton(onClick = { deleting = false }, enabled = !controls.state.busy) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
@@ -120,13 +127,13 @@ private fun SavedBrushNameDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "Saved copies persist independently of Use brush. They do not change existing artwork.",
+                    stringResource(R.string.savedbrushcontrols_saved_copies_persist_independently_of),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it.take(BrushLibraryCodec.MAX_NAME) },
-                    label = { Text("Brush name") },
+                    label = { Text(stringResource(R.string.savedbrushcontrols_brush_name)) },
                     singleLine = true,
                     enabled = !controls.state.busy,
                     isError = name.isNotEmpty() && !valid,
@@ -145,6 +152,6 @@ private fun SavedBrushNameDialog(
                 Text(caption)
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss, enabled = !controls.state.busy) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !controls.state.busy) { Text(stringResource(R.string.cancel)) } },
     )
 }

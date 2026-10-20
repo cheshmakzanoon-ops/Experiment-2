@@ -8,7 +8,27 @@ import kotlin.math.max
 class PointerGestureRouter(
     private val tapSlop: Float,
     private val tapTimeoutMillis: Long,
+    enabled: Set<Gesture> = Gesture.entries.toSet(),
 ) {
+    /** The multi-finger gestures Prefs > Gesture controls can switch off. */
+    enum class Gesture {
+        TWO_FINGER_TAP_UNDO,
+        THREE_FINGER_TAP_REDO,
+        FOUR_FINGER_TAP_FULL_SCREEN,
+        HOLD_RAPID_UNDO_REDO,
+        PINCH_NAVIGATION,
+        QUICK_PINCH_FIT,
+        THREE_FINGER_SWIPE_COPY_PASTE,
+        THREE_FINGER_SCRUB_CLEAR,
+    }
+
+    /**
+     * Gestures that may be recognised. A disabled gesture is never reported and never latches the
+     * touch: its fingers keep their other meaning (a two-finger tap that is not undo can still be a
+     * quick pinch, and three fingers that are not a swipe can still scrub).
+     */
+    var enabled: Set<Gesture> = enabled.toSet()
+
     enum class Event { DOWN, POINTER_DOWN, MOVE, POINTER_UP, UP, CANCEL }
 
     enum class Action {
@@ -42,12 +62,18 @@ class PointerGestureRouter(
         val historyPointers: Int = 0,
     )
 
-    private enum class Mode { IDLE, TOOL, NAVIGATION, SUPPRESSED }
+    private enum class Mode { IDLE, TOOL, NAVIGATION, SUPPRESSED, REJECTED }
 
     private var mode = Mode.IDLE
     private var owner = -1
     private var pen = false
     private var startedAt = 0L
+
+    /** When the pen last lifted; a finger that lands soon after is most likely the resting palm. */
+    private var penLiftedAt: Long? = null
+
+    /** Navigation begun by a palm pair: a third contact is ignored, so it cannot scrub, redo or count as a tap. */
+    private var palmPair = false
     private var maxPointers = 0
     private var tapEligible = false
     private val lastPositions = mutableMapOf<Int, Pointer>()
@@ -57,9 +83,11 @@ class PointerGestureRouter(
     private var scrubDirection = 0
     private var scrubAnchorX = 0f
     private var scrubReversals = 0
+    private var scrubTracking = false
 
     /** Discard the current stream; a trailing finger must not start drawing or undo artwork. */
     fun suppress() {
+        palmPair = false
         mode = Mode.SUPPRESSED
         owner = -1
         tapEligible = false
@@ -69,10 +97,21 @@ class PointerGestureRouter(
         multiGestureFired = false
         scrubDirection = 0
         scrubReversals = 0
+        scrubTracking = false
     }
 
     /** Two or three fingers resting still since the touch began, else 0: Procreate's rapid undo and redo. */
-    fun heldFingers(): Int = if (mode == Mode.NAVIGATION && tapEligible && maxPointers in 2..3) maxPointers else 0
+    fun heldFingers(): Int {
+        if (Gesture.HOLD_RAPID_UNDO_REDO !in enabled) return 0
+        return if (mode == Mode.NAVIGATION && tapEligible && maxPointers in 2..3) maxPointers else 0
+    }
+
+    /** Procreate's quick pinch to fit: a fast pinch that closes well below its start scale, while the gesture is on. */
+    fun quickPinchRecognised(
+        startScale: Float,
+        endScale: Float,
+        durationMillis: Long,
+    ): Boolean = Gesture.QUICK_PINCH_FIT in enabled && QuickPinch.isQuickPinch(startScale, endScale, durationMillis)
 
     /** A hold that already undid or redid must not also count as a tap when the fingers lift. */
     fun consumeTap() {
@@ -105,13 +144,19 @@ class PointerGestureRouter(
             suppress()
             return Route(Action.CANCEL)
         }
+        if (pointers[changedIndex].stylus && (event == Event.UP || event == Event.POINTER_UP)) penLiftedAt = timeMillis
         if (event == Event.DOWN) {
             val cancelPrevious = mode == Mode.TOOL
+            val palm = !pointers[changedIndex].stylus && recentlyLifted(timeMillis)
             suppress()
             startedAt = timeMillis
             maxPointers = 0
             tapEligible = true
             observe(pointers)
+            if (palm) {
+                mode = Mode.REJECTED
+                return Route(if (cancelPrevious) Action.CANCEL else Action.IGNORE)
+            }
             return start(pointers, changedIndex, cancelPrevious)
         }
         observe(pointers)
@@ -119,6 +164,7 @@ class PointerGestureRouter(
         return when (mode) {
             Mode.TOOL -> routeTool(event, pointers, changedIndex, cancelled)
             Mode.NAVIGATION -> routeNavigation(event, pointers, changedIndex, timeMillis, cancelled)
+            Mode.REJECTED -> routeRejected(event, pointers, changedIndex, timeMillis)
             Mode.SUPPRESSED -> {
                 when {
                     event == Event.POINTER_DOWN && pointers[changedIndex].stylus -> start(pointers, changedIndex, false)
@@ -132,6 +178,38 @@ class PointerGestureRouter(
             Mode.IDLE -> Route(Action.IGNORE)
         }
     }
+
+    private fun recentlyLifted(timeMillis: Long): Boolean {
+        val lifted = penLiftedAt ?: return false
+        val elapsed = timeMillis - lifted
+        return elapsed in 0 until PALM_WINDOW_MILLIS
+    }
+
+    /**
+     * A finger that landed just after the pen lifted is ignored, so a resting palm draws nothing and starts no
+     * colour hold. A second finger still makes it a gesture (undo, redo, navigation), and the pen can take over.
+     */
+    private fun routeRejected(
+        event: Event,
+        pointers: List<Pointer>,
+        changedIndex: Int,
+        timeMillis: Long,
+    ): Route =
+        when {
+            event == Event.POINTER_DOWN && pointers[changedIndex].stylus -> start(pointers, changedIndex, false)
+            // Only a pair landing inside the window is a gesture. A palm that rests on, or brings a third contact, stays ignored.
+            event == Event.POINTER_DOWN && pointers.size == 2 && recentlyLifted(timeMillis) -> {
+                mode = Mode.NAVIGATION
+                owner = -1
+                palmPair = true
+                Route(Action.REBASE_NAVIGATION)
+            }
+            event == Event.UP -> {
+                mode = Mode.IDLE
+                Route(Action.IGNORE)
+            }
+            else -> Route(Action.IGNORE)
+        }
 
     private fun routeTool(
         event: Event,
@@ -177,14 +255,28 @@ class PointerGestureRouter(
             event == Event.POINTER_DOWN && pointers[changedIndex].stylus -> start(pointers, changedIndex, false)
             event == Event.UP -> {
                 mode = Mode.IDLE
+                palmPair = false
                 val elapsed = timeMillis - startedAt
-                val count = if (tapEligible && elapsed in 0 until tapTimeoutMillis && maxPointers in 2..4) maxPointers else 0
+                val tapped = tapEligible && elapsed in 0 until tapTimeoutMillis && maxPointers in 2..4
+                val count = if (tapped && tapEnabled(maxPointers)) maxPointers else 0
                 Route(Action.FINISH_NAVIGATION, historyPointers = count)
+            }
+            palmPair && pointers.size > 2 -> {
+                tapEligible = false
+                Route(Action.IGNORE)
             }
             event == Event.POINTER_UP || event == Event.POINTER_DOWN -> Route(Action.REBASE_NAVIGATION)
             event == Event.MOVE && pointers.size >= 3 -> routeThreeFinger(pointers)
-            event == Event.MOVE -> Route(Action.NAVIGATE)
+            event == Event.MOVE && Gesture.PINCH_NAVIGATION in enabled -> Route(Action.NAVIGATE)
             else -> Route(Action.IGNORE)
+        }
+
+    /** Whether a still tap of [fingers] fingers is one of the enabled tap gestures. */
+    private fun tapEnabled(fingers: Int): Boolean =
+        when (fingers) {
+            2 -> Gesture.TWO_FINGER_TAP_UNDO in enabled
+            3 -> Gesture.THREE_FINGER_TAP_REDO in enabled
+            else -> Gesture.FOUR_FINGER_TAP_FULL_SCREEN in enabled
         }
 
     /** Three-finger moves never pan the canvas; they can only trigger one swipe or scrub per touch. */
@@ -202,16 +294,24 @@ class PointerGestureRouter(
         dx /= pointers.size
         dy /= pointers.size
         meanX /= pointers.size
-        if (dy > swipeDistance && abs(dx) < dy * 0.6f) {
+        if (Gesture.THREE_FINGER_SWIPE_COPY_PASTE in enabled && dy > swipeDistance && abs(dx) < dy * 0.6f) {
             multiGestureFired = true
             return Route(Action.THREE_FINGER_SWIPE_DOWN)
+        }
+        if (!scrubTracking) {
+            // Anchor the scrub where the fingers first move together, not at the screen's left edge.
+            scrubTracking = true
+            scrubAnchorX = meanX
         }
         val step = meanX - scrubAnchorX
         val direction = if (step > 0f) 1 else -1
         when {
+            // Only real movement sets the direction, so jitter inside the scrub distance is not a reversal.
             scrubDirection == 0 -> {
-                scrubDirection = direction
-                scrubAnchorX = meanX
+                if (abs(step) > scrubDistance) {
+                    scrubDirection = direction
+                    scrubAnchorX = meanX
+                }
             }
             direction == scrubDirection -> scrubAnchorX = meanX
             abs(step) > scrubDistance -> {
@@ -236,6 +336,7 @@ class PointerGestureRouter(
         cancelPrevious: Boolean,
     ): Route {
         owner = pointers[index].id
+        palmPair = false
         pen = pointers[index].stylus
         if (pen) tapEligible = false
         mode = Mode.TOOL
@@ -244,5 +345,8 @@ class PointerGestureRouter(
 
     private companion object {
         const val SCRUB_REVERSALS = 3
+
+        /** How long after a pen lift a finger is treated as a palm; longer than a typical pen-to-hand move. */
+        const val PALM_WINDOW_MILLIS = 1_500L
     }
 }

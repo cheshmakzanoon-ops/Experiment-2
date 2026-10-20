@@ -31,6 +31,15 @@ object ProcreateBrush {
     fun read(archive: ByteArray): Settings {
         val keyed = KeyedArchive(BinaryPlist.read(archive))
         val brush = requireNotNull(keyed.root) { "This is not a Procreate brush" }
+        return Settings(
+            name = keyed.string(brush["name"])?.trim()?.takeIf { it.isNotEmpty() },
+            parameters = parameters(brush),
+            shapeInverted = brush.flag("shapeInverted"),
+            grainInverted = brush.flag("textureInverted"),
+            bundledShape = keyed.string(brush["bundledShapePath"]) != null,
+            bundledGrain = keyed.string(brush["bundledGrainPath"]) != null,
+        )
+    }
 
         fun number(key: String): Float? = (brush[key] as? Number)?.toFloat()?.takeIf { it.isFinite() }
 
@@ -74,8 +83,9 @@ object ProcreateBrush {
                 smoothing = maxOf(unit("plotSmoothing"), unit("plotMovingAverageStabilization"), unit("plotFFTSmoothingAmount")),
                 wetMix = unit("dynamicsMix"),
                 flow = (number("dynamicsGlazedFlow") ?: 1f).coerceIn(MIN_OPACITY, 1f),
-                textureScale = (number("textureScale") ?: 1f).coerceIn(MIN_SCALE, MAX_SCALE),
-                tiltInfluence = maxOf(unit("dynamicsTiltSize"), unit("dynamicsTiltOpacity")),
+                textureScale = (number("textureScale") ?: 1f).coerceIn(MIN_GRAIN_SCALE, MAX_SCALE),
+                tiltInfluence = unit("dynamicsTiltSize"),
+                tiltOpacityInfluence = unit("dynamicsTiltOpacity"),
                 tiltToRotation = flag("shapeAzimuth") || flag("oriented"),
                 velocityToSize = (number("dynamicsSpeedSize") ?: 0f).coerceIn(-1f, 1f),
                 velocityToOpacity = (number("dynamicsSpeedOpacity") ?: 0f).coerceIn(-1f, 1f),
@@ -89,6 +99,8 @@ object ProcreateBrush {
                 tipFlipYJitter = flag("shapeFlipYJitter"),
                 tipRandomized = flag("shapeRandomise"),
                 buildUp = flag("renderingRecursiveMixing"),
+                renderingMode =
+                    if (flag("renderingRecursiveMixing")) RenderingMode.BLEND_UNIFORM else RenderingMode.GLAZE_UNIFORM,
                 grainMoving = unit("textureMovement") >= MOVING_GRAIN,
                 secondaryPressure = unit("dynamicsPressureSecondaryColor"),
                 secondaryJitter = unit("jitterSecondary"),
@@ -140,13 +152,26 @@ object ProcreateBrush {
     private const val MAX_SIZE = 500f
     private const val MIN_SCALE = 0.05f
     private const val MAX_SCALE = 8f
+
+    /** The smallest grain scale the library stores and the renderer uses. */
+    private const val MIN_GRAIN_SCALE = 0.25f
     private const val MIN_OPACITY = 0.05f
     private const val DEFAULT_SPACING = 0.1f
     private const val MIN_SPACING = 0.01f
     private const val MAX_COUNT = 16
     private const val FULL_TURN = 360f
+
+    /** Kotlin's % keeps the sign of the dividend, so a negative angle needs wrapping to [0, 360). */
+    private fun wrapDegrees(degrees: Float): Float = ((degrees % FULL_TURN) + FULL_TURN) % FULL_TURN
+
     private const val MIN_ROUNDNESS = 0.05f
     private const val MOVING_GRAIN = 0.5f
+
+    private fun Map<String, Any?>.number(key: String): Float? = (this[key] as? Number)?.toFloat()?.takeIf { it.isFinite() }
+
+    private fun Map<String, Any?>.unit(key: String): Float = number(key)?.coerceIn(0f, 1f) ?: 0f
+
+    private fun Map<String, Any?>.flag(key: String): Boolean = this[key] == true
 }
 
 /** Procreate's blend mode numbers, as documents and brushes store them. */
@@ -182,4 +207,7 @@ internal object ProcreateBlendModes {
         )
 
     fun of(number: Int): BlendMode? = MODES[number]
+
+    /** The number Procreate stores for [mode]; modes it has no number for are written as Normal. */
+    fun numberOf(mode: BlendMode): Int = MODES.entries.firstOrNull { it.value == mode }?.key ?: 0
 }

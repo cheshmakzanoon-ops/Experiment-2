@@ -12,12 +12,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.core.content.FileProvider
-import com.artflow.studio.core.export.AbrReader
-import com.artflow.studio.data.local.BrushArchives
+import com.artflow.studio.R
 import com.artflow.studio.data.local.BrushFiles
-import com.artflow.studio.data.local.GrainStorage
-import com.artflow.studio.data.renderer.BitmapPixelBridge
+import com.artflow.studio.data.local.BrushImports
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.SavedBrush
 import com.artflow.studio.domain.model.brush.StudioBrushes
@@ -26,7 +25,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-/** Share the brush being edited as an `.artbrush` file, or import brushes (ArtFlow, Procreate or Photoshop). */
+/** Share the brush being edited as an `.artbrush` or Procreate `.brush` file, or import brushes (ArtFlow, Procreate or Photoshop). */
 @Composable
 internal fun BrushFileButtons(
     parameters: BrushParams,
@@ -56,7 +55,11 @@ internal fun BrushFileButtons(
                             }
                         }.getOrNull()
                     }
-                if (brushes == null) onFailure("That file is not a brush ArtFlow can import") else latestControls.importAll(brushes)
+                if (brushes == null) {
+                    onFailure(context.getString(R.string.brushfilebuttons_not_a_brush_file))
+                } else {
+                    latestControls.importAll(brushes)
+                }
             }
         }
     TextButton(onClick = {
@@ -71,7 +74,11 @@ internal fun BrushFileButtons(
                         }
                     }.getOrNull()
                 }
-            if (file == null) onFailure("The brush could not be shared") else runCatching { share(context, file) }
+            if (file == null) {
+                onFailure(context.getString(R.string.brushfilebuttons_could_not_share))
+            } else {
+                runCatching { share(context, file) }
+            }
         }
     }, enabled = enabled) { Text("Share") }
     TextButton(onClick = { runCatching { picker.launch("*/*") } }, enabled = enabled) { Text("Import") }
@@ -102,6 +109,7 @@ private fun importAbr(
 }
 
 private const val MAX_ARCHIVE_BYTES = 64 * 1024 * 1024
+private const val PROCREATE_BRUSH_EXTENSION = "brush"
 
 /** Stores the file's images under their content identities and points the brushes at them. */
 private fun importBrushes(

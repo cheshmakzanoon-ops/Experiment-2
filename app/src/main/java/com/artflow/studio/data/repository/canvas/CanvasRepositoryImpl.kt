@@ -3,6 +3,7 @@ package com.artflow.studio.data.repository.canvas
 import com.artflow.studio.core.animation.AnimationTimeline
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.color.ColorProfile
+import com.artflow.studio.core.color.ColorProfiles
 import com.artflow.studio.core.pixels.AdjustmentProcessor
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.LayerMaskFactory
@@ -18,6 +19,7 @@ import com.artflow.studio.core.text.TextLayerContent
 import com.artflow.studio.data.local.CanvasDocument
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.renderer.BitmapPixelBridge
+import com.artflow.studio.data.renderer.TextRasterizer
 import com.artflow.studio.domain.model.animation.AnimationFrame
 import com.artflow.studio.domain.model.animation.AnimationSettings
 import com.artflow.studio.domain.model.brush.BrushParams
@@ -28,6 +30,7 @@ import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.FilterType
 import com.artflow.studio.domain.model.layer.Layer
+import com.artflow.studio.domain.model.layer.LayerEffects
 import com.artflow.studio.domain.repository.canvas.CanvasExportSnapshot
 import com.artflow.studio.domain.repository.canvas.CanvasInvalidationEvent
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
@@ -35,6 +38,7 @@ import com.artflow.studio.domain.repository.canvas.CanvasSize
 import com.artflow.studio.domain.repository.canvas.CanvasState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.ensureActive
@@ -100,6 +104,9 @@ class CanvasRepositoryImpl
         private var backgroundColor = 0xFFFFFFFF.toInt()
 
         private var frameList: MutableList<FrameData> = mutableListOf()
+
+        /** The frame last copied with [copyFrame]; cleared when another artwork is opened. */
+        private var frameClipboard: FrameData? = null
         private var activeFrame = 0
         private var animationSettings = AnimationSettings()
         private var nextLayerId = 1L
@@ -112,6 +119,9 @@ class CanvasRepositoryImpl
         private val strokeErasers = mutableMapOf<Long, Boolean>()
         private val strokeSecondaries = mutableMapOf<Long, Int>()
         private val strokeDestinations = mutableMapOf<Long, StrokeDestination>()
+
+        /** Copies of each stroke's layer, started by [beginStroke] so the commit need not make one on the UI thread. */
+        private val strokeCopies = mutableMapOf<Long, StrokeCopy>()
 
         private var strokeColor: Int = 0xFF000000.toInt()
         private var symmetrySettings = SymmetryEngine.Settings()
@@ -151,6 +161,14 @@ class CanvasRepositoryImpl
         private val dirtyRasters = mutableSetOf<Long>()
 
         private var rasterEditToken = 0L
+
+        /** A copy of [source], a layer raster, made while its stroke is drawn; [ready] is set once the copy is made. */
+        private class StrokeCopy(
+            val source: PixelBuffer,
+        ) {
+            @Volatile var ready: PixelBuffer? = null
+            var job: Job? = null
+        }
 
         private data class PendingEdit(
             val projectId: Long,
@@ -230,6 +248,7 @@ class CanvasRepositoryImpl
             synchronized(liveLock) { liveStrokes.clear() }
             strokeBrushParams.clear()
             strokeLayerIds.clear()
+            cancelStrokeCopies()
             strokeErasers.clear()
             strokeSecondaries.clear()
             strokeDestinations.clear()
@@ -294,6 +313,7 @@ class CanvasRepositoryImpl
             document: CanvasDocument,
         ) {
             val frames = document.resolvedFrames()
+            frameClipboard = null
             requireCanvasMemory(document.width, document.height)
             val rasterCount = frames.sumOf { frame -> frame.layers.sumOf { listOfNotNull(it.rasterFile, it.maskFile).size } }
             val rasterBytes = document.width.toLong() * document.height * 4L * rasterCount
@@ -358,6 +378,7 @@ class CanvasRepositoryImpl
             synchronized(liveLock) { liveStrokes.clear() }
             strokeBrushParams.clear()
             strokeLayerIds.clear()
+            cancelStrokeCopies()
             strokeErasers.clear()
             strokeSecondaries.clear()
             strokeDestinations.clear()
@@ -402,6 +423,7 @@ class CanvasRepositoryImpl
                     isFillReference = layer.isFillReference
                     drawingAssist = layer.drawingAssist
                     isPrivate = layer.isPrivate
+                    effects = layer.effects?.takeUnless { it.isEmpty }
                 }
             data.raster = loadRaster(projectId, layer.rasterFile)
             data.text = layer.textContent
@@ -548,6 +570,7 @@ class CanvasRepositoryImpl
             layerId: Long,
             isEraser: Boolean,
             destination: StrokeDestination,
+            timestamp: Long,
         ): Long {
             val strokeId = nextStrokeId++
             val layer = layerById(layerId)
@@ -557,7 +580,13 @@ class CanvasRepositoryImpl
             }
             activeStrokes[strokeId] =
                 mutableListOf(
-                    StrokePoint(x = x, y = y, pressure = pressure, color = destination.color(strokeColor, layer.maskInverted)),
+                    StrokePoint(
+                        x = x,
+                        y = y,
+                        pressure = pressure,
+                        timestamp = timestamp,
+                        color = destination.color(documentColor(strokeColor), layer.maskInverted),
+                    ),
                 )
             strokeBrushParams[strokeId] =
                 if (destination.isMask) {
@@ -568,6 +597,8 @@ class CanvasRepositoryImpl
                         colorPressure = false,
                         velocityToHue = 0f,
                         wetMix = 0f,
+                        dilution = 0f,
+                        pull = 0f,
                         secondaryPressure = 0f,
                         secondaryJitter = 0f,
                     )
@@ -578,6 +609,7 @@ class CanvasRepositoryImpl
             strokeErasers[strokeId] = isEraser && !destination.isMask
             strokeSecondaries[strokeId] = secondaryStrokeColor
             strokeDestinations[strokeId] = destination
+            if (!destination.isMask) prepareStrokeCopy(strokeId, layer)
             return strokeId
         }
 
@@ -588,6 +620,7 @@ class CanvasRepositoryImpl
             pressure: Float,
             tiltX: Float,
             tiltY: Float,
+            timestamp: Long,
         ) {
             if (!validSample(x, y, pressure) || !tiltX.isFinite() || !tiltY.isFinite()) return
             val points = activeStrokes[strokeId] ?: return
@@ -598,12 +631,26 @@ class CanvasRepositoryImpl
                     pressure = pressure,
                     tiltX = tiltX,
                     tiltY = tiltY,
+                    timestamp = timestamp,
                     color = points.first().color,
                 ),
             )
         }
 
         override fun endStroke(strokeId: Long) {
+            val prepared = strokeCopies.remove(strokeId)
+            try {
+                commitStroke(strokeId, prepared)
+            } finally {
+                // A copy the commit used has already finished, so cancelling it changes nothing.
+                prepared?.job?.cancel()
+            }
+        }
+
+        private fun commitStroke(
+            strokeId: Long,
+            prepared: StrokeCopy?,
+        ) {
             val points = activeStrokes.remove(strokeId) ?: return
             val brushParams = strokeBrushParams.remove(strokeId) ?: return
             val layerId = strokeLayerIds.remove(strokeId) ?: return
@@ -640,12 +687,14 @@ class CanvasRepositoryImpl
             // A live stroke already holds its dabs: the commit lays them down instead of redrawing.
             val lives = synchronized(liveLock) { liveStrokes.remove(strokeId) }
             val live = lives?.takeIf { destination == StrokeDestination.LAYER && it.size == incoming.size && layer.strokes.isEmpty() }
+            // The copy made while the stroke was drawn, when it is ready and still the layer's raster.
+            val owned = if (destination.isMask) null else readyCopy(prepared, layer)
             val base =
                 if (live != null) {
-                    commitLive(layer, incoming, live)
+                    commitLive(layer, incoming, live, owned)
                 } else {
                     LayerStrokeRenderer.render(
-                        if (destination.isMask) layer.mask else layer.raster,
+                        if (destination.isMask) layer.mask else owned ?: layer.raster,
                         if (destination.isMask) emptyList() else layer.strokes.toList(),
                         incoming,
                         canvasWidth,
@@ -653,6 +702,7 @@ class CanvasRepositoryImpl
                         !destination.isMask && layer.isAlphaLocked,
                         activeSelection,
                         region = area,
+                        ownedBase = owned != null,
                     )
                 }
             val damageBefore = previewDamage
@@ -673,13 +723,46 @@ class CanvasRepositoryImpl
             emitAsync(CanvasInvalidationEvent.Full)
         }
 
+        /**
+         * Starts copying [layer]'s raster now, while the stroke is still being drawn, so the commit can take the
+         * copy instead of making one on the UI thread. Painting leaves the layer's raster alone until the commit
+         * (live strokes are drawn into their own buffers, and raster edits clone first), so the copy matches the
+         * raster unless a later edit replaces it, which [readyCopy] checks.
+         */
+        private fun prepareStrokeCopy(
+            strokeId: Long,
+            layer: LayerData,
+        ) {
+            val raster = layer.raster ?: return
+            if (raster.pixels.size.toLong() * BYTES_PER_PIXEL > Runtime.getRuntime().maxMemory() / LIVE_HEAP_SHARE) return
+            val prepared = StrokeCopy(raster)
+            // A failed copy (out of memory, say) must not reach the thread's uncaught handler. The commit then copies as before.
+            prepared.job = coroutineScope.launch { prepared.ready = runCatching { raster.copy() }.getOrNull() }
+            strokeCopies[strokeId] = prepared
+        }
+
+        /** The copy [prepared] made of [layer]'s raster, once it is ready and the raster is still the same buffer; else null. */
+        private fun readyCopy(
+            prepared: StrokeCopy?,
+            layer: LayerData,
+        ): PixelBuffer? {
+            if (prepared == null || prepared.source !== layer.raster) return null
+            return prepared.ready
+        }
+
+        private fun cancelStrokeCopies() {
+            strokeCopies.values.forEach { it.job?.cancel() }
+            strokeCopies.clear()
+        }
+
         /** [layer]'s pixels with the live [strokes] laid down, as a full redraw would paint them. */
         private fun commitLive(
             layer: LayerData,
             strokes: List<Stroke>,
             lives: List<StrokeRasterizer.LiveStroke>,
+            owned: PixelBuffer?,
         ): PixelBuffer {
-            val result = layer.raster?.copy() ?: PixelBuffer(canvasWidth, canvasHeight)
+            val result = owned ?: layer.raster?.copy() ?: PixelBuffer(canvasWidth, canvasHeight)
             val rasterizer = StrokeRasterizer()
             try {
                 synchronized(liveLock) {
@@ -711,6 +794,7 @@ class CanvasRepositoryImpl
 
         override fun cancelStroke(strokeId: Long) {
             synchronized(liveLock) { liveStrokes.remove(strokeId) }
+            strokeCopies.remove(strokeId)?.job?.cancel()
             activeStrokes.remove(strokeId)
             strokeBrushParams.remove(strokeId)
             strokeLayerIds.remove(strokeId)
@@ -765,6 +849,29 @@ class CanvasRepositoryImpl
 
         override suspend fun layerPixels(layerId: Long): PixelBuffer? =
             withState { layerById(layerId)?.let { rawLayerPixels(it, canvasWidth, canvasHeight)?.copy() } }
+
+        override suspend fun layerAt(
+            x: Int,
+            y: Int,
+        ): Long? =
+            withState {
+                if (x !in 0 until canvasWidth || y !in 0 until canvasHeight) return@withState null
+                val layers = currentLayers()
+                val byId = layers.associateBy { it.id }
+
+                fun shown(layer: LayerData): Boolean =
+                    generateSequence(layer) { it.parentGroupId?.let(byId::get) }.take(layers.size + 1).all { it.isVisible }
+                layers
+                    .asReversed()
+                    .firstOrNull { layer ->
+                        !layer.isGroup &&
+                            !layer.isInternal &&
+                            layer.adjustmentType == null &&
+                            layer.filterType == null &&
+                            shown(layer) &&
+                            rawLayerPixels(layer, canvasWidth, canvasHeight)?.let { (it.getSafe(x, y) ushr 24) != 0 } == true
+                    }?.id
+            }
 
         override suspend fun beginRasterEdit(layerId: Long): CanvasRepository.RasterEditSession? =
             withState {
@@ -862,6 +969,54 @@ class CanvasRepositoryImpl
                 dirty = true
                 emit(CanvasInvalidationEvent.Full)
                 Timber.d("Set pixels for layer ${layer.name} ($description)")
+                true
+            }
+
+        override suspend fun transformLayer(
+            layerId: Long,
+            parameters: LayerTransform.Parameters,
+            expectedRevision: Long,
+        ): Boolean =
+            withState {
+                val layer = activeLayerData() ?: return@withState false
+                if (layer.id != layerId || !layer.canPaint() || layer.linkGroupId != null) return@withState false
+                if (editRevision != expectedRevision || activeSelection != null) return@withState false
+                if (activeStrokes.isNotEmpty() || pendingEdits.isNotEmpty()) return@withState false
+                if (parameters.isIdentity) return@withState true
+                requireCanvasMemory(canvasWidth, canvasHeight)
+                val project = currentProjectId
+                val frame = activeFrame
+                val width = canvasWidth
+                val height = canvasHeight
+                markRastersShared()
+                val frozen = layer.snapshotCopy()
+                // Prepare BOTH planes before touching live state. Preview, autosave and export
+                // continue to read the previous committed document while resampling is in flight.
+                val result =
+                    withContext(Dispatchers.Default) {
+                        val source = rawLayerPixels(frozen, width, height) ?: PixelBuffer(width, height)
+                        val pixels = LayerTransform.apply(source, parameters, checkActive = { ensureActive() })
+                        val sourceMask = frozen.mask
+                        val mask = sourceMask?.let { LayerTransform.apply(it, parameters, checkActive = { ensureActive() }) }
+                        val samePixels = frozen.strokes.isEmpty() && source.pixels.contentEquals(pixels.pixels)
+                        val sameMask = if (sourceMask == null) mask == null else sourceMask.pixels.contentEquals(mask?.pixels)
+                        Triple(pixels, mask, samePixels && sameMask)
+                    }
+                coroutineContext.ensureActive()
+                if (currentProjectId != project || activeFrame != frame || activeLayerData() !== layer) return@withState false
+                if (editRevision != expectedRevision || activeSelection != null) return@withState false
+                if (activeStrokes.isNotEmpty() || pendingEdits.isNotEmpty()) return@withState false
+                if (result.third) return@withState true
+                pushUndo()
+                layer.raster = result.first
+                layer.strokes.clear()
+                layer.rasterFile = null
+                layer.mask = result.second
+                layer.maskFile = null
+                layer.maskOwned = true
+                dirtyRasters += layer.id
+                dirty = true
+                emit(CanvasInvalidationEvent.Full)
                 true
             }
 
@@ -977,6 +1132,8 @@ class CanvasRepositoryImpl
         ): Boolean =
             withState {
                 val layer = layerById(layerId) ?: return@withState false
+                // A layer that a crop, rotation or resize has rasterised is no longer text, so a stale edit cannot re-attach text.
+                if (layer.text == null) return@withState false
                 if (!layer.canPaint() || pixels.width != canvasWidth || pixels.height != canvasHeight) return@withState false
                 pushUndo()
                 layer.raster = pixels.copy()
@@ -1047,17 +1204,21 @@ class CanvasRepositoryImpl
             withState {
                 val layers = currentLayers()
                 val position = layers.indexOfFirst { it.id == layerId }
-                if (position == -1 || !hasLayerCapacity(1)) return@withState null
+                if (position == -1) return@withState null
+                // A group is duplicated with everything inside it.
+                val members = if (layers[position].isGroup) subtreeIds(layers, layerId) else setOf(layerId)
+                val block = layers.filter { it.id in members }
+                if (!hasLayerCapacity(block.size)) return@withState null
 
                 pushUndo()
-                val source = layers[position]
-                val newId = nextLayerId++
                 // Copy-on-write means the duplicate can share pixel buffers with the original until one of
                 // them is edited, so duplicating a 4K layer is instant.
-                val duplicate = source.duplicate(newId, "${source.name} copy") { nextStrokeId++ }
-                layers.add(position + 1, duplicate)
+                val copies = duplicateBlock(block) { if (it.id == layerId) "${it.name} copy" else it.name }
+                val newId = copies[block.indexOfFirst { it.id == layerId }].id
+                // Layers sit bottom first; the copy goes just above the original block.
+                val above = layers.indexOfLast { it.id in members } + 1
+                layers.addAll(above, copies)
                 setActiveLayerId(newId)
-                dirtyRasters += newId
                 markRastersShared()
                 dirty = true
                 emit(CanvasInvalidationEvent.LayersChanged)
@@ -1075,9 +1236,12 @@ class CanvasRepositoryImpl
                 // A non-adjacent merge changes intervening compositing order; never silently do so.
                 if (source < 0 || target < 0 || kotlin.math.abs(source - target) != 1) return@withState false
                 val selected = listOf(layers[source], layers[target])
-                if (selected.any { !it.isVisible || it.isLocked || it.isReference }) return@withState false
+                if (!selected.all(::mergeable)) return@withState false
+                // A merge never moves a layer into or out of a group, so both must share one.
+                val group = selected[0].parentGroupId
+                if (selected[1].parentGroupId != group) return@withState false
                 val lowerIndex = minOf(source, target)
-                mergeStack(selected.map { it.id }.toSet(), targetLayerId, layers[target].name, lowerIndex) != null
+                mergeStack(selected.map { it.id }.toSet(), targetLayerId, layers[target].name, lowerIndex, parentGroupId = group) != null
             }
 
         private fun mergeable(layer: LayerData): Boolean = layer.isVisible && !layer.isLocked && !layer.isReference && !layer.isGroup
@@ -1090,8 +1254,10 @@ class CanvasRepositoryImpl
                 if (indices.size < 2 || indices.first() < 0 || indices.last() - indices.first() != indices.size - 1) return@withState false
                 val selected = indices.map { layers[it] }
                 if (!selected.all(::mergeable)) return@withState false
+                val group = selected.first().parentGroupId
+                if (selected.any { it.parentGroupId != group }) return@withState false
                 val bottom = selected.first()
-                mergeStack(selected.map { it.id }.toSet(), bottom.id, bottom.name, indices.first()) != null
+                mergeStack(selected.map { it.id }.toSet(), bottom.id, bottom.name, indices.first(), parentGroupId = group) != null
             }
 
         override suspend fun mergeVisibleLayers(keepOriginals: Boolean): Long? =
@@ -1130,6 +1296,7 @@ class CanvasRepositoryImpl
             name: String,
             insertionIndex: Int,
             keepOriginals: Boolean = false,
+            parentGroupId: Long? = null,
         ): Long? {
             if (activeStrokes.isNotEmpty() || pendingEdits.isNotEmpty()) return null
             val live = currentLayers()
@@ -1142,6 +1309,10 @@ class CanvasRepositoryImpl
                 withContext(Dispatchers.Default) {
                     val selected = frozen.filter { it.id in selectedIds }
                     val baked = LayerData(id = mergedId, name = name)
+                    // The merged layer stays in the group its sources shared and stays private if any source was,
+                    // so a private photo never reaches the time-lapse.
+                    baked.parentGroupId = parentGroupId
+                    baked.isPrivate = selected.any { it.isPrivate }
                     // Raster content excludes the canvas background. All per-layer effects are already
                     // baked; the replacement must have neutral opacity, blend mode, mask and strokes.
                     baked.raster = renderFrozen(selected, document, transparentBackground = true)
@@ -1197,8 +1368,36 @@ class CanvasRepositoryImpl
         ): Boolean =
             withState {
                 val layer = layerById(layerId) ?: return@withState false
+                val next = isVisible ?: !layer.isVisible
+                if (layer.isVisible == next) return@withState true
                 pushUndo()
-                layer.isVisible = isVisible ?: !layer.isVisible
+                layer.isVisible = next
+                dirty = true
+                emit(CanvasInvalidationEvent.LayersChanged)
+                true
+            }
+
+        /** Visibility before the last "show only this layer", restored when it is toggled off. */
+        private var soloRestore: Map<Long, Boolean>? = null
+
+        override suspend fun toggleLayerSolo(layerId: Long): Boolean =
+            withState {
+                val layers = currentLayers().filterNot { it.isInternal }
+                val target = layers.firstOrNull { it.id == layerId } ?: return@withState false
+                val byId = layers.associateBy { it.id }
+                val ancestors = generateSequence(target) { it.parentGroupId?.let(byId::get) }.take(layers.size + 1)
+                val shown = subtreeIds(layers, layerId) + ancestors.map { it.id }
+                val solo = layers.associate { it.id to (it.id in shown) }
+                val current = layers.associate { it.id to it.isVisible }
+                val next =
+                    if (current == solo) {
+                        soloRestore?.takeIf { it.keys == solo.keys } ?: solo.mapValues { true }
+                    } else {
+                        soloRestore = current
+                        solo
+                    }
+                pushUndo()
+                layers.forEach { it.isVisible = next.getValue(it.id) }
                 dirty = true
                 emit(CanvasInvalidationEvent.LayersChanged)
                 true
@@ -1211,6 +1410,36 @@ class CanvasRepositoryImpl
         )
 
         private var opacityRun: OpacityRun? = null
+
+        /** A run of timeline edits of one kind (a slider drag), merged into one undo step like [OpacityRun]. */
+        private data class EditRun(
+            val key: String,
+            val pushes: Long,
+            val at: Long,
+        )
+
+        private var editRun: EditRun? = null
+
+        private fun continuesEditRun(
+            key: String,
+            now: Long,
+        ): Boolean {
+            val run = editRun ?: return false
+            return run.key == key && run.pushes == undoPushes && now - run.at <= EDIT_MERGE_MS
+        }
+
+        /**
+         * The onion-skin look (frames, opacity and tints) is a viewing preference, so [source] supplies it
+         * instead of this settings object: undo and redo never change it.
+         */
+        private fun AnimationSettings.withOnionLookOf(source: AnimationSettings): AnimationSettings =
+            copy(
+                onionSkinEnabled = source.onionSkinEnabled,
+                onionSkinFrames = source.onionSkinFrames,
+                onionSkinOpacity = source.onionSkinOpacity,
+                onionSkinPreviousColor = source.onionSkinPreviousColor,
+                onionSkinNextColor = source.onionSkinNextColor,
+            )
 
         /** True when the last undo entry is an opacity change to [layerId] made moments ago. */
         private fun continuesOpacityRun(
@@ -1264,6 +1493,7 @@ class CanvasRepositoryImpl
         ): Boolean =
             withState {
                 val layer = layerById(layerId) ?: return@withState false
+                if (layer.isLocked == isLocked) return@withState true
                 pushUndo()
                 layer.isLocked = isLocked
                 dirty = true
@@ -1277,6 +1507,7 @@ class CanvasRepositoryImpl
         ): Boolean =
             withState {
                 val layer = layerById(layerId) ?: return@withState false
+                if (layer.blendMode == blendMode) return@withState true
                 pushUndo()
                 layer.blendMode = blendMode
                 dirty = true
@@ -1290,8 +1521,10 @@ class CanvasRepositoryImpl
         ): Boolean =
             withState {
                 val layer = layerById(layerId) ?: return@withState false
+                val next = isLocked ?: !layer.isAlphaLocked
+                if (layer.isAlphaLocked == next) return@withState true
                 pushUndo()
-                layer.isAlphaLocked = isLocked ?: !layer.isAlphaLocked
+                layer.isAlphaLocked = next
                 dirty = true
                 emit(CanvasInvalidationEvent.LayersChanged)
                 true
@@ -1303,8 +1536,10 @@ class CanvasRepositoryImpl
         ): Boolean =
             withState {
                 val layer = layerById(layerId) ?: return@withState false
+                val next = isClipping ?: !layer.isClippingMask
+                if (layer.isClippingMask == next) return@withState true
                 pushUndo()
-                layer.isClippingMask = isClipping ?: !layer.isClippingMask
+                layer.isClippingMask = next
                 dirty = true
                 emit(CanvasInvalidationEvent.LayersChanged)
                 true
@@ -1346,6 +1581,21 @@ class CanvasRepositoryImpl
                 true
             }
 
+        override suspend fun setLayerEffects(
+            layerId: Long,
+            effects: LayerEffects?,
+        ): Boolean =
+            withState {
+                val layer = layerById(layerId)?.takeIf { !it.isGroup } ?: return@withState false
+                val normalized = effects?.normalized()?.takeUnless { it.isEmpty }
+                if (layer.effects == normalized) return@withState true
+                pushUndo()
+                layer.effects = normalized
+                dirty = true
+                emit(CanvasInvalidationEvent.Full)
+                true
+            }
+
         override suspend fun setLayerFillReference(
             layerId: Long,
             enabled: Boolean,
@@ -1368,6 +1618,7 @@ class CanvasRepositoryImpl
         ): Boolean =
             withState {
                 val layer = layerById(layerId) ?: return@withState false
+                if (layer.isReference == isReference) return@withState true
                 pushUndo()
                 layer.isReference = isReference
                 dirty = true
@@ -1439,6 +1690,24 @@ class CanvasRepositoryImpl
                 emit(CanvasInvalidationEvent.LayersChanged)
                 removing.size
             }
+
+        /**
+         * Copies [block] with fresh ids, in order. Groups inside the block are remapped to their
+         * copies, so the copied children stay in the copied groups rather than the originals.
+         */
+        private fun duplicateBlock(
+            block: List<LayerData>,
+            name: (LayerData) -> String,
+        ): List<LayerData> {
+            val ids = block.associate { it.id to nextLayerId++ }
+            return block.map { layer ->
+                val newId = ids.getValue(layer.id)
+                layer.duplicate(newId, name(layer)) { nextStrokeId++ }.also { copy ->
+                    copy.parentGroupId = layer.parentGroupId?.let { ids[it] ?: it }
+                    dirtyRasters += newId
+                }
+            }
+        }
 
         /** [groupId] and every layer inside it, at any depth. */
         private fun subtreeIds(
@@ -1614,6 +1883,7 @@ class CanvasRepositoryImpl
         ): Boolean =
             withState {
                 val layer = layerById(layerId) ?: return@withState false
+                if (layer.maskEnabled == enabled) return@withState true
                 pushUndo()
                 layer.maskEnabled = enabled
                 dirty = true
@@ -1840,7 +2110,11 @@ class CanvasRepositoryImpl
                 transformCanvas(canvasWidth, canvasHeight) { buffer, _ -> CanvasOperations.flip(buffer, axis, properties).buffer }
             }
 
-        /** Rasterise legacy vectors BEFORE transforming, retaining masks/effects as independent data. */
+        /**
+         * Rasterise legacy vectors BEFORE transforming, retaining masks/effects as independent data.
+         * Editable text layers are rasterised too: their glyphs stay in the raster, and dropping their
+         * TextLayerContent (the raster setter does this) means the layer can no longer be edited as text.
+         */
         private suspend fun transformCanvas(
             width: Int,
             height: Int,
@@ -1871,8 +2145,11 @@ class CanvasRepositoryImpl
                                     .map { layer ->
                                         coroutineContext.ensureActive()
                                         layer.snapshotCopy().also { result ->
-                                            result.raster =
-                                                rawLayerPixels(layer, snapshot.width, snapshot.height)?.let { transform(it, false) }
+                                            // A text layer whose raster file is missing is drawn from its text before the transform.
+                                            val pixels =
+                                                rawLayerPixels(layer, snapshot.width, snapshot.height)
+                                                    ?: layer.text?.let { TextRasterizer.render(snapshot.width, snapshot.height, it) }
+                                            result.raster = pixels?.let { transform(it, false) }
                                             result.strokes.clear()
                                             result.rasterFile = null
                                             result.mask = layer.mask?.let { transform(it, true) }
@@ -1932,14 +2209,56 @@ class CanvasRepositoryImpl
             trackedMs.addAndGet(ms.coerceAtLeast(0L))
         }
 
+        /**
+         * Switches the profile and converts every stored value to it, so colours look the same afterwards.
+         * Every layer in every frame, its text colour and the background convert together, as one undo step.
+         */
         override suspend fun setColorProfile(
             profile: ColorProfile,
             undoable: Boolean,
         ): Boolean =
             withState {
-                if (profile == colorProfile) return@withState true
+                val from = colorProfile
+                if (profile == from) return@withState true
+                if (activeStrokes.isNotEmpty() || pendingEdits.isNotEmpty()) return@withState false
+                val frames = frameList
+                val revision = editRevision
+                val project = currentProjectId
+                val width = canvasWidth
+                val height = canvasHeight
+                val targets = allLayers().map { it.snapshotCopy() }
+                val required = width.toLong() * height * 4L * (targets.size + 6L)
+                require(required <= Runtime.getRuntime().maxMemory() * 3 / 5) {
+                    "Changing the colour profile needs more memory than this device provides"
+                }
+                val background = backgroundColor
+                markRastersShared()
+                val converted =
+                    withContext(Dispatchers.Default) {
+                        targets.associate { layer ->
+                            coroutineContext.ensureActive()
+                            // A new buffer is made, never written in place: buffers are shared with undo snapshots.
+                            val raster = rawLayerPixels(layer, width, height)?.let { ColorProfiles.convert(it, from, profile) }
+                            val text = layer.text?.let { it.copy(color = ColorProfiles.convert(it.color, from, profile)) }
+                            layer.id to (raster to text)
+                        } to ColorProfiles.convert(background, from, profile)
+                    }
+                if (currentProjectId != project || frameList !== frames || editRevision != revision) return@withState false
+                if (activeStrokes.isNotEmpty() || pendingEdits.isNotEmpty()) return@withState false
                 if (undoable) pushUndo()
                 colorProfile = profile
+                backgroundColor = converted.second
+                allLayers().forEach { layer ->
+                    val (raster, text) = converted.first.getValue(layer.id)
+                    if (raster != null) {
+                        layer.raster = raster
+                        layer.strokes.clear()
+                        layer.rasterFile = null
+                        dirtyRasters += layer.id
+                    }
+                    // Text is set after the raster, because the raster setter drops TextLayerContent.
+                    if (text != null) layer.text = text
+                }
                 dirty = true
                 emit(CanvasInvalidationEvent.Full)
                 true
@@ -1947,9 +2266,10 @@ class CanvasRepositoryImpl
 
         override suspend fun setCanvasBackgroundColor(color: Int): Boolean =
             withState {
-                if (color == backgroundColor) return@withState true
+                val stored = documentColor(color)
+                if (stored == backgroundColor) return@withState true
                 pushUndo()
-                backgroundColor = color
+                backgroundColor = stored
                 dirty = true
                 emit(CanvasInvalidationEvent.Full)
                 true
@@ -1958,7 +2278,7 @@ class CanvasRepositoryImpl
         override suspend fun clearCanvas(color: Int) =
             withState {
                 pushUndo()
-                backgroundColor = color
+                backgroundColor = documentColor(color)
                 currentLayers().forEach { layer ->
                     layer.strokes.clear()
                     layer.raster = PixelBuffer.filled(canvasWidth, canvasHeight, 0)
@@ -2048,14 +2368,7 @@ class CanvasRepositoryImpl
                             name = "${source.name} copy",
                             durationMs = source.durationMs,
                             isKeyframe = source.isKeyframe,
-                            layers =
-                                source.layers
-                                    .map { layer ->
-                                        val newId = nextLayerId++
-                                        layer
-                                            .duplicate(newId, layer.name) { nextStrokeId++ }
-                                            .also { dirtyRasters += newId }
-                                    }.toMutableList(),
+                            layers = duplicateBlock(source.layers) { it.name }.toMutableList(),
                         )
                     } else {
                         FrameData(
@@ -2071,6 +2384,75 @@ class CanvasRepositoryImpl
                 dirty = true
                 syncTimeline()
                 emit(CanvasInvalidationEvent.FrameChanged(activeFrame))
+            }
+
+        /**
+         * Copies the frame at [index] to the frame clipboard. The copy owns its pixels, so later edits
+         * to the source frame do not change what Paste inserts.
+         */
+        override suspend fun copyFrame(index: Int): Boolean =
+            withState {
+                val source = frameList.getOrNull(index) ?: return@withState false
+                var strokeCursor = 0L
+                frameClipboard =
+                    FrameData(
+                        id = source.id,
+                        name = source.name,
+                        durationMs = source.durationMs,
+                        isKeyframe = source.isKeyframe,
+                        layers =
+                            source.layers
+                                .map { layer ->
+                                    layer.duplicate(layer.id, layer.name) { ++strokeCursor }.also { fresh ->
+                                        fresh.raster = fresh.raster?.copy()
+                                        fresh.mask = fresh.mask?.copy()
+                                    }
+                                }.toMutableList(),
+                    )
+                true
+            }
+
+        /**
+         * Inserts a copy of the clipboard frame at [insertAt] and makes it the active frame. Nothing is
+         * pasted when no frame was copied, when the copy was made for a canvas of another size, or when
+         * the frame or layer limits are reached.
+         */
+        override suspend fun pasteFrame(insertAt: Int): Boolean =
+            withState {
+                val clip = frameClipboard ?: return@withState false
+                val fitsCanvas =
+                    clip.layers.all { layer ->
+                        listOfNotNull(layer.raster, layer.mask).all { it.width == canvasWidth && it.height == canvasHeight }
+                    }
+                if (!fitsCanvas) return@withState false
+                require(frameList.size < ProjectStorage.MAX_FRAMES) { "Maximum ${ProjectStorage.MAX_FRAMES} frames reached" }
+                require(hasLayerCapacity(clip.layers.size)) { "Maximum project layer count reached" }
+                require(nextFrameId in 1 until Long.MAX_VALUE) { "Frame identifiers are exhausted" }
+                pushUndo()
+                val frame =
+                    FrameData(
+                        id = nextFrameId++,
+                        name = "${clip.name} copy",
+                        durationMs = clip.durationMs,
+                        isKeyframe = clip.isKeyframe,
+                        layers =
+                            clip.layers
+                                .map { layer ->
+                                    val newId = nextLayerId++
+                                    layer.duplicate(newId, layer.name) { nextStrokeId++ }.also { fresh ->
+                                        fresh.raster = fresh.raster?.copy()
+                                        fresh.mask = fresh.mask?.copy()
+                                        dirtyRasters += newId
+                                    }
+                                }.toMutableList(),
+                    )
+                val target = insertAt.coerceIn(0, frameList.size)
+                frameList.add(target, frame)
+                activeFrame = target
+                dirty = true
+                syncTimeline()
+                emit(CanvasInvalidationEvent.FrameChanged(activeFrame))
+                true
             }
 
         override suspend fun deleteFrame(index: Int): Boolean =
@@ -2113,6 +2495,7 @@ class CanvasRepositoryImpl
                 val clamped = index.coerceIn(0, frameList.lastIndex.coerceAtLeast(0))
                 if (clamped == activeFrame) return@withState
                 pendingSelection = null
+                editRun = null
                 activeFrame = clamped
                 syncTimeline()
                 emit(CanvasInvalidationEvent.FrameChanged(activeFrame))
@@ -2126,7 +2509,11 @@ class CanvasRepositoryImpl
                 val frame = frameList.getOrNull(index) ?: return@withState false
                 val clamped = durationMs.coerceIn(AnimationFrame.MIN_DURATION_MS, AnimationFrame.MAX_DURATION_MS)
                 if (clamped == frame.durationMs) return@withState true
-                pushUndo()
+                // A duration slider drag is one undo step, and it keeps the step from before the drag.
+                val now = System.currentTimeMillis()
+                val key = "duration:${frame.id}"
+                if (!continuesEditRun(key, now)) pushUndo()
+                editRun = EditRun(key, undoPushes, now)
                 frame.durationMs = clamped
                 dirty = true
                 syncTimeline()
@@ -2144,7 +2531,12 @@ class CanvasRepositoryImpl
                         onionSkinOpacity = settings.onionSkinOpacity.coerceIn(0.05f, 1f),
                     )
                 if (normalized == animationSettings) return@withState
-                pushUndo()
+                // Only the onion-skin look changed: a viewing preference, so it is not an undoable edit.
+                if (normalized.withOnionLookOf(animationSettings) != animationSettings) {
+                    val now = System.currentTimeMillis()
+                    if (!continuesEditRun("animation", now)) pushUndo()
+                    editRun = EditRun("animation", undoPushes, now)
+                }
                 val oldDuration = animationSettings.frameDurationMs
                 val fpsChanged = normalized.fps != animationSettings.fps
                 animationSettings = normalized
@@ -2294,8 +2686,8 @@ class CanvasRepositoryImpl
 
         /**
          * Identifies everything a preview shows except strokes in progress, or null when only a full
-         * composite is exact: pixel sessions in progress, filter layers and feathered masks reach
-         * beyond the pixels they cover.
+         * composite is exact: pixel sessions in progress, filter layers, feathered masks and layer
+         * effects reach beyond the pixels they cover.
          */
         private fun previewKey(): PreviewCache.Key? {
             val layers = currentLayers()
@@ -2303,7 +2695,7 @@ class CanvasRepositoryImpl
             val local =
                 pendingEdits.keys.all { it in damageTrackedSessions } &&
                     (selection == null || (selection.width == canvasWidth && selection.height == canvasHeight)) &&
-                    layers.none { it.filterType != null || it.maskFeather > 0f } &&
+                    layers.none { it.filterType != null || it.maskFeather > 0f || it.effects != null } &&
                     layers.all { canvasSized(it.raster) && canvasSized(it.mask) }
             if (!local) return null
 
@@ -2509,7 +2901,7 @@ class CanvasRepositoryImpl
             val eligible =
                 StrokeRasterizer.canDrawLive(stroke) &&
                     layer.strokes.isEmpty() &&
-                    (mirrors.size == 1 || stroke.brushParams.wetMix <= 0f)
+                    (mirrors.size == 1 || (stroke.brushParams.wetMix <= 0f && stroke.brushParams.dilution <= 0f))
             val bytes = width.toLong() * height * BYTES_PER_PIXEL * mirrors.size
             if (!eligible || bytes > Runtime.getRuntime().maxMemory() / LIVE_HEAP_SHARE) return null
             val lives =
@@ -2758,6 +3150,8 @@ class CanvasRepositoryImpl
             val backgroundColor: Int,
             val animation: AnimationSettings,
             val colorProfile: ColorProfile = ColorProfile.SRGB,
+            /** Shared, not copied: the selection is replaced on change and never edited in place. */
+            val selection: SelectionMask? = null,
         )
 
         /**
@@ -2794,6 +3188,7 @@ class CanvasRepositoryImpl
                 backgroundColor = backgroundColor,
                 animation = animationSettings,
                 colorProfile = colorProfile,
+                selection = activeSelection,
             ).also { markRastersShared() }
 
         private fun restore(snapshot: Snapshot) {
@@ -2816,15 +3211,17 @@ class CanvasRepositoryImpl
             canvasDpi = snapshot.dpi
             colorProfile = snapshot.colorProfile
             backgroundColor = snapshot.backgroundColor
-            animationSettings = snapshot.animation
+            animationSettings = snapshot.animation.withOnionLookOf(animationSettings)
+            editRun = null
             pendingEdits.clear()
             damageTrackedSessions.clear()
             pendingSelection = null
-            activeSelection = null
+            activeSelection = snapshot.selection?.copy()
             activeStrokes.clear()
             synchronized(liveLock) { liveStrokes.clear() }
             strokeBrushParams.clear()
             strokeLayerIds.clear()
+            cancelStrokeCopies()
             strokeErasers.clear()
             strokeSecondaries.clear()
             strokeDestinations.clear()
@@ -2966,6 +3363,7 @@ class CanvasRepositoryImpl
             synchronized(liveLock) { liveStrokes.clear() }
             strokeBrushParams.clear()
             strokeLayerIds.clear()
+            cancelStrokeCopies()
             strokeErasers.clear()
             strokeSecondaries.clear()
             strokeDestinations.clear()
@@ -3004,6 +3402,7 @@ class CanvasRepositoryImpl
             var isFillReference: Boolean = false
             var drawingAssist: Boolean = false
             var isPrivate: Boolean = false
+            var effects: LayerEffects? = null
             var parentGroupId: Long? = null
 
             /** Editable text; set it after [raster], because any new pixels turn the text into pixels. */
@@ -3061,6 +3460,7 @@ class CanvasRepositoryImpl
                     isFillReference = this@LayerData.isFillReference
                     drawingAssist = this@LayerData.drawingAssist
                     isPrivate = this@LayerData.isPrivate
+                    effects = this@LayerData.effects
                 }.also {
                     it.raster = raster
                     it.text = text
@@ -3112,6 +3512,7 @@ class CanvasRepositoryImpl
                     isFillReference = this@LayerData.isFillReference
                     drawingAssist = this@LayerData.drawingAssist
                     isPrivate = this@LayerData.isPrivate
+                    effects = this@LayerData.effects
                 }.also { fresh ->
                     fresh.raster = raster
                     fresh.text = text
@@ -3147,6 +3548,7 @@ class CanvasRepositoryImpl
                     isFillReference = isFillReference,
                     drawingAssist = drawingAssist,
                     isPrivate = isPrivate,
+                    effects = effects,
                     parentGroupId = parentGroupId,
                     isInternal = isInternal,
                     textContent = text,
@@ -3171,6 +3573,7 @@ class CanvasRepositoryImpl
             private const val MAX_HISTORY = 30
             private val NO_SYMMETRY = SymmetryEngine.Settings()
             private const val OPACITY_MERGE_MS = 1_500L
+            private const val EDIT_MERGE_MS = 1_500L
             private const val TEXT_LAYER_NAME = 32
 
             /**

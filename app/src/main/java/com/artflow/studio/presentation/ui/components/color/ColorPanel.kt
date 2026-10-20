@@ -1,11 +1,16 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+
 package com.artflow.studio.presentation.ui.components.color
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,6 +19,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -21,15 +29,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.R
 import com.artflow.studio.core.color.ColorHarmony
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.color.PaletteLibrary
-import kotlin.math.roundToInt
 
 /**
  * Colour picker (Phases 31-32).
@@ -46,10 +55,9 @@ fun ColorPanel(
     onColorSelected: (Int) -> Unit,
     onClearRecents: () -> Unit,
     onSavePalette: (String, List<Int>) -> Unit,
-    onRemovePalette: (Long) -> Unit,
+    palettesEdit: PaletteEdits,
     modifier: Modifier = Modifier,
-    onImportPalette: (() -> Unit)? = null,
-    onPaletteFromPhoto: (() -> Unit)? = null,
+    sources: PaletteSources = PaletteSources(),
     /** The secondary colour and swapping it with the primary; null hides the swatch. */
     secondary: SecondarySwatch? = null,
 ) {
@@ -69,15 +77,15 @@ fun ColorPanel(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("Colours", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.color_title), style = MaterialTheme.typography.titleMedium)
                 Text(
                     text = "${ColorHarmony.nameOf(color)} · ${ColorHarmony.toHex(color)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Swatch(color = previous, onClick = { onColorSelected(previous) }, description = "Previous colour")
-            secondary?.let { Swatch(color = it.color, onClick = it.onSwap, description = "Secondary colour, tap to swap") }
+            Swatch(color = previous, onClick = { onColorSelected(previous) }, description = stringResource(R.string.color_previous))
+            secondary?.let { Swatch(color = it.color, onClick = it.onSwap, description = stringResource(R.string.color_secondary_swap)) }
             Box(
                 modifier =
                     Modifier
@@ -94,13 +102,24 @@ fun ColorPanel(
             ColorTab.HARMONY -> HarmonyTab(color, harmony, { harmony = it }, onColorSelected)
             ColorTab.VALUE -> ValueTab(color, mode, { mode = it }, onColorSelected)
             ColorTab.PALETTES -> {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    onImportPalette?.let { OutlinedButton(onClick = it) { Text("Import palette") } }
-                    onPaletteFromPhoto?.let { OutlinedButton(onClick = it) { Text("New from photo") } }
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    sources.fromFile?.let { OutlinedButton(onClick = it) { Text("Import palette") } }
+                    sources.fromPhoto?.let { OutlinedButton(onClick = it) { Text("New from photo") } }
+                    sources.fromCamera?.let { OutlinedButton(onClick = it) { Text("From camera") } }
+                    OutlinedButton(onClick = {
+                        val number = palettes.count { it.category == "Custom" } + 1
+                        onSavePalette("Palette $number", listOf(color))
+                    }) { Text("New palette") }
                 }
-                PaletteList(palettes, color, onColorSelected, onRemovePalette)
+                PaletteList(palettes, color, onColorSelected, palettesEdit)
             }
         }
+
+        // Procreate's default palette sits under every picker except the Palettes tab itself.
+        palettes
+            .firstOrNull { it.name == palettesEdit.defaultName }
+            ?.takeIf { tab != ColorTab.PALETTES }
+            ?.let { DefaultPaletteRow(it, color, onColorSelected) }
 
         TabRow(selectedTabIndex = tab.ordinal) {
             ColorTab.entries.forEach { entry ->
@@ -113,20 +132,20 @@ fun ColorPanel(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SectionLabel("History")
+            SectionLabel(stringResource(R.string.color_history))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = {
                     val name = "My palette"
                     onSavePalette(name, recentColors.take(16))
-                }) { Text("Save as palette", style = MaterialTheme.typography.labelSmall) }
+                }) { Text(stringResource(R.string.color_save_as_palette), style = MaterialTheme.typography.labelSmall) }
                 IconButton(onClick = onClearRecents) {
-                    Icon(Icons.Default.Delete, contentDescription = "Clear recent colours")
+                    Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.color_clear_recent))
                 }
             }
         }
         if (recentColors.isEmpty()) {
             Text(
-                "Colours you use will show up here.",
+                stringResource(R.string.color_history_empty),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -192,7 +211,8 @@ private fun ValueTab(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            ColorHarmony.ColorMode.entries.forEach { entry ->
+            // The Hex field below is always shown, so Hex is not a separate mode with sliders of its own.
+            ColorHarmony.ColorMode.entries.filter { it != ColorHarmony.ColorMode.HEX }.forEach { entry ->
                 FilterChip(
                     selected = mode == entry,
                     onClick = { onMode(entry) },
@@ -205,6 +225,8 @@ private fun ValueTab(
                 label = label,
                 value = value,
                 range = ColorHarmony.channelRange(mode, index),
+                readout = ColorHarmony.formatChannelValue(mode, index, value),
+                parse = { text -> ColorHarmony.parseChannelValue(mode, index, text) },
                 onChange = { newValue -> onColorSelected(ColorHarmony.withChannel(color, mode, index, newValue)) },
             )
         }
@@ -226,8 +248,11 @@ private fun ChannelSlider(
     label: String,
     value: Float,
     range: ClosedFloatingPointRange<Float>,
+    readout: String,
+    parse: (String) -> Float?,
     onChange: (Float) -> Unit,
 ) {
+    var typing by remember { mutableStateOf(false) }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(label, modifier = Modifier.width(34.dp), style = MaterialTheme.typography.labelMedium)
         Slider(
@@ -236,12 +261,46 @@ private fun ChannelSlider(
             valueRange = range,
             modifier = Modifier.weight(1f),
         )
-        Text(
-            text = value.roundToInt().toString(),
-            modifier = Modifier.width(40.dp),
-            style = MaterialTheme.typography.labelSmall,
-        )
+        // Tap the number to type an exact value, as in Procreate's Value tab.
+        TextButton(onClick = { typing = true }, contentPadding = PaddingValues(horizontal = 4.dp), modifier = Modifier.width(56.dp)) {
+            Text(text = readout, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+        }
     }
+    if (typing) {
+        ChannelValueDialog(label, readout, parse, onDismiss = { typing = false }) {
+            onChange(it)
+            typing = false
+        }
+    }
+}
+
+@Composable
+private fun ChannelValueDialog(
+    label: String,
+    current: String,
+    parse: (String) -> Float?,
+    onDismiss: () -> Unit,
+    onValue: (Float) -> Unit,
+) {
+    var text by remember { mutableStateOf(current) }
+    val parsed = parse(text)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(label) },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it.take(8) },
+                singleLine = true,
+                isError = parsed == null,
+                supportingText = { if (parsed == null) Text(stringResource(R.string.color_value_invalid)) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { parsed?.let(onValue) }),
+            )
+        },
+        confirmButton = { TextButton(onClick = { parsed?.let(onValue) }, enabled = parsed != null) { Text(stringResource(R.string.ok)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
 }
 
 @Composable
@@ -253,7 +312,7 @@ private fun HexField(
     OutlinedTextField(
         value = text,
         onValueChange = { text = it.take(8) },
-        label = { Text("Hex") },
+        label = { Text(stringResource(R.string.color_hex)) },
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Done),
         keyboardActions =
@@ -261,11 +320,29 @@ private fun HexField(
                 ColorHarmony.parseHex(text)?.let(onColorSelected)
             }),
         trailingIcon = {
-            TextButton(onClick = { ColorHarmony.parseHex(text)?.let(onColorSelected) }) { Text("Apply") }
+            TextButton(onClick = { ColorHarmony.parseHex(text)?.let(onColorSelected) }) { Text(stringResource(R.string.color_apply)) }
         },
         modifier = Modifier.fillMaxWidth(),
     )
 }
+
+/** Where a new palette can come from: a swatch file, a photo, or the camera; null hides that button. */
+data class PaletteSources(
+    val fromFile: (() -> Unit)? = null,
+    val fromPhoto: (() -> Unit)? = null,
+    val fromCamera: (() -> Unit)? = null,
+)
+
+/** Removing a custom palette, and saving one after a swatch is added or removed. */
+data class PaletteEdits(
+    val onRemove: (Long) -> Unit,
+    val onEdit: (Palette) -> Unit,
+    val onShare: (Palette) -> Unit = {},
+    /** Makes a palette (by name) the default shown under the pickers, or clears it when it already is. */
+    val onToggleDefault: (String) -> Unit = {},
+    /** The current default palette's name; empty for none. */
+    val defaultName: String = "",
+)
 
 /** Procreate's secondary colour swatch: its colour, and swapping it with the primary. */
 data class SecondarySwatch(
@@ -291,12 +368,33 @@ private fun Swatch(
     )
 }
 
+/** The default palette's swatches in one scrolling row. */
+@Composable
+private fun DefaultPaletteRow(
+    palette: Palette,
+    currentColor: Int,
+    onColorSelected: (Int) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        SectionLabel(palette.name)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(palette.colors) { entry ->
+                Swatch(
+                    color = entry,
+                    onClick = { onColorSelected(entry) },
+                    description = ColorHarmony.nameOf(entry) + if (ColorHarmony.distance(entry, currentColor) < 24f) ", current" else "",
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun PaletteList(
     palettes: List<Palette>,
     currentColor: Int,
     onColorSelected: (Int) -> Unit,
-    onRemovePalette: (Long) -> Unit,
+    edits: PaletteEdits,
 ) {
     val grouped = remember(palettes) { palettes.groupBy { it.category } }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -309,15 +407,27 @@ private fun PaletteList(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(palette.name, style = MaterialTheme.typography.bodyMedium)
+                        Text(palette.name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        val isDefault = palette.name == edits.defaultName
+                        IconButton(onClick = { edits.onToggleDefault(palette.name) }) {
+                            Icon(
+                                if (isDefault) Icons.Default.Star else Icons.Default.StarBorder,
+                                contentDescription =
+                                    if (isDefault) "${palette.name} is the default palette" else "Set ${palette.name} as default",
+                            )
+                        }
+                        IconButton(onClick = { edits.onShare(palette) }) {
+                            Icon(Icons.Default.Share, contentDescription = "Share ${palette.name}")
+                        }
                         if (palette.category == "Custom") {
-                            IconButton(onClick = { onRemovePalette(palette.id) }) {
+                            IconButton(onClick = { edits.onRemove(palette.id) }) {
                                 Icon(Icons.Default.Delete, contentDescription = "Remove ${palette.name}")
                             }
                         }
                     }
+                    val editable = palette.category == "Custom"
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(palette.colors) { entry ->
+                        itemsIndexed(palette.colors) { index, entry ->
                             val closest = ColorHarmony.distance(entry, currentColor) < 24f
                             Box(
                                 modifier =
@@ -325,8 +435,28 @@ private fun PaletteList(
                                         .size(if (closest) 40.dp else 32.dp)
                                         .clip(RoundedCornerShape(6.dp))
                                         .background(Color(entry))
-                                        .clickable { onColorSelected(entry) },
+                                        // In your own palettes, touch and hold a swatch to remove it.
+                                        .combinedClickable(
+                                            onClick = { onColorSelected(entry) },
+                                            onLongClick = if (editable) ({ edits.onEdit(palette.withoutColor(index)) }) else null,
+                                            onLongClickLabel = if (editable) "Remove colour" else null,
+                                        ),
                             )
+                        }
+                        if (editable) {
+                            item {
+                                // Tap the empty cell to add the current colour, as in Procreate.
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .size(32.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(6.dp))
+                                            .clickable { edits.onEdit(palette.withColor(currentColor)) }
+                                            .semantics { contentDescription = "Add the current colour to ${palette.name}" },
+                                    contentAlignment = Alignment.Center,
+                                ) { Text("+", style = MaterialTheme.typography.titleMedium) }
+                            }
                         }
                     }
                 }

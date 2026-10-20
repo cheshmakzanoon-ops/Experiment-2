@@ -2,6 +2,7 @@ package com.artflow.studio.domain.repository.canvas
 
 import com.artflow.studio.core.animation.AnimationTimeline
 import com.artflow.studio.core.color.ColorProfile
+import com.artflow.studio.core.color.ColorProfiles
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.PixelBuffer
@@ -15,6 +16,7 @@ import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.FilterType
 import com.artflow.studio.domain.model.layer.Layer
+import com.artflow.studio.domain.model.layer.LayerEffects
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
@@ -106,6 +108,8 @@ interface CanvasRepository {
         layerId: Long,
         isEraser: Boolean = false,
         destination: StrokeDestination = StrokeDestination.LAYER,
+        /** Wall-clock milliseconds of the first sample, normally the touch-down. */
+        timestamp: Long = System.currentTimeMillis(),
     ): Long
 
     fun continueStroke(
@@ -115,6 +119,8 @@ interface CanvasRepository {
         pressure: Float,
         tiltX: Float = 0f,
         tiltY: Float = 0f,
+        /** Wall-clock milliseconds of the sample, so speed is measured between the samples' own times. */
+        timestamp: Long = System.currentTimeMillis(),
     )
 
     fun endStroke(strokeId: Long)
@@ -180,6 +186,12 @@ interface CanvasRepository {
     /** A caller-owned copy of the layer's committed pixels. */
     suspend fun layerPixels(layerId: Long): PixelBuffer?
 
+    /** The topmost visible layer with paint at canvas pixel ([x], [y]), for Layer Select; null when none. */
+    suspend fun layerAt(
+        x: Int,
+        y: Int,
+    ): Long? = null
+
     /** Starts a provisional edit. Exactly one undo entry is created only on a successful commit. */
     suspend fun beginRasterEdit(layerId: Long): RasterEditSession?
 
@@ -227,6 +239,17 @@ interface CanvasRepository {
         layerId: Long,
         buffer: PixelBuffer,
         description: String,
+    ): Boolean
+
+    /**
+     * Affine transform of the complete active layer and its editable mask, as one undo step.
+     * Rejects selections, in-flight gestures and stale callers; never transforms another frame.
+     * Geometry is about the canvas centre. Off-canvas content is clipped and recoverable by Undo.
+     */
+    suspend fun transformLayer(
+        layerId: Long,
+        parameters: LayerTransform.Parameters,
+        expectedRevision: Long,
     ): Boolean
 
     /** Sets the ink colour used by subsequent strokes. */
@@ -321,6 +344,12 @@ interface CanvasRepository {
         isVisible: Boolean? = null,
     ): Boolean
 
+    /**
+     * Touch and hold a layer's visibility box: show only that layer (with its groups and contents),
+     * or, when it is already the only one shown, restore the visibility from before. One undo step.
+     */
+    suspend fun toggleLayerSolo(layerId: Long): Boolean = false
+
     suspend fun setLayerOpacity(
         layerId: Long,
         opacity: Float,
@@ -363,6 +392,12 @@ interface CanvasRepository {
     suspend fun setLayerPrivate(
         layerId: Long,
         isPrivate: Boolean,
+    ): Boolean = false
+
+    /** Sets the outline and drop shadow drawn around a layer; null removes them. One undo step. */
+    suspend fun setLayerEffects(
+        layerId: Long,
+        effects: LayerEffects?,
     ): Boolean = false
 
     /** Makes a layer the fill reference whose lines bound ColorDrop on other layers (one at a time). */
@@ -511,7 +546,16 @@ interface CanvasRepository {
     /** The colour space pixel values are stored in. */
     fun getColorProfile(): ColorProfile = ColorProfile.SRGB
 
-    /** Assigns [profile]: pixel values stay as they are and are read in the new space. */
+    /** Converts an sRGB colour from the interface into the stored space, so it looks the same on this canvas. */
+    fun documentColor(srgb: Int): Int = ColorProfiles.convert(srgb, ColorProfile.SRGB, getColorProfile())
+
+    /** Converts a stored colour back to sRGB for display in the interface. */
+    fun displayColor(stored: Int): Int = ColorProfiles.convert(stored, getColorProfile(), ColorProfile.SRGB)
+
+    /**
+     * Switches [profile] and converts stored colours to it, so the canvas looks the same. Fails, changing
+     * nothing, while a stroke or edit is in progress.
+     */
     suspend fun setColorProfile(
         profile: ColorProfile,
         undoable: Boolean = true,
@@ -543,6 +587,15 @@ interface CanvasRepository {
 
     /** @return true when a frame was actually removed (never removes the last frame). */
     suspend fun deleteFrame(index: Int): Boolean
+
+    /** Copies the frame at [index] to the frame clipboard. @return false when there is no such frame. */
+    suspend fun copyFrame(index: Int): Boolean
+
+    /**
+     * Inserts a copy of the copied frame at [insertAt], which becomes the active frame.
+     * @return false when nothing is copied or the copy does not fit this canvas.
+     */
+    suspend fun pasteFrame(insertAt: Int): Boolean
 
     suspend fun moveFrame(
         from: Int,

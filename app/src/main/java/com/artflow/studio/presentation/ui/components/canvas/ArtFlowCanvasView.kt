@@ -7,19 +7,38 @@ import android.opengl.GLSurfaceView
 import android.os.Build
 import android.os.SystemClock
 import android.util.AttributeSet
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.animation.DecelerateInterpolator
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.math.MathUtils
+import com.artflow.studio.core.animation.OnionSkinTint
 import com.artflow.studio.core.canvas.MotionFilter
+import com.artflow.studio.core.canvas.MouseInput
+import com.artflow.studio.core.canvas.MousePress
+import com.artflow.studio.core.canvas.PalmRejection
 import com.artflow.studio.core.canvas.PointerGestureRouter
+import com.artflow.studio.core.canvas.PointerKind
 import com.artflow.studio.core.canvas.PointerPressure
 import com.artflow.studio.core.canvas.PressureSmoother
-import com.artflow.studio.core.canvas.QuickPinch
 import com.artflow.studio.core.canvas.QuickShape
+import com.artflow.studio.core.canvas.RotationSnap
 import com.artflow.studio.core.canvas.StrokePredictor
 import com.artflow.studio.core.canvas.StrokeStabilizer
+import com.artflow.studio.core.canvas.StylusAction
+import com.artflow.studio.core.canvas.StylusButtonMapper
+import com.artflow.studio.core.canvas.StylusButtons
+import com.artflow.studio.core.canvas.StylusDecision
+import com.artflow.studio.core.canvas.ViewFrame
+import com.artflow.studio.core.canvas.ViewMath
+import com.artflow.studio.core.canvas.ViewTransform
+import com.artflow.studio.core.canvas.WheelAction
 import com.artflow.studio.core.color.CmykProof
+import com.artflow.studio.core.color.ViewFilter
 import com.artflow.studio.core.perspective.PerspectiveGuide
+import com.artflow.studio.core.pixels.AreaSample
 import com.artflow.studio.core.pixels.Channels
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.LayerTransform
@@ -30,6 +49,7 @@ import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.pixels.TransformQuad
 import com.artflow.studio.core.pixels.WarpMesh
 import com.artflow.studio.core.render.BrushPatch
+import com.artflow.studio.core.render.StrokeClock
 import com.artflow.studio.core.symmetry.SymmetryEngine
 import com.artflow.studio.core.text.TextLayout
 import com.artflow.studio.core.tool.FillTool
@@ -39,8 +59,11 @@ import com.artflow.studio.core.tool.PixelBrushes
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.data.renderer.opengl.OpenGLCanvasRenderer
+import com.artflow.studio.domain.model.animation.AnimationSettings
 import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.PressureResponse
 import com.artflow.studio.domain.model.brush.StrokeDestination
+import com.artflow.studio.domain.model.settings.AppSettings
 import com.artflow.studio.domain.repository.canvas.CanvasInvalidationEvent
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import dagger.hilt.android.AndroidEntryPoint
@@ -106,6 +129,10 @@ data class EditorInput(
     /** Procreate's secondary colour: brushes with secondary colour dynamics blend toward it. */
     val secondaryColor: Int = 0xFFFFFFFF.toInt(),
     val eraserSize: Float = 48f,
+    /** The eraser's own brush, as in Procreate; null erases with the paint brush. */
+    val eraserParams: BrushParams? = null,
+    /** Smudge's own brush, as in Procreate; null smudges with the paint brush. */
+    val smudgeParams: BrushParams? = null,
     val symmetry: SymmetryEngine.Settings = SymmetryEngine.Settings(),
     val perspective: PerspectiveGuide.Settings = PerspectiveGuide.Settings(),
     val snapToGuides: Boolean = false,
@@ -113,6 +140,8 @@ data class EditorInput(
     val gradientType: GradientTool.GradientType = GradientTool.GradientType.LINEAR,
     val fillTolerance: Int = 32,
     val fillContiguous: Boolean = true,
+    /** Gaps in line art up to this many pixels wide stop a fill, so it does not leak out. */
+    val fillGapClose: Int = 0,
     val smudge: PixelBrushes.SmudgeSettings = PixelBrushes.SmudgeSettings(),
     val clone: PixelBrushes.CloneSettings = PixelBrushes.CloneSettings(),
     val healing: PixelBrushes.HealingSettings = PixelBrushes.HealingSettings(),
@@ -124,6 +153,8 @@ data class EditorInput(
     val selectionMode: SelectionCombineMode = SelectionCombineMode.REPLACE,
     /** How a one-finger drag edits the active layer while the transform tool is selected. */
     val transformMode: TransformQuad.Mode = TransformQuad.Mode.FREEFORM,
+    /** Warp with Procreate's Advanced Mesh: a denser grid of control points. */
+    val advancedMesh: Boolean = false,
     val transformInterpolation: TransformQuad.Interpolation = TransformQuad.Interpolation.BILINEAR,
     /** Transform Magnetics and Snapping. */
     val transformAssist: TransformQuad.Assist = TransformQuad.Assist(),
@@ -141,20 +172,63 @@ data class EditorInput(
     val motionFiltering: Float = 0f,
     val motionExpression: Float = 0.5f,
     val pressureSmoothing: Float = 0f,
+    /** Pulled string from Prefs > Pressure and Smoothing (0..1 of 60 dp on screen). */
+    val pulledString: Float = 0f,
+    /** Prefs > Pressure and Smoothing curve, applied after [pressureCurve]. */
+    val pressureResponse: PressureResponse = PressureResponse(),
+    /** Settings > Haptics: a short buzz confirms QuickShape and the touch-and-hold eyedropper. */
+    val haptics: Boolean = true,
+    /** Settings > Reduce motion: the view jumps to fit instead of animating there. */
+    val reduceMotion: Boolean = false,
     /** Outline the brush under a hovering stylus. */
     val brushCursor: Boolean = true,
     /** Gesture controls from Prefs; each can be switched off. */
     val gestures: GestureControls = GestureControls(),
     /** Prefs > Dynamic brush scaling: brush size follows the zoom so it looks the same on screen. */
     val dynamicBrushScaling: Boolean = false,
+    /** Prefs > Stylus: what the stylus buttons and the eraser end do. */
+    val stylus: StylusButtons = StylusButtons(),
+    /** Settings > Haptics: the vibration when a hold-to-sample or QuickShape locks on, off when the switch is off. */
+    val haptics: Boolean = true,
 )
 
-/** Which multi-finger shortcuts are active, from Prefs > Gesture controls. */
+/**
+ * The zoom percentage and the signed angle shown while the artist navigates. [stamp] changes on every update,
+ * so the HUD can restart its hide timer each time.
+ */
+data class NavigationReadout(
+    val zoomPercent: Int,
+    val angleDegrees: Int,
+    val stamp: Long,
+)
+
+/** Which touch gestures are active, from Prefs > Gesture controls. Each one can be switched off. */
 data class GestureControls(
     val scrubToClear: Boolean = true,
     val swipeCopyPaste: Boolean = true,
     val fourFingerFullScreen: Boolean = true,
+    /** How long two or three resting fingers wait before undo or redo starts repeating. */
+    val rapidUndoDelayMs: Int = 650,
+    val eyedropperDelayMs: Int = 500,
+    val quickShapeDelayMs: Int = 650,
+    /** Procreate's Layer Select: touch and hold picks the topmost layer painted under the finger. */
+    val holdSelectsLayer: Boolean = false,
+    /** The eyedropper's sample: 1 pixel, or the average of a 3, 5 or 11 pixel square. */
+    val eyedropperSample: Int = 1,
 )
+
+/** The gesture preferences the canvas reads, from the stored settings. */
+fun AppSettings.gestureControls(): GestureControls =
+    GestureControls(
+        scrubToClear,
+        swipeCopyPaste,
+        fourFingerFullScreen,
+        rapidUndoDelayMs,
+        eyedropperDelayMs,
+        quickShapeDelayMs,
+        holdSelectsLayer,
+        eyedropperSample,
+    )
 
 /** Brush outline under a hovering stylus, in view pixels. */
 data class BrushCursor(
@@ -229,6 +303,25 @@ class ArtFlowCanvasView
         // --- Editor state -------------------------------------------------------------------------
 
         private var input = EditorInput()
+
+        /** Turns the stylus buttons and eraser end into what a touch does; rebuilt when Prefs > Stylus changes. */
+        private var stylusMapper = StylusButtonMapper()
+
+        /** The tool chosen before the current one, which a held stylus button can return to. */
+        private var previousTool = ToolType.BRUSH
+
+        /** Snaps a pinch-rotation to a right angle while it is close to one; see [RotationSnap]. */
+        private val rotationSnap = RotationSnap()
+
+        /** The rotation the fingers have turned, before snapping; the view shows the snapped value. */
+        private var rotationRaw = 0f
+
+        /** True while a middle-button mouse drag pans the view. */
+        private var mousePanning = false
+
+        /** Ignores a resting palm while the stylus hovers or touches; see [PalmRejection]. */
+        private val palmRejection = PalmRejection()
+
         private var activeLayerId = 0L
         private var canvasWidth = 1920
         private var canvasHeight = 1080
@@ -268,10 +361,42 @@ class ArtFlowCanvasView
         /** Reports the brush outline under a hovering stylus, or null when it leaves. */
         var onBrushCursorChanged: ((BrushCursor?) -> Unit)? = null
 
+        /** Scroll wheel and trackpad scroll pan the view; Ctrl with the wheel, or a trackpad pinch, zooms about the pointer. */
+        override fun onGenericMotionEvent(event: MotionEvent): Boolean {
+            if (event.actionMasked != MotionEvent.ACTION_SCROLL) return super.onGenericMotionEvent(event)
+            val action =
+                MouseInput.wheel(
+                    ctrl = (event.metaState and KeyEvent.META_CTRL_ON) != 0,
+                    horizontal = event.getAxisValue(MotionEvent.AXIS_HSCROLL),
+                    vertical = event.getAxisValue(MotionEvent.AXIS_VSCROLL),
+                    // The touchpad pinch axis exists from Android 13; below that there is no pinch to read.
+                    pinchScale =
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            event.getAxisValue(MotionEvent.AXIS_GESTURE_PINCH_SCALE_FACTOR)
+                        } else {
+                            0f
+                        },
+                )
+            when (action) {
+                WheelAction.None -> Unit
+                is WheelAction.Pan -> {
+                    viewAnimator?.cancel()
+                    panBy(action.dx, action.dy)
+                    emitNavigationReadout()
+                }
+
+                is WheelAction.Zoom -> zoomAboutPoint(action.factor, event.x, event.y)
+            }
+            return true
+        }
+
         override fun onHoverEvent(event: MotionEvent): Boolean {
             val type = event.getToolType(0)
-            if (type != MotionEvent.TOOL_TYPE_STYLUS && type != MotionEvent.TOOL_TYPE_ERASER) return super.onHoverEvent(event)
-            val tool = if (type == MotionEvent.TOOL_TYPE_ERASER) ToolType.ERASER else input.tool
+            val pen = type == MotionEvent.TOOL_TYPE_STYLUS || type == MotionEvent.TOOL_TYPE_ERASER
+            if (!pen && type != MotionEvent.TOOL_TYPE_MOUSE) return super.onHoverEvent(event)
+            // A hovering mouse shows the brush outline as a hovering pen does; only the pen counts for palm rejection.
+            if (pen) palmRejection.stylusHover(event.actionMasked != MotionEvent.ACTION_HOVER_EXIT)
+            val tool = stylusMapper.toolFor(pointerKind(type), input.tool)
             val showing = input.brushCursor && tool in CURSOR_TOOLS && event.actionMasked != MotionEvent.ACTION_HOVER_EXIT
             val size = if (tool == ToolType.ERASER) input.eraserSize else input.brushParams.size
             // With dynamic brush scaling the brush keeps its size on screen, whatever the zoom.
@@ -354,17 +479,44 @@ class ArtFlowCanvasView
         private fun resetLiquifyReference() {
             liquifyContextVersion++
             liquifyReference = null
+            clearLiquifyAdjust()
         }
 
         private var gestureLiquifyReference: LiquifyReference? = null
+
+        /** The last committed liquify gesture, kept so Adjust can re-render it at another strength. */
+        private class AdjustableLiquify(
+            val session: LiquifyTool.Session,
+            val original: PixelBuffer,
+            val layerId: Long,
+            var historyMark: Long,
+        )
+
+        private var adjustableLiquify: AdjustableLiquify? = null
+        private var liquifyAdjustJob: Job? = null
+
+        /** Counts liquify gestures that Adjust can still change; 0 when there is none. */
+        var liquifyAdjustGesture by mutableLongStateOf(0L)
+            private set
+
+        private fun clearLiquifyAdjust() {
+            adjustableLiquify = null
+            liquifyAdjustGesture = 0L
+        }
+
         private var cloneSource: Pair<Float, Float>? = null
         private var cloneDragStarted = false
         private var lastPreviewRequest = 0L
         private var lastLiquifyPreview = 0L
+        private var liquifyPreviewJob: Job? = null
+        private var liquifyPreviewQueued = false
 
         // --- Callbacks ----------------------------------------------------------------------------
 
         var onColorPicked: ((Int) -> Unit)? = null
+
+        /** Layer Select chose this layer. */
+        var onLayerSelected: ((Long) -> Unit)? = null
 
         /** The eyedropper loupe while colour is being sampled, then null. */
         var onEyedropperChanged: ((EyedropperLoupe?) -> Unit)? = null
@@ -375,6 +527,13 @@ class ArtFlowCanvasView
         var onRedoRequested: (() -> Unit)? = null
         var onFullscreenRequested: (() -> Unit)? = null
         var onCopyPasteMenuRequested: (() -> Unit)? = null
+
+        /** A stylus button set to QuickMenu opens the QuickMenu once per press. */
+        var onQuickMenuRequested: (() -> Unit)? = null
+
+        /** Zoom and angle while the artist navigates, for the transient navigation HUD. */
+        var onNavigationReadout: ((NavigationReadout) -> Unit)? = null
+
         var onClearLayerRequested: (() -> Unit)? = null
         var onViewChanged: ((scale: Float, offsetX: Float, offsetY: Float, rotation: Float) -> Unit)? = null
         var onTextPlacementRequested: ((x: Float, y: Float) -> Unit)? = null
@@ -394,6 +553,9 @@ class ArtFlowCanvasView
         private var invalidateJob: Job? = null
         private var onionEnabled = false
         private var onionDirty = true
+
+        /** The animation settings the ghosts were last drawn for; a change to them redraws the ghosts. */
+        private var onionSettingsSeen: AnimationSettings? = null
 
         init {
             setEGLContextClientVersion(2)
@@ -456,6 +618,8 @@ class ArtFlowCanvasView
         }
 
         private fun cancelToolInteraction() {
+            stylusMapper.end()
+            mousePanning = false
             // A node drag keeps the shape it has reached rather than losing the stroke.
             if (draggedNode >= 0) dropShapeNode()
             gestureTool = null
@@ -493,6 +657,7 @@ class ArtFlowCanvasView
             healingSession = null
             liquifySession = null
             gestureLiquifyReference = null
+            cancelLiquifyPreview()
         }
 
         override fun onDetachedFromWindow() {
@@ -515,9 +680,13 @@ class ArtFlowCanvasView
             val destinationChanged = newInput.tool != input.tool || newInput.strokeDestination != input.strokeDestination
             if (destinationChanged || newInput.fingerPainting != input.fingerPainting) cancelActiveGesture()
             if (destinationChanged) resetLiquifyReference()
+            pointerRouter.enabled = newInput.gestures.canvasGestures()
+            if (newInput.tool != input.tool) previousTool = input.tool
+            if (newInput.stylus != input.stylus) stylusMapper = StylusButtonMapper(newInput.stylus)
             val enteringTransform = newInput.tool == ToolType.TRANSFORM && input.tool != ToolType.TRANSFORM
             val leavingTransform = newInput.tool != ToolType.TRANSFORM && input.tool == ToolType.TRANSFORM
             val warpToggled = (newInput.transformMode == TransformQuad.Mode.WARP) != (input.transformMode == TransformQuad.Mode.WARP)
+            val meshResized = newInput.advancedMesh != input.advancedMesh
             input = newInput
             if (enteringTransform) ensureTransformSession()
             if (leavingTransform) clearTransformSession()
@@ -525,6 +694,11 @@ class ArtFlowCanvasView
             if (warpToggled && newInput.tool == ToolType.TRANSFORM && transformSession != null) {
                 clearTransformSession()
                 ensureTransformSession()
+            }
+            // Advanced Mesh adds or removes control points but keeps the current bend.
+            transformSession?.takeIf { meshResized }?.let { session ->
+                session.mesh = session.mesh?.resampled(meshSide())
+                publishTransformQuad()
             }
             canvasRepository.setStrokeColor(newInput.brushColor)
             canvasRepository.setSecondaryColor(newInput.secondaryColor)
@@ -585,6 +759,12 @@ class ArtFlowCanvasView
             requestRender()
         }
 
+        /** Shows the canvas in greyscale or as a colour-vision deficiency sees it; the artwork is unchanged. */
+        fun setViewFilter(filter: ViewFilter) {
+            renderer.setViewFilter(filter.takeIf { it != ViewFilter.OFF }?.columnMajor(), filter.levels)
+            requestRender()
+        }
+
         fun setOnionSkinEnabled(enabled: Boolean) {
             if (enabled == onionEnabled) return
             onionEnabled = enabled
@@ -605,6 +785,7 @@ class ArtFlowCanvasView
         /** Eases the view back to fit the screen, unrotated, as after Procreate's quick pinch. */
         fun animateFitToView() {
             if (width == 0 || height == 0) return
+            if (input.reduceMotion) return fitToView()
             val fromScale = scale
             val toScale = fitScale()
             val fromX = offsetX
@@ -652,6 +833,16 @@ class ArtFlowCanvasView
 
         fun rotateView(degrees: Float) {
             rotationDegrees = normalizeDegrees(rotationDegrees + degrees)
+            pushTransform()
+        }
+
+        /** Moves the view by [dx], [dy] screen pixels, as a keyboard pan does. */
+        fun panBy(
+            dx: Float,
+            dy: Float,
+        ) {
+            offsetX += dx
+            offsetY += dy
             pushTransform()
         }
 
@@ -822,8 +1013,9 @@ class ArtFlowCanvasView
             dx: Float,
             dy: Float,
         ) {
-            if (dx == 0f && dy == 0f) return
+            val parameters = LayerTransform.Parameters(translationX = dx, translationY = dy)
             val layerId = activeLayerId
+            val revision = canvasRepository.contentRevision
             coroutineScope.launch {
                 val base = canvasRepository.layerPixels(layerId) ?: return@launch
                 canvasRepository.applyRasterEdit(layerId, "Move layer") { target ->
@@ -859,6 +1051,12 @@ class ArtFlowCanvasView
             },
         )
 
+        /** Moves the transformed content by ([dx], [dy]) pixels, as one step (Procreate's nudge). */
+        private fun nudgeTransform(
+            dx: Float,
+            dy: Float,
+        ) = applyTransformQuad({ TransformQuad.translate(it.quad, dx, dy) }, { it.translate(dx, dy) })
+
         /** Fit to Screen: the largest centred placement inside the canvas. */
         fun fitTransformToCanvas() =
             applyTransformQuad({ TransformQuad.fitTo(it.quad, canvasWidth, canvasHeight) }, { it.fitTo(canvasWidth, canvasHeight) })
@@ -880,7 +1078,7 @@ class ArtFlowCanvasView
             /** Control points while warping; null keeps the plain [quad] placement. */
             var mesh: WarpMesh? = null
 
-            fun meshOrBox(): WarpMesh = mesh ?: WarpMesh.fromBounds(bounds)
+            fun meshOrBox(side: Int): WarpMesh = mesh ?: WarpMesh.fromBounds(bounds, side)
         }
 
         private var transformSession: TransformSession? = null
@@ -916,10 +1114,12 @@ class ArtFlowCanvasView
 
         private val warping: Boolean get() = input.transformMode == TransformQuad.Mode.WARP
 
+        private fun meshSide(): Int = if (input.advancedMesh) WarpMesh.ADVANCED_SIDE else WarpMesh.SIDE
+
         private fun publishTransformQuad() {
             val session = transformSession
             onTransformQuadChanged?.invoke(session?.takeUnless { warping }?.let { transformPreviewQuad ?: it.quad })
-            onWarpMeshChanged?.invoke(session?.takeIf { warping }?.let { transformPreviewMesh ?: it.meshOrBox() })
+            onWarpMeshChanged?.invoke(session?.takeIf { warping }?.let { transformPreviewMesh ?: it.meshOrBox(meshSide()) })
         }
 
         private fun clearTransformSession() {
@@ -994,7 +1194,7 @@ class ArtFlowCanvasView
             companions.open(canvasRepository, current.companions)
             transformStartQuad = current.quad
             if (warping) {
-                val mesh = current.meshOrBox()
+                val mesh = current.meshOrBox(meshSide())
                 warpStartMesh = mesh
                 warpTarget = mesh.hit(x, y, HANDLE_TOUCH_PX / scale)
             } else {
@@ -1013,7 +1213,7 @@ class ArtFlowCanvasView
                 transformPreviewMesh = (warpStartMesh ?: return).drag(warpTarget, x - moveOriginX(), y - moveOriginY())
             } else {
                 val start = transformStartQuad ?: return
-                val area = TransformQuad.SnapArea(session.base.width, session.base.height, SNAP_DISTANCE_PX / scale)
+                val area = TransformQuad.SnapArea(session.base.width, session.base.height, input.transformAssist.snapDistance / scale)
                 transformPreviewQuad =
                     TransformQuad.drag(
                         start,
@@ -1031,8 +1231,9 @@ class ArtFlowCanvasView
             lastTransformPreview = now
             val quad = transformPreviewQuad ?: session.quad
             val mesh = transformPreviewMesh
-            TransformQuad.renderShape(session.base, buffer, session.bounds, quad, mesh, session.selection, highQuality = false)
-            companions.render(session.bounds, quad, mesh, highQuality = false)
+            val preview = TransformQuad.Interpolation.NEAREST
+            TransformQuad.renderShape(session.base, buffer, session.bounds, quad, mesh, session.selection, preview)
+            companions.render(session.bounds, quad, mesh, preview)
         }
 
         private fun applyTransformQuad(
@@ -1041,8 +1242,8 @@ class ArtFlowCanvasView
         ) {
             ensureTransformSession { session ->
                 val quad = if (warping) session.quad else change(session)
-                val mesh = if (warping) changeMesh(session.meshOrBox()) else null
-                val highQuality = input.transformInterpolation == TransformQuad.Interpolation.BILINEAR
+                val mesh = if (warping) changeMesh(session.meshOrBox(meshSide())) else null
+                val interpolation = input.transformInterpolation
                 transformCommitting = true
                 coroutineScope.launch {
                     try {
@@ -1052,7 +1253,7 @@ class ArtFlowCanvasView
                                 val companion = session.companions.firstOrNull { it.layerId == id }
                                 val source = companion?.base ?: session.base
                                 val selection = if (companion == null) session.selection else null
-                                TransformQuad.renderShape(source, buffer, session.bounds, quad, mesh, selection, highQuality)
+                                TransformQuad.renderShape(source, buffer, session.bounds, quad, mesh, selection, interpolation)
                             }
                         if (placed) {
                             session.quad = quad
@@ -1085,11 +1286,19 @@ class ArtFlowCanvasView
                                 cancelActiveGesture()
                                 onionDirty = true
                             }
+                            // Ghost count, opacity and tints live in the animation settings.
+                            if (onionEnabled && canvasRepository.timeline.value.settings != onionSettings) onionDirty = true
                         }.conflate()
                         .collect {
                             // A busy renderer must complete frames instead of cancelling each one
                             // when another pointer sample arrives. Only the latest queued request is kept.
                             refreshComposite()
+                            // Ghosts also depend on the onion look and pinned frames, which change without a frame change.
+                            val ghostSettings = canvasRepository.timeline.value.settings
+                            if (ghostSettings != ghostSettingsSeen) {
+                                ghostSettingsSeen = ghostSettings
+                                onionDirty = true
+                            }
                             if (onionDirty) refreshOnionSkins()
                             if (input.tool == ToolType.TRANSFORM && pixelTool == null && !transformCommitting) ensureTransformSession()
                         }
@@ -1140,6 +1349,10 @@ class ArtFlowCanvasView
         }
 
         private var onionJob: Job? = null
+        private var ghostSettingsSeen: AnimationSettings? = null
+
+        /** The animation settings the current ghosts were made with. */
+        private var onionSettings: AnimationSettings? = null
 
         private fun refreshOnionSkins() {
             if (onionEnabled && !onionDirty) return
@@ -1154,14 +1367,11 @@ class ArtFlowCanvasView
             onionJob =
                 coroutineScope.launch {
                     val state = canvasRepository.timeline.value
+                    onionSettings = state.settings
                     val active = state.activeIndex
                     val range = state.settings.onionSkinFrames.coerceIn(0, 5)
-                    val opacity = state.settings.onionSkinOpacity
                     val ghosts = mutableListOf<Pair<PixelBuffer, Float>>()
-                    for (offset in -range..range) {
-                        if (offset == 0) continue
-                        val index = active + offset
-                        if (index !in state.frames.indices) continue
+                    for ((index, alpha, colour) in planned) {
                         val frame = canvasRepository.compositeFrame(index, transparentBackground = true) ?: continue
                         val ratio = (1024f / maxOf(frame.width, frame.height)).coerceAtMost(1f)
                         val preview =
@@ -1175,9 +1385,11 @@ class ArtFlowCanvasView
                             } else {
                                 frame
                             }
-                        ghosts += preview to opacity / abs(offset).toFloat()
+                        val tint = if (offset < 0) state.settings.onionSkinPreviousColor else state.settings.onionSkinNextColor
+                        val silhouette = withContext(Dispatchers.Default) { OnionSkinTint.silhouette(preview, tint) }
+                        ghosts += silhouette to opacity / abs(offset).toFloat()
                     }
-                    renderer.setOnionSkins(ghosts)
+                    renderer.setOnionSkins(ghosts, OnionSkin.primaryOpacity(state.settings))
                     requestRender()
                 }
         }
@@ -1218,6 +1430,7 @@ class ArtFlowCanvasView
                     MotionEvent.ACTION_CANCEL -> PointerGestureRouter.Event.CANCEL
                     else -> return false
                 }
+            if (observePalm(event, action)) return true
             if (action == PointerGestureRouter.Event.MOVE) {
                 for (history in 0 until event.historySize) pointerRouter.observe(pointers(event, history))
             }
@@ -1260,7 +1473,7 @@ class ArtFlowCanvasView
 
                 PointerGestureRouter.Action.REBASE_NAVIGATION -> {
                     removeCallbacks(rapidHistory)
-                    postDelayed(rapidHistory, RAPID_HISTORY_DELAY_MS)
+                    postDelayed(rapidHistory, input.gestures.rapidUndoDelayMs.toLong())
                     val remaining =
                         if (action ==
                             PointerGestureRouter.Event.POINTER_UP
@@ -1283,12 +1496,12 @@ class ArtFlowCanvasView
 
                 PointerGestureRouter.Action.THREE_FINGER_SWIPE_DOWN -> {
                     resetNavigation()
-                    if (input.gestures.swipeCopyPaste) onCopyPasteMenuRequested?.invoke()
+                    onCopyPasteMenuRequested?.invoke()
                 }
 
                 PointerGestureRouter.Action.THREE_FINGER_SCRUB -> {
                     resetNavigation()
-                    if (input.gestures.scrubToClear) onClearLayerRequested?.invoke()
+                    onClearLayerRequested?.invoke()
                 }
 
                 PointerGestureRouter.Action.IGNORE -> {
@@ -1297,6 +1510,70 @@ class ArtFlowCanvasView
             }
             return true
         }
+
+        /** Starts colour sampling under the screen point ([x], [y]) for as long as the button or pointer is held. */
+        private fun beginSampling(
+            x: Float,
+            y: Float,
+        ) {
+            val (canvasX, canvasY) = viewToCanvas(x, y)
+            startSampling()
+            pickColor(canvasX, canvasY)
+        }
+
+        /** Runs a one-shot stylus action: Undo, or the QuickMenu. Hold-style actions never reach here. */
+        private fun performStylusAction(action: StylusAction) {
+            when (action) {
+                StylusAction.UNDO -> onUndoRequested?.invoke()
+                StylusAction.QUICK_MENU -> onQuickMenuRequested?.invoke()
+                else -> Unit
+            }
+        }
+
+        private fun pointerKind(toolType: Int): PointerKind =
+            if (toolType == MotionEvent.TOOL_TYPE_ERASER) {
+                PointerKind.STYLUS_ERASER
+            } else if (toolType == MotionEvent.TOOL_TYPE_STYLUS) {
+                PointerKind.STYLUS_TIP
+            } else {
+                PointerKind.FINGER
+            }
+
+        /**
+         * Palm rejection for one pointer event: the pen's contact is recorded, and a finger that lands while the
+         * pen hovers or touches, and is palm-sized or lands next to the pen's contact, is ignored entirely.
+         * Returns true when this event belongs to such a finger and must not reach the router.
+         */
+        private fun observePalm(
+            event: MotionEvent,
+            action: PointerGestureRouter.Event,
+        ): Boolean {
+            when (action) {
+                PointerGestureRouter.Event.DOWN, PointerGestureRouter.Event.POINTER_DOWN -> {
+                    if (isStylusTool(event.getToolType(event.actionIndex))) {
+                        palmRejection.stylusContact(down = true, timeMs = event.eventTime)
+                    } else if (action == PointerGestureRouter.Event.DOWN &&
+                        palmRejection.rejectsFinger(event.getSize(event.actionIndex), event.eventTime)
+                    ) {
+                        pointerRouter.suppress()
+                        return true
+                    }
+                }
+
+                PointerGestureRouter.Event.POINTER_UP, PointerGestureRouter.Event.UP -> {
+                    if (isStylusTool(event.getToolType(event.actionIndex))) {
+                        palmRejection.stylusContact(down = false, timeMs = event.eventTime)
+                    }
+                }
+
+                PointerGestureRouter.Event.CANCEL -> palmRejection.stylusContact(down = false, timeMs = event.eventTime)
+                PointerGestureRouter.Event.MOVE -> Unit
+            }
+            return false
+        }
+
+        private fun isStylusTool(toolType: Int): Boolean =
+            toolType == MotionEvent.TOOL_TYPE_STYLUS || toolType == MotionEvent.TOOL_TYPE_ERASER
 
         private fun pointers(
             event: MotionEvent,
@@ -1324,6 +1601,8 @@ class ArtFlowCanvasView
             gestureStartTime = event.eventTime
             gestureMoved = 0f
             gestureStartView = x to y
+            // The stylus buttons and eraser end choose this touch's tool, read as the touch starts.
+            val choice = stylusMapper.down(event.buttonState, pointerKind(event.getToolType(index)), input.tool, previousTool)
 
             onBrushCursorChanged?.invoke(null)
             if (shapeEdit != null && grabShapeNode(x, y)) {
@@ -1336,15 +1615,41 @@ class ArtFlowCanvasView
                 gestureTool = null
                 return true
             }
-            // The stylus side button samples colour, the usual Android pen shortcut.
-            if (isStylus && (event.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY) != 0) {
-                val (canvasX, canvasY) = viewToCanvas(x, y)
-                startSampling()
-                pickColor(canvasX, canvasY)
-                gestureTool = null
-                return true
+            // A mouse's middle button pans and its right button samples; its left button draws like a finger.
+            if (event.getToolType(index) == MotionEvent.TOOL_TYPE_MOUSE) {
+                when (MouseInput.press(event.buttonState)) {
+                    MousePress.PAN -> {
+                        mousePanning = true
+                        gestureTool = null
+                        return true
+                    }
+
+                    MousePress.SAMPLE -> {
+                        beginSampling(x, y)
+                        gestureTool = null
+                        return true
+                    }
+
+                    MousePress.DRAW -> Unit
+                }
             }
-            val tool = if (event.getToolType(index) == MotionEvent.TOOL_TYPE_ERASER) ToolType.ERASER else input.tool
+            // The primary side button samples colour by default, the usual Android pen shortcut.
+            when (choice) {
+                is StylusDecision.Fire -> {
+                    performStylusAction(choice.action)
+                    gestureTool = null
+                    return true
+                }
+
+                StylusDecision.Sample -> {
+                    beginSampling(x, y)
+                    gestureTool = null
+                    return true
+                }
+
+                is StylusDecision.Use, StylusDecision.Ignore -> Unit
+            }
+            val tool = (choice as? StylusDecision.Use)?.tool ?: input.tool
             armHoldEyedropper(isStylus, x, y)
             // Palm rejection: a stylus always paints, fingers only when finger painting is on.
             if (!isStylus && !input.fingerPainting) {
@@ -1353,6 +1658,7 @@ class ArtFlowCanvasView
             }
 
             gestureTool = tool
+            strokeFromTouch = !isStylus
             val (canvasX, canvasY) = snapped(event, x, y, index)
             val pressure = pressureOf(event, index)
             if (tool == ToolType.EYEDROPPER) {
@@ -1365,7 +1671,8 @@ class ArtFlowCanvasView
 
             when (tool) {
                 ToolType.BRUSH, ToolType.ERASER -> {
-                    startStroke(canvasX, canvasY, pressure, tool)
+                    val time = StrokeClock.wallTime(event.eventTime, SystemClock.uptimeMillis(), System.currentTimeMillis())
+                    startStroke(canvasX, canvasY, pressure, tool, time)
                 }
 
                 ToolType.SMUDGE -> {
@@ -1408,7 +1715,7 @@ class ArtFlowCanvasView
                 }
 
                 ToolType.SELECT_RECTANGLE, ToolType.SELECT_ELLIPSE,
-                ToolType.SELECT_LASSO, ToolType.SELECT_FREEHAND,
+                ToolType.SELECT_LASSO, ToolType.SELECT_FREEHAND, ToolType.LASSO_FILL,
                 -> {
                     previewPoints = mutableListOf(canvasX to canvasY)
                 }
@@ -1427,6 +1734,21 @@ class ArtFlowCanvasView
             y: Float,
             history: Int = -1,
         ): Boolean {
+            if (mousePanning) {
+                panBy(x - lastPointerX, y - lastPointerY)
+                lastPointerX = x
+                lastPointerY = y
+                return true
+            }
+            // A one-shot stylus button pressed during the touch fires once and ends this touch's stroke.
+            if (history < 0 && isStylusTool(event.getToolType(index))) {
+                val decision = stylusMapper.move(event.buttonState)
+                if (decision is StylusDecision.Fire) {
+                    cancelActiveGesture()
+                    performStylusAction(decision.action)
+                    return true
+                }
+            }
             val dx = x - lastPointerX
             val dy = y - lastPointerY
             gestureMoved += sqrt(dx * dx + dy * dy)
@@ -1466,6 +1788,7 @@ class ArtFlowCanvasView
                             pressure = strokePressure,
                             tiltX = axisOf(event, index, MotionEvent.AXIS_TILT, history),
                             tiltY = axisOf(event, index, MotionEvent.AXIS_ORIENTATION, history),
+                            timestamp = StrokeClock.wallTime(time, SystemClock.uptimeMillis(), System.currentTimeMillis()),
                         )
                         predict(tool, smoothX, smoothY, strokePressure, time)
                         updateLiveStroke()
@@ -1491,9 +1814,9 @@ class ArtFlowCanvasView
                     emitDragPreview(tool)
                 }
 
-                ToolType.SELECT_FREEHAND, ToolType.SELECT_LASSO -> {
+                ToolType.SELECT_FREEHAND, ToolType.SELECT_LASSO, ToolType.LASSO_FILL -> {
                     previewPoints.add(canvasX to canvasY)
-                    emitDragPreview(tool, closed = tool == ToolType.SELECT_LASSO)
+                    emitDragPreview(tool, closed = tool != ToolType.SELECT_FREEHAND)
                 }
 
                 else -> {
@@ -1513,6 +1836,12 @@ class ArtFlowCanvasView
             cancelled: Boolean,
         ) {
             removeCallbacks(holdEyedropper)
+            stylusMapper.end()
+            if (mousePanning) {
+                mousePanning = false
+                gestureTool = null
+                return
+            }
             if (holdSampling) {
                 endSampling()
                 gestureTool = null
@@ -1548,8 +1877,22 @@ class ArtFlowCanvasView
                     reportHistory()
                 }
 
+                ToolType.TRANSFORM -> {
+                    // A tap outside the box nudges it one pixel toward the tap.
+                    val nudge =
+                        transformSession?.takeIf { wasTap && !cancelled && !warping }?.let {
+                            TransformQuad.nudgeToward(
+                                it.quad,
+                                canvasX,
+                                canvasY,
+                            )
+                        }
+                    endPixelGesture(cancelled || nudge != null)
+                    nudge?.let { (dx, dy) -> nudgeTransform(dx, dy) }
+                }
+
                 ToolType.SMUDGE, ToolType.HEALING, ToolType.LIQUIFY,
-                ToolType.MOVE, ToolType.TRANSFORM,
+                ToolType.MOVE,
                 -> {
                     endPixelGesture(cancelled)
                 }
@@ -1568,6 +1911,11 @@ class ArtFlowCanvasView
                     if (!cancelled && wasTap) bucketFill(canvasX, canvasY)
                 }
 
+                ToolType.LASSO_FILL -> {
+                    onDragPreview?.invoke(null)
+                    if (!cancelled && selectionPoints.size >= 3) lassoFill(selectionPoints)
+                }
+
                 ToolType.GRADIENT -> {
                     if (!cancelled && gradientStart != null && gestureMoved > TAP_SLOP) {
                         gradientFill(gradientStart, canvasX to canvasY)
@@ -1584,7 +1932,7 @@ class ArtFlowCanvasView
                             endX = canvasX,
                             endY = canvasY,
                             filled = input.shapeFilled,
-                            color = input.brushColor,
+                            color = canvasRepository.documentColor(input.brushColor),
                             strokeWidth = max(1f, input.brushParams.size / 4f),
                         )
                     }
@@ -1636,6 +1984,9 @@ class ArtFlowCanvasView
             if (pinchStartScale == 0f) {
                 pinchStartScale = scale
                 pinchStartTime = SystemClock.uptimeMillis()
+                // A new pinch starts from the rotation on screen, with no snap held over from the last one.
+                rotationRaw = rotationDegrees
+                rotationSnap.reset()
             }
             val ordered = pointers.sortedBy { it.id }
             navPrevDistance = spacing(ordered)
@@ -1645,18 +1996,21 @@ class ArtFlowCanvasView
             navAnchor = viewToCanvas(navPrevMidX, navPrevMidY)
         }
 
-        /** Taps of two, three or four fingers undo, redo or toggle full screen; a quick pinch fits the canvas. */
+        /**
+         * Taps of two, three or four fingers undo, redo or toggle full screen; a quick pinch fits the canvas.
+         * The router reports only the taps and pinches whose gesture is switched on.
+         */
         private fun finishNavigation(
             tapFingers: Int,
             timeMillis: Long,
         ) {
             resetNavigation()
-            val quickPinch = QuickPinch.isQuickPinch(pinchStartScale, scale, timeMillis - pinchStartTime)
+            val quickPinch = pointerRouter.quickPinchRecognised(pinchStartScale, scale, timeMillis - pinchStartTime)
             pinchStartScale = 0f
             when {
                 tapFingers == 2 -> onUndoRequested?.invoke()
                 tapFingers == 3 -> onRedoRequested?.invoke()
-                tapFingers == 4 -> if (input.gestures.fourFingerFullScreen) onFullscreenRequested?.invoke()
+                tapFingers == 4 -> onFullscreenRequested?.invoke()
                 quickPinch -> animateFitToView()
             }
         }
@@ -1675,7 +2029,11 @@ class ArtFlowCanvasView
             val midY = ordered.map { it.y }.average().toFloat()
             if (navPrevDistance > 1f && distance > 1f) {
                 scale = MathUtils.clamp(scale * (distance / navPrevDistance), MIN_SCALE, MAX_SCALE)
-                rotationDegrees = normalizeDegrees(rotationDegrees + (eventAngle - navPrevAngle))
+                // The fingers' turn is accumulated unsnapped; the view shows it held at a right angle while close to one.
+                rotationRaw = normalizeDegrees(rotationRaw + (eventAngle - navPrevAngle))
+                val snap = rotationSnap.update(rotationRaw)
+                if (snap.entered && input.haptics) performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+                rotationDegrees = snap.degrees
                 val radians = Math.toRadians(rotationDegrees.toDouble())
                 val cosR = cos(radians).toFloat()
                 val sinR = sin(radians).toFloat()
@@ -1688,25 +2046,66 @@ class ArtFlowCanvasView
                 offsetY += midY - navPrevMidY
             }
             pushTransform()
+            emitNavigationReadout()
             rebaseNavigation(ordered)
+        }
+
+        /** Shows the navigation HUD: the zoom percentage and the signed angle, as they are now. */
+        private fun emitNavigationReadout() {
+            onNavigationReadout?.invoke(
+                NavigationReadout(
+                    zoomPercent = ViewMath.zoomPercent(scale),
+                    angleDegrees = ViewMath.readoutDegrees(rotationDegrees),
+                    stamp = SystemClock.uptimeMillis(),
+                ),
+            )
+        }
+
+        /** Zooms by [factor] so the canvas point under ([x], [y]) stays under the pointer. */
+        private fun zoomAboutPoint(
+            factor: Float,
+            x: Float,
+            y: Float,
+        ) {
+            viewAnimator?.cancel()
+            val frame = ViewFrame(canvasWidth.toFloat(), canvasHeight.toFloat(), width.toFloat(), height.toFloat())
+            val zoomed =
+                ViewMath.zoomAbout(
+                    ViewTransform(scale, offsetX, offsetY, rotationDegrees),
+                    frame,
+                    factor,
+                    MIN_SCALE,
+                    MAX_SCALE,
+                    x,
+                    y,
+                )
+            scale = zoomed.scale
+            offsetX = zoomed.offsetX
+            offsetY = zoomed.offsetY
+            pushTransform()
+            emitNavigationReadout()
         }
 
         // -----------------------------------------------------------------------------------------
         // Brush strokes
         // -----------------------------------------------------------------------------------------
 
+        /** True while the current gesture is a finger, so brushes use their Touch taper. */
+        private var strokeFromTouch = false
+
         private fun startStroke(
             x: Float,
             y: Float,
             pressure: Float,
             tool: ToolType,
+            time: Long = System.currentTimeMillis(),
         ) {
             val chosen =
                 if (tool == ToolType.ERASER) {
-                    input.brushParams.copy(size = input.eraserSize)
+                    (input.eraserParams ?: input.brushParams).copy(size = input.eraserSize)
                 } else {
                     input.brushParams
-                }
+                }.let { if (strokeFromTouch) it.forTouch() else it }
             // Dynamic brush scaling keeps the brush the same size on screen at any zoom, as in Procreate.
             val params =
                 if (input.dynamicBrushScaling && scale > 0f) {
@@ -1723,11 +2122,17 @@ class ArtFlowCanvasView
                     layerId = activeLayerId,
                     isEraser = tool == ToolType.ERASER,
                     destination = input.strokeDestination,
+                    timestamp = time,
                 )
             drawing = currentStrokeId != 0L
             clearPrediction()
             if (!drawing) onStatusMessage?.invoke("Choose an unlocked, visible layer with an editable destination")
-            stabilizer = StrokeStabilizer(max(params.smoothing, input.stabilization)).takeIf { it.isActive }?.also { it.start(x, y) }
+            // The string keeps the same length on screen whatever the zoom.
+            val string = input.pulledString.coerceIn(0f, 1f) * MAX_STRING_DP * resources.displayMetrics.density / scale
+            stabilizer =
+                StrokeStabilizer(max(params.smoothing, input.stabilization), string)
+                    .takeIf { it.isActive }
+                    ?.also { it.start(x, y) }
             motionFilter =
                 MotionFilter(input.motionFiltering, input.motionExpression)
                     .takeIf { it.isActive }
@@ -1760,7 +2165,7 @@ class ArtFlowCanvasView
             val (canvasX, canvasY) = viewToCanvas(x, y)
             holdCanvasX = canvasX
             holdCanvasY = canvasY
-            postDelayed(holdEyedropper, HOLD_EYEDROPPER_MS)
+            postDelayed(holdEyedropper, input.gestures.eyedropperDelayMs.toLong())
         }
 
         private fun startHoldEyedropper() {
@@ -1771,9 +2176,28 @@ class ArtFlowCanvasView
             cancelPixelInteraction()
             previewPoints.clear()
             onDragPreview?.invoke(null)
+            if (input.haptics) performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+            if (input.gestures.holdSelectsLayer) {
+                gestureTool = null // The rest of this touch does nothing.
+                selectLayerAt(holdCanvasX, holdCanvasY)
+                return
+            }
             startSampling()
-            performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
             pickColor(holdCanvasX, holdCanvasY)
+        }
+
+        /** Layer Select: makes the topmost visible layer with paint at the point the active one. */
+        private fun selectLayerAt(
+            x: Float,
+            y: Float,
+        ) {
+            coroutineScope.launch {
+                val layerId = canvasRepository.layerAt(x.roundToInt(), y.roundToInt())
+                when {
+                    layerId == null -> onStatusMessage?.invoke("No layer has paint here")
+                    layerId != activeLayerId -> onLayerSelected?.invoke(layerId)
+                }
+            }
         }
 
         /**
@@ -1797,7 +2221,8 @@ class ArtFlowCanvasView
             }
             val radius = input.brushParams.size * 0.5f * pressure.coerceIn(MIN_PREDICTED_PRESSURE, 1f)
             val alpha = (input.brushParams.opacity.coerceIn(0f, 1f) * 255f).toInt()
-            renderer.setPrediction(points, radius, (input.brushColor and 0x00FFFFFF) or (alpha shl 24))
+            val predicted = canvasRepository.documentColor(input.brushColor)
+            renderer.setPrediction(points, radius, (predicted and 0x00FFFFFF) or (alpha shl 24))
             requestRender()
         }
 
@@ -1805,6 +2230,9 @@ class ArtFlowCanvasView
             predictor.reset()
             renderer.setPrediction(null, 0f, 0)
         }
+
+        private fun activeLayerHasText(): Boolean =
+            canvasRepository.getAllLayers().firstOrNull { it.id == activeLayerId }?.textContent != null
 
         /** Lets the stabilised line catch up to the lift point, then commits or cancels the stroke. */
         private fun finishStroke(
@@ -1823,7 +2251,12 @@ class ArtFlowCanvasView
                 }
             }
             val markBefore = canvasRepository.historyMark
+            val paintedText = activeLayerHasText()
             canvasRepository.endStroke(currentStrokeId)
+            // The first paint on editable text rasterises it: the glyphs stay, the text does not. Say so once.
+            if (paintedText && !activeLayerHasText()) {
+                onStatusMessage?.invoke("Painting rasterised this text: it stays visible but can no longer be edited as text")
+            }
             val shape = quickShapeShown?.takeIf { quickShapeApplied && it.nodes.isNotEmpty() }
             if (shape != null && canvasRepository.historyMark != markBefore) {
                 shapeEdit = ShapeEdit(shape, quickShapePressure, quickShapeTool, activeLayerId, canvasRepository.historyMark)
@@ -1943,7 +2376,7 @@ class ArtFlowCanvasView
                 holdAnchorX = viewX
                 holdAnchorY = viewY
                 removeCallbacks(quickShapeCheck)
-                postDelayed(quickShapeCheck, QUICKSHAPE_HOLD_MS)
+                postDelayed(quickShapeCheck, input.gestures.quickShapeDelayMs.toLong())
             }
         }
 
@@ -1966,7 +2399,7 @@ class ArtFlowCanvasView
             quickShapePressure = pressure
             shape.points.drop(1).forEach { (px, py) -> canvasRepository.continueStroke(currentStrokeId, px, py, pressure) }
             updateLiveStroke()
-            performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+            if (input.haptics) performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
             onStatusMessage?.invoke("QuickShape: ${shape.kind.label} — keep holding and drag to adjust")
         }
 
@@ -2013,6 +2446,13 @@ class ArtFlowCanvasView
             description: String,
         ) {
             cancelPixelInteraction()
+            if (tool == ToolType.MOVE || tool == ToolType.TRANSFORM) {
+                val layer = canvasRepository.getActiveLayer()
+                if (canvasRepository.selection() != null || layer?.hasMask() == true || layer?.linkGroupId != null) {
+                    onStatusMessage?.invoke("Use Transform options for masked layers. Deselect before moving the whole layer.")
+                    return
+                }
+            }
             pixelTool = tool
             pixelCommitDescription = description
             pendingPixelCommit = false
@@ -2032,6 +2472,7 @@ class ArtFlowCanvasView
             val layerId = activeLayerId
             val gestureInput = input
             val gestureSelection = canvasRepository.selection()
+            moveSelection = if (tool == ToolType.MOVE) gestureSelection else null
             pixelOpenJob =
                 coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
                     val session = canvasRepository.beginRasterEdit(layerId)
@@ -2125,10 +2566,10 @@ class ArtFlowCanvasView
                             x,
                             y,
                             gestureInput.smudge.copy(
-                                size = gestureInput.brushParams.size,
+                                size = (gestureInput.smudgeParams ?: gestureInput.brushParams).size,
                                 mask = selection,
                                 alphaLock = alphaLocked,
-                                texture = BrushPatch.texture(gestureInput.brushParams),
+                                texture = BrushPatch.texture(gestureInput.smudgeParams ?: gestureInput.brushParams),
                             ),
                         )
                 }
@@ -2231,13 +2672,17 @@ class ArtFlowCanvasView
 
                 ToolType.MOVE -> {
                     val base = rasterBase ?: return
-                    buffer.clear()
-                    drawShifted(
-                        buffer,
-                        base,
-                        (x - moveOriginX()).roundToInt(),
-                        (y - moveOriginY()).roundToInt(),
-                    )
+                    val dx = (x - moveOriginX()).roundToInt()
+                    val dy = (y - moveOriginY()).roundToInt()
+                    val selection = moveSelection
+                    if (selection == null) {
+                        buffer.clear()
+                        drawShifted(buffer, base, dx, dy)
+                    } else {
+                        // With a selection, only the selected pixels move; the rest of the layer stays put.
+                        val params = LayerTransform.Params(moveOriginX(), moveOriginY(), dx.toFloat(), dy.toFloat())
+                        LayerTransform.render(base, buffer, params, selection)
+                    }
                 }
 
                 else -> {
@@ -2247,16 +2692,65 @@ class ArtFlowCanvasView
             requestPreviewRefresh()
         }
 
-        /** Full-canvas resample of the liquify map, throttled so dragging stays responsive. */
+        /**
+         * Throttled live preview of a liquify gesture. Warps render from a snapshot of the displacement on a
+         * background thread, one at a time, so the UI thread only copies the region the gesture has touched.
+         * Reconstruct blends a live restore field and still renders here, so it stays under the pixel cap.
+         */
         private fun previewLiquify(buffer: PixelBuffer) {
             val session = liquifySession ?: return
             val base = rasterBase ?: return
             val now = System.currentTimeMillis()
             if (now - lastLiquifyPreview < LIQUIFY_PREVIEW_INTERVAL_MS) return
             lastLiquifyPreview = now
-            if (buffer.width * buffer.height > LIQUIFY_PREVIEW_MAX_PIXELS) return
-            val preview = session.render(base, gestureLiquifyReference?.original)
-            preview.pixels.copyInto(buffer.pixels)
+            if (session.settings.mode == LiquifyTool.Mode.RECONSTRUCT) {
+                if (buffer.width * buffer.height > LIQUIFY_PREVIEW_MAX_PIXELS) return
+                session.render(base, gestureLiquifyReference?.original).pixels.copyInto(buffer.pixels)
+                return
+            }
+            if (liquifyPreviewJob?.isActive == true) {
+                liquifyPreviewQueued = true
+                return
+            }
+            launchLiquifyPreview(session, buffer, base)
+        }
+
+        private fun launchLiquifyPreview(
+            session: LiquifyTool.Session,
+            buffer: PixelBuffer,
+            base: PixelBuffer,
+        ) {
+            val bounds = session.dirtyBounds ?: return
+            val snapshot = session.snapshotWarp(bounds)
+            liquifyPreviewJob =
+                coroutineScope.launch {
+                    val pixels = withContext(Dispatchers.Default) { snapshot.render(base) }
+                    // The gesture may have ended while this rendered. Only paste into the gesture that asked for it.
+                    if (rasterBuffer !== buffer || liquifySession !== session) return@launch
+                    pasteRegion(buffer, snapshot.bounds, pixels)
+                    forcePreviewRefresh()
+                    if (liquifyPreviewQueued) {
+                        liquifyPreviewQueued = false
+                        launchLiquifyPreview(session, buffer, base)
+                    }
+                }
+        }
+
+        private fun pasteRegion(
+            buffer: PixelBuffer,
+            bounds: IntBounds,
+            pixels: IntArray,
+        ) {
+            for (row in 0 until bounds.height) {
+                val to = (bounds.top + row) * buffer.width + bounds.left
+                pixels.copyInto(buffer.pixels, to, row * bounds.width, (row + 1) * bounds.width)
+            }
+        }
+
+        private fun cancelLiquifyPreview() {
+            liquifyPreviewJob?.cancel()
+            liquifyPreviewJob = null
+            liquifyPreviewQueued = false
         }
 
         private fun moveOriginX(): Float = moveStart.first
@@ -2264,6 +2758,9 @@ class ArtFlowCanvasView
         private fun moveOriginY(): Float = moveStart.second
 
         private var moveStart: Pair<Float, Float> = 0f to 0f
+
+        /** Selection in force when a Move gesture began; null moves the whole layer. */
+        private var moveSelection: SelectionMask? = null
 
         private fun endPixelGesture(cancelled: Boolean) {
             if (pixelTool == null) return
@@ -2302,6 +2799,8 @@ class ArtFlowCanvasView
             healingSession = null
             liquifySession = null
             gestureLiquifyReference = null
+            // A preview still rendering must not paste over the committed pixels.
+            cancelLiquifyPreview()
             coroutineScope.launch {
                 try {
                     if (!cancelled) {
@@ -2310,7 +2809,6 @@ class ArtFlowCanvasView
                         if (transform != null) {
                             // Previews are throttled and nearest-neighbour; commit the exact final placement.
                             withContext(Dispatchers.Default) {
-                                val highQuality = interpolation == TransformQuad.Interpolation.BILINEAR
                                 val quad = finalQuad ?: transform.quad
                                 TransformQuad.renderShape(
                                     transform.base,
@@ -2319,13 +2817,15 @@ class ArtFlowCanvasView
                                     quad,
                                     finalMesh,
                                     transform.selection,
-                                    highQuality,
+                                    interpolation,
                                 )
-                                companions.render(transform.bounds, quad, finalMesh, highQuality)
+                                companions.render(transform.bounds, quad, finalMesh, interpolation)
                             }
                         }
                         if (finalLiquify != null && original != null) {
                             withContext(Dispatchers.Default) {
+                                // Momentum carries the distortion on after the pen lifts.
+                                finalLiquify.release()
                                 finalLiquify
                                     .render(original, reference?.original)
                                     .pixels
@@ -2347,6 +2847,7 @@ class ArtFlowCanvasView
                                 if (finalLiquify != null && reference != null && reference.contextVersion == liquifyContextVersion) {
                                     liquifyReference = reference.copy(revision = canvasRepository.contentRevision)
                                 }
+                                if (finalLiquify != null && original != null) rememberForAdjust(finalLiquify, original, session.layerId)
                                 reportHistory()
                             } else {
                                 onStatusMessage?.invoke("The layer changed; this gesture was discarded")
@@ -2366,11 +2867,67 @@ class ArtFlowCanvasView
             }
         }
 
+        private fun rememberForAdjust(
+            gesture: LiquifyTool.Session,
+            original: PixelBuffer,
+            layerId: Long,
+        ) {
+            if (gesture.settings.mode == LiquifyTool.Mode.RECONSTRUCT) return
+            adjustableLiquify = AdjustableLiquify(gesture, original, layerId, canvasRepository.historyMark)
+            liquifyAdjustGesture++
+        }
+
+        /**
+         * Liquify's Adjust: replaces the last liquify gesture with the same gesture at [strength]
+         * (0 to 1) of its distortion, as the same single undo step. Does nothing once anything else
+         * has changed the history since.
+         */
+        fun adjustLiquify(strength: Float) {
+            val previous = liquifyAdjustJob
+            liquifyAdjustJob =
+                coroutineScope.launch {
+                    previous?.join()
+                    val last = adjustableLiquify ?: return@launch
+                    // Render first: undo and re-apply then happen back to back, so no edit can land between them.
+                    val adjusted = withContext(Dispatchers.Default) { last.session.renderAdjusted(last.original, strength) }
+                    val revision = canvasRepository.contentRevision
+                    if (rasterSession != null || canvasRepository.historyMark != last.historyMark || !canvasRepository.undo()) {
+                        clearLiquifyAdjust()
+                        onStatusMessage?.invoke("Adjust only changes the latest liquify gesture")
+                        return@launch
+                    }
+                    val reference = liquifyReference
+                    if (canvasRepository.applyRasterEdit(last.layerId, "Liquify") { adjusted.pixels.copyInto(it.pixels) }) {
+                        last.historyMark = canvasRepository.historyMark
+                        if (reference != null && reference.revision == revision) {
+                            liquifyReference = reference.copy(revision = canvasRepository.contentRevision)
+                        }
+                    } else {
+                        canvasRepository.redo()
+                        clearLiquifyAdjust()
+                    }
+                    reportHistory()
+                }
+        }
+
         private fun requestPreviewRefresh() {
             val now = System.currentTimeMillis()
             if (now - lastPreviewRequest < PREVIEW_INTERVAL_MS) return
-            lastPreviewRequest = now
+            forcePreviewRefresh()
+        }
+
+        /** A refresh the throttle must not drop: a background render has just changed the pixels it shows. */
+        private fun forcePreviewRefresh() {
+            lastPreviewRequest = System.currentTimeMillis()
             canvasRepository.requestPreviewRefresh()
+        }
+
+        /** Fills the shape just traced with the brush colour, as one undo step. */
+        private fun lassoFill(shape: List<Pair<Float, Float>>) {
+            val color = input.brushColor
+            applyFillEdit("Lasso fill") { target, selection, alphaLocked ->
+                FillTool.lassoFill(target, shape, color, FillTool.Settings(mask = selection, alphaLock = alphaLocked)).changed
+            }
         }
 
         private fun bucketFill(
@@ -2379,8 +2936,10 @@ class ArtFlowCanvasView
             tolerance: Int = input.fillTolerance,
             onCommitted: ((Int) -> Unit)? = null,
         ) {
-            val cx = x.roundToInt()
-            val cy = y.roundToInt()
+            // A pixel covers [i, i + 1), so the seed is the pixel under the touch; rounding would pick the neighbour past
+            // the edge.
+            val cx = floor(x).toInt()
+            val cy = floor(y).toInt()
             val captured = input
             // With a Reference layer, the fill stops at its lines instead of the active layer's pixels.
             val referenceId =
@@ -2388,6 +2947,7 @@ class ArtFlowCanvasView
                     .getAllLayers()
                     .firstOrNull { it.isFillReference && it.isVisible && it.id != activeLayerId }
                     ?.id
+            val fillColor = canvasRepository.documentColor(captured.brushColor)
             coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
                 val reference = referenceId?.let { canvasRepository.layerPixels(it) }
                 applyFillEdit("Paint bucket", onCommitted) { target, selection, alphaLocked ->
@@ -2396,11 +2956,12 @@ class ArtFlowCanvasView
                             target = target,
                             startX = cx,
                             startY = cy,
-                            color = captured.brushColor,
+                            color = fillColor,
                             settings =
                                 FillTool.Settings(
                                     tolerance = tolerance,
                                     contiguous = captured.fillContiguous,
+                                    gapClose = captured.fillGapClose,
                                     mask = selection,
                                     alphaLock = alphaLocked,
                                 ),
@@ -2414,7 +2975,12 @@ class ArtFlowCanvasView
             start: Pair<Float, Float>,
             end: Pair<Float, Float>,
         ) {
-            val gradient = input.gradient.copy(type = input.gradientType, stops = input.gradient.stops.toList())
+            // The stops are interface sRGB; convert them into the canvas's stored space before drawing.
+            val gradient =
+                input.gradient.copy(
+                    type = input.gradientType,
+                    stops = input.gradient.stops.map { it.copy(color = canvasRepository.documentColor(it.color)) },
+                )
             applyFillEdit("Gradient") { target, selection, alphaLocked ->
                 GradientTool
                     .draw(
@@ -2480,6 +3046,7 @@ class ArtFlowCanvasView
         ) {
             val source = samplingSource
             val (viewX, viewY) = canvasToView(x, y)
+            val sampleSize = input.gestures.eyedropperSample
             coroutineScope.launch {
                 val color =
                     withContext(Dispatchers.Default) {
@@ -2489,11 +3056,12 @@ class ArtFlowCanvasView
                         if (buffer == null || !buffer.contains(px, py)) {
                             null
                         } else {
-                            buffer.getSafe(px, py).takeIf { (it ushr 24) != 0 }
+                            AreaSample.average(buffer, px, py, sampleSize).takeIf { (it ushr 24) != 0 }
                         }
                     }
                 if (color != null) {
-                    val opaque = Channels.withAlpha(color, 255)
+                    // The canvas stores its own colour space; the picker shows sRGB.
+                    val opaque = Channels.withAlpha(canvasRepository.displayColor(color), 255)
                     if (source != null && source === samplingSource) {
                         onEyedropperChanged?.invoke(EyedropperLoupe(viewX, viewY, opaque, samplingPrevious))
                     }
@@ -2513,6 +3081,9 @@ class ArtFlowCanvasView
             points: List<Pair<Float, Float>>,
         ) {
             if (points.size < 2) return
+            // A tap is not a lasso: it must not replace the selection with an empty one.
+            val enclosing = tool == ToolType.SELECT_FREEHAND || tool == ToolType.SELECT_LASSO
+            if (enclosing && points.size < MIN_LASSO_POINTS) return
             val mode = input.selectionMode
             runSelectionEdit(mode) { session ->
                 withContext(Dispatchers.Default) {
@@ -2541,12 +3112,12 @@ class ArtFlowCanvasView
                             )
                         }
 
-                        ToolType.SELECT_LASSO -> {
+                        ToolType.SELECT_FREEHAND, ToolType.SELECT_LASSO -> {
                             SelectionMask.polygon(session.width, session.height, points, checkActive = { ensureActive() })
                         }
 
                         else -> {
-                            SelectionMask.fromStroke(session.width, session.height, points, radius = 12f, checkActive = { ensureActive() })
+                            SelectionMask.polygon(session.width, session.height, points, checkActive = { ensureActive() })
                         }
                     }
                 }
@@ -2835,7 +3406,7 @@ class ArtFlowCanvasView
             val pressure = if (history < 0) event.getPressure(index) else event.getHistoricalPressure(index, history)
             val size = if (history < 0) event.getSize(index) else event.getHistoricalSize(index, history)
             val stylus = toolType == MotionEvent.TOOL_TYPE_STYLUS || toolType == MotionEvent.TOOL_TYPE_ERASER
-            return PointerPressure.curve(PointerPressure.normalize(stylus, pressure, size), input.pressureCurve)
+            return input.pressureResponse.map(PointerPressure.curve(PointerPressure.normalize(stylus, pressure, size), input.pressureCurve))
         }
 
         private fun axisOf(
@@ -2877,19 +3448,17 @@ class ArtFlowCanvasView
             private const val MAX_SCALE = 32f
             private const val TAP_SLOP = 24f
             private const val QUICKSHAPE_HOLD_SLOP = 10f
-            private const val QUICKSHAPE_HOLD_MS = 650L
             private const val NODE_REACH_DP = 28f
-            private const val HOLD_EYEDROPPER_MS = 500L
             private const val HANDLE_TOUCH_PX = 36f
             private const val MIN_SCALED_BRUSH = 0.5f
             private const val MAX_SCALED_BRUSH = 1_000f
-            private const val RAPID_HISTORY_DELAY_MS = 650L
             private const val RAPID_HISTORY_REPEAT_MS = 220L
+            private const val MAX_STRING_DP = 60f
             private const val KNOB_DISTANCE_PX = 48f
-            private const val SNAP_DISTANCE_PX = 12f
             private const val TRANSFORM_PREVIEW_INTERVAL_MS = 33L
             private const val TAP_TIMEOUT_MS = 320L
             private const val SNAP_TOLERANCE = 12f
+            private const val MIN_LASSO_POINTS = 3
             private const val PREVIEW_INTERVAL_MS = 66L
             private const val LIQUIFY_PREVIEW_INTERVAL_MS = 140L
             private const val LIQUIFY_PREVIEW_MAX_PIXELS = 4_000_000

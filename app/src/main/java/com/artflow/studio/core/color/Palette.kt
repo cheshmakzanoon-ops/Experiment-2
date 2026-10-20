@@ -48,6 +48,15 @@ data class Palette(
 
     /** Duplicates the palette under a new name. */
     fun renamed(newName: String): Palette = copy(id = 0, name = newName, createdAt = 0L)
+
+    /** A palette with the colour at [index] replaced; an index that is not a swatch leaves it as it is. */
+    fun withColorAt(
+        index: Int,
+        color: Int,
+    ): Palette = if (index in colors.indices) copy(colors = colors.toMutableList().also { it[index] = color }) else this
+
+    /** A palette with [color] added at the end, even when it is already there (unlike [withColor]). */
+    fun withColorAppended(color: Int): Palette = copy(colors = colors + color)
 }
 
 /** Bundled starter palettes so the app is useful before the artist saves anything. */
@@ -286,11 +295,20 @@ object PaletteCodec {
         if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
             importJson(trimmed)?.let { return it.renamed(name) }
         }
-        if (trimmed.startsWith("GIMP Palette", ignoreCase = true)) {
+        if (trimmed.startsWith("GIMP Palette", ignoreCase = true) || isRgbListing(trimmed)) {
             return importGpl(trimmed, name)
         }
         importHex(trimmed, name)?.let { return it }
         return importGpl(trimmed, name)
+    }
+
+    /**
+     * True when every data line is an `r g b` triplet, as a GPL body is. Checked before hex, because a three-digit
+     * hex code and a decimal channel look alike, so a headerless GPL list would otherwise import as hex garbage.
+     */
+    private fun isRgbListing(text: String): Boolean {
+        val data = text.lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
+        return data.isNotEmpty() && data.all { parseRgbTriplet(it) != null }
     }
 
     // ---------------------------------------------------------------------------------------
@@ -524,6 +542,7 @@ object PaletteCodec {
         ASE("ase", "Adobe swatch"),
         HEX("txt", "Hex list"),
         JSON("json", "ArtFlow palette"),
+        SWATCHES(ProcreateSwatches.EXTENSION, "Procreate swatches"),
     }
 
     /** Encodes a palette in the requested format. */
@@ -536,6 +555,7 @@ object PaletteCodec {
             Format.ASE -> exportAse(palette)
             Format.HEX -> exportHex(palette).toByteArray()
             Format.JSON -> exportJson(palette).toByteArray()
+            Format.SWATCHES -> ProcreateSwatches.write(palette)
         }
 
     /** Decodes a palette from raw bytes, sniffing the format. */
@@ -545,6 +565,9 @@ object PaletteCodec {
     ): Palette? {
         if (bytes.size >= 4 && String(bytes, 0, 4, Charsets.US_ASCII) == ASE_HEADER) {
             return importAse(bytes, fallbackName)
+        }
+        if (ProcreateSwatches.isArchive(bytes)) {
+            return ProcreateSwatches.read(bytes, fallbackName).firstOrNull()
         }
         val text = String(bytes, Charsets.UTF_8)
         return importAuto(text, fallbackName)

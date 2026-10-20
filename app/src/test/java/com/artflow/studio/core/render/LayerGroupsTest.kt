@@ -5,6 +5,7 @@ import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.Layer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -66,5 +67,20 @@ class LayerGroupsTest {
         val hiddenInner = listOf(a, inner.copy(isVisible = false), outer.copy(opacity = 1f))
         val resolved = LayerGroups.resolve(hiddenInner.map { Compositor.LayerInput(it) })
         assertFalse(resolved.single().layer.isVisible)
+    }
+
+    @Test fun passThroughGroupLetsMembersBlendWithTheLayersBelow() {
+        val paper = Compositor.LayerInput(Layer(id = 2, name = "Paper", index = 0), PixelBuffer(1, 1).also { it.fill(0xFF808080.toInt()) })
+        val ink = Layer(id = 1, name = "Ink", index = 1, blendMode = BlendMode.MULTIPLY)
+        val inkPixels = PixelBuffer(1, 1).also { it.fill(0xFF800000.toInt()) }
+        val folder = Layer(id = 10, name = "Folder", index = 2, isGroup = true, blendMode = BlendMode.PASS_THROUGH)
+        assertFalse(LayerGroups.isolates(folder))
+        assertTrue(LayerGroups.isolates(folder.copy(opacity = 0.5f)))
+        val flat = Compositor().composite(listOf(paper, Compositor.LayerInput(ink, inkPixels)), 1, 1)
+        val inFolder = Compositor.LayerInput(ink.copy(parentGroupId = 10), inkPixels)
+        val grouped = Compositor().composite(listOf(paper, inFolder, Compositor.LayerInput(folder)), 1, 1)
+        assertEquals(flat.pixels[0], grouped.pixels[0])
+        // Multiply darkens the grey paper; an isolated folder would show the ink colour unchanged.
+        assertNotEquals(0xFF800000.toInt(), grouped.pixels[0])
     }
 }

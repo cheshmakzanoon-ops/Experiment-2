@@ -87,7 +87,9 @@ object FillTool {
 
         if (!filled.isActive()) return Result(0, null, changed = false)
 
-        return applyFill(target, filled, color, settings)
+        // The colour-based edge is the coverage applyFill blends, so applyFill must not soften it a second time.
+        val coverage = if (settings.antiAlias) colourEdgeCoverage(filled, source, startColor, toleranceSquared) else filled
+        return applyFill(target, coverage, color, settings.copy(antiAlias = false))
     }
 
     /**
@@ -101,6 +103,23 @@ object FillTool {
         val coverage = SelectionMask(target.width, target.height).apply { selectAll() }
         if (!coverage.isActive()) return Result(0, null, changed = false)
         return applyFill(target, coverage, color, settings)
+    }
+
+    /**
+     * Lasso Fill: fills the closed shape traced by [points] (canvas pixels) with [color] in one go,
+     * inside any selection in [Settings.mask]. Fewer than three points enclose nothing.
+     */
+    fun lassoFill(
+        target: PixelBuffer,
+        points: List<Pair<Float, Float>>,
+        color: Int,
+        settings: Settings = Settings(),
+    ): Result {
+        if (points.size < 3) return Result(0, null, changed = false)
+        val shape = SelectionMask.polygon(target.width, target.height, points)
+        val mask = settings.mask?.let { SelectionMask.intersect(shape, it) } ?: shape
+        // The polygon is already anti-aliased along its edge, so it is not softened again.
+        return fillAll(target, color, settings.copy(mask = mask, antiAlias = false))
     }
 
     /** Fill the mask itself: paints the selection outline (Phase 13: "stroke selection"). */
@@ -213,6 +232,39 @@ object FillTool {
     }
 
     /**
+     * Anti-aliased edge for a flood fill. A pixel next to the region takes coverage from how close its
+     * colour is to the seed colour: a dark line far from the seed keeps its colour, while an
+     * anti-aliased pixel just beyond the tolerance takes a share of the fill.
+     */
+    private fun colourEdgeCoverage(
+        coverage: SelectionMask,
+        source: PixelBuffer,
+        seed: Int,
+        toleranceSquared: Float,
+    ): SelectionMask {
+        val out = coverage.copy()
+        val width = coverage.width
+        val height = coverage.height
+        val tolerance = sqrt(toleranceSquared)
+        val ramp = max(tolerance * 0.5f, 8f)
+
+        fun covered(index: Int): Boolean = (coverage.coverage[index].toInt() and 0xFF) != 0
+
+        for (y in 1 until height - 1) {
+            for (x in 1 until width - 1) {
+                val index = y * width + x
+                if (covered(index)) continue
+                val beside = covered(index - 1) || covered(index + 1)
+                if (!(beside || covered(index - width) || covered(index + width))) continue
+                val distance = sqrt(colorDistanceSquared(source.pixels[index], seed))
+                val share = ((tolerance + ramp - distance) / ramp).coerceIn(0f, 1f)
+                if (share > 0f) out.coverage[index] = (share * 255f).roundToInt().toByte()
+            }
+        }
+        return out
+    }
+
+    /**
      * Scanline flood fill. Iterative with an explicit stack of spans, which keeps memory flat and
      * avoids the per-pixel object allocation a naive queue would incur.
      */
@@ -231,12 +283,17 @@ object FillTool {
 
         // Close the *barrier*, not the matching region. Expanding matching pixels used to
         // bridge across ink, opening closed shapes and flooding the rest of the canvas.
+        // Closing erodes after it dilates, and an erosion counts samples past the canvas as empty. That reopened any
+        // gap within gapClose of the edge, so the barrier is closed on a canvas padded by gapClose on every side.
+        val pad = gapClose
         val closedBarrier =
             if (gapClose > 0) {
-                val barrier = SelectionMask(width, height)
-                for (i in source.pixels.indices) {
-                    if (colorDistanceSquared(source.pixels[i], startColor) > toleranceSquared) {
-                        barrier.coverage[i] = 255.toByte()
+                val barrier = SelectionMask(width + 2 * pad, height + 2 * pad)
+                for (y in 0 until height) {
+                    for (x in 0 until width) {
+                        if (colorDistanceSquared(source.getUnchecked(x, y), startColor) > toleranceSquared) {
+                            barrier.coverage[(y + pad) * barrier.width + x + pad] = 255.toByte()
+                        }
                     }
                 }
                 barrier.expanded(gapClose).expanded(-gapClose)
@@ -249,7 +306,7 @@ object FillTool {
             y: Int,
         ): Boolean =
             colorDistanceSquared(source.getUnchecked(x, y), startColor) <= toleranceSquared &&
-                (closedBarrier?.coverageAt(x, y) ?: 0) == 0
+                (closedBarrier?.coverageAt(x + pad, y + pad) ?: 0) == 0
 
         val stack = ArrayDeque<IntArray>()
         stack.addLast(intArrayOf(startX, startY))

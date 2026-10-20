@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="newcanvas_screen_size">Screen size</string>
+    <string name="newcanvas_width_in">Width (%1$s)</string>
+    <string name="newcanvas_height_in">Height (%1$s)</string>
+    <string name="newcanvas_unit_pixels">Pixels</string>
+    <string name="newcanvas_unit_inches">Inches</string>
+    <string name="newcanvas_unit_centimeters">Centimeters</string>
+    <string name="newcanvas_unit_millimeters">Millimeters</string>
+    <string name="newcanvas_size_pixels">%1$d × %2$d px at %3$d dpi</string>
+    <string name="newcanvas_size_physical">%1$.2f × %2$.2f in (%3$.1f × %4$.1f cm)</string>
+    <string name="newcanvas_dpi_range">Resolution must be between %1$d and %2$d dpi</string>
+    <string name="newcanvas_save_size">Save this size</string>
+    <string name="newcanvas_delete_size">Delete \"%1$s\"</string>
+    <string name="newcanvas_saved_size_hint">Saved sizes appear first in the list. Name the artwork above to name the size.</string>
+</resources>

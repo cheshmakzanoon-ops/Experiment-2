@@ -1,9 +1,12 @@
 package com.artflow.studio.data.repository.settings
 
+import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.color.PaletteCodec
+import com.artflow.studio.core.pixels.AreaSample
 import com.artflow.studio.data.local.dao.SettingsDao
 import com.artflow.studio.data.local.entity.SettingsEntity
+import com.artflow.studio.domain.model.brush.PressureResponse
 import com.artflow.studio.domain.model.settings.AccentChoice
 import com.artflow.studio.domain.model.settings.AppSettings
 import com.artflow.studio.domain.model.settings.GallerySort
@@ -105,6 +108,8 @@ class SettingsRepositoryImpl
                 dismissedTips = dismissedTips.toSet(),
                 recentColors = recentColors.toList(),
                 customPalettes = customPalettes.map { it.copy(colors = it.colors.toList()) },
+                canvasPresets = canvasPresets.toList(),
+                galleryOrder = galleryOrder.toList(),
             )
 
         override suspend fun setThemeMode(mode: ThemeMode) = update { it.copy(themeMode = mode) }
@@ -144,6 +149,12 @@ class SettingsRepositoryImpl
 
         override suspend fun setDefaultPreset(name: String) = update { it.copy(defaultPresetName = name) }
 
+        override suspend fun saveCanvasPreset(preset: CanvasOperations.Preset) =
+            update { it.copy(canvasPresets = CanvasPresets.add(it.canvasPresets, preset)) }
+
+        override suspend fun deleteCanvasPreset(name: String) =
+            update { it.copy(canvasPresets = CanvasPresets.remove(it.canvasPresets, name)) }
+
         override suspend fun setGallerySort(sort: GallerySort) = update { it.copy(gallerySort = sort) }
 
         override suspend fun setOnboardingSeen(seen: Boolean) = update { it.copy(seenOnboarding = seen) }
@@ -179,6 +190,16 @@ class SettingsRepositoryImpl
                         if (palette.id == paletteId) palette.copy(name = name) else palette
                     },
             )
+        }
+
+        override suspend fun updatePalette(
+            palette: Palette,
+            makeDefault: Boolean,
+        ) = update { current ->
+            val stored = current.customPalettes
+            val index = stored.indexOfFirst { it.id == palette.id }
+            val replaced = if (index >= 0) stored.toMutableList().also { it[index] = palette } else stored + palette
+            current.copy(customPalettes = if (makeDefault) listOf(palette) + replaced.filterNot { it.id == palette.id } else replaced)
         }
 
         // -----------------------------------------------------------------------------------------
@@ -228,21 +249,45 @@ class SettingsRepositoryImpl
                 KEY_MOTION_FILTERING to settings.motionFiltering.toString(),
                 KEY_MOTION_EXPRESSION to settings.motionExpression.toString(),
                 KEY_PRESSURE_SMOOTHING to settings.pressureSmoothing.toString(),
+                KEY_PULLED_STRING to settings.pulledString.toString(),
+                KEY_PRESSURE_RESPONSE to settings.pressureResponse.let { "${it.low},${it.middle},${it.high}" },
                 KEY_SCRUB_CLEAR to settings.scrubToClear.toString(),
                 KEY_SWIPE_PASTE to settings.swipeCopyPaste.toString(),
                 KEY_FOUR_FINGER to settings.fourFingerFullScreen.toString(),
+                KEY_RAPID_UNDO_DELAY to settings.rapidUndoDelayMs.toString(),
+                KEY_EYEDROPPER_DELAY to settings.eyedropperDelayMs.toString(),
+                KEY_QUICKSHAPE_DELAY to settings.quickShapeDelayMs.toString(),
+                KEY_HOLD_SELECTS_LAYER to settings.holdSelectsLayer.toString(),
+                KEY_EYEDROPPER_SAMPLE to settings.eyedropperSample.toString(),
                 KEY_TIMELAPSE_SIDE to settings.timelapseMaxSide.toString(),
+                KEY_RECORD_TIMELAPSE to settings.recordTimelapse.toString(),
                 KEY_DYNAMIC_BRUSH to settings.dynamicBrushScaling.toString(),
+                KEY_SELECTION_VISIBILITY to settings.selectionMaskVisibility.toString(),
+                KEY_PROJECT_CANVAS to settings.projectCanvas.toString(),
                 KEY_QUICK_MENU to settings.quickMenu.joinToString("|"),
                 KEY_AUTOSAVE to settings.autosaveEnabled.toString(),
                 KEY_AUTOSAVE_INTERVAL to settings.autosaveIntervalMs.toString(),
                 KEY_DEFAULT_PRESET to settings.defaultPresetName,
+                KEY_SAVED_PRESETS to CanvasOperations.encodePresets(settings.savedCanvasPresets),
+                KEY_DEFAULT_PALETTE to settings.defaultPaletteName,
                 KEY_GALLERY_SORT to settings.gallerySort.name,
+                KEY_GALLERY_ORDER to GalleryOrder.encode(settings.galleryOrder),
                 KEY_ONBOARDING to settings.seenOnboarding.toString(),
                 KEY_TIPS to settings.dismissedTips.joinToString("|"),
                 KEY_RECENT_COLORS to settings.recentColors.joinToString(","),
                 KEY_PALETTES to PaletteCodec.exportJson(settings.customPalettes),
             )
+
+        /** A stored hold delay in milliseconds, within the range the gesture sliders offer. */
+        private fun Map<String, String>.delay(key: String): Int? =
+            this[key]?.toIntOrNull()?.coerceIn(MIN_RAPID_UNDO_DELAY_MS, MAX_RAPID_UNDO_DELAY_MS)
+
+        /** Three increasing values in 0..1, or null when the stored curve is missing or damaged. */
+        private fun Map<String, String>.pressureResponse(key: String): PressureResponse? {
+            val values = this[key]?.split(',')?.map { it.toFloatOrNull() ?: return null } ?: return null
+            if (values.size != PRESSURE_POINTS) return null
+            return runCatching { PressureResponse(values[0], values[1], values[2]) }.getOrNull()
+        }
 
         /** A stored true/false, or [default] when it is missing or unreadable. */
         private fun Map<String, String>.unit(key: String): Float? = this[key]?.toFloatOrNull()?.takeIf { it.isFinite() }?.coerceIn(0f, 1f)
@@ -299,12 +344,25 @@ class SettingsRepositoryImpl
                 motionFiltering = stored.unit(KEY_MOTION_FILTERING) ?: defaults.motionFiltering,
                 motionExpression = stored.unit(KEY_MOTION_EXPRESSION) ?: defaults.motionExpression,
                 pressureSmoothing = stored.unit(KEY_PRESSURE_SMOOTHING) ?: defaults.pressureSmoothing,
+                pulledString = stored.unit(KEY_PULLED_STRING) ?: defaults.pulledString,
+                pressureResponse = stored.pressureResponse(KEY_PRESSURE_RESPONSE) ?: defaults.pressureResponse,
                 scrubToClear = stored.flag(KEY_SCRUB_CLEAR, defaults.scrubToClear),
                 swipeCopyPaste = stored.flag(KEY_SWIPE_PASTE, defaults.swipeCopyPaste),
                 fourFingerFullScreen = stored.flag(KEY_FOUR_FINGER, defaults.fourFingerFullScreen),
+                rapidUndoDelayMs =
+                    stored[KEY_RAPID_UNDO_DELAY]?.toIntOrNull()?.coerceIn(MIN_RAPID_UNDO_DELAY_MS, MAX_RAPID_UNDO_DELAY_MS)
+                        ?: defaults.rapidUndoDelayMs,
+                eyedropperDelayMs = stored.delay(KEY_EYEDROPPER_DELAY) ?: defaults.eyedropperDelayMs,
+                quickShapeDelayMs = stored.delay(KEY_QUICKSHAPE_DELAY) ?: defaults.quickShapeDelayMs,
+                holdSelectsLayer = stored.flag(KEY_HOLD_SELECTS_LAYER, defaults.holdSelectsLayer),
+                eyedropperSample =
+                    stored[KEY_EYEDROPPER_SAMPLE]?.toIntOrNull()?.takeIf { it in AreaSample.SIZES } ?: defaults.eyedropperSample,
                 timelapseMaxSide =
                     stored[KEY_TIMELAPSE_SIDE]?.toIntOrNull()?.takeIf { it in TIMELAPSE_SIDES } ?: defaults.timelapseMaxSide,
+                recordTimelapse = stored.flag(KEY_RECORD_TIMELAPSE, defaults.recordTimelapse),
                 dynamicBrushScaling = stored.flag(KEY_DYNAMIC_BRUSH, defaults.dynamicBrushScaling),
+                selectionMaskVisibility = stored.unit(KEY_SELECTION_VISIBILITY) ?: defaults.selectionMaskVisibility,
+                projectCanvas = stored.flag(KEY_PROJECT_CANVAS, defaults.projectCanvas),
                 quickMenu = stored.slots(KEY_QUICK_MENU, defaults.quickMenu),
                 autosaveEnabled = stored.flag(KEY_AUTOSAVE, defaults.autosaveEnabled),
                 autosaveIntervalMs =
@@ -312,10 +370,13 @@ class SettingsRepositoryImpl
                         ?.toLongOrNull()
                         ?.coerceIn(MIN_AUTOSAVE, MAX_AUTOSAVE) ?: defaults.autosaveIntervalMs,
                 defaultPresetName = stored[KEY_DEFAULT_PRESET] ?: defaults.defaultPresetName,
+                defaultPaletteName = stored[KEY_DEFAULT_PALETTE] ?: defaults.defaultPaletteName,
+                savedCanvasPresets = stored[KEY_SAVED_PRESETS]?.let(CanvasOperations::decodePresets) ?: defaults.savedCanvasPresets,
                 gallerySort =
                     stored[KEY_GALLERY_SORT]
                         ?.let { name -> GallerySort.entries.firstOrNull { it.name == name } }
                         ?: defaults.gallerySort,
+                galleryOrder = GalleryOrder.decode(stored[KEY_GALLERY_ORDER]),
                 seenOnboarding = stored.flag(KEY_ONBOARDING, defaults.seenOnboarding),
                 dismissedTips =
                     stored[KEY_TIPS]?.split('|')?.filter { it.isNotBlank() }?.toSet()
@@ -373,11 +434,24 @@ class SettingsRepositoryImpl
             private const val KEY_MOTION_FILTERING = "input.motionFiltering"
             private const val KEY_MOTION_EXPRESSION = "input.motionExpression"
             private const val KEY_PRESSURE_SMOOTHING = "input.pressureSmoothing"
+            private const val KEY_PULLED_STRING = "input.pulledString"
+            private const val KEY_PRESSURE_RESPONSE = "input.pressureResponse"
+            private const val PRESSURE_POINTS = 3
             private const val KEY_SCRUB_CLEAR = "gesture.scrubToClear"
             private const val KEY_SWIPE_PASTE = "gesture.swipeCopyPaste"
             private const val KEY_FOUR_FINGER = "gesture.fourFingerFullScreen"
+            private const val KEY_RAPID_UNDO_DELAY = "gesture.rapidUndoDelayMs"
+            private const val KEY_EYEDROPPER_DELAY = "gesture.eyedropperDelayMs"
+            private const val KEY_QUICKSHAPE_DELAY = "gesture.quickShapeDelayMs"
+            private const val KEY_HOLD_SELECTS_LAYER = "gesture.holdSelectsLayer"
+            private const val KEY_EYEDROPPER_SAMPLE = "gesture.eyedropperSample"
+            private const val MIN_RAPID_UNDO_DELAY_MS = 200
+            private const val MAX_RAPID_UNDO_DELAY_MS = 1500
             private const val KEY_TIMELAPSE_SIDE = "timelapse.maxSide"
+            private const val KEY_RECORD_TIMELAPSE = "timelapse.record"
             private const val KEY_DYNAMIC_BRUSH = "brush.dynamicScaling"
+            private const val KEY_SELECTION_VISIBILITY = "canvas.selectionMaskVisibility"
+            private const val KEY_PROJECT_CANVAS = "canvas.project"
 
             /** Time-lapse recording sizes offered in Prefs: 720p, 1080p and 1440p. */
             val TIMELAPSE_SIDES = listOf(1280, 1920, 2560)
@@ -386,8 +460,11 @@ class SettingsRepositoryImpl
             private const val KEY_AUTOSAVE = "general.autosave"
             private const val KEY_AUTOSAVE_INTERVAL = "general.autosaveInterval"
             private const val KEY_DEFAULT_PRESET = "general.defaultPreset"
+            private const val KEY_SAVED_PRESETS = "general.savedCanvasPresets"
+            private const val KEY_DEFAULT_PALETTE = "color.defaultPalette"
             private const val KEY_QUICK_MENU = "studio.quickMenu"
             private const val KEY_GALLERY_SORT = "gallery.sort"
+            private const val KEY_GALLERY_ORDER = "gallery.order"
             private const val KEY_ONBOARDING = "general.onboardingSeen"
             private const val KEY_TIPS = "general.dismissedTips"
             private const val KEY_RECENT_COLORS = "color.recent"

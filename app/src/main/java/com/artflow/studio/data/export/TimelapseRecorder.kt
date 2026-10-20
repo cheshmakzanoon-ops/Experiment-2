@@ -31,7 +31,7 @@ class TimelapseRecorder
     ) {
         private val mutex = Mutex()
 
-        /** Whether edits are recorded; tests and future per-canvas settings can turn it off. */
+        /** A master switch above the per-artwork one; tests turn it off. */
         @Volatile
         var isEnabled: Boolean = true
         private var lastProjectId = 0L
@@ -44,6 +44,22 @@ class TimelapseRecorder
                 .listFiles { file -> file.isFile && file.name.endsWith(EXTENSION) }
                 ?.sortedBy { it.name }
                 .orEmpty()
+
+        // Beside the frames, not inside them, so Clear recording does not switch recording back on.
+        private fun pausedMarker(projectId: Long): File = File(storage.projectDir(projectId), PAUSED_FILE)
+
+        /** Whether this artwork is being recorded: on until Actions > Video > Time-lapse recording is switched off. */
+        suspend fun isRecording(projectId: Long): Boolean = withContext(Dispatchers.IO) { !pausedMarker(projectId).exists() }
+
+        /** Switches recording on or off for one artwork; the choice stays with the artwork's files. */
+        suspend fun setRecording(
+            projectId: Long,
+            recording: Boolean,
+        ) = withContext(Dispatchers.IO) {
+            val marker = pausedMarker(projectId)
+            if (recording) marker.delete() else marker.createNewFile()
+            Unit
+        }
 
         suspend fun frameCount(projectId: Long): Int = withContext(Dispatchers.IO) { frames(projectId).size }
 
@@ -166,6 +182,7 @@ class TimelapseRecorder
             }
 
             const val DIR_NAME = "timelapse"
+            private const val PAUSED_FILE = "timelapse.paused"
             private const val EXTENSION = ".jpg"
             const val MAX_FRAMES = 3_600
             private const val MAX_SIDE = 1_280

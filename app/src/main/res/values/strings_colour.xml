@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="color_value_invalid">Enter a number inside the slider\'s range</string>
+</resources>

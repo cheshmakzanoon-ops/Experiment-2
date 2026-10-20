@@ -15,6 +15,8 @@ import com.artflow.studio.domain.repository.ProjectRepository
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import com.artflow.studio.domain.repository.settings.SettingsRepository
 import com.artflow.studio.presentation.ui.components.editor.AnimationSheet
+import com.artflow.studio.presentation.ui.components.editor.FrameClipboard
+import com.artflow.studio.presentation.ui.components.editor.OnionSwitch
 import com.artflow.studio.presentation.ui.viewmodel.CanvasUiState
 import com.artflow.studio.presentation.ui.viewmodel.CanvasViewModel
 import dagger.hilt.android.testing.HiltAndroidRule
@@ -85,15 +87,20 @@ class AnimationPlaybackUiTest {
             MaterialTheme {
                 AnimationSheet(
                     timeline = timeline,
-                    onionEnabled = preferences.onionSkin,
+                    onion = OnionSwitch(enabled = preferences.onionSkin, onToggle = viewModel::toggleOnionSkin),
                     onSelectFrame = viewModel::selectFrame,
                     onAddFrame = viewModel::addFrame,
                     onDeleteFrame = viewModel::deleteFrame,
                     onMoveFrame = viewModel::moveFrame,
                     onFrameDuration = viewModel::setFrameDuration,
                     onSettings = viewModel::updateAnimationSettings,
-                    onToggleOnion = viewModel::toggleOnionSkin,
                     onTogglePlayback = viewModel::togglePlayback,
+                    clipboard =
+                        FrameClipboard(
+                            canPaste = viewModel.frameClipboard.canPaste.value,
+                            onCopy = viewModel.frameClipboard::copy,
+                            onPaste = viewModel.frameClipboard::paste,
+                        ),
                 )
             }
         }

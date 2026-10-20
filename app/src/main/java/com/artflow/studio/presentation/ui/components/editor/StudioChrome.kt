@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
@@ -30,6 +31,7 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
@@ -39,13 +41,19 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.Quad
 import com.artflow.studio.core.pixels.TransformQuad
 import com.artflow.studio.core.pixels.WarpMesh
+import com.artflow.studio.core.symmetry.SymmetryEngine
 import com.artflow.studio.core.tool.ToolType
+import com.artflow.studio.domain.model.brush.MAX_BRUSH_SIZE
+import com.artflow.studio.domain.model.brush.MIN_BRUSH_OPACITY
+import com.artflow.studio.domain.model.brush.MIN_BRUSH_SIZE
 import com.artflow.studio.presentation.ui.components.canvas.SelectionCombineMode
 import kotlinx.coroutines.delay
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -184,6 +192,9 @@ data class StudioSidebarState(
     val canUndo: Boolean,
     val canRedo: Boolean,
     val eyedropperActive: Boolean,
+    /** The brush's own size and opacity limits, which the sliders span end to end. */
+    val sizeRange: ClosedFloatingPointRange<Float> = MIN_BRUSH_SIZE..MAX_BRUSH_SIZE,
+    val opacityRange: ClosedFloatingPointRange<Float> = MIN_BRUSH_OPACITY..1f,
 )
 
 data class StudioSidebarActions(
@@ -194,6 +205,8 @@ data class StudioSidebarActions(
     val onRedo: () -> Unit,
     /** Touch and hold the modify button: Procreate's QuickMenu. */
     val onQuickMenu: () -> Unit = {},
+    /** Touch and hold undo or redo: scrub through the history. */
+    val onHistory: () -> Unit = {},
 )
 
 /** Brush size slider, modify (eyedropper) button, opacity slider, undo and redo. */
@@ -227,11 +240,12 @@ private fun StudioSidebarContent(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             VerticalSlider(
-                value = sizeToSlider(state.size),
-                onValueChange = { actions.onSize(sliderToSize(it)) },
+                value = sizeToSlider(state.size, state.sizeRange),
+                onValueChange = { actions.onSize(sliderToSize(it, state.sizeRange)) },
                 label = "Brush size ${state.size.toInt()} px",
                 height = sliderHeight,
             )
+            val pickDescription = stringResource(R.string.studiochrome_pick_colour_from_canvas)
             Box(
                 modifier =
                     Modifier
@@ -240,36 +254,102 @@ private fun StudioSidebarContent(
                             width = 2.dp,
                             color = if (state.eyedropperActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                             shape = RoundedCornerShape(6.dp),
-                        ).semantics { contentDescription = "Modify: pick a colour from the canvas" }
-                        .combinedClickable(onClick = actions.onModify, onLongClick = actions.onQuickMenu, onLongClickLabel = "QuickMenu"),
+                        ).semantics { contentDescription = pickDescription }
+                        .combinedClickable(
+                            onClick = actions.onModify,
+                            onLongClick = actions.onQuickMenu,
+                            onLongClickLabel = stringResource(R.string.studiochrome_quickmenu),
+                        ),
             )
             VerticalSlider(
-                value = state.opacity,
-                onValueChange = { actions.onOpacity(it.coerceAtLeast(0.01f)) },
+                value = toSlider(state.opacity, state.opacityRange),
+                onValueChange = { actions.onOpacity(fromSlider(it, state.opacityRange)) },
                 label = "Opacity ${(state.opacity * 100).toInt()}%",
                 height = sliderHeight,
             )
-            IconButton(onClick = actions.onUndo, enabled = state.canUndo, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Default.Undo, contentDescription = "Undo")
-            }
-            IconButton(onClick = actions.onRedo, enabled = state.canRedo, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Default.Redo, contentDescription = "Redo")
-            }
+            HistoryButton(Icons.Default.Undo, "Undo", state.canUndo, actions.onUndo, actions.onHistory)
+            HistoryButton(Icons.Default.Redo, "Redo", state.canRedo, actions.onRedo, actions.onHistory)
         }
     }
 }
 
-private const val MAX_BRUSH_SIZE = 512f
+/** Undo or redo; touch and hold either one to scrub through the whole history. */
+@Composable
+private fun HistoryButton(
+    icon: ImageVector,
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    onHistory: () -> Unit,
+) {
+    val tint = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+    Box(
+        Modifier
+            .size(36.dp)
+            .combinedClickable(enabled = enabled, onClick = onClick, onLongClick = onHistory, onLongClickLabel = "History")
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = tint)
+    }
+}
+
+/**
+ * The History scrubber: slide to any point between the oldest kept step and the newest redo,
+ * watching the canvas change as you go. Procreate has only one-step-at-a-time undo.
+ */
+@Composable
+fun HistoryScrubber(
+    undoDepth: Int,
+    redoDepth: Int,
+    onStep: (Int) -> Unit,
+    onDone: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val total = undoDepth + redoDepth
+    Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 4.dp, modifier = modifier.padding(12.dp).widthIn(max = 480.dp)) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("History $undoDepth / $total", style = MaterialTheme.typography.labelMedium)
+            Slider(
+                value = undoDepth.toFloat(),
+                onValueChange = { onStep(it.roundToInt()) },
+                valueRange = 0f..total.coerceAtLeast(1).toFloat(),
+                steps = (total - 1).coerceAtLeast(0),
+                enabled = total > 0,
+                modifier = Modifier.weight(1f).padding(horizontal = 8.dp).semantics { contentDescription = "History" },
+            )
+            TextButton(onClick = onDone) { Text("Done") }
+        }
+    }
+}
 
 /** The sidebar's padding, spacing, modify button, undo and redo; the two sliders get the rest. */
 private val SIDEBAR_FIXED_HEIGHT = 180.dp
 private val MIN_SLIDER = 72.dp
 private val MAX_SLIDER = 170.dp
 
-/** Square-root mapping gives fine control over small brushes, like Procreate's size slider. */
-internal fun sizeToSlider(size: Float): Float = sqrt(((size - 1f) / (MAX_BRUSH_SIZE - 1f)).coerceIn(0f, 1f))
+/** Where [value] sits in [range], from 0 to 1. */
+internal fun toSlider(
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+): Float = ((value - range.start) / (range.endInclusive - range.start)).coerceIn(0f, 1f)
 
-internal fun sliderToSize(value: Float): Float = 1f + value.coerceIn(0f, 1f).let { it * it } * (MAX_BRUSH_SIZE - 1f)
+/** The value at [position] (0 to 1) along [range]. */
+internal fun fromSlider(
+    position: Float,
+    range: ClosedFloatingPointRange<Float>,
+): Float = range.start + position.coerceIn(0f, 1f) * (range.endInclusive - range.start)
+
+/** Square-root mapping gives fine control over small brushes, like Procreate's size slider. */
+internal fun sizeToSlider(
+    size: Float,
+    range: ClosedFloatingPointRange<Float> = MIN_BRUSH_SIZE..MAX_BRUSH_SIZE,
+): Float = sqrt(((size - range.start) / (range.endInclusive - range.start)).coerceIn(0f, 1f))
+
+internal fun sliderToSize(
+    value: Float,
+    range: ClosedFloatingPointRange<Float> = MIN_BRUSH_SIZE..MAX_BRUSH_SIZE,
+): Float = range.start + value.coerceIn(0f, 1f).let { it * it } * (range.endInclusive - range.start)
 
 /** A tall rounded slider: drag or tap anywhere along it; top is 1, bottom is 0. */
 @Composable
@@ -320,8 +400,11 @@ data class SelectionToolbarActions(
     val onInvert: () -> Unit,
     val onCopyPaste: () -> Unit,
     val onMore: () -> Unit,
+    /** Erases the selected pixels on the active layer. */
     val onClear: () -> Unit,
     val onColorFill: () -> Unit = {},
+    /** Drops the selection and leaves the pixels alone. */
+    val onDeselect: () -> Unit = {},
     val onSave: () -> Unit = {},
     val onLoad: (Int) -> Unit = {},
     val onDelete: (Int) -> Unit = {},
@@ -354,14 +437,14 @@ fun SelectionToolbar(
                 label = { Text(name) },
             )
         }
-        AssistChip(onClick = actions.onInvert, label = { Text("Invert") })
-        AssistChip(onClick = actions.onCopyPaste, label = { Text("Copy & Paste") })
-        AssistChip(onClick = actions.onMore, label = { Text("Feather…") })
+        AssistChip(onClick = actions.onInvert, label = { Text(stringResource(R.string.chip_invert)) })
+        AssistChip(onClick = actions.onCopyPaste, label = { Text(stringResource(R.string.chip_copy_paste)) })
+        AssistChip(onClick = actions.onMore, label = { Text(stringResource(R.string.chip_feather)) })
         Box {
-            AssistChip(onClick = { savedMenu = true }, label = { Text("Save & Load") })
+            AssistChip(onClick = { savedMenu = true }, label = { Text(stringResource(R.string.chip_save_load)) })
             DropdownMenu(expanded = savedMenu, onDismissRequest = { savedMenu = false }) {
                 DropdownMenuItem(
-                    text = { Text("Save selection") },
+                    text = { Text(stringResource(R.string.chip_save_selection)) },
                     onClick = {
                         actions.onSave()
                         savedMenu = false
@@ -369,22 +452,26 @@ fun SelectionToolbar(
                 )
                 repeat(savedCount) { index ->
                     DropdownMenuItem(
-                        text = { Text("Selection ${index + 1}") },
+                        text = { Text(stringResource(R.string.selection_slot, index + 1)) },
                         onClick = {
                             actions.onLoad(index)
                             savedMenu = false
                         },
                         trailingIcon = {
                             IconButton(onClick = { actions.onDelete(index) }) {
-                                Icon(Icons.Default.Delete, contentDescription = "Delete selection ${index + 1}")
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = stringResource(R.string.delete_selection_description, index + 1),
+                                )
                             }
                         },
                     )
                 }
             }
         }
-        AssistChip(onClick = actions.onColorFill, label = { Text("Colour Fill") })
-        AssistChip(onClick = actions.onClear, label = { Text("Clear") })
+        AssistChip(onClick = actions.onColorFill, label = { Text(stringResource(R.string.chip_colour_fill)) })
+        AssistChip(onClick = actions.onClear, label = { Text(stringResource(R.string.chip_clear)) })
+        AssistChip(onClick = actions.onDeselect, label = { Text(stringResource(R.string.chip_deselect)) })
     }
 }
 
@@ -415,31 +502,36 @@ fun TransformToolbar(
         FilterChip(
             selected = assist.magnetics,
             onClick = { actions.onAssist(assist.copy(magnetics = !assist.magnetics)) },
-            label = { Text("Magnetics") },
+            label = { Text(stringResource(R.string.chip_magnetics)) },
         )
         FilterChip(
             selected = assist.snapping,
             onClick = { actions.onAssist(assist.copy(snapping = !assist.snapping)) },
-            label = { Text("Snapping") },
+            label = { Text(stringResource(R.string.chip_snapping)) },
         )
+        if (assist.snapping) {
+            Text("Distance ${assist.snapDistance.toInt()}", style = MaterialTheme.typography.labelMedium)
+            Slider(
+                value = assist.snapDistance,
+                onValueChange = { actions.onAssist(assist.copy(snapDistance = it)) },
+                valueRange = 1f..TransformQuad.Assist.MAX_SNAP_DISTANCE,
+                modifier = Modifier.width(140.dp).semantics { contentDescription = "Snapping distance" },
+            )
+        }
         VerticalDivider(Modifier.height(24.dp))
         AssistChip(onClick = { actions.onFlip(true) }, label = { Text("Flip Horizontal") })
         AssistChip(onClick = { actions.onFlip(false) }, label = { Text("Flip Vertical") })
         AssistChip(onClick = { actions.onRotate(45f) }, label = { Text("Rotate 45°") })
         AssistChip(onClick = actions.onFit, label = { Text("Fit to Screen") })
         AssistChip(onClick = actions.onReset, label = { Text("Reset") })
+        // Tapping cycles Nearest neighbour, Bilinear and Bicubic.
         FilterChip(
-            selected = interpolation == TransformQuad.Interpolation.BILINEAR,
+            selected = interpolation != TransformQuad.Interpolation.NEAREST,
             onClick = {
-                actions.onInterpolation(
-                    if (interpolation == TransformQuad.Interpolation.BILINEAR) {
-                        TransformQuad.Interpolation.NEAREST
-                    } else {
-                        TransformQuad.Interpolation.BILINEAR
-                    },
-                )
+                val all = TransformQuad.Interpolation.entries
+                actions.onInterpolation(all[(interpolation.ordinal + 1) % all.size])
             },
-            label = { Text("Interpolation: ${interpolation.displayName}") },
+            label = { Text(stringResource(R.string.chip_interpolation, interpolation.displayName)) },
         )
     }
 }
@@ -541,15 +633,15 @@ fun WarpOverlay(
             translate(-canvasWidth / 2f, -canvasHeight / 2f)
         }) {
             val line = 1.2f / scale
-            for (k in 0 until WarpMesh.SIDE) {
-                val t = k / (WarpMesh.SIDE - 1f)
+            for (k in 0 until mesh.side) {
+                val t = k / (mesh.side - 1f)
                 val rows = (0..WARP_CURVE_STEPS).map { mesh.evaluate(it / WARP_CURVE_STEPS.toFloat(), t) }
                 val columns = (0..WARP_CURVE_STEPS).map { mesh.evaluate(t, it / WARP_CURVE_STEPS.toFloat()) }
                 listOf(rows, columns).forEach { curve ->
                     curve.zipWithNext { a, b -> drawLine(accent, Offset(a.first, a.second), Offset(b.first, b.second), strokeWidth = line) }
                 }
             }
-            for (i in 0 until WarpMesh.POINTS) {
+            for (i in 0 until mesh.pointCount) {
                 val center = Offset(mesh.x(i), mesh.y(i))
                 drawCircle(Color.White, radius = 6f / scale, center = center)
                 drawCircle(accent, radius = 6f / scale, center = center, style = Stroke(line))
@@ -570,6 +662,8 @@ data class AdjustmentOverlayActions(
     val onPencil: (Boolean) -> Unit = {},
     /** A Pencil-mode touch at a point of the overlay, with the overlay's width and height. */
     val onPaint: (Offset, Float, Float) -> Unit = { _, _, _ -> },
+    /** Replaces all of the adjustment's parameters at once (a Gradient Map preset). */
+    val onParameters: (Map<String, Float>) -> Unit = {},
 )
 
 /** The canvas view's pan, zoom and rotation, as reported to the compose layer. */
@@ -594,6 +688,101 @@ data class ViewTransform(
         val s = sin(radians).toFloat()
         val factor = scale.coerceAtLeast(0.01f)
         return Offset((dx * c - dy * s) / factor + canvasWidth / 2f, (dx * s + dy * c) / factor + canvasHeight / 2f)
+    }
+
+    /** Where canvas pixel [point] appears in a view [viewWidth] × [viewHeight]; the inverse of [toCanvas]. */
+    fun toView(
+        point: Offset,
+        viewWidth: Float,
+        viewHeight: Float,
+        canvasWidth: Int,
+        canvasHeight: Int,
+    ): Offset {
+        val dx = (point.x - canvasWidth / 2f) * scale
+        val dy = (point.y - canvasHeight / 2f) * scale
+        val radians = Math.toRadians(rotationDegrees.toDouble())
+        val c = cos(radians).toFloat()
+        val s = sin(radians).toFloat()
+        return Offset(dx * c - dy * s + viewWidth / 2f + offsetX, dx * s + dy * c + viewHeight / 2f + offsetY)
+    }
+}
+
+/**
+ * Procreate's Edit Drawing Guide: while open, the perspective guide's vanishing points are handles
+ * to drag (one on the horizon carries the horizon with it). Painting resumes after Done.
+ */
+@Composable
+fun VanishingPointEditor(
+    perspective: PerspectiveGuide.Settings,
+    canvasWidth: Int,
+    canvasHeight: Int,
+    view: ViewTransform,
+    onChange: (PerspectiveGuide.Settings) -> Unit,
+    onDone: () -> Unit,
+    modifier: Modifier = Modifier,
+    symmetry: SymmetryEngine.Settings = SymmetryEngine.Settings(),
+    onSymmetry: (SymmetryEngine.Settings) -> Unit = {},
+) {
+    val latest by rememberUpdatedState(perspective)
+    val latestSymmetry by rememberUpdatedState(symmetry)
+    val handle = MaterialTheme.colorScheme.primary
+    val axisHandle = MaterialTheme.colorScheme.tertiary
+
+    // Handle positions in canvas pixels: the vanishing points, then the symmetry axis when it is on.
+    fun handles(): List<Offset> =
+        (0 until latest.activePointCount()).map { i ->
+            PerspectiveGuide.pointPosition(latest, i, canvasWidth, canvasHeight).let { (x, y) -> Offset(x, y) }
+        } + listOfNotNull(latestSymmetry.takeIf { it.isActive() }?.let { Offset(it.centreX * canvasWidth, it.centreY * canvasHeight) })
+    Box(modifier) {
+        Canvas(
+            Modifier
+                .fillMaxSize()
+                .pointerInput(canvasWidth, canvasHeight, view) {
+                    var grabbed = -1
+                    detectDragGestures(
+                        onDragStart = { at ->
+                            val points = handles()
+                            grabbed =
+                                points.indices.minByOrNull { i ->
+                                    val shown =
+                                        view.toView(points[i], size.width.toFloat(), size.height.toFloat(), canvasWidth, canvasHeight)
+                                    (shown - at).getDistance()
+                                } ?: -1
+                        },
+                    ) { change, _ ->
+                        change.consume()
+                        if (grabbed < 0) return@detectDragGestures
+                        val at = view.toCanvas(change.position, size.width.toFloat(), size.height.toFloat(), canvasWidth, canvasHeight)
+                        if (grabbed < latest.activePointCount()) {
+                            onChange(PerspectiveGuide.dragPoint(latest, grabbed, at.x, at.y, canvasWidth, canvasHeight))
+                        } else {
+                            onSymmetry(
+                                latestSymmetry.copy(
+                                    centreX = (at.x / canvasWidth).coerceIn(0f, 1f),
+                                    centreY = (at.y / canvasHeight).coerceIn(0f, 1f),
+                                ),
+                            )
+                        }
+                    }
+                },
+        ) {
+            handles().forEachIndexed { i, point ->
+                val shown = view.toView(point, size.width, size.height, canvasWidth, canvasHeight)
+                val colour = if (i < perspective.activePointCount()) handle else axisHandle
+                drawCircle(colour, radius = 14.dp.toPx(), center = shown, style = Stroke(width = 3.dp.toPx()))
+                drawCircle(colour, radius = 4.dp.toPx(), center = shown)
+            }
+        }
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            tonalElevation = 4.dp,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp),
+        ) {
+            Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Drag the vanishing points or the symmetry axis", style = MaterialTheme.typography.labelMedium)
+                TextButton(onClick = onDone) { Text("Done") }
+            }
+        }
     }
 }
 
@@ -644,15 +833,17 @@ fun CopyPasteMenu(
             actions.onDismiss()
         }
     FloatingBar(modifier) {
-        Text("Copy & Paste", style = MaterialTheme.typography.titleSmall)
-        AssistChip(onClick = run(actions.onCut), label = { Text("Cut") })
-        AssistChip(onClick = run(actions.onCopy), label = { Text("Copy") })
-        AssistChip(onClick = run(actions.onCopyAll), label = { Text("Copy All") })
-        AssistChip(onClick = run(actions.onDuplicate), label = { Text("Duplicate") })
-        AssistChip(onClick = run(actions.onCutAndPaste), label = { Text("Cut & Paste") })
-        AssistChip(onClick = run(actions.onCopyAndPaste), label = { Text("Copy & Paste") })
-        AssistChip(onClick = run(actions.onPaste), enabled = canPaste, label = { Text("Paste") })
-        IconButton(onClick = actions.onDismiss) { Icon(Icons.Default.Close, contentDescription = "Close Copy & Paste") }
+        Text(stringResource(R.string.copy_paste), style = MaterialTheme.typography.titleSmall)
+        AssistChip(onClick = run(actions.onCut), label = { Text(stringResource(R.string.chip_cut)) })
+        AssistChip(onClick = run(actions.onCopy), label = { Text(stringResource(R.string.chip_copy)) })
+        AssistChip(onClick = run(actions.onCopyAll), label = { Text(stringResource(R.string.chip_copy_all)) })
+        AssistChip(onClick = run(actions.onDuplicate), label = { Text(stringResource(R.string.duplicate)) })
+        AssistChip(onClick = run(actions.onCutAndPaste), label = { Text(stringResource(R.string.chip_cut_and_paste)) })
+        AssistChip(onClick = run(actions.onCopyAndPaste), label = { Text(stringResource(R.string.chip_copy_paste)) })
+        AssistChip(onClick = run(actions.onPaste), enabled = canPaste, label = { Text(stringResource(R.string.chip_paste)) })
+        IconButton(onClick = actions.onDismiss) {
+            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close_copy_paste_description))
+        }
     }
 }
 

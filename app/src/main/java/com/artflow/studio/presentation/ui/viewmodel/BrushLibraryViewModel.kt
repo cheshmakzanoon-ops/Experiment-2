@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
@@ -29,6 +30,7 @@ class BrushLibraryViewModel
             val revision: Long = 0L,
             val favourites: Set<String> = emptySet(),
             val sets: Map<String, List<String>> = emptyMap(),
+            val recent: List<String> = emptyList(),
         )
 
         private val mutableState = MutableStateFlow(State())
@@ -53,6 +55,9 @@ class BrushLibraryViewModel
             viewModelScope.launch(errors) {
                 store.sets.collect { mutableState.value = mutableState.value.copy(sets = it) }
             }
+            viewModelScope.launch(errors) {
+                store.recent.collect { mutableState.value = mutableState.value.copy(recent = it) }
+            }
         }
 
         fun createSet(name: String) = editSets { sets -> if (name.trim() in sets) sets else sets + (name.trim() to emptyList()) }
@@ -70,6 +75,11 @@ class BrushLibraryViewModel
 
         private fun editSets(change: (Map<String, List<String>>) -> Map<String, List<String>>) {
             viewModelScope.launch(errors) { store.editSets(change) }
+        }
+
+        /** Puts a chosen brush at the front of the Recent set. */
+        fun markUsed(id: String) {
+            viewModelScope.launch(errors) { store.markUsed(id) }
         }
 
         /** Stars or unstars a brush in the Favourites set. */
@@ -101,6 +111,12 @@ class BrushLibraryViewModel
         fun delete(id: String) = edit { store.delete(id) }
 
         fun importAll(brushes: List<SavedBrush>) = edit { store.importAll(brushes) }
+
+        /** Imports once the library has loaded and no other change is running; a file opened at launch can arrive first. */
+        suspend fun importWhenReady(brushes: List<SavedBrush>) {
+            state.first { !it.loading && !it.busy }
+            importAll(brushes)
+        }
 
         private fun edit(operation: suspend () -> Unit) {
             if (mutableState.value.loading || mutableState.value.busy) return

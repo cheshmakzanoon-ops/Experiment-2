@@ -55,14 +55,17 @@ class ClipboardController(
             }
         }
 
-    /** Fill Layer: paints the current colour over the layer or its selection. */
+    /** Fill Layer: paints the current colour over the layer or its selection, within the layer's paint if alpha is locked. */
     fun fill(
         color: Int,
         layerId: Long? = null,
     ) = perform {
         val selection = repository.selection()
-        repository.applyRasterEdit(layerId ?: repository.getActiveLayerId(), "Fill layer") {
-            SelectionClipboard.fill(it, selection, color)
+        val target = layerId ?: repository.getActiveLayerId()
+        val alphaLocked = repository.getAllLayers().firstOrNull { it.id == target }?.isAlphaLocked == true
+        val stored = repository.documentColor(color)
+        repository.applyRasterEdit(target, "Fill layer") {
+            SelectionClipboard.fill(it, selection, stored, alphaLocked)
         }
     }
 

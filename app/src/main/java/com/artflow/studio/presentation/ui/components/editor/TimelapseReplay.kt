@@ -14,33 +14,41 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.artflow.studio.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.File
 
-/** Full-screen playback of the recorded drawing process, with play/pause and scrubbing. */
+/** Full-screen playback of the recorded drawing process, with play/pause, speed and scrubbing. */
 @Composable
 fun TimelapseReplay(
     frames: List<File>,
-    onExport: () -> Unit,
+    /** Exports the recording; true for full length, false for the 30-second version. */
+    onExport: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var index by remember(frames) { mutableIntStateOf(0) }
+    var loadedIndex by remember(frames) { mutableIntStateOf(-1) }
     var playing by remember(frames) { mutableStateOf(frames.size > 1) }
+    var speed by remember { mutableFloatStateOf(1f) }
     var image by remember { mutableStateOf<ImageBitmap?>(null) }
-    val frameDelay = (REPLAY_SECONDS * 1000L / frames.size.coerceAtLeast(1)).coerceIn(16L, 250L)
 
     LaunchedEffect(frames, index) {
         val file = frames.getOrNull(index) ?: return@LaunchedEffect
         image = withContext(Dispatchers.IO) { BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap() }
+        loadedIndex = index
     }
     LaunchedEffect(playing, frames) {
         while (playing && frames.isNotEmpty()) {
-            delay(frameDelay)
+            delay(REPLAY_FRAME_MS)
+            // Advance only after the shown frame is decoded: a slow decode lowers the pace instead of
+            // cancelling each decode before it finishes.
+            while (loadedIndex != index) delay(REPLAY_POLL_MS)
             if (index >= frames.lastIndex) playing = false else index++
         }
     }
@@ -51,18 +59,30 @@ fun TimelapseReplay(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Time-lapse Replay", color = Color.White, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                TextButton(onClick = onExport) { Text("Export MP4") }
-                IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Close replay", tint = Color.White) }
+                Text(
+                    stringResource(R.string.timelapsereplay_time_lapse_replay),
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = { onExport(false) }) { Text(stringResource(R.string.timelapsereplay_export_30)) }
+                TextButton(onClick = { onExport(true) }) { Text(stringResource(R.string.timelapsereplay_export_full)) }
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = stringResource(R.string.timelapsereplay_close_replay),
+                        tint = Color.White,
+                    )
+                }
             }
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 val current = image
                 if (frames.isEmpty()) {
-                    Text("Nothing recorded yet. Every edit is recorded automatically.", color = Color.White)
+                    Text(stringResource(R.string.timelapsereplay_nothing_recorded_yet_every_edit_is), color = Color.White)
                 } else if (current != null) {
                     Image(
                         bitmap = current,
-                        contentDescription = "Time-lapse frame ${index + 1}",
+                        contentDescription = stringResource(R.string.timelapsereplay_time_lapse_frame, index + 1),
                         contentScale = ContentScale.Fit,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -90,10 +110,15 @@ fun TimelapseReplay(
                         modifier = Modifier.weight(1f),
                     )
                     Text("${index + 1}/${frames.size}", color = Color.White, style = MaterialTheme.typography.labelMedium)
+                    TextButton(onClick = { speed = REPLAY_SPEEDS[(REPLAY_SPEEDS.indexOf(speed) + 1) % REPLAY_SPEEDS.size] }) {
+                        Text(stringResource(R.string.timelapsereplay_speed, REPLAY_SPEED_LABELS.getValue(speed)), color = Color.White)
+                    }
                 }
             }
         }
     }
 }
 
-private const val REPLAY_SECONDS = 20
+/** 30 fps: the same hold as a full-length time-lapse MP4, so the replay shows what the export contains. */
+private const val REPLAY_FRAME_MS = 33L
+private const val REPLAY_POLL_MS = 4L

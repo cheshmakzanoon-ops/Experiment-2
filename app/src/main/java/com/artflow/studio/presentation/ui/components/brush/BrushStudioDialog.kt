@@ -22,16 +22,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.artflow.studio.R
 import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.SavedBrush
 import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.model.brush.StudioBrushes
+import kotlinx.coroutines.launch
 
 /** Draft settings stay local. Dismiss/Back never publishes a half-edited brush to the canvas. */
 @Composable
@@ -66,7 +71,7 @@ fun BrushStudioContent(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("Brush studio", style = MaterialTheme.typography.titleLarge)
+                        Text(stringResource(R.string.brushstudiodialog_brush_studio), style = MaterialTheme.typography.titleLarge)
                         Text(
                             StudioBrushes.presets.firstOrNull { it.parameters == draft }?.name ?: "Custom settings",
                             style = MaterialTheme.typography.labelMedium,
@@ -75,7 +80,9 @@ fun BrushStudioContent(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Cancel brush changes") }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.brushstudiodialog_cancel_brush_changes))
+                    }
                 }
                 library?.let { SavedBrushToolbar(draft, it) }
                 BrushStudioTabs(selectedTab = tab, onSelect = {
@@ -110,12 +117,15 @@ fun BrushStudioContent(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    TextButton(onClick = { draft = original }, enabled = draft != original) { Text("Restore initial") }
+                    TextButton(
+                        onClick = { draft = original },
+                        enabled = draft != original,
+                    ) { Text(stringResource(R.string.brushstudiodialog_restore_initial)) }
                     Button(onClick = {
                         applying = true
                         onApply(draft)
                         onDismiss()
-                    }, enabled = !applying) { Text("Use brush") }
+                    }, enabled = !applying) { Text(stringResource(R.string.brushstudiodialog_use_brush)) }
                 }
             }
         }
@@ -137,11 +147,20 @@ fun StudioBrushLibrary(
     val saved = library?.state?.brushes.orEmpty()
     val favourites = library?.state?.favourites.orEmpty()
     val sets = library?.state?.sets.orEmpty()
+    val recent = library?.state?.recent.orEmpty()
     var naming by remember { mutableStateOf(false) }
+    var shareFailed by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val matches =
-        remember(query, category, saved, favourites, sets) {
-            // Favourites and the artist's own sets gather brushes from every category.
-            val chosen = if (category == FAVOURITES) favourites else sets[category]?.toSet()
+        remember(query, category, saved, favourites, sets, recent) {
+            // Recent, Favourites and the artist's own sets gather brushes from every category.
+            val chosen =
+                when (category) {
+                    RECENT -> recent.toSet()
+                    FAVOURITES -> favourites
+                    else -> sets[category]?.toSet()
+                }
             val originals = StudioBrushes.search(query, if (chosen != null) "All" else category)
             val words = query.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
             val own =
@@ -150,13 +169,15 @@ fun StudioBrushLibrary(
                         val shown = category == "All" || category == "Saved" || chosen != null
                         shown && words.all { brush.name.contains(it, ignoreCase = true) }
                     }.map { StudioBrushes.Preset("saved-${it.id}", it.name, "Saved", "Your saved brush", it.parameters) }
-            (own + originals).filter { chosen == null || it.id in chosen }
+            val found = (own + originals).filter { chosen == null || it.id in chosen }
+            // Recent lists the brush used last first.
+            if (category == RECENT) found.sortedBy { recent.indexOf(it.id) } else found
         }
     val categories =
         if (library == null) {
             StudioBrushes.categories
         } else {
-            listOf("All", FAVOURITES, "Saved") + sets.keys + StudioBrushes.categories.drop(1).filter { it !in sets }
+            listOf("All", RECENT, FAVOURITES, "Saved") + sets.keys + StudioBrushes.categories.drop(1).filter { it !in sets }
         }
     Column(
         modifier.focusRequester(focusSink).focusable().padding(horizontal = 16.dp),
@@ -165,11 +186,13 @@ fun StudioBrushLibrary(
         OutlinedTextField(
             value = query,
             onValueChange = { query = it.take(100) },
-            label = { Text("Search brushes") },
+            label = { Text(stringResource(R.string.brushstudiodialog_search_brushes)) },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
             trailingIcon = {
                 if (query.isNotEmpty()) {
-                    IconButton(onClick = { query = "" }) { Icon(Icons.Default.Close, contentDescription = "Clear brush search") }
+                    IconButton(onClick = {
+                        query = ""
+                    }) { Icon(Icons.Default.Close, contentDescription = stringResource(R.string.brushstudiodialog_clear_brush_search)) }
                 }
             },
             singleLine = true,
@@ -179,13 +202,22 @@ fun StudioBrushLibrary(
             categories.forEach { title ->
                 FilterChip(selected = category == title, onClick = { category = title }, label = { Text(title) })
             }
-            if (library != null) AssistChip(onClick = { naming = true }, label = { Text("New set") })
+            if (library != null) {
+                AssistChip(onClick = { naming = true }, label = { Text(stringResource(R.string.brushstudiodialog_new_set)) })
+            }
         }
         if (library != null && category in sets) {
-            TextButton(onClick = {
-                library.deleteSet(category)
-                category = "All"
-            }) { Text("Delete the set $category") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = {
+                    val brushes = matches.map { SavedBrush(it.id, it.name, it.parameters) }
+                    scope.launch { if (!shareBrushes(context, category, brushes)) shareFailed = true }
+                }, enabled = matches.isNotEmpty()) { Text("Share the set") }
+                TextButton(onClick = {
+                    library.deleteSet(category)
+                    category = "All"
+                }) { Text("Delete the set $category") }
+            }
+            if (shareFailed) Text("The set could not be shared", color = MaterialTheme.colorScheme.error)
         }
         if (naming && library != null) {
             NewSetDialog(taken = categories.toSet(), onDismiss = { naming = false }) { name ->
@@ -197,7 +229,10 @@ fun StudioBrushLibrary(
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
             if (matches.isEmpty()) {
                 item {
-                    Text("No matching brushes. Clear the search or choose another category.", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        stringResource(R.string.brushstudiodialog_no_matching_brushes_clear_the_search_or),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
                 }
             }
             items(matches, key = { it.id }) { preset ->
@@ -211,6 +246,7 @@ fun StudioBrushLibrary(
                         Modifier.fillMaxWidth().selectable(selected, role = Role.RadioButton) {
                             focusSink.requestFocus()
                             onSelect(preset.parameters)
+                            library?.markUsed?.invoke(preset.id)
                         },
                 ) {
                     Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
@@ -257,7 +293,9 @@ private fun SetMenu(
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { open = true }) { Icon(Icons.Default.PlaylistAdd, contentDescription = "Brush sets") }
+        IconButton(onClick = {
+            open = true
+        }) { Icon(Icons.Default.PlaylistAdd, contentDescription = stringResource(R.string.brushstudiodialog_brush_sets)) }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             sets.forEach { (name, members) ->
                 DropdownMenuItem(
@@ -282,21 +320,24 @@ private fun NewSetDialog(
     val trimmed = name.trim()
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("New brush set") },
+        title = { Text(stringResource(R.string.brushstudiodialog_new_brush_set)) },
         text = {
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it.take(MAX_SET_NAME) },
-                label = { Text("Set name") },
+                label = { Text(stringResource(R.string.brushstudiodialog_set_name)) },
                 singleLine = true,
             )
         },
         confirmButton = {
-            TextButton(onClick = { onCreate(trimmed) }, enabled = trimmed.isNotEmpty() && trimmed !in taken) { Text("Create") }
+            TextButton(onClick = {
+                onCreate(trimmed)
+            }, enabled = trimmed.isNotEmpty() && trimmed !in taken) { Text(stringResource(R.string.brushstudiodialog_create)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 
 private const val FAVOURITES = "Favourites"
+private const val RECENT = "Recent"
 private const val MAX_SET_NAME = 40

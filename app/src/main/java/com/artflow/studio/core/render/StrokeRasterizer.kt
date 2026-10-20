@@ -9,6 +9,8 @@ import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.pixels.Stamping
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.DualBrush
+import com.artflow.studio.domain.model.brush.GrainBlend
+import com.artflow.studio.domain.model.brush.RenderingMode
 import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.model.brush.StrokePoint
 import com.artflow.studio.domain.model.layer.BlendMode
@@ -17,6 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
@@ -131,7 +134,7 @@ class StrokeRasterizer(
                 if ((source ushr 24) == 0) continue
                 val coverage = selectionCoverage(how.mask, target, i)
                 val grain = how.texture?.coverage(originX + i % target.width - grainX, originY + i / target.width - grainY) ?: 1f
-                val effective = how.strokeAlpha * coverage * grain * wetEdgeFactor(source, how.wetEdges)
+                val effective = how.strokeAlpha * coverage * grainFactor(source, grain, how.params) * wetEdgeFactor(source, how.wetEdges)
                 if (effective <= 0f) continue
                 val paint = Channels.scaleAlpha(burnt(source, how.burntEdges), effective)
                 target.pixels[i] = deposit(target.pixels[i], paint, how.params, how.alphaLock)
@@ -196,7 +199,9 @@ class StrokeRasterizer(
         val end = StrokeReach.bounds(listOf(points.last()), params, coverage.width, coverage.height)
         // A closing dab far off the canvas reaches no pixels, and then there is nothing to keep.
         val kept = if (end.isEmpty) null else coverage.crop(end)
+        val carried = live.walk.carried
         stampEnd(DabContext(coverage, stroke, params, 0f, false, null, live.random.copy(), tip, canvas), points.takeLast(2), live.walk)
+        live.walk.carried = carried
         val reach = IntBounds(left - originX, top - originY, right - originX, bottom - originY)
         val buffer = scratchFor(scratch, target.width, target.height)
         for (y in top..bottom) {
@@ -296,7 +301,7 @@ class StrokeRasterizer(
                 val selectionCoverage = selectionCoverage(mask, target, i)
                 if (selectionCoverage <= 0f) continue
                 val grain = texture?.coverage(originX + i % target.width - grainX, originY + i / target.width - grainY) ?: 1f
-                val erase = (strokeAlpha * sourceCoverage * selectionCoverage * grain).coerceIn(0f, 1f)
+                val erase = (strokeAlpha * sourceCoverage * selectionCoverage * grainFactor(source, grain, params)).coerceIn(0f, 1f)
                 val destination = target.pixels[i]
                 val destinationAlpha = (destination ushr 24) and 0xFF
                 if (destinationAlpha == 0) continue
@@ -355,14 +360,36 @@ class StrokeRasterizer(
         )
     }
 
+    /**
+     * Speed along a segment, in pixels per millisecond. Samples that share a timestamp, as batched input does, have no
+     * measurable time between them, so they keep the speed of the last measured segment. Reading them as a 1 ms gap
+     * would make the stroke look infinitely fast and drive the speed dynamics to their limit.
+     */
+    private fun segmentVelocity(
+        previous: StrokePoint,
+        current: StrokePoint,
+        distance: Float,
+        carried: Float,
+    ): Float {
+        if (distance <= 0f) return 0f
+        val elapsedMs = current.timestamp - previous.timestamp
+        return if (elapsedMs > 0L) distance / elapsedMs.toFloat() else carried
+    }
+
     /** Where the spacing grid stands after the segments stamped so far. */
     internal class DabWalk {
         var carry = 0f
         var accumulated = 0f
 
+        // Speed of the last segment that had elapsed time; a segment without any keeps it.
+        var velocity = 0f
+
         // Travelled value of the most recently stamped dab, used to avoid stamping the path end
         // twice when the spacing grid already lands exactly on it.
         var lastDabTravelled = Float.NaN
+
+        // Wet paint the brush carries from dab to dab when pull is on; null before the first dab.
+        var carried: Int? = null
     }
 
     /** Stamps the spacing grid along the segments ending at points [from] and later. */
@@ -372,9 +399,6 @@ class StrokeRasterizer(
         from: Int,
         walk: DabWalk,
     ) {
-        // Spacing is expressed as a fraction of the brush size; a minimum of one dab per segment
-        // keeps single-point taps visible.
-        val spacingPx = max(1f, context.params.size * context.params.spacing.coerceIn(0.01f, 4f))
         for (i in from until points.size) {
             val previous = points[i - 1]
             val current = points[i]
@@ -384,19 +408,44 @@ class StrokeRasterizer(
 
             if (distance <= 0.0001f) {
                 // Duplicate sample: a single dab keeps a tap visible without double-darkening.
-                drawDabAt(context, previous, current, 0f, distance, walk.accumulated)
+                drawDabAt(context, walk, previous, current, 0f, distance, walk.accumulated)
                 continue
             }
 
+            val velocity = segmentVelocity(previous, current, distance, walk.velocity)
+            walk.velocity = velocity
             var travelled = walk.carry
             while (travelled <= distance) {
-                drawDabAt(context, previous, current, travelled / distance, distance, walk.accumulated + travelled)
+                drawDabAt(context, walk, previous, current, travelled / distance, distance, walk.accumulated + travelled)
                 walk.lastDabTravelled = travelled
-                travelled += spacingPx
+                travelled += dabSpacing(context, previous, current, t, walk.accumulated + travelled, velocity)
             }
             walk.carry = travelled - distance
             walk.accumulated += distance
         }
+    }
+
+    /**
+     * The distance to the next dab: a fraction of the diameter the dab here will have. Spacing from the nominal size
+     * left gaps wherever light pressure or a taper made the dabs smaller, which read as beads along the line. The
+     * estimate leaves out size jitter, so it draws no random numbers and the dab sequence stays the same.
+     */
+    private fun dabSpacing(
+        context: DabContext,
+        previous: StrokePoint,
+        current: StrokePoint,
+        t: Float,
+        accumulatedDistance: Float,
+        velocity: Float,
+    ): Float {
+        val params = context.params
+        val pressure = previous.pressure + (current.pressure - previous.pressure) * t
+        val tilt = ((previous.tiltX + (current.tiltX - previous.tiltX) * t) / HALF_PI).coerceIn(0f, 1f)
+        val tiltEffect = params.tiltInfluence.coerceIn(0f, 1f) * tilt
+        val taper = taperFactor(params, accumulatedDistance, context.totalLength)
+        val diameter = params.calculateEffectiveSize(pressure, velocity) * (1f + TILT_SIZE_GAIN * tiltEffect) * taper
+        // A minimum of one pixel keeps single-point taps visible and stops a fully tapered end from stalling.
+        return max(1f, diameter * params.spacing.coerceIn(0.01f, 4f))
     }
 
     /**
@@ -409,7 +458,7 @@ class StrokeRasterizer(
         walk: DabWalk,
     ) {
         if (points.size == 1) {
-            drawDabAt(context, points.first(), points.first(), 0f, 0f, 0f)
+            drawDabAt(context, walk, points.first(), points.first(), 0f, 0f, 0f)
             return
         }
         val lastPrevious = points[points.size - 2]
@@ -418,7 +467,7 @@ class StrokeRasterizer(
         val endDy = last.y - lastPrevious.y
         val endDistance = sqrt(endDx * endDx + endDy * endDy)
         if (endDistance > 0.0001f && walk.lastDabTravelled != endDistance) {
-            drawDabAt(context, lastPrevious, last, 1f, endDistance, walk.accumulated)
+            drawDabAt(context, walk, lastPrevious, last, 1f, endDistance, walk.accumulated)
         }
     }
 
@@ -437,11 +486,13 @@ class StrokeRasterizer(
 
     private fun drawDabAt(
         context: DabContext,
+        walk: DabWalk,
         previous: StrokePoint,
         current: StrokePoint,
         t: Float,
         distance: Float,
         accumulatedDistance: Float,
+        velocity: Float,
     ) {
         val target = context.target
         val stroke = context.stroke
@@ -454,35 +505,38 @@ class StrokeRasterizer(
         val y = previous.y + (current.y - previous.y) * t
         val pressure = previous.pressure + (current.pressure - previous.pressure) * t
 
-        // Velocity is derived from the sample spacing and timestamps so the dynamics are stable
-        // regardless of how fast the digitiser reports.
-        val elapsedMs = (current.timestamp - previous.timestamp).coerceAtLeast(1L).toFloat()
-        val velocity = if (distance <= 0f) 0f else distance / elapsedMs
-
         // Stylus tilt: 0 upright, 1 lying flat. Shading with the side of the pen widens and softens the mark.
+        // Size and opacity have separate amounts; opacity follows the size amount unless it was set apart.
         val tilt = ((previous.tiltX + (current.tiltX - previous.tiltX) * t) / HALF_PI).coerceIn(0f, 1f)
-        val tiltEffect = params.tiltInfluence.coerceIn(0f, 1f) * tilt
-        val size = params.calculateEffectiveSize(pressure, velocity, random) * (1f + TILT_SIZE_GAIN * tiltEffect)
+        val sizeTilt = params.tiltInfluence.coerceIn(0f, 1f) * tilt
+        val opacityTilt = (params.tiltOpacityInfluence ?: params.tiltInfluence).coerceIn(0f, 1f) * tilt
+        val size = params.calculateEffectiveSize(pressure, velocity, random) * (1f + TILT_SIZE_GAIN * sizeTilt)
         val baseOpacity = params.calculateEffectiveOpacity(pressure, velocity, random) * params.flow.coerceIn(0f, 1f)
-        val opacity = baseOpacity * (1f - TILT_OPACITY_LOSS * tiltEffect)
+        val opacity = baseOpacity * (1f - TILT_OPACITY_LOSS * opacityTilt)
 
         // Tapering thins the stroke over the first and last portion of its length.
         val taper = taperFactor(params, accumulatedDistance, totalLength)
         val radius = max(0.35f, size * taper / 2f)
         // Taper opacity fades the tapered ends as well, and fall off fades the stroke along its path.
-        val dabOpacity = opacity * (1f - params.taperOpacity.coerceIn(0f, 1f) * (1f - taper)) * falloffFactor(params, accumulatedDistance)
+        val plainOpacity =
+            opacity * (1f - params.taperOpacity.coerceIn(0f, 1f) * (1f - taper)) * falloffFactor(params, accumulatedDistance) *
+                (1f - DILUTION_THINNING * params.dilution.coerceIn(0f, 1f))
+        val rendering = params.rendering
+        // Intense rendering lays down more paint per dab: twice as much of what is left to cover.
+        val dabOpacity = if (rendering.intense) 1f - (1f - plainOpacity).let { it * it } else plainOpacity
 
-        val color =
-            wetColor(
-                params.applyColorJitter(stroke.color, pressure, velocity, random, stroke.secondaryColor),
-                context.canvas,
-                x,
-                y,
-                params.wetMix,
-            )
+        // Pull keeps some of the paint the brush already carries instead of reloading the fresh colour.
+        // Per-stroke jitter draws from a sequence that restarts at every dab, so each dab gets the same colour.
+        val colorRandom = if (params.colorJitterPerStroke) Random(strokeColorSeed(stroke.id)) else random
+        val fresh = params.applyColorJitter(stroke.color, pressure, velocity, colorRandom, stroke.secondaryColor, tilt)
+        val loaded = walk.carried?.let { carried -> carriedColor(fresh, carried, params) } ?: fresh
+        val color = wetColor(loaded, context.canvas, x, y, wetPickup(params), params.wetBlur.coerceIn(0f, 1f) * params.size / 2f)
+        walk.carried = color
 
         // Scatter offsets each dab; count repeats it along a random perpendicular offset.
-        val dabs = params.count.coerceIn(1, 32)
+        val most = params.count.coerceIn(1, 32)
+        val jitter = params.countJitter.coerceIn(0f, 1f)
+        val dabs = if (jitter > 0f && most > 1) most - (random.nextFloat() * jitter * most).toInt().coerceAtMost(most - 1) else most
         repeat(dabs) { index ->
             val scatter = params.scatter.coerceIn(0f, 4f) * params.size
             val jitterX = if (scatter > 0f) ((random.nextFloat() * 2f - 1f) * scatter / 2f) else 0f
@@ -496,11 +550,15 @@ class StrokeRasterizer(
                 x = x + offsetX,
                 y = y + offsetY,
                 radius = radius,
-                color = Channels.withAlpha(color, (Channels.alpha(color) * dabOpacity).roundToInt().coerceIn(0, 255)),
+                color =
+                    Channels.withAlpha(
+                        color,
+                        (Channels.alpha(color) * dabOpacity * rendering.strength).roundToInt().coerceIn(0, 255),
+                    ),
                 strength = 1f,
                 // Flow controls deposited coverage. Glazing caps it within a stroke; blending builds it up.
-                hardness = hardnessForFlow(params),
-                mode = if (params.buildUp) Stamping.Mode.SOURCE_OVER else Stamping.Mode.MAX_COVERAGE,
+                hardness = if (rendering.uniformEdges) 1f else hardnessForFlow(params),
+                mode = if (rendering.blending) Stamping.Mode.SOURCE_OVER else Stamping.Mode.MAX_COVERAGE,
                 alphaLock = alphaLock,
                 mask = mask,
                 tip = tipFor(context.tip, params, current, random),
@@ -529,20 +587,91 @@ class StrokeRasterizer(
         return turned.copy(image = { u, v -> image(if (flipX) 1f - u else u, if (flipY) 1f - v else v) })
     }
 
-    /** Wet mix: the dab picks up some of the paint already on the layer under it. */
+    /** Wet mix, raised by dilution: watery paint picks up more of the layer. */
+    private fun wetPickup(params: BrushParams): Float {
+        val wetMix = params.wetMix.coerceIn(0f, 1f)
+        return wetMix + (1f - wetMix) * DILUTION_PICKUP * params.dilution.coerceIn(0f, 1f)
+    }
+
+    /** The fresh colour mixed toward the paint still on the brush; alpha stays the fresh colour's. */
+    private fun carriedColor(
+        fresh: Int,
+        carried: Int,
+        params: BrushParams,
+    ): Int {
+        // Pull is what the brush still carries after travelling one brush width; dabs come every spacing.
+        val pull = params.pull.coerceIn(0f, 1f)
+        if (pull <= 0f) return fresh
+        val amount = pull.toDouble().pow(params.spacing.coerceIn(MIN_PULL_STEP, 1f).toDouble()).toFloat()
+        val mixed = ImageFilters.lerpArgb(fresh or 0xFF000000.toInt(), carried or 0xFF000000.toInt(), amount)
+        return (fresh and 0xFF000000.toInt()) or (mixed and 0x00FFFFFF)
+    }
+
+    /**
+     * Wet mix: the dab takes up the paint already on the layer and mixes it into its own colour. Each
+     * step reads only the dab's own sample of the canvas and its position on the path, so live frames,
+     * full redraws and region renders agree. With no wet mix field set, the colour is returned unchanged.
+     *
+     * - Pickup, from Wetness ([BrushParams.wetMix]) and Bleed, leans the colour toward the canvas in
+     *   proportion to that canvas's opacity at the sample.
+     * - Attack ([pickupRamp]) scales pickup in from the stroke's start.
+     * - Pull moves the sample back along the path; blur averages the canvas around it ([canvasUnder]).
+     * - Charge below one leans the colour toward the canvas further, even with no pickup from Wetness.
+     * - Dilution leans the colour toward the canvas and removes the same share of the dab's alpha.
+     */
     private fun wetColor(
+        context: DabContext,
         color: Int,
-        canvas: PixelBuffer?,
         x: Float,
         y: Float,
         wetMix: Float,
+        blurReach: Float = 0f,
     ): Int {
         if (canvas == null || wetMix <= 0f) return color
-        val under = canvas.getSafe(floor(x).toInt(), floor(y).toInt())
+        val under = if (blurReach >= 1f) blurredUnder(canvas, x, y, blurReach) else canvas.getSafe(floor(x).toInt(), floor(y).toInt())
         val pickup = wetMix.coerceIn(0f, 1f) * WET_PICKUP * ((under ushr 24) / 255f)
         if (pickup <= 0f) return color
         val mixed = ImageFilters.lerpArgb(color or 0xFF000000.toInt(), under or 0xFF000000.toInt(), pickup)
         return (color and 0xFF000000.toInt()) or (mixed and 0x00FFFFFF)
+    }
+
+    /** Wet Mix Blur: the paint under the dab averaged with four points [reach] pixels around it. */
+    private fun blurredUnder(
+        canvas: PixelBuffer,
+        x: Float,
+        y: Float,
+        reach: Float,
+    ): Int {
+        var a = 0f
+        var r = 0f
+        var g = 0f
+        var b = 0f
+        for ((dx, dy) in BLUR_TAPS) {
+            val p = canvas.getSafe(floor(x + dx * reach).toInt(), floor(y + dy * reach).toInt())
+            val alpha = (p ushr 24) / 255f
+            a += alpha
+            r += ((p shr 16) and 0xFF) * alpha
+            g += ((p shr 8) and 0xFF) * alpha
+            b += (p and 0xFF) * alpha
+        }
+        if (a <= 0f) return 0
+        val count = BLUR_TAPS.size
+        return Channels.argb((a / count * 255f).roundToInt(), (r / a).roundToInt(), (g / a).roundToInt(), (b / a).roundToInt())
+    }
+
+    /**
+     * What the grain leaves of the coverage in [source]'s alpha, as a factor on that alpha, so
+     * Multiply is exactly the grain value and other grain blends reshape the coverage first.
+     */
+    private fun grainFactor(
+        source: Int,
+        grain: Float,
+        params: BrushParams,
+    ): Float {
+        // Without grain (none, or depth 0) there is nothing to blend, whatever the mode.
+        if (params.grainBlend == GrainBlend.MULTIPLY || grain >= 1f) return grain
+        val coverage = (source ushr 24) / 255f
+        return if (coverage <= 0f) 0f else params.grainBlend.combine(coverage, grain) / coverage
     }
 
     private fun canUseCapsule(
@@ -552,7 +681,10 @@ class StrokeRasterizer(
         params.spacing <= 0f &&
             params.roundness >= 1f &&
             params.wetMix <= 0f &&
+            params.dilution <= 0f &&
+            params.pull <= 0f &&
             params.tiltInfluence <= 0f &&
+            (params.tiltOpacityInfluence ?: 0f) <= 0f &&
             CustomGrains.get(params.shapeId) == null &&
             points.size <= 2 &&
             params.count == 1 &&
@@ -572,6 +704,7 @@ class StrokeRasterizer(
                 params.velocityToHue,
                 params.secondaryPressure,
                 params.secondaryJitter,
+                params.pressureToFlow,
             ).all { it == 0f }
 
     private fun drawSegment(
@@ -603,7 +736,11 @@ class StrokeRasterizer(
                 x = start.x,
                 y = start.y,
                 radius = max(0.35f, startSize / 2f),
-                color = Channels.withAlpha(color, (Channels.alpha(color) * startAlpha).roundToInt().coerceIn(0, 255)),
+                color =
+                    Channels.withAlpha(
+                        color,
+                        (Channels.alpha(color) * startAlpha * params.effectiveRenderingMode.strength).roundToInt().coerceIn(0, 255),
+                    ),
                 hardness = hardnessForFlow(params),
                 mode = Stamping.Mode.MAX_COVERAGE,
                 alphaLock = alphaLock,
@@ -621,7 +758,11 @@ class StrokeRasterizer(
             y1 = end.y,
             radiusStart = max(0.35f, startSize / 2f),
             radiusEnd = max(0.35f, endSize / 2f),
-            color = Channels.withAlpha(color, (Channels.alpha(color) * averageAlpha).roundToInt().coerceIn(0, 255)),
+            color =
+                Channels.withAlpha(
+                    color,
+                    (Channels.alpha(color) * averageAlpha * params.effectiveRenderingMode.strength).roundToInt().coerceIn(0, 255),
+                ),
             hardness = hardnessForFlow(params),
             mode = Stamping.Mode.MAX_COVERAGE,
             alphaLock = alphaLock,
@@ -656,7 +797,10 @@ class StrokeRasterizer(
         val startFactor = if (startRamp <= 0f) 1f else (travelled / startRamp).coerceIn(0.05f, 1f)
         val remaining = totalLength - travelled
         val endFactor = if (endRamp <= 0f) 1f else (remaining / endRamp).coerceIn(0.05f, 1f)
-        return min(startFactor, endFactor)
+        val factor = min(startFactor, endFactor)
+        val sharpness = params.tipSharpness.coerceIn(0f, 1f)
+        // A sharper tip bends the straight ramp into a curve that stays thin near the end.
+        return if (sharpness > 0f) factor.pow(1f + SHARPNESS_CURVE * sharpness) else factor
     }
 
     /** Moving grain is anchored where the stroke starts; texturized grain stays fixed to the canvas. */
@@ -826,6 +970,15 @@ private const val BURNT_DEPTH = 0.6f
 /** How much of the paint under a dab a fully wet brush picks up. */
 private const val WET_PICKUP = 0.6f
 
+/** Fully diluted paint keeps a quarter of its opacity. */
+private const val DILUTION_THINNING = 0.75f
+
+/** Fully diluted paint with no wet mix picks up as much as half wet mix does. */
+private const val DILUTION_PICKUP = 0.5f
+
+/** Spacing below this still counts as this step, so very dense brushes keep some pull. */
+private const val MIN_PULL_STEP = 0.01f
+
 private const val HALF_PI = (Math.PI / 2).toFloat()
 
 /** A fully tilted pen paints up to this much wider ... */
@@ -839,3 +992,23 @@ private const val FALLOFF_RANGE = 39f
 
 /** Degrees in a full turn, for a randomized tip angle. */
 private const val FULL_TURN = 360f
+
+/** Where Wet Mix Blur samples the layer: the dab's centre and four points around it. */
+private val BLUR_TAPS = listOf(0f to 0f, 1f to 0f, -1f to 0f, 0f to 1f, 0f to -1f)
+
+/** Tip sharpness at full raises the taper ramp to this extra power. */
+private const val SHARPNESS_CURVE = 3f
+
+/** Renderings the single-capsule fast path reproduces exactly. */
+private val CAPSULE_RENDERINGS = setOf(RenderingMode.LIGHT_GLAZE, RenderingMode.UNIFORM_BLENDING)
+
+/**
+ * A well-mixed seed for a stroke's own colour sequence (SplitMix64's finaliser). Stroke ids count
+ * up by one, and java.util.Random gives nearly the same first value for neighbouring seeds.
+ */
+internal fun strokeColorSeed(id: Long): Long {
+    var z = id + -0x61c8864680b583ebL
+    z = (z xor (z ushr 30)) * -0x40a7b892e31b1a47L
+    z = (z xor (z ushr 27)) * -0x6b2fb644ecceee15L
+    return z xor (z ushr 31)
+}

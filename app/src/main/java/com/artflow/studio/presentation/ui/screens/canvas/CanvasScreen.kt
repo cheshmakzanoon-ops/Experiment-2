@@ -32,6 +32,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -40,9 +42,13 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.artflow.studio.R
+import com.artflow.studio.core.canvas.CanvasInformation
 import com.artflow.studio.core.canvas.CropBox
+import com.artflow.studio.core.canvas.ShortcutAction
 import com.artflow.studio.core.color.CmykProof
 import com.artflow.studio.core.color.ColorProfile
+import com.artflow.studio.core.color.ViewFilter
 import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.LiveAdjustments
 import com.artflow.studio.core.pixels.Quad
@@ -51,8 +57,12 @@ import com.artflow.studio.core.text.TextLayerContent
 import com.artflow.studio.core.tool.ToolGroup
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.data.local.FontLibrary
+import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.local.ReferenceImages
 import com.artflow.studio.data.renderer.BitmapPixelBridge
+import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.MAX_BRUSH_SIZE
+import com.artflow.studio.domain.model.brush.MIN_BRUSH_SIZE
 import com.artflow.studio.domain.model.brush.StrokeDestination
 import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.layer.BlendMode
@@ -60,16 +70,22 @@ import com.artflow.studio.domain.model.layer.FilterType
 import com.artflow.studio.domain.model.layer.Layer
 import com.artflow.studio.domain.model.settings.ThemeMode
 import com.artflow.studio.domain.model.settings.pressureAndSmoothing
+import com.artflow.studio.presentation.ui.ShortcutHost
 import com.artflow.studio.presentation.ui.components.brush.BrushStudioDialog
 import com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView
 import com.artflow.studio.presentation.ui.components.canvas.BrushCursor
+import com.artflow.studio.presentation.ui.components.canvas.CanvasProjection
 import com.artflow.studio.presentation.ui.components.canvas.DragPreview
 import com.artflow.studio.presentation.ui.components.canvas.EditorInput
 import com.artflow.studio.presentation.ui.components.canvas.EyedropperLoupe
-import com.artflow.studio.presentation.ui.components.canvas.GestureControls
 import com.artflow.studio.presentation.ui.components.canvas.ShapeEditState
+import com.artflow.studio.presentation.ui.components.canvas.gestureControls
 import com.artflow.studio.presentation.ui.components.canvas.imageDropTarget
+import com.artflow.studio.presentation.ui.components.canvas.layerGestures
+import com.artflow.studio.presentation.ui.components.canvas.stylusButtons
 import com.artflow.studio.presentation.ui.components.color.ColorPanel
+import com.artflow.studio.presentation.ui.components.color.PaletteEdits
+import com.artflow.studio.presentation.ui.components.color.PaletteSources
 import com.artflow.studio.presentation.ui.components.color.SecondarySwatch
 import com.artflow.studio.presentation.ui.components.editor.ActionsPanel
 import com.artflow.studio.presentation.ui.components.editor.AddActions
@@ -87,9 +103,12 @@ import com.artflow.studio.presentation.ui.components.editor.CopyPasteActions
 import com.artflow.studio.presentation.ui.components.editor.CopyPasteMenu
 import com.artflow.studio.presentation.ui.components.editor.CropBar
 import com.artflow.studio.presentation.ui.components.editor.CropOverlay
+import com.artflow.studio.presentation.ui.components.editor.FrameClipboard
 import com.artflow.studio.presentation.ui.components.editor.GuideAssist
 import com.artflow.studio.presentation.ui.components.editor.GuidesOverlay
 import com.artflow.studio.presentation.ui.components.editor.GuidesSheet
+import com.artflow.studio.presentation.ui.components.editor.HistoryScrubber
+import com.artflow.studio.presentation.ui.components.editor.LayerEffectsDialog
 import com.artflow.studio.presentation.ui.components.editor.LayerMaskActions
 import com.artflow.studio.presentation.ui.components.editor.LayerOpacityOverlay
 import com.artflow.studio.presentation.ui.components.editor.LayerOptionActions
@@ -98,6 +117,7 @@ import com.artflow.studio.presentation.ui.components.editor.LayerStackActions
 import com.artflow.studio.presentation.ui.components.editor.LayersSheet
 import com.artflow.studio.presentation.ui.components.editor.ModelCompanion
 import com.artflow.studio.presentation.ui.components.editor.NoticePill
+import com.artflow.studio.presentation.ui.components.editor.OnionSwitch
 import com.artflow.studio.presentation.ui.components.editor.PageAssistActions
 import com.artflow.studio.presentation.ui.components.editor.PageAssistBar
 import com.artflow.studio.presentation.ui.components.editor.PrefActions
@@ -109,6 +129,7 @@ import com.artflow.studio.presentation.ui.components.editor.SelectionSheet
 import com.artflow.studio.presentation.ui.components.editor.SelectionToolbar
 import com.artflow.studio.presentation.ui.components.editor.SelectionToolbarActions
 import com.artflow.studio.presentation.ui.components.editor.ShapeNodesOverlay
+import com.artflow.studio.presentation.ui.components.editor.SliderRanges
 import com.artflow.studio.presentation.ui.components.editor.StudioBottomPanel
 import com.artflow.studio.presentation.ui.components.editor.StudioButton
 import com.artflow.studio.presentation.ui.components.editor.StudioPopover
@@ -123,6 +144,7 @@ import com.artflow.studio.presentation.ui.components.editor.TimelapseReplay
 import com.artflow.studio.presentation.ui.components.editor.TransformOverlay
 import com.artflow.studio.presentation.ui.components.editor.TransformToolbar
 import com.artflow.studio.presentation.ui.components.editor.TransformToolbarActions
+import com.artflow.studio.presentation.ui.components.editor.VanishingPointEditor
 import com.artflow.studio.presentation.ui.components.editor.VideoActions
 import com.artflow.studio.presentation.ui.components.editor.ViewTransform
 import com.artflow.studio.presentation.ui.components.editor.WarpOverlay
@@ -141,10 +163,12 @@ private enum class EditorPanel(
     val title: String,
 ) {
     NONE(""),
+    PALETTE("Studio tools"),
     TOOLS("Tool options"),
     COLOUR("Colour"),
     LAYERS("Layers"),
     SELECTION("Selection"),
+    TRANSFORM("Transform layer"),
     GUIDES("Guides"),
     ANIMATION("Animation"),
     CANVAS("Canvas"),
@@ -174,6 +198,7 @@ fun CanvasScreen(
     val layers by viewModel.layers.collectAsState()
     val history by viewModel.history.collectAsState()
     val settings by viewModel.settings.collectAsState()
+    val canPasteFrame by viewModel.frameClipboard.canPaste.collectAsState()
     val timeline by viewModel.timeline.collectAsState()
     val exportState by viewModel.exportState.collectAsState()
     val pendingText by viewModel.pendingText.collectAsState()
@@ -188,6 +213,7 @@ fun CanvasScreen(
     val activeLayerId by viewModel.activeLayerId.collectAsState()
     val recentColors by viewModel.recentColors.collectAsState()
     val palettes by viewModel.palettes.collectAsState()
+    val timelapseRecording by viewModel.timelapseRecording.collectAsState()
 
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
@@ -195,6 +221,8 @@ fun CanvasScreen(
     val exportActions = rememberExportActions(viewModel)
 
     var panel by remember { mutableStateOf(EditorPanel.NONE) }
+    var focusCanvas by rememberSaveable(projectId) { mutableStateOf(false) }
+    var showWorkspaceMenu by remember { mutableStateOf(false) }
     var canvasView by remember { mutableStateOf<ArtFlowCanvasView?>(null) }
     var dragPreview by remember { mutableStateOf<DragPreview?>(null) }
     var previewBytes by remember { mutableStateOf<ByteArray?>(null) }
@@ -214,6 +242,7 @@ fun CanvasScreen(
     var colorDropThreshold by remember { mutableStateOf<Float?>(null) }
     var continueFilling by remember { mutableStateOf(false) }
     var editingText by remember { mutableStateOf<Layer?>(null) }
+    var effectsLayerId by remember { mutableStateOf<Long?>(null) }
     val adjustment by viewModel.adjustments.state.collectAsState()
     val layerThumbnails by viewModel.layerThumbnails.thumbnails.collectAsState()
     val pickedLayers by viewModel.layerBatch.picked.collectAsState()
@@ -236,6 +265,8 @@ fun CanvasScreen(
     var cropBox by remember { mutableStateOf<CropBox.Box?>(null) }
     var opacityLayer by remember { mutableStateOf<Long?>(null) }
     var quickMenu by remember { mutableStateOf(false) }
+    var showHistory by remember { mutableStateOf(false) }
+    var editingGuide by remember { mutableStateOf(false) }
     val pageThumbnails by viewModel.pageThumbnails.pages.collectAsState()
     val pageImages =
         remember(pageThumbnails) {
@@ -250,6 +281,7 @@ fun CanvasScreen(
     val modelMesh by viewModel.model.mesh.collectAsState()
     var showModel by rememberSaveable(projectId) { mutableStateOf(true) }
     var proof by rememberSaveable(projectId) { mutableStateOf(CmykProof.Mode.OFF) }
+    var viewFilter by rememberSaveable(projectId) { mutableStateOf(ViewFilter.OFF) }
     LaunchedEffect(showReference, referenceCanvas, history, modelMesh, showModel) {
         val referenceShowsCanvas = showReference && referenceCanvas
         val modelShown = modelMesh != null && showModel
@@ -306,7 +338,7 @@ fun CanvasScreen(
             if (uri != null) insertImageFrom(uri)
         }
     val takePhoto = rememberCameraCapture(onImage = viewModel::insertImageLayer, onError = viewModel::notify)
-    val paletteImports = rememberPaletteImports(onPalette = viewModel::addPaletteFromColors, onError = viewModel::notify)
+    val paletteImports = rememberPaletteImports(onPalette = viewModel.paletteActions::addFromColors, onError = viewModel::notify)
     var importedFonts by remember { mutableStateOf(FontLibrary.families(context)) }
     val fontPicker =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -430,6 +462,8 @@ fun CanvasScreen(
         if (pendingText != null) {
             canvasView?.cancelActiveGesture()
             openMenu = null
+            // A new Add Text must not edit a text layer left over from an earlier session.
+            editingText = null
             panel = EditorPanel.TEXT
         }
     }
@@ -447,8 +481,8 @@ fun CanvasScreen(
             dirty -> BackTarget.LEAVE
             else -> null
         }
-    BackHandler(enabled = backTarget != null) {
-        when (backTarget) {
+    val performBack: (BackTarget?) -> Unit = { target ->
+        when (target) {
             BackTarget.PANEL -> {
                 dismissPanel()
             }
@@ -483,6 +517,41 @@ fun CanvasScreen(
             }
         }
     }
+    BackHandler(enabled = backTarget != null) { performBack(backTarget) }
+
+    // Hardware-keyboard shortcuts reach the editor through the activity, which asks this lambda.
+    val shortcutHandler: (ShortcutAction) -> Boolean = { action ->
+        when {
+            ready == null -> false
+            action == ShortcutAction.CLOSE_PANEL -> {
+                // Escape closes what is open; it never leaves the artwork the way Back can.
+                (backTarget != null && backTarget != BackTarget.LEAVE).also { if (it) performBack(backTarget) }
+            }
+            else -> {
+                if (action.group != ShortcutAction.Group.VIEW && action.group != ShortcutAction.Group.BRUSH) {
+                    canvasView?.cancelActiveGesture()
+                }
+                runShortcut(
+                    action,
+                    ShortcutEnvironment(
+                        viewModel = viewModel,
+                        input = input,
+                        canvasView = canvasView,
+                        activeLayerId = activeLayerId,
+                        toggleInterface = { focusMode = !focusMode },
+                        openExport = { panel = EditorPanel.EXPORT },
+                    ),
+                )
+                true
+            }
+        }
+    }
+    val currentShortcutHandler by rememberUpdatedState(shortcutHandler)
+    DisposableEffect(Unit) {
+        val host: (ShortcutAction) -> Boolean = { currentShortcutHandler(it) }
+        ShortcutHost.handler = host
+        onDispose { if (ShortcutHost.handler === host) ShortcutHost.handler = null }
+    }
 
     val panelContent: @Composable ColumnScope.() -> Unit = {
         Row(
@@ -497,7 +566,7 @@ fun CanvasScreen(
                 modifier = Modifier.weight(1f),
             )
             IconButton(onClick = dismissPanel) {
-                Icon(Icons.Default.Close, contentDescription = "Close ${panel.title}")
+                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.canvasscreen_close_panel, panel.title))
             }
         }
         when (panel) {
@@ -510,7 +579,7 @@ fun CanvasScreen(
                 )
                 BrushOptionsRow(
                     tool = input.tool,
-                    size = input.brushParams.size,
+                    size = (input.smudgeParams?.takeIf { input.tool == ToolType.SMUDGE } ?: input.brushParams).size,
                     opacity = input.brushParams.opacity,
                     eraserSize = input.eraserSize,
                     tolerance = input.fillTolerance,
@@ -518,6 +587,11 @@ fun CanvasScreen(
                     onOpacityChanged = viewModel::setBrushOpacity,
                     onEraserSizeChanged = viewModel::setEraserSize,
                     onToleranceChanged = { viewModel.setFillSettings(it, input.fillContiguous) },
+                    ranges =
+                        SliderRanges(
+                            (input.smudgeParams?.takeIf { input.tool == ToolType.SMUDGE } ?: input.brushParams).sizeLimits,
+                            input.brushParams.opacityLimits,
+                        ),
                 )
                 ToolOptionsPanel(viewModel, input, canvasView)
             }
@@ -529,10 +603,16 @@ fun CanvasScreen(
                     palettes = palettes,
                     onColorSelected = { viewModel.setColor(it) },
                     onClearRecents = { scope.launch { viewModel.clearRecentColors() } },
-                    onSavePalette = { name, colors -> viewModel.addPaletteFromColors(name, colors) },
-                    onImportPalette = paletteImports.fromFile,
-                    onPaletteFromPhoto = paletteImports.fromPhoto,
-                    onRemovePalette = { viewModel.removePalette(it) },
+                    onSavePalette = viewModel.paletteActions::addFromColors,
+                    sources = PaletteSources(paletteImports.fromFile, paletteImports.fromPhoto, paletteImports.fromCamera),
+                    palettesEdit =
+                        PaletteEdits(
+                            viewModel.paletteActions::remove,
+                            viewModel.paletteActions::update,
+                            paletteImports.share,
+                            viewModel.paletteActions::toggleDefault,
+                            settings.defaultPaletteName,
+                        ),
                     secondary = SecondarySwatch(input.secondaryColor, viewModel::swapColors),
                 )
             }
@@ -546,6 +626,7 @@ fun CanvasScreen(
                         LayerRowActions(
                             onSelect = { viewModel.setActiveLayer(it) },
                             onVisibility = { id, visible -> viewModel.setLayerVisibility(id, visible) },
+                            onSolo = viewModel::toggleLayerSolo,
                             onOpacity = { id, opacity -> viewModel.setLayerOpacity(id, opacity) },
                             onName = { id, name -> viewModel.setLayerName(id, name) },
                             onLock = { id, locked -> viewModel.setLayerLock(id, locked) },
@@ -564,6 +645,7 @@ fun CanvasScreen(
                                 panel = EditorPanel.NONE
                                 opacityLayer = id
                             },
+                            twoFingerGestures = settings.gestureControls().layerGestures(),
                         ),
                     stackActions =
                         LayerStackActions(
@@ -622,12 +704,13 @@ fun CanvasScreen(
                             onFillReference = viewModel::setLayerFillReference,
                             onDrawingAssist = viewModel::setLayerDrawingAssist,
                             onPrivate = viewModel::setLayerPrivate,
+                            onEffects = { effectsLayerId = it.id },
                             onMask = { viewModel.createLayerMask(LayerMaskSource.REVEAL_ALL) },
                             onCombineDown = viewModel::groupWithLayerBelow,
                             onEditText = { layer ->
                                 layer.textContent?.let { content ->
                                     viewModel.setText(content.text, content.style)
-                                    viewModel.setColor(content.color)
+                                    viewModel.setColor(viewModel.displayColor(content.color))
                                     editingText = layer
                                     panel = EditorPanel.TEXT
                                 }
@@ -684,6 +767,10 @@ fun CanvasScreen(
                             onSnap = { viewModel.setSnapToGuides(it) },
                             assisted = layers.firstOrNull { it.id == activeLayerId }?.drawingAssist == true,
                             onAssisted = { viewModel.setLayerDrawingAssist(activeLayerId, it) },
+                            onEditPoints = {
+                                panel = EditorPanel.NONE
+                                editingGuide = true
+                            },
                         ),
                 )
             }
@@ -691,15 +778,24 @@ fun CanvasScreen(
             EditorPanel.ANIMATION -> {
                 AnimationSheet(
                     timeline = timeline,
-                    onionEnabled = settings.onionSkin,
+                    onion =
+                        OnionSwitch(
+                            enabled = settings.onionSkin,
+                            onToggle = { viewModel.toggleOnionSkin(it) },
+                        ),
                     onSelectFrame = { viewModel.selectFrame(it) },
                     onAddFrame = { viewModel.addFrame(it) },
                     onDeleteFrame = { viewModel.deleteFrame(it) },
                     onMoveFrame = { from, to -> viewModel.moveFrame(from, to) },
                     onFrameDuration = { index, duration -> viewModel.setFrameDuration(index, duration) },
                     onSettings = { viewModel.updateAnimationSettings(it) },
-                    onToggleOnion = { viewModel.toggleOnionSkin(it) },
                     onTogglePlayback = { viewModel.togglePlayback() },
+                    clipboard =
+                        FrameClipboard(
+                            canPaste = canPasteFrame,
+                            onCopy = { viewModel.frameClipboard.copy(it) },
+                            onPaste = { viewModel.frameClipboard.paste(it) },
+                        ),
                 )
             }
 
@@ -733,14 +829,26 @@ fun CanvasScreen(
                         val editingContent = editing?.textContent
                         when {
                             editing != null && editingContent != null -> {
-                                val updated = editingContent.copy(text = input.text, style = input.textStyle, color = input.brushColor)
+                                val updated =
+                                    editingContent.copy(
+                                        text = input.text,
+                                        style = input.textStyle,
+                                        color = viewModel.documentColor(input.brushColor),
+                                    )
                                 viewModel.textLayers.edit(editing.id, updated)
                                 editingText = null
                             }
 
                             pending != null -> {
                                 // Text goes on its own layer and stays editable, as in Procreate.
-                                val content = TextLayerContent(input.text, input.textStyle, input.brushColor, pending.x, pending.y)
+                                val content =
+                                    TextLayerContent(
+                                        input.text,
+                                        input.textStyle,
+                                        viewModel.documentColor(input.brushColor),
+                                        pending.x,
+                                        pending.y,
+                                    )
                                 viewModel.textLayers.place(content)
                                 viewModel.cancelText()
                                 viewModel.setTool(ToolType.BRUSH)
@@ -801,10 +909,17 @@ fun CanvasScreen(
                             ready?.width ?: 0,
                             ready?.height ?: 0,
                             ready?.dpi ?: 72,
-                            layers.size,
+                            viewModel.layerTotal(),
                             ready?.frameCount ?: 1,
                             (ready?.colorProfile ?: ColorProfile.SRGB).label,
                             viewModel.trackedTimeMs(),
+                            layerLimit =
+                                CanvasInformation.layerLimit(
+                                    ready?.width ?: 0,
+                                    ready?.height ?: 0,
+                                    Runtime.getRuntime().maxMemory(),
+                                    ProjectStorage.MAX_LAYERS,
+                                ),
                         ),
                     prefs =
                         StudioPrefs(
@@ -813,10 +928,12 @@ fun CanvasScreen(
                             input.touchHoldEyedropper,
                             input.fingerPainting,
                             settings.pressureAndSmoothing,
-                            GestureControls(settings.scrubToClear, settings.swipeCopyPaste, settings.fourFingerFullScreen),
+                            settings.gestureControls(),
                             lightInterface = settings.themeMode == ThemeMode.LIGHT,
                             brushCursor = settings.brushCursor,
                             dynamicBrushScaling = settings.dynamicBrushScaling,
+                            selectionMaskVisibility = settings.selectionMaskVisibility,
+                            projectCanvas = settings.projectCanvas,
                         ),
                     add =
                         AddActions(
@@ -850,6 +967,8 @@ fun CanvasScreen(
                             },
                             proof = proof,
                             onProof = { proof = it },
+                            viewFilter = viewFilter,
+                            onViewFilter = { viewFilter = it },
                             onCropResize = {
                                 // Crop & Resize starts with the box on the canvas; Settings has the exact sizes.
                                 panel = EditorPanel.NONE
@@ -878,6 +997,8 @@ fun CanvasScreen(
                             onClear = viewModel::clearTimelapse,
                             quality = settings.timelapseMaxSide,
                             onQuality = { side -> viewModel.updateSettings { it.copy(timelapseMaxSide = side) } },
+                            recording = settings.recordTimelapse,
+                            onRecording = { on -> viewModel.updateSettings { it.copy(recordTimelapse = on) } },
                         ),
                     prefActions =
                         PrefActions(
@@ -897,6 +1018,8 @@ fun CanvasScreen(
                             },
                             onBrushCursor = { on -> viewModel.updateSettings { it.copy(brushCursor = on) } },
                             onDynamicBrushScaling = { on -> viewModel.updateSettings { it.copy(dynamicBrushScaling = on) } },
+                            onSelectionMaskVisibility = { v -> viewModel.updateSettings { it.copy(selectionMaskVisibility = v) } },
+                            onProjectCanvas = { on -> viewModel.updateSettings { it.copy(projectCanvas = on) } },
                         ),
                     onShare = { panel = EditorPanel.EXPORT },
                     canPaste = hasClipboard,
@@ -1058,6 +1181,7 @@ fun CanvasScreen(
                                 attachToCanvas(state.width, state.height, state.dpi, state.backgroundColor)
 
                                 onColorPicked = { viewModel.onColorPicked(it) }
+                                onLayerSelected = { viewModel.setActiveLayer(it) }
                                 onSelectionChanged = { mask, count -> viewModel.selectionChanged(mask, count) }
                                 onDragPreview = { dragPreview = it }
                                 onHistoryChanged = { _, _ -> }
@@ -1076,6 +1200,11 @@ fun CanvasScreen(
                                 onCloneSourceChanged = { viewModel.onCloneSourceChanged(it) }
                                 onStatusMessage = { viewModel.notify(it) }
                                 onFillToleranceChanged = viewModel::setFillTolerance
+                                onQuickMenuRequested = {
+                                    canvasView?.cancelActiveGesture()
+                                    quickMenu = true
+                                }
+                                onNavigationReadout = { navReadout.value = it }
                                 setEditorInput(input)
                                 setOnionSkinEnabled(settings.onionSkin)
                                 setCheckerboardVisible(settings.checkerboard)
@@ -1089,6 +1218,7 @@ fun CanvasScreen(
                             view.setCheckerboardVisible(settings.checkerboard)
                             view.setWideColor(state.colorProfile == ColorProfile.DISPLAY_P3)
                             view.setProof(proof)
+                            view.setViewFilter(viewFilter)
                         },
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -1096,23 +1226,34 @@ fun CanvasScreen(
                     GuidesOverlay(
                         canvasWidth = state.width,
                         canvasHeight = state.height,
-                        scale = viewScale,
-                        offsetX = viewOffsetX,
-                        offsetY = viewOffsetY,
-                        rotationDegrees = viewRotation,
+                        view = ViewTransform(viewScale, viewOffsetX, viewOffsetY, viewRotation),
                         symmetry = input.symmetry,
                         showSymmetry = settings.showSymmetryGuides,
                         perspective = input.perspective,
                         showPerspective = settings.showPerspectiveGuides,
                         selection = selection,
+                        selectionVisibility = settings.selectionMaskVisibility,
                         preview = dragPreview,
                         modifier = Modifier.fillMaxSize(),
                     )
+                    if (editingGuide) {
+                        VanishingPointEditor(
+                            perspective = input.perspective,
+                            canvasWidth = state.width,
+                            canvasHeight = state.height,
+                            view = ViewTransform(viewScale, viewOffsetX, viewOffsetY, viewRotation),
+                            onChange = viewModel::setPerspectiveSettings,
+                            onDone = { editingGuide = false },
+                            modifier = Modifier.fillMaxSize().zIndex(7f),
+                            symmetry = input.symmetry,
+                            onSymmetry = viewModel::setSymmetrySettings,
+                        )
+                    }
 
                     if (!focusMode && (settings.showSymmetryGuides || settings.showPerspectiveGuides)) {
                         // Guides are always available from the quick menu; the chip is a reminder.
                         Text(
-                            text = "Guides on",
+                            text = stringResource(R.string.canvasscreen_guides_on),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier =
@@ -1147,11 +1288,23 @@ fun CanvasScreen(
                 StudioSidebar(
                     state =
                         StudioSidebarState(
-                            size = if (input.tool == ToolType.ERASER) input.eraserSize else input.brushParams.size,
+                            size =
+                                when {
+                                    input.tool == ToolType.ERASER -> input.eraserSize
+                                    input.tool == ToolType.SMUDGE -> (input.smudgeParams ?: input.brushParams).size
+                                    else -> input.brushParams.size
+                                },
                             opacity = input.brushParams.opacity,
                             canUndo = history.canUndo,
                             canRedo = history.canRedo,
                             eyedropperActive = input.tool == ToolType.EYEDROPPER,
+                            sizeRange =
+                                when (input.tool) {
+                                    ToolType.ERASER -> MIN_BRUSH_SIZE..MAX_BRUSH_SIZE
+                                    ToolType.SMUDGE -> (input.smudgeParams ?: input.brushParams).sizeLimits
+                                    else -> input.brushParams.sizeLimits
+                                },
+                            opacityRange = input.brushParams.opacityLimits,
                         ),
                     actions =
                         StudioSidebarActions(
@@ -1161,8 +1314,15 @@ fun CanvasScreen(
                             onUndo = viewModel::undo,
                             onRedo = viewModel::redo,
                             onQuickMenu = {
+                                // Switched off in Prefs > Gesture controls, a long press on modify does nothing.
+                                if (settings.modifyHoldQuickMenu) {
+                                    canvasView?.cancelActiveGesture()
+                                    quickMenu = true
+                                }
+                            },
+                            onHistory = {
                                 canvasView?.cancelActiveGesture()
-                                quickMenu = true
+                                showHistory = true
                             },
                         ),
                     modifier =
@@ -1260,6 +1420,15 @@ fun CanvasScreen(
                     modifier = Modifier.fillMaxSize(),
                 )
             }
+            if (showHistory) {
+                HistoryScrubber(
+                    undoDepth = history.undoDepth,
+                    redoDepth = history.redoDepth,
+                    onStep = viewModel::jumpToHistory,
+                    onDone = { showHistory = false },
+                    modifier = Modifier.align(Alignment.BottomCenter).zIndex(6f),
+                )
+            }
             if (quickMenu) {
                 // Every action a QuickMenu slot can hold; settings keep which six are on the ring.
                 val catalogue =
@@ -1308,6 +1477,7 @@ fun CanvasScreen(
                     )
                 }
             }
+            NavigationHud(navReadout, modifier = Modifier.align(Alignment.TopCenter).zIndex(4f))
             val crop = cropBox
             if (crop != null && ready != null) {
                 CropOverlay(
@@ -1341,6 +1511,7 @@ fun CanvasScreen(
                             onAmount = viewModel.adjustments::setAmount,
                             onAngle = viewModel.adjustments::setAngle,
                             onParameter = viewModel.adjustments::setParameter,
+                            onParameters = viewModel.adjustments::setParameters,
                             onCancel = viewModel.adjustments::cancel,
                             onApply = viewModel.adjustments::apply,
                             onPencil = viewModel.adjustments::setPencil,
@@ -1408,7 +1579,7 @@ fun CanvasScreen(
                             .padding(8.dp)
                             .size(if (settings.largeTouchTargets) 56.dp else 48.dp),
                 ) {
-                    Icon(Icons.Default.FullscreenExit, contentDescription = "Exit focus mode")
+                    Icon(Icons.Default.FullscreenExit, contentDescription = stringResource(R.string.canvasscreen_exit_focus_mode))
                 }
             }
         }
@@ -1417,10 +1588,10 @@ fun CanvasScreen(
     replayFrames?.let { frames ->
         TimelapseReplay(
             frames = frames,
-            onExport = {
+            onExport = { fullLength ->
                 replayFrames = null
                 panel = EditorPanel.EXPORT
-                viewModel.exportTimelapse()
+                viewModel.exportTimelapse(fullLength)
             },
             onDismiss = { replayFrames = null },
         )
@@ -1437,25 +1608,38 @@ fun CanvasScreen(
         )
     }
 
+    val projected by viewModel.projection.image.collectAsState()
+    CanvasProjection(settings.projectCanvas, projected) { side ->
+        if (side == null) viewModel.projection.stop() else viewModel.projection.start(side)
+    }
+
+    layers.firstOrNull { it.id == effectsLayerId }?.let { layer ->
+        LayerEffectsDialog(
+            layer = layer,
+            currentColor = input.brushColor or 0xFF000000.toInt(),
+            onApply = { viewModel.setLayerEffects(layer.id, it) },
+            onDismiss = { effectsLayerId = null },
+        )
+    }
     if (showRecoveryDialog) {
         AlertDialog(
             // A tap outside the dialog or system Back must never delete recoverable artwork.
             onDismissRequest = {},
-            title = { Text("Autosave found") },
+            title = { Text(stringResource(R.string.canvasscreen_autosave_found)) },
             text = {
-                Text("ArtFlow closed unexpectedly the last time this project was open. Recover the autosaved version?")
+                Text(stringResource(R.string.canvasscreen_artflow_closed_unexpectedly_the_last))
             },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.recoverAutosave()
                     showRecoveryDialog = false
-                }) { Text("Recover") }
+                }) { Text(stringResource(R.string.canvasscreen_recover)) }
             },
             dismissButton = {
                 TextButton(onClick = {
                     viewModel.dismissRecovery()
                     showRecoveryDialog = false
-                }) { Text("Discard") }
+                }) { Text(stringResource(R.string.canvasscreen_discard)) }
             },
         )
     }
@@ -1463,8 +1647,8 @@ fun CanvasScreen(
     if (showExitConfirm) {
         AlertDialog(
             onDismissRequest = { if (!saving) showExitConfirm = false },
-            title = { Text("Save changes?") },
-            text = { Text("This project has unsaved changes.") },
+            title = { Text(stringResource(R.string.canvasscreen_save_changes)) },
+            text = { Text(stringResource(R.string.canvasscreen_this_project_has_unsaved_changes)) },
             confirmButton = {
                 TextButton(enabled = !saving, onClick = {
                     viewModel.save {
@@ -1475,13 +1659,16 @@ fun CanvasScreen(
             },
             dismissButton = {
                 Row {
-                    TextButton(enabled = !saving, onClick = { showExitConfirm = false }) { Text("Stay") }
+                    TextButton(
+                        enabled = !saving,
+                        onClick = { showExitConfirm = false },
+                    ) { Text(stringResource(R.string.canvasscreen_stay)) }
                     TextButton(enabled = !saving, onClick = {
                         viewModel.discardChanges {
                             showExitConfirm = false
                             onNavigateBack()
                         }
-                    }) { Text("Discard and leave") }
+                    }) { Text(stringResource(R.string.canvasscreen_discard_and_leave)) }
                 }
             },
         )
@@ -1498,78 +1685,19 @@ private fun ToolOptionsPanel(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(input.tool.displayName, style = MaterialTheme.typography.titleMedium)
         Text(
-            when (input.tool) {
-                ToolType.BRUSH -> {
-                    "Pressure controls size and opacity; tap Brush for the full dynamics panel."
-                }
-
-                ToolType.ERASER -> {
-                    "Erases to transparency on the active layer. Two fingers to navigate; the stylus keeps painting."
-                }
-
-                ToolType.SMUDGE -> {
-                    "Pull colour along the stroke. Lower strength gives a softer blend."
-                }
-
-                ToolType.CLONE_STAMP -> {
-                    "Tap once to set the source, then drag to stamp."
-                }
-
-                ToolType.HEALING -> {
-                    "Spot-heals blemishes by matching the surrounding texture."
-                }
-
-                ToolType.LIQUIFY -> {
-                    "Push, twirl, pinch or bloat pixels with a displacement map."
-                }
-
-                ToolType.PAINT_BUCKET -> {
-                    "Flood fills the area under the tap within the tolerance."
-                }
-
-                ToolType.GRADIENT -> {
-                    "Drag to set the gradient axis; the ramp is chosen in the colour panel."
-                }
-
-                ToolType.TEXT -> {
-                    "Tap the canvas to place the current text."
-                }
-
-                ToolType.SHAPE -> {
-                    "Drag to draw the selected shape."
-                }
-
-                ToolType.SELECT_MAGIC_WAND -> {
-                    "Tap to select a colour region."
-                }
-
-                ToolType.EYEDROPPER -> {
-                    "Tap to pick a colour from the artwork."
-                }
-
-                ToolType.MOVE -> {
-                    "Drag to move the active layer's pixels."
-                }
-
-                ToolType.TRANSFORM -> {
-                    "Drag to move, scale or rotate the active layer — or only the selection when one is active."
-                }
-
-                else -> {
-                    "Drag on the canvas to use this tool."
-                }
-            },
+            toolHint(input.tool),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         if (input.tool == ToolType.GRADIENT) {
-            Text("Gradient direction", style = MaterialTheme.typography.labelMedium)
+            Text(stringResource(R.string.canvasscreen_gradient_direction), style = MaterialTheme.typography.labelMedium)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1582,7 +1710,7 @@ private fun ToolOptionsPanel(
                     )
                 }
             }
-            Text("Ramp", style = MaterialTheme.typography.labelMedium)
+            Text(stringResource(R.string.canvasscreen_ramp), style = MaterialTheme.typography.labelMedium)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1603,12 +1731,20 @@ private fun ToolOptionsPanel(
                     onCheckedChange = { viewModel.setFillSettings(input.fillTolerance, it) },
                 )
                 Spacer(Modifier.width(8.dp))
-                Text("Only fill the connected region", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.canvasscreen_only_fill_the_connected_region), style = MaterialTheme.typography.bodySmall)
             }
+            Text("Close gaps up to ${input.fillGapClose} px", style = MaterialTheme.typography.labelSmall)
+            Slider(
+                value = input.fillGapClose.toFloat(),
+                onValueChange = { viewModel.setFillGapClose(it.roundToInt()) },
+                valueRange = 0f..16f,
+                steps = 15,
+                modifier = Modifier.semantics { contentDescription = "Close gaps" },
+            )
         }
 
         if (input.tool == ToolType.SHAPE) {
-            Text("Shape", style = MaterialTheme.typography.labelMedium)
+            Text(stringResource(R.string.brush_adv_shape), style = MaterialTheme.typography.labelMedium)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1627,18 +1763,25 @@ private fun ToolOptionsPanel(
                     onCheckedChange = { viewModel.setShapeSettings(input.shapeKind, it) },
                 )
                 Spacer(Modifier.width(8.dp))
-                Text("Filled", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.canvasscreen_filled), style = MaterialTheme.typography.bodySmall)
             }
         }
 
+        if (input.tool == ToolType.ERASER) {
+            OwnBrushOptions("Erasing", "eraser", input.eraserParams, input.brushParams, viewModel::setEraserParams)
+        }
         if (input.tool == ToolType.SMUDGE) {
             Text(
                 "Smudge strength ${(input.smudge.strength * 100).toInt()}% · hardness ${(input.smudge.hardness * 100).toInt()}%",
                 style = MaterialTheme.typography.bodySmall,
             )
+            OwnBrushOptions("Smudging", "smudge", input.smudgeParams, input.brushParams, viewModel::setSmudgeParams)
         }
         if (input.tool == ToolType.LIQUIFY) {
-            Text("Liquify mode: ${input.liquify.mode.displayName}", style = MaterialTheme.typography.bodySmall)
+            Text(
+                stringResource(R.string.canvasscreen_liquify_mode, input.liquify.mode.displayName),
+                style = MaterialTheme.typography.bodySmall,
+            )
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1651,29 +1794,158 @@ private fun ToolOptionsPanel(
                     )
                 }
             }
-            Text("Size ${input.liquify.size.toInt()} px", style = MaterialTheme.typography.labelSmall)
+            // Liquify paints with the brush size, as the sidebar and the brush outline show it.
+            Text("Size ${input.brushParams.size.toInt()} px", style = MaterialTheme.typography.labelSmall)
             Slider(
-                value = input.liquify.size.coerceIn(8f, 400f),
-                onValueChange = { viewModel.setLiquifySettings(input.liquify.copy(size = it)) },
+                value = input.brushParams.size.coerceIn(8f, 400f),
+                onValueChange = viewModel::setBrushSize,
                 valueRange = 8f..400f,
+                modifier = Modifier.semantics { contentDescription = "Liquify size" },
             )
-            Text("Distortion ${(input.liquify.strength * 100).toInt()}%", style = MaterialTheme.typography.labelSmall)
+            Text(
+                stringResource(R.string.canvasscreen_liquify_distortion, (input.liquify.strength * 100).toInt()),
+                style = MaterialTheme.typography.labelSmall,
+            )
             Slider(
                 value = input.liquify.strength.coerceIn(0f, 1f),
                 onValueChange = { viewModel.setLiquifySettings(input.liquify.copy(strength = it)) },
+                modifier = Modifier.semantics { contentDescription = "Liquify distortion" },
             )
+            Text("Momentum ${(input.liquify.momentum * 100).toInt()}%", style = MaterialTheme.typography.labelSmall)
+            Slider(
+                value = input.liquify.momentum.coerceIn(0f, 1f),
+                onValueChange = { viewModel.setLiquifySettings(input.liquify.copy(momentum = it)) },
+                modifier = Modifier.semantics { contentDescription = "Liquify momentum" },
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Pressure", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+                Switch(
+                    checked = input.liquify.usePressure,
+                    onCheckedChange = { viewModel.setLiquifySettings(input.liquify.copy(usePressure = it)) },
+                    modifier = Modifier.semantics { contentDescription = "Liquify pressure" },
+                )
+            }
+            canvasView?.liquifyAdjustGesture?.takeIf { it != 0L }?.let { gesture ->
+                // Adjust re-renders the last gesture at a fraction of its distortion when released.
+                var amount by remember(gesture) { mutableFloatStateOf(1f) }
+                Text("Adjust last gesture ${(amount * 100).toInt()}%", style = MaterialTheme.typography.labelSmall)
+                Slider(
+                    value = amount,
+                    onValueChange = { amount = it },
+                    onValueChangeFinished = { canvasView?.adjustLiquify(amount) },
+                    modifier = Modifier.semantics { contentDescription = "Adjust last liquify gesture" },
+                )
+            }
             TextButton(onClick = viewModel::resetLiquify) { Text("Reset liquify") }
         }
         if (input.tool == ToolType.TRANSFORM) TransformOptions(viewModel, input, canvasView)
         if (input.tool == ToolType.BRUSH) BrushAssistOptions(viewModel, input)
         if (input.tool == ToolType.CLONE_STAMP) {
             Text(
-                "Tap to set the clone source, then drag. Blend mode: aligned.",
+                stringResource(R.string.canvasscreen_tap_to_set_the_clone_source_then_drag),
                 style = MaterialTheme.typography.bodySmall,
             )
         }
     }
 }
+
+/**
+ * Procreate lets the eraser and Smudge each keep a brush of their own; until one is chosen they use
+ * the paint brush. [doing] names the action ("Erasing") and [tool] the tool ("eraser").
+ */
+@Composable
+private fun OwnBrushOptions(
+    doing: String,
+    tool: String,
+    own: BrushParams?,
+    paintBrush: BrushParams,
+    onChoose: (BrushParams?) -> Unit,
+) {
+    var choosing by remember { mutableStateOf(false) }
+    Text(
+        if (own == null) "$doing with the paint brush" else "$doing with its own brush",
+        style = MaterialTheme.typography.bodySmall,
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = { choosing = true }) { Text("Choose $tool brush") }
+        if (own != null) TextButton(onClick = { onChoose(null) }) { Text("Use the paint brush") }
+    }
+    if (choosing) {
+        BrushStudioDialog(
+            initial = own ?: paintBrush,
+            onApply = onChoose,
+            onDismiss = { choosing = false },
+        )
+    }
+}
+
+/** What the active tool does, shown at the top of its options. */
+private fun toolHint(tool: ToolType): String =
+    when (tool) {
+        ToolType.BRUSH -> {
+            "Pressure controls size and opacity; tap Brush for the full dynamics panel."
+        }
+
+        ToolType.ERASER -> {
+            "Erases to transparency on the active layer. Two fingers to navigate; the stylus keeps painting."
+        }
+
+        ToolType.SMUDGE -> {
+            "Pull colour along the stroke. Lower strength gives a softer blend."
+        }
+
+        ToolType.CLONE_STAMP -> {
+            "Tap once to set the source, then drag to stamp."
+        }
+
+        ToolType.HEALING -> {
+            "Spot-heals blemishes by matching the surrounding texture."
+        }
+
+        ToolType.LIQUIFY -> {
+            "Push, twirl, pinch or bloat pixels with a displacement map."
+        }
+
+        ToolType.PAINT_BUCKET -> {
+            "Flood fills the area under the tap within the tolerance."
+        }
+
+        ToolType.GRADIENT -> {
+            "Drag to set the gradient axis; the ramp is chosen in the colour panel."
+        }
+
+        ToolType.LASSO_FILL -> {
+            "Trace a shape; it fills with the current colour when you lift."
+        }
+
+        ToolType.TEXT -> {
+            "Tap the canvas to place the current text."
+        }
+
+        ToolType.SHAPE -> {
+            "Drag to draw the selected shape."
+        }
+
+        ToolType.SELECT_MAGIC_WAND -> {
+            "Tap to select a colour region."
+        }
+
+        ToolType.EYEDROPPER -> {
+            "Tap to pick a colour from the artwork."
+        }
+
+        ToolType.MOVE -> {
+            "Drag to move the active layer's pixels."
+        }
+
+        ToolType.TRANSFORM -> {
+            "Drag to move, scale or rotate the active layer — or only the selection when one is active."
+        }
+
+        else -> {
+            "Drag on the canvas to use this tool."
+        }
+    }
 
 private const val MAX_PSD_IMPORT_BYTES = 256 * 1024 * 1024
 
@@ -1690,7 +1962,10 @@ private fun ColorDropThresholdBar(
 ) {
     Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 4.dp, modifier = modifier.padding(12.dp).widthIn(max = 420.dp)) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("ColorDrop threshold ${(threshold / 255f * 100).roundToInt()}%", style = MaterialTheme.typography.labelMedium)
+            Text(
+                stringResource(R.string.canvasscreen_color_drop_threshold, (threshold / 255f * 100).roundToInt()),
+                style = MaterialTheme.typography.labelMedium,
+            )
             Slider(
                 value = threshold,
                 onValueChange = onChange,
@@ -1700,7 +1975,7 @@ private fun ColorDropThresholdBar(
             )
             // Procreate's Continue Filling: further taps fill more areas with the same colour.
             TextButton(onClick = onContinueFilling) { Text(if (continueFilling) "Filling: tap areas" else "Continue filling") }
-            TextButton(onClick = onDone) { Text("Done") }
+            TextButton(onClick = onDone) { Text(stringResource(R.string.layeropacityoverlay_done)) }
         }
     }
 }
@@ -1743,9 +2018,9 @@ private fun ShapeEditBar(
                 style = MaterialTheme.typography.labelMedium,
             )
             if (edit.editing) {
-                TextButton(onClick = onDone) { Text("Done") }
+                TextButton(onClick = onDone) { Text(stringResource(R.string.layeropacityoverlay_done)) }
             } else {
-                TextButton(onClick = onEdit) { Text("Edit Shape") }
+                TextButton(onClick = onEdit) { Text(stringResource(R.string.canvasscreen_edit_shape)) }
             }
         }
     }
@@ -1773,7 +2048,8 @@ private fun ContextToolbar(
                         onInvert = viewModel::invertSelection,
                         onCopyPaste = viewModel.clipboard::copyAndPaste,
                         onMore = { openPanel(EditorPanel.SELECTION) },
-                        onClear = viewModel::clearSelection,
+                        onClear = { viewModel.clipboard.clear() },
+                        onDeselect = viewModel::clearSelection,
                         onColorFill = { viewModel.clipboard.fill(input.brushColor) },
                         onSave = {
                             if (!viewModel.savedSelections.save()) viewModel.notify("Make a selection first")
@@ -1831,7 +2107,9 @@ private fun ClipboardActions(
     ) {
         AssistChip(onClick = { viewModel.clipboard.copy(cut = true) }, label = { Text(if (hasSelection) "Cut" else "Cut layer") })
         AssistChip(onClick = { viewModel.clipboard.copy() }, label = { Text(if (hasSelection) "Copy" else "Copy layer") })
-        AssistChip(onClick = viewModel.clipboard::paste, enabled = hasClipboard, label = { Text("Paste as layer") })
+        AssistChip(onClick = viewModel.clipboard::paste, enabled = hasClipboard, label = {
+            Text(stringResource(R.string.canvasscreen_paste_as_layer))
+        })
     }
 }
 
@@ -1852,7 +2130,7 @@ private fun BrushAssistOptions(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(checked = input.quickShape, onCheckedChange = viewModel::setQuickShape)
             Spacer(Modifier.width(8.dp))
-            Text("QuickShape — hold at the end of a stroke to snap a line or ellipse", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.canvasscreen_quickshape_hold_at_the_end_of_a_stroke), style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -1864,7 +2142,7 @@ private fun TransformOptions(
     canvasView: ArtFlowCanvasView?,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Drag mode", style = MaterialTheme.typography.labelMedium)
+        Text(stringResource(R.string.canvasscreen_drag_mode), style = MaterialTheme.typography.labelMedium)
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1877,16 +2155,39 @@ private fun TransformOptions(
                 )
             }
         }
+        if (input.transformMode == com.artflow.studio.core.pixels.TransformQuad.Mode.WARP) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Advanced mesh", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+                Switch(
+                    checked = input.advancedMesh,
+                    onCheckedChange = viewModel::setAdvancedMesh,
+                    modifier = Modifier.semantics { contentDescription = "Advanced mesh" },
+                )
+            }
+        }
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            AssistChip(onClick = { canvasView?.transformActiveLayer(flipHorizontal = true) }, label = { Text("Flip H") })
-            AssistChip(onClick = { canvasView?.transformActiveLayer(flipVertical = true) }, label = { Text("Flip V") })
-            AssistChip(onClick = { canvasView?.transformActiveLayer(rotation = 45f) }, label = { Text("Rotate 45°") })
-            AssistChip(onClick = { canvasView?.transformActiveLayer(rotation = 90f) }, label = { Text("Rotate 90°") })
-            AssistChip(onClick = { canvasView?.transformActiveLayer(scaleFactor = 0.5f) }, label = { Text("Half size") })
-            AssistChip(onClick = { canvasView?.transformActiveLayer(scaleFactor = 2f) }, label = { Text("Double size") })
+            AssistChip(onClick = {
+                canvasView?.transformActiveLayer(flipHorizontal = true)
+            }, label = { Text(stringResource(R.string.editorchrome_flip_h)) })
+            AssistChip(onClick = {
+                canvasView?.transformActiveLayer(flipVertical = true)
+            }, label = { Text(stringResource(R.string.editorchrome_flip_v)) })
+            AssistChip(
+                onClick = { canvasView?.transformActiveLayer(rotation = 45f) },
+                label = { Text(stringResource(R.string.chip_rotate_45)) },
+            )
+            AssistChip(onClick = {
+                canvasView?.transformActiveLayer(rotation = 90f)
+            }, label = { Text(stringResource(R.string.editorchrome_rotate_90)) })
+            AssistChip(onClick = {
+                canvasView?.transformActiveLayer(scaleFactor = 0.5f)
+            }, label = { Text(stringResource(R.string.canvasscreen_half_size)) })
+            AssistChip(onClick = {
+                canvasView?.transformActiveLayer(scaleFactor = 2f)
+            }, label = { Text(stringResource(R.string.canvasscreen_double_size)) })
         }
     }
 }
@@ -1908,7 +2209,7 @@ private fun ErrorState(
         Spacer(Modifier.height(12.dp))
         Text(message, color = MaterialTheme.colorScheme.error)
         Spacer(Modifier.height(12.dp))
-        Button(onClick = onRetry) { Text("Retry") }
+        Button(onClick = onRetry) { Text(stringResource(R.string.canvasscreen_retry)) }
     }
 }
 

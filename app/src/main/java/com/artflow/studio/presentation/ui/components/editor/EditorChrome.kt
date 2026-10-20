@@ -7,9 +7,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -25,7 +23,12 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.R
 import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
@@ -33,6 +36,7 @@ import com.artflow.studio.core.symmetry.SymmetryEngine
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.presentation.ui.components.canvas.DragPreview
+import com.artflow.studio.presentation.ui.theme.LocalArtFlowFlags
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -47,6 +51,7 @@ fun ToolType.icon(): androidx.compose.ui.graphics.vector.ImageVector =
         ToolType.LIQUIFY -> Icons.Default.Waves
         ToolType.PAINT_BUCKET -> Icons.Default.FormatColorFill
         ToolType.GRADIENT -> Icons.Default.Gradient
+        ToolType.LASSO_FILL -> Icons.Default.FormatShapes
         ToolType.TEXT -> Icons.Default.TextFields
         ToolType.SHAPE -> Icons.Default.Category
         ToolType.SELECT_RECTANGLE -> Icons.Default.CropSquare
@@ -72,7 +77,7 @@ private val TOOL_GROUPS: List<Pair<String, List<ToolType>>> =
                 ToolType.HEALING,
                 ToolType.LIQUIFY,
             ),
-        "Fill" to listOf(ToolType.PAINT_BUCKET, ToolType.GRADIENT),
+        "Fill" to listOf(ToolType.PAINT_BUCKET, ToolType.GRADIENT, ToolType.LASSO_FILL),
         "Vector" to listOf(ToolType.TEXT, ToolType.SHAPE),
         "Select" to
             listOf(
@@ -128,6 +133,8 @@ fun ToolStrip(
                             val selected = tool == activeTool
                             IconButton(
                                 onClick = { onToolSelected(tool) },
+                                // Selection is also announced to screen readers, not only shown by colour.
+                                modifier = Modifier.semantics { this.selected = tool == activeTool },
                                 colors =
                                     IconButtonDefaults.iconButtonColors(
                                         containerColor =
@@ -157,6 +164,12 @@ fun ToolStrip(
     }
 }
 
+/** The brush's own size and opacity limits, which the size and opacity sliders span. */
+data class SliderRanges(
+    val size: ClosedFloatingPointRange<Float> = 1f..400f,
+    val opacity: ClosedFloatingPointRange<Float> = 0.01f..1f,
+)
+
 /** Size / opacity controls, shown for the tools where they mean something. */
 @Composable
 fun BrushOptionsRow(
@@ -170,6 +183,7 @@ fun BrushOptionsRow(
     onEraserSizeChanged: (Float) -> Unit,
     onToleranceChanged: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    ranges: SliderRanges = SliderRanges(),
 ) {
     Row(
         modifier =
@@ -181,7 +195,7 @@ fun BrushOptionsRow(
         when {
             tool == ToolType.ERASER ->
                 LabeledSlider(
-                    label = "Size",
+                    label = stringResource(R.string.size),
                     value = eraserSize,
                     range = 1f..400f,
                     onChange = onEraserSizeChanged,
@@ -189,24 +203,24 @@ fun BrushOptionsRow(
                 )
             tool.usesBrushSize() -> {
                 LabeledSlider(
-                    label = "Size",
+                    label = stringResource(R.string.size),
                     value = size,
-                    range = 1f..400f,
+                    range = ranges.size,
                     onChange = onSizeChanged,
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.width(12.dp))
                 LabeledSlider(
-                    label = "Opacity",
+                    label = stringResource(R.string.opacity),
                     value = opacity,
-                    range = 0.01f..1f,
+                    range = ranges.opacity,
                     onChange = onOpacityChanged,
                     modifier = Modifier.weight(1f),
                 )
             }
             tool == ToolType.PAINT_BUCKET || tool == ToolType.SELECT_MAGIC_WAND ->
                 LabeledSlider(
-                    label = "Tolerance",
+                    label = stringResource(R.string.editorchrome_tolerance),
                     value = tolerance.toFloat(),
                     range = 0f..255f,
                     onChange = { onToleranceChanged(it.toInt()) },
@@ -251,7 +265,7 @@ private fun LabeledSlider(
             value = value.coerceIn(range.start, range.endInclusive),
             onValueChange = onChange,
             valueRange = range,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = label },
         )
     }
 }
@@ -267,10 +281,7 @@ private fun LabeledSlider(
 fun GuidesOverlay(
     canvasWidth: Int,
     canvasHeight: Int,
-    scale: Float,
-    offsetX: Float,
-    offsetY: Float,
-    rotationDegrees: Float,
+    view: ViewTransform,
     symmetry: SymmetryEngine.Settings,
     showSymmetry: Boolean,
     perspective: PerspectiveGuide.Settings,
@@ -278,13 +289,17 @@ fun GuidesOverlay(
     selection: SelectionMask?,
     preview: DragPreview?,
     modifier: Modifier = Modifier,
+    selectionVisibility: Float = 0.28f,
 ) {
-    val dashPhase by rememberInfiniteTransition(label = "ants").animateFloat(
+    val reduceMotion = LocalArtFlowFlags.current.reduceMotion
+    val antsPhase by rememberInfiniteTransition(label = "ants").animateFloat(
         initialValue = 0f,
         targetValue = 24f,
         animationSpec = infiniteRepeatable(tween(durationMillis = 900)),
         label = "dash",
     )
+    // With Reduce motion the selection outline stays still.
+    val dashPhase = if (reduceMotion) 0f else antsPhase
 
     var maskBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(selection) {
@@ -295,37 +310,43 @@ fun GuidesOverlay(
             }
     }
 
+    val scale = view.scale
     Canvas(modifier = modifier) {
         val viewCentre = Offset(size.width / 2f, size.height / 2f)
         val canvasCentre = Offset(canvasWidth / 2f, canvasHeight / 2f)
 
         withTransform({
-            translate(viewCentre.x + offsetX, viewCentre.y + offsetY)
-            rotate(rotationDegrees, pivot = Offset.Zero)
+            translate(viewCentre.x + view.offsetX, viewCentre.y + view.offsetY)
+            rotate(view.rotationDegrees, pivot = Offset.Zero)
             scale(scale, scale, pivot = Offset.Zero)
             translate(-canvasCentre.x, -canvasCentre.y)
         }) {
             val hairline = (1.2f / scale).coerceAtLeast(0.2f)
 
             if (showSymmetry && symmetry.isActive()) {
+                // Primary axes are drawn 1.4 times as thick as the secondary ones.
+                val symmetryWidth = symmetry.lineStyle.widthInCanvasPixels(scale)
+                val symmetryColour = Color(symmetry.lineStyle.argb())
                 SymmetryEngine.guideLines(canvasWidth, canvasHeight, symmetry).forEach { line ->
                     drawLine(
-                        color = Color(0xCC2D9CDB),
+                        color = symmetryColour,
                         start = Offset(line.startX, line.startY),
                         end = Offset(line.endX, line.endY),
-                        strokeWidth = if (line.isPrimary) hairline * 1.4f else hairline,
+                        strokeWidth = if (line.isPrimary) symmetryWidth * 1.4f else symmetryWidth,
                     )
                 }
             }
 
             if (showPerspective && perspective.isActive()) {
+                val perspectiveWidth = perspective.lineStyle.widthInCanvasPixels(scale)
+                val perspectiveColour = Color(perspective.lineStyle.argb())
                 PerspectiveGuide.guideLines(perspective, canvasWidth, canvasHeight).forEach { line ->
                     val clipped = PerspectiveGuide.clipToCanvas(line, canvasWidth, canvasHeight) ?: return@forEach
                     drawLine(
-                        color = Color(0x9988CC66),
+                        color = Color(perspective.lineColor).copy(alpha = perspective.lineOpacity.coerceIn(0.05f, 1f)),
                         start = Offset(clipped.startX, clipped.startY),
                         end = Offset(clipped.endX, clipped.endY),
-                        strokeWidth = hairline,
+                        strokeWidth = hairline * perspective.lineThickness.coerceIn(0.5f, PerspectiveGuide.MAX_LINE_THICKNESS),
                     )
                 }
             }
@@ -339,7 +360,7 @@ fun GuidesOverlay(
                     dstSize =
                         androidx.compose.ui.unit
                             .IntSize(canvasWidth, canvasHeight),
-                    alpha = 0.28f,
+                    alpha = selectionVisibility.coerceIn(0f, 1f),
                 )
             }
 
@@ -384,7 +405,7 @@ fun GuidesOverlay(
                                 )
                             }
                         }
-                    ToolType.SELECT_FREEHAND, ToolType.SELECT_LASSO -> {
+                    ToolType.SELECT_FREEHAND, ToolType.SELECT_LASSO, ToolType.LASSO_FILL -> {
                         for (i in 1 until points.size) {
                             drawLine(
                                 color = Color.White,
@@ -487,11 +508,11 @@ fun QuickMenuSheet(
                 .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("View", style = MaterialTheme.typography.titleSmall)
+        Text(stringResource(R.string.editorchrome_view), style = MaterialTheme.typography.titleSmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AssistChip(onClick = onZoomOut, label = { Text("Zoom out") })
-            AssistChip(onClick = onZoomIn, label = { Text("Zoom in") })
-            AssistChip(onClick = onFit, label = { Text("Fit") })
+            AssistChip(onClick = onZoomOut, label = { Text(stringResource(R.string.editorchrome_zoom_out)) })
+            AssistChip(onClick = onZoomIn, label = { Text(stringResource(R.string.editorchrome_zoom_in)) })
+            AssistChip(onClick = onFit, label = { Text(stringResource(R.string.editorchrome_fit)) })
             AssistChip(onClick = onResetView, label = { Text("100%") })
         }
         Text(
@@ -500,29 +521,29 @@ fun QuickMenuSheet(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AssistChip(onClick = { onRotate(15f) }, label = { Text("View +15°") })
-            AssistChip(onClick = { onRotate(-15f) }, label = { Text("View -15°") })
+            AssistChip(onClick = { onRotate(15f) }, label = { Text(stringResource(R.string.editorchrome_view_15)) })
+            AssistChip(onClick = { onRotate(-15f) }, label = { Text(stringResource(R.string.editorchrome_view_15_2)) })
         }
 
-        Text("History", style = MaterialTheme.typography.titleSmall)
+        Text(stringResource(R.string.color_history), style = MaterialTheme.typography.titleSmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AssistChip(onClick = onUndo, enabled = canUndo, label = { Text("Undo") })
-            AssistChip(onClick = onRedo, enabled = canRedo, label = { Text("Redo") })
+            AssistChip(onClick = onUndo, enabled = canUndo, label = { Text(stringResource(R.string.undo)) })
+            AssistChip(onClick = onRedo, enabled = canRedo, label = { Text(stringResource(R.string.redo)) })
         }
 
-        Text("Canvas", style = MaterialTheme.typography.titleSmall)
+        Text(stringResource(R.string.editorchrome_canvas), style = MaterialTheme.typography.titleSmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AssistChip(onClick = { onRotateCanvas(90) }, label = { Text("Rotate 90°") })
-            AssistChip(onClick = { onRotateCanvas(-90) }, label = { Text("Rotate -90°") })
-            AssistChip(onClick = { onFlipCanvas(false) }, label = { Text("Flip H") })
-            AssistChip(onClick = { onFlipCanvas(true) }, label = { Text("Flip V") })
+            AssistChip(onClick = { onRotateCanvas(90) }, label = { Text(stringResource(R.string.editorchrome_rotate_90)) })
+            AssistChip(onClick = { onRotateCanvas(-90) }, label = { Text(stringResource(R.string.editorchrome_rotate_90_2)) })
+            AssistChip(onClick = { onFlipCanvas(false) }, label = { Text(stringResource(R.string.editorchrome_flip_h)) })
+            AssistChip(onClick = { onFlipCanvas(true) }, label = { Text(stringResource(R.string.editorchrome_flip_v)) })
         }
 
-        Text("Selection", style = MaterialTheme.typography.titleSmall)
+        Text(stringResource(R.string.editorchrome_selection), style = MaterialTheme.typography.titleSmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AssistChip(onClick = onSelectAll, label = { Text("Select all") })
-            AssistChip(onClick = onInvertSelection, label = { Text("Invert") })
-            AssistChip(onClick = onClearSelection, label = { Text("Clear") })
+            AssistChip(onClick = onSelectAll, label = { Text(stringResource(R.string.editorchrome_select_all)) })
+            AssistChip(onClick = onInvertSelection, label = { Text(stringResource(R.string.chip_invert)) })
+            AssistChip(onClick = onClearSelection, label = { Text(stringResource(R.string.chip_clear)) })
         }
     }
 }

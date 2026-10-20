@@ -26,11 +26,24 @@ class ModelRenderer : GLSurfaceView.Renderer {
     @Volatile
     var lighting: ModelLighting = ModelLighting()
 
+    /** Procreate's Show 3D mesh: the model's triangle edges drawn over it. */
+    @Volatile
+    var showMesh: Boolean = false
+
     private val pendingMesh = AtomicReference<Mesh?>(null)
     private val pendingTexture = AtomicReference<Bitmap?>(null)
     private var program = 0
+    private var wireProgram = 0
     private var buffers = IntArray(3)
     private var corners = 0
+
+    /** The mesh's edges as line vertices, built on the GL thread the first time the mesh is shown. */
+    private val wireBuffer = IntArray(1)
+    private var wireVertices = 0
+    private var wireSource: Mesh? = null
+
+    /** The mesh whose buffers are on the GPU now (set on the GL thread). */
+    private var uploadedMesh: Mesh? = null
     private var texture = 0
     private var width = 1
     private var height = 1
@@ -56,7 +69,10 @@ class ModelRenderer : GLSurfaceView.Renderer {
         config: EGLConfig?,
     ) {
         program = program(VERTEX, FRAGMENT)
+        wireProgram = program(WIRE_VERTEX, WIRE_FRAGMENT)
         GLES20.glGenBuffers(3, buffers, 0)
+        GLES20.glGenBuffers(1, wireBuffer, 0)
+        wireSource = null
         val ids = IntArray(1)
         GLES20.glGenTextures(1, ids, 0)
         texture = ids[0]
@@ -72,6 +88,7 @@ class ModelRenderer : GLSurfaceView.Renderer {
         GLES20.glEnable(GLES20.GL_DEPTH_TEST)
         // A recreated context lost every upload, so the mesh is sent again.
         corners = 0
+        uploadedMesh = null
         lastMesh?.let { pendingMesh.compareAndSet(null, it) }
     }
 
@@ -113,13 +130,39 @@ class ModelRenderer : GLSurfaceView.Renderer {
         GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "uPower"), light.highlightPower())
         GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "uSpecular"), light.highlightStrength())
         GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "uExposure"), light.exposure)
+        val second = light.secondDirection()
+        GLES20.glUniform3f(GLES20.glGetUniformLocation(program, "uLight2Dir"), second.x, second.y, second.z)
+        GLES20.glUniform1f(
+            GLES20.glGetUniformLocation(program, "uLight2"),
+            light.secondIntensity.coerceIn(0f, ModelLighting.MAX_INTENSITY),
+        )
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture)
         GLES20.glUniform1i(GLES20.glGetUniformLocation(program, "uTexture"), 0)
         attribute("aPosition", buffers[0], 3)
         attribute("aNormal", buffers[1], 3)
         attribute("aUv", buffers[2], 2)
+        // The surface sits a little behind its own edges so the wireframe is never hidden by it.
+        GLES20.glEnable(GLES20.GL_POLYGON_OFFSET_FILL)
+        GLES20.glPolygonOffset(1f, 1f)
         GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, corners)
+        GLES20.glDisable(GLES20.GL_POLYGON_OFFSET_FILL)
+        if (showMesh) drawWire()
+    }
+
+    private fun drawWire() {
+        val mesh = uploadedMesh ?: return
+        if (wireSource !== mesh) {
+            val edges = edgeVertices(mesh.positions, corners)
+            GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, wireBuffer[0])
+            GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, edges.size * 4, floats(edges), GLES20.GL_STATIC_DRAW)
+            wireVertices = edges.size / 3
+            wireSource = mesh
+        }
+        GLES20.glUseProgram(wireProgram)
+        GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(wireProgram, "uMvp"), 1, false, mvp, 0)
+        attribute("aPosition", wireBuffer[0], 3, wireProgram)
+        GLES20.glDrawArrays(GLES20.GL_LINES, 0, wireVertices)
     }
 
     private fun upload(mesh: Mesh) {
@@ -128,14 +171,16 @@ class ModelRenderer : GLSurfaceView.Renderer {
             GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, values.size * 4, floats(values), GLES20.GL_STATIC_DRAW)
         }
         corners = mesh.triangleCount * 3
+        uploadedMesh = mesh
     }
 
     private fun attribute(
         name: String,
         buffer: Int,
         size: Int,
+        owner: Int = program,
     ) {
-        val location = GLES20.glGetAttribLocation(program, name)
+        val location = GLES20.glGetAttribLocation(owner, name)
         GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, buffer)
         GLES20.glEnableVertexAttribArray(location)
         GLES20.glVertexAttribPointer(location, size, GLES20.GL_FLOAT, false, 0, 0)
@@ -179,6 +224,21 @@ class ModelRenderer : GLSurfaceView.Renderer {
     }
 
     private companion object {
+        const val WIRE_VERTEX = """
+            uniform mat4 uMvp;
+            attribute vec3 aPosition;
+            void main() {
+                gl_Position = uMvp * vec4(aPosition, 1.0);
+            }
+        """
+
+        const val WIRE_FRAGMENT = """
+            precision mediump float;
+            void main() {
+                gl_FragColor = vec4(0.36, 0.72, 1.0, 1.0);
+            }
+        """
+
         const val NEAR = 0.05f
         const val FAR = 50f
         const val BACKGROUND = 0.16f
@@ -211,6 +271,8 @@ class ModelRenderer : GLSurfaceView.Renderer {
             uniform float uPower;
             uniform float uSpecular;
             uniform float uExposure;
+            uniform vec3 uLight2Dir;
+            uniform float uLight2;
             varying vec3 vNormal;
             varying vec3 vPosition;
             varying vec2 vUv;
@@ -224,10 +286,33 @@ class ModelRenderer : GLSurfaceView.Renderer {
                 float highlight = pow(max(dot(normal, normalize(uLightDir + toEye)), 0.0), uPower) * uSpecular * diffuse;
                 // Metals have no diffuse body colour; their highlights take the surface colour instead.
                 vec3 highlightColour = mix(uLightColour, colour.rgb * uLightColour, uMetallic);
-                vec3 body = colour.rgb * (uAmbient + diffuse * uLightColour * (1.0 - 0.8 * uMetallic));
+                float second = max(dot(normal, uLight2Dir), 0.0) * uLight2;
+                vec3 body = colour.rgb * (uAmbient + (diffuse * uLightColour + second) * (1.0 - 0.8 * uMetallic));
                 vec3 lit = body + highlight * highlightColour * 4.0;
                 gl_FragColor = vec4(clamp(lit * uExposure, 0.0, 1.0), 1.0);
             }
         """
     }
+}
+
+/** Three edges of two vertices of three floats. */
+private const val EDGE_FLOATS = 18
+
+/** Each of the first [corners] / 3 triangles' three edges as pairs of line vertices (x, y, z each). */
+internal fun edgeVertices(
+    positions: FloatArray,
+    corners: Int,
+): FloatArray {
+    val triangles = corners / 3
+    val out = FloatArray(triangles * EDGE_FLOATS)
+    for (t in 0 until triangles) {
+        for (edge in 0 until 3) {
+            val from = (t * 3 + edge) * 3
+            val to = (t * 3 + (edge + 1) % 3) * 3
+            val at = t * EDGE_FLOATS + edge * 6
+            positions.copyInto(out, at, from, from + 3)
+            positions.copyInto(out, at + 3, to, to + 3)
+        }
+    }
+    return out
 }

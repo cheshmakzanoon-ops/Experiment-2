@@ -61,4 +61,14 @@ class ModelLightingTest {
     private companion object {
         const val EPSILON = 1e-4f
     }
+
+    @Test
+    fun aSecondLightBrightensTheSideItFacesAndPresetsKeepIt() {
+        val back = Vec3(0f, 0f, -1f)
+        val one = ModelLighting(azimuth = 0f, elevation = 0f, ambient = 0.2f)
+        val two = one.copy(secondAzimuth = 180f, secondElevation = 0f, secondIntensity = 0.5f)
+        assertEquals(one.shade(back) + 0.5f, two.shade(back), EPSILON)
+        val studio = ModelLighting.presets.first()
+        assertEquals(0.5f, studio.appliedTo(two).secondIntensity, EPSILON)
+    }
 }

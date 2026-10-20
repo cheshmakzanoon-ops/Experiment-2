@@ -1,0 +1,4 @@
+# Known harness limitations for compile.sh / unit.sh -- one entry per line:  <path relative to the repository>|<exact compiler message>
+# A compile error that matches an entry is reported as "suppressed" instead of failing the run.  Leave empty unless a CI-green
+# line of code is rejected by the harness only because a library is approximated (Compose desktop jars / hand-written androidx
+# shims, see README.md).  Prefer fixing the shim in shims/src/ over adding an entry here.

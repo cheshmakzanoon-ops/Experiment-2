@@ -24,11 +24,13 @@ import com.artflow.studio.core.export.ExportResult
 import com.artflow.studio.core.export.FitMode
 import com.artflow.studio.core.export.GifEncoder
 import com.artflow.studio.core.export.PdfPageSize
+import com.artflow.studio.core.export.ProcreateWriter
 import com.artflow.studio.core.export.PsdCodec
 import com.artflow.studio.core.export.PsdFolders
 import com.artflow.studio.core.export.TiffCodec
 import com.artflow.studio.core.pixels.BlendModes
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.render.LayerGroups
 import com.artflow.studio.core.three.ObjExport
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.renderer.BitmapPixelBridge
@@ -146,6 +148,10 @@ class ArtworkExporter
                                 buildLayerZip(prepared, layers, projectName, options)
                             }
 
+                            ExportFormat.PROCREATE -> {
+                                buildProcreate(prepared, layers, projectName, options, hasAdjustmentLayers, groups)
+                            }
+
                             ExportFormat.MODEL_OBJ -> {
                                 buildModelZip(projectId, flatten(prepared, options), options)
                             }
@@ -167,7 +173,7 @@ class ArtworkExporter
                             width = prepared.width,
                             height = prepared.height,
                             warning =
-                                if (options.format == ExportFormat.PSD && hasAdjustmentLayers) {
+                                if (layeredDocument(options.format) && hasAdjustmentLayers) {
                                     "Adjustment/filter effects are baked into Artwork; original pixel layers are included hidden."
                                 } else {
                                     null
@@ -426,7 +432,9 @@ class ArtworkExporter
                         layerOf = { it.layer },
                         groups = groups,
                         includeHidden = options.includeHiddenLayers,
-                        header = { group -> PsdCodec.PsdLayer.groupHeader(group.name, opacity(group), shown(group), group.blendMode) },
+                        header = { group ->
+                            PsdCodec.PsdLayer.groupHeader(group.name, opacity(group), shown(group), PsdFolders.headerBlend(group))
+                        },
                     ) { entry ->
                         PsdCodec.PsdLayer(
                             name = entry.name,
@@ -455,6 +463,60 @@ class ArtworkExporter
                 composite = flatten(composite, options),
                 dpi = options.dpi,
                 useRle = options.psdUseRle,
+            )
+        }
+
+        /** Formats that store each layer as a layer of the file. */
+        private fun layeredDocument(format: ExportFormat): Boolean = format == ExportFormat.PSD || format == ExportFormat.PROCREATE
+
+        /**
+         * The layers as a Procreate document, nested as the groups are. Like PSD, a stack with adjustment
+         * effects keeps its pixel layers hidden and adds the rendered artwork on top; a flattened export
+         * shows the background colour.
+         */
+        private fun buildProcreate(
+            composite: PixelBuffer,
+            layers: List<LayerRaster>,
+            projectName: String,
+            options: ExportOptions,
+            hasAdjustmentLayers: Boolean,
+            groups: List<Layer>,
+        ): ByteArray {
+            fun shown(layer: Layer) = !hasAdjustmentLayers && (options.includeHiddenLayers || layer.isVisible)
+            val rendered: List<ProcreateWriter.Node> =
+                if (hasAdjustmentLayers) {
+                    listOf(ProcreateWriter.Layer("Artwork (rendered effects)", composite))
+                } else {
+                    emptyList()
+                }
+            val tree: List<ProcreateWriter.Node> =
+                ProcreateWriter.nest(
+                    items = layers,
+                    layerOf = { it.layer },
+                    groups = groups,
+                    group = { group, children ->
+                        ProcreateWriter.Group(group.name, group.opacity, shown(group), children)
+                    },
+                    leaf = { entry ->
+                        ProcreateWriter.Layer(
+                            name = entry.name,
+                            pixels = prepare(entry.buffer, composite.width, composite.height, options),
+                            opacity = entry.layer.opacity,
+                            visible = shown(entry.layer),
+                            blendMode = entry.layer.blendMode,
+                            clipped = entry.layer.isClippingMask,
+                            alphaLocked = entry.layer.isAlphaLocked,
+                        )
+                    },
+                )
+            return ProcreateWriter.write(
+                width = composite.width,
+                height = composite.height,
+                nodes = rendered + tree,
+                composite = composite,
+                background = if (options.flattenOntoBackground) options.outputBackground else null,
+                dpi = options.dpi,
+                name = projectName,
             )
         }
 

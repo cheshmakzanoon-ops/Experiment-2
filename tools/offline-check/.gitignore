@@ -1,0 +1,8 @@
+# Everything setup.sh downloads or the scripts generate stays out of git.
+libs/
+dl/
+out/
+work/
+gradle-home/
+gen/
+probe/

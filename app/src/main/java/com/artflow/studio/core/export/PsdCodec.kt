@@ -1,5 +1,6 @@
 package com.artflow.studio.core.export
 
+import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.pixels.Channels
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.domain.model.layer.BlendMode
@@ -29,6 +30,9 @@ object PsdCodec {
     private const val DEPTH_8 = 8
     private const val DEPTH_16 = 16
 
+    /** The most channels a PSD may have (the format's limit), which bounds every per-channel allocation. */
+    private const val MAX_CHANNELS = 56
+
     private const val COMPRESSION_RAW = 0
     private const val COMPRESSION_RLE = 1
     private const val COMPRESSION_ZIP = 2
@@ -38,7 +42,12 @@ object PsdCodec {
     private const val CHANNEL_GREEN = 1
     private const val CHANNEL_BLUE = 2
     private const val CHANNEL_ALPHA = -1
+    private const val CHANNEL_USER_MASK = -2
     private const val LSCT_LENGTH = 12
+    private const val MASK_HEADER_LENGTH = 18
+    private const val MASK_RELATIVE = 0x01
+    private const val MASK_DISABLED = 0x02
+    private const val MASK_INVERTED = 0x04
     private const val PASS_THROUGH_KEY = "pass"
 
     /** A layer to be written to (or read from) a PSD file. */
@@ -54,6 +63,8 @@ object PsdCodec {
         val isClippingMask: Boolean = false,
         /** Folder structure; folder records carry no pixels. */
         val section: Section = Section.NONE,
+        /** The layer's mask as read from a file, in document coordinates; the pixels are not pre-masked. */
+        val mask: PsdMask? = null,
     ) {
         companion object {
             private val NO_PIXELS = PixelBuffer(1, 1)
@@ -92,6 +103,49 @@ object PsdCodec {
     }
 
     const val GROUP_END_NAME = "</Layer group>"
+
+    /**
+     * A layer mask read from a PSD file, in document coordinates. [coverage] holds one 0..255 value
+     * per pixel of its rectangle (255 reveals); pixels outside the rectangle take [outside].
+     */
+    data class PsdMask(
+        val left: Int,
+        val top: Int,
+        val width: Int,
+        val height: Int,
+        val coverage: ByteArray,
+        val outside: Int,
+    ) {
+        /** The mask laid over a canvas, with the document's top-left corner at ([offsetX], [offsetY]). */
+        fun coverageFor(
+            canvasWidth: Int,
+            canvasHeight: Int,
+            offsetX: Int,
+            offsetY: Int,
+        ): ByteArray {
+            val out = ByteArray(canvasWidth * canvasHeight) { outside.toByte() }
+            for (y in 0 until height) {
+                val targetY = offsetY + top + y
+                if (targetY !in 0 until canvasHeight) continue
+                for (x in 0 until width) {
+                    val targetX = offsetX + left + x
+                    if (targetX !in 0 until canvasWidth) continue
+                    out[targetY * canvasWidth + targetX] = coverage[y * width + x]
+                }
+            }
+            return out
+        }
+    }
+
+    /** The fixed part of a layer mask record: its rectangle, default value and flags. */
+    private data class MaskHeader(
+        val top: Int,
+        val left: Int,
+        val bottom: Int,
+        val right: Int,
+        val defaultValue: Int,
+        val flags: Int,
+    )
 
     /** A parsed PSD document. */
     data class PsdDocument(
@@ -340,7 +394,8 @@ object PsdCodec {
         val width = reader.readInt()
         val depth = reader.readShort()
         val colorMode = reader.readShort()
-        if (width <= 0 || height <= 0 || width > 30_000 || height > 30_000) return null
+        if (!CanvasOperations.isSizeSafe(width, height)) return null
+        if (channelCount !in 1..MAX_CHANNELS) return null
         if (colorMode !in setOf(COLOR_MODE_RGB, COLOR_MODE_GRAYSCALE, COLOR_MODE_CMYK)) return null
 
         // Colour mode data.
@@ -364,7 +419,13 @@ object PsdCodec {
             val layerInfoLength = reader.readInt()
             if (layerInfoLength > 0) {
                 val layerInfoEnd = reader.position + layerInfoLength
-                layers += readLayerRecords(reader, width, height, channelCount, depth, colorMode)
+                // A damaged layer record is a damaged file: the document reads as not a PSD, as documented.
+                layers +=
+                    try {
+                        readLayerRecords(reader, width, height, channelCount, depth, colorMode)
+                    } catch (damaged: IllegalArgumentException) {
+                        return null
+                    }
                 reader.position = layerInfoEnd
             }
             reader.position = sectionEnd
@@ -435,6 +496,7 @@ object PsdCodec {
             val channels: List<Pair<Int, Int>>,
             val isClippingMask: Boolean,
             val section: Section,
+            val mask: MaskHeader?,
         )
 
         val pending = mutableListOf<Pending>()
@@ -445,6 +507,7 @@ object PsdCodec {
             val bottom = reader.readInt()
             val right = reader.readInt()
             val layerChannelCount = reader.readShort()
+            require(layerChannelCount <= MAX_CHANNELS) { "A PSD layer has too many channels" }
             val channels =
                 (0 until layerChannelCount).map {
                     val id = reader.readShort().toShort().toInt()
@@ -463,9 +526,18 @@ object PsdCodec {
             var name = "Layer ${i + 1}"
             var section = Section.NONE
             var folderBlend: BlendMode? = null
+            var maskHeader: MaskHeader? = null
             if (extraLength > 0 && reader.remaining() >= 8) {
                 val maskLength = reader.readInt()
-                if (maskLength > 0) reader.skip(maskLength)
+                val maskStart = reader.position
+                if (maskLength >= MASK_HEADER_LENGTH && reader.remaining() >= MASK_HEADER_LENGTH) {
+                    val maskTop = reader.readInt()
+                    val maskLeft = reader.readInt()
+                    val maskBottom = reader.readInt()
+                    val maskRight = reader.readInt()
+                    maskHeader = MaskHeader(maskTop, maskLeft, maskBottom, maskRight, reader.readByte(), reader.readByte())
+                }
+                reader.position = (maskStart + maskLength.coerceAtLeast(0)).coerceAtMost(extraEnd)
                 val blendingRangesLength = reader.readInt()
                 if (blendingRangesLength > 0) reader.skip(blendingRangesLength)
                 if (reader.position < extraEnd) {
@@ -512,6 +584,7 @@ object PsdCodec {
                     channels = channels,
                     isClippingMask = isClippingMask,
                     section = section,
+                    mask = maskHeader,
                 )
         }
 
@@ -536,16 +609,25 @@ object PsdCodec {
                 record.channels.forEach { (_, length) -> reader.skip(max(0, length)) }
                 return@forEach
             }
+            require(CanvasOperations.isSizeSafe(layerWidth, layerHeight)) { "A PSD layer is too large" }
 
             val planes = HashMap<Int, ByteArray>()
+            val mask = record.mask
+            val maskWidth = (mask?.let { it.right - it.left } ?: 0).coerceAtLeast(0)
+            val maskHeight = (mask?.let { it.bottom - it.top } ?: 0).coerceAtLeast(0)
             record.channels.forEach { (channelId, length) ->
                 val start = reader.position
-                planes[channelId] = readChannel(reader, layerWidth, layerHeight, depth, length)
+                if (channelId != CHANNEL_USER_MASK) {
+                    planes[channelId] = readChannel(reader, layerWidth, layerHeight, depth, length)
+                } else if (maskWidth > 0 && maskHeight > 0) {
+                    // The mask has its own rectangle, which need not match the layer's.
+                    planes[channelId] = readChannel(reader, maskWidth, maskHeight, depth, length)
+                }
                 // Trust the declared length over where the decoder ended up.
                 reader.position = start + length
             }
 
-            val buffer = PixelBuffer(max(1, layerWidth), max(1, layerHeight))
+            val buffer = PixelBuffer(layerWidth, layerHeight)
             val alpha = planes[CHANNEL_ALPHA]
             if (colorMode == COLOR_MODE_CMYK) {
                 for (index in buffer.pixels.indices) {
@@ -565,8 +647,9 @@ object PsdCodec {
                 val blue = planes[CHANNEL_BLUE]
                 for (index in buffer.pixels.indices) {
                     val r = channelValue(red, index, colorMode)
-                    val g = channelValue(green, index, colorMode)
-                    val b = channelValue(blue, index, colorMode)
+                    // A grayscale document has one gray plane, which fills all three colour channels.
+                    val g = if (colorMode == COLOR_MODE_GRAYSCALE) r else channelValue(green, index, colorMode)
+                    val b = if (colorMode == COLOR_MODE_GRAYSCALE) r else channelValue(blue, index, colorMode)
                     val a = alpha?.getOrNull(index)?.toInt()?.and(0xFF) ?: 255
                     buffer.pixels[index] = Channels.argb(a, r, g, b)
                 }
@@ -582,9 +665,41 @@ object PsdCodec {
                     left = record.left,
                     top = record.top,
                     isClippingMask = record.isClippingMask,
+                    mask = mask?.let { maskOf(it, record.left, record.top, planes[CHANNEL_USER_MASK]) },
                 )
         }
         return layers
+    }
+
+    /** Places a mask record in document coordinates; null when the mask is disabled and so has no effect. */
+    private fun maskOf(
+        header: MaskHeader,
+        layerLeft: Int,
+        layerTop: Int,
+        plane: ByteArray?,
+    ): PsdMask? {
+        if ((header.flags and MASK_DISABLED) != 0) return null
+        val relative = (header.flags and MASK_RELATIVE) != 0
+        val originX = if (relative) layerLeft else 0
+        val originY = if (relative) layerTop else 0
+        val width = (header.right - header.left).coerceAtLeast(0)
+        val height = (header.bottom - header.top).coerceAtLeast(0)
+        val invert = (header.flags and MASK_INVERTED) != 0
+        fun adjust(value: Int): Int = if (invert) 255 - value else value
+        // Pixels the file did not store take the mask's default value.
+        val coverage =
+            ByteArray(width * height) { index ->
+                val stored = plane?.getOrNull(index)?.toInt()?.and(0xFF)
+                adjust(stored ?: header.defaultValue).toByte()
+            }
+        return PsdMask(
+            left = originX + header.left,
+            top = originY + header.top,
+            width = width,
+            height = height,
+            coverage = coverage,
+            outside = adjust(header.defaultValue),
+        )
     }
 
     private fun readImageData(
@@ -596,64 +711,7 @@ object PsdCodec {
         colorMode: Int,
     ): PixelBuffer? {
         val compression = reader.readShort()
-        val planes = HashMap<Int, ByteArray>()
-        val channelIds =
-            (0 until channelCount).map { index ->
-                when (colorMode) {
-                    COLOR_MODE_GRAYSCALE -> {
-                        if (index == 0) CHANNEL_RED else CHANNEL_ALPHA
-                    }
-
-                    COLOR_MODE_CMYK -> {
-                        index
-                    }
-
-                    else -> {
-                        when (index) {
-                            0 -> CHANNEL_RED
-                            1 -> CHANNEL_GREEN
-                            2 -> CHANNEL_BLUE
-                            else -> CHANNEL_ALPHA
-                        }
-                    }
-                }
-            }
-
-        when (compression) {
-            COMPRESSION_RAW -> {
-                channelIds.forEach { id ->
-                    val size = width * height * (if (depth == 16) 2 else 1)
-                    planes[id] = reader.readBytes(min(size, reader.remaining()))
-                }
-            }
-
-            COMPRESSION_RLE -> {
-                // The byte-count table lists every row of every channel, then the row data follows.
-                repeat(channelCount * height) { reader.readShort() }
-                channelIds.forEach { id ->
-                    val out = ByteArray(width * height)
-                    for (row in 0 until height) {
-                        val rowBytes = decodeRleRow(reader, width)
-                        System.arraycopy(rowBytes, 0, out, row * width, min(width, rowBytes.size))
-                    }
-                    planes[id] = out
-                }
-            }
-
-            COMPRESSION_ZIP, COMPRESSION_ZIP_PREDICTION -> {
-                channelIds.forEach { id ->
-                    // ZIP channels carry their own length prefix.
-                    val size = reader.readInt()
-                    if (size <= 0 || reader.remaining() < size) return@forEach
-                    val compressed = reader.readBytes(size)
-                    planes[id] = inflate(compressed)
-                }
-            }
-
-            else -> {
-                return null
-            }
-        }
+        val planes = readMergedPlanes(reader, compression, channelCount, width, height, depth, colorMode) ?: return null
 
         val buffer = PixelBuffer(width, height)
         val red = planes[CHANNEL_RED]
@@ -679,8 +737,9 @@ object PsdCodec {
         }
         for (index in buffer.pixels.indices) {
             val r = channelValue(red, index, colorMode)
-            val g = channelValue(green, index, colorMode)
-            val b = channelValue(blue, index, colorMode)
+            // A grayscale document has one gray plane, which fills all three colour channels.
+            val g = if (colorMode == COLOR_MODE_GRAYSCALE) r else channelValue(green, index, colorMode)
+            val b = if (colorMode == COLOR_MODE_GRAYSCALE) r else channelValue(blue, index, colorMode)
             val a = alpha?.getOrNull(index)?.toInt()?.and(0xFF) ?: 255
             buffer.pixels[index] = Channels.argb(a, r, g, b)
         }
@@ -718,20 +777,27 @@ object PsdCodec {
 
             COMPRESSION_RLE -> {
                 repeat(height) { reader.readShort() } // row byte counts
-                val out = ByteArray(width * height)
+                // A 16-bit row holds two bytes per pixel, so it is decoded at its full width before downsampling.
+                val bytesPerSample = if (depth == DEPTH_16) 2 else 1
+                val rowBytes = width * bytesPerSample
+                val out = ByteArray(rowBytes * height)
                 for (row in 0 until height) {
-                    val rowBytes = decodeRleRow(reader, width)
-                    System.arraycopy(rowBytes, 0, out, row * width, min(width, rowBytes.size))
+                    val decoded = decodeRleRow(reader, rowBytes)
+                    System.arraycopy(decoded, 0, out, row * rowBytes, min(rowBytes, decoded.size))
                 }
-                downsample(out, width, height, 1)
+                downsample(out, width, height, depth)
             }
 
             COMPRESSION_ZIP, COMPRESSION_ZIP_PREDICTION -> {
-                val size = reader.readInt()
-                if (size <= 0 || reader.remaining() < size) {
+                // A layer channel is one zlib stream whose length is the record's declared length, with no size prefix.
+                val size = min(declaredLength - 2, reader.remaining())
+                if (size <= 0) {
                     ByteArray(width * height)
                 } else {
-                    downsample(inflate(reader.readBytes(size)), width, height, depth)
+                    val bytesPerSample = if (depth == DEPTH_16) 2 else 1
+                    val plane = inflate(reader.readBytes(size), width * height * bytesPerSample).copyOf(width * height * bytesPerSample)
+                    if (compression == COMPRESSION_ZIP_PREDICTION) undoPrediction(plane, width, height, bytesPerSample)
+                    downsample(plane, width, height, depth)
                 }
             }
 
@@ -914,19 +980,135 @@ object PsdCodec {
         return out
     }
 
+    /**
+     * The merged image's channel planes, one byte per sample: 16-bit samples keep their high byte.
+     * Null when the compression is not one this reader decodes.
+     */
+    private fun readMergedPlanes(
+        reader: PsdReader,
+        compression: Int,
+        channelCount: Int,
+        width: Int,
+        height: Int,
+        depth: Int,
+        colorMode: Int,
+    ): HashMap<Int, ByteArray>? {
+        val planes = HashMap<Int, ByteArray>()
+        val channelIds =
+            (0 until channelCount).map { index ->
+                when (colorMode) {
+                    COLOR_MODE_GRAYSCALE -> {
+                        if (index == 0) CHANNEL_RED else CHANNEL_ALPHA
+                    }
+
+                    COLOR_MODE_CMYK -> {
+                        index
+                    }
+
+                    else -> {
+                        when (index) {
+                            0 -> CHANNEL_RED
+                            1 -> CHANNEL_GREEN
+                            2 -> CHANNEL_BLUE
+                            else -> CHANNEL_ALPHA
+                        }
+                    }
+                }
+            }
+
+        val bytesPerSample = if (depth == 16) 2 else 1
+        when (compression) {
+            COMPRESSION_RAW -> {
+                channelIds.forEach { id ->
+                    val size = width * height * bytesPerSample
+                    planes[id] = reader.readBytes(min(size, reader.remaining()))
+                }
+            }
+
+            COMPRESSION_RLE -> {
+                // The byte-count table lists every row of every channel, then the row data follows.
+                repeat(channelCount * height) { reader.readShort() }
+                val rowBytes = width * bytesPerSample
+                channelIds.forEach { id ->
+                    val out = ByteArray(rowBytes * height)
+                    for (row in 0 until height) {
+                        val decoded = decodeRleRow(reader, rowBytes)
+                        System.arraycopy(decoded, 0, out, row * rowBytes, min(rowBytes, decoded.size))
+                    }
+                    planes[id] = out
+                }
+            }
+
+            COMPRESSION_ZIP, COMPRESSION_ZIP_PREDICTION -> {
+                // The merged image is one zlib stream: each channel's whole plane follows the one before it.
+                val planeBytes = width * height * bytesPerSample
+                val stream = inflate(reader.readBytes(reader.remaining()), planeBytes * channelIds.size)
+                if (stream.size < planeBytes * channelIds.size) return null
+                channelIds.forEachIndexed { index, id ->
+                    val plane = stream.copyOfRange(index * planeBytes, (index + 1) * planeBytes)
+                    if (compression == COMPRESSION_ZIP_PREDICTION) undoPrediction(plane, width, height, bytesPerSample)
+                    planes[id] = plane
+                }
+            }
+
+            else -> {
+                return null
+            }
+        }
+
+        // 16-bit samples: the reader works with one byte per channel, so keep each sample's high byte.
+        if (bytesPerSample == 2) {
+            for (id in planes.keys.toList()) planes[id] = highBytes(planes.getValue(id))
+        }
+        return planes
+    }
+
     private fun decodeRleRow(
         reader: PsdReader,
         width: Int,
     ): ByteArray = unpackBits(reader, width)
 
-    private fun inflate(bytes: ByteArray): ByteArray =
+    /** Keeps the high byte of each 16-bit sample. */
+    private fun highBytes(samples: ByteArray): ByteArray = ByteArray(samples.size / 2) { samples[it * 2] }
+
+    /**
+     * Undoes ZIP prediction: each sample was stored as its difference from the sample before it in its row,
+     * modulo the sample size. A 16-bit sample is a big-endian pair of bytes, so its carry crosses the high byte.
+     */
+    private fun undoPrediction(
+        plane: ByteArray,
+        width: Int,
+        height: Int,
+        bytesPerSample: Int,
+    ) {
+        val rowBytes = width * bytesPerSample
+        for (row in 0 until height) {
+            val start = row * rowBytes
+            for (x in 1 until width) {
+                val at = start + x * bytesPerSample
+                val before = at - bytesPerSample
+                var carry = 0
+                for (b in bytesPerSample - 1 downTo 0) {
+                    val sum = (plane[at + b].toInt() and 0xFF) + (plane[before + b].toInt() and 0xFF) + carry
+                    plane[at + b] = sum.toByte()
+                    carry = sum ushr 8
+                }
+            }
+        }
+    }
+
+    /** Inflates a ZIP channel, stopping at [limit] bytes: a plane never needs more than its pixels, so a bomb cannot grow it. */
+    private fun inflate(
+        bytes: ByteArray,
+        limit: Int,
+    ): ByteArray =
         try {
             val inflater = java.util.zip.Inflater()
             inflater.setInput(bytes)
-            val out = ByteArrayOutputStream(bytes.size * 4)
+            val out = ByteArrayOutputStream(min(limit, bytes.size * 4))
             val buffer = ByteArray(8192)
-            while (!inflater.finished()) {
-                val read = inflater.inflate(buffer)
+            while (!inflater.finished() && out.size() < limit) {
+                val read = inflater.inflate(buffer, 0, min(buffer.size, limit - out.size()))
                 if (read == 0) break
                 out.write(buffer, 0, read)
             }
@@ -1011,7 +1193,11 @@ object PsdCodec {
     class PsdReader(
         private val bytes: ByteArray,
     ) {
+        /** Always within the data: a declared length can point anywhere, and the readers must not index past either end. */
         var position: Int = 0
+            set(value) {
+                field = value.coerceIn(0, bytes.size)
+            }
 
         fun remaining(): Int = bytes.size - position
 

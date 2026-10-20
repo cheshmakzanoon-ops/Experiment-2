@@ -23,6 +23,7 @@ enum class ToolType(
     LIQUIFY("Liquify", ToolGroup.PAINT, isPixelTool = true),
     PAINT_BUCKET("Paint Bucket", ToolGroup.FILL, isPixelTool = true),
     GRADIENT("Gradient", ToolGroup.FILL, isPixelTool = true),
+    LASSO_FILL("Lasso Fill", ToolGroup.FILL, isPixelTool = true),
     TEXT("Text", ToolGroup.VECTOR, requiresDrag = false),
     SHAPE("Shape", ToolGroup.VECTOR),
     SELECT_RECTANGLE("Rectangle Select", ToolGroup.SELECTION),
@@ -42,7 +43,7 @@ enum class ToolType(
     /** Whether the brush size / opacity controls are relevant. */
     fun usesBrushSize(): Boolean =
         when (this) {
-            SMUDGE, CLONE_STAMP, HEALING, LIQUIFY, ERASER, BRUSH, SELECT_FREEHAND, GRADIENT -> true
+            SMUDGE, CLONE_STAMP, HEALING, LIQUIFY, ERASER, BRUSH, GRADIENT -> true
             else -> false
         }
 

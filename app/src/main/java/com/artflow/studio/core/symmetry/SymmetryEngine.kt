@@ -1,5 +1,6 @@
 package com.artflow.studio.core.symmetry
 
+import com.artflow.studio.core.perspective.GuideLineStyle
 import com.artflow.studio.domain.model.brush.Stroke
 import kotlin.math.cos
 import kotlin.math.max
@@ -57,6 +58,10 @@ object SymmetryEngine {
         val secondaryAxis: Boolean = false,
         /** When true the mirrored copies use their own independent colour jitter. */
         val independentColour: Boolean = false,
+        /** Procreate's Rotational Symmetry: vertical, horizontal and quadrant copies turn about the axis point instead of mirroring. */
+        val rotational: Boolean = false,
+        /** Radial copies come in mirrored pairs, like a kaleidoscope or mandala, instead of only turning. */
+        val mirroredSegments: Boolean = false,
     ) {
         fun isActive(): Boolean = type != SymmetryType.NONE
 
@@ -66,7 +71,7 @@ object SymmetryEngine {
                 SymmetryType.NONE -> 1
                 SymmetryType.VERTICAL, SymmetryType.HORIZONTAL -> if (secondaryAxis) 4 else 2
                 SymmetryType.QUADRANT -> 4
-                SymmetryType.RADIAL -> radialCount.coerceIn(2, 32)
+                SymmetryType.RADIAL -> radialCount.coerceIn(2, 32) * if (mirroredSegments) 2 else 1
             }
     }
 
@@ -112,6 +117,26 @@ object SymmetryEngine {
             rotation: Float,
         ): Instance = Instance(px, 2f * axisY - py, -rotation)
 
+        // Rotational symmetry: half turns about the axis point, or quarter turns for four copies.
+        fun turned(quarters: Int): Instance {
+            val dx = x - axisX
+            val dy = y - axisY
+            return when (quarters % 4) {
+                1 -> Instance(axisX - dy, axisY + dx, brushRotation + QUARTER_TURN)
+                2 -> Instance(axisX - dx, axisY - dy, brushRotation + 2 * QUARTER_TURN)
+                3 -> Instance(axisX + dy, axisY - dx, brushRotation + 3 * QUARTER_TURN)
+                else -> Instance(x, y, brushRotation)
+            }
+        }
+
+        val rotationalCopies =
+            when {
+                !settings.rotational || settings.type == SymmetryType.RADIAL -> 0
+                settings.type == SymmetryType.QUADRANT || settings.secondaryAxis -> 4
+                else -> 2
+            }
+        if (rotationalCopies > 0) return List(rotationalCopies) { turned(it * 4 / rotationalCopies) }
+
         when (settings.type) {
             SymmetryType.NONE -> results += Instance(x, y, brushRotation)
             SymmetryType.VERTICAL -> {
@@ -139,18 +164,35 @@ object SymmetryEngine {
             SymmetryType.RADIAL -> {
                 val count = settings.radialCount.coerceIn(2, 32)
                 val baseAngle = Math.toRadians(settings.radialAngleDegrees.toDouble())
+                val dx = x - centreX
+                val dy = y - centreY
+                // The mirror image across the pattern's first spoke, for kaleidoscope pairs.
+                val doubled = 2.0 * baseAngle
+                val mirrorX = (dx * cos(doubled) + dy * sin(doubled)).toFloat()
+                val mirrorY = (dx * sin(doubled) - dy * cos(doubled)).toFloat()
                 for (i in 0 until count) {
-                    val angle = baseAngle + (2.0 * Math.PI * i) / count
+                    val angle = (2.0 * Math.PI * i) / count
                     val cosA = cos(angle).toFloat()
                     val sinA = sin(angle).toFloat()
-                    val dx = x - centreX
-                    val dy = y - centreY
                     results +=
                         Instance(
                             x = centreX + dx * cosA - dy * sinA,
                             y = centreY + dx * sinA + dy * cosA,
                             rotationDegrees = brushRotation + Math.toDegrees(angle).toFloat(),
                         )
+                }
+                if (settings.mirroredSegments) {
+                    for (i in 0 until count) {
+                        val angle = (2.0 * Math.PI * i) / count
+                        val cosA = cos(angle).toFloat()
+                        val sinA = sin(angle).toFloat()
+                        results +=
+                            Instance(
+                                x = centreX + mirrorX * cosA - mirrorY * sinA,
+                                y = centreY + mirrorX * sinA + mirrorY * cosA,
+                                rotationDegrees = -brushRotation + Math.toDegrees(angle + doubled).toFloat(),
+                            )
+                    }
                 }
             }
         }
@@ -159,7 +201,9 @@ object SymmetryEngine {
 
     /**
      * Mirrors a whole stroke. Used when symmetry is switched on after a stroke was drawn, and by
-     * the tests that assert the replication matches stamp-for-stamp.
+     * the tests that assert the replication matches stamp-for-stamp. Every point of a copy goes
+     * through the map of its copy: a reflection for mirrored copies, a half turn for the diagonal
+     * of quadrant symmetry and a rotation for radial copies. Points keep their pressure and timing.
      */
     fun mirrorStroke(
         stroke: Stroke,
@@ -168,38 +212,84 @@ object SymmetryEngine {
         settings: Settings,
     ): List<Stroke> {
         if (!settings.isActive()) return listOf(stroke)
-        val mirrored =
-            instances(
-                x = stroke.points.firstOrNull()?.x ?: 0f,
-                y = stroke.points.firstOrNull()?.y ?: 0f,
-                width = width,
-                height = height,
-                settings = settings,
-            )
-        if (mirrored.size <= 1) return listOf(stroke)
+        val copies = copyMaps(width, height, settings)
+        if (copies.size <= 1) return listOf(stroke)
 
-        // Apply the same transform to every point so pressure/texture data is preserved.
-        return mirrored.mapIndexed { index, instance ->
+        return copies.mapIndexed { index, map ->
             if (index == 0) {
                 stroke
             } else {
-                val dx = instance.x - (stroke.points.firstOrNull()?.x ?: 0f)
-                val dy = instance.y - (stroke.points.firstOrNull()?.y ?: 0f)
-                val rotation = Math.toRadians(instance.rotationDegrees.toDouble())
-                val cosR = cos(rotation).toFloat()
-                val sinR = sin(rotation).toFloat()
-                val originX = stroke.points.firstOrNull()?.x ?: 0f
-                val originY = stroke.points.firstOrNull()?.y ?: 0f
                 val transformed =
                     stroke.points.map { point ->
-                        val localX = point.x - originX
-                        val localY = point.y - originY
-                        point.copy(
-                            x = originX + dx + (localX * cosR - localY * sinR),
-                            y = originY + dy + (localX * sinR + localY * cosR),
-                        )
+                        point.copy(x = map.x(point.x, point.y), y = map.y(point.x, point.y))
                     }
                 stroke.copy(id = stroke.id + index, points = transformed)
+            }
+        }
+    }
+
+    /** One copy of the sample as an affine map: `x' = a·x + b·y + tx` and `y' = c·x + d·y + ty`. */
+    private class CopyMap(
+        private val a: Float,
+        private val b: Float,
+        private val c: Float,
+        private val d: Float,
+        private val tx: Float,
+        private val ty: Float,
+    ) {
+        fun x(
+            px: Float,
+            py: Float,
+        ): Float = a * px + b * py + tx
+
+        fun y(
+            px: Float,
+            py: Float,
+        ): Float = c * px + d * py + ty
+    }
+
+    /**
+     * The copies [instances] produces, in the same order and count, expressed as affine maps so a
+     * whole stroke can be carried through them. A mirrored copy is a reflection of the stroke, not
+     * a translation of it.
+     */
+    private fun copyMaps(
+        width: Int,
+        height: Int,
+        settings: Settings,
+    ): List<CopyMap> {
+        val axisX = (settings.centreX + settings.offsetX) * width
+        val axisY = (settings.centreY + settings.offsetY) * height
+        val identity = CopyMap(1f, 0f, 0f, 1f, 0f, 0f)
+        val reflectX = CopyMap(-1f, 0f, 0f, 1f, 2f * axisX, 0f)
+        val reflectY = CopyMap(1f, 0f, 0f, -1f, 0f, 2f * axisY)
+        val halfTurn = CopyMap(-1f, 0f, 0f, -1f, 2f * axisX, 2f * axisY)
+        return when (settings.type) {
+            SymmetryType.NONE -> listOf(identity)
+            SymmetryType.VERTICAL ->
+                if (settings.secondaryAxis) listOf(identity, reflectX, reflectY, halfTurn) else listOf(identity, reflectX)
+            SymmetryType.HORIZONTAL ->
+                if (settings.secondaryAxis) listOf(identity, reflectY, reflectX, halfTurn) else listOf(identity, reflectY)
+            SymmetryType.QUADRANT -> listOf(identity, reflectX, reflectY, halfTurn)
+            SymmetryType.RADIAL -> {
+                val count = settings.radialCount.coerceIn(2, 32)
+                val baseAngle = Math.toRadians(settings.radialAngleDegrees.toDouble())
+                val centreX = width / 2f
+                val centreY = height / 2f
+                List(count) { i ->
+                    val angle = baseAngle + (2.0 * Math.PI * i) / count
+                    val cosA = cos(angle).toFloat()
+                    val sinA = sin(angle).toFloat()
+                    // Rotation about the canvas centre: x' = R·x + (centre - R·centre).
+                    CopyMap(
+                        a = cosA,
+                        b = -sinA,
+                        c = sinA,
+                        d = cosA,
+                        tx = centreX - (cosA * centreX - sinA * centreY),
+                        ty = centreY - (sinA * centreX + cosA * centreY),
+                    )
+                }
             }
         }
     }
@@ -305,6 +395,8 @@ object SymmetryEngine {
     /** Radial symmetry count range exposed to the UI slider. */
     val RADIAL_RANGE = 2..32
 
+    private const val QUARTER_TURN = 90f
+
     /** Clamps settings into their valid ranges (called by every setter in the ViewModel). */
     fun sanitize(settings: Settings): Settings =
         settings.copy(
@@ -314,6 +406,7 @@ object SymmetryEngine {
             offsetY = settings.offsetY.coerceIn(-1f, 1f),
             radialCount = settings.radialCount.coerceIn(RADIAL_RANGE.first, RADIAL_RANGE.last),
             radialAngleDegrees = ((settings.radialAngleDegrees % 360f) + 360f) % 360f,
+            lineStyle = settings.lineStyle.sanitize(),
         )
 
     /** True when mirrored strokes would fall outside the canvas and are worth skipping. */

@@ -89,6 +89,21 @@ object LiquifyTool {
             dirtyBounds = null
         }
 
+        /** The same field with every offset multiplied by [factor] (Liquify's Adjust). */
+        fun scaled(factor: Float): DisplacementMap {
+            val out = DisplacementMap(width, height)
+            if (isEmpty() || factor == 0f || !factor.isFinite()) return out
+            // Copied array to array: no per-pixel bounds objects on a large canvas.
+            for (index in 0 until count) {
+                if (!touched[index]) continue
+                out.offsetX[index] = offsetX[index] * factor
+                out.offsetY[index] = offsetY[index] * factor
+                out.touched[index] = true
+            }
+            out.dirtyBounds = dirtyBounds
+            return out
+        }
+
         /** Bilinear resample of [source] through this field. */
         fun apply(source: PixelBuffer): PixelBuffer {
             require(source.width == width && source.height == height) { "Displacement dimensions must match the layer" }
@@ -110,6 +125,57 @@ object LiquifyTool {
             }
             return out
         }
+
+        /** Copies the displacement inside [bounds], so it can be resampled later while this map keeps changing. */
+        fun copyRegion(bounds: IntBounds): Region {
+            require(bounds.left >= 0 && bounds.top >= 0) { "Region must lie inside the displacement map" }
+            require(bounds.right < width && bounds.bottom < height && !bounds.isEmpty) { "Region must lie inside the displacement map" }
+            val size = bounds.width * bounds.height
+            val copy = Region(bounds, FloatArray(size), FloatArray(size), BooleanArray(size))
+            if (isEmpty()) return copy
+            for (row in 0 until bounds.height) {
+                val from = (bounds.top + row) * width + bounds.left
+                val to = row * bounds.width
+                offsetX.copyInto(copy.offsetX, to, from, from + bounds.width)
+                offsetY.copyInto(copy.offsetY, to, from, from + bounds.width)
+                touched.copyInto(copy.touched, to, from, from + bounds.width)
+            }
+            return copy
+        }
+
+        /** A detached part of a displacement field. Resampling it never reads the live map. */
+        class Region internal constructor(
+            val bounds: IntBounds,
+            internal val offsetX: FloatArray,
+            internal val offsetY: FloatArray,
+            internal val touched: BooleanArray,
+        ) {
+            /** Bilinear resample of [source] through this region, row-major, pixel for pixel as [apply] does. */
+            fun resample(
+                source: PixelBuffer,
+                alphaLock: Boolean,
+            ): IntArray {
+                require(bounds.right < source.width && bounds.bottom < source.height) { "Region must lie inside the source" }
+                val regionWidth = bounds.width
+                val out = IntArray(regionWidth * bounds.height)
+                for (row in 0 until bounds.height) {
+                    val sourceY = bounds.top + row
+                    for (column in 0 until regionWidth) {
+                        val sourceX = bounds.left + column
+                        val index = row * regionWidth + column
+                        val original = source.pixels[sourceY * source.width + sourceX]
+                        val warped =
+                            if (touched[index]) {
+                                source.sampleBilinear(sourceX + 0.5f + offsetX[index], sourceY + 0.5f + offsetY[index])
+                            } else {
+                                original
+                            }
+                        out[index] = if (alphaLock) keepCoverage(original, warped) else warped
+                    }
+                }
+                return out
+            }
+        }
     }
 
     data class Settings(
@@ -129,6 +195,10 @@ object LiquifyTool {
         /** Optional selection restricting the distortion. */
         val mask: SelectionMask? = null,
         val alphaLock: Boolean = false,
+        /** `0..1`: how far the distortion carries on after the pen lifts, as with Procreate's Momentum. */
+        val momentum: Float = 0f,
+        /** When false, stylus pressure no longer scales the distortion. */
+        val usePressure: Boolean = true,
     ) {
         val radius: Float get() = if (size.isFinite()) (size / 2f).coerceIn(1f, 4096f) else 1f
     }
@@ -145,7 +215,9 @@ object LiquifyTool {
     ) {
         private var lastX = startX
         private var lastY = startY
-        private var samplePressure = unit(settings.pressure)
+        private var samplePressure = pressureOf(settings.pressure)
+        private var directionX = 0f
+        private var directionY = 0f
         private var reconstruction: FloatArray? = null
         private var reconstructionBounds: IntBounds? = null
         val dirtyBounds: IntBounds? get() = map.dirtyBounds ?: reconstructionBounds
@@ -162,7 +234,7 @@ object LiquifyTool {
             pressure: Float = settings.pressure,
         ): IntBounds? {
             if (!x.isFinite() || !y.isFinite()) return null
-            samplePressure = unit(pressure)
+            samplePressure = pressureOf(pressure)
             val dx = x - lastX
             val dy = y - lastY
             val distance = sqrt(dx * dx + dy * dy)
@@ -188,10 +260,37 @@ object LiquifyTool {
             }
 
             totalDistance += distance
+            directionX = dx / distance
+            directionY = dy / distance
             lastX = x
             lastY = y
 
             return affectedBounds(lastX, lastY, settings.radius, map.width, map.height)
+        }
+
+        private fun pressureOf(pressure: Float): Float = if (settings.usePressure) unit(pressure) else 1f
+
+        /**
+         * Momentum: when the pen lifts, the gesture glides on along its last direction, slowing to a
+         * stop over up to [MOMENTUM_REACH] brush widths. Call once, after the last [dragTo].
+         * @return the region the glide distorted, or null when there is no momentum or no movement.
+         */
+        fun release(): IntBounds? {
+            val momentum = unit(settings.momentum)
+            if (momentum <= 0f || totalDistance <= 0f || settings.mode == Mode.RECONSTRUCT) return null
+            val reach = momentum * MOMENTUM_REACH * settings.radius * 2f
+            // Step lengths fall linearly to zero, so the glide eases out like a sliding object.
+            val stepCount = MOMENTUM_STEPS
+            val unitStep = reach / (stepCount * (stepCount + 1) / 2f)
+            var bounds: IntBounds? = null
+            val glideX = directionX
+            val glideY = directionY
+            for (step in stepCount downTo 1) {
+                val length = unitStep * step
+                val moved = dragTo(lastX + glideX * length, lastY + glideY * length, samplePressure) ?: continue
+                bounds = bounds?.union(moved) ?: moved
+            }
+            return bounds
         }
 
         private fun applyPush(
@@ -349,6 +448,18 @@ object LiquifyTool {
             }
         }
 
+        /**
+         * Liquify's Adjust: [source] (the pixels before this gesture) distorted by [strength] times
+         * the gesture's distortion, from none at 0 to the full gesture at 1.
+         */
+        fun renderAdjusted(
+            source: PixelBuffer,
+            strength: Float,
+        ): PixelBuffer {
+            if (settings.mode == Mode.RECONSTRUCT) return render(source)
+            return retainCoverage(map.scaled(strength.coerceIn(0f, 1f)).apply(source), source)
+        }
+
         /** Reconstruct always reads a fixed pre-liquify reference, never its own previous preview. */
         fun render(
             source: PixelBuffer,
@@ -377,15 +488,7 @@ object LiquifyTool {
         ): PixelBuffer {
             if (!settings.alphaLock) return result
             for (index in result.pixels.indices) {
-                val original = source.pixels[index]
-                val candidate = result.pixels[index]
-                val alpha = original ushr 24
-                result.pixels[index] =
-                    if (alpha == 0 || (candidate ushr 24) == 0) {
-                        original
-                    } else {
-                        (candidate and 0x00FFFFFF) or (alpha shl 24)
-                    }
+                result.pixels[index] = keepCoverage(source.pixels[index], result.pixels[index])
             }
             return result
         }
@@ -394,6 +497,30 @@ object LiquifyTool {
             val t = falloff.coerceIn(0f, 1f)
             return t * t * (3f - 2f * t)
         }
+
+        /**
+         * Copies the warp inside [bounds] now, on the calling thread. The snapshot can then be rendered on
+         * another thread while this session keeps taking drag samples. Reconstruct is not snapshotted: it
+         * reads a live restore field, so it is rendered with [render] instead.
+         */
+        fun snapshotWarp(bounds: IntBounds): WarpSnapshot {
+            require(settings.mode != Mode.RECONSTRUCT) { "Reconstruct is rendered with render, not snapshotted" }
+            return WarpSnapshot(map.copyRegion(bounds), settings.alphaLock)
+        }
+    }
+
+    /**
+     * A frozen part of a warp. Rendering it reads only its own copy and the source it is given, so it is
+     * safe to run off the UI thread. Pixels outside [bounds] are unchanged by the warp.
+     */
+    class WarpSnapshot internal constructor(
+        private val region: DisplacementMap.Region,
+        private val alphaLock: Boolean,
+    ) {
+        val bounds: IntBounds get() = region.bounds
+
+        /** Row-major pixels for [bounds], warped from [source], which must be the layer as it was before the gesture. */
+        fun render(source: PixelBuffer): IntArray = region.resample(source, alphaLock)
     }
 
     fun beginSession(
@@ -414,6 +541,15 @@ object LiquifyTool {
     }
 
     private fun unit(value: Float): Float = if (value.isFinite()) value.coerceIn(0f, 1f) else 0f
+
+    /** Keeps [original]'s alpha with the warped colour, and falls back to [original] where either side is clear. */
+    private fun keepCoverage(
+        original: Int,
+        warped: Int,
+    ): Int {
+        val alpha = original ushr 24
+        return if (alpha == 0 || (warped ushr 24) == 0) original else (warped and 0x00FFFFFF) or (alpha shl 24)
+    }
 
     /** Applies the accumulated displacement to the layer in place. */
     fun commit(
@@ -554,3 +690,9 @@ object LiquifyTool {
 
 /** Size of a Crystals shard, in pixels. */
 private const val CRYSTAL_CELL = 6
+
+/** Full momentum glides on for this many brush widths after the pen lifts. */
+private const val MOMENTUM_REACH = 1.5f
+
+/** The glide is applied as this many slowing steps. */
+private const val MOMENTUM_STEPS = 12

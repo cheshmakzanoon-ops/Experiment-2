@@ -3,6 +3,7 @@ package com.artflow.studio.data.local
 import com.artflow.studio.core.export.AbrReader
 import com.artflow.studio.core.export.BinaryPlist
 import com.artflow.studio.core.export.ProcreateBrush
+import com.artflow.studio.core.export.ProcreateBrushWriter
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.render.CustomGrains
 import com.artflow.studio.domain.model.brush.BrushParams
@@ -61,6 +62,20 @@ object BrushArchives {
             }
             Imported(CustomGrains.tileFrom(square), null, name = tip.name)
         }
+
+    /**
+     * A Procreate `.brush` file for a saved brush: its settings and its shape and grain images, which are
+     * looked up among the grains in memory (an image that is not loaded is left out).
+     */
+    fun procreateBrush(brush: SavedBrush): ByteArray =
+        ProcreateBrushWriter.brush(
+            ProcreateBrushWriter.Brush(
+                name = brush.name,
+                parameters = brush.parameters,
+                shape = CustomGrains.get(brush.parameters.shapeId),
+                grain = CustomGrains.get(brush.parameters.textureId),
+            ),
+        )
 
     /** Zip files start with the local-file signature `PK\u0003\u0004`. */
     fun isArchive(bytes: ByteArray): Boolean =

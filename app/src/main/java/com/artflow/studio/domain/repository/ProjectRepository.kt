@@ -69,6 +69,12 @@ interface ProjectRepository {
         stack: String?,
     )
 
+    /** Renames the stack [from], merging it into [to] if there is one by that name, or dissolves it when [to] is null. */
+    suspend fun renameStack(
+        from: String,
+        to: String?,
+    )
+
     /**
      * Get total count of projects
      */

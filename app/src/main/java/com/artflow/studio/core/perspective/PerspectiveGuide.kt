@@ -2,7 +2,10 @@ package com.artflow.studio.core.perspective
 
 import kotlin.math.abs
 import kotlin.math.atan2
+import kotlin.math.ceil
 import kotlin.math.cos
+import kotlin.math.floor
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
@@ -16,6 +19,9 @@ import kotlin.math.sqrt
  * testable without a device.
  */
 object PerspectiveGuide {
+    /** Directions of the isometric grid's line families, in degrees. */
+    private val ISOMETRIC_AXES = listOf(0f, 30f, -30f, 90f)
+
     enum class GuideType(
         val displayName: String,
     ) {
@@ -52,7 +58,13 @@ object PerspectiveGuide {
         val snapStrength: Float = 1f,
         /** Isometric grid: grid cell size in pixels. */
         val gridSpacing: Int = 64,
+        /** 2D grid: rotation in degrees about the canvas centre. */
+        val gridRotation: Float = 0f,
         val showHorizon: Boolean = true,
+        /** Procreate's guide appearance: the lines' colour (RGB), opacity (0 to 1) and thickness (times a hairline). */
+        val lineColor: Int = DEFAULT_LINE_COLOR,
+        val lineOpacity: Float = 0.6f,
+        val lineThickness: Float = 1f,
     ) {
         fun isActive(): Boolean = type != GuideType.NONE
 
@@ -76,12 +88,21 @@ object PerspectiveGuide {
         val pointIndex: Int = -1,
     )
 
+    /** The guide's default line colour, a soft green. */
+    const val DEFAULT_LINE_COLOR = 0xFF88CC66.toInt()
+
+    /** Thickest guide line, in hairlines. */
+    const val MAX_LINE_THICKNESS = 4f
+
     val DEFAULT_POINTS: List<VanishingPoint> =
         listOf(
             VanishingPoint(0.30f, 0.45f),
             VanishingPoint(0.70f, 0.45f),
             VanishingPoint(0.50f, 0.95f),
         )
+
+    /** Directions of the isometric families: vertical, and 30 degrees either side of horizontal. */
+    private val ISOMETRIC_AXES: List<Float> = listOf(90f, 30f, -30f)
 
     /** Resolution-independent position of vanishing point [index]. */
     fun pointPosition(
@@ -162,9 +183,7 @@ object PerspectiveGuide {
         val lines = mutableListOf<GuideLine>()
         val diagonal = sqrt((width * width + height * height).toFloat())
 
-        // The three isometric axes: 0 degrees (horizontal), +30 and -30 degrees.
-        val axes = listOf(0f, 30f, -30f, 90f)
-        for (angleDegrees in axes) {
+        for (angleDegrees in ISOMETRIC_AXES) {
             val radians = Math.toRadians(angleDegrees.toDouble())
             val dx = cos(radians).toFloat()
             val dy = sin(radians).toFloat()
@@ -205,7 +224,7 @@ object PerspectiveGuide {
     ): Pair<Float, Float> {
         if (!settings.isActive() || !settings.snapEnabled) return x to y
         if (settings.type == GuideType.ISOMETRIC) return snapToIsometricGrid(x, y, settings, width, height)
-        if (settings.type == GuideType.GRID) return snapToSquareGrid(x, y, settings)
+        if (settings.type == GuideType.GRID) return snapToSquareGrid(x, y, settings, width / 2f, height / 2f)
 
         var bestX = x
         var bestY = y
@@ -241,20 +260,24 @@ object PerspectiveGuide {
         return bestX to bestY
     }
 
-    /** Square drawing grid centred on the canvas, [Settings.gridSpacing] pixels per cell. */
+    /**
+     * Square drawing grid centred on the canvas, [Settings.gridSpacing] pixels per cell, turned by
+     * [Settings.gridRotation] about the centre.
+     */
     private fun squareGridLines(
         settings: Settings,
         width: Int,
         height: Int,
     ): List<GuideLine> {
         val spacing = settings.gridSpacing.coerceIn(8, 512)
+        if (settings.gridRotation % 360f != 0f) return rotatedGridLines(settings, width, height)
         val lines = mutableListOf<GuideLine>()
-        var x = (width / 2f) % spacing
+        var x = phaseX
         while (x <= width) {
             lines += GuideLine(x, 0f, x, height.toFloat(), pointIndex = -1)
             x += spacing
         }
-        var y = (height / 2f) % spacing
+        var y = phaseY
         while (y <= height) {
             lines += GuideLine(0f, y, width.toFloat(), y, pointIndex = -1)
             y += spacing
@@ -262,16 +285,22 @@ object PerspectiveGuide {
         return lines
     }
 
-    /** Pulls the pointer onto the nearest grid line (horizontal or vertical) within the snap radius. */
+    /**
+     * Pulls the pointer onto the nearest grid line (horizontal or vertical) within the snap radius.
+     * The lines pass through ([originX], [originY]), the canvas centre that [squareGridLines] draws from.
+     */
     fun snapToSquareGrid(
         x: Float,
         y: Float,
         settings: Settings,
+        originX: Float,
+        originY: Float,
     ): Pair<Float, Float> {
-        val spacing = settings.gridSpacing.coerceIn(8, 512).toFloat()
+        val cell = settings.gridSpacing.coerceIn(8, 512)
+        val spacing = cell.toFloat()
         val strength = settings.snapStrength.coerceIn(0f, 1f)
-        val lineX = Math.round(x / spacing) * spacing
-        val lineY = Math.round(y / spacing) * spacing
+        val lineX = originX + Math.round((x - originX) / spacing) * spacing
+        val lineY = originY + Math.round((y - originY) / spacing) * spacing
         val distanceX = abs(x - lineX)
         val distanceY = abs(y - lineY)
         return when {
@@ -281,7 +310,10 @@ object PerspectiveGuide {
         }
     }
 
-    /** Snaps onto the nearest isometric grid intersection. */
+    /**
+     * Snaps onto the nearest intersection of two isometric guide lines. The lines are the families
+     * [isometricLines] draws, each spaced [Settings.gridSpacing] apart from the canvas centre.
+     */
     fun snapToIsometricGrid(
         x: Float,
         y: Float,
@@ -289,20 +321,71 @@ object PerspectiveGuide {
         width: Int,
         height: Int,
     ): Pair<Float, Float> {
-        val spacing = settings.gridSpacing.coerceIn(8, 512)
-        // Isometric lattice: rows are spaced spacing * sin(60) apart, columns spacing wide.
-        val rowHeight = spacing * 0.866f
-        val row = Math.round(y / rowHeight)
-        val baseline = row * rowHeight
-        val offset = if (row % 2L == 0L) 0f else spacing / 2f
-        val column = Math.round((x - offset) / spacing)
-        val snapX = column * spacing + offset
-        val snapY = baseline
-
-        val distance = sqrt((x - snapX) * (x - snapX) + (y - snapY) * (y - snapY))
-        if (distance > settings.snapRadius) return x to y
+        val spacing = settings.gridSpacing.coerceIn(8, 512).toDouble()
+        val centreX = width / 2.0
+        val centreY = height / 2.0
+        val crossing = nearestIsometricCrossing(x - centreX, y - centreY, spacing)
+        if (crossing.distance > settings.snapRadius) return x to y
+        val snapX = (centreX + crossing.x).toFloat()
+        val snapY = (centreY + crossing.y).toFloat()
         val strength = settings.snapStrength.coerceIn(0f, 1f)
         return (x + (snapX - x) * strength) to (y + (snapY - y) * strength)
+    }
+
+    /** A point where two isometric families cross, relative to the canvas centre. */
+    private class Crossing(
+        val x: Double,
+        val y: Double,
+        val distance: Double,
+    )
+
+    /** The crossing of any two isometric families nearest to the offset ([qx], [qy]) from the centre. */
+    private fun nearestIsometricCrossing(
+        qx: Double,
+        qy: Double,
+        spacing: Double,
+    ): Crossing {
+        var best = Crossing(0.0, 0.0, Double.MAX_VALUE)
+        for (a in ISOMETRIC_AXES.indices) {
+            for (b in a + 1 until ISOMETRIC_AXES.size) {
+                val candidate = crossingNear(ISOMETRIC_AXES[a], ISOMETRIC_AXES[b], qx, qy, spacing)
+                if (candidate.distance < best.distance) best = candidate
+            }
+        }
+        return best
+    }
+
+    /** Two families meet where both offsets are whole multiples of the spacing; test the cells around the point. */
+    private fun crossingNear(
+        degreesA: Float,
+        degreesB: Float,
+        qx: Double,
+        qy: Double,
+        spacing: Double,
+    ): Crossing {
+        val (ax, ay) = isometricNormal(degreesA)
+        val (bx, by) = isometricNormal(degreesB)
+        val determinant = ax * by - ay * bx
+        val ua = floor((ax * qx + ay * qy) / spacing).toInt()
+        val ub = floor((bx * qx + by * qy) / spacing).toInt()
+        var best = Crossing(0.0, 0.0, Double.MAX_VALUE)
+        for (i in ua - 1..ua + 2) {
+            for (j in ub - 1..ub + 2) {
+                val offsetA = i * spacing
+                val offsetB = j * spacing
+                val px = (offsetA * by - ay * offsetB) / determinant
+                val py = (ax * offsetB - bx * offsetA) / determinant
+                val distance = hypot(px - qx, py - qy)
+                if (distance < best.distance) best = Crossing(px, py, distance)
+            }
+        }
+        return best
+    }
+
+    /** Unit normal of the isometric family whose lines run at [degrees]: offsets are measured along it. */
+    private fun isometricNormal(degrees: Float): Pair<Double, Double> {
+        val radians = Math.toRadians(degrees.toDouble())
+        return -sin(radians) to cos(radians)
     }
 
     /** Moves the horizon and keeps the horizontal vanishing points on it. */
@@ -310,6 +393,25 @@ object PerspectiveGuide {
         settings: Settings,
         horizonY: Float,
     ): Settings = settings.copy(horizonY = horizonY.coerceIn(-1f, 2f))
+
+    /**
+     * Drags vanishing point [index] to canvas pixel ([x], [y]). Points on the horizon carry the
+     * horizon with them; the third point of a three-point guide moves freely.
+     */
+    fun dragPoint(
+        settings: Settings,
+        index: Int,
+        x: Float,
+        y: Float,
+        width: Int,
+        height: Int,
+    ): Settings {
+        val fx = x / width.coerceAtLeast(1)
+        val fy = y / height.coerceAtLeast(1)
+        val onHorizon = !(settings.type == GuideType.THREE_POINT && index == settings.activePointCount() - 1)
+        val moved = movePoint(settings, index, fx, fy)
+        return if (onHorizon) withHorizon(moved, fy) else moved
+    }
 
     /** Moves vanishing point [index] to a normalised position. */
     fun movePoint(
@@ -399,6 +501,7 @@ object PerspectiveGuide {
             snapRadius = settings.snapRadius.coerceIn(SNAP_RADIUS_RANGE),
             snapStrength = settings.snapStrength.coerceIn(0f, 1f),
             gridSpacing = settings.gridSpacing.coerceIn(8, 512),
+            gridRotation = if (settings.gridRotation.isFinite()) settings.gridRotation.mod(360f) else 0f,
         )
 
     /** Human-readable description for the guide overlay's info pill. */

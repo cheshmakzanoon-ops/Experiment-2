@@ -6,14 +6,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.artflow.studio.core.animation.AnimationTimeline
 import com.artflow.studio.core.animation.PlaybackStepper
+import com.artflow.studio.core.canvas.CanvasInformation
+import com.artflow.studio.core.canvas.StylusButtons
 import com.artflow.studio.core.color.ColorHarmony
 import com.artflow.studio.core.color.ColorProfile
+import com.artflow.studio.core.color.ColorProfiles
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.color.PaletteLibrary
 import com.artflow.studio.core.export.ExportArea
 import com.artflow.studio.core.export.ExportFormat
 import com.artflow.studio.core.export.ExportOptions
-import com.artflow.studio.core.export.ExportRegion
 import com.artflow.studio.core.export.ExportResult
 import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.PixelBuffer
@@ -28,7 +30,6 @@ import com.artflow.studio.core.tool.PixelBrushes
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.data.export.ArtworkExporter
 import com.artflow.studio.data.export.LayerImports
-import com.artflow.studio.data.export.LayerRaster
 import com.artflow.studio.data.export.PendingImports
 import com.artflow.studio.data.export.ProcreateImport
 import com.artflow.studio.data.export.TimelapseRecorder
@@ -39,6 +40,7 @@ import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.FilterType
 import com.artflow.studio.domain.model.layer.Layer
+import com.artflow.studio.domain.model.layer.LayerEffects
 import com.artflow.studio.domain.model.settings.AppSettings
 import com.artflow.studio.domain.model.settings.PressureAndSmoothing
 import com.artflow.studio.domain.repository.ProjectRepository
@@ -49,12 +51,14 @@ import com.artflow.studio.presentation.ui.components.canvas.EditorInput
 import com.artflow.studio.presentation.ui.components.canvas.GestureControls
 import com.artflow.studio.presentation.ui.components.canvas.SelectionCombineMode
 import com.artflow.studio.presentation.ui.components.canvas.ShapeKind
+import com.artflow.studio.presentation.ui.components.canvas.gestureControls
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -120,6 +124,9 @@ sealed class ExportUiState {
 data class PendingText(
     val x: Float,
     val y: Float,
+    val projectId: Long,
+    val layerId: Long,
+    val revision: Long,
     val id: Long = System.nanoTime(),
 )
 
@@ -208,6 +215,10 @@ class CanvasViewModel
         private var playbackActive = false
         private var autosaveJob: Job? = null
         private var observationJob: Job? = null
+        private val _timelapseRecording = MutableStateFlow(true)
+
+        /** Whether the open artwork is being recorded (Actions > Video > Time-lapse recording). */
+        val timelapseRecording: StateFlow<Boolean> = _timelapseRecording.asStateFlow()
         private var timelapseJob: Job? = null
         private var timelapseRevision = -1L
         private val timelapseRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -220,6 +231,9 @@ class CanvasViewModel
                 _dirty.value = canvasRepository.hasUnsavedChanges()
                 notify(error.message ?: "The operation could not be completed")
             }
+
+        /** Creating, renaming, copying, extending and deleting the user's own palettes. */
+        val paletteEditor = PaletteEditor(settingsRepository, viewModelScope, editorErrors) { _palettes.value }
 
         init {
             viewModelScope.launch(editorErrors) {
@@ -237,9 +251,15 @@ class CanvasViewModel
                             motionFiltering = stored.motionFiltering,
                             motionExpression = stored.motionExpression,
                             pressureSmoothing = stored.pressureSmoothing,
+                            pulledString = stored.pulledString,
+                            pressureResponse = stored.pressureResponse,
+                            haptics = stored.haptics,
+                            reduceMotion = stored.reduceMotion,
                             brushCursor = stored.brushCursor,
-                            gestures = GestureControls(stored.scrubToClear, stored.swipeCopyPaste, stored.fourFingerFullScreen),
+                            gestures = stored.gestureControls(),
                             dynamicBrushScaling = stored.dynamicBrushScaling,
+                            stylus = stored.stylusButtons(),
+                            haptics = stored.haptics,
                         )
                 }
             }
@@ -254,6 +274,7 @@ class CanvasViewModel
 
         fun open(projectId: Long) {
             if (currentProjectId == projectId && _uiState.value is CanvasUiState.Ready) return
+            cancelText()
             loadJob?.cancel()
             autosaveJob?.cancel()
             observationJob?.cancel()
@@ -286,6 +307,7 @@ class CanvasViewModel
                         refreshLayers()
                         refreshHistory()
                         refreshSelection()
+                        _timelapseRecording.value = timelapse.isRecording(projectId)
                         startObserving()
                         startAutosave()
                         PendingImports.takeProfile(projectId)?.let { canvasRepository.setColorProfile(it, undoable = false) }
@@ -335,7 +357,7 @@ class CanvasViewModel
             timelapseJob =
                 viewModelScope.launch {
                     timelapseRequests.collect {
-                        if (!timelapse.isEnabled) return@collect
+                        if (!timelapse.isEnabled || !_settings.value.recordTimelapse) return@collect
                         // Let the edit settle so a burst of changes yields one frame.
                         delay(TIMELAPSE_INTERVAL_MS)
                         val projectId = currentProjectId
@@ -345,7 +367,9 @@ class CanvasViewModel
                         try {
                             // Private layers (Insert a private photo) are left out of the recording.
                             val composite = canvasRepository.compositeWithoutPrivateLayers() ?: return@collect
-                            timelapse.capture(projectId, composite, _settings.value.timelapseMaxSide)
+                            // Stored values are in the document's profile; the recording is sRGB.
+                            val recorded = ColorProfiles.convert(composite, canvasRepository.getColorProfile(), ColorProfile.SRGB)
+                            timelapse.capture(projectId, recorded, _settings.value.timelapseMaxSide)
                             timelapseRevision = revision
                         } catch (cancelled: CancellationException) {
                             throw cancelled
@@ -440,7 +464,7 @@ class CanvasViewModel
                         width = size.width,
                         height = size.height,
                         dpi = size.dpi,
-                        backgroundColor = canvasRepository.getBackgroundColor(),
+                        backgroundColor = canvasRepository.displayColor(canvasRepository.getBackgroundColor()),
                         colorProfile = canvasRepository.getColorProfile(),
                     )
             }
@@ -491,17 +515,40 @@ class CanvasViewModel
                 }
             }
 
-        fun setBrushSize(size: Float) = updateInput { it.copy(brushParams = it.brushParams.copy(size = size.coerceIn(1f, 512f))) }
+        /** Sets the brush size within the brush's own size limits (Smudge's own brush while smudging with one). */
+        fun setBrushSize(size: Float) =
+            updateInput { current ->
+                val smudge = current.smudgeParams?.takeIf { current.tool == ToolType.SMUDGE }
+                if (smudge != null) {
+                    current.copy(smudgeParams = smudge.copy(size = size.coerceIn(smudge.sizeLimits)))
+                } else {
+                    current.copy(brushParams = current.brushParams.copy(size = size.coerceIn(current.brushParams.sizeLimits)))
+                }
+            }
 
+        /** Gives Smudge its own brush; null smudges with the paint brush. */
+        fun setSmudgeParams(params: com.artflow.studio.domain.model.brush.BrushParams?) = updateInput { it.copy(smudgeParams = params) }
+
+        /** Sets the brush opacity within the brush's own opacity limits. */
         fun setBrushOpacity(opacity: Float) =
-            updateInput { it.copy(brushParams = it.brushParams.copy(opacity = opacity.coerceIn(0.01f, 1f))) }
+            updateInput { it.copy(brushParams = it.brushParams.copy(opacity = opacity.coerceIn(it.brushParams.opacityLimits))) }
 
         fun setBrushParams(params: com.artflow.studio.domain.model.brush.BrushParams) = updateInput { it.copy(brushParams = params) }
 
         fun setEraserSize(size: Float) = updateInput { it.copy(eraserSize = size.coerceIn(1f, 512f)) }
 
+        /** Gives the eraser its own brush (at that brush's size); null erases with the paint brush. */
+        fun setEraserParams(params: com.artflow.studio.domain.model.brush.BrushParams?) =
+            updateInput { it.copy(eraserParams = params, eraserSize = params?.size?.coerceIn(1f, 512f) ?: it.eraserSize) }
+
         /** Swaps the primary and secondary colours, as tapping Procreate's secondary swatch does. */
         fun swapColors() = updateInput { it.copy(brushColor = it.secondaryColor, secondaryColor = it.brushColor) }
+
+        /** Converts an sRGB interface colour into the canvas's stored colour space. */
+        fun documentColor(srgb: Int): Int = canvasRepository.documentColor(srgb)
+
+        /** Converts a stored canvas colour back to sRGB for the interface. */
+        fun displayColor(stored: Int): Int = canvasRepository.displayColor(stored)
 
         fun setColor(color: Int) {
             updateInput { it.copy(brushColor = color) }
@@ -545,7 +592,11 @@ class CanvasViewModel
             viewModelScope.launch(editorErrors) { settingsRepository.setSnapToGuides(enabled) }
         }
 
-        fun setFingerPainting(enabled: Boolean) = updateInput { it.copy(fingerPainting = enabled) }
+        fun setFingerPainting(enabled: Boolean) {
+            updateInput { it.copy(fingerPainting = enabled) }
+            // Saved as Settings' Stylus only, which every settings update reads back.
+            viewModelScope.launch(editorErrors) { settingsRepository.setStylusOnly(!enabled) }
+        }
 
         fun setGradient(
             gradient: GradientTool.Gradient,
@@ -556,6 +607,8 @@ class CanvasViewModel
             tolerance: Int,
             contiguous: Boolean,
         ) = updateInput { it.copy(fillTolerance = tolerance.coerceIn(0, 255), fillContiguous = contiguous) }
+
+        fun setFillGapClose(pixels: Int) = updateInput { it.copy(fillGapClose = pixels.coerceIn(0, MAX_FILL_GAP)) }
 
         fun setFillTolerance(tolerance: Int) = updateInput { it.copy(fillTolerance = tolerance.coerceIn(0, 255)) }
 
@@ -579,12 +632,31 @@ class CanvasViewModel
 
         fun setLiquifySettings(settings: LiquifyTool.Settings) = updateInput { it.copy(liquify = settings) }
 
-        fun setQuickShape(enabled: Boolean) = updateInput { it.copy(quickShape = enabled) }
+        fun setQuickShape(enabled: Boolean) {
+            updateInput { it.copy(quickShape = enabled) }
+            viewModelScope.launch(editorErrors) { settingsRepository.update { it.copy(quickShape = enabled) } }
+        }
 
-        fun setTouchHoldEyedropper(enabled: Boolean) = updateInput { it.copy(touchHoldEyedropper = enabled) }
+        fun setTouchHoldEyedropper(enabled: Boolean) {
+            updateInput { it.copy(touchHoldEyedropper = enabled) }
+            viewModelScope.launch(editorErrors) { settingsRepository.update { it.copy(touchHoldEyedropper = enabled) } }
+        }
 
         fun setRightHandedInterface(enabled: Boolean) {
             viewModelScope.launch(editorErrors) { settingsRepository.update { it.copy(rightHandedInterface = enabled) } }
+        }
+
+        /** Prefs > Stylus: the buttons and eraser end are saved, and reach the canvas through the settings stream. */
+        fun setStylusButtons(buttons: StylusButtons) {
+            viewModelScope.launch(editorErrors) {
+                settingsRepository.update {
+                    it.copy(
+                        stylusPrimaryButton = buttons.primary,
+                        stylusSecondaryButton = buttons.secondary,
+                        stylusEraserEnd = buttons.eraserEnd,
+                    )
+                }
+            }
         }
 
         fun setGestureControls(controls: GestureControls) {
@@ -594,6 +666,11 @@ class CanvasViewModel
                         scrubToClear = controls.scrubToClear,
                         swipeCopyPaste = controls.swipeCopyPaste,
                         fourFingerFullScreen = controls.fourFingerFullScreen,
+                        rapidUndoDelayMs = controls.rapidUndoDelayMs,
+                        eyedropperDelayMs = controls.eyedropperDelayMs,
+                        quickShapeDelayMs = controls.quickShapeDelayMs,
+                        holdSelectsLayer = controls.holdSelectsLayer,
+                        eyedropperSample = controls.eyedropperSample,
                     )
                 }
             }
@@ -608,12 +685,16 @@ class CanvasViewModel
                         motionFiltering = value.motionFiltering.coerceIn(0f, 1f),
                         motionExpression = value.motionExpression.coerceIn(0f, 1f),
                         pressureSmoothing = value.pressureSmoothing.coerceIn(0f, 1f),
+                        pulledString = value.pulledString.coerceIn(0f, 1f),
+                        pressureResponse = value.pressureResponse,
                     )
                 }
             }
         }
 
         fun setTransformMode(mode: TransformQuad.Mode) = updateInput { it.copy(transformMode = mode) }
+
+        fun setAdvancedMesh(enabled: Boolean) = updateInput { it.copy(advancedMesh = enabled) }
 
         fun updateSettings(change: (AppSettings) -> AppSettings) = viewModelScope.launch(editorErrors) { settingsRepository.update(change) }
 
@@ -642,6 +723,29 @@ class CanvasViewModel
             _cloneSource.value = source
         }
 
+        /** Exposed only to bind a transform panel to the document revision it was opened against. */
+        fun transformRevision(): Long = canvasRepository.contentRevision
+
+        suspend fun transformLayer(
+            layerId: Long,
+            revision: Long,
+            parameters: LayerTransform.Parameters,
+        ): Boolean {
+            if (canvasRepository.selection() != null) {
+                notify("Deselect first: precision transforms currently affect the entire layer")
+                return false
+            }
+            val applied = canvasRepository.transformLayer(layerId, parameters, revision)
+            if (applied) {
+                refreshLayers()
+                refreshHistory()
+                _dirty.value = canvasRepository.hasUnsavedChanges()
+            } else {
+                notify("The layer is locked, linked, or changed. Close Transform and reopen it on an editable layer.")
+            }
+            return applied
+        }
+
         fun notify(message: String) {
             viewModelScope.launch(editorErrors) { messages.send(message) }
         }
@@ -650,24 +754,22 @@ class CanvasViewModel
         // History
         // -----------------------------------------------------------------------------------------
 
-        fun undo() {
-            if (canvasRepository.undo()) {
-                refreshLayers()
-                refreshHistory()
-                refreshSelection()
-            } else {
-                notify("Nothing to undo")
-            }
+        fun undo() = if (canvasRepository.undo()) afterHistoryMove() else notify("Nothing to undo")
+
+        fun redo() = if (canvasRepository.redo()) afterHistoryMove() else notify("Nothing to redo")
+
+        /** Undoes or redoes until [step] steps of history lie behind the artwork, for the History scrubber. */
+        fun jumpToHistory(step: Int) {
+            var moved = false
+            while (canvasRepository.undoDepth > step && canvasRepository.undo()) moved = true
+            while (canvasRepository.undoDepth < step && canvasRepository.redo()) moved = true
+            if (moved) afterHistoryMove()
         }
 
-        fun redo() {
-            if (canvasRepository.redo()) {
-                refreshLayers()
-                refreshHistory()
-                refreshSelection()
-            } else {
-                notify("Nothing to redo")
-            }
+        private fun afterHistoryMove() {
+            refreshLayers()
+            refreshHistory()
+            refreshSelection()
         }
 
         // -----------------------------------------------------------------------------------------
@@ -780,6 +882,11 @@ class CanvasViewModel
             isPrivate: Boolean,
         ) = layerOp { canvasRepository.setLayerPrivate(layerId, isPrivate) }
 
+        fun setLayerEffects(
+            layerId: Long,
+            effects: LayerEffects?,
+        ) = layerOp { canvasRepository.setLayerEffects(layerId, effects) }
+
         /** Cut, copy, paste, clear and fill (Copy & Paste menu and layer options). */
         val clipboard = ClipboardController(canvasRepository, ::layerOp)
         val savedSelections = SavedSelections(canvasRepository) { refreshSelection() }
@@ -792,7 +899,23 @@ class CanvasViewModel
         val canvasPreview = CanvasPreviewController(canvasRepository, viewModelScope)
         val pageThumbnails = PageThumbnailController(canvasRepository, viewModelScope)
 
+        /** Copy and paste of whole animation frames for the Animation panel. */
+        val frameClipboard =
+            FrameClipboardController(
+                canvasRepository,
+                viewModelScope + editorErrors,
+                ::notify,
+                {
+                    refreshLayers()
+                    refreshUiStateFrames()
+                },
+                ::stopPlayback,
+            )
+
         val layerThumbnails = LayerThumbnailController(canvasRepository, viewModelScope)
+
+        /** The artwork for an external display, while Project Canvas is showing it. */
+        val projection = CanvasProjectionController(canvasRepository, viewModelScope)
 
         fun duplicateActiveLayer() = duplicateLayer(canvasRepository.getActiveLayerId())
 
@@ -895,6 +1018,8 @@ class CanvasViewModel
         ) = layerOp {
             canvasRepository.setLayerVisibility(layerId, visible)
         }
+
+        fun toggleLayerSolo(layerId: Long) = layerOp { canvasRepository.toggleLayerSolo(layerId) }
 
         fun setLayerOpacity(
             layerId: Long,
@@ -1170,7 +1295,27 @@ class CanvasViewModel
             x: Float,
             y: Float,
         ) {
-            _pendingText.value = PendingText(x, y)
+            val size = canvasRepository.getCanvasSize()
+            if (!x.isFinite() || !y.isFinite() || x < 0f || y < 0f || x >= size.width || y >= size.height) {
+                notify("Tap inside the artwork to position text")
+                return
+            }
+            stopPlayback()
+            _pendingText.value = PendingText(x, y, currentProjectId, canvasRepository.getActiveLayerId(), canvasRepository.contentRevision)
+        }
+
+        /** Consume a placement once, and only in the document state in which the artist chose it. */
+        fun takePendingText(): PendingText? {
+            val pending = _pendingText.value ?: return null
+            _pendingText.value = null
+            if (pending.projectId != currentProjectId ||
+                pending.layerId != canvasRepository.getActiveLayerId() ||
+                pending.revision != canvasRepository.contentRevision
+            ) {
+                notify("The artwork changed. Tap again to choose a fresh text position.")
+                return null
+            }
+            return pending
         }
 
         fun cancelText() {
@@ -1184,6 +1329,11 @@ class CanvasViewModel
         fun save(onSaved: (() -> Unit)? = null) {
             val projectId = currentProjectId
             if (projectId == 0L || _saving.value) return
+            // An autosave that has not been recovered holds the only copy of that work. A save would replace it.
+            if ((_uiState.value as? CanvasUiState.Ready)?.recoveryAvailable == true) {
+                notify("Recover or discard the autosaved version before saving")
+                return
+            }
             _saving.value = true
             viewModelScope.launch(editorErrors) {
                 try {
@@ -1224,7 +1374,11 @@ class CanvasViewModel
             if (!allowAutosave || !_settings.value.autosaveEnabled || _saving.value) return
             val state = _uiState.value as? CanvasUiState.Ready ?: return
             if (state.recoveryAvailable || !canvasRepository.hasUnsavedChanges()) return
-            viewModelScope.launch(editorErrors) { canvasRepository.autosave(state.projectId) }
+            viewModelScope.launch(editorErrors) {
+                // The app can be closed as soon as it stops, which cancels this scope. The save must finish instead,
+                // or the work since the last autosave is lost.
+                withContext(NonCancellable) { canvasRepository.autosave(state.projectId) }
+            }
         }
 
         fun discardChanges(onDiscarded: () -> Unit) {
@@ -1283,6 +1437,9 @@ class CanvasViewModel
         /** Time spent changing this artwork, for Canvas information. */
         fun trackedTimeMs(): Long = canvasRepository.trackedTimeMs()
 
+        /** Layers across every frame, the count the layer limit applies to (Canvas information). */
+        fun layerTotal(): Int = CanvasInformation.layerTotal(canvasRepository.frames().map { it.layers.size })
+
         /** Runs an export through the shared pipeline and keeps the result for the dialog. */
         fun export(options: ExportOptions) {
             val projectId = currentProjectId
@@ -1304,7 +1461,7 @@ class CanvasViewModel
                             _dirty.value = canvasRepository.hasUnsavedChanges()
                             exporter.exportPackage(projectId, name, resolved)
                         } else {
-                            renderedExport(projectId, name, resolved)
+                            renderedExport(canvasRepository, exporter, projectId, name, resolved)
                         }
                     _exportState.value =
                         result.fold(
@@ -1319,40 +1476,6 @@ class CanvasViewModel
                     Timber.e(error, "Export failed")
                     _exportState.value = ExportUiState.Failed(error.message ?: "Export failed")
                 }
-            }
-        }
-
-        /** An image, document or animation export rendered from the canvas. */
-        private suspend fun renderedExport(
-            projectId: Long,
-            name: String,
-            resolved: ExportOptions,
-        ): Result<ExportResult> {
-            val allFrames =
-                resolved.area == ExportArea.ALL_FRAMES ||
-                    (resolved.format.requiresAnimation && resolved.area != ExportArea.CURRENT_FRAME)
-            require(!allFrames || resolved.format.requiresAnimation || resolved.format == ExportFormat.PDF) {
-                "For all frames, choose PNG frames, PDF, GIF or MP4"
-            }
-            val snapshot =
-                canvasRepository.exportSnapshot(
-                    allFrames,
-                    resolved.includeHiddenLayers,
-                    resolved.format.needsLayers,
-                )
-            val region = ExportRegion.resolve(snapshot.frames, snapshot.selection, resolved.area)
-            val frames = snapshot.frames.map { ExportRegion.apply(it, snapshot.selection, resolved.area, region) }
-            val delays =
-                resolved.animationFpsOverride?.let { fps -> List(frames.size) { 1000 / fps.coerceIn(1, 60) } }
-                    ?: snapshot.delaysMs
-            return if (allFrames || resolved.format.requiresAnimation) {
-                exporter.exportAnimation(projectId, name, frames, delays, resolved)
-            } else {
-                val layers =
-                    snapshot.layers.map { (layer, buffer) ->
-                        LayerRaster(layer.name, ExportRegion.apply(buffer, snapshot.selection, resolved.area, region), layer)
-                    }
-                exporter.exportStill(projectId, name, frames.first(), layers, resolved, snapshot.hasAdjustmentLayers, snapshot.groups)
             }
         }
 
@@ -1373,6 +1496,13 @@ class CanvasViewModel
                     throw cancelled
                 }
             }
+        }
+
+        fun setTimelapseRecording(recording: Boolean) {
+            val projectId = currentProjectId
+            if (projectId == 0L) return
+            _timelapseRecording.value = recording
+            viewModelScope.launch(editorErrors) { timelapse.setRecording(projectId, recording) }
         }
 
         /** Frames for the in-app time-lapse replay (empty before anything was drawn). */
@@ -1435,26 +1565,7 @@ class CanvasViewModel
         fun palettesFor(category: String? = null): List<Palette> =
             if (category == null) _palettes.value else _palettes.value.filter { it.category == category }
 
-        fun addPaletteFromColors(
-            name: String,
-            colors: List<Int>,
-        ) {
-            viewModelScope.launch(editorErrors) {
-                val palette =
-                    Palette(
-                        id = System.currentTimeMillis(),
-                        name = name,
-                        colors = colors,
-                        category = "Custom",
-                    )
-                settingsRepository.addPalette(palette)
-                notify("Palette saved")
-            }
-        }
-
-        fun removePalette(paletteId: Long) {
-            viewModelScope.launch(editorErrors) { settingsRepository.removePalette(paletteId) }
-        }
+        val paletteActions by lazy { PaletteActions(settingsRepository, viewModelScope, editorErrors, ::notify) }
 
         fun harmonyFor(
             baseColor: Int,
@@ -1492,7 +1603,8 @@ class CanvasViewModel
                         canvasRepository.selectFrame(cursor.index)
                         while (true) {
                             if (projectId != canvasRepository.projectId()) break
-                            val frame = canvasRepository.frames().getOrNull(cursor.index) ?: break
+                            // The timeline snapshot already holds each frame's id and duration.
+                            val frame = canvasRepository.timeline.value.frames.getOrNull(cursor.index) ?: break
                             delay(frame.durationMs.toLong().coerceAtLeast(16L))
                             if (projectId != canvasRepository.projectId()) break
                             val state = canvasRepository.timeline.value
@@ -1550,5 +1662,8 @@ class CanvasViewModel
             const val DEFAULT_HEIGHT = 1080
             const val DEFAULT_DPI = 72
             private const val TIMELAPSE_INTERVAL_MS = 750L
+
+            /** The fill engine closes gaps up to this many pixels. */
+            private const val MAX_FILL_GAP = 16
         }
     }

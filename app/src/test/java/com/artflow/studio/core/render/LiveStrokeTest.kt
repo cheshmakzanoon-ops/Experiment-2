@@ -89,6 +89,8 @@ class LiveStrokeTest {
                     opacityJitter = random.nextFloat() * 0.5f,
                     hueJitter = if (index % 2 == 0) random.nextFloat() * 0.3f else 0f,
                     wetMix = if (index % 4 == 1) random.nextFloat() else 0f,
+                    dilution = if (index % 5 == 2) random.nextFloat() else 0f,
+                    pull = if (index % 3 == 2) random.nextFloat() else 0f,
                     flow = 0.4f + random.nextFloat() * 0.6f,
                     roundness = if (index % 5 == 0) 0.3f else 1f,
                     rotation = random.nextFloat() * 90f,

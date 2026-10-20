@@ -234,14 +234,15 @@ object CanvasOperations {
         margin: Int = 32,
     ): Result {
         val content = buffer.contentBounds() ?: return Result(buffer, properties)
-        val padded = content.inflated(margin)
-        return resizeCanvas(
-            buffer = buffer,
-            width = padded.width,
-            height = padded.height,
-            anchor = Anchor.CENTER,
-            properties = properties,
-        )
+        val padding = margin.coerceAtLeast(0)
+        val padded = content.inflated(padding)
+        val width = padded.width.coerceIn(1, MAX_DIMENSION)
+        val height = padded.height.coerceIn(1, MAX_DIMENSION)
+        // Move the artwork's own bounds to the margin, not the whole buffer to the centre, so the
+        // content keeps an even margin on every side and is never pushed out of the canvas.
+        val canvas = PixelBuffer(width, height)
+        canvas.drawInto(buffer, padding - content.left, padding - content.top)
+        return Result(canvas, properties.copy(width = width, height = height))
     }
 
     /** Changes DPI only; the pixel data is untouched (this is a print-resolution change). */
@@ -292,6 +293,7 @@ object CanvasOperations {
         listOf(
             Preset("Screen HD", 1920, 1080, 72),
             Preset("Screen 4K", 3840, 2160, 72),
+            Preset("4K Canvas", 4096, 2304, 132),
             Preset("Tablet", 2560, 1600, 132),
             Preset("Square 2048", 2048, 2048, 132),
             Preset("Square 4096", 4096, 4096, 132),
@@ -303,11 +305,57 @@ object CanvasOperations {
             Preset("Instagram Post", 1080, 1080, 72),
             Preset("Instagram Story", 1080, 1920, 72),
             Preset("Twitter Header", 1500, 500, 72),
+            Preset("4×6 Photo", 1200, 1800, 300),
             Preset("Print 5×7", 1500, 2100, 300),
             Preset("Print 8×10", 2400, 3000, 300),
         )
 
-    fun presetByName(name: String): Preset? = PRESETS.firstOrNull { it.name == name }
+    fun presetByName(
+        name: String,
+        saved: List<Preset> = emptyList(),
+    ): Preset? = saved.firstOrNull { it.name == name } ?: PRESETS.firstOrNull { it.name == name }
+
+    /** The most canvas presets an artist can save. */
+    const val MAX_SAVED_PRESETS = 32
+
+    /** Saved presets as text: one per line, fields separated by tabs. */
+    fun encodePresets(presets: List<Preset>): String =
+        presets.joinToString("\n") { listOf(presetName(it.name), it.width, it.height, it.dpi).joinToString("\t") }
+
+    /** Reads [encodePresets] text, dropping any line that is not a valid, safe canvas size. */
+    fun decodePresets(text: String): List<Preset> =
+        text
+            .lineSequence()
+            .mapNotNull { line ->
+                val fields = line.split('\t')
+                if (fields.size != 4) return@mapNotNull null
+                val name = presetName(fields[0])
+                val width = fields[1].toIntOrNull() ?: return@mapNotNull null
+                val height = fields[2].toIntOrNull() ?: return@mapNotNull null
+                val dpi = fields[3].toIntOrNull() ?: return@mapNotNull null
+                Preset(name, width, height, dpi).takeIf(::isValidPreset)
+            }.distinctBy { it.name }
+            .take(MAX_SAVED_PRESETS)
+            .toList()
+
+    /** True when [preset] has a name and a canvas size and dpi that can be created. */
+    fun isValidPreset(preset: Preset): Boolean =
+        preset.name.isNotEmpty() && isSizeSafe(preset.width, preset.height) && preset.dpi in MIN_DPI..MAX_DPI
+
+    /** A preset name without the characters [encodePresets] uses as separators. */
+    fun presetName(raw: String): String = raw.filterNot { it == '\t' || it == '\n' || it == '\r' }.trim().take(MAX_PRESET_NAME)
+
+    private const val MAX_PRESET_NAME = 40
+
+    /** The name of the preset made from the device's own display; see [screenPreset]. */
+    const val SCREEN_SIZE = "Screen size"
+
+    /** A canvas the size of the display, at the display's density; null when that is too large to allocate. */
+    fun screenPreset(
+        width: Int,
+        height: Int,
+        densityDpi: Int,
+    ): Preset? = Preset(SCREEN_SIZE, width, height, densityDpi.coerceIn(MIN_DPI, MAX_DPI)).takeIf { isSizeSafe(width, height) }
 
     /** Guard rails against allocations large enough to crash the app. */
     const val MAX_DIMENSION = 8192

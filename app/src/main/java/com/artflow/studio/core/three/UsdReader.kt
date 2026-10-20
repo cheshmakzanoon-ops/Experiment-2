@@ -327,7 +327,9 @@ object UsdReader {
         val data: ByteArray,
     ) : Values<Long> {
         private val buffer = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
-        private val minor = data[MAGIC.size + 1].toInt()
+
+        // Read without a bounds failure here, so that a file too short for its header is refused by init below.
+        private val minor = data.getOrNull(MAGIC.size + 1)?.toInt() ?: 0
         private val sections = HashMap<String, Int>()
         val tokens: List<String>
         private val fieldNames: IntArray
@@ -336,25 +338,28 @@ object UsdReader {
         private val pathNames: Array<String?>
 
         init {
+            // The magic alone is not enough: the header and table of contents must be present before they are read.
+            require(data.size >= TOC_OFFSET + 8) { "The USD file is cut short" }
             require(data[MAGIC.size].toInt() == 0 && minor >= MIN_MINOR) { "This USD file version is not supported" }
-            var at = position(buffer.getLong(TOC_OFFSET))
-            repeat(count(buffer.getLong(at))) { index ->
+            var at = position(longAt(TOC_OFFSET))
+            repeat(count(longAt(at))) { index ->
                 val entry = at + 8 + index * SECTION_ENTRY
+                require(entry.toLong() + SECTION_ENTRY <= data.size) { "The USD file is damaged" }
                 val name = String(data, entry, SECTION_NAME).trimEnd('\u0000')
-                sections[name] = position(buffer.getLong(entry + SECTION_NAME))
+                sections[name] = position(longAt(entry + SECTION_NAME))
             }
             at = section("TOKENS")
-            val tokenCount = count(buffer.getLong(at))
-            val raw = decompress(at + 24, count(buffer.getLong(at + 16)), count(buffer.getLong(at + 8)))
+            val tokenCount = count(longAt(at))
+            val raw = decompress(at + 24, count(longAt(at + 16)), count(longAt(at + 8)))
             tokens = String(raw, Charsets.UTF_8).split('\u0000').take(tokenCount)
             at = section("FIELDS")
-            val fields = count(buffer.getLong(at))
+            val fields = count(longAt(at))
             at += 8
             fieldNames = ints(at, fields).also { at = it.second }.first
-            val repBytes = decompress(at + 8, count(buffer.getLong(at)), fields * 8)
+            val repBytes = decompress(at + 8, count(longAt(at)), fields * 8)
             fieldValues = LongArray(fields) { ByteBuffer.wrap(repBytes).order(ByteOrder.LITTLE_ENDIAN).getLong(it * 8) }
             at = section("FIELDSETS")
-            fieldSets = ints(at + 8, count(buffer.getLong(at))).first
+            fieldSets = ints(at + 8, count(longAt(at))).first
             pathNames = paths(section("PATHS"))
         }
 
@@ -363,7 +368,7 @@ object UsdReader {
         /** Prims and properties by path, each with its fields by name. */
         fun specs(): Map<String, Map<String, Long>> {
             val at = section("SPECS")
-            val count = count(buffer.getLong(at))
+            val count = count(longAt(at))
             val (paths, afterPaths) = ints(at + 8, count)
             val (sets, _) = ints(afterPaths, count)
             val result = HashMap<String, Map<String, Long>>()
@@ -381,8 +386,8 @@ object UsdReader {
         }
 
         private fun paths(start: Int): Array<String?> {
-            val total = count(buffer.getLong(start))
-            val encoded = count(buffer.getLong(start + 8))
+            val total = count(longAt(start))
+            val encoded = count(longAt(start + 8))
             val (indexes, a) = ints(start + 16, encoded)
             val (elements, b) = ints(a, encoded)
             val (jumps, _) = ints(b, encoded)
@@ -424,16 +429,16 @@ object UsdReader {
             val tokenArray = type(rep) == TOKEN && array(rep)
             if (inlined(rep) || (!tokenArray && type(rep) != TOKEN_VECTOR)) return emptyList()
             val at = position(payload(rep))
-            val count = if (tokenArray) arrayCount(at) else count(buffer.getLong(at))
+            val count = if (tokenArray) arrayCount(at) else count(longAt(at))
             val start = at + if (tokenArray && minor < ARRAY_COUNT_64) 4 else 8
-            return List(count) { tokens.getOrElse(buffer.getInt(start + it * 4)) { "" } }
+            return List(count) { tokens.getOrElse(intAt(start + it * 4)) { "" } }
         }
 
         override fun assetPath(rep: Long): String? =
             when {
                 type(rep) != ASSET_PATH -> null
                 inlined(rep) -> tokens.getOrNull(payload(rep).toInt())
-                else -> tokens.getOrNull(buffer.getInt(position(payload(rep))))
+                else -> tokens.getOrNull(intAt(position(payload(rep))))
             }
 
         /** The added and explicit items of a path list (connections), as path strings. */
@@ -444,8 +449,8 @@ object UsdReader {
             val found = mutableListOf<String>()
             for (bit in LIST_BITS) {
                 if (header and bit == 0) continue
-                val count = count(buffer.getLong(at))
-                repeat(count) { pathNames.getOrNull(buffer.getInt(at + 8 + it * 4))?.let(found::add) }
+                val count = count(longAt(at))
+                repeat(count) { pathNames.getOrNull(intAt(at + 8 + it * 4))?.let(found::add) }
                 at += 8 + count * 4
             }
             return found
@@ -456,13 +461,15 @@ object UsdReader {
             val at = position(payload(rep))
             val count = arrayCount(at)
             val start = at + if (minor >= ARRAY_COUNT_64) 8 else 4
-            return if (compressed(rep)) ints(start, count).first else IntArray(count) { buffer.getInt(start + it * 4) }
+            if (compressed(rep)) return ints(start, count).first
+            require(start.toLong() + count.toLong() * 4 <= data.size) { "The USD file is damaged" }
+            return IntArray(count) { intAt(start + it * 4) }
         }
 
         /** Float-based values (scalars, vectors, matrices and their arrays) flattened to floats. */
         override fun floats(rep: Long): FloatArray {
             val type = type(rep)
-            val width = WIDTH[type] ?: error("Unsupported USD value type $type")
+            val width = WIDTH[type] ?: throw IllegalArgumentException("The USD file uses a value type that is not supported")
             val double = type in DOUBLES
             if (inlined(rep)) return inlinedFloats(rep, type, width)
             val at = position(payload(rep))
@@ -502,9 +509,9 @@ object UsdReader {
             if (minor >=
                 ARRAY_COUNT_64
             ) {
-                count(buffer.getLong(at))
+                count(longAt(at))
             } else {
-                buffer.getInt(at).also { require(it >= 0) }
+                intAt(at).also { require(it >= 0) }
             }
 
         /** Delta-coded integers behind an LZ4 block: returns the values and the position after them. */
@@ -512,7 +519,7 @@ object UsdReader {
             at: Int,
             count: Int,
         ): Pair<IntArray, Int> {
-            val size = count(buffer.getLong(at))
+            val size = count(longAt(at))
             val coded = decompress(at + 8, size, 4 + (count * 2 + 7) / 8 + count * 4)
             val codes = ByteBuffer.wrap(coded).order(ByteOrder.LITTLE_ENDIAN)
             val common = codes.getInt(0)
@@ -540,6 +547,9 @@ object UsdReader {
             capacity: Int,
         ): ByteArray {
             require(size >= 1 && at + size <= data.size && capacity in 0..MAX_DECODED) { "The USD data is cut short" }
+            // LZ4 expands its input by at most about 255 times, so a larger declared size cannot be honest. Refusing it
+            // here stops a small file from making the reader allocate hundreds of megabytes.
+            require(capacity.toLong() <= size.toLong() * MAX_EXPANSION + EXPANSION_SLACK) { "The USD data is cut short" }
             val out = ByteArray(capacity)
             val chunks = data[at].toInt() and 0xFF
             if (chunks == 0) {
@@ -548,7 +558,7 @@ object UsdReader {
                 var source = at + 1
                 var written = 0
                 repeat(chunks) {
-                    val length = buffer.getInt(source)
+                    val length = intAt(source)
                     written += Lz4.decompress(data, source + 4, length, out, written)
                     source += 4 + length
                 }
@@ -557,6 +567,17 @@ object UsdReader {
         }
 
         private fun position(value: Long): Int = value.also { require(it in 0 until data.size) { "The USD file is damaged" } }.toInt()
+
+        /** Little-endian reads that refuse a position whose bytes are not all inside the file. */
+        private fun longAt(at: Int): Long {
+            require(at >= 0 && at.toLong() + 8 <= data.size) { "The USD file is damaged" }
+            return buffer.getLong(at)
+        }
+
+        private fun intAt(at: Int): Int {
+            require(at >= 0 && at.toLong() + 4 <= data.size) { "The USD file is damaged" }
+            return buffer.getInt(at)
+        }
 
         private fun count(value: Long): Int = value.also { require(it in 0..MAX_COUNT) { "The USD file is damaged" } }.toInt()
 
@@ -578,6 +599,8 @@ object UsdReader {
             const val SECTION_ENTRY = 32
             const val MAX_COUNT = 50_000_000L
             const val MAX_DECODED = 512 * 1024 * 1024
+            const val MAX_EXPANSION = 255L
+            const val EXPANSION_SLACK = 64L
             const val TYPE_SHIFT = 48
             const val ARRAY_BIT = 63
             const val INLINED_BIT = 62

@@ -170,4 +170,15 @@ class PixelBufferTest {
         assertEquals(0x40, (scaled shr 24) and 0xFF)
         assertEquals(color and 0x00FFFFFF, scaled and 0x00FFFFFF)
     }
+
+    @Test
+    fun catmullRomWeightsSumToOneAndInterpolateLinearRamps() {
+        for (step in 0..10) {
+            val t = step / 10f
+            assertEquals(1f, (0..3).sumOf { PixelBuffer.catmullRom(it, t).toDouble() }.toFloat(), 1e-5f)
+        }
+        val ramp = PixelBuffer(4, 1, IntArray(4) { 0xFF000000.toInt() or (it * 40 shl 16) })
+        assertEquals(60f, Channels.red(ramp.sampleBicubic(2f, 0.5f)), 0.5f)
+        assertEquals(ramp.pixels[2], ramp.sampleBicubic(2.5f, 0.5f))
+    }
 }

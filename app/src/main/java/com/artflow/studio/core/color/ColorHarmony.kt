@@ -176,7 +176,9 @@ object ColorHarmony {
                 8 -> cleaned.toLong(16).toInt()
                 else -> null
             }
-        } catch (e: NumberFormatException) {
+        } catch (e: IllegalArgumentException) {
+            // digitToInt throws IllegalArgumentException for a non-hex letter, such as "red";
+            // toInt throws NumberFormatException, which is a subclass of it.
             null
         }
     }
@@ -291,8 +293,12 @@ object ColorHarmony {
         largeText: Boolean = false,
     ): Boolean = contrastRatio(foreground, background) >= if (largeText) 3f else 4.5f
 
-    /** Black or white, whichever reads better on [background]. */
-    fun bestTextColor(background: Int): Int = if (relativeLuminance(background) > 0.35f) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
+    /** Black or white, whichever has the higher contrast ratio against [background]. */
+    fun bestTextColor(background: Int): Int {
+        val black = 0xFF000000.toInt()
+        val white = 0xFFFFFFFF.toInt()
+        return if (contrastRatio(black, background) >= contrastRatio(white, background)) black else white
+    }
 
     /** The classic colour-wheel position in degrees, for drawing a hue ring. */
     fun wheelPosition(
@@ -357,8 +363,20 @@ object ColorHarmony {
         val result = mutableListOf<Int>()
         for (i in steps downTo 1) result += adjustLightness(argb, i * -0.16f)
         result += argb
-        for (i in 1..steps) result += adjustLightness(argb, i * 0.16f)
+        for (i in 1..steps) result += towardWhite(argb, i * 0.16f)
         return result
+    }
+
+    /** Mixes [argb] with white by [amount], so even a fully bright colour gets lighter. */
+    private fun towardWhite(
+        argb: Int,
+        amount: Float,
+    ): Int {
+        fun channel(shift: Int): Int {
+            val c = (argb shr shift) and 0xFF
+            return (c + (255 - c) * amount.coerceIn(0f, 1f) + 0.5f).toInt().coerceIn(0, 255)
+        }
+        return (argb and 0xFF000000.toInt()) or (channel(16) shl 16) or (channel(8) shl 8) or channel(0)
     }
 
     /** Deduplicates a recent-colour list while preserving order (most recent first). */
@@ -424,6 +442,47 @@ object ColorHarmony {
             }
             ColorMode.HEX -> listOf("Hex" to 0f)
         }
+    }
+
+    /** How a channel is shown and typed: the number is the channel value times [scale], followed by [suffix]. */
+    data class ChannelDisplay(
+        val scale: Float,
+        val suffix: String,
+    )
+
+    /** Hue reads in degrees, saturation, brightness and CMYK inks in percent, RGB as 0-255. */
+    fun channelDisplay(
+        mode: ColorMode,
+        index: Int,
+    ): ChannelDisplay =
+        when (mode) {
+            ColorMode.HSV -> if (index == 0) ChannelDisplay(1f, "\u00B0") else ChannelDisplay(100f, "%")
+            ColorMode.RGB, ColorMode.HEX -> ChannelDisplay(1f, "")
+            ColorMode.CMYK -> ChannelDisplay(100f, "%")
+        }
+
+    /** The readout for one channel value, e.g. `87%` or `210\u00B0`. */
+    fun formatChannelValue(
+        mode: ColorMode,
+        index: Int,
+        value: Float,
+    ): String {
+        val display = channelDisplay(mode, index)
+        return "${(value * display.scale).roundToInt()}${display.suffix}"
+    }
+
+    /** The channel value (in the slider's units) a user typed, or null when it is not a number inside the channel's range. */
+    fun parseChannelValue(
+        mode: ColorMode,
+        index: Int,
+        text: String,
+    ): Float? {
+        val display = channelDisplay(mode, index)
+        val cleaned = text.trim().removeSuffix(display.suffix).trim()
+        val typed = cleaned.replace(',', '.').toFloatOrNull() ?: return null
+        val value = typed / display.scale
+        val range = channelRange(mode, index)
+        return value.takeIf { it.isFinite() && it >= range.start && it <= range.endInclusive }
     }
 
     /** Ranges for each channel slider. */

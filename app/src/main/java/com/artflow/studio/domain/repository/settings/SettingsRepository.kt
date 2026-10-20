@@ -1,5 +1,6 @@
 package com.artflow.studio.domain.repository.settings
 
+import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.domain.model.settings.AccentChoice
 import com.artflow.studio.domain.model.settings.AppSettings
@@ -64,6 +65,11 @@ interface SettingsRepository {
 
     suspend fun setDefaultPreset(name: String)
 
+    /** Keeps a canvas size in the new-canvas dialog; one of the same name is replaced. */
+    suspend fun saveCanvasPreset(preset: CanvasOperations.Preset)
+
+    suspend fun deleteCanvasPreset(name: String)
+
     suspend fun setGallerySort(sort: GallerySort)
 
     suspend fun setOnboardingSeen(seen: Boolean)
@@ -82,5 +88,11 @@ interface SettingsRepository {
     suspend fun renamePalette(
         paletteId: Long,
         name: String,
+    )
+
+    /** Replaces the palette with the same id where it stands (or adds it); [makeDefault] moves it to the front. */
+    suspend fun updatePalette(
+        palette: Palette,
+        makeDefault: Boolean = false,
     )
 }

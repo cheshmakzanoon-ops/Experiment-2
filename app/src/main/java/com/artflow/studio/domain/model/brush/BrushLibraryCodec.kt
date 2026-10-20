@@ -8,6 +8,9 @@ object BrushLibraryCodec {
     const val MAX_BRUSHES = 128
     const val MAX_NAME = 80
     private const val MAX_CHARACTERS = 524_288
+
+    /** The rasterizer repeats each dab at most this many times; Procreate's Count reaches 16. */
+    private const val MAX_DAB_COUNT = 32
     private val GRAIN_IDS = setOf(null, "paper", "charcoal", "canvas", "fine", "blotch", "bristle", "halftone", "hatch", "speckle")
 
     /** Grains imported from photos; their tiles live beside the library. */
@@ -72,6 +75,16 @@ object BrushLibraryCodec {
                 params.opacityJitter,
                 params.smoothing,
                 params.wetMix,
+                params.dilution,
+                params.pull,
+                params.countJitter,
+                params.minOpacity,
+                params.tipSharpness,
+                params.pressureToFlow,
+                params.touchTaperStart ?: 0f,
+                params.touchTaperEnd ?: 0f,
+                params.maxOpacity,
+                params.wetBlur,
                 params.flow,
                 params.tiltInfluence,
                 params.velocityToHue,

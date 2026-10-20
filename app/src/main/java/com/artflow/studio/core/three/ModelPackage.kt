@@ -27,7 +27,13 @@ object ModelPackage {
         if (GltfReader.isGlb(bytes) || isGltfText(bytes)) return gltf(bytes, emptyMap())
         if (UsdReader.isUsd(bytes)) return contents(UsdReader.read(bytes))
         if (!isZip(bytes)) return Contents(bytes.decodeToString())
-        val files = unzip(bytes)
+        val files =
+            try {
+                unzip(bytes)
+            } catch (damaged: java.io.IOException) {
+                // A damaged archive, such as a CRC mismatch or a cut-off entry, is a refusal like any other.
+                throw IllegalArgumentException("The 3D model package is damaged", damaged)
+            }
         // A .usdz is a zip whose first USD file is the scene.
         files.keys.firstOrNull { it.endsWith(".usdc") || it.endsWith(".usda") || it.endsWith(".usd") }?.let { name ->
             return contents(UsdReader.read(requireNotNull(files[name]), files))
@@ -38,7 +44,8 @@ object ModelPackage {
             return Contents(objText, textureFor(objText, files), textures)
         }
         val scene = files.keys.firstOrNull { it.endsWith(".glb") } ?: files.keys.firstOrNull { it.endsWith(".gltf") }
-        return gltf(requireNotNull(files[scene ?: error("The zip has no OBJ or glTF model in it")]), files)
+        val name = scene ?: throw IllegalArgumentException("The zip has no OBJ or glTF model in it")
+        return gltf(requireNotNull(files[name]), files)
     }
 
     private fun gltf(

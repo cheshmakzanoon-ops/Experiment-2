@@ -241,6 +241,48 @@ class LiquifyToolTest {
         }
     }
 
+    @Test
+    fun momentumCarriesThePushOnAfterThePenLifts() {
+        val source = ramp(horizontal = true)
+
+        fun pushed(momentum: Float): LiquifyTool.Session =
+            LiquifyTool
+                .beginSession(10f, center, LiquifyTool.Settings(size = 16f, strength = 1f, momentum = momentum), width, width)
+                .apply { dragTo(20f, center) }
+        val still = pushed(0f)
+        assertEquals(null, still.release())
+        val gliding = pushed(1f)
+        val glide = gliding.release()
+        assertTrue(glide != null && glide.right > 30)
+        // Past where the pen lifted, only the glide has moved the artwork.
+        val x = 32
+        assertEquals(channel(source, x, 32), channel(still.render(source), x, 32))
+        assertTrue(channel(gliding.render(source), x, 32) < channel(source, x, 32))
+    }
+
+    @Test
+    fun withPressureOffALightTouchDistortsFully() {
+        val source = ramp(horizontal = true)
+
+        fun drag(usePressure: Boolean) =
+            LiquifyTool
+                .beginSession(center, center, LiquifyTool.Settings(size = 40f, strength = 1f, usePressure = usePressure), width, width)
+                .apply { dragTo(center + 4f, center, pressure = 0f) }
+                .render(source)
+        assertArrayEquals(source.pixels, drag(usePressure = true).pixels)
+        assertTrue(channel(drag(usePressure = false), 32, 32) < channel(source, 32, 32))
+    }
+
+    @Test
+    fun adjustScalesTheGestureFromNoneToFull() {
+        val source = ramp(horizontal = true)
+        val push = session(LiquifyTool.Mode.PUSH).apply { dragTo(center + 6f, center) }
+        assertArrayEquals(source.pixels, push.renderAdjusted(source, 0f).pixels)
+        assertArrayEquals(push.render(source).pixels, push.renderAdjusted(source, 1f).pixels)
+        val half = channel(push.renderAdjusted(source, 0.5f), 32, 32)
+        assertTrue(half < channel(source, 32, 32) && half > channel(push.render(source), 32, 32))
+    }
+
     private fun session(
         mode: LiquifyTool.Mode,
         strength: Float = 1f,

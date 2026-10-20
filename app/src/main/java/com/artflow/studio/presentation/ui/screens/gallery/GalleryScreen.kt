@@ -2,6 +2,7 @@
 
 package com.artflow.studio.presentation.ui.screens.gallery
 
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -22,28 +24,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
-import com.artflow.studio.core.canvas.CanvasOperations
-import com.artflow.studio.core.color.ColorProfile
-import com.artflow.studio.core.export.PsdCodec
-import com.artflow.studio.core.pixels.PixelBuffer
-import com.artflow.studio.core.three.ModelPackage
-import com.artflow.studio.core.three.ObjParser
-import com.artflow.studio.core.three.TextureAtlas
-import com.artflow.studio.data.export.PendingImports
-import com.artflow.studio.data.export.ProcreateImport
-import com.artflow.studio.data.renderer.BitmapPixelBridge
+import com.artflow.studio.R
 import com.artflow.studio.domain.model.Project
 import com.artflow.studio.domain.model.settings.GallerySort
+import com.artflow.studio.presentation.ui.IncomingFiles
+import com.artflow.studio.presentation.ui.viewmodel.BrushLibraryViewModel
 import com.artflow.studio.presentation.ui.viewmodel.MainUiState
 import com.artflow.studio.presentation.ui.viewmodel.MainViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -66,16 +62,15 @@ fun GalleryScreen(
     val scope = rememberCoroutineScope()
 
     var showNewProjectDialog by remember { mutableStateOf(false) }
-    var renameTarget by remember { mutableStateOf<Project?>(null) }
-    var deleteTarget by remember { mutableStateOf<Project?>(null) }
     var searchVisible by remember { mutableStateOf(false) }
     var openStack by rememberSaveable { mutableStateOf<String?>(null) }
-    var stackTarget by remember { mutableStateOf<Project?>(null) }
-    var preview by remember { mutableStateOf<Pair<List<Project>, Int>?>(null) }
     // Select mode: null while browsing, otherwise the chosen artworks.
     var selection by remember { mutableStateOf<Set<Long>?>(null) }
-    var batch by remember { mutableStateOf<GalleryBatch?>(null) }
+    val dialogs = remember { GalleryDialogs() }
     val drag = rememberGalleryDrag()
+    val hint = MaterialTheme.colorScheme.primary
+    val gridState = rememberLazyGridState()
+    AutoScrollWhileDragging(drag, gridState)
     val onDrop: (Long, GalleryDrop) -> Unit = { id, target -> dropArtwork(viewModel, uiState, id, target) }
     BackHandler(enabled = selection != null) { selection = null }
     BackHandler(enabled = openStack != null && selection == null) { openStack = null }
@@ -86,11 +81,25 @@ fun GalleryScreen(
         if (projects.none { it.stack == stack }) openStack = null
     }
     val context = LocalContext.current
-    val photoImport = rememberPhotoImport(viewModel, snackbarHostState, onNavigateToCanvas)
-    val psdImport = rememberPsdImport(viewModel, snackbarHostState, onNavigateToCanvas)
-    val procreateImport = rememberProcreateImport(viewModel, snackbarHostState, onNavigateToCanvas)
-    val packageImport = rememberPackageImport(viewModel, snackbarHostState, onNavigateToCanvas)
-    val modelImport = rememberModelImport(viewModel, snackbarHostState, onNavigateToCanvas)
+    val brushLibrary: BrushLibraryViewModel = hiltViewModel()
+    val imports =
+        remember(context, viewModel, onNavigateToCanvas) {
+            GalleryImports(
+                context = context,
+                scope = scope,
+                viewModel = viewModel,
+                say = { snackbarHostState.showSnackbar(it) },
+                addBrushes = brushLibrary::importWhenReady,
+                openArtwork = onNavigateToCanvas,
+            )
+        }
+    val photoImport = rememberPhotoPicker(imports::photo)
+    val psdImport = rememberDocumentPicker(arrayOf("image/vnd.adobe.photoshop", "application/octet-stream"), imports::psd)
+    val procreateImport = rememberDocumentPicker(arrayOf("application/octet-stream", "application/zip", "*/*"), imports::procreate)
+    val packageImport = rememberDocumentPicker(arrayOf("application/octet-stream", "application/zip"), imports::artwork)
+    val modelImport = rememberDocumentPicker(arrayOf("*/*"), imports::model)
+    // Files other apps open or share with ArtFlow are imported here, as the pickers' files are.
+    LaunchedEffect(imports) { IncomingFiles.files.collect { imports.open(it) } }
 
     LaunchedEffect(Unit) {
         viewModel.messageFlow.collect { snackbarHostState.showSnackbar(it) }
@@ -101,16 +110,21 @@ fun GalleryScreen(
         topBar = {
             val chosen = selection
             if (chosen != null) {
+                val picked = selectedProjects(uiState, chosen)
                 SelectionTopBar(
                     chosen.size,
                     SelectionActions(
-                        onStack = { batch = GalleryBatch.STACK },
+                        onStack = { dialogs.batch = GalleryBatch.STACK },
                         onDuplicate = {
-                            selectedProjects(uiState, chosen).forEach(viewModel::duplicate)
+                            picked.forEach(viewModel::duplicate)
                             selection = null
                         },
-                        onDelete = { batch = GalleryBatch.DELETE },
+                        onDelete = { dialogs.batch = GalleryBatch.DELETE },
                         onDone = { selection = null },
+                        onSelectAll = { selection = shownProjects(uiState, openStack, query).mapTo(HashSet()) { it.id } },
+                        onShare = { scope.launch { shareProjects(viewModel, picked, context, snackbarHostState) } },
+                        onFavorite = { viewModel.setFavorite(picked, !picked.all(Project::isFavorite)) },
+                        allFavourite = picked.isNotEmpty() && picked.all(Project::isFavorite),
                     ),
                 )
             } else {
@@ -120,7 +134,7 @@ fun GalleryScreen(
                             OutlinedTextField(
                                 value = query,
                                 onValueChange = viewModel::setQuery,
-                                placeholder = { Text("Search artworks") },
+                                placeholder = { Text(stringResource(R.string.galleryscreen_search_artworks)) },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
                             )
@@ -137,7 +151,7 @@ fun GalleryScreen(
                     navigationIcon = {
                         if (openStack != null) {
                             IconButton(onClick = { openStack = null }) {
-                                Icon(Icons.Default.ArrowBack, contentDescription = "Back to gallery")
+                                Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.galleryscreen_back_to_gallery))
                             }
                         }
                     },
@@ -145,17 +159,17 @@ fun GalleryScreen(
                         IconButton(onClick = { searchVisible = !searchVisible }) {
                             Icon(
                                 imageVector = if (searchVisible) Icons.Default.Close else Icons.Default.Search,
-                                contentDescription = "Search",
+                                contentDescription = stringResource(R.string.galleryscreen_search),
                             )
                         }
                         SortMenu(settings.gallerySort, viewModel::setSort)
-                        TextButton(onClick = { selection = emptySet() }) { Text("Select") }
+                        TextButton(onClick = { selection = emptySet() }) { Text(stringResource(R.string.layer_select)) }
                         ImportMenu(ImportChoices(photoImport, psdImport, procreateImport, packageImport, modelImport))
                         IconButton(onClick = onOpenHelp) {
-                            Icon(Icons.Default.HelpOutline, contentDescription = "Help")
+                            Icon(Icons.Default.HelpOutline, contentDescription = stringResource(R.string.galleryscreen_help))
                         }
                         IconButton(onClick = onOpenSettings) {
-                            Icon(Icons.Default.Settings, contentDescription = "Settings")
+                            Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings))
                         }
                     },
                 )
@@ -165,7 +179,7 @@ fun GalleryScreen(
             ExtendedFloatingActionButton(
                 onClick = { showNewProjectDialog = true },
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("New artwork") },
+                text = { Text(stringResource(R.string.galleryscreen_new_artwork)) },
             )
         },
     ) { padding ->
@@ -173,7 +187,8 @@ fun GalleryScreen(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .padding(padding),
+                    .padding(padding)
+                    .onGloballyPositioned { drag.viewport = it.boundsInRoot() },
         ) {
             when (val state = uiState) {
                 is MainUiState.Loading -> {
@@ -194,6 +209,7 @@ fun GalleryScreen(
                         EmptyGallery(query.isNotEmpty())
                     } else {
                         LazyVerticalGrid(
+                            state = gridState,
                             columns = GridCells.Adaptive(minSize = 168.dp),
                             contentPadding = PaddingValues(12.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -201,10 +217,19 @@ fun GalleryScreen(
                         ) {
                             val layout = GalleryLayout.of(state.projects, openStack, searching = query.isNotEmpty())
                             items(layout.stacks, key = { "stack:${it.first}" }) { (name, members) ->
-                                StackCard(name, members, Modifier.stackDropTarget(drag, name)) { openStack = name }
+                                TrackStack(drag, name)
+                                val menu =
+                                    StackMenu(
+                                        onRename = { dialogs.stackAction = StackAction(name, StackCommand.RENAME) },
+                                        onMerge = { dialogs.stackAction = StackAction(name, StackCommand.MERGE) },
+                                        onDissolve = { viewModel.dissolveStack(name) },
+                                        onShare = { scope.launch { shareProjects(viewModel, members, context, snackbarHostState) } },
+                                    )
+                                StackCard(name, members, menu, Modifier.stackDropTarget(drag, name, hint)) { openStack = name }
                             }
                             items(layout.projects, key = { it.id }) { project ->
                                 val chosen = selection
+                                TrackCard(drag, project.id)
                                 ProjectCard(
                                     project = project,
                                     onClick = {
@@ -216,13 +241,13 @@ fun GalleryScreen(
                                     },
                                     selected = chosen?.let { project.id in it },
                                     onFavorite = { viewModel.toggleFavorite(project) },
-                                    onRename = { renameTarget = project },
+                                    onRename = { dialogs.rename = project },
                                     onDuplicate = { viewModel.duplicate(project) },
-                                    onDelete = { deleteTarget = project },
-                                    onStack = { stackTarget = project },
-                                    onPreview = { preview = layout.projects to layout.projects.indexOf(project) },
-                                    onShare = { scope.launch { shareProject(viewModel, project, context, snackbarHostState) } },
-                                    modifier = if (chosen == null) Modifier.draggableArtwork(drag, project.id, onDrop) else Modifier,
+                                    onDelete = { dialogs.delete = project },
+                                    onStack = { dialogs.stack = project },
+                                    onPreview = { dialogs.preview = layout.projects to layout.projects.indexOf(project) },
+                                    onShare = { scope.launch { shareProjects(viewModel, listOf(project), context, snackbarHostState) } },
+                                    modifier = if (chosen == null) Modifier.draggableArtwork(drag, project.id, hint, onDrop) else Modifier,
                                 )
                             }
                         }
@@ -235,6 +260,8 @@ fun GalleryScreen(
     if (showNewProjectDialog) {
         NewProjectDialog(
             defaultPresetName = settings.defaultPresetName,
+            savedPresets = settings.savedCanvasPresets,
+            presetEdits = PresetEdits(viewModel::saveCanvasPreset, viewModel::deleteCanvasPreset),
             onDismiss = { showNewProjectDialog = false },
             onCreate = { name, preset, width, height, dpi, wideColor ->
                 showNewProjectDialog = false
@@ -249,119 +276,7 @@ fun GalleryScreen(
         )
     }
 
-    preview?.let { (projects, index) ->
-        GalleryPreview(projects, index, viewModel::previewImage) { preview = null }
-    }
-
-    batch?.let { action ->
-        BatchDialog(action, selectedProjects(uiState, selection.orEmpty()), existingStacks(uiState), viewModel) { done ->
-            batch = null
-            if (done) selection = null
-        }
-    }
-    stackTarget?.let { project ->
-        StackDialog("Stack ${project.name}", project.stack, existingStacks(uiState), onDismiss = { stackTarget = null }) { stack ->
-            viewModel.moveToStack(project.id, stack)
-            stackTarget = null
-        }
-    }
-    renameTarget?.let { project ->
-        RenameDialog(project, onDismiss = { renameTarget = null }) { name ->
-            viewModel.rename(project, name)
-            renameTarget = null
-        }
-    }
-    deleteTarget?.let { project ->
-        DeleteDialog(project, onDismiss = { deleteTarget = null }) {
-            viewModel.delete(project)
-            deleteTarget = null
-        }
-    }
-}
-
-/** Opens a layered Photoshop document as a new artwork of the same size, keeping its layers. */
-@Composable
-private fun rememberPsdImport(
-    viewModel: MainViewModel,
-    snackbarHostState: SnackbarHostState,
-    onNavigateToCanvas: (Long) -> Unit,
-): () -> Unit {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val launcher =
-        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            if (uri == null) return@rememberLauncherForActivityResult
-            scope.launch {
-                val opened =
-                    withContext(Dispatchers.IO) {
-                        runCatching {
-                            val bytes = requireNotNull(context.contentResolver.openInputStream(uri)?.use { it.readBytes() })
-                            val document = requireNotNull(PsdCodec.read(bytes))
-                            bytes to document
-                        }.getOrNull()
-                    }
-                if (opened == null) {
-                    snackbarHostState.showSnackbar("That file is not a Photoshop document ArtFlow can read")
-                    return@launch
-                }
-                val (bytes, document) = opened
-                viewModel.createProject("Imported PSD", null, document.width, document.height, document.dpi) { id ->
-                    PendingImports.putPsd(id, bytes)
-                    scope.launch { onNavigateToCanvas(id) }
-                }
-            }
-        }
-    return { runCatching { launcher.launch(arrayOf("image/vnd.adobe.photoshop", "application/octet-stream")) } }
-}
-
-/**
- * Opens a Procreate document as a new artwork of the same size, with its layers, groups, blend
- * modes, masks and background colour.
- */
-@Composable
-private fun rememberProcreateImport(
-    viewModel: MainViewModel,
-    snackbarHostState: SnackbarHostState,
-    onNavigateToCanvas: (Long) -> Unit,
-): () -> Unit {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val launcher =
-        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            if (uri == null) return@rememberLauncherForActivityResult
-            scope.launch {
-                val opened =
-                    withContext(Dispatchers.IO) {
-                        runCatching {
-                            requireNotNull(context.contentResolver.openInputStream(uri)) { "That file could not be opened" }.use { input ->
-                                ProcreateImport.open(input, context.cacheDir)
-                            }
-                        }
-                    }
-                val document =
-                    opened.getOrElse { failure ->
-                        // Our own checks explain themselves; anything else means a damaged or unusual file.
-                        val explained = failure is IllegalArgumentException && failure !is NumberFormatException
-                        snackbarHostState.showSnackbar(
-                            failure.message?.takeIf { explained } ?: "That file is not a Procreate document ArtFlow can read",
-                        )
-                        return@launch
-                    }
-                val size = document.document
-                if (!CanvasOperations.isSizeSafe(size.width, size.height)) {
-                    document.close()
-                    snackbarHostState.showSnackbar("This Procreate canvas is too large for this device")
-                    return@launch
-                }
-                val name = size.name?.takeIf { it.isNotBlank() } ?: "Imported Procreate"
-                val dpi = size.dpi.coerceIn(CanvasOperations.MIN_DPI, CanvasOperations.MAX_DPI)
-                viewModel.createProject(name, null, size.width, size.height, dpi) { id ->
-                    PendingImports.putProcreate(id, document)
-                    scope.launch { onNavigateToCanvas(id) }
-                }
-            }
-        }
-    return { runCatching { launcher.launch(arrayOf("application/octet-stream", "application/zip", "*/*")) } }
+    GalleryDialogHost(dialogs, uiState, selection, viewModel) { selection = null }
 }
 
 /** What the gallery's Import menu can bring in, each as a new artwork. */
@@ -373,136 +288,32 @@ private class ImportChoices(
     val model: () -> Unit,
 )
 
-/** Opens an OBJ model as a new artwork that is its texture, for 3D painting. */
-@Composable
-private fun rememberModelImport(
-    viewModel: MainViewModel,
-    snackbarHostState: SnackbarHostState,
-    onNavigateToCanvas: (Long) -> Unit,
-): () -> Unit {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val launcher =
-        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            if (uri == null) return@rememberLauncherForActivityResult
-            scope.launch {
-                // An OBJ file, or a zip with the OBJ, its materials and textures.
-                val read =
-                    withContext(Dispatchers.IO) {
-                        runCatching {
-                            val bytes =
-                                requireNotNull(
-                                    context.contentResolver.openInputStream(uri)?.use { it.readBytes() },
-                                )
-                            val contents = ModelPackage.read(bytes)
-                            ObjParser.parse(contents.objText)
-                            // Several textured materials share one artwork, each in its own cell.
-                            val decoded =
-                                contents.textures
-                                    .mapNotNull { (name, image) ->
-                                        BitmapPixelBridge.fromEncodedBytes(image)?.let {
-                                            name to
-                                                it
-                                        }
-                                    }.toMap()
-                            TextureAtlas.pack(contents.objText, decoded, MAX_MODEL_TEXTURE)?.takeIf { decoded.isNotEmpty() }?.let {
-                                it.objText to
-                                    it.image
-                            }
-                                ?: (contents.objText to contents.texture?.let(BitmapPixelBridge::fromEncodedBytes)?.let(::fittedTexture))
-                        }
-                    }
-                read.onFailure { failure ->
-                    // Our own checks explain themselves; anything else means a damaged or unusual file.
-                    val explained =
-                        (failure is IllegalArgumentException || failure is IllegalStateException) && failure !is NumberFormatException
-                    snackbarHostState.showSnackbar(failure.message?.takeIf { explained } ?: "That 3D model could not be read")
-                }
-                val (model, texture) = read.getOrNull() ?: return@launch
-                val width = texture?.width ?: MODEL_TEXTURE
-                val height = texture?.height ?: MODEL_TEXTURE
-                viewModel.createProject("3D model", null, width, height, MODEL_DPI) { id ->
-                    PendingImports.putModel(id, model)
-                    // The model's own texture becomes the first layer to paint over.
-                    texture?.let { PendingImports.put(id, it) }
-                    scope.launch { onNavigateToCanvas(id) }
-                }
-            }
-        }
-    return { runCatching { launcher.launch(arrayOf("*/*")) } }
-}
-
-private const val MODEL_TEXTURE = 2048
-private const val MAX_MODEL_TEXTURE = 4096
-
-/** A model texture scaled down, if needed, so its longest side fits the canvas limit. */
-private fun fittedTexture(texture: PixelBuffer): PixelBuffer {
-    val scale = MAX_MODEL_TEXTURE.toFloat() / maxOf(texture.width, texture.height)
-    if (scale >= 1f) return texture
-    return texture.scaled((texture.width * scale).toInt().coerceAtLeast(1), (texture.height * scale).toInt().coerceAtLeast(1))
-}
-
-private const val MODEL_DPI = 132
-
-/** Opens an `.artflow` file as a new artwork with all its layers, frames and settings. */
-@Composable
-private fun rememberPackageImport(
-    viewModel: MainViewModel,
-    snackbarHostState: SnackbarHostState,
-    onNavigateToCanvas: (Long) -> Unit,
-): () -> Unit {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val launcher =
-        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            if (uri == null) return@rememberLauncherForActivityResult
-            scope.launch {
-                val bytes =
-                    withContext(Dispatchers.IO) {
-                        runCatching {
-                            context.contentResolver.openInputStream(uri)?.use { input ->
-                                input.readBytes().also { require(it.size <= MAX_PACKAGE_BYTES) }
-                            }
-                        }.getOrNull()
-                    }
-                if (bytes == null) {
-                    snackbarHostState.showSnackbar("That file could not be read, or it is too large")
-                    return@launch
-                }
-                viewModel.importPackage(bytes) { id -> scope.launch { onNavigateToCanvas(id) } }
-            }
-        }
-    return { runCatching { launcher.launch(arrayOf("application/octet-stream", "application/zip")) } }
-}
-
-private const val MAX_PACKAGE_BYTES = 512 * 1024 * 1024
-
 /** The gallery's Import menu: a photo or a layered Photoshop file, each as a new artwork. */
 @Composable
 private fun ImportMenu(choices: ImportChoices) {
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }) {
-            Icon(Icons.Default.AddPhotoAlternate, contentDescription = "Import as a new artwork")
+            Icon(Icons.Default.AddPhotoAlternate, contentDescription = stringResource(R.string.galleryscreen_import_as_a_new_artwork))
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            DropdownMenuItem(text = { Text("Photo") }, onClick = {
+            DropdownMenuItem(text = { Text(stringResource(R.string.galleryscreen_photo)) }, onClick = {
                 open = false
                 choices.photo()
             })
-            DropdownMenuItem(text = { Text("Photoshop file (PSD)") }, onClick = {
+            DropdownMenuItem(text = { Text(stringResource(R.string.galleryscreen_photoshop_file_psd)) }, onClick = {
                 open = false
                 choices.psd()
             })
-            DropdownMenuItem(text = { Text("Procreate document (.procreate)") }, onClick = {
+            DropdownMenuItem(text = { Text(stringResource(R.string.galleryscreen_procreate_document_procreate)) }, onClick = {
                 open = false
                 choices.procreate()
             })
-            DropdownMenuItem(text = { Text("ArtFlow artwork (.artflow)") }, onClick = {
+            DropdownMenuItem(text = { Text(stringResource(R.string.galleryscreen_artflow_artwork_artflow)) }, onClick = {
                 open = false
                 choices.artwork()
             })
-            DropdownMenuItem(text = { Text("3D model (OBJ, glTF, USDZ)") }, onClick = {
+            DropdownMenuItem(text = { Text(stringResource(R.string.galleryscreen_3d_model_obj_gltf_usdz)) }, onClick = {
                 open = false
                 choices.model()
             })
@@ -510,33 +321,20 @@ private fun ImportMenu(choices: ImportChoices) {
     }
 }
 
-/** Opens a photo from the device as a new canvas of the same size. */
+/** A document picker that hands the chosen file to [import]; returns the function that opens it. */
 @Composable
-private fun rememberPhotoImport(
-    viewModel: MainViewModel,
-    snackbarHostState: SnackbarHostState,
-    onNavigateToCanvas: (Long) -> Unit,
+private fun rememberDocumentPicker(
+    types: Array<String>,
+    import: (Uri) -> Unit,
 ): () -> Unit {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val launcher =
-        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-            if (uri == null) return@rememberLauncherForActivityResult
-            scope.launch {
-                val image =
-                    withContext(Dispatchers.IO) {
-                        runCatching { BitmapPixelBridge.decodeUri(context.contentResolver, uri) }.getOrNull()
-                    }
-                if (image == null) {
-                    snackbarHostState.showSnackbar("That image could not be opened")
-                    return@launch
-                }
-                viewModel.createProject("Imported photo", null, image.width, image.height, 72) { id ->
-                    PendingImports.put(id, image)
-                    scope.launch { onNavigateToCanvas(id) }
-                }
-            }
-        }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) import(uri) }
+    return { runCatching { launcher.launch(types) } }
+}
+
+/** The photo picker, which lists the device's photo apps first. */
+@Composable
+private fun rememberPhotoPicker(import: (Uri) -> Unit): () -> Unit {
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> if (uri != null) import(uri) }
     return { runCatching { launcher.launch("image/*") } }
 }
 
@@ -547,7 +345,7 @@ private fun SortMenu(
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { open = true }) { Icon(Icons.Default.Sort, contentDescription = "Sort") }
+        IconButton(onClick = { open = true }) { Icon(Icons.Default.Sort, contentDescription = stringResource(R.string.galleryscreen_sort)) }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             GallerySort.entries.forEach { sort ->
                 DropdownMenuItem(
@@ -563,21 +361,10 @@ private fun SortMenu(
     }
 }
 
-private suspend fun shareProject(
-    viewModel: MainViewModel,
-    project: Project,
-    context: android.content.Context,
-    snackbar: SnackbarHostState,
-) {
-    val file = viewModel.shareablePng(project)
-    if (file == null) {
-        snackbar.showSnackbar("Open the artwork once so it can be shared")
-    } else {
-        runCatching { sharePng(context, file) }
-    }
-}
-
-/** Drag-to-stack: onto a stack moves the artwork in; onto another artwork makes a new stack of both. */
+/**
+ * Drag in the gallery: onto a stack moves the artwork in; onto another artwork makes a new stack of both; beside an artwork puts it
+ * there, which keeps the gallery in that order.
+ */
 private fun dropArtwork(
     viewModel: MainViewModel,
     state: MainUiState,
@@ -589,6 +376,8 @@ private fun dropArtwork(
             viewModel.moveToStack(projectId, target.name)
         }
 
+        is GalleryDrop.Beside -> viewModel.reorder(projectId, target.projectId, target.after)
+
         is GalleryDrop.OnProject -> {
             val other = (state as? MainUiState.Success)?.projects?.firstOrNull { it.id == target.projectId } ?: return
             val name = other.stack ?: newStackName(existingStacks(state))
@@ -596,50 +385,6 @@ private fun dropArtwork(
             viewModel.moveToStack(projectId, name)
         }
     }
-}
-
-private fun selectedProjects(
-    state: MainUiState,
-    ids: Set<Long>,
-): List<Project> = (state as? MainUiState.Success)?.projects.orEmpty().filter { it.id in ids }
-
-private fun existingStacks(state: MainUiState): List<String> =
-    (state as? MainUiState.Success)
-        ?.projects
-        ?.mapNotNull { it.stack }
-        ?.distinct()
-        ?.sorted()
-        .orEmpty()
-
-@Composable
-private fun RenameDialog(
-    project: Project,
-    onDismiss: () -> Unit,
-    onRename: (String) -> Unit,
-) {
-    var text by remember(project.id) { mutableStateOf(project.name) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Rename artwork") },
-        text = { OutlinedTextField(value = text, onValueChange = { text = it }, singleLine = true) },
-        confirmButton = { TextButton(onClick = { onRename(text) }) { Text("Rename") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
-}
-
-@Composable
-private fun DeleteDialog(
-    project: Project,
-    onDismiss: () -> Unit,
-    onDelete: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Delete ${project.name}?") },
-        text = { Text("The artwork and its layers are removed from this device. This cannot be undone.") },
-        confirmButton = { TextButton(onClick = onDelete) { Text("Delete", color = MaterialTheme.colorScheme.error) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
 }
 
 @Composable
@@ -733,7 +478,7 @@ private fun ProjectCard(
                 if (project.isFavorite) {
                     Icon(
                         Icons.Default.Star,
-                        contentDescription = "Favourite",
+                        contentDescription = stringResource(R.string.galleryscreen_favourite),
                         tint = Color(0xFFF2C037),
                         modifier =
                             Modifier
@@ -764,7 +509,7 @@ private fun ProjectCard(
                 }
                 Box {
                     IconButton(onClick = { menuVisible = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Project actions")
+                        Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.galleryscreen_project_actions))
                     }
                     DropdownMenu(expanded = menuVisible, onDismissRequest = { menuVisible = false }) {
                         DropdownMenuItem(
@@ -775,28 +520,28 @@ private fun ProjectCard(
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("Rename") },
+                            text = { Text(stringResource(R.string.layer_rename)) },
                             onClick = {
                                 onRename()
                                 menuVisible = false
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("Duplicate") },
+                            text = { Text(stringResource(R.string.duplicate)) },
                             onClick = {
                                 onDuplicate()
                                 menuVisible = false
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("Preview") },
+                            text = { Text(stringResource(R.string.galleryscreen_preview)) },
                             onClick = {
                                 onPreview()
                                 menuVisible = false
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("Share") },
+                            text = { Text(stringResource(R.string.export_share)) },
                             onClick = {
                                 onShare()
                                 menuVisible = false
@@ -811,7 +556,7 @@ private fun ProjectCard(
                         )
                         Divider()
                         DropdownMenuItem(
-                            text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                            text = { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) },
                             onClick = {
                                 onDelete()
                                 menuVisible = false
@@ -824,15 +569,23 @@ private fun ProjectCard(
     }
 }
 
+/** Saving the custom size as a named canvas preset, and deleting a saved one. */
+private class PresetEdits(
+    val onSave: (CanvasOperations.Preset) -> Unit,
+    val onDelete: (String) -> Unit,
+)
+
 @Composable
 private fun NewProjectDialog(
     defaultPresetName: String,
+    savedPresets: List<CanvasOperations.Preset>,
+    presetEdits: PresetEdits,
     onDismiss: () -> Unit,
     onCreate: (String, CanvasOperations.Preset?, Int, Int, Int, Boolean) -> Unit,
 ) {
     var name by remember { mutableStateOf("") }
     var selectedPreset by remember {
-        mutableStateOf(CanvasOperations.presetByName(defaultPresetName) ?: CanvasOperations.PRESETS.first())
+        mutableStateOf(CanvasOperations.presetByName(defaultPresetName, savedPresets) ?: CanvasOperations.PRESETS.first())
     }
     var customWidth by remember { mutableStateOf("2048") }
     var customHeight by remember { mutableStateOf("2048") }
@@ -889,6 +642,21 @@ private fun NewProjectDialog(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    val custom =
+                        CanvasOperations.Preset(
+                            "$customWidth×$customHeight @ $customDpi dpi",
+                            customWidth.toIntOrNull() ?: 0,
+                            customHeight.toIntOrNull() ?: 0,
+                            customDpi.toIntOrNull() ?: 0,
+                        )
+                    TextButton(
+                        onClick = {
+                            presetEdits.onSave(custom)
+                            selectedPreset = custom
+                            useCustom = false
+                        },
+                        enabled = CanvasOperations.isValidPreset(custom),
+                    ) { Text("Save as preset \"${custom.name}\"") }
                 } else {
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(2),
@@ -896,7 +664,7 @@ private fun NewProjectDialog(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        items(CanvasOperations.PRESETS) { preset ->
+                        items(savedPresets + CanvasOperations.PRESETS) { preset ->
                             FilterChip(
                                 selected = selectedPreset == preset,
                                 onClick = { selectedPreset = preset },
@@ -915,6 +683,12 @@ private fun NewProjectDialog(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (selectedPreset in savedPresets) {
+                        TextButton(onClick = {
+                            presetEdits.onDelete(selectedPreset.name)
+                            selectedPreset = CanvasOperations.PRESETS.first()
+                        }) { Text("Delete preset \"${selectedPreset.name}\"") }
+                    }
                 }
                 val width = if (useCustom) customWidth.toIntOrNull() ?: 2048 else selectedPreset.width
                 val height = if (useCustom) customHeight.toIntOrNull() ?: 2048 else selectedPreset.height

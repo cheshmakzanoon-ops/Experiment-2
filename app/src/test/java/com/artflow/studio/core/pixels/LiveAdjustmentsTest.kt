@@ -39,6 +39,12 @@ class LiveAdjustmentsTest {
         assertFalse(out.pixels.copyOfRange(0, 32 * 16).contentEquals(source.pixels.copyOfRange(0, 32 * 16)))
     }
 
+    @Test fun emptySelectionLeavesTheLayerUntouched() {
+        val source = checker()
+        val out = LiveAdjustments.apply(Kind.GAUSSIAN_BLUR, source, Settings(0.5f), SelectionMask(32, 32))
+        assertTrue(out.pixels.contentEquals(source.pixels))
+    }
+
     @Test fun colourAdjustmentsUseTheirParameters() {
         val source = PixelBuffer.filled(4, 4, 0xFF808080.toInt())
         val brighter = LiveAdjustments.apply(Kind.HUE_SATURATION_BRIGHTNESS, source, Settings(1f, mapOf("lightness" to 50f)))
@@ -49,6 +55,39 @@ class LiveAdjustmentsTest {
         val source = checker()
         val out = LiveAdjustments.bloom(source, 0.8f)
         for (i in source.pixels.indices) assertTrue(Channels.luminance(out.pixels[i]) >= Channels.luminance(source.pixels[i]) - 1e-3f)
+    }
+
+    @Test fun bloomTransitionAndBurnShapeTheGlow() {
+        val dark = 0xFF404040.toInt()
+        val yellow = 0xFFFFFF00.toInt()
+        val source = PixelBuffer.filled(32, 32, dark)
+        for (y in 12 until 20) for (x in 12 until 20) source.pixels[y * 32 + x] = yellow
+
+        fun light(buffer: PixelBuffer) = buffer.pixels.sumOf { Channels.luminance(it).toDouble() }
+        val early = LiveAdjustments.bloom(source, 0.8f, transition = 0f)
+        val late = LiveAdjustments.bloom(source, 0.8f, transition = 0.9f)
+        assertTrue("A lower transition lets more of the image glow", light(early) > light(late))
+
+        val beside = 22 * 32 + 16
+        val plain = LiveAdjustments.bloom(source, 1f).pixels[beside] and 0xFF
+        val burnt = LiveAdjustments.bloom(source, 1f, burn = 1f).pixels[beside] and 0xFF
+        assertTrue("Burn pushes the yellow glow toward white", burnt > plain)
+    }
+
+    @Test fun glitchStylesEachCorruptDifferently() {
+        val source = PixelBuffer(64, 64)
+        for (i in source.pixels.indices) {
+            val x = i % 64
+            val y = i / 64
+            source.pixels[i] = Channels.argb(255, x * 4, y * 4, (x + y) * 2)
+        }
+        val results =
+            LiveAdjustments.GlitchStyle.entries.map { style ->
+                LiveAdjustments.glitch(source, 1f, style).pixels.also { assertFalse(style.name, it.contentEquals(source.pixels)) }
+            }
+        for (a in results.indices) for (b in a + 1 until results.size) assertFalse(results[a].contentEquals(results[b]))
+        val untouched = LiveAdjustments.apply(Kind.GLITCH, source, Settings(0f, mapOf(LiveAdjustments.GLITCH_STYLE to 2f)))
+        assertTrue(untouched.pixels.contentEquals(source.pixels))
     }
 
     @Test fun recolorReplacesTheTouchedColourAndKeepsShading() {
@@ -91,5 +130,17 @@ class LiveAdjustmentsTest {
         // Just inside the edge, samples reach back toward the centre and pick up the clear area.
         assertTrue("The edge streaks along the line to the focus", (out.pixels[20 * 40 + 31] ushr 24) < 255)
         assertEquals("The focus point stays sharp", source.pixels[20 * 40 + 20], out.pixels[20 * 40 + 20])
+    }
+
+    @Test fun directionalPerspectiveBlurStreaksOnlyAheadOfThePoint() {
+        val source = PixelBuffer(40, 40)
+        for (y in 0 until 40) for (x in 30 until 40) source.pixels[y * 40 + x] = 0xFF000000.toInt()
+
+        fun blurred(angle: Float): PixelBuffer {
+            val parameters = mapOf(LiveAdjustments.PERSPECTIVE_DIRECTIONAL to 1f, LiveAdjustments.PERSPECTIVE_ANGLE to angle)
+            return LiveAdjustments.apply(Kind.PERSPECTIVE_BLUR, source, Settings(1f, parameters))
+        }
+        assertTrue("Ahead of the point the edge streaks back", (blurred(0f).pixels[20 * 40 + 31] ushr 24) < 255)
+        assertTrue("Behind the point nothing moves", blurred(180f).pixels.contentEquals(source.pixels))
     }
 }

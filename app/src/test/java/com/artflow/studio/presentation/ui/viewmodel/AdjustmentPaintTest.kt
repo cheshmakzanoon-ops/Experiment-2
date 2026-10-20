@@ -2,8 +2,10 @@ package com.artflow.studio.presentation.ui.viewmodel
 
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AdjustmentPaintTest {
@@ -24,5 +26,12 @@ class AdjustmentPaintTest {
         val source = PixelBuffer(4, 4)
         val effect = PixelBuffer(4, 4)
         assertSame(effect, AdjustmentPaint.mix(source, effect, null, null))
+    }
+
+    @Test fun emptySelectionKeepsTheSourceLayer() {
+        val source = PixelBuffer(20, 10).also { it.fill(red) }
+        val effect = PixelBuffer(20, 10).also { it.fill(blue) }
+        val out = AdjustmentPaint.mix(source, effect, SelectionMask(20, 10), null)
+        assertTrue(out.pixels.contentEquals(source.pixels))
     }
 }

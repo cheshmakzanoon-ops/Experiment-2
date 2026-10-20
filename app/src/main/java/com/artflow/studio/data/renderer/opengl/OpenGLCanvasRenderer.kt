@@ -58,6 +58,14 @@ class OpenGLCanvasRenderer
         private var wideColor = false
         private var proofMode = 0
 
+        /** An on-screen view check (greyscale or colour vision), as a column-major matrix; null is off. */
+        @Volatile
+        private var viewMatrix: FloatArray? = null
+
+        /** Notan's number of flat values; 0 keeps the view continuous. */
+        @Volatile
+        private var viewLevels = 0
+
         /** Predicted pen positions ahead of the live stroke: x, y pairs in canvas pixels. */
         @Volatile
         private var prediction: Prediction? = null
@@ -83,6 +91,9 @@ class OpenGLCanvasRenderer
         private var quadUseTextureHandle = 0
         private var quadWideColorHandle = 0
         private var quadProofHandle = 0
+        private var quadViewHandle = 0
+        private var quadViewMatrixHandle = 0
+        private var quadViewLevelsHandle = 0
 
         // --- Textures ------------------------------------------------------------------------------
 
@@ -158,6 +169,9 @@ class OpenGLCanvasRenderer
             quadUseTextureHandle = GLES20.glGetUniformLocation(quadProgram, "uUseTexture")
             quadWideColorHandle = GLES20.glGetUniformLocation(quadProgram, "uWideColor")
             quadProofHandle = GLES20.glGetUniformLocation(quadProgram, "uProof")
+            quadViewHandle = GLES20.glGetUniformLocation(quadProgram, "uView")
+            quadViewMatrixHandle = GLES20.glGetUniformLocation(quadProgram, "uViewMatrix")
+            quadViewLevelsHandle = GLES20.glGetUniformLocation(quadProgram, "uViewLevels")
             dabProgram = createProgram(DAB_VERTEX_SHADER, DAB_FRAGMENT_SHADER)
 
             checkerTexture = createCheckerboardTexture()
@@ -193,6 +207,10 @@ class OpenGLCanvasRenderer
             GLES20.glUniform4f(quadTintHandle, 1f, 1f, 1f, 1f)
             GLES20.glUniform1f(quadWideColorHandle, if (wideColor) 1f else 0f)
             GLES20.glUniform1f(quadProofHandle, proofMode.toFloat())
+            val filter = viewMatrix
+            GLES20.glUniform1f(quadViewHandle, if (filter == null) 0f else 1f)
+            GLES20.glUniformMatrix3fv(quadViewMatrixHandle, 1, false, filter ?: IDENTITY_3, 0)
+            GLES20.glUniform1f(quadViewLevelsHandle, viewLevels.toFloat())
 
             if (showCheckerboard) {
                 GLES20.glUniform1f(quadUseTextureHandle, 1f)
@@ -236,7 +254,9 @@ class OpenGLCanvasRenderer
                     updateBitmap(compositeTexture, bitmap)
                 }
                 GLES20.glUniform4f(quadTintHandle, 1f, 1f, 1f, 1f)
+                GLES20.glUniform1f(quadAlphaHandle, primaryAlpha)
                 drawQuad(compositeTexture, textureRepeat = false)
+                GLES20.glUniform1f(quadAlphaHandle, 1f)
             }
             prediction?.let { drawPrediction(it, matrix) }
         }
@@ -375,7 +395,15 @@ class OpenGLCanvasRenderer
             return direct
         }
 
-        fun setOnionSkins(frames: List<Pair<PixelBuffer, Float>>) {
+        /** Animation Assist's Blend Primary Frame: the frame being drawn shows the ghosts through it. */
+        @Volatile
+        private var primaryAlpha = 1f
+
+        fun setOnionSkins(
+            frames: List<Pair<PixelBuffer, Float>>,
+            primaryAlpha: Float = 1f,
+        ) {
+            this.primaryAlpha = if (frames.isEmpty()) 1f else primaryAlpha.coerceIn(0f, 1f)
             val bitmaps = mutableListOf<Pair<Bitmap, Float>>()
             var published = false
             try {
@@ -389,6 +417,7 @@ class OpenGLCanvasRenderer
         }
 
         fun clearOnionSkins() {
+            primaryAlpha = 1f
             pendingOnionSkins.getAndSet(emptyList())?.forEach { it.first.recycle() }
         }
 
@@ -435,6 +464,15 @@ class OpenGLCanvasRenderer
         /** Print soft-proofing on screen: 0 off, 1 CMYK proof, 2 proof with out-of-gamut colours greyed. */
         fun setProof(mode: Int) {
             proofMode = mode
+        }
+
+        /** Greyscale or a colour-vision check on screen: a column-major 3×3 matrix on linear sRGB, or null for none. */
+        fun setViewFilter(
+            columnMajor: FloatArray?,
+            levels: Int = 0,
+        ) {
+            viewMatrix = columnMajor
+            viewLevels = levels
         }
 
         /** Called only AFTER GLSurfaceView has stopped its GL thread and destroyed the surface. */
@@ -632,6 +670,7 @@ class OpenGLCanvasRenderer
         }
 
         companion object {
+            private val IDENTITY_3 = floatArrayOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f)
             private val QUAD_VERTICES =
                 floatArrayOf(
                     0f,
@@ -698,6 +737,9 @@ class OpenGLCanvasRenderer
             uniform float uUseTexture;
             uniform float uWideColor;
             uniform float uProof;
+            uniform float uView;
+            uniform mat3 uViewMatrix;
+            uniform float uViewLevels;
             varying vec2 vTexCoord;
             // Printed process inks on white paper, as encoded sRGB (see CmykProof).
             const vec3 INK_C = vec3(0.0, 0.682, 0.937);
@@ -733,6 +775,12 @@ class OpenGLCanvasRenderer
                     vec3 shift = abs(printed - rgb);
                     if (uProof > 1.5 && max(max(shift.r, shift.g), shift.b) > 0.08) printed = mix(printed, vec3(0.5), 0.6);
                     color.rgb = printed * color.a;
+                }
+                if (uView > 0.5 && color.a > 0.0) {
+                    vec3 seen = clamp(uViewMatrix * toLinear(clamp(color.rgb / color.a, 0.0, 1.0)), 0.0, 1.0);
+                    vec3 shown = toEncoded(seen);
+                    if (uViewLevels > 1.5) shown = min(floor(shown * uViewLevels), uViewLevels - 1.0) / (uViewLevels - 1.0);
+                    color.rgb = shown * color.a;
                 }
                 gl_FragColor = color;
             }

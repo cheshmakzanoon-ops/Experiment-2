@@ -1,6 +1,8 @@
 package com.artflow.studio.domain.model.settings
 
+import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.color.Palette
+import com.artflow.studio.domain.model.brush.PressureResponse
 
 /** Which theme the app follows. */
 enum class ThemeMode(
@@ -40,6 +42,7 @@ enum class GallerySort(
     CREATED("Recently created"),
     NAME("Name"),
     SIZE("Canvas size"),
+    MANUAL("Manual"),
 }
 
 /**
@@ -79,16 +82,36 @@ data class AppSettings(
     val motionExpression: Float = 0.5f,
     /** Evens out sudden pressure changes (0..1). */
     val pressureSmoothing: Float = 0f,
+    /** Pulled string: the brush trails the pen on a string this long (0..1 of its longest reach). */
+    val pulledString: Float = 0f,
+    /** Pressure curve: what a light, medium and firm press give, applied after [pressureCurve]. */
+    val pressureResponse: PressureResponse = PressureResponse(),
     /** Gesture controls: rubbing three fingers clears the layer. */
     val scrubToClear: Boolean = true,
     /** Gesture controls: swiping three fingers down opens Copy & Paste. */
     val swipeCopyPaste: Boolean = true,
     /** Gesture controls: tapping four fingers toggles full screen. */
     val fourFingerFullScreen: Boolean = true,
+    /** Gesture controls: how long two or three fingers must rest before undo or redo starts repeating. */
+    val rapidUndoDelayMs: Int = 650,
+    /** Gesture controls: how long a touch must rest before the eyedropper appears. */
+    val eyedropperDelayMs: Int = 500,
+    /** Gesture controls: how long the pen must rest at the end of a stroke before QuickShape snaps. */
+    val quickShapeDelayMs: Int = 650,
+    /** Gesture controls: a finger held still selects the layer under it instead of sampling colour. */
+    val holdSelectsLayer: Boolean = false,
+    /** Gesture controls: the eyedropper samples 1 pixel or averages a 3, 5 or 11 pixel square. */
+    val eyedropperSample: Int = 1,
     /** Longest side, in pixels, of recorded time-lapse frames (720p, 1080p or 1440p). */
     val timelapseMaxSide: Int = 1280,
+    /** Actions > Video > Time-lapse Recording: whether edits are recorded at all. */
+    val recordTimelapse: Boolean = true,
     /** Brush size follows the zoom so the brush looks the same size on screen. */
     val dynamicBrushScaling: Boolean = false,
+    /** Prefs > Selection mask visibility: how strongly the selected area is tinted (0..1). */
+    val selectionMaskVisibility: Float = 0.28f,
+    /** Prefs > Project canvas: a second screen shows the artwork alone, without the interface. */
+    val projectCanvas: Boolean = false,
     /** The QuickMenu's six actions, by label, clockwise from the top; touch and hold a slot to change it. */
     val quickMenu: List<String> = listOf("New layer", "Merge down", "Flip horizontal", "Clear layer", "Copy", "Paste"),
     // Saving
@@ -96,8 +119,14 @@ data class AppSettings(
     val autosaveEnabled: Boolean = true,
     // New documents
     val defaultPresetName: String = "FHD 1080p",
+    /** The palette shown under the Disc, Classic, Harmony and Value pickers (by name); empty for none. */
+    val defaultPaletteName: String = "",
+    /** Canvas sizes the artist saved from the New artwork dialog. */
+    val savedCanvasPresets: List<CanvasOperations.Preset> = emptyList(),
     // Gallery
     val gallerySort: GallerySort = GallerySort.RECENT,
+    /** Artwork ids in the order the user arranged them; used by [GallerySort.MANUAL]. */
+    val galleryOrder: List<Long> = emptyList(),
     // Content the user has already seen
     val seenOnboarding: Boolean = false,
     val dismissedTips: Set<String> = emptySet(),
@@ -118,7 +147,20 @@ data class PressureAndSmoothing(
     val motionFiltering: Float = 0f,
     val motionExpression: Float = 0.5f,
     val pressureSmoothing: Float = 0f,
+    /** Pulled string: the brush trails the pen on a string this long (0..1 of its longest reach). */
+    val pulledString: Float = 0f,
+    /** Pressure curve: what a light, medium and firm press give, applied after [pressureCurve]. */
+    val pressureResponse: PressureResponse = PressureResponse(),
 )
 
 val AppSettings.pressureAndSmoothing: PressureAndSmoothing
-    get() = PressureAndSmoothing(pressureCurve, stabilization, motionFiltering, motionExpression, pressureSmoothing)
+    get() =
+        PressureAndSmoothing(
+            pressureCurve,
+            stabilization,
+            motionFiltering,
+            motionExpression,
+            pressureSmoothing,
+            pulledString,
+            pressureResponse,
+        )

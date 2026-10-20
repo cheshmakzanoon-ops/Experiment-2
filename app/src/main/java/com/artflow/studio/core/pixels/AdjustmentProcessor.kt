@@ -1,5 +1,6 @@
 package com.artflow.studio.core.pixels
 
+import com.artflow.studio.core.color.GradientMaps
 import com.artflow.studio.domain.model.layer.AdjustmentType
 import kotlin.math.abs
 import kotlin.math.max
@@ -92,13 +93,17 @@ object AdjustmentProcessor {
                 }
             }
             AdjustmentType.CURVES -> {
-                val lut = buildCurveLut(merged)
+                // The master curve, then each channel's own curve on top of it (identity when unset).
+                // Once the caller sets master points, removed defaults must not come back.
+                val curves = if (parameters.keys.any { it.startsWith("point_") }) parameters else merged
+                val lut = buildCurveLut(curves)
+                val (red, green, blue) = CURVE_CHANNELS.map { buildCurveLut(curves, it) }
                 perPixel(source, out, mixed, mask) { _, p ->
                     Channels.argb(
                         Channels.alpha(p).toInt(),
-                        lut[Channels.red(p).toInt().coerceIn(0, 255)],
-                        lut[Channels.green(p).toInt().coerceIn(0, 255)],
-                        lut[Channels.blue(p).toInt().coerceIn(0, 255)],
+                        red[lut[Channels.red(p).toInt().coerceIn(0, 255)]],
+                        green[lut[Channels.green(p).toInt().coerceIn(0, 255)]],
+                        blue[lut[Channels.blue(p).toInt().coerceIn(0, 255)]],
                     )
                 }
             }
@@ -136,6 +141,14 @@ object AdjustmentProcessor {
                 }
             }
             AdjustmentType.GRADIENT_MAP -> {
+                // A colour ramp, when the adjustment carries one; older maps run between two hues.
+                val ramp = GradientMaps.fromParameters(merged)
+                if (ramp != null) {
+                    perPixel(source, out, mixed, mask) { _, p ->
+                        Channels.withAlpha(GradientMaps.colorAt(ramp, Channels.luminance(p)), Channels.alpha(p).toInt())
+                    }
+                    return out
+                }
                 val startHue = merged.float("gradient_start_hue", 0f)
                 val endHue = merged.float("gradient_end_hue", 360f)
                 perPixel(source, out, mixed, mask) { _, p ->
@@ -181,19 +194,61 @@ object AdjustmentProcessor {
         }
     }
 
+    /** Prefixes of the per-channel curves' parameter keys, in red, green, blue order. */
+    val CURVE_CHANNELS = listOf("red_", "green_", "blue_")
+
     /**
-     * Build the 256-entry lookup table used by the Curves adjustment from up to five control
-     * points (keys `point_N_x` / `point_N_y`). Uses monotone cubic interpolation so the curve
-     * cannot overshoot into artifacts.
+     * Curves' backdrop: how many pixels of [buffer] sit at each brightness (Rec. 709 luma, 0..255).
+     * Transparent pixels are left out so an empty layer's clear area does not swamp the shadows.
      */
-    fun buildCurveLut(parameters: Map<String, Float>): IntArray {
-        val points =
-            (0..4)
-                .mapNotNull { index ->
-                    val x = parameters["point_${index}_x"] ?: return@mapNotNull null
-                    val y = parameters["point_${index}_y"] ?: return@mapNotNull null
-                    (x.coerceIn(0f, 255f) to y.coerceIn(0f, 255f))
-                }.sortedBy { it.first }
+    fun histogram(buffer: PixelBuffer): List<Int> {
+        val bins = IntArray(256)
+        for (pixel in buffer.pixels) {
+            if (pixel ushr 24 == 0) continue
+            val luma = 0.2126f * ((pixel shr 16) and 0xFF) + 0.7152f * ((pixel shr 8) and 0xFF) + 0.0722f * (pixel and 0xFF)
+            bins[luma.roundToInt().coerceIn(0, 255)]++
+        }
+        return bins.toList()
+    }
+
+    /** Most control points one curve can have; Procreate-style curves start with five. */
+    const val MAX_CURVE_POINTS = 8
+
+    /** The control points of one curve ([prefix] "" is the master curve), sorted left to right. */
+    fun curvePoints(
+        parameters: Map<String, Float>,
+        prefix: String = "",
+    ): List<Pair<Float, Float>> =
+        (0 until MAX_CURVE_POINTS)
+            .mapNotNull { index ->
+                val x = parameters["${prefix}point_${index}_x"] ?: return@mapNotNull null
+                val y = parameters["${prefix}point_${index}_y"] ?: return@mapNotNull null
+                (x.coerceIn(0f, 255f) to y.coerceIn(0f, 255f))
+            }.sortedBy { it.first }
+
+    /** [parameters] with one curve's points replaced by [points] (at most [MAX_CURVE_POINTS]). */
+    fun withCurvePoints(
+        parameters: Map<String, Float>,
+        prefix: String,
+        points: List<Pair<Float, Float>>,
+    ): Map<String, Float> {
+        val others = parameters.filterKeys { key -> (0 until MAX_CURVE_POINTS).none { key.startsWith("${prefix}point_${it}_") } }
+        return others +
+            points.take(MAX_CURVE_POINTS).flatMapIndexed { index, (x, y) ->
+                listOf("${prefix}point_${index}_x" to x, "${prefix}point_${index}_y" to y)
+            }
+    }
+
+    /**
+     * Build the 256-entry lookup table used by the Curves adjustment from up to [MAX_CURVE_POINTS]
+     * control points (keys `point_N_x` / `point_N_y`, after [prefix]; "" is the master curve). Uses
+     * monotone cubic interpolation so the curve cannot overshoot into artifacts.
+     */
+    fun buildCurveLut(
+        parameters: Map<String, Float>,
+        prefix: String = "",
+    ): IntArray {
+        val points = curvePoints(parameters, prefix)
 
         val lut = IntArray(256)
         if (points.size < 2) {
@@ -313,10 +368,10 @@ object AdjustmentProcessor {
         var g = Channels.green(pixel) / 255f
         var b = Channels.blue(pixel) / 255f
 
-        // CMYK-style shifts: increasing cyan removes red, and so on.
-        r = (r - normalizedCyan + normalizedBlack * 0.5f).coerceIn(0f, 1f)
-        g = (g - normalizedMagenta + normalizedBlack * 0.5f).coerceIn(0f, 1f)
-        b = (b - normalizedYellow + normalizedBlack * 0.5f).coerceIn(0f, 1f)
+        // CMYK-style shifts: increasing cyan removes red, and so on; more black darkens.
+        r = (r - normalizedCyan - normalizedBlack * 0.5f).coerceIn(0f, 1f)
+        g = (g - normalizedMagenta - normalizedBlack * 0.5f).coerceIn(0f, 1f)
+        b = (b - normalizedYellow - normalizedBlack * 0.5f).coerceIn(0f, 1f)
 
         return Channels.argb(
             Channels.alpha(pixel).toInt(),
