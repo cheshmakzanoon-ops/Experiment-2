@@ -2,7 +2,10 @@ name: Reference static analysis
 on:
   push:
     branches: [main]
-    paths: ['.github/workflows/reference-analysis.yml']
+    paths:
+      - '.github/workflows/reference-analysis.yml'
+      - 'tools/rea_brush_dependency_audit.py'
+      - 'tools/test_rea_brush_dependency_audit.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -94,6 +97,15 @@ jobs:
           print(json.dumps({'brushes': len(records), 'compound_brushes': sum(len(r['archives']) != 1 for r in records),
               'rea_compound_samples': len(samples), 'runtime_executed': False}))
           PY
+      - name: Verify reference brush dependency mapping
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tools -p 'test_rea_brush_dependency_audit.py' -v
+          python tools/rea_brush_dependency_audit.py \
+            "$RUNNER_TEMP/reference-evidence/compound-structures.json" \
+            app/src/main/java/com/artflow/studio/core/export/ProcreateBrush.kt \
+            --out "$RUNNER_TEMP/reference-evidence/brush-dependency-audit.json"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
