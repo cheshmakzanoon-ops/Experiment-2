@@ -416,6 +416,76 @@ class BrushExportRoundTripTest {
         assertEquals(channels, imported.importedPressure)
     }
 
+    @Test
+    fun unchangedOutOfRangeReferenceScalarsSurviveWithoutClampingOnExport() {
+        val imported =
+            com.artflow.studio.core.export.ProcreateBrush.parameters(
+                mapOf(
+                    "maxSize" to 16.0,
+                    "paintSize" to 4.58,
+                    "plotSpacing" to 0.0,
+                    "textureScale" to 0.1,
+                    "shapeCount" to 0.45,
+                    "shapeRoundness" to 0.0,
+                    "textureMovement" to 0.23,
+                    "maxOpacity" to 0.8,
+                    "paintOpacity" to 2.0,
+                ),
+            )
+        // These are deliberately ArtFlow's *clamped* effective controls.
+        assertEquals(192f, imported.size, 1e-6f)
+        assertEquals(0.01f, imported.spacing, 1e-6f)
+        assertEquals(0.25f, imported.textureScale, 1e-6f)
+        val exported = ProcreateBrushWriter.brush(ProcreateBrushWriter.Brush("Raw values", imported))
+        val archiveData =
+            ZipInputStream(exported.inputStream()).use { zip ->
+                check(zip.nextEntry.name == "Brush.archive")
+                zip.readBytes()
+            }
+        val root = requireNotNull(
+            com.artflow.studio.core.export.KeyedArchive(
+                com.artflow.studio.core.export.BinaryPlist.read(archiveData),
+            ).root,
+        )
+        fun exact(key: String, value: Double) = assertEquals(key, value, (root[key] as Number).toDouble(), 0.000001)
+        exact("maxSize", 16.0)
+        exact("paintSize", 4.58)
+        exact("plotSpacing", 0.0)
+        exact("textureScale", 0.1)
+        exact("shapeRoundness", 0.0)
+        exact("textureMovement", 0.23)
+        exact("maxOpacity", 0.8)
+        exact("paintOpacity", 2.0)
+        val restored = com.artflow.studio.core.export.ProcreateBrush.read(archiveData).parameters
+        assertEquals(imported.size, restored.size, 1e-6f)
+        assertEquals(imported.spacing, restored.spacing, 1e-6f)
+        assertEquals(imported.textureScale, restored.textureScale, 1e-6f)
+    }
+
+    @Test
+    fun editingClampedBrushValuesOverridesOnlyThoseOriginalSourceKeys() {
+        val original =
+            com.artflow.studio.core.export.ProcreateBrush.parameters(
+                mapOf("maxSize" to 16.0, "paintSize" to 4.58, "plotSpacing" to 0.0, "textureScale" to 0.1),
+            )
+        val edited = original.copy(size = 72f, spacing = 0.4f, textureScale = 1.5f)
+        val exported = ProcreateBrushWriter.brush(ProcreateBrushWriter.Brush("Edited", edited))
+        val archiveData =
+            ZipInputStream(exported.inputStream()).use { zip ->
+                check(zip.nextEntry.name == "Brush.archive")
+                zip.readBytes()
+            }
+        val root = requireNotNull(
+            com.artflow.studio.core.export.KeyedArchive(
+                com.artflow.studio.core.export.BinaryPlist.read(archiveData),
+            ).root,
+        )
+        assertEquals(3.0, (root["maxSize"] as Number).toDouble(), 1e-6)
+        assertEquals(1.0, (root["paintSize"] as Number).toDouble(), 1e-6)
+        assertEquals(0.4, (root["plotSpacing"] as Number).toDouble(), 1e-6)
+        assertEquals(1.5, (root["textureScale"] as Number).toDouble(), 1e-6)
+    }
+
     private companion object {
         const val TOLERANCE = 1e-4
     }

@@ -17,7 +17,7 @@ import java.util.zip.ZipOutputStream
  * "Grain.png"), and a `.brushset` is a zip of such folders with "brushset.plist" listing them in order.
  *
  * Each setting is written on the scale [ProcreateBrush.read] maps it back from, so a brush read back has
- * the same value within float rounding wherever the value is in range. Settings that [ProcreateBrush] does
+ * the same value within float rounding wherever the value is in range. This writer
  * does not reconstruct the second brush's exact native storage, nor the renderer's texture rotation.
  * Known pressure curve graphs are serialized as ValkyrieMagnitudinalCurve archives; source interpolation
  * and pixel parity are not verified. Signed pressure/tilt scalar values survive in the archive.
@@ -126,8 +126,97 @@ object ProcreateBrushWriter {
         val root =
             preservedScalars + preservedStructures + originalColor +
                 mapOf("\$class" to keyed.classOf(BRUSH_CLASS), "name" to keyed.add(brush.name)) +
-                settings(brush.parameters) + keyedCurves
+                sourceAwareSettings(brush.parameters) + keyedCurves
         return keyed.encode(root)
+    }
+
+    /**
+     * Prevent an unedited source brush from losing original setting scales just because
+     * ArtFlow's renderer clamps them. For every translated field, use the actual importer
+     * as the baseline; editing a field makes ArtFlow's new value authoritative.
+     *
+     * E.g. an original plotSpacing=0 maps to 0.01f in ArtFlow. Exporting an unedited
+     * brush should retain 0 rather than pretending that source value was 0.01.
+     */
+    private fun sourceAwareSettings(params: BrushParams): Map<String, Any?> {
+        val rewritten = settings(params)
+        val raw = params.importedSourceScalars
+        if (raw.isEmpty()) return rewritten
+
+        // The same source decoding path defines the baseline; do not implement a
+        // second, subtly different set of scaling/clamping formulas here.
+        val input = raw.mapValues { (_, value) -> sourceLiteral(value) }
+        val imported = ProcreateBrush.parameters(input)
+        val keepOriginal = mutableSetOf<String>()
+        fun retain(unchanged: Boolean, vararg fields: String) {
+            if (unchanged) keepOriginal.addAll(fields)
+        }
+
+        retain(params.size == imported.size, "maxSize", "paintSize")
+        retain(params.opacity == imported.opacity, "maxOpacity", "paintOpacity")
+        retain(params.spacing == imported.spacing, "plotSpacing")
+        retain(params.textureScale == imported.textureScale, "textureScale")
+        retain(params.count == imported.count, "shapeCount")
+        retain(params.scatter == imported.scatter, "plotJitter")
+        retain(params.rotation == imported.rotation, "shapeAngle")
+        retain(params.roundness == imported.roundness, "shapeRoundness")
+        retain(params.flow == imported.flow, "dynamicsGlazedFlow")
+        retain(params.smoothing == imported.smoothing, "plotSmoothing", "plotMovingAverageStabilization", "plotFFTSmoothingAmount")
+        retain(params.taperStart == imported.taperStart, "pencilTaperStartLength")
+        retain(params.taperEnd == imported.taperEnd, "pencilTaperEndLength")
+        retain(params.taperOpacity == imported.taperOpacity, "pencilTaperOpacity")
+        retain(params.pressureToSize == imported.pressureToSize, "dynamicsPressureSize")
+        retain(params.pressureToOpacity == imported.pressureToOpacity, "dynamicsPressureOpacity")
+        retain(params.velocityToSize == imported.velocityToSize, "dynamicsSpeedSize")
+        retain(params.velocityToOpacity == imported.velocityToOpacity, "dynamicsSpeedOpacity")
+        retain(params.wetMix == imported.wetMix, "dynamicsMix")
+        retain(params.wetEdges == imported.wetEdges, "wetEdgesAmount")
+        retain(params.burntEdges == imported.burntEdges, "burntEdgesAmount")
+        retain(params.grainDepth == imported.grainDepth, "grainDepth")
+        retain(params.falloff == imported.falloff, "dynamicsFalloff")
+        retain(params.tipFlipXJitter == imported.tipFlipXJitter, "shapeFlipXJitter")
+        retain(params.tipFlipYJitter == imported.tipFlipYJitter, "shapeFlipYJitter")
+        retain(params.tipRandomized == imported.tipRandomized, "shapeRandomise")
+        retain(params.grainMoving == imported.grainMoving, "textureMovement")
+        retain(params.buildUp == imported.buildUp, "renderingRecursiveMixing")
+        retain(params.tiltInfluence == imported.tiltInfluence, "dynamicsTiltSize")
+        retain(params.tiltOpacityInfluence == imported.tiltOpacityInfluence, "dynamicsTiltOpacity")
+        retain(params.tiltToRotation == imported.tiltToRotation, "shapeAzimuth", "oriented")
+        retain(params.hueJitter == imported.hueJitter, "dynamicsJitterHue")
+        retain(params.saturationJitter == imported.saturationJitter, "dynamicsJitterSaturation")
+        retain(params.brightnessJitter == imported.brightnessJitter, "dynamicsJitterLightness", "dynamicsJitterDarkness")
+        retain(params.sizeJitter == imported.sizeJitter, "dynamicsJitterSize")
+        retain(params.opacityJitter == imported.opacityJitter, "dynamicsJitterOpacity")
+        retain(params.secondaryPressure == imported.secondaryPressure, "dynamicsPressureSecondaryColor")
+        retain(params.secondaryJitter == imported.secondaryJitter, "jitterSecondary")
+        val dynamics = params.colorDynamics
+        val baseline = imported.colorDynamics
+        retain(dynamics.pressureHue == baseline.pressureHue, "dynamicsPressureHue")
+        retain(dynamics.pressureSaturation == baseline.pressureSaturation, "dynamicsPressureSaturation")
+        retain(dynamics.pressureBrightness == baseline.pressureBrightness, "dynamicsPressureBrightness")
+        retain(dynamics.tiltHue == baseline.tiltHue, "dynamicsTiltHue")
+        retain(dynamics.tiltSaturation == baseline.tiltSaturation, "dynamicsTiltSaturation")
+        retain(dynamics.tiltBrightness == baseline.tiltBrightness, "dynamicsTiltBrightness")
+
+        // Extended blend mode can have a native numeric ID ArtFlow does not yet know.
+        // Do not invent an extra extendedBlend=Normal when the original carried only
+        // the legacy blendMode key; adding one would shadow the native value on import.
+        if (params.blendMode == imported.blendMode &&
+            ("extendedBlend" in raw || "blendMode" in raw)
+        ) keepOriginal.add("extendedBlend")
+
+        return rewritten.filterKeys { key -> key !in keepOriginal }
+    }
+
+    /** A typed literal for baseline import (not a keyed reference to another object). */
+    private fun sourceLiteral(value: SourceBrushScalar): Any {
+        require(value.isValid()) { "Invalid saved source brush scalar" }
+        return when (value.type) {
+            SourceBrushScalar.Type.BOOLEAN -> value.value == "true"
+            SourceBrushScalar.Type.INTEGER -> requireNotNull(value.value.toLongOrNull())
+            SourceBrushScalar.Type.REAL -> requireNotNull(value.value.toDoubleOrNull())
+            SourceBrushScalar.Type.TEXT -> value.value
+        }
     }
 
     private fun sourceValue(keyed: KeyedArchiveBuilder, scalar: SourceBrushScalar): Any {
