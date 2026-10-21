@@ -671,6 +671,15 @@ class CanvasViewModel
                         quickShapeDelayMs = controls.quickShapeDelayMs,
                         holdSelectsLayer = controls.holdSelectsLayer,
                         eyedropperSample = controls.eyedropperSample,
+                        twoFingerTapUndo = controls.twoFingerTapUndo,
+                        threeFingerTapRedo = controls.threeFingerTapRedo,
+                        holdRapidUndoRedo = controls.holdRapidUndoRedo,
+                        pinchNavigation = controls.pinchNavigation,
+                        quickPinchFit = controls.quickPinchFit,
+                        layerTwoFingerOpacity = controls.layerTwoFingerOpacity,
+                        layerTwoFingerAlphaLock = controls.layerTwoFingerAlphaLock,
+                        layerTwoFingerSelect = controls.layerTwoFingerSelect,
+                        modifyHoldQuickMenu = controls.modifyHoldQuickMenu,
                     )
                 }
             }

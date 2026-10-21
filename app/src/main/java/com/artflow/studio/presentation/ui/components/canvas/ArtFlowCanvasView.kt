@@ -188,8 +188,6 @@ data class EditorInput(
     val dynamicBrushScaling: Boolean = false,
     /** Prefs > Stylus: what the stylus buttons and the eraser end do. */
     val stylus: StylusButtons = StylusButtons(),
-    /** Settings > Haptics: the vibration when a hold-to-sample or QuickShape locks on, off when the switch is off. */
-    val haptics: Boolean = true,
 )
 
 /**
@@ -215,19 +213,37 @@ data class GestureControls(
     val holdSelectsLayer: Boolean = false,
     /** The eyedropper's sample: 1 pixel, or the average of a 3, 5 or 11 pixel square. */
     val eyedropperSample: Int = 1,
+    val twoFingerTapUndo: Boolean = true,
+    val threeFingerTapRedo: Boolean = true,
+    val holdRapidUndoRedo: Boolean = true,
+    val pinchNavigation: Boolean = true,
+    val quickPinchFit: Boolean = true,
+    val layerTwoFingerOpacity: Boolean = true,
+    val layerTwoFingerAlphaLock: Boolean = true,
+    val layerTwoFingerSelect: Boolean = true,
+    val modifyHoldQuickMenu: Boolean = true,
 )
 
 /** The gesture preferences the canvas reads, from the stored settings. */
 fun AppSettings.gestureControls(): GestureControls =
     GestureControls(
-        scrubToClear,
-        swipeCopyPaste,
-        fourFingerFullScreen,
-        rapidUndoDelayMs,
-        eyedropperDelayMs,
-        quickShapeDelayMs,
-        holdSelectsLayer,
-        eyedropperSample,
+        scrubToClear = scrubToClear,
+        swipeCopyPaste = swipeCopyPaste,
+        fourFingerFullScreen = fourFingerFullScreen,
+        rapidUndoDelayMs = rapidUndoDelayMs,
+        eyedropperDelayMs = eyedropperDelayMs,
+        quickShapeDelayMs = quickShapeDelayMs,
+        holdSelectsLayer = holdSelectsLayer,
+        eyedropperSample = eyedropperSample,
+        twoFingerTapUndo = twoFingerTapUndo,
+        threeFingerTapRedo = threeFingerTapRedo,
+        holdRapidUndoRedo = holdRapidUndoRedo,
+        pinchNavigation = pinchNavigation,
+        quickPinchFit = quickPinchFit,
+        layerTwoFingerOpacity = layerTwoFingerOpacity,
+        layerTwoFingerAlphaLock = layerTwoFingerAlphaLock,
+        layerTwoFingerSelect = layerTwoFingerSelect,
+        modifyHoldQuickMenu = modifyHoldQuickMenu,
     )
 
 /** Brush outline under a hovering stylus, in view pixels. */

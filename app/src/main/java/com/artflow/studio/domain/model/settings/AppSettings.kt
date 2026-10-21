@@ -1,6 +1,8 @@
 package com.artflow.studio.domain.model.settings
 
 import com.artflow.studio.core.canvas.CanvasOperations
+import com.artflow.studio.core.canvas.StylusAction
+import com.artflow.studio.core.canvas.StylusEraserEnd
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.domain.model.brush.PressureResponse
 
@@ -102,6 +104,21 @@ data class AppSettings(
     val holdSelectsLayer: Boolean = false,
     /** Gesture controls: the eyedropper samples 1 pixel or averages a 3, 5 or 11 pixel square. */
     val eyedropperSample: Int = 1,
+    /** Separate gesture switches; defaults preserve existing behavior. */
+    val twoFingerTapUndo: Boolean = true,
+    val threeFingerTapRedo: Boolean = true,
+    val holdRapidUndoRedo: Boolean = true,
+    val pinchNavigation: Boolean = true,
+    val quickPinchFit: Boolean = true,
+    val layerTwoFingerOpacity: Boolean = true,
+    val layerTwoFingerAlphaLock: Boolean = true,
+    val layerTwoFingerSelect: Boolean = true,
+    val modifyHoldQuickMenu: Boolean = true,
+    val quickShape: Boolean = true,
+    val touchHoldEyedropper: Boolean = true,
+    val stylusPrimaryButton: StylusAction = StylusAction.EYEDROPPER,
+    val stylusSecondaryButton: StylusAction = StylusAction.NOTHING,
+    val stylusEraserEnd: StylusEraserEnd = StylusEraserEnd.ERASER,
     /** Longest side, in pixels, of recorded time-lapse frames (720p, 1080p or 1440p). */
     val timelapseMaxSide: Int = 1280,
     /** Actions > Video > Time-lapse Recording: whether edits are recorded at all. */

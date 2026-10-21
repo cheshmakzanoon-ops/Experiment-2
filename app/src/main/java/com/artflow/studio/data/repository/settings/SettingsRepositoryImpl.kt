@@ -1,6 +1,8 @@
 package com.artflow.studio.data.repository.settings
 
 import com.artflow.studio.core.canvas.CanvasOperations
+import com.artflow.studio.core.canvas.StylusAction
+import com.artflow.studio.core.canvas.StylusEraserEnd
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.color.PaletteCodec
 import com.artflow.studio.core.pixels.AreaSample
@@ -267,6 +269,20 @@ class SettingsRepositoryImpl
                 KEY_QUICKSHAPE_DELAY to settings.quickShapeDelayMs.toString(),
                 KEY_HOLD_SELECTS_LAYER to settings.holdSelectsLayer.toString(),
                 KEY_EYEDROPPER_SAMPLE to settings.eyedropperSample.toString(),
+                KEY_TWO_FINGER_UNDO to settings.twoFingerTapUndo.toString(),
+                KEY_THREE_FINGER_REDO to settings.threeFingerTapRedo.toString(),
+                KEY_HOLD_RAPID_UNDO to settings.holdRapidUndoRedo.toString(),
+                KEY_PINCH_NAVIGATION to settings.pinchNavigation.toString(),
+                KEY_QUICK_PINCH_FIT to settings.quickPinchFit.toString(),
+                KEY_LAYER_OPACITY to settings.layerTwoFingerOpacity.toString(),
+                KEY_LAYER_ALPHA_LOCK to settings.layerTwoFingerAlphaLock.toString(),
+                KEY_LAYER_SELECT to settings.layerTwoFingerSelect.toString(),
+                KEY_MODIFY_QUICK_MENU to settings.modifyHoldQuickMenu.toString(),
+                KEY_QUICKSHAPE_ENABLED to settings.quickShape.toString(),
+                KEY_TOUCH_EYEDROPPER to settings.touchHoldEyedropper.toString(),
+                KEY_STYLUS_PRIMARY to settings.stylusPrimaryButton.name,
+                KEY_STYLUS_SECONDARY to settings.stylusSecondaryButton.name,
+                KEY_STYLUS_ERASER to settings.stylusEraserEnd.name,
                 KEY_TIMELAPSE_SIDE to settings.timelapseMaxSide.toString(),
                 KEY_RECORD_TIMELAPSE to settings.recordTimelapse.toString(),
                 KEY_DYNAMIC_BRUSH to settings.dynamicBrushScaling.toString(),
@@ -365,6 +381,20 @@ class SettingsRepositoryImpl
                 holdSelectsLayer = stored.flag(KEY_HOLD_SELECTS_LAYER, defaults.holdSelectsLayer),
                 eyedropperSample =
                     stored[KEY_EYEDROPPER_SAMPLE]?.toIntOrNull()?.takeIf { it in AreaSample.SIZES } ?: defaults.eyedropperSample,
+                twoFingerTapUndo = stored.flag(KEY_TWO_FINGER_UNDO, defaults.twoFingerTapUndo),
+                threeFingerTapRedo = stored.flag(KEY_THREE_FINGER_REDO, defaults.threeFingerTapRedo),
+                holdRapidUndoRedo = stored.flag(KEY_HOLD_RAPID_UNDO, defaults.holdRapidUndoRedo),
+                pinchNavigation = stored.flag(KEY_PINCH_NAVIGATION, defaults.pinchNavigation),
+                quickPinchFit = stored.flag(KEY_QUICK_PINCH_FIT, defaults.quickPinchFit),
+                layerTwoFingerOpacity = stored.flag(KEY_LAYER_OPACITY, defaults.layerTwoFingerOpacity),
+                layerTwoFingerAlphaLock = stored.flag(KEY_LAYER_ALPHA_LOCK, defaults.layerTwoFingerAlphaLock),
+                layerTwoFingerSelect = stored.flag(KEY_LAYER_SELECT, defaults.layerTwoFingerSelect),
+                modifyHoldQuickMenu = stored.flag(KEY_MODIFY_QUICK_MENU, defaults.modifyHoldQuickMenu),
+                quickShape = stored.flag(KEY_QUICKSHAPE_ENABLED, defaults.quickShape),
+                touchHoldEyedropper = stored.flag(KEY_TOUCH_EYEDROPPER, defaults.touchHoldEyedropper),
+                stylusPrimaryButton = stored[KEY_STYLUS_PRIMARY]?.let { name -> StylusAction.entries.firstOrNull { it.name == name } } ?: defaults.stylusPrimaryButton,
+                stylusSecondaryButton = stored[KEY_STYLUS_SECONDARY]?.let { name -> StylusAction.entries.firstOrNull { it.name == name } } ?: defaults.stylusSecondaryButton,
+                stylusEraserEnd = stored[KEY_STYLUS_ERASER]?.let { name -> StylusEraserEnd.entries.firstOrNull { it.name == name } } ?: defaults.stylusEraserEnd,
                 timelapseMaxSide =
                     stored[KEY_TIMELAPSE_SIDE]?.toIntOrNull()?.takeIf { it in TIMELAPSE_SIDES } ?: defaults.timelapseMaxSide,
                 recordTimelapse = stored.flag(KEY_RECORD_TIMELAPSE, defaults.recordTimelapse),
@@ -453,6 +483,20 @@ class SettingsRepositoryImpl
             private const val KEY_QUICKSHAPE_DELAY = "gesture.quickShapeDelayMs"
             private const val KEY_HOLD_SELECTS_LAYER = "gesture.holdSelectsLayer"
             private const val KEY_EYEDROPPER_SAMPLE = "gesture.eyedropperSample"
+            private const val KEY_TWO_FINGER_UNDO = "gesture.twoFingerTapUndo"
+            private const val KEY_THREE_FINGER_REDO = "gesture.threeFingerTapRedo"
+            private const val KEY_HOLD_RAPID_UNDO = "gesture.holdRapidUndoRedo"
+            private const val KEY_PINCH_NAVIGATION = "gesture.pinchNavigation"
+            private const val KEY_QUICK_PINCH_FIT = "gesture.quickPinchFit"
+            private const val KEY_LAYER_OPACITY = "gesture.layerTwoFingerOpacity"
+            private const val KEY_LAYER_ALPHA_LOCK = "gesture.layerTwoFingerAlphaLock"
+            private const val KEY_LAYER_SELECT = "gesture.layerTwoFingerSelect"
+            private const val KEY_MODIFY_QUICK_MENU = "gesture.modifyHoldQuickMenu"
+            private const val KEY_QUICKSHAPE_ENABLED = "gesture.quickShapeEnabled"
+            private const val KEY_TOUCH_EYEDROPPER = "gesture.touchHoldEyedropper"
+            private const val KEY_STYLUS_PRIMARY = "input.stylusPrimaryButton"
+            private const val KEY_STYLUS_SECONDARY = "input.stylusSecondaryButton"
+            private const val KEY_STYLUS_ERASER = "input.stylusEraserEnd"
             private const val MIN_RAPID_UNDO_DELAY_MS = 200
             private const val MAX_RAPID_UNDO_DELAY_MS = 1500
             private const val KEY_TIMELAPSE_SIDE = "timelapse.maxSide"

@@ -2,24 +2,6 @@ package com.artflow.studio.presentation.ui.components.canvas
 
 import com.artflow.studio.core.canvas.PointerGestureRouter
 import com.artflow.studio.core.canvas.TwoFingerLayerGesture
-import com.artflow.studio.domain.model.settings.AppSettings
-
-/** The gesture switches as the editor reads them from the stored preferences. */
-fun AppSettings.gestureControls(): GestureControls =
-    GestureControls(
-        scrubToClear = scrubToClear,
-        swipeCopyPaste = swipeCopyPaste,
-        fourFingerFullScreen = fourFingerFullScreen,
-        twoFingerTapUndo = twoFingerTapUndo,
-        threeFingerTapRedo = threeFingerTapRedo,
-        holdRapidUndoRedo = holdRapidUndoRedo,
-        pinchNavigation = pinchNavigation,
-        quickPinchFit = quickPinchFit,
-        layerTwoFingerOpacity = layerTwoFingerOpacity,
-        layerTwoFingerAlphaLock = layerTwoFingerAlphaLock,
-        layerTwoFingerSelect = layerTwoFingerSelect,
-        modifyHoldQuickMenu = modifyHoldQuickMenu,
-    )
 
 /** The canvas touch gestures that [PointerGestureRouter] may recognise under these switches. */
 fun GestureControls.canvasGestures(): Set<PointerGestureRouter.Gesture> =
