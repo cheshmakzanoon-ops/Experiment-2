@@ -37,9 +37,15 @@ data class SourceBrushStructuredField(
     }
 
     /** The key and object kind must agree; a malformed archive cannot disguise a saved-size array as a roll object. */
-    fun isValidFor(name: String): Boolean =
-        name in ALLOWED_NAMES && isValid() &&
-            if (name in ARRAY_NAMES) kind == Kind.ARRAY else kind == Kind.FIELDS
+    fun isValidFor(name: String): Boolean {
+        if (!isValid()) return false
+        return when (name) {
+            in ROLL_NAMES -> kind == Kind.FIELDS && className == "ValkyrieBrushRollParameters"
+            in ARRAY_NAMES -> kind == Kind.ARRAY && className == "NSArray"
+            "creationDate" -> kind == Kind.FIELDS && className == "NSDate"
+            else -> false
+        }
+    }
 
     companion object {
         val ROLL_NAMES: Set<String> =

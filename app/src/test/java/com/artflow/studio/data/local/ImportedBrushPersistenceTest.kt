@@ -110,6 +110,45 @@ class ImportedBrushPersistenceTest {
         assertEquals(original, BrushLibraryCodec.decode(BrushLibraryCodec.encode(original)))
     }
 
+    @Test fun sourceStructureRejectsMismatchedNativeArchiveClasses() {
+        val scalar = SourceBrushScalar(SourceBrushScalar.Type.REAL, "1.0")
+        val wrongRoll =
+            SourceBrushStructuredField(
+                "NSDate",
+                SourceBrushStructuredField.Kind.FIELDS,
+                fields = mapOf("activationOrigin" to scalar),
+            )
+        val wrongDate =
+            SourceBrushStructuredField(
+                "ValkyrieBrushRollParameters",
+                SourceBrushStructuredField.Kind.FIELDS,
+                fields = mapOf("NS.time" to scalar),
+            )
+        val wrongArray =
+            SourceBrushStructuredField(
+                "NSMutableArray",
+                SourceBrushStructuredField.Kind.ARRAY,
+                items = emptyList(),
+            )
+        for ((name, data) in listOf(
+            "attackRollParameters" to wrongRoll,
+            "creationDate" to wrongDate,
+            "savedPaintSizes" to wrongArray,
+        )) {
+            assertThrows(IllegalArgumentException::class.java) {
+                BrushLibraryCodec.encode(
+                    listOf(
+                        SavedBrush(
+                            "wrong-class",
+                            "Bad class",
+                            BrushParams(importedSourceStructures = mapOf(name to data)),
+                        ),
+                    ),
+                )
+            }
+        }
+    }
+
     @Test fun oldLibrariesWithoutNewFieldsStillDecodeWithTheirOriginalDefaults() {
         val legacy = """{"version":1,"brushes":[{"id":"old","name":"Old brush","parameters":{"pressureToSize":0.8}}]}"""
         assertEquals(BrushParams(pressureToSize = 0.8f), BrushLibraryCodec.decode(legacy).single().parameters)
