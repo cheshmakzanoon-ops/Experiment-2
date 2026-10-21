@@ -20,8 +20,18 @@ READER_CALL = re.compile(
 
 
 def referenced_keys(reader_source: str) -> set[str]:
-    """Syntactic key references only, not behavioral support."""
+    """Directly interpreted fields (not proof of rendering equivalence)."""
     return {left or right for left, right in READER_CALL.findall(reader_source)}
+
+
+def auxiliary_curve_keys(reader_source: str) -> set[str]:
+    """Explicitly whitelisted keyed curves retained for interchange, not applied to strokes."""
+    block = re.search(
+        r'\bAUXILIARY_CURVE_KEYS\s*:\s*Set<String>\s*=\s*setOf\((.*?)\)',
+        reader_source,
+        re.DOTALL,
+    )
+    return set(re.findall(r'"([A-Za-z][A-Za-z0-9_]*)"', block.group(1))) if block else set()
 
 
 def audit(evidence: dict, reader_source: str, counts=(394, 534)) -> dict:
@@ -69,7 +79,9 @@ def audit(evidence: dict, reader_source: str, counts=(394, 534)) -> dict:
     if (len(corpus), components) != counts:
         raise ValueError("Reference corpus size differs from expected counts")
     observed = set(keys)
-    used = referenced_keys(reader_source)
+    direct = referenced_keys(reader_source)
+    auxiliary = auxiliary_curve_keys(reader_source)
+    used = direct | auxiliary
     referenced = used & observed
     prefixes = ("dynamicsPressure", "dynamicsTilt", "dynamicsSpeed",
                 "shape", "texture", "grain", "plot")
@@ -93,9 +105,12 @@ def audit(evidence: dict, reader_source: str, counts=(394, 534)) -> dict:
         "compound_brushes": compound,
         "settings_components": components,
         "observed_keys": len(observed),
+        "direct_reader_keys": len(direct & observed),
+        "preserved_auxiliary_curve_keys": len(auxiliary & observed),
         "reader_referenced_keys": len(referenced),
         "reader_unreferenced_keys": len(observed - used),
         "reader_referenced_names": sorted(referenced),
+        "preserved_auxiliary_curve_names": sorted(auxiliary & observed),
         "reader_unreferenced_names": sorted(observed - used),
         "reader_keys_absent_from_corpus": sorted(used - observed),
         "families": families,
@@ -124,6 +139,7 @@ def main() -> None:
     args.out.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps({key: report[key] for key in (
         "logical_brushes", "compound_brushes", "settings_components", "observed_keys",
+        "direct_reader_keys", "preserved_auxiliary_curve_keys",
         "reader_referenced_keys", "reader_unreferenced_keys", "distinct_shape_references",
         "distinct_grain_references"
     )}, sort_keys=True))

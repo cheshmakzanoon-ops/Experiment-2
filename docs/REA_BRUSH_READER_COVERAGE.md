@@ -8,16 +8,18 @@ This report is derived from the original 777,430,382-byte user-supplied iOS ZIP 
 | Compound brushes | 140 |
 | Serialized setting components | 534 |
 | Distinct top-level setting keys | 264 |
-| Keys visibly referenced by the current reader | 60 |
-| Keys not visibly referenced by that reader | 204 |
+| Fields directly mapped into ArtFlow parameters | 60 |
+| Additional typed pressure-curve fields retained for interchange | 30 |
+| All reader-referenced fields (direct + retained) | 90 |
+| Settings keys without an importer mapping | 174 |
 | Bundled shape path references | 534 component references, 297 distinct paths |
 | Bundled grain path references | 504 component references, 234 distinct paths |
 | Embedded preview thumbnails | 394 |
 | Separate image files inside brush containers | 6 |
 
-**Important:** 60/264 is a syntactic key-reference measure, **not** a rendering-parity percentage. Some of the 60 fields may be approximated or unused at runtime; some of the remaining 204 may be irrelevant to ArtFlow. These counts are a precise map of what is and isn't visibly interpreted by the current reader.
+**Important:** 90/264 is a static source-key coverage measure, **not** a rendering-parity percentage. Only 60 keys are mapped directly to ArtFlow parameters, and 30 extra REA-observed pressure curves are decoded and retained for brush save/export without claiming the native rendering equations. There are 174 keys with no such mapping. Some directly mapped settings are approximations; some unmapped fields may be irrelevant.
 
-The counts were recomputed against the **current** ProcreateBrush.kt reader on main. Six additional signed scalar settings (`dynamicsPressureHue/Saturation/Brightness` and `dynamicsTiltHue/Saturation/Brightness`) now map to ArtFlow's own HSV colour dynamics. This is an approximation, not a recovered native formula. The 297 shape and 234 grain references refer to filenames of potential external bundled resources. Most reference brushes contain only a preview and keyed settings, not the shape/grain image. Resource location and actual loading remain **unknown** without the entire IPA's resource inventory, and the program must not assert that an asset was recovered merely because a path was identified.
+The counts were recomputed against the **current** ProcreateBrush.kt reader on main. Six signed scalar settings (`dynamicsPressureHue/Saturation/Brightness` and `dynamicsTiltHue/Saturation/Brightness`) map to ArtFlow's HSV approximation. The supplementary 30 pressure curves are supported as bounded `PressureMapping` dictionaries for import, library persistence and synthetic `.brush` export, not as complete source rendering behavior. The 297 shape and 234 grain references refer to filenames of potential external bundled resources. Most reference brushes contain only a preview and keyed settings, not the shape/grain image. Resource location and actual loading remain **unknown** without the entire IPA's resource inventory, and the program must not assert that an asset was recovered merely because a path was identified.
 
 ## Reproduction
 

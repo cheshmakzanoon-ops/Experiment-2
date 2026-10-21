@@ -58,6 +58,20 @@ class ReaCorpusCoverageTests(unittest.TestCase):
         self.assertEqual(2, report["distinct_shape_references"])
         self.assertEqual(1, report["distinct_grain_references"])
 
+    def test_auxiliary_whitelist_counts_structural_preservation_separately(self):
+        reader = (
+            'number("shapeCount"); brush["bundledShapePath"]\n'
+            'internal val AUXILIARY_CURVE_KEYS: Set<String> = setOf(\n'
+            '    "unknownCurve", "not-in-corpus",\n'
+            ')'
+        )
+        report = audit_module.audit(fixture(), reader, counts=(2, 3))
+        self.assertEqual(2, report["direct_reader_keys"])
+        self.assertEqual(1, report["preserved_auxiliary_curve_keys"])
+        self.assertEqual(3, report["reader_referenced_keys"])
+        self.assertEqual(2, report["reader_unreferenced_keys"])
+        self.assertEqual(["unknownCurve"], report["preserved_auxiliary_curve_names"])
+
     def test_rejects_different_reference_identity(self):
         bad = fixture()
         bad["reference_sha256"] = "0" * 64
