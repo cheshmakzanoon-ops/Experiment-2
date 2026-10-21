@@ -184,6 +184,25 @@ class BrushExportRoundTripTest {
         assertTrue(brushes.all { it.grain == null })
     }
 
+    @Test
+    fun signedPressureAndIndependentMirrorJitterSurviveExportAndImport() {
+        val original =
+            BrushParams(
+                pressureToSize = -0.6f,
+                pressureToOpacity = -0.35f,
+                tipFlipX = false,
+                tipFlipY = false,
+                tipFlipXJitter = true,
+                tipFlipYJitter = false,
+            )
+        val bytes = ProcreateBrushWriter.brush(ProcreateBrushWriter.Brush("Signed pressure", original))
+        val imported = requireNotNull(BrushArchives.read(bytes, decode).single().settings).parameters
+        assertEquals(-0.6f, imported.pressureToSize, 1e-6f)
+        assertEquals(-0.35f, imported.pressureToOpacity, 1e-6f)
+        assertTrue(imported.tipFlipXJitter)
+        assertEquals(false, imported.tipFlipYJitter)
+    }
+
     private companion object {
         const val TOLERANCE = 1e-4
     }
