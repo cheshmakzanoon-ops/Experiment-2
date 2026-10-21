@@ -118,6 +118,23 @@ class LiveStrokeTest {
     }
 
     @Test
+    fun repeatedCoordinatesAndBatchedTimestampsRenderDeterministically() {
+        val brush = BrushParams(size = 12f, flow = 0.65f, wetMix = 0.4f, wetBlur = 0.3f, spacing = 0.2f)
+        val points =
+            listOf(
+                StrokePoint(22f, 22f, 0.3f, timestamp = 10L),
+                StrokePoint(22f, 22f, 0.3f, timestamp = 10L),
+                StrokePoint(52f, 23f, 0.8f, timestamp = 10L),
+                StrokePoint(90f, 36f, 0.5f, timestamp = 30L),
+            )
+        val reference = stroke(brush).copy(points = points)
+        val once = layer.copy().also { StrokeRasterizer().draw(it, reference) }
+        val twice = layer.copy().also { StrokeRasterizer().draw(it, reference) }
+        assertArrayEquals(once.pixels, twice.pixels)
+        assertTrue(once.pixels.indices.any { once.pixels[it] != layer.pixels[it] })
+    }
+
+    @Test
     fun replayableRandomFollowsJavaRandomAndCopiesItsPosition() {
         val reference = Random(99L)
         val replay = ReplayableRandom(99L)

@@ -408,7 +408,7 @@ class StrokeRasterizer(
 
             if (distance <= 0.0001f) {
                 // Duplicate sample: a single dab keeps a tap visible without double-darkening.
-                drawDabAt(context, walk, previous, current, 0f, distance, walk.accumulated)
+                drawDabAt(context, walk, previous, current, 0f, distance, walk.accumulated, walk.velocity)
                 continue
             }
 
@@ -416,9 +416,9 @@ class StrokeRasterizer(
             walk.velocity = velocity
             var travelled = walk.carry
             while (travelled <= distance) {
-                drawDabAt(context, walk, previous, current, travelled / distance, distance, walk.accumulated + travelled)
+                drawDabAt(context, walk, previous, current, travelled / distance, distance, walk.accumulated + travelled, velocity)
                 walk.lastDabTravelled = travelled
-                travelled += dabSpacing(context, previous, current, t, walk.accumulated + travelled, velocity)
+                travelled += dabSpacing(context, previous, current, travelled / distance, walk.accumulated + travelled, velocity)
             }
             walk.carry = travelled - distance
             walk.accumulated += distance
@@ -458,7 +458,7 @@ class StrokeRasterizer(
         walk: DabWalk,
     ) {
         if (points.size == 1) {
-            drawDabAt(context, walk, points.first(), points.first(), 0f, 0f, 0f)
+            drawDabAt(context, walk, points.first(), points.first(), 0f, 0f, 0f, 0f)
             return
         }
         val lastPrevious = points[points.size - 2]
@@ -467,7 +467,7 @@ class StrokeRasterizer(
         val endDy = last.y - lastPrevious.y
         val endDistance = sqrt(endDx * endDx + endDy * endDy)
         if (endDistance > 0.0001f && walk.lastDabTravelled != endDistance) {
-            drawDabAt(context, walk, lastPrevious, last, 1f, endDistance, walk.accumulated)
+            drawDabAt(context, walk, lastPrevious, last, 1f, endDistance, walk.accumulated, walk.velocity)
         }
     }
 
@@ -530,7 +530,7 @@ class StrokeRasterizer(
         val colorRandom = if (params.colorJitterPerStroke) Random(strokeColorSeed(stroke.id)) else random
         val fresh = params.applyColorJitter(stroke.color, pressure, velocity, colorRandom, stroke.secondaryColor, tilt)
         val loaded = walk.carried?.let { carried -> carriedColor(fresh, carried, params) } ?: fresh
-        val color = wetColor(loaded, context.canvas, x, y, wetPickup(params), params.wetBlur.coerceIn(0f, 1f) * params.size / 2f)
+        val color = wetColor(context, loaded, x, y, wetPickup(params), params.wetBlur.coerceIn(0f, 1f) * params.size / 2f)
         walk.carried = color
 
         // Scatter offsets each dab; count repeats it along a random perpendicular offset.
@@ -627,7 +627,8 @@ class StrokeRasterizer(
         wetMix: Float,
         blurReach: Float = 0f,
     ): Int {
-        if (canvas == null || wetMix <= 0f) return color
+        val canvas = context.canvas ?: return color
+        if (wetMix <= 0f) return color
         val under = if (blurReach >= 1f) blurredUnder(canvas, x, y, blurReach) else canvas.getSafe(floor(x).toInt(), floor(y).toInt())
         val pickup = wetMix.coerceIn(0f, 1f) * WET_PICKUP * ((under ushr 24) / 255f)
         if (pickup <= 0f) return color
