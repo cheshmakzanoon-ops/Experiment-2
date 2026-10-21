@@ -10,6 +10,8 @@ on:
       - 'tools/test_rea_source_field_shape_audit.py'
       - 'tools/rea_keyed_graph_audit.py'
       - 'tools/test_rea_keyed_graph_audit.py'
+      - 'tools/rea_scalar_drift_audit.py'
+      - 'tools/test_rea_scalar_drift_audit.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -112,6 +114,14 @@ jobs:
             "$RUNNER_TEMP/reference-evidence/rea-compound-1.json" \
             "$RUNNER_TEMP/reference-evidence/rea-compound-2.json" \
             --out "$RUNNER_TEMP/reference-evidence/rea-keyed-graph-report.json"
+      - name: Audit source scalar round-trip drift risks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tools -p 'test_rea_scalar_drift_audit.py' -v
+          python tools/rea_scalar_drift_audit.py \
+            "$RUNNER_TEMP/reference-evidence/compound-structures.json" \
+            --out "$RUNNER_TEMP/reference-evidence/rea-scalar-drift-risks.json"
       - name: Verify reference brush dependency mapping
         shell: bash
         run: |

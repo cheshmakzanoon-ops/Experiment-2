@@ -1,3 +1,7 @@
+### REA source-value drift audit (21 October 2026)
+
+An offline, hash-pinned audit found **477 of 534** component settings records contain at least one source scalar that ArtFlow's approximate importer would normally clamp or quantize. The [exporter repair](https://github.com/cheshmakzanoon-ops/Experiment-2/commit/9dec2c473702ec6deb113a7b80321fdd58e13b97) now preserves original primitive values for unedited brush controls, including source spacing and grain scaling outside ArtFlow's limits. See [the reproducible drift-risk report](docs/REA_SCALAR_DRIFT_RISKS.md). This is archive-data retention, not reference-app rendering or runtime equivalence.
+
 ### REA source schema capture (21 October 2026)
 
 Read-only REA analysis of the supplied IPA documents **264 distinct brush-setting fields**: 211 scalar, 33 pressure-curve, 19 structured-object, and one 16-byte color-data field. The current importer now has bounded preservation paths for those observed shapes, including saved-brush storage and synthetic keyed-archive export. **Structural capture is not identical NSKeyedArchiver bytes, original brush rendering, or full reverse engineering of the iOS application.** See the [complete source schema census](docs/REA_BRUSH_FULL_SCHEMA_CENSUS_2026-10-21.md); Android build/device verification remains pending.
