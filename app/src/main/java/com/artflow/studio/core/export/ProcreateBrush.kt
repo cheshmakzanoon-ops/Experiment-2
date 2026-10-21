@@ -6,6 +6,7 @@ import com.artflow.studio.domain.model.brush.ImportedPressure
 import com.artflow.studio.domain.model.brush.PressureMapping
 import com.artflow.studio.domain.model.brush.SourceBrushScalar
 import com.artflow.studio.domain.model.brush.SourceBrushStructuredField
+import com.artflow.studio.domain.model.brush.RenderingMode
 import com.artflow.studio.domain.model.layer.BlendMode
 import java.util.Base64
 import kotlin.math.roundToInt
@@ -21,36 +22,36 @@ object ProcreateBrush {
     /** REA-observed curve dictionaries with real control points, beyond overall / size / opacity. */
     internal val AUXILIARY_CURVE_KEYS: Set<String> =
         setOf(
-        "dynamicsPressureAttackCurve",
-        "dynamicsPressureBleedCurve",
-        "dynamicsPressureBlurCurve",
-        "dynamicsPressureBrightnessCurve",
-        "dynamicsPressureCharge",
-        "dynamicsPressureDilutionCurve",
-        "dynamicsPressureGradeCurve",
-        "dynamicsPressureGrainDepthCurve",
-        "dynamicsPressureGrainDepthJitterCurve",
-        "dynamicsPressureGrainMovementCurve",
-        "dynamicsPressureGrainScaleCurve",
-        "dynamicsPressureGrainZoomCurve",
-        "dynamicsPressureHueCurve",
-        "dynamicsPressureHueJitterCurve",
-        "dynamicsPressureOpacityJitterCurve",
-        "dynamicsPressurePlotJitterCurve",
-        "dynamicsPressurePlotJitterLongitudinalCurve",
-        "dynamicsPressurePlotSpacingJitter",
-        "dynamicsPressureSaturationCurve",
-        "dynamicsPressureSecondaryColorCurve",
-        "dynamicsPressureShapeRoundessHorizontalJitterCurve",
-        "dynamicsPressureShapeRoundessVerticalJitterCurve",
-        "dynamicsPressureShapeRoundnessCurve",
-        "dynamicsPressureShapeScatterCurve",
-        "dynamicsPressureSizeJitterCurve",
-        "dynamicsPressureSmudgePullCurve",
-        "dynamicsPressureStampCountCurve",
-        "dynamicsPressureStampCountJitterCurve",
-        "dynamicsPressureTransferModulationCurve",
-        "dynamicsPressureWetPullCurve",
+            "dynamicsPressureAttackCurve",
+            "dynamicsPressureBleedCurve",
+            "dynamicsPressureBlurCurve",
+            "dynamicsPressureBrightnessCurve",
+            "dynamicsPressureCharge",
+            "dynamicsPressureDilutionCurve",
+            "dynamicsPressureGradeCurve",
+            "dynamicsPressureGrainDepthCurve",
+            "dynamicsPressureGrainDepthJitterCurve",
+            "dynamicsPressureGrainMovementCurve",
+            "dynamicsPressureGrainScaleCurve",
+            "dynamicsPressureGrainZoomCurve",
+            "dynamicsPressureHueCurve",
+            "dynamicsPressureHueJitterCurve",
+            "dynamicsPressureOpacityJitterCurve",
+            "dynamicsPressurePlotJitterCurve",
+            "dynamicsPressurePlotJitterLongitudinalCurve",
+            "dynamicsPressurePlotSpacingJitter",
+            "dynamicsPressureSaturationCurve",
+            "dynamicsPressureSecondaryColorCurve",
+            "dynamicsPressureShapeRoundessHorizontalJitterCurve",
+            "dynamicsPressureShapeRoundessVerticalJitterCurve",
+            "dynamicsPressureShapeRoundnessCurve",
+            "dynamicsPressureShapeScatterCurve",
+            "dynamicsPressureSizeJitterCurve",
+            "dynamicsPressureSmudgePullCurve",
+            "dynamicsPressureStampCountCurve",
+            "dynamicsPressureStampCountJitterCurve",
+            "dynamicsPressureTransferModulationCurve",
+            "dynamicsPressureWetPullCurve",
         )
 
     /** Keep dictionary schema names with the domain validation contract. */
@@ -187,7 +188,8 @@ object ProcreateBrush {
                 tipFlipYJitter = flag("shapeFlipYJitter"),
                 tipRandomized = flag("shapeRandomise"),
                 buildUp = flag("renderingRecursiveMixing"),
-                renderingMode = if (flag("renderingRecursiveMixing")) com.artflow.studio.domain.model.brush.RenderingMode.BLEND_UNIFORM else com.artflow.studio.domain.model.brush.RenderingMode.GLAZE_UNIFORM,
+                renderingMode =
+                    if (flag("renderingRecursiveMixing")) RenderingMode.BLEND_UNIFORM else RenderingMode.GLAZE_UNIFORM,
                 grainMoving = unit("textureMovement") >= MOVING_GRAIN,
                 secondaryPressure = unit("dynamicsPressureSecondaryColor"),
                 secondaryJitter = unit("jitterSecondary"),

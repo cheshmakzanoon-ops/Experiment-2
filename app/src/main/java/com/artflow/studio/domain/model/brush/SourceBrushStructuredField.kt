@@ -29,7 +29,10 @@ data class SourceBrushStructuredField(
                     }
             Kind.ARRAY ->
                 items != null && fields.isEmpty() && items.size <= MAX_ITEMS &&
-                    items.all { it.isValid() && it.type in setOf(SourceBrushScalar.Type.REAL, SourceBrushScalar.Type.INTEGER) }
+                    items.all { scalar ->
+                        scalar.isValid() &&
+                            (scalar.type == SourceBrushScalar.Type.REAL || scalar.type == SourceBrushScalar.Type.INTEGER)
+                    }
         }
     }
 

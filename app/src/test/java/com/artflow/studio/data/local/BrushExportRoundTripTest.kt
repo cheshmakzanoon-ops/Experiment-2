@@ -288,8 +288,14 @@ class BrushExportRoundTripTest {
         assertEquals(0.35f, imported.parameters.spacing, 1e-6f)
         assertEquals(source.importedSourceScalars["authorName"], imported.parameters.importedSourceScalars["authorName"])
         assertEquals(source.importedSourceScalars["shapeCountRoll"], imported.parameters.importedSourceScalars["shapeCountRoll"])
-        assertEquals(source.importedSourceScalars["burntEdgesBlendModeExtended"], imported.parameters.importedSourceScalars["burntEdgesBlendModeExtended"])
-        assertEquals(source.importedSourceScalars["plotJitterLongitudinal"], imported.parameters.importedSourceScalars["plotJitterLongitudinal"])
+        assertEquals(
+            source.importedSourceScalars["burntEdgesBlendModeExtended"],
+            imported.parameters.importedSourceScalars["burntEdgesBlendModeExtended"],
+        )
+        assertEquals(
+            source.importedSourceScalars["plotJitterLongitudinal"],
+            imported.parameters.importedSourceScalars["plotJitterLongitudinal"],
+        )
     }
 
     @Test
