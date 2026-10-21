@@ -13,6 +13,26 @@ class LayerTransformTest {
         y: Int,
     ): PixelBuffer = PixelBuffer(size, size).also { it.pixels[y * size + x] = red }
 
+    @Test fun repositoryTransformRequestKeepsOriginalAndMovesPixels() {
+        val source = dot(8, 1, 2)
+        val moved = LayerTransform.apply(
+            source,
+            LayerTransform.Parameters(translationX = 2f, translationY = 1f),
+        )
+        assertEquals(red, moved.pixels[3 * 8 + 3])
+        assertEquals(red, source.pixels[2 * 8 + 1])
+        assertEquals(0, source.pixels[3 * 8 + 3])
+        assertEquals(1, moved.opaquePixelCount())
+    }
+
+    @Test fun layerTransformIdentityReturnsAnIndependentCopy() {
+        val source = dot(8, 1, 2)
+        val result = LayerTransform.apply(source, LayerTransform.Parameters())
+        assertEquals(red, result.pixels[2 * 8 + 1])
+        result.pixels[2 * 8 + 1] = 0
+        assertEquals(red, source.pixels[2 * 8 + 1])
+    }
+
     @Test fun identityKeepsPixels() {
         val src = dot(8, 2, 3)
         val out = PixelBuffer(8, 8)

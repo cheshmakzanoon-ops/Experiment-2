@@ -18,6 +18,7 @@ import com.artflow.studio.core.export.ExportFormat
 import com.artflow.studio.core.export.ExportOptions
 import com.artflow.studio.core.export.ExportResult
 import com.artflow.studio.core.perspective.PerspectiveGuide
+import com.artflow.studio.core.pixels.LayerTransform
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.pixels.TransformQuad

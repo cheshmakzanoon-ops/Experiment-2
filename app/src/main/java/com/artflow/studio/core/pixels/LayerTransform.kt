@@ -19,6 +19,62 @@ import kotlin.math.sin
  * the flips as negative scale factors.
  */
 object LayerTransform {
+    /**
+     * Atomic layer-level transform request from the document repository.
+     * The existing [Params] type is used for direct rendering with an explicit pivot.
+     */
+    data class Parameters(
+        val translationX: Float = 0f,
+        val translationY: Float = 0f,
+        val scaleX: Float = 1f,
+        val scaleY: Float = 1f,
+        val rotationDegrees: Float = 0f,
+        val flipHorizontal: Boolean = false,
+        val flipVertical: Boolean = false,
+    ) {
+        val isIdentity: Boolean
+            get() =
+                translationX == 0f && translationY == 0f &&
+                    scaleX == 1f && scaleY == 1f &&
+                    rotationDegrees % 360f == 0f &&
+                    !flipHorizontal && !flipVertical
+    }
+
+    /** Prepare a transformed pixel plane without mutating the source or repository state. */
+    fun apply(
+        source: PixelBuffer,
+        parameters: Parameters,
+        checkActive: () -> Unit = {},
+    ): PixelBuffer {
+        require(
+            listOf(
+                parameters.translationX, parameters.translationY, parameters.scaleX,
+                parameters.scaleY, parameters.rotationDegrees,
+            ).all { it.isFinite() },
+        ) { "Transform parameters must be finite" }
+        checkActive()
+        if (parameters.isIdentity) return source.copy()
+        val out = PixelBuffer(source.width, source.height)
+        render(
+            source = source,
+            target = out,
+            params =
+                Params(
+                    pivotX = source.width / 2f,
+                    pivotY = source.height / 2f,
+                    translateX = parameters.translationX,
+                    translateY = parameters.translationY,
+                    scaleX = parameters.scaleX,
+                    scaleY = parameters.scaleY,
+                    rotationDegrees = parameters.rotationDegrees,
+                    flipHorizontal = parameters.flipHorizontal,
+                    flipVertical = parameters.flipVertical,
+                ),
+        )
+        checkActive()
+        return out
+    }
+
     data class Params(
         val pivotX: Float,
         val pivotY: Float,
