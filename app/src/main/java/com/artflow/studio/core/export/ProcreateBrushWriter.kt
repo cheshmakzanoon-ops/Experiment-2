@@ -149,7 +149,7 @@ object ProcreateBrushWriter {
         val imported = ProcreateBrush.parameters(input)
         val keepOriginal = mutableSetOf<String>()
         fun retain(unchanged: Boolean, vararg fields: String) {
-            if (unchanged) keepOriginal.addAll(fields)
+            if (unchanged) fields.forEach(keepOriginal::add)
         }
 
         retain(params.size == imported.size, "maxSize", "paintSize")
