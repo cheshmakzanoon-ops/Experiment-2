@@ -31,16 +31,6 @@ object ProcreateBrush {
     fun read(archive: ByteArray): Settings {
         val keyed = KeyedArchive(BinaryPlist.read(archive))
         val brush = requireNotNull(keyed.root) { "This is not a Procreate brush" }
-        return Settings(
-            name = keyed.string(brush["name"])?.trim()?.takeIf { it.isNotEmpty() },
-            parameters = parameters(brush),
-            shapeInverted = brush.flag("shapeInverted"),
-            grainInverted = brush.flag("textureInverted"),
-            bundledShape = keyed.string(brush["bundledShapePath"]) != null,
-            bundledGrain = keyed.string(brush["bundledGrainPath"]) != null,
-        )
-    }
-
         fun number(key: String): Float? = (brush[key] as? Number)?.toFloat()?.takeIf { it.isFinite() }
 
         fun unit(key: String): Float = number(key)?.coerceIn(0f, 1f) ?: 0f
