@@ -4,6 +4,7 @@ import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.ColorDynamics
 import com.artflow.studio.domain.model.brush.ImportedPressure
 import com.artflow.studio.domain.model.brush.PressureMapping
+import com.artflow.studio.domain.model.brush.SourceBrushScalar
 import com.artflow.studio.domain.model.layer.BlendMode
 import kotlin.math.roundToInt
 
@@ -67,6 +68,16 @@ object ProcreateBrush {
     fun read(archive: ByteArray): Settings {
         val keyed = KeyedArchive(BinaryPlist.read(archive))
         val brush = requireNotNull(keyed.root) { "This is not a Procreate brush" }
+        // Preserve source scalar values before ArtFlow's intentionally approximate
+        // mapping clamps its own editable brush controls. Nested archive objects
+        // and image data are never copied into the saved brush model.
+        val sourceScalars =
+            brush.mapNotNull { (name, raw) ->
+                if (!SourceBrushScalar.validName(name)) return@mapNotNull null
+                val field = SourceBrushScalar.capture(keyed.resolve(raw)) ?: return@mapNotNull null
+                name to field
+            }.toMap()
+        require(sourceScalars.size <= SourceBrushScalar.MAX_FIELDS) { "Too many source brush scalar settings" }
         fun number(key: String): Float? = (brush[key] as? Number)?.toFloat()?.takeIf { it.isFinite() }
 
         fun unit(key: String): Float = number(key)?.coerceIn(0f, 1f) ?: 0f
@@ -105,6 +116,7 @@ object ProcreateBrush {
                     AUXILIARY_CURVE_KEYS.mapNotNull { key ->
                         curve(keyed, brush[key])?.let { mapping -> key to mapping }
                     }.toMap(),
+                importedSourceScalars = sourceScalars,
                 hueJitter = unit("dynamicsJitterHue"),
                 saturationJitter = unit("dynamicsJitterSaturation"),
                 brightnessJitter = maxOf(unit("dynamicsJitterLightness"), unit("dynamicsJitterDarkness")),

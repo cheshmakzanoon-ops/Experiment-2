@@ -7,7 +7,9 @@ import kotlinx.serialization.json.Json
 object BrushLibraryCodec {
     const val MAX_BRUSHES = 128
     const val MAX_NAME = 80
-    private const val MAX_CHARACTERS = 524_288
+    // 128 source-preserving brushes can include ~200 metadata scalars each.
+    // Still bounded: per-field and per-library validation prevents unbounded allocations.
+    private const val MAX_CHARACTERS = 3_145_728
 
     /** The rasterizer repeats each dab at most this many times; Procreate's Count reaches 16. */
     private const val MAX_DAB_COUNT = 32
@@ -96,6 +98,12 @@ object BrushLibraryCodec {
                 params.grainDepth,
             )
         require(unitValues.all { it in 0f..1f }) { "Brush dynamics must be finite values between zero and one" }
+        require(params.importedSourceScalars.size <= SourceBrushScalar.MAX_FIELDS) {
+            "Too many source brush scalar settings"
+        }
+        require(params.importedSourceScalars.all { (name, field) ->
+            SourceBrushScalar.validName(name) && field.isValid()
+        }) { "Invalid imported source brush scalar" }
         require(params.importedAuxiliaryCurves.size <= MAX_AUXILIARY_CURVES) {
             "Too many source pressure curve components"
         }

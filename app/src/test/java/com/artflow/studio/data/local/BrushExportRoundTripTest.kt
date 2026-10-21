@@ -6,6 +6,7 @@ import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.render.CustomGrains
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.ColorDynamics
+import com.artflow.studio.domain.model.brush.SourceBrushScalar
 import com.artflow.studio.domain.model.brush.PressureMapping
 import com.artflow.studio.domain.model.brush.SavedBrush
 import com.artflow.studio.domain.model.layer.BlendMode
@@ -255,6 +256,36 @@ class BrushExportRoundTripTest {
         )
         val restored = com.artflow.studio.domain.model.brush.BrushLibraryCodec.decode(saved).single().parameters
         assertEquals(curves, restored.importedAuxiliaryCurves)
+    }
+
+    @Test
+    fun unknownSourceScalarsSurviveImportSaveAndExportWithoutReplacingEditableSettings() {
+        val source =
+            com.artflow.studio.core.export.ProcreateBrush.parameters(
+                mapOf(
+                    "plotSpacing" to 0.2,
+                    "shapeCountRoll" to true,
+                    "burntEdgesBlendModeExtended" to 34L,
+                    "plotJitterLongitudinal" to 0.125,
+                    "authorName" to "Synthetic artist",
+                ),
+            )
+        assertEquals(SourceBrushScalar(SourceBrushScalar.Type.BOOLEAN, "true"), source.importedSourceScalars["shapeCountRoll"])
+        assertEquals(SourceBrushScalar(SourceBrushScalar.Type.INTEGER, "34"), source.importedSourceScalars["burntEdgesBlendModeExtended"])
+        val brush = SavedBrush("raw", "Source", source)
+        val restored = com.artflow.studio.domain.model.brush.BrushLibraryCodec.decode(
+            com.artflow.studio.domain.model.brush.BrushLibraryCodec.encode(listOf(brush)),
+        ).single().parameters
+        assertEquals(source.importedSourceScalars, restored.importedSourceScalars)
+        val modified = restored.copy(spacing = 0.35f)
+        val exported = ProcreateBrushWriter.brush(ProcreateBrushWriter.Brush("Edited source", modified))
+        val imported = requireNotNull(BrushArchives.read(exported, decode).single().settings)
+        assertEquals("Edited source", imported.name)
+        assertEquals(0.35f, imported.parameters.spacing, 1e-6f)
+        assertEquals(source.importedSourceScalars["authorName"], imported.parameters.importedSourceScalars["authorName"])
+        assertEquals(source.importedSourceScalars["shapeCountRoll"], imported.parameters.importedSourceScalars["shapeCountRoll"])
+        assertEquals(source.importedSourceScalars["burntEdgesBlendModeExtended"], imported.parameters.importedSourceScalars["burntEdgesBlendModeExtended"])
+        assertEquals(source.importedSourceScalars["plotJitterLongitudinal"], imported.parameters.importedSourceScalars["plotJitterLongitudinal"])
     }
 
     private companion object {

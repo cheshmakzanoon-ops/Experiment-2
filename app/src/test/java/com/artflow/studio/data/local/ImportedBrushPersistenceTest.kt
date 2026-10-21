@@ -7,6 +7,7 @@ import com.artflow.studio.domain.model.brush.DualBrush
 import com.artflow.studio.domain.model.brush.ImportedPressure
 import com.artflow.studio.domain.model.brush.PressureMapping
 import com.artflow.studio.domain.model.brush.SavedBrush
+import com.artflow.studio.domain.model.brush.SourceBrushScalar
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
@@ -57,6 +58,31 @@ class ImportedBrushPersistenceTest {
         val tooMany = (0..30).associate { index -> "dynamicsPressureSynthetic$index" to response }
         assertThrows(IllegalArgumentException::class.java) {
             BrushLibraryCodec.encode(listOf(SavedBrush("too-many", "Too many", good.copy(importedAuxiliaryCurves = tooMany))))
+        }
+    }
+
+    @Test fun sourceScalarMetadataIsValidatedAndVersionOneLibrariesRemainCompatible() {
+        val source =
+            BrushParams(
+                importedSourceScalars =
+                    mapOf(
+                        "plotJitterLongitudinal" to SourceBrushScalar(SourceBrushScalar.Type.REAL, "0.125"),
+                        "shapeCountRoll" to SourceBrushScalar(SourceBrushScalar.Type.BOOLEAN, "true"),
+                        "burntEdgesBlendModeExtended" to SourceBrushScalar(SourceBrushScalar.Type.INTEGER, "34"),
+                        "authorName" to SourceBrushScalar(SourceBrushScalar.Type.TEXT, "Synthetic artist"),
+                    ),
+            )
+        val brush = SavedBrush("raw-settings", "Source settings", source)
+        assertEquals(listOf(brush), BrushLibraryCodec.decode(BrushLibraryCodec.encode(listOf(brush))))
+        for (bad in listOf(
+            mapOf("../invalid" to SourceBrushScalar(SourceBrushScalar.Type.TEXT, "x")),
+            mapOf("shapeCountRoll" to SourceBrushScalar(SourceBrushScalar.Type.BOOLEAN, "not-a-boolean")),
+            mapOf("plotJitterLongitudinal" to SourceBrushScalar(SourceBrushScalar.Type.REAL, "NaN")),
+            mapOf("authorName" to SourceBrushScalar(SourceBrushScalar.Type.TEXT, "x".repeat(257))),
+        )) {
+            assertThrows(IllegalArgumentException::class.java) {
+                BrushLibraryCodec.encode(listOf(brush.copy(parameters = source.copy(importedSourceScalars = bad))))
+            }
         }
     }
 

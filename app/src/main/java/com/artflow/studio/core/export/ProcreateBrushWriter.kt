@@ -3,6 +3,7 @@ package com.artflow.studio.core.export
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.render.CustomGrains
 import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.SourceBrushScalar
 import java.io.ByteArrayOutputStream
 import java.util.UUID
 import java.util.zip.ZipEntry
@@ -65,8 +66,21 @@ object ProcreateBrushWriter {
                     val points = keyed.array(curve.points.map { point -> keyed.add("{${point.input}, ${point.output}}") })
                     keyed.instance("NSDictionary", mapOf("points" to points))
                 }
+        val preservedScalars =
+            brush.parameters.importedSourceScalars.mapValues { (_, scalar) ->
+                require(scalar.isValid()) { "Invalid stored source brush scalar" }
+                when (scalar.type) {
+                    SourceBrushScalar.Type.BOOLEAN -> scalar.value == "true"
+                    SourceBrushScalar.Type.INTEGER -> requireNotNull(scalar.value.toLongOrNull())
+                    SourceBrushScalar.Type.REAL -> requireNotNull(scalar.value.toDoubleOrNull())
+                    SourceBrushScalar.Type.TEXT -> keyed.add(scalar.value)
+                }
+            }
+        // Editable ArtFlow settings win for known fields; original values survive
+        // for every other primitive source setting. Compound settings and opaque
+        // native data are outside this scalar-preservation contract.
         val root =
-            mapOf("\$class" to keyed.classOf(BRUSH_CLASS), "name" to keyed.add(brush.name)) +
+            preservedScalars + mapOf("\$class" to keyed.classOf(BRUSH_CLASS), "name" to keyed.add(brush.name)) +
                 settings(brush.parameters) + auxiliary
         return keyed.encode(root)
     }
