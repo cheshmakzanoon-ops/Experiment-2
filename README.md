@@ -1,3 +1,7 @@
+### REA source schema capture (21 October 2026)
+
+Read-only REA analysis of the supplied IPA documents **264 distinct brush-setting fields**: 211 scalar, 33 pressure-curve, 19 structured-object, and one 16-byte color-data field. The current importer now has bounded preservation paths for those observed shapes, including saved-brush storage and synthetic keyed-archive export. **Structural capture is not identical NSKeyedArchiver bytes, original brush rendering, or full reverse engineering of the iOS application.** See the [complete source schema census](docs/REA_BRUSH_FULL_SCHEMA_CENSUS_2026-10-21.md); Android build/device verification remains pending.
+
 ### REA supplemental pressure-curve recovery (21 October 2026)
 
 The reference corpus has 33 curve fields. The importer now retains 30 auxiliary source fields in addition to the original three, with **4,138 syntactically valid auxiliary curve instances** observed offline. Synthetic import/save/export round-trip tests were added; native brush behavior, pixel parity and exact-commit Android CI remain unverified. See [REA auxiliary curve recovery](docs/REA_AUXILIARY_CURVES_2026-10-21.md) and [reader mapping audit](docs/REA_BRUSH_READER_COVERAGE.md).
