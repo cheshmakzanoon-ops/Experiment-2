@@ -8,16 +8,16 @@ This report is derived from the original 777,430,382-byte user-supplied iOS ZIP 
 | Compound brushes | 140 |
 | Serialized setting components | 534 |
 | Distinct top-level setting keys | 264 |
-| Keys visibly referenced by the current reader | 52 |
-| Keys not visibly referenced by that reader | 212 |
+| Keys visibly referenced by the current reader | 54 |
+| Keys not visibly referenced by that reader | 210 |
 | Bundled shape path references | 534 component references, 297 distinct paths |
 | Bundled grain path references | 504 component references, 234 distinct paths |
 | Embedded preview thumbnails | 394 |
 | Separate image files inside brush containers | 6 |
 
-**Important:** 52/264 is a syntactic key-reference measure, **not** a rendering-parity percentage. Some of the 52 fields may be approximated or unused at runtime; some of the remaining 212 may be irrelevant to ArtFlow. These counts are a precise map of what is and isn't visibly interpreted by the current reader.
+**Important:** 54/264 is a syntactic key-reference measure, **not** a rendering-parity percentage. Some of the 54 fields may be approximated or unused at runtime; some of the remaining 210 may be irrelevant to ArtFlow. These counts are a precise map of what is and isn't visibly interpreted by the current reader.
 
-The 297 shape and 234 grain references refer to filenames of potential external bundled resources. Most reference brushes contain only a preview and keyed settings, not the shape/grain image. Resource location and actual loading remain **unknown** without the entire IPA's resource inventory, and the program must not assert that an asset was recovered merely because a path was identified.
+The counts were recomputed against the **current** ProcreateBrush.kt reader on main, including both signed `dynamicsPressureSize` and `dynamicsPressureOpacity` accessors (omitted from an older extracted-key stub). The 297 shape and 234 grain references refer to filenames of potential external bundled resources. Most reference brushes contain only a preview and keyed settings, not the shape/grain image. Resource location and actual loading remain **unknown** without the entire IPA's resource inventory, and the program must not assert that an asset was recovered merely because a path was identified.
 
 ## Reproduction
 
