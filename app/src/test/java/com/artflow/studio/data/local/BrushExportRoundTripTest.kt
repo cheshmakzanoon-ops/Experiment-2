@@ -411,6 +411,11 @@ class BrushExportRoundTripTest {
         val root = requireNotNull(keyed.root)
         for (field in listOf("dynamicsPressureOverall", "dynamicsPressureSizeCurve", "dynamicsPressureOpacityCurve")) {
             assertEquals("ValkyrieMagnitudinalCurve", keyed.className(root[field]))
+            val curve = requireNotNull(keyed.map(root[field]))
+            // Both the serialized curve class and its nested mutable point array
+            // are observed independently in the pinned REA object graph samples.
+            assertEquals("NSMutableArray", keyed.className(curve["points"]))
+            assertTrue(keyed.array(curve["points"]).size >= 2)
         }
         val imported = requireNotNull(BrushArchives.read(exported, decode).single().settings).parameters
         assertEquals(channels, imported.importedPressure)
