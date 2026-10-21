@@ -14,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.math.MathUtils
+import com.artflow.studio.core.animation.OnionSkin
 import com.artflow.studio.core.animation.OnionSkinTint
 import com.artflow.studio.core.canvas.MotionFilter
 import com.artflow.studio.core.canvas.MouseInput
@@ -1029,7 +1030,6 @@ class ArtFlowCanvasView
             dx: Float,
             dy: Float,
         ) {
-            val parameters = LayerTransform.Parameters(translationX = dx, translationY = dy)
             val layerId = activeLayerId
             val revision = canvasRepository.contentRevision
             coroutineScope.launch {
@@ -1387,7 +1387,10 @@ class ArtFlowCanvasView
                     val active = state.activeIndex
                     val range = state.settings.onionSkinFrames.coerceIn(0, 5)
                     val ghosts = mutableListOf<Pair<PixelBuffer, Float>>()
-                    for ((index, alpha, colour) in planned) {
+                    for (offset in -range..range) {
+                        if (offset == 0) continue
+                        val index = active + offset
+                        if (index !in state.frames.indices) continue
                         val frame = canvasRepository.compositeFrame(index, transparentBackground = true) ?: continue
                         val ratio = (1024f / maxOf(frame.width, frame.height)).coerceAtMost(1f)
                         val preview =
@@ -1401,9 +1404,11 @@ class ArtFlowCanvasView
                             } else {
                                 frame
                             }
-                        val tint = if (offset < 0) state.settings.onionSkinPreviousColor else state.settings.onionSkinNextColor
-                        val silhouette = withContext(Dispatchers.Default) { OnionSkinTint.silhouette(preview, tint) }
-                        ghosts += silhouette to opacity / abs(offset).toFloat()
+                        val tint = OnionSkin.tint(state.settings, offset)
+                        val ghost =
+                            if (tint == null) preview
+                            else withContext(Dispatchers.Default) { OnionSkinTint.silhouette(preview, tint) }
+                        ghosts += ghost to OnionSkin.opacity(state.settings, offset)
                     }
                     renderer.setOnionSkins(ghosts, OnionSkin.primaryOpacity(state.settings))
                     requestRender()

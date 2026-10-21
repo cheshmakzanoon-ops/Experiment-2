@@ -78,6 +78,7 @@ import com.artflow.studio.presentation.ui.components.canvas.BrushCursor
 import com.artflow.studio.presentation.ui.components.canvas.CanvasProjection
 import com.artflow.studio.presentation.ui.components.canvas.DragPreview
 import com.artflow.studio.presentation.ui.components.canvas.EditorInput
+import com.artflow.studio.presentation.ui.components.canvas.NavigationReadout
 import com.artflow.studio.presentation.ui.components.canvas.EyedropperLoupe
 import com.artflow.studio.presentation.ui.components.canvas.ShapeEditState
 import com.artflow.studio.presentation.ui.components.canvas.gestureControls
@@ -164,12 +165,10 @@ private enum class EditorPanel(
     val title: String,
 ) {
     NONE(""),
-    PALETTE("Studio tools"),
     TOOLS("Tool options"),
     COLOUR("Colour"),
     LAYERS("Layers"),
     SELECTION("Selection"),
-    TRANSFORM("Transform layer"),
     GUIDES("Guides"),
     ANIMATION("Animation"),
     CANVAS("Canvas"),
@@ -266,6 +265,7 @@ fun CanvasScreen(
     var cropBox by remember { mutableStateOf<CropBox.Box?>(null) }
     var opacityLayer by remember { mutableStateOf<Long?>(null) }
     var quickMenu by remember { mutableStateOf(false) }
+    val navReadout = remember { mutableStateOf<NavigationReadout?>(null) }
     var showHistory by remember { mutableStateOf(false) }
     var editingGuide by remember { mutableStateOf(false) }
     val pageThumbnails by viewModel.pageThumbnails.pages.collectAsState()
