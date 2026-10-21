@@ -120,6 +120,75 @@ jobs:
             "$RUNNER_TEMP/reference-evidence/compound-structures.json" \
             "$RUNNER_TEMP/reference.ipa" \
             --out "$RUNNER_TEMP/reference-evidence/brush-resource-candidates.json"
+      - name: Index Apple asset catalog labels without extracting artwork
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json, os, pathlib, shutil, subprocess, tempfile, zipfile
+          root = pathlib.Path(os.environ['RUNNER_TEMP'])
+          ipa = root / 'reference.ipa'
+          out = root / 'reference-evidence' / 'asset-catalog-name-index.json'
+          report = {'scope': 'macOS assetutil metadata only; no artwork extraction or executable loading',
+                    'source_sha256': '7b1dad3ac95f8aeca3c22b432b5d6fd94182a3bf9f84fb93588adb126368b54e',
+                    'catalogs': [], 'limitations': []}
+          try:
+              executable = subprocess.run(['xcrun', '--find', 'assetutil'],
+                                          check=True, capture_output=True, text=True, timeout=15).stdout.strip()
+          except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+              executable = ''
+              report['limitations'].append('macOS assetutil unavailable on runner')
+          with zipfile.ZipFile(ipa) as archive:
+              catalogs = [part for part in archive.infolist()
+                          if not part.is_dir() and part.filename.endswith('.car')]
+              for index, member in enumerate(catalogs):
+                  item = {'path': member.filename, 'declared_bytes': member.file_size,
+                          'status': 'not-inspected'}
+                  report['catalogs'].append(item)
+                  if not executable:
+                      item['status'] = 'assetutil-unavailable'
+                      continue
+                  if member.file_size > 512 * 1024 * 1024:
+                      item['status'] = 'bounded-size-limit'
+                      continue
+                  with tempfile.TemporaryDirectory(dir=root) as tmp:
+                      filename = pathlib.Path(tmp) / ('catalog-' + str(index) + '.car')
+                      with archive.open(member) as source, filename.open('wb') as destination:
+                          remaining = 512 * 1024 * 1024
+                          while remaining:
+                              block = source.read(min(1024 * 1024, remaining))
+                              if not block: break
+                              destination.write(block)
+                              remaining -= len(block)
+                          if source.read(1):
+                              raise RuntimeError('Declared catalog size was understated')
+                      try:
+                          run = subprocess.run([executable, '--info', str(filename)],
+                                               check=False, capture_output=True, timeout=180)
+                          if run.returncode or len(run.stdout) > 64 * 1024 * 1024:
+                              item['status'] = 'assetutil-failed-or-output-too-large'
+                              item['exit_code'] = run.returncode
+                              continue
+                          entries = json.loads(run.stdout)
+                          if not isinstance(entries, list) or len(entries) > 200000:
+                              item['status'] = 'unexpected-assetutil-output'
+                              continue
+                          names = sorted({row['Name'] for row in entries
+                                          if isinstance(row, dict) and
+                                          isinstance(row.get('Name'), str) and
+                                          0 < len(row['Name']) <= 512})
+                          item['status'] = 'name-inventory-complete' if len(names) <= 20000 else 'name-inventory-truncated'
+                          item['rendition_records'] = len(entries)
+                          item['distinct_names_total'] = len(names)
+                          item['distinct_names'] = names[:20000]
+                      except (subprocess.TimeoutExpired, ValueError, OSError):
+                          item['status'] = 'assetutil-unavailable-or-unparseable'
+          report['limitations'].append('Catalog names are metadata and do not identify which brush loads a given rendition.')
+          report['limitations'].append('Native rendering code, decrypted instructions and texture bytes are not recovered.')
+          out.write_text(json.dumps(report, indent=2, sort_keys=True) + '\n')
+          print(json.dumps({'catalogs': len(report['catalogs']),
+                            'analyzed': sum(x['status'].startswith('name-inventory') for x in report['catalogs'])}))
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
