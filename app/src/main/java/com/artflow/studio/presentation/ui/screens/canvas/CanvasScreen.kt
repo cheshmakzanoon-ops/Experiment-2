@@ -42,6 +42,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.ui.res.stringResource
 import com.artflow.studio.R
 import com.artflow.studio.core.canvas.CanvasInformation
 import com.artflow.studio.core.canvas.CropBox

@@ -33,6 +33,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.artflow.studio.R
+import com.artflow.studio.core.canvas.CanvasOperations
+import com.artflow.studio.core.color.ColorProfile
+import com.artflow.studio.data.export.PendingImports
 import com.artflow.studio.domain.model.Project
 import com.artflow.studio.domain.model.settings.GallerySort
 import com.artflow.studio.presentation.ui.IncomingFiles

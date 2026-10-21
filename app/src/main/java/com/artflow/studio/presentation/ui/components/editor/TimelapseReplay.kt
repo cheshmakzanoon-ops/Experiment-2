@@ -43,9 +43,9 @@ fun TimelapseReplay(
         image = withContext(Dispatchers.IO) { BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap() }
         loadedIndex = index
     }
-    LaunchedEffect(playing, frames) {
+    LaunchedEffect(playing, frames, speed) {
         while (playing && frames.isNotEmpty()) {
-            delay(REPLAY_FRAME_MS)
+            delay((REPLAY_FRAME_MS / speed).toLong().coerceAtLeast(1L))
             // Advance only after the shown frame is decoded: a slow decode lowers the pace instead of
             // cancelling each decode before it finishes.
             while (loadedIndex != index) delay(REPLAY_POLL_MS)
@@ -120,5 +120,7 @@ fun TimelapseReplay(
 }
 
 /** 30 fps: the same hold as a full-length time-lapse MP4, so the replay shows what the export contains. */
+private val REPLAY_SPEEDS = listOf(0.5f, 1f, 2f, 4f)
+private val REPLAY_SPEED_LABELS = mapOf(0.5f to "0.5×", 1f to "1×", 2f to "2×", 4f to "4×")
 private const val REPLAY_FRAME_MS = 33L
 private const val REPLAY_POLL_MS = 4L

@@ -9,6 +9,10 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -369,7 +373,7 @@ private fun TextureGridItem(
                 tint = Color.Red,
                 modifier = Modifier
                     .size(12.dp)
-                    .align(Alignment.TopEnd)
+                    .align(Alignment.End)
                     .padding(4.dp)
             )
         }

@@ -41,6 +41,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.artflow.studio.R
 import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.Quad
 import com.artflow.studio.core.pixels.TransformQuad

@@ -13,6 +13,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
 import com.artflow.studio.core.color.Palette
+import com.artflow.studio.R
 import com.artflow.studio.core.color.PaletteCodec
 import com.artflow.studio.core.color.PaletteExtractor
 import com.artflow.studio.core.color.ProcreateSwatches
