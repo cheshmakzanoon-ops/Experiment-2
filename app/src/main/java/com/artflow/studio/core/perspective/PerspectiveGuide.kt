@@ -19,9 +19,6 @@ import kotlin.math.sqrt
  * testable without a device.
  */
 object PerspectiveGuide {
-    /** Directions of the isometric grid's line families, in degrees. */
-    private val ISOMETRIC_AXES = listOf(0f, 30f, -30f, 90f)
-
     enum class GuideType(
         val displayName: String,
     ) {
@@ -65,6 +62,8 @@ object PerspectiveGuide {
         val lineColor: Int = DEFAULT_LINE_COLOR,
         val lineOpacity: Float = 0.6f,
         val lineThickness: Float = 1f,
+        /** UI-only guide style shared with symmetry, preserving older per-field settings. */
+        val lineStyle: GuideLineStyle = GuideLineStyle(),
     ) {
         fun isActive(): Boolean = type != GuideType.NONE
 
@@ -272,6 +271,9 @@ object PerspectiveGuide {
         val spacing = settings.gridSpacing.coerceIn(8, 512)
         if (settings.gridRotation % 360f != 0f) return rotatedGridLines(settings, width, height)
         val lines = mutableListOf<GuideLine>()
+        // The grid is centred on the canvas, matching the square-grid snapping origin.
+        val phaseX = (width / 2f) % spacing
+        val phaseY = (height / 2f) % spacing
         var x = phaseX
         while (x <= width) {
             lines += GuideLine(x, 0f, x, height.toFloat(), pointIndex = -1)
@@ -283,6 +285,39 @@ object PerspectiveGuide {
             y += spacing
         }
         return lines
+    }
+
+    /**
+     * Rotated 2D grid about the canvas centre: both orthogonal families retain the
+     * same spacing and rotation as the user's guide settings.
+     */
+    private fun rotatedGridLines(settings: Settings, width: Int, height: Int): List<GuideLine> {
+        val spacing = settings.gridSpacing.coerceIn(8, 512).toFloat()
+        val angle = Math.toRadians(settings.gridRotation.toDouble())
+        val centreX = width / 2f
+        val centreY = height / 2f
+        val diagonal = hypot(width.toFloat(), height.toFloat())
+        val steps = ceil(diagonal / spacing).toInt() + 1
+        return buildList {
+            for (axis in 0..1) {
+                val theta = angle + axis * Math.PI / 2.0
+                val dx = cos(theta).toFloat()
+                val dy = sin(theta).toFloat()
+                val nx = -dy
+                val ny = dx
+                for (step in -steps..steps) {
+                    val ox = centreX + nx * step * spacing
+                    val oy = centreY + ny * step * spacing
+                    val ray =
+                        GuideLine(
+                            ox - dx * diagonal, oy - dy * diagonal,
+                            ox + dx * diagonal, oy + dy * diagonal,
+                            pointIndex = -1,
+                        )
+                    clipToCanvas(ray, width, height)?.let(::add)
+                }
+            }
+        }
     }
 
     /**
@@ -502,6 +537,7 @@ object PerspectiveGuide {
             snapStrength = settings.snapStrength.coerceIn(0f, 1f),
             gridSpacing = settings.gridSpacing.coerceIn(8, 512),
             gridRotation = if (settings.gridRotation.isFinite()) settings.gridRotation.mod(360f) else 0f,
+            lineStyle = settings.lineStyle.sanitize(),
         )
 
     /** Human-readable description for the guide overlay's info pill. */

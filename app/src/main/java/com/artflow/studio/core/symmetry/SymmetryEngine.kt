@@ -62,6 +62,8 @@ object SymmetryEngine {
         val rotational: Boolean = false,
         /** Radial copies come in mirrored pairs, like a kaleidoscope or mandala, instead of only turning. */
         val mirroredSegments: Boolean = false,
+        /** How symmetry's overlays are drawn. An independent style does not change paint pixels. */
+        val lineStyle: GuideLineStyle = GuideLineStyle.SYMMETRY_DEFAULT,
     ) {
         fun isActive(): Boolean = type != SymmetryType.NONE
 
