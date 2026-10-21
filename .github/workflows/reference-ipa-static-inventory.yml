@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   inspect:
-    runs-on: macos-14
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -163,6 +163,8 @@ jobs:
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
             git commit -m 'docs: add verified REA IPA package and Mach-O inventory'
+            git fetch --no-tags origin main
+            git rebase origin/main
             git push origin HEAD:main
           fi
       - uses: actions/upload-artifact@v4
