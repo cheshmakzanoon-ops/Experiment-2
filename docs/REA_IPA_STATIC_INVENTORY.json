@@ -1,0 +1,1075 @@
+{
+  "app_roots": [
+    "Payload/Procreate.app"
+  ],
+  "bundle_plists": {
+    "Payload/Procreate.app/ApplicationImageAssets.bundle/Info.plist": {
+      "CFBundleIdentifier": "au.com.savageinteractive.procreate.ApplicationImageAssets",
+      "CFBundleName": "ApplicationImageAssets",
+      "CFBundleShortVersionString": "1.0",
+      "CFBundleSupportedPlatforms": [
+        "iPhoneOS"
+      ],
+      "CFBundleVersion": "1",
+      "MinimumOSVersion": "16.3",
+      "UIDeviceFamily": [
+        2
+      ]
+    },
+    "Payload/Procreate.app/Brush.storyboardc/Info.plist": {},
+    "Payload/Procreate.app/BrushesResources.bundle/Info.plist": {
+      "CFBundleIdentifier": "au.com.savageinteractive.procreate.BrushesResources",
+      "CFBundleName": "BrushesResources",
+      "CFBundleShortVersionString": "1.0",
+      "CFBundleSupportedPlatforms": [
+        "iPhoneOS"
+      ],
+      "CFBundleVersion": "1",
+      "MinimumOSVersion": "16.3",
+      "UIDeviceFamily": [
+        2
+      ]
+    },
+    "Payload/Procreate.app/CanvasInformation.storyboardc/Info.plist": {},
+    "Payload/Procreate.app/CanvasPresetEditor.storyboardc/Info.plist": {},
+    "Payload/Procreate.app/ColorPanelResources.bundle/Base.lproj/PocketColor.storyboardc/Info.plist": {},
+    "Payload/Procreate.app/ColorPanelResources.bundle/ColorPanel.storyboardc/Info.plist": {},
+    "Payload/Procreate.app/ColorPanelResources.bundle/Info.plist": {
+      "CFBundleIdentifier": "au.com.savageinteractive.procreate.ColorPanelResources",
+      "CFBundleName": "ColorPanelResources",
+      "CFBundleShortVersionString": "1.0",
+      "CFBundleSupportedPlatforms": [
+        "iPhoneOS"
+      ],
+      "CFBundleVersion": "1",
+      "MinimumOSVersion": "16.3",
+      "UIDeviceFamily": [
+        2
+      ]
+    },
+    "Payload/Procreate.app/ColorUIResources.bundle/Info.plist": {
+      "CFBundleIdentifier": "au.com.savageinteractive.procreate.ColorUIResources",
+      "CFBundleName": "ColorUIResources",
+      "CFBundleShortVersionString": "1.0",
+      "CFBundleSupportedPlatforms": [
+        "iPhoneOS"
+      ],
+      "CFBundleVersion": "1",
+      "MinimumOSVersion": "16.3",
+      "UIDeviceFamily": [
+        2
+      ]
+    },
+    "Payload/Procreate.app/ContextMenuResources.bundle/Info.plist": {
+      "CFBundleIdentifier": "au.com.savageinteractive.procreate.ContextMenuResources",
+      "CFBundleName": "ContextMenuResources",
+      "CFBundleShortVersionString": "1.0",
+      "CFBundleSupportedPlatforms": [
+        "iPhoneOS"
+      ],
+      "CFBundleVersion": "1",
+      "MinimumOSVersion": "16.3",
+      "UIDeviceFamily": [
+        2
+      ]
+    },
+    "Payload/Procreate.app/Document.storyboardc/Info.plist": {},
+    "Payload/Procreate.app/DocumentPocket.storyboardc/Info.plist": {},
+    "Payload/Procreate.app/FloatingWindowsResources.bundle/Info.plist": {
+      "CFBundleIdentifier": "au.com.savageinteractive.procreate.FloatingWindowsResources",
+      "CFBundleName": "FloatingWindowsResources",
+      "CFBundleShortVersionString": "1.0",
+      "CFBundleSupportedPlatforms": [
+        "iPhoneOS"
+      ],
+      "CFBundleVersion": "1",
+      "MinimumOSVersion": "16.3",
+      "UIDeviceFamily": [
+        2
+      ]
+    },
+    "Payload/Procreate.app/Gallery.storyboardc/Info.plist": {},
+    "Payload/Procreate.app/GestureControls.storyboardc/Info.plist": {},
+    "Payload/Procreate.app/Info.plist": {
+      "CFBundleDisplayName": "Procreate",
+      "CFBundleExecutable": "Procreate",
+      "CFBundleIdentifier": "au.com.savageinteractive.procreate",
+      "CFBundleName": "Procreate",
+      "CFBundleShortVersionString": "5.4.4",
+      "CFBundleSupportedPlatforms": [
+        "iPhoneOS"
+      ],
+      "CFBundleVersion": "56832",
+      "MinimumOSVersion": "16.0",
+      "UIDeviceFamily": [
+        2
+      ]
+    },
+    "Payload/Procreate.app/Introduction.storyboardc/Info.plist": {},
+    "Payload/Procreate.app/LaunchScreen.storyboardc/Info.plist": {},
+    "Payload/Procreate.app/LayersResources.bundle/Info.plist": {
+      "CFBundleIdentifier": "au.com.savageinteractive.procreate.LayersResources",
+      "CFBundleName": "LayersResources",
+      "CFBundleShortVersionString": "1.0",
+      "CFBundleSupportedPlatforms": [
+        "iPhoneOS"
+      ],
+      "CFBundleVersion": "1",
+      "MinimumOSVersion": "16.3",
+      "UIDeviceFamily": [
+        2
+      ]
+    },
+    "Payload/Procreate.app/LayersResources.bundle/Layers.storyboardc/Info.plist": {},
+    "Payload/Procreate.app/PlugIns/Add-to-Procreate.appex/Info.plist": {
+      "CFBundleDisplayName": "Add-to-Procreate",
+      "CFBundleExecutable": "Add-to-Procreate",
+      "CFBundleIdentifier": "au.com.savageinteractive.procreate.Add-to-Procreate",
+      "CFBundleName": "Add-to-Procreate",
+      "CFBundleShortVersionString": "5.4.4",
+      "CFBundleSupportedPlatforms": [
+        "iPhoneOS"
+      ],
+      "CFBundleVersion": "56832",
+      "MinimumOSVersion": "16.3",
+      "UIDeviceFamily": [
+        2
+      ]
+    },
+    "Payload/Procreate.app/PlugIns/Add-to-Procreate.appex/MainInterface.storyboardc/Info.plist": {},
+    "Payload/Procreate.app/PlugIns/OpenRecentArtworkWidget.appex/Info.plist": {
+      "CFBundleDisplayName": "OpenRecentArtworkWidget",
+      "CFBundleExecutable": "OpenRecentArtworkWidget",
+      "CFBundleIdentifier": "au.com.savageinteractive.procreate.OpenRecentArtworkWidget",
+      "CFBundleName": "OpenRecentArtworkWidget",
+      "CFBundleShortVersionString": "5.4.4",
+      "CFBundleSupportedPlatforms": [
+        "iPhoneOS"
+      ],
+      "CFBundleVersion": "56832",
+      "MinimumOSVersion": "16.3",
+      "UIDeviceFamily": [
+        2
+      ]
+    },
+    "Payload/Procreate.app/PlugIns/Thumbnails.appex/Info.plist": {
+      "CFBundleDisplayName": "Thumbnails",
+      "CFBundleExecutable": "Thumbnails",
+      "CFBundleIdentifier": "au.com.savageinteractive.procreate.Thumbnails",
+      "CFBundleName": "Thumbnails",
+      "CFBundleShortVersionString": "5.4.4",
+      "CFBundleSupportedPlatforms": [
+        "iPhoneOS"
+      ],
+      "CFBundleVersion": "56832",
+      "MinimumOSVersion": "16.3",
+      "UIDeviceFamily": [
+        2
+      ]
+    },
+    "Payload/Procreate.app/Preview.storyboardc/Info.plist": {},
+    "Payload/Procreate.app/ProButtonOldResources.bundle/Info.plist": {
+      "CFBundleIdentifier": "au.com.savageinteractive.procreate.ProButtonOldResources",
+      "CFBundleName": "ProButtonOldResources",
+      "CFBundleShortVersionString": "1.0",
+      "CFBundleSupportedPlatforms": [
+        "iPhoneOS"
+      ],
+      "CFBundleVersion": "1",
+      "MinimumOSVersion": "16.3",
+      "UIDeviceFamily": [
+        2
+      ]
+    },
+    "Payload/Procreate.app/ProContextMenuOldResources.bundle/Info.plist": {
+      "CFBundleIdentifier": "au.com.savageinteractive.procreate.ProContextMenuOldResources",
+      "CFBundleName": "ProContextMenuOldResources",
+      "CFBundleShortVersionString": "1.0",
+      "CFBundleSupportedPlatforms": [
+        "iPhoneOS"
+      ],
+      "CFBundleVersion": "1",
+      "MinimumOSVersion": "16.3",
+      "UIDeviceFamily": [
+        2
+      ]
+    },
+    "Payload/Procreate.app/ProContextMenuOldResources.bundle/ProContextMenuOldPopover.storyboardc/Info.plist": {},
+    "Payload/Procreate.app/ProControlsDeprecatedResources.bundle/Info.plist": {
+      "CFBundleIdentifier": "au.com.savageinteractive.procreate.ProControlsDeprecatedResources",
+      "CFBundleName": "ProControlsDeprecatedResources",
+      "CFBundleShortVersionString": "1.0",
+      "CFBundleSupportedPlatforms": [
+        "iPhoneOS"
+      ],
+      "CFBundleVersion": "1",
+      "MinimumOSVersion": "16.3",
+      "UIDeviceFamily": [
+        2
+      ]
+    },
+    "Payload/Procreate.app/ProControlsEssentialsResources.bundle/Info.plist": {
+      "CFBundleIdentifier": "au.com.savageinteractive.procreate.ProControlsEssentialsResources",
+      "CFBundleName": "ProControlsEssentialsResources",
+      "CFBundleShortVersionString": "1.0",
+      "CFBundleSupportedPlatforms": [
+        "iPhoneOS"
+      ],
+      "CFBundleVersion": "1",
+      "MinimumOSVersion": "16.3",
+      "UIDeviceFamily": [
+        2
+      ]
+    },
+    "Payload/Procreate.app/ProControlsResources.bundle/Info.plist": {
+      "CFBundleIdentifier": "au.com.savageinteractive.procreate.ProControlsResources",
+      "CFBundleName": "ProControlsResources",
+      "CFBundleShortVersionString": "1.0",
+      "CFBundleSupportedPlatforms": [
+        "iPhoneOS"
+      ],
+      "CFBundleVersion": "1",
+      "MinimumOSVersion": "16.3",
+      "UIDeviceFamily": [
+        2
+      ]
+    },
+    "Payload/Procreate.app/ProLibrary.storyboardc/Info.plist": {},
+    "Payload/Procreate.app/ProLibraryPocket.storyboardc/Info.plist": {},
+    "Payload/Procreate.app/ProMenuOldResources.bundle/Info.plist": {
+      "CFBundleIdentifier": "au.com.savageinteractive.procreate.ProMenuOldResources",
+      "CFBundleName": "ProMenuOldResources",
+      "CFBundleShortVersionString": "1.0",
+      "CFBundleSupportedPlatforms": [
+        "iPhoneOS"
+      ],
+      "CFBundleVersion": "1",
+      "MinimumOSVersion": "16.3",
+      "UIDeviceFamily": [
+        2
+      ]
+    },
+    "Payload/Procreate.app/ProMenuOldResources.bundle/ProPopoverMenu.storyboardc/Info.plist": {},
+    "Payload/Procreate.app/ProPressureCurveOldResources.bundle/Info.plist": {
+      "CFBundleIdentifier": "au.com.savageinteractive.procreate.ProPressureCurveOldResources",
+      "CFBundleName": "ProPressureCurveOldResources",
+      "CFBundleShortVersionString": "1.0",
+      "CFBundleSupportedPlatforms": [
+        "iPhoneOS"
+      ],
+      "CFBundleVersion": "1",
+      "MinimumOSVersion": "16.3",
+      "UIDeviceFamily": [
+        2
+      ]
+    },
+    "Payload/Procreate.app/ProcreateModelResources.bundle/Info.plist": {
+      "CFBundleIdentifier": "au.com.savageinteractive.procreate.ProcreateModelResources",
+      "CFBundleName": "ProcreateModelResources",
+      "CFBundleShortVersionString": "1.0",
+      "CFBundleSupportedPlatforms": [
+        "iPhoneOS"
+      ],
+      "CFBundleVersion": "1",
+      "MinimumOSVersion": "16.3",
+      "UIDeviceFamily": [
+        2
+      ]
+    },
+    "Payload/Procreate.app/Valkyrie3DResources.bundle/Info.plist": {
+      "CFBundleIdentifier": "au.com.savageinteractive.procreate.Valkyrie3DResources",
+      "CFBundleName": "Valkyrie3DResources",
+      "CFBundleShortVersionString": "1.0",
+      "CFBundleSupportedPlatforms": [
+        "iPhoneOS"
+      ],
+      "CFBundleVersion": "1",
+      "MinimumOSVersion": "16.3",
+      "UIDeviceFamily": [
+        2
+      ]
+    },
+    "Payload/Procreate.app/ValkyrieBrushResources.bundle/Info.plist": {
+      "CFBundleIdentifier": "au.com.savageinteractive.procreate.ValkyrieBrushResources",
+      "CFBundleName": "ValkyrieBrushResources",
+      "CFBundleShortVersionString": "1.0",
+      "CFBundleSupportedPlatforms": [
+        "iPhoneOS"
+      ],
+      "CFBundleVersion": "1",
+      "MinimumOSVersion": "16.3",
+      "UIDeviceFamily": [
+        2
+      ]
+    },
+    "Payload/Procreate.app/ValkyrieResources.bundle/Info.plist": {
+      "CFBundleIdentifier": "au.com.savageinteractive.procreate.ValkyrieResources",
+      "CFBundleName": "ValkyrieResources",
+      "CFBundleShortVersionString": "1.0",
+      "CFBundleSupportedPlatforms": [
+        "iPhoneOS"
+      ],
+      "CFBundleVersion": "1",
+      "MinimumOSVersion": "16.3",
+      "UIDeviceFamily": [
+        2
+      ]
+    }
+  },
+  "declared_executables": {
+    "Payload/Procreate.app/PlugIns/Add-to-Procreate.appex/Add-to-Procreate": {
+      "binary": {
+        "architecture": "arm64",
+        "code_signatures": [
+          {
+            "offset": 74688,
+            "size": 2176
+          }
+        ],
+        "commands": 38,
+        "contains_encrypted_region": false,
+        "cpu_subtype": 0,
+        "encryption": [
+          {
+            "cryptid": 0,
+            "cryptoff": 16384,
+            "cryptsize": 16384
+          }
+        ],
+        "flags": 69206149,
+        "is_64_bit": true,
+        "kind": 2,
+        "linked_libraries": [
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/UIKit.framework/UIKit"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/Foundation.framework/Foundation"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/libobjc.A.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/libSystem.B.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/swift/libswiftCore.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftCoreFoundation.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftCoreImage.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftDarwin.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftDataDetection.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/swift/libswiftDispatch.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftMetal.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftOSLog.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftObjectiveC.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftQuartzCore.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftSpatial.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftUniformTypeIdentifiers.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftXPC.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftos.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftsimd.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftUIKit.dylib"
+          }
+        ],
+        "platforms": [
+          {
+            "minimum_os_encoded": 1049344,
+            "platform_id": 2,
+            "sdk_encoded": 1180672,
+            "tool_count": 1
+          }
+        ],
+        "rpaths": [],
+        "status": "parsed",
+        "uuid": [
+          "d5e443ab2a2c38238c46e113070578fd"
+        ]
+      },
+      "declared_bytes": 76864
+    },
+    "Payload/Procreate.app/PlugIns/OpenRecentArtworkWidget.appex/OpenRecentArtworkWidget": {
+      "binary": {
+        "architecture": "arm64",
+        "code_signatures": [
+          {
+            "offset": 115712,
+            "size": 2496
+          }
+        ],
+        "commands": 46,
+        "contains_encrypted_region": false,
+        "cpu_subtype": 0,
+        "encryption": [
+          {
+            "cryptid": 0,
+            "cryptoff": 16384,
+            "cryptsize": 32768
+          }
+        ],
+        "flags": 69206149,
+        "is_64_bit": true,
+        "kind": 2,
+        "linked_libraries": [
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/OSLog.framework/OSLog"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/SwiftUI.framework/SwiftUI"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/UIKit.framework/UIKit"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/WidgetKit.framework/WidgetKit"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/Foundation.framework/Foundation"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/libobjc.A.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/libSystem.B.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/swift/libswiftCore.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/swift/libswiftCoreFoundation.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftCoreImage.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftCoreLocation.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftDarwin.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftDataDetection.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftDispatch.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftIntents.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftMetal.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftOSLog.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftObjectiveC.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftQuartzCore.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftSpatial.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftUniformTypeIdentifiers.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftXPC.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/swift/libswift_Concurrency.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/swift/libswiftos.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftsimd.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftUIKit.dylib"
+          }
+        ],
+        "platforms": [
+          {
+            "minimum_os_encoded": 1049344,
+            "platform_id": 2,
+            "sdk_encoded": 1180672,
+            "tool_count": 1
+          }
+        ],
+        "rpaths": [],
+        "status": "parsed",
+        "uuid": [
+          "01d87da88560372fbb9c271c0bc92d73"
+        ]
+      },
+      "declared_bytes": 118208
+    },
+    "Payload/Procreate.app/PlugIns/Thumbnails.appex/Thumbnails": {
+      "binary": {
+        "architecture": "arm64",
+        "code_signatures": [
+          {
+            "offset": 69888,
+            "size": 1904
+          }
+        ],
+        "commands": 27,
+        "contains_encrypted_region": false,
+        "cpu_subtype": 0,
+        "encryption": [
+          {
+            "cryptid": 0,
+            "cryptoff": 16384,
+            "cryptsize": 16384
+          }
+        ],
+        "flags": 2097285,
+        "is_64_bit": true,
+        "kind": 2,
+        "linked_libraries": [
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/Foundation.framework/Foundation"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/QuickLook.framework/QuickLook"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/QuickLookThumbnailing.framework/QuickLookThumbnailing"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/UIKit.framework/UIKit"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/libz.1.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/libobjc.A.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/libSystem.B.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation"
+          }
+        ],
+        "platforms": [
+          {
+            "minimum_os_encoded": 1049344,
+            "platform_id": 2,
+            "sdk_encoded": 1180672,
+            "tool_count": 1
+          }
+        ],
+        "rpaths": [],
+        "status": "parsed",
+        "uuid": [
+          "04c068217eaa3bf7a059bb03196a61b8"
+        ]
+      },
+      "declared_bytes": 71792
+    },
+    "Payload/Procreate.app/Procreate": {
+      "binary": {
+        "architecture": "arm64",
+        "code_signatures": [
+          {
+            "offset": 18968048,
+            "size": 151376
+          }
+        ],
+        "commands": 90,
+        "contains_encrypted_region": false,
+        "cpu_subtype": 0,
+        "encryption": [
+          {
+            "cryptid": 0,
+            "cryptoff": 16384,
+            "cryptsize": 15433728
+          }
+        ],
+        "flags": 10584197,
+        "is_64_bit": true,
+        "kind": 2,
+        "linked_libraries": [
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/ARKit.framework/ARKit"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/AVFAudio.framework/AVFAudio"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/AVFoundation.framework/AVFoundation"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/AVKit.framework/AVKit"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/Accelerate.framework/Accelerate"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/AudioToolbox.framework/AudioToolbox"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/Combine.framework/Combine"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/CoreImage.framework/CoreImage"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/CoreMedia.framework/CoreMedia"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/CoreServices.framework/CoreServices"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/CoreText.framework/CoreText"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/CoreVideo.framework/CoreVideo"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/CryptoKit.framework/CryptoKit"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/Foundation.framework/Foundation"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/ImageIO.framework/ImageIO"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/MessageUI.framework/MessageUI"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/Metal.framework/Metal"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/MetalKit.framework/MetalKit"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/MetalPerformanceShaders.framework/MetalPerformanceShaders"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/ModelIO.framework/ModelIO"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/Photos.framework/Photos"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/PhotosUI.framework/PhotosUI"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/QuartzCore.framework/QuartzCore"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/RealityKit.framework/RealityKit"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/SceneKit.framework/SceneKit"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/Security.framework/Security"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/SwiftUI.framework/SwiftUI"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/UIKit.framework/UIKit"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/UniformTypeIdentifiers.framework/UniformTypeIdentifiers"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/VideoToolbox.framework/VideoToolbox"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/WidgetKit.framework/WidgetKit"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/libcompression.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/libSystem.B.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/libz.1.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/libobjc.A.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/System/Library/Frameworks/RealityFoundation.framework/RealityFoundation"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/swift/libswiftARKit.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/swift/libswiftAVFoundation.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftAccelerate.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/swift/libswiftCore.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/swift/libswiftCoreAudio.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/swift/libswiftCoreFoundation.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftCoreImage.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftCoreLocation.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftCoreMIDI.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/swift/libswiftCoreMedia.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/swift/libswiftDarwin.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftDataDetection.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/swift/libswiftDispatch.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftGLKit.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftIntents.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftMetal.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftMetalKit.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftModelIO.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftOSLog.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/swift/libswiftObjectiveC.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftQuartzCore.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftSceneKit.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftSpatial.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftSpriteKit.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/swift/libswiftUniformTypeIdentifiers.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftVideoToolbox.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftXPC.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/swift/libswift_Concurrency.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/swift/libswift_StringProcessing.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftos.dylib"
+          },
+          {
+            "kind": "weak",
+            "name": "/usr/lib/swift/libswiftsimd.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/swift/libswiftCoreGraphics.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/swift/libswiftPhotosUI.dylib"
+          },
+          {
+            "kind": "load",
+            "name": "/usr/lib/swift/libswiftUIKit.dylib"
+          }
+        ],
+        "platforms": [
+          {
+            "minimum_os_encoded": 1049344,
+            "platform_id": 2,
+            "sdk_encoded": 1180672,
+            "tool_count": 1
+          }
+        ],
+        "rpaths": [],
+        "status": "parsed",
+        "uuid": [
+          "8460aec799033682ba1a165067ed3fa6"
+        ]
+      },
+      "declared_bytes": 19119424
+    }
+  },
+  "declared_expanded_bytes": 865713740,
+  "extensions": {
+    ".05f670b3906440128644fe651b677cb6": 1,
+    ".06cd1b45b8384e70b9221b4aa6155caf": 1,
+    ".07e4ef3472ba4e278738692d411cb226": 1,
+    ".0cfae60b2b3e4c848709184560be4c17": 1,
+    ".1b9191ab26464b3e9796eb68ba0ca0e4": 1,
+    ".21655ff246b34b27a1584133fddada72": 1,
+    ".279723639a33428aab0c38725285ff32": 1,
+    ".367f59b1da3b42459c0d9b3385de3e0e": 1,
+    ".37f26e1fba7f4dbe8d16b464edb93349": 1,
+    ".42d05761635a4365a74d2ef6c65f858f": 1,
+    ".42efb75e30274d3dafb139ddeb1bab76": 1,
+    ".433922271b3a4850993da59bcdfb213c": 1,
+    ".4f0e6c118e974215981d1c1c9ee6382a": 1,
+    ".55f4b963b4514fe892430e4aee4f70eb": 1,
+    ".5a2039d3028440f8bff40e5103b4257f": 1,
+    ".5d3159ddf30b4114948461724df8caad": 1,
+    ".5d7b5435d7c14de381ce239e11e171d1": 1,
+    ".689127b0d7df4415b1f44ba6d7f70f73": 1,
+    ".68ca723f83d64faab0e02e687eb3f83c": 1,
+    ".68d1967891ea40b087715c184345efa4": 1,
+    ".6c0f72503c344fd0857f4135cef739dc": 1,
+    ".75eb7eadb84243d39ad608fc78f638cc": 1,
+    ".82ce506c235d415a9eace8a6b3abb232": 1,
+    ".86f37366d2bd4f199f0e7b2467c31de7": 1,
+    ".90c89e314ace4a4693bdd52357a5e7ad": 1,
+    ".a14582d5da774924ba1f0523295249f7": 1,
+    ".aecd1b6003cb4397ad6224bd3c7f264f": 1,
+    ".app": 1,
+    ".appex": 3,
+    ".archive": 1,
+    ".b81d01ef7c944abbb78142f46ced0c4b": 1,
+    ".bin": 1,
+    ".brush": 395,
+    ".bundle": 19,
+    ".c69c86b7385b45a2badd15a6497c59a6": 1,
+    ".c98377995f424eaa8f969ee4c446acd8": 1,
+    ".car": 17,
+    ".cfe16c3de6c2488483aa98a33d123f6d": 1,
+    ".dad8e860221a4195aa2e69d06067ad70": 1,
+    ".e009f857efda445ba232ef3813e68bcd": 1,
+    ".e3e3aaa1f8b44f148b6aa0df69f8f57c": 1,
+    ".e94b054720ad49b79573c44ba1bcdff5": 1,
+    ".ea23dadb14274f6e8cf7bdef89e419e6": 1,
+    ".f021b896b7294507a5f2c2c0c7eb089c": 1,
+    ".f5d7b8db1c424dd0b0ebf760f25cd985": 1,
+    ".fc6f1716602f4a6e9cb972a3df39dc26": 1,
+    ".icc": 13,
+    ".icns": 4,
+    ".jpg": 300,
+    ".json": 3,
+    ".lproj": 148,
+    ".metallib": 1,
+    ".mp4": 2,
+    ".nib": 115,
+    ".obj": 12,
+    ".otf": 10,
+    ".plist": 53,
+    ".png": 650,
+    ".storyboardc": 18,
+    ".strings": 302,
+    ".stringsdict": 20,
+    ".tiff": 11,
+    ".ttf": 4,
+    ".xcprivacy": 1,
+    "[none]": 184
+  },
+  "frameworks": [],
+  "limitations": [
+    "Native functions and encrypted application code are not recovered.",
+    "Executable metadata is not evidence of observed runtime behavior.",
+    "No application code or unpacked proprietary resources redistributed."
+  ],
+  "scope": "read-only static ZIP, bundle plist and Mach-O header evidence",
+  "sha256": "7b1dad3ac95f8aeca3c22b432b5d6fd94182a3bf9f84fb93588adb126368b54e",
+  "source_bytes": 777430382,
+  "zip_members": 2327
+}
