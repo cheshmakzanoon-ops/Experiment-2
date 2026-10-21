@@ -84,6 +84,45 @@ class ProcreateBrushTest {
     }
 
     @Test
+    fun signedReferenceColourPressureAndTiltAreImportedIndependently() {
+        val params =
+            ProcreateBrush.parameters(
+                mapOf(
+                    "dynamicsPressureHue" to -0.125,
+                    "dynamicsPressureSaturation" to -0.2,
+                    "dynamicsPressureBrightness" to 0.45,
+                    "dynamicsTiltHue" to -0.01,
+                    "dynamicsTiltSaturation" to 0.01,
+                    "dynamicsTiltBrightness" to -0.02,
+                ),
+            )
+        val color = params.colorDynamics
+        assertTrue(color.isActive)
+        assertEquals(-0.125f, color.pressureHue, 1e-6f)
+        assertEquals(-0.2f, color.pressureSaturation, 1e-6f)
+        assertEquals(0.45f, color.pressureBrightness, 1e-6f)
+        assertEquals(-0.01f, color.tiltHue, 1e-6f)
+        assertEquals(0.01f, color.tiltSaturation, 1e-6f)
+        assertEquals(-0.02f, color.tiltBrightness, 1e-6f)
+        val saved = BrushLibraryCodec.encode(listOf(SavedBrush("colour", "Colour", params)))
+        assertEquals(params, BrushLibraryCodec.decode(saved).single().parameters)
+    }
+
+    @Test
+    fun negativeColourDynamicsActuallyChangeStrokesWithoutChangingAlpha() {
+        val brush =
+            ProcreateBrush.parameters(
+                mapOf("dynamicsPressureHue" to -0.25, "dynamicsPressureBrightness" to -0.3),
+            )
+        val ink = 0x806EC860.toInt()
+        val atLightPressure = brush.applyColorJitter(ink, pressure = 0f)
+        val atFullPressure = brush.applyColorJitter(ink, pressure = 1f)
+        assertEquals(ink ushr 24, atLightPressure ushr 24)
+        assertEquals(ink, atFullPressure)
+        assertTrue(atLightPressure != ink)
+    }
+
+    @Test
     fun anythingElseIsRefused() {
         assertTrue(runCatching { ProcreateBrush.read("bplist00 not really".toByteArray()) }.exceptionOrNull() is IllegalArgumentException)
     }

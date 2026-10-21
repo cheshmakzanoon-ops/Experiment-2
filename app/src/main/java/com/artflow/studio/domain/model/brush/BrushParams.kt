@@ -377,7 +377,7 @@ data class ColorDynamics(
     val tiltSaturation: Float = 0f,
     val tiltBrightness: Float = 0f,
 ) {
-    val isActive: Boolean get() = amounts().any { it > 0f }
+    val isActive: Boolean get() = amounts().any { it.isFinite() && it != 0f }
 
     fun amounts(): List<Float> = listOf(pressureHue, pressureSaturation, pressureBrightness, tiltHue, tiltSaturation, tiltBrightness)
 
@@ -393,17 +393,18 @@ data class ColorDynamics(
         val hsv =
             com.artflow.studio.domain.model.Color
                 .rgbToHsv(color)
-        val hueShift = (unit(pressureHue) * light + unit(tiltHue) * flat) * HALF_TURN
+        val hueShift = (signed(pressureHue) * light + signed(tiltHue) * flat) * HALF_TURN
         hsv[0] = ((hsv[0] + hueShift) % FULL_TURN + FULL_TURN) % FULL_TURN
-        hsv[1] *= (1f - unit(pressureSaturation) * light) * (1f - unit(tiltSaturation) * flat)
-        hsv[2] *= (1f - unit(pressureBrightness) * light) * (1f - unit(tiltBrightness) * flat)
+        hsv[1] *= (1f - signed(pressureSaturation) * light) * (1f - signed(tiltSaturation) * flat)
+        hsv[2] *= (1f - signed(pressureBrightness) * light) * (1f - signed(tiltBrightness) * flat)
         val rgb =
             com.artflow.studio.domain.model.Color
                 .hsvToRgb(hsv[0], hsv[1].coerceIn(0f, 1f), hsv[2].coerceIn(0f, 1f))
         return (color and 0xFF000000.toInt()) or (rgb and 0x00FFFFFF)
     }
 
-    private fun unit(value: Float): Float = if (value.isFinite()) value.coerceIn(0f, 1f) else 0f
+    /** Negative reference values increase saturation/value or rotate hue the opposite way. */
+    private fun signed(value: Float): Float = if (value.isFinite()) value.coerceIn(-1f, 1f) else 0f
 
     private companion object {
         const val HALF_TURN = 180f

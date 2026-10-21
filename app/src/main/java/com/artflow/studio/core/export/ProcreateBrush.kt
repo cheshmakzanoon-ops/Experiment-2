@@ -1,6 +1,7 @@
 package com.artflow.studio.core.export
 
 import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.ColorDynamics
 import com.artflow.studio.domain.model.brush.ImportedPressure
 import com.artflow.studio.domain.model.brush.PressureMapping
 import com.artflow.studio.domain.model.layer.BlendMode
@@ -68,6 +69,17 @@ object ProcreateBrush {
                 hueJitter = unit("dynamicsJitterHue"),
                 saturationJitter = unit("dynamicsJitterSaturation"),
                 brightnessJitter = maxOf(unit("dynamicsJitterLightness"), unit("dynamicsJitterDarkness")),
+                // The reference corpus contains all six colour pressure/tilt scalars.
+                // ArtFlow applies its documented HSV approximation; reference pixel parity is unknown.
+                colorDynamics =
+                    ColorDynamics(
+                        pressureHue = signed("dynamicsPressureHue"),
+                        pressureSaturation = signed("dynamicsPressureSaturation"),
+                        pressureBrightness = signed("dynamicsPressureBrightness"),
+                        tiltHue = signed("dynamicsTiltHue"),
+                        tiltSaturation = signed("dynamicsTiltSaturation"),
+                        tiltBrightness = signed("dynamicsTiltBrightness"),
+                    ),
                 sizeJitter = unit("dynamicsJitterSize"),
                 opacityJitter = unit("dynamicsJitterOpacity"),
                 smoothing = maxOf(unit("plotSmoothing"), unit("plotMovingAverageStabilization"), unit("plotFFTSmoothingAmount")),
