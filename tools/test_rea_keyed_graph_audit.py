@@ -10,18 +10,21 @@ spec.loader.exec_module(graph)
 
 
 def source():
-    return {
-        "reference_sha256": graph.EXPECTED_IPA,
-        "brushes": [{
-            "archives": [
-                {"path": "Brush.archive", "sha256": "a" * 64},
-                {"path": "Sub01/Brush.archive", "sha256": "b" * 64},
-            ]
-        }] + [
-            {"archives": [{"path": "Brush.archive", "sha256": f"{k:064x}"}]}
-            for k in range(1, 533)
-        ],
-    }
+    # Mirror the *entire* corpus cardinality: 394 logical brushes, 140
+    # compound containers and 534 component archives. No reference samples
+    # or proprietary metadata are embedded in these synthetic fixtures.
+    brushes = [{
+        "archives": [
+            {"path": "Brush.archive", "sha256": "a" * 64},
+            {"path": "Sub01/Brush.archive", "sha256": "b" * 64},
+        ]
+    }]
+    for index in range(1, 394):
+        parts = [{"path": "Brush.archive", "sha256": f"{index:064x}"}]
+        if index <= 139:
+            parts.append({"path": "Sub01/Brush.archive", "sha256": f"{index + 500:064x}"})
+        brushes.append({"archives": parts})
+    return {"reference_sha256": graph.EXPECTED_IPA, "brushes": brushes}
 
 
 def evidence():
