@@ -68,6 +68,30 @@ data class BrushParams(
     val burntEdges: Float = 0f, // 0..1: paint darkens where the stroke's coverage falls off, like a scorched rim
     val grainDepth: Float = 1f, // 0..1: how strongly the grain shows; 0 paints as if there were no grain
     val tiltOpacityInfluence: Float? = null, // 0..1: how much tilt lightens the paint; null follows tiltInfluence
+    // Reconciled editor and rasterizer fields. Defaults preserve older serialized brushes.
+    val pressureToFlow: Float = 0f,
+    val touchTaperStart: Float? = null,
+    val touchTaperEnd: Float? = null,
+    val tipSharpness: Float = 0f,
+    val minSize: Float = MIN_BRUSH_SIZE,
+    val maxSize: Float = MAX_BRUSH_SIZE,
+    val minOpacity: Float = MIN_BRUSH_OPACITY,
+    val maxOpacity: Float = 1f,
+    val bleed: Float = 0f,
+    val grainBrightness: Float = 0f,
+    val grainContrast: Float = 0f,
+    val grainBlend: GrainBlend = GrainBlend.MULTIPLY,
+    val countJitter: Float = 0f,
+    val colorJitterPerStroke: Boolean = false,
+    val colorDynamics: ColorDynamics = ColorDynamics(),
+    val dilution: Float = 0f,
+    val wetBlur: Float = 0f,
+    val pull: Float = 0f,
+    val wetPull: Float = 0f,
+    val wetBlurJitter: Float = 0f,
+    val wetCharge: Float = 1f,
+    val wetDilution: Float = 0f,
+    val renderingMode: RenderingMode? = null,
 ) {
     /** Flow at [pressure], after Pressure → Flow thins it for lighter presses. */
     fun flowAt(pressure: Float): Float = flow.coerceIn(0f, 1f) * (1f - pressureToFlow.coerceIn(0f, 1f) * (1f - pressureResponse(pressure)))
@@ -75,9 +99,9 @@ data class BrushParams(
     /** These settings for a finger stroke: the Touch taper replaces the stylus (pressure) taper. */
     fun forTouch(): BrushParams = copy(taperStart = touchTaperStart ?: taperStart, taperEnd = touchTaperEnd ?: taperEnd)
 
-    /** How dabs accumulate within one stroke. */
+    /** Canonical mode consumed by the rasterizer and Brush Studio. */
     val rendering: RenderingMode
-        get() = renderingMode ?: if (buildUp) RenderingMode.UNIFORM_BLENDING else RenderingMode.LIGHT_GLAZE
+        get() = effectiveRenderingMode
 
     /** The sizes the sidebar offers for this brush (Procreate's Min and Max size). */
     val sizeLimits: ClosedFloatingPointRange<Float>
@@ -385,26 +409,6 @@ data class ColorDynamics(
         const val HALF_TURN = 180f
         const val FULL_TURN = 360f
     }
-}
-
-/**
- * Procreate's rendering modes. Glazes cap the paint a stroke lays down at its strongest dab; blendings
- * let overlapping dabs build up. Intense modes lay more paint per dab; uniform and heavy modes keep
- * the dab's edge as hard at low flow as at full flow.
- */
-@Serializable
-enum class RenderingMode(
-    val displayName: String,
-    val blending: Boolean,
-    val intense: Boolean,
-    val uniformEdges: Boolean,
-) {
-    LIGHT_GLAZE("Light glaze", blending = false, intense = false, uniformEdges = false),
-    UNIFORM_GLAZE("Uniform glaze", blending = false, intense = false, uniformEdges = true),
-    INTENSE_GLAZE("Intense glaze", blending = false, intense = true, uniformEdges = false),
-    HEAVY_GLAZE("Heavy glaze", blending = false, intense = true, uniformEdges = true),
-    UNIFORM_BLENDING("Uniform blending", blending = true, intense = false, uniformEdges = false),
-    INTENSE_BLENDING("Intense blending", blending = true, intense = true, uniformEdges = false),
 }
 
 /** Procreate's grain blend modes: how the grain value combines with the stroke's own coverage. */
