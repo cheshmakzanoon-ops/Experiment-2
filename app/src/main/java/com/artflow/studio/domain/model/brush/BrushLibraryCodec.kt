@@ -15,6 +15,8 @@ object BrushLibraryCodec {
 
     /** Grains imported from photos; their tiles live beside the library. */
     private val IMPORTED_GRAIN = Regex("custom-[0-9a-f]{1,32}")
+    private val AUXILIARY_CURVE_KEY = Regex("dynamicsPressure[A-Za-z0-9]{1,60}")
+    private const val MAX_AUXILIARY_CURVES = 30
     private val json = Json { encodeDefaults = true }
 
     @Serializable
@@ -94,6 +96,12 @@ object BrushLibraryCodec {
                 params.grainDepth,
             )
         require(unitValues.all { it in 0f..1f }) { "Brush dynamics must be finite values between zero and one" }
+        require(params.importedAuxiliaryCurves.size <= MAX_AUXILIARY_CURVES) {
+            "Too many source pressure curve components"
+        }
+        require(params.importedAuxiliaryCurves.keys.all { it.matches(AUXILIARY_CURVE_KEY) }) {
+            "Invalid imported pressure curve field name"
+        }
         val signedValues = listOf(params.pressureToSize, params.pressureToOpacity, params.velocityToSize, params.velocityToOpacity)
         require(signedValues.all { it in -1f..1f }) { "Signed brush dynamics must be finite values between minus one and one" }
         // Both pressure response types validate their control points during deserialization.

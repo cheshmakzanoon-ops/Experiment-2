@@ -44,6 +44,22 @@ class ImportedBrushPersistenceTest {
         assertArrayEquals(grain.values, images.getValue(grainId).values)
     }
 
+    @Test fun additionalSourceCurvesAreBoundedAndNamesAreValidated() {
+        val response =
+            PressureMapping(listOf(PressureMapping.Point(0f, 1f), PressureMapping.Point(1f, 0f)))
+        val good = BrushParams(importedAuxiliaryCurves = mapOf("dynamicsPressureBleedCurve" to response))
+        val library = listOf(SavedBrush("valid-curves", "Curves", good))
+        assertEquals(library, BrushLibraryCodec.decode(BrushLibraryCodec.encode(library)))
+        val malformed = good.copy(importedAuxiliaryCurves = mapOf("../escapedKey" to response))
+        assertThrows(IllegalArgumentException::class.java) {
+            BrushLibraryCodec.encode(listOf(SavedBrush("bad-key", "Bad key", malformed)))
+        }
+        val tooMany = (0..30).associate { index -> "dynamicsPressureSynthetic$index" to response }
+        assertThrows(IllegalArgumentException::class.java) {
+            BrushLibraryCodec.encode(listOf(SavedBrush("too-many", "Too many", good.copy(importedAuxiliaryCurves = tooMany))))
+        }
+    }
+
     @Test fun oldLibrariesWithoutNewFieldsStillDecodeWithTheirOriginalDefaults() {
         val legacy = """{"version":1,"brushes":[{"id":"old","name":"Old brush","parameters":{"pressureToSize":0.8}}]}"""
         assertEquals(BrushParams(pressureToSize = 0.8f), BrushLibraryCodec.decode(legacy).single().parameters)
