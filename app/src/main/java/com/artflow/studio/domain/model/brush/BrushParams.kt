@@ -30,6 +30,8 @@ data class BrushParams(
     val importedAuxiliaryCurves: Map<String, PressureMapping> = emptyMap(),
     /** Bounded native settings scalars retained as data, including fields unknown to this renderer. */
     val importedSourceScalars: Map<String, SourceBrushScalar> = emptyMap(),
+    /** Additional primitive-field objects and saved slider arrays, not executed by this brush renderer. */
+    val importedSourceStructures: Map<String, SourceBrushStructuredField> = emptyMap(),
     // Color dynamics - Phase 9: Advanced Brush Parameters
     val hueJitter: Float = 0f, // Hue variation (0.0 - 1.0)
     val saturationJitter: Float = 0f, // Saturation variation (0.0 - 1.0)

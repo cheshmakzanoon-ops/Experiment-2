@@ -7,6 +7,7 @@ import com.artflow.studio.core.render.CustomGrains
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.ColorDynamics
 import com.artflow.studio.domain.model.brush.SourceBrushScalar
+import com.artflow.studio.domain.model.brush.SourceBrushStructuredField
 import com.artflow.studio.domain.model.brush.PressureMapping
 import com.artflow.studio.domain.model.brush.SavedBrush
 import com.artflow.studio.domain.model.layer.BlendMode
@@ -305,6 +306,46 @@ class BrushExportRoundTripTest {
                 )
             }
         }
+    }
+
+    @Test
+    fun keyedRollParametersDatesAndSavedSizeArraysPreserveTheirTypes() {
+        val archive = com.artflow.studio.core.export.KeyedArchiveBuilder()
+        val roll =
+            archive.instance(
+                "ValkyrieBrushRollParameters",
+                mapOf(
+                    "activationFalloff" to 1.57079637,
+                    "activationOrigin" to 3.14159274,
+                    "mode" to 1L,
+                    "activationRange" to 3.14159274,
+                ),
+            )
+        val date = archive.instance("NSDate", mapOf("NS.time" to 595235271.168956))
+        val sizes = archive.instance("NSArray", mapOf("NS.objects" to listOf(archive.add(0.24))))
+        val original =
+            com.artflow.studio.core.export.ProcreateBrush.read(
+                archive.encode(
+                    mapOf(
+                        "name" to archive.add("Structured"),
+                        "attackRollParameters" to roll,
+                        "creationDate" to date,
+                        "savedPaintSizes" to sizes,
+                    ),
+                ),
+            ).parameters
+        val stored = original.importedSourceStructures
+        assertEquals(3, stored.size)
+        assertEquals("ValkyrieBrushRollParameters", stored.getValue("attackRollParameters").className)
+        assertEquals(SourceBrushScalar(SourceBrushScalar.Type.REAL, "595235271.168956"), stored.getValue("creationDate").fields["NS.time"])
+        assertEquals(SourceBrushStructuredField.Kind.ARRAY, stored.getValue("savedPaintSizes").kind)
+        val brush = SavedBrush("structured", "Structured", original)
+        val reopened = com.artflow.studio.domain.model.brush.BrushLibraryCodec.decode(
+            com.artflow.studio.domain.model.brush.BrushLibraryCodec.encode(listOf(brush)),
+        ).single().parameters
+        val exported = ProcreateBrushWriter.brush(ProcreateBrushWriter.Brush("Structured", reopened))
+        val imported = requireNotNull(BrushArchives.read(exported, decode).single().settings).parameters
+        assertEquals(stored, imported.importedSourceStructures)
     }
 
     private companion object {

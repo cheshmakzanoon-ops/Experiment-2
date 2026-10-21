@@ -5,6 +5,7 @@ import com.artflow.studio.domain.model.brush.ColorDynamics
 import com.artflow.studio.domain.model.brush.ImportedPressure
 import com.artflow.studio.domain.model.brush.PressureMapping
 import com.artflow.studio.domain.model.brush.SourceBrushScalar
+import com.artflow.studio.domain.model.brush.SourceBrushStructuredField
 import com.artflow.studio.domain.model.layer.BlendMode
 import kotlin.math.roundToInt
 
@@ -51,6 +52,34 @@ object ProcreateBrush {
         "dynamicsPressureWetPullCurve",
         )
 
+    /** REA-observed native classes with bounded primitive fields, plus saved stroke-size arrays. */
+    internal val ROLL_OBJECT_KEYS: Set<String> =
+        setOf(
+            "attackRollParameters",
+            "dynamicsRollBleedParameters",
+            "dynamicsRollBrightnessParameters",
+            "dynamicsRollHueParameters",
+            "dynamicsRollOpacityParameters",
+            "dynamicsRollSaturationParameters",
+            "dynamicsRollSecondaryColorParameters",
+            "dynamicsRollSizeParameters",
+            "plotJitterLongitudinalRollParameters",
+            "plotJitterRollParameters",
+            "shapeCountRollParameters",
+            "shapeScatterRollParameters",
+        )
+    internal val ARRAY_OBJECT_KEYS: Set<String> =
+        setOf(
+            "savedEraseOpacities",
+            "savedEraseSizes",
+            "savedPaintOpacities",
+            "savedPaintSizes",
+            "savedSmudgeOpacities",
+            "savedSmudgeSizes",
+        )
+    internal val STRUCTURED_OBJECT_KEYS: Set<String> =
+        ROLL_OBJECT_KEYS + ARRAY_OBJECT_KEYS + "creationDate"
+
     class Settings(
         val name: String?,
         /** Settings without images; the importer adds the stored shape and grain. */
@@ -78,6 +107,29 @@ object ProcreateBrush {
                 name to field
             }.toMap()
         require(sourceScalars.size <= SourceBrushScalar.MAX_FIELDS) { "Too many source brush scalar settings" }
+        val sourceStructures =
+            STRUCTURED_OBJECT_KEYS.mapNotNull { key ->
+                val original = brush[key] ?: return@mapNotNull null
+                val className = keyed.className(original) ?: return@mapNotNull null
+                val objectFields = keyed.map(original) ?: return@mapNotNull null
+                val captured =
+                    if (key in ARRAY_OBJECT_KEYS) {
+                        val rawValues = keyed.array(original)
+                        if (rawValues.size > SourceBrushStructuredField.MAX_ITEMS) return@mapNotNull null
+                        val values = rawValues.mapNotNull(SourceBrushScalar::capture)
+                        if (values.size != rawValues.size) return@mapNotNull null
+                        SourceBrushStructuredField(className, SourceBrushStructuredField.Kind.ARRAY, items = values)
+                    } else {
+                        val originalFields = objectFields.filterKeys { it != "\$class" }
+                        val values =
+                            originalFields.mapNotNull { (name, value) ->
+                                val scalar = SourceBrushScalar.capture(keyed.resolve(value)) ?: return@mapNotNull null
+                                name to scalar
+                            }.toMap()
+                        SourceBrushStructuredField(className, SourceBrushStructuredField.Kind.FIELDS, fields = values)
+                    }
+                if (captured.isValid()) key to captured else null
+            }.toMap()
         fun number(key: String): Float? = (brush[key] as? Number)?.toFloat()?.takeIf { it.isFinite() }
 
         fun unit(key: String): Float = number(key)?.coerceIn(0f, 1f) ?: 0f
@@ -117,6 +169,7 @@ object ProcreateBrush {
                         curve(keyed, brush[key])?.let { mapping -> key to mapping }
                     }.toMap(),
                 importedSourceScalars = sourceScalars,
+                importedSourceStructures = sourceStructures,
                 hueJitter = unit("dynamicsJitterHue"),
                 saturationJitter = unit("dynamicsJitterSaturation"),
                 brightnessJitter = maxOf(unit("dynamicsJitterLightness"), unit("dynamicsJitterDarkness")),

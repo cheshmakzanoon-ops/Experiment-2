@@ -4,6 +4,7 @@ import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.render.CustomGrains
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.SourceBrushScalar
+import com.artflow.studio.domain.model.brush.SourceBrushStructuredField
 import java.io.ByteArrayOutputStream
 import java.util.UUID
 import java.util.zip.ZipEntry
@@ -79,13 +80,46 @@ object ProcreateBrushWriter {
                     SourceBrushScalar.Type.TEXT -> keyed.add(scalar.value)
                 }
             }
-        // Editable ArtFlow settings win for known fields; original values survive
-        // for every other primitive source setting. Compound settings and opaque
-        // native data are outside this scalar-preservation contract.
+        val originalStructures = brush.parameters.importedSourceStructures
+        require(originalStructures.size <= SourceBrushStructuredField.MAX_OBJECTS) {
+            "Too many source brush structured settings"
+        }
+        require(originalStructures.all { (name, data) ->
+            name in ProcreateBrush.STRUCTURED_OBJECT_KEYS && data.isValid()
+        }) { "Invalid source brush structured setting" }
+        val preservedStructures =
+            originalStructures.mapValues { (_, data) ->
+                val values: Map<String, Any?> =
+                    when (data.kind) {
+                        SourceBrushStructuredField.Kind.FIELDS ->
+                            data.fields.mapValues { (_, scalar) -> sourceValue(keyed, scalar) }
+                        SourceBrushStructuredField.Kind.ARRAY ->
+                            mapOf(
+                                "NS.objects" to requireNotNull(data.items).map { scalar ->
+                                    keyed.add(sourceValue(keyed, scalar))
+                                },
+                            )
+                    }
+                keyed.instance(data.className, values)
+            }
+        // Editable ArtFlow settings win for known scalar fields; source-only
+        // primitive and structured metadata remain attached to the brush.
+        // Neither original binary assets nor the reference app's algorithms are reproduced.
         val root =
-            preservedScalars + mapOf("\$class" to keyed.classOf(BRUSH_CLASS), "name" to keyed.add(brush.name)) +
+            preservedScalars + preservedStructures +
+                mapOf("\$class" to keyed.classOf(BRUSH_CLASS), "name" to keyed.add(brush.name)) +
                 settings(brush.parameters) + auxiliary
         return keyed.encode(root)
+    }
+
+    private fun sourceValue(keyed: KeyedArchiveBuilder, scalar: SourceBrushScalar): Any {
+        require(scalar.isValid()) { "Invalid source brush scalar" }
+        return when (scalar.type) {
+            SourceBrushScalar.Type.BOOLEAN -> scalar.value == "true"
+            SourceBrushScalar.Type.INTEGER -> requireNotNull(scalar.value.toLongOrNull())
+            SourceBrushScalar.Type.REAL -> requireNotNull(scalar.value.toDoubleOrNull())
+            SourceBrushScalar.Type.TEXT -> keyed.add(scalar.value)
+        }
     }
 
     private fun settings(p: BrushParams): Map<String, Any?> =

@@ -104,6 +104,12 @@ object BrushLibraryCodec {
         require(params.importedSourceScalars.all { (name, field) ->
             SourceBrushScalar.validName(name) && field.isValid()
         }) { "Invalid imported source brush scalar" }
+        require(params.importedSourceStructures.size <= SourceBrushStructuredField.MAX_OBJECTS) {
+            "Too many source brush structured fields"
+        }
+        require(params.importedSourceStructures.all { (name, entry) ->
+            name in com.artflow.studio.core.export.ProcreateBrush.STRUCTURED_OBJECT_KEYS && entry.isValid()
+        }) { "Invalid source brush structured field" }
         require(params.importedAuxiliaryCurves.size <= MAX_AUXILIARY_CURVES) {
             "Too many source pressure curve components"
         }
