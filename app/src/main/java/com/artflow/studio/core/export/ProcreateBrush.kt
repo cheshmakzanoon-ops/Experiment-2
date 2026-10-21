@@ -52,33 +52,9 @@ object ProcreateBrush {
         "dynamicsPressureWetPullCurve",
         )
 
-    /** REA-observed native classes with bounded primitive fields, plus saved stroke-size arrays. */
-    internal val ROLL_OBJECT_KEYS: Set<String> =
-        setOf(
-            "attackRollParameters",
-            "dynamicsRollBleedParameters",
-            "dynamicsRollBrightnessParameters",
-            "dynamicsRollHueParameters",
-            "dynamicsRollOpacityParameters",
-            "dynamicsRollSaturationParameters",
-            "dynamicsRollSecondaryColorParameters",
-            "dynamicsRollSizeParameters",
-            "plotJitterLongitudinalRollParameters",
-            "plotJitterRollParameters",
-            "shapeCountRollParameters",
-            "shapeScatterRollParameters",
-        )
-    internal val ARRAY_OBJECT_KEYS: Set<String> =
-        setOf(
-            "savedEraseOpacities",
-            "savedEraseSizes",
-            "savedPaintOpacities",
-            "savedPaintSizes",
-            "savedSmudgeOpacities",
-            "savedSmudgeSizes",
-        )
-    internal val STRUCTURED_OBJECT_KEYS: Set<String> =
-        ROLL_OBJECT_KEYS + ARRAY_OBJECT_KEYS + "creationDate"
+    /** Keep dictionary schema names with the domain validation contract. */
+    internal val ARRAY_OBJECT_KEYS: Set<String> = SourceBrushStructuredField.ARRAY_NAMES
+    internal val STRUCTURED_OBJECT_KEYS: Set<String> = SourceBrushStructuredField.ALLOWED_NAMES
 
     class Settings(
         val name: String?,
@@ -121,14 +97,16 @@ object ProcreateBrush {
                         SourceBrushStructuredField(className, SourceBrushStructuredField.Kind.ARRAY, items = values)
                     } else {
                         val originalFields = objectFields.filterKeys { it != "\$class" }
+                        if (originalFields.size > SourceBrushStructuredField.MAX_FIELDS) return@mapNotNull null
                         val values =
                             originalFields.mapNotNull { (name, value) ->
                                 val scalar = SourceBrushScalar.capture(keyed.resolve(value)) ?: return@mapNotNull null
                                 name to scalar
                             }.toMap()
+                        if (values.size != originalFields.size) return@mapNotNull null
                         SourceBrushStructuredField(className, SourceBrushStructuredField.Kind.FIELDS, fields = values)
                     }
-                if (captured.isValid()) key to captured else null
+                if (captured.isValidFor(key)) key to captured else null
             }.toMap()
         fun number(key: String): Float? = (brush[key] as? Number)?.toFloat()?.takeIf { it.isFinite() }
 

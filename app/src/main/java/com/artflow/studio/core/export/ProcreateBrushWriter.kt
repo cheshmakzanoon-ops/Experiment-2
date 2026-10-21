@@ -85,7 +85,7 @@ object ProcreateBrushWriter {
             "Too many source brush structured settings"
         }
         require(originalStructures.all { (name, data) ->
-            name in ProcreateBrush.STRUCTURED_OBJECT_KEYS && data.isValid()
+            data.isValidFor(name)
         }) { "Invalid source brush structured setting" }
         val preservedStructures =
             originalStructures.mapValues { (_, data) ->

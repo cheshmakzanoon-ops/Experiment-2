@@ -8,6 +8,7 @@ import com.artflow.studio.domain.model.brush.ImportedPressure
 import com.artflow.studio.domain.model.brush.PressureMapping
 import com.artflow.studio.domain.model.brush.SavedBrush
 import com.artflow.studio.domain.model.brush.SourceBrushScalar
+import com.artflow.studio.domain.model.brush.SourceBrushStructuredField
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
@@ -84,6 +85,29 @@ class ImportedBrushPersistenceTest {
                 BrushLibraryCodec.encode(listOf(brush.copy(parameters = source.copy(importedSourceScalars = bad))))
             }
         }
+    }
+
+    @Test fun sourceStructureKindsAreValidatedBeforePersistence() {
+        val rollShape =
+            SourceBrushStructuredField(
+                "ValkyrieBrushRollParameters",
+                SourceBrushStructuredField.Kind.FIELDS,
+                fields = mapOf("activationOrigin" to SourceBrushScalar(SourceBrushScalar.Type.REAL, "1.0")),
+            )
+        val invalid = BrushParams(importedSourceStructures = mapOf("savedPaintSizes" to rollShape))
+        assertThrows(IllegalArgumentException::class.java) {
+            BrushLibraryCodec.encode(listOf(SavedBrush("invalid-kind", "Malformed", invalid)))
+        }
+        val valid =
+            BrushParams(
+                importedSourceStructures =
+                    mapOf(
+                        "savedPaintSizes" to
+                            SourceBrushStructuredField("NSArray", SourceBrushStructuredField.Kind.ARRAY, items = emptyList()),
+                    ),
+            )
+        val original = listOf(SavedBrush("original", "Source array", valid))
+        assertEquals(original, BrushLibraryCodec.decode(BrushLibraryCodec.encode(original)))
     }
 
     @Test fun oldLibrariesWithoutNewFieldsStillDecodeWithTheirOriginalDefaults() {

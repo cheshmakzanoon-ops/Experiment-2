@@ -33,7 +33,37 @@ data class SourceBrushStructuredField(
         }
     }
 
+    /** The key and object kind must agree; a malformed archive cannot disguise a saved-size array as a roll object. */
+    fun isValidFor(name: String): Boolean =
+        name in ALLOWED_NAMES && isValid() &&
+            if (name in ARRAY_NAMES) kind == Kind.ARRAY else kind == Kind.FIELDS
+
     companion object {
+        val ROLL_NAMES: Set<String> =
+            setOf(
+                "attackRollParameters",
+                "dynamicsRollBleedParameters",
+                "dynamicsRollBrightnessParameters",
+                "dynamicsRollHueParameters",
+                "dynamicsRollOpacityParameters",
+                "dynamicsRollSaturationParameters",
+                "dynamicsRollSecondaryColorParameters",
+                "dynamicsRollSizeParameters",
+                "plotJitterLongitudinalRollParameters",
+                "plotJitterRollParameters",
+                "shapeCountRollParameters",
+                "shapeScatterRollParameters",
+            )
+        val ARRAY_NAMES: Set<String> =
+            setOf(
+                "savedEraseOpacities",
+                "savedEraseSizes",
+                "savedPaintOpacities",
+                "savedPaintSizes",
+                "savedSmudgeOpacities",
+                "savedSmudgeSizes",
+            )
+        val ALLOWED_NAMES: Set<String> = ROLL_NAMES + ARRAY_NAMES + "creationDate"
         const val MAX_OBJECTS = 19
         const val MAX_FIELDS = 8
         const val MAX_ITEMS = 16
