@@ -1,3 +1,7 @@
+### REA supplemental pressure-curve recovery (21 October 2026)
+
+The reference corpus has 33 curve fields. The importer now retains 30 auxiliary source fields in addition to the original three, with **4,138 syntactically valid auxiliary curve instances** observed offline. Synthetic import/save/export round-trip tests were added; native brush behavior, pixel parity and exact-commit Android CI remain unverified. See [REA auxiliary curve recovery](docs/REA_AUXILIARY_CURVES_2026-10-21.md) and [reader mapping audit](docs/REA_BRUSH_READER_COVERAGE.md).
+
 ### REA reference-analysis record — 21 October 2026
 
 The linked [reference archive](https://drive.google.com/file/d/1xPr6e53L76Cq8exGFWOSvq96wt-NlLVC/view) is a 777,430,382-byte ZIP / IPA, identified by SHA-256 `7b1dad3ac95f8aeca3c22b432b5d6fd94182a3bf9f84fb93588adb126368b54e`. A successful prior REA/keyed-archive workflow extracted 394 brush containers (140 dual-component; 534 settings components). New evidence-based reports include the [264-key schema inventory](docs/REA_IPA_BRUSH_SCHEMA_INVENTORY_2026-10-21.md) and [numeric range and importer-loss audit](docs/REA_IPA_BRUSH_RANGE_AUDIT_2026-10-21.md). Raw paid source assets and executables are not redistributed.
