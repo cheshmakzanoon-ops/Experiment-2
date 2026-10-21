@@ -89,8 +89,6 @@ object ProcreateBrush {
                 tipFlipYJitter = flag("shapeFlipYJitter"),
                 tipRandomized = flag("shapeRandomise"),
                 buildUp = flag("renderingRecursiveMixing"),
-                renderingMode =
-                    if (flag("renderingRecursiveMixing")) RenderingMode.BLEND_UNIFORM else RenderingMode.GLAZE_UNIFORM,
                 grainMoving = unit("textureMovement") >= MOVING_GRAIN,
                 secondaryPressure = unit("dynamicsPressureSecondaryColor"),
                 secondaryJitter = unit("jitterSecondary"),
