@@ -15,7 +15,8 @@ import java.util.zip.ZipOutputStream
  *
  * Each setting is written on the scale [ProcreateBrush.read] maps it back from, so a brush read back has
  * the same value within float rounding wherever the value is in range. Settings that [ProcreateBrush] does
- * not read (colour pressure, pressure curves, the second brush, texture rotation) are not written.
+ * not read (pressure curves, the second brush, texture rotation) are not written.
+ * Signed color-pressure and color-tilt scalars are written, though native pixel parity is unverified.
  */
 object ProcreateBrushWriter {
     /** One brush to write: its name, settings, and its shape and grain tiles (null when it has none). */
@@ -75,6 +76,12 @@ object ProcreateBrushWriter {
             "pencilTaperOpacity" to unit(p.taperOpacity),
             "dynamicsPressureSize" to p.pressureToSize.coerceIn(-1f, 1f).toDouble(),
             "dynamicsPressureOpacity" to p.pressureToOpacity.coerceIn(-1f, 1f).toDouble(),
+            "dynamicsPressureHue" to signed(p.colorDynamics.pressureHue),
+            "dynamicsPressureSaturation" to signed(p.colorDynamics.pressureSaturation),
+            "dynamicsPressureBrightness" to signed(p.colorDynamics.pressureBrightness),
+            "dynamicsTiltHue" to signed(p.colorDynamics.tiltHue),
+            "dynamicsTiltSaturation" to signed(p.colorDynamics.tiltSaturation),
+            "dynamicsTiltBrightness" to signed(p.colorDynamics.tiltBrightness),
             "dynamicsJitterHue" to unit(p.hueJitter),
             "dynamicsJitterSaturation" to unit(p.saturationJitter),
             "dynamicsJitterLightness" to unit(p.brightnessJitter),
@@ -106,6 +113,9 @@ object ProcreateBrushWriter {
         )
 
     private fun unit(value: Float): Double = value.coerceIn(0f, 1f).toDouble()
+
+    /** Round-trip signed imported colour dynamics without writing non-finite scalar values. */
+    private fun signed(value: Float): Double = if (value.isFinite()) value.coerceIn(-1f, 1f).toDouble() else 0.0
 
     /** A tile as an opaque grey PNG: its values are the brightness, which the reader takes back as the tile. */
     private fun png(tile: CustomGrains.Tile): ByteArray {

@@ -5,6 +5,7 @@ import com.artflow.studio.core.export.TestPng
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.render.CustomGrains
 import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.ColorDynamics
 import com.artflow.studio.domain.model.brush.SavedBrush
 import com.artflow.studio.domain.model.layer.BlendMode
 import org.junit.Assert.assertArrayEquals
@@ -201,6 +202,24 @@ class BrushExportRoundTripTest {
         assertEquals(-0.35f, imported.pressureToOpacity, 1e-6f)
         assertTrue(imported.tipFlipXJitter)
         assertEquals(false, imported.tipFlipYJitter)
+    }
+
+    @Test
+    fun signedColourDynamicsRoundTripThroughProcreateBrushFile() {
+        val dynamics =
+            ColorDynamics(
+                pressureHue = -0.125f,
+                pressureSaturation = -0.2f,
+                pressureBrightness = 0.35f,
+                tiltHue = -0.01f,
+                tiltSaturation = 0.01f,
+                tiltBrightness = -0.02f,
+            )
+        val source = BrushParams(colorDynamics = dynamics)
+        val archive = ProcreateBrushWriter.brush(ProcreateBrushWriter.Brush("Colour pressure", source))
+        val imported = requireNotNull(BrushArchives.read(archive, decode).single().settings).parameters
+        assertEquals(dynamics, imported.colorDynamics)
+        assertTrue(imported.colorDynamics.isActive)
     }
 
     private companion object {
