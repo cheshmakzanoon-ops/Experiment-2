@@ -18,8 +18,9 @@ import java.util.zip.ZipOutputStream
  *
  * Each setting is written on the scale [ProcreateBrush.read] maps it back from, so a brush read back has
  * the same value within float rounding wherever the value is in range. Settings that [ProcreateBrush] does
- * not read (pressure curves, the second brush, texture rotation) are not written.
- * Signed color-pressure and color-tilt scalars are written, though native pixel parity is unverified.
+ * does not reconstruct the second brush's exact native storage, nor the renderer's texture rotation.
+ * Known pressure curve graphs are serialized as ValkyrieMagnitudinalCurve archives; source interpolation
+ * and pixel parity are not verified. Signed pressure/tilt scalar values survive in the archive.
  */
 object ProcreateBrushWriter {
     /** One brush to write: its name, settings, and its shape and grain tiles (null when it has none). */
@@ -59,15 +60,23 @@ object ProcreateBrushWriter {
     /** The brush's settings as a keyed archive of class SilicaBrush, the form [ProcreateBrush.read] reads. */
     private fun archive(brush: Brush): ByteArray {
         val keyed = KeyedArchiveBuilder()
-        // Preserve known source curve points as keyed NSArray values. Native interpolation,
-        // per-field response units and pixel output remain unverified.
-        val auxiliary =
-            brush.parameters.importedAuxiliaryCurves
-                .filterKeys { it in ProcreateBrush.AUXILIARY_CURVE_KEYS }
-                .mapValues { (_, curve) ->
-                    val points = keyed.array(curve.points.map { point -> keyed.add("{${point.input}, ${point.output}}") })
-                    keyed.instance("NSDictionary", mapOf("points" to points))
-                }
+        // REA's reference archive identifies these as ValkyrieMagnitudinalCurve objects
+        // containing NSArrays of point strings. Preserve the class and all three primary
+        // curves as well as the supported auxiliary keys (no native interpolation inferred).
+        val primary =
+            mapOf(
+                "dynamicsPressureOverall" to brush.parameters.importedPressure?.overall,
+                "dynamicsPressureSizeCurve" to brush.parameters.importedPressure?.size,
+                "dynamicsPressureOpacityCurve" to brush.parameters.importedPressure?.opacity,
+            ).filterValues { it != null }
+        val curves =
+            primary + brush.parameters.importedAuxiliaryCurves.filterKeys { it in ProcreateBrush.AUXILIARY_CURVE_KEYS }
+        val keyedCurves =
+            curves.mapValues { (_, entry) ->
+                val response = requireNotNull(entry)
+                val points = keyed.array(response.points.map { point -> keyed.add("{${point.input}, ${point.output}}") })
+                keyed.instance("ValkyrieMagnitudinalCurve", mapOf("points" to points))
+            }
         val originalScalars = brush.parameters.importedSourceScalars
         require(originalScalars.size <= SourceBrushScalar.MAX_FIELDS) { "Too many source brush scalar settings" }
         require(originalScalars.keys.all(SourceBrushScalar::validName)) { "Invalid source brush scalar field name" }
@@ -117,7 +126,7 @@ object ProcreateBrushWriter {
         val root =
             preservedScalars + preservedStructures + originalColor +
                 mapOf("\$class" to keyed.classOf(BRUSH_CLASS), "name" to keyed.add(brush.name)) +
-                settings(brush.parameters) + auxiliary
+                settings(brush.parameters) + keyedCurves
         return keyed.encode(root)
     }
 

@@ -6,6 +6,7 @@ import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.render.CustomGrains
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.ColorDynamics
+import com.artflow.studio.domain.model.brush.ImportedPressure
 import com.artflow.studio.domain.model.brush.SourceBrushScalar
 import com.artflow.studio.domain.model.brush.SourceBrushStructuredField
 import com.artflow.studio.domain.model.brush.PressureMapping
@@ -377,6 +378,36 @@ class BrushExportRoundTripTest {
                 listOf(saved.copy(parameters = original.copy(importedSourceColorData = "not-base64"))),
             )
         }
+    }
+
+    @Test
+    fun allThreePrimaryPressureCurvesExportAsTheirObservedKeyedArchiveClass() {
+        val overall =
+            PressureMapping(
+                listOf(
+                    PressureMapping.Point(0f, 0.2f),
+                    PressureMapping.Point(0.35f, 0.8f),
+                    PressureMapping.Point(1f, 0.95f),
+                ),
+            )
+        val falling = PressureMapping(listOf(PressureMapping.Point(0f, 1f), PressureMapping.Point(1f, 0f)))
+        val channels = ImportedPressure(overall = overall, size = falling, opacity = overall)
+        val source = BrushParams(importedPressure = channels)
+        val exported = ProcreateBrushWriter.brush(ProcreateBrushWriter.Brush("Three pressure curves", source))
+        val archiveData =
+            ZipInputStream(exported.inputStream()).use { zip ->
+                check(zip.nextEntry.name == "Brush.archive")
+                zip.readBytes()
+            }
+        val keyed = com.artflow.studio.core.export.KeyedArchive(
+            com.artflow.studio.core.export.BinaryPlist.read(archiveData),
+        )
+        val root = requireNotNull(keyed.root)
+        for (field in listOf("dynamicsPressureOverall", "dynamicsPressureSizeCurve", "dynamicsPressureOpacityCurve")) {
+            assertEquals("ValkyrieMagnitudinalCurve", keyed.className(root[field]))
+        }
+        val imported = requireNotNull(BrushArchives.read(exported, decode).single().settings).parameters
+        assertEquals(channels, imported.importedPressure)
     }
 
     private companion object {
