@@ -1,3 +1,11 @@
+### REA reference-analysis record — 21 October 2026
+
+The linked [reference archive](https://drive.google.com/file/d/1xPr6e53L76Cq8exGFWOSvq96wt-NlLVC/view) is a 777,430,382-byte ZIP / IPA, identified by SHA-256 `7b1dad3ac95f8aeca3c22b432b5d6fd94182a3bf9f84fb93588adb126368b54e`. A successful prior REA/keyed-archive workflow extracted 394 brush containers (140 dual-component; 534 settings components). New evidence-based reports include the [264-key schema inventory](docs/REA_IPA_BRUSH_SCHEMA_INVENTORY_2026-10-21.md) and [numeric range and importer-loss audit](docs/REA_IPA_BRUSH_RANGE_AUDIT_2026-10-21.md). Raw paid source assets and executables are not redistributed.
+
+The [full archive static inventory workflow](.github/workflows/reference-ipa-static-inventory.yml) uses the original SHA-256 to validate provenance before inspecting bundle plists, declared executable headers and Mach-O encryption markers, and attempts REA CLI artifact inspection. Its completion and results must be checked at the exact workflow run; the presence of a workflow is **not proof** it has finished.
+
+The consolidated main has historically failed Android Kotlin compilation (706 compiler diagnostics, 34 files, often cascading). The [compiler audit](docs/CI_COMPILER_TRIAGE_2026-10-21.md) records the failure's exact CI job. The Procreate brush decoder's malformed scope and two brush-export data-loss cases received source fixes and a synthetic regression test, but a passing exact-commit Android build and device matrix have **not** been established. **Whole-app source recovery and 1:1 Procreate parity are not achieved.**
+
 ### Run 84 Android-system recovery
 
 Run `35509598187` proved that an app-only restart is insufficient after a classifier-proven Android 15/16 KB runtime crash: the first instrumentation attempt matched the known framework crash, then the retry aborted immediately with `INSTRUMENTATION_ABORTED: System has crashed`. The harness now preserves the first attempt, performs a real emulator reboot, proves the boot ID changed and Android reached `sys.boot_completed=1`, reapplies and verifies the Android 15 runtime configuration, clears only disposable test-package state, and then performs the single retry. Recovery itself is fail-closed and covered by standalone tests; application assertions and unrelated crashes are still never retried.
