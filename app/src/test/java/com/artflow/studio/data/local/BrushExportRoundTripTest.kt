@@ -15,6 +15,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertThrows
 import org.junit.Test
 import java.util.zip.ZipInputStream
 
@@ -286,6 +287,24 @@ class BrushExportRoundTripTest {
         assertEquals(source.importedSourceScalars["shapeCountRoll"], imported.parameters.importedSourceScalars["shapeCountRoll"])
         assertEquals(source.importedSourceScalars["burntEdgesBlendModeExtended"], imported.parameters.importedSourceScalars["burntEdgesBlendModeExtended"])
         assertEquals(source.importedSourceScalars["plotJitterLongitudinal"], imported.parameters.importedSourceScalars["plotJitterLongitudinal"])
+    }
+
+    @Test
+    fun sourceScalarWriterRejectsInvalidNamesAndValues() {
+        for (sourceScalars in listOf(
+            mapOf("../escapes" to SourceBrushScalar(SourceBrushScalar.Type.TEXT, "x")),
+            mapOf("shapeCountRoll" to SourceBrushScalar(SourceBrushScalar.Type.BOOLEAN, "no")),
+            mapOf("unknownValue" to SourceBrushScalar(SourceBrushScalar.Type.REAL, "Infinity")),
+        )) {
+            assertThrows(IllegalArgumentException::class.java) {
+                ProcreateBrushWriter.brush(
+                    ProcreateBrushWriter.Brush(
+                        "Malformed",
+                        BrushParams(importedSourceScalars = sourceScalars),
+                    ),
+                )
+            }
+        }
     }
 
     private companion object {

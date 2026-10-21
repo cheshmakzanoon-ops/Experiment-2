@@ -66,8 +66,11 @@ object ProcreateBrushWriter {
                     val points = keyed.array(curve.points.map { point -> keyed.add("{${point.input}, ${point.output}}") })
                     keyed.instance("NSDictionary", mapOf("points" to points))
                 }
+        val originalScalars = brush.parameters.importedSourceScalars
+        require(originalScalars.size <= SourceBrushScalar.MAX_FIELDS) { "Too many source brush scalar settings" }
+        require(originalScalars.keys.all(SourceBrushScalar::validName)) { "Invalid source brush scalar field name" }
         val preservedScalars =
-            brush.parameters.importedSourceScalars.mapValues { (_, scalar) ->
+            originalScalars.mapValues { (_, scalar) ->
                 require(scalar.isValid()) { "Invalid stored source brush scalar" }
                 when (scalar.type) {
                     SourceBrushScalar.Type.BOOLEAN -> scalar.value == "true"

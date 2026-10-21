@@ -15,7 +15,12 @@ data class SourceBrushScalar(
     val value: String,
 ) {
     @Serializable
-    enum class Type { BOOLEAN, INTEGER, REAL, TEXT }
+    enum class Type {
+        BOOLEAN,
+        INTEGER,
+        REAL,
+        TEXT,
+    }
 
     fun isValid(): Boolean {
         if (value.length > MAX_VALUE_LENGTH) return false
@@ -40,8 +45,9 @@ data class SourceBrushScalar(
                 is Byte, is Short, is Int, is Long -> SourceBrushScalar(Type.INTEGER, value.toString())
                 is Float -> value.takeIf { it.isFinite() }?.let { SourceBrushScalar(Type.REAL, it.toString()) }
                 is Double -> value.takeIf { it.isFinite() }?.let { SourceBrushScalar(Type.REAL, it.toString()) }
-                is String -> value.takeIf { it.length <= MAX_VALUE_LENGTH && '\u0000' !in it }
-                    ?.let { SourceBrushScalar(Type.TEXT, it) }
+                is String ->
+                    value.takeIf { it.length <= MAX_VALUE_LENGTH && '\u0000' !in it }
+                        ?.let { SourceBrushScalar(Type.TEXT, it) }
                 else -> null
             }
     }
