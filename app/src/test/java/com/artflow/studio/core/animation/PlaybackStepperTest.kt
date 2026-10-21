@@ -21,10 +21,9 @@ class PlaybackStepperTest {
     }
 
     @Test
-    fun oneShotPlaysForwardOnceEvenWhenTheLegacyPingPongSwitchIsOn() {
-        // Ping-pong without loop was a contradictory pair of switches; it now plays as One shot.
+    fun nonLoopingPingPongReturnsToTheFirstFrameAndStopsAfterItsHold() {
         val state = state(3, AnimationSettings(loop = false, pingPong = true))
-        assertEquals(listOf(0, 1, 2), sequence(state, 10))
+        assertEquals(listOf(0, 1, 2, 1, 0), sequence(state, 10))
     }
 
     @Test

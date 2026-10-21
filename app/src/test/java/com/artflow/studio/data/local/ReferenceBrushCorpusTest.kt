@@ -53,12 +53,23 @@ class ReferenceBrushCorpusTest {
                 val all = listOfNotNull(params, params.dual?.params)
                 components += all.size
                 signed +=
-                    all.count { it.pressureToSize < 0 || it.pressureToOpacity < 0 || it.velocityToSize < 0 || it.velocityToOpacity < 0 }
+                    all.count { brush ->
+                        listOf(
+                            brush.pressureToSize,
+                            brush.pressureToOpacity,
+                            brush.pressureToFlow,
+                            brush.velocityToSize,
+                            brush.velocityToOpacity,
+                        ).any { it < 0f }
+                    }
                 curves +=
-                    all.sumOf { listOfNotNull(it.importedPressure?.overall, it.importedPressure?.size, it.importedPressure?.opacity).size }
+                    all.sumOf { brush ->
+                        brush.importedPressure?.let { listOfNotNull(it.overall, it.size, it.opacity, it.flow).size } ?: 0
+                    }
                 val saved = listOf(SavedBrush("reference-$brushes", "Reference brush $brushes", params))
                 assertEquals(entry.name, saved, BrushLibraryCodec.decode(BrushLibraryCodec.encode(saved)))
                 assertFiniteDynamics(entry.name, all)
+                assertNativeChannelMappings(entry.name, all)
                 brushes++
             }
         }
@@ -92,7 +103,24 @@ class ReferenceBrushCorpusTest {
             for (pressure in listOf(0f, 0.25f, 0.5f, 0.75f, 1f)) {
                 assertTrue(name, brush.calculateEffectiveSize(pressure, 5f).isFinite())
                 assertTrue(name, brush.calculateEffectiveOpacity(pressure, 5f) in 0f..1f)
+                assertTrue(name, brush.flowAt(pressure) in 0f..1f)
             }
+        }
+    }
+
+    /** The decoded reference property/accessor offsets establish these archive aliases. */
+    private fun assertNativeChannelMappings(
+        name: String,
+        brushes: List<BrushParams>,
+    ) {
+        for (brush in brushes) {
+            fun scalar(key: String): Float? = brush.importedSourceScalars[key]?.value?.toFloatOrNull()
+            assertEquals(name, scalar("dynamicsPressureOpacity")?.coerceIn(-1f, 1f) ?: 0f, brush.pressureToFlow, 0f)
+            assertEquals(name, scalar("dynamicsPressureOpacityTransfer")?.coerceIn(-1f, 1f) ?: 0f, brush.pressureToOpacity, 0f)
+            assertEquals(name, scalar("dynamicsMix")?.coerceIn(0f, 1f) ?: 0f, brush.wetDilution, 0f)
+            assertEquals(name, scalar("dynamicsPressureMix")?.coerceIn(0f, 1f) ?: 1f, brush.wetAttack, 0f)
+            val pull = scalar("dynamicsWetAccumulation") ?: scalar("dynamicsSmudgeAccumulation") ?: 0f
+            assertEquals(name, pull.coerceIn(0f, 1f), brush.wetPull, 0f)
         }
     }
 

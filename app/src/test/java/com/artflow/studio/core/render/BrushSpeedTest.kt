@@ -8,7 +8,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Speed dynamics: a positive setting narrows or fades a fast stroke, a negative one enlarges or lifts it. */
+/** Positive speed dynamics reduce fast marks; negative dynamics reduce slow marks. */
 class BrushSpeedTest {
     private val black = 0xFF000000.toInt()
 
@@ -35,17 +35,18 @@ class BrushSpeedTest {
     @Test fun effectiveSizeFollowsSpeedInEitherDirection() {
         val fastest = 10f
         val narrowed = BrushParams(size = 20f, pressureToSize = 0f, velocityToSize = 1f)
-        val enlarged = BrushParams(size = 20f, pressureToSize = 0f, velocityToSize = -1f)
+        val reversed = BrushParams(size = 20f, pressureToSize = 0f, velocityToSize = -1f)
         assertEquals(10f, narrowed.calculateEffectiveSize(1f, fastest), 1e-4f)
-        assertEquals(30f, enlarged.calculateEffectiveSize(1f, fastest), 1e-4f)
-        assertEquals(20f, enlarged.calculateEffectiveSize(1f, 0f), 1e-4f)
+        assertEquals(20f, reversed.calculateEffectiveSize(1f, fastest), 1e-4f)
+        assertEquals(10f, reversed.calculateEffectiveSize(1f, 0f), 1e-4f)
     }
 
     @Test fun effectiveOpacityFollowsSpeedInEitherDirection() {
         val faded = BrushParams(opacity = 0.5f, pressureToOpacity = 0f, velocityToOpacity = 1f)
-        val lifted = BrushParams(opacity = 0.5f, pressureToOpacity = 0f, velocityToOpacity = -1f)
+        val reversed = BrushParams(opacity = 0.5f, pressureToOpacity = 0f, velocityToOpacity = -1f)
         assertEquals(0.35f, faded.calculateEffectiveOpacity(1f, 10f), 1e-4f)
-        assertEquals(0.65f, lifted.calculateEffectiveOpacity(1f, 10f), 1e-4f)
+        assertEquals(0.5f, reversed.calculateEffectiveOpacity(1f, 10f), 1e-4f)
+        assertEquals(0.35f, reversed.calculateEffectiveOpacity(1f, 0f), 1e-4f)
     }
 
     @Test fun reversedSpeedStaysInsideTheStrokeReach() {
@@ -53,11 +54,11 @@ class BrushSpeedTest {
         assertTrue(StrokeReach.of(params) >= params.calculateEffectiveSize(1f, 10f) / 2f)
     }
 
-    @Test fun aFastStrokeGrowsWithReversedSpeed() {
+    @Test fun reversedSpeedKeepsFastMarksLargerThanSlowMarks() {
         val reversed = BrushParams(size = 12f, spacing = 0.05f, pressureToSize = 0f, velocityToSize = -1f)
-        // 7.5 px from the centre line lies outside a slow mark (6 px radius) and inside a fast one (9 px).
-        assertEquals(0, alpha(line(reversed, 300L), 20, 17))
-        assertTrue(alpha(line(reversed, 3L), 20, 17) > 0)
+        // 4.5 px from the centre line lies outside a slow mark (~3 px radius) and inside a fast one (6 px).
+        assertEquals(0, alpha(line(reversed, 300L), 20, 14))
+        assertTrue(alpha(line(reversed, 3L), 20, 14) > 0)
     }
 
     @Test fun aFastStrokeNarrowsWithPositiveSpeed() {

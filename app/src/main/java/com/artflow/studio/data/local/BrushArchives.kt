@@ -11,6 +11,7 @@ import com.artflow.studio.domain.model.brush.DualBrush
 import com.artflow.studio.domain.model.brush.SavedBrush
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.io.InputStream
 import java.util.zip.ZipInputStream
 
@@ -87,6 +88,16 @@ object BrushArchives {
 
     /** Primary brushes, in the set's order, with any Sub01 component attached to its parent. */
     fun read(
+        bytes: ByteArray,
+        decode: (ByteArray) -> PixelBuffer?,
+    ): List<Imported> =
+        try {
+            readContents(bytes, decode)
+        } catch (damaged: IOException) {
+            throw IllegalArgumentException("This brush archive is damaged", damaged)
+        }
+
+    private fun readContents(
         bytes: ByteArray,
         decode: (ByteArray) -> PixelBuffer?,
     ): List<Imported> {

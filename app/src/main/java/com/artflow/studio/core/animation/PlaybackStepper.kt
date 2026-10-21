@@ -9,38 +9,39 @@ object PlaybackStepper {
 
     /** A stopped One shot clip restarts at its first frame when Play is pressed at the end. */
     fun start(state: AnimationTimeline.State): Cursor? {
-        val range = AnimationTimeline.playbackRange(state)
-        if (range.isEmpty() || range.first == range.last) return null
-        val index = state.activeIndex.takeIf { it in range } ?: range.first
-        val restart = PlayMode.of(state.settings) == PlayMode.ONE_SHOT && index == range.last
-        return Cursor(if (restart) range.first else index)
+        val indices = AnimationPlayback.forwardIndices(state)
+        if (indices.size < 2) return null
+        val index = state.activeIndex.takeIf { it in indices } ?: indices.first()
+        val restart = !state.settings.loop && !state.settings.pingPong && index == indices.last()
+        return Cursor(if (restart) indices.first() else index)
     }
 
     /**
-     * Null ends playback after the current frame's hold. One shot makes one forward pass; Ping-pong
-     * bounces between the ends without repeating an endpoint; Loop returns to the first frame.
+     * Null ends playback after the current frame's hold. Ping-pong reverses direction; Loop repeats
+     * the clip. Legacy non-looping ping-pong retains one bounce and the final first-frame hold.
      */
     fun next(
         state: AnimationTimeline.State,
         cursor: Cursor,
     ): Cursor? {
-        val range = AnimationTimeline.playbackRange(state)
-        if (range.isEmpty() || range.first == range.last) return null
-        if (cursor.index !in range) return Cursor(range.first)
-        val mode = PlayMode.of(state.settings)
+        val indices = AnimationPlayback.forwardIndices(state)
+        if (indices.size < 2) return null
+        val position = indices.indexOf(cursor.index)
+        if (position < 0) return Cursor(indices.first())
+        val settings = state.settings
         if (cursor.direction >= 0) {
             return when {
-                cursor.index < range.last -> Cursor(cursor.index + 1)
-                mode == PlayMode.PING_PONG -> Cursor(range.last - 1, -1)
-                mode == PlayMode.LOOP -> Cursor(range.first)
+                position < indices.lastIndex -> Cursor(indices[position + 1])
+                settings.pingPong -> Cursor(indices[indices.lastIndex - 1], -1)
+                settings.loop -> Cursor(indices.first())
                 else -> null
             }
         }
         return when {
-            cursor.index > range.first -> Cursor(cursor.index - 1, -1)
-            mode == PlayMode.ONE_SHOT -> null
-            mode == PlayMode.PING_PONG -> Cursor(range.first + 1)
-            else -> Cursor(range.last, -1)
+            position > 0 -> Cursor(indices[position - 1], -1)
+            !settings.loop -> null
+            settings.pingPong -> Cursor(indices[1])
+            else -> Cursor(indices.last(), -1)
         }
     }
 }

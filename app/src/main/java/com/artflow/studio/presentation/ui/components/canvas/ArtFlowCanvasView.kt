@@ -14,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.math.MathUtils
+import com.artflow.studio.core.animation.AnimationTimeline
 import com.artflow.studio.core.animation.OnionSkin
 import com.artflow.studio.core.animation.OnionSkinTint
 import com.artflow.studio.core.canvas.MotionFilter
@@ -570,9 +571,6 @@ class ArtFlowCanvasView
         private var invalidateJob: Job? = null
         private var onionEnabled = false
         private var onionDirty = true
-
-        /** The animation settings the ghosts were last drawn for; a change to them redraws the ghosts. */
-        private var onionSettingsSeen: AnimationSettings? = null
 
         init {
             setEGLContextClientVersion(2)
@@ -1385,14 +1383,17 @@ class ArtFlowCanvasView
                     val state = canvasRepository.timeline.value
                     onionSettings = state.settings
                     val active = state.activeIndex
-                    val range = state.settings.onionSkinFrames.coerceIn(0, 5)
+                    val neighbours = AnimationTimeline.onionGhosts(state)
+                    val entries = neighbours.previous.asReversed() + neighbours.next.asReversed()
+                    val previewEdge =
+                        kotlin.math
+                            .sqrt(Runtime.getRuntime().maxMemory().toDouble() / (32 * entries.size.coerceAtLeast(1)))
+                            .toFloat()
+                            .coerceIn(64f, 1024f)
                     val ghosts = mutableListOf<Pair<PixelBuffer, Float>>()
-                    for (offset in -range..range) {
-                        if (offset == 0) continue
-                        val index = active + offset
-                        if (index !in state.frames.indices) continue
-                        val frame = canvasRepository.compositeFrame(index, transparentBackground = true) ?: continue
-                        val ratio = (1024f / maxOf(frame.width, frame.height)).coerceAtMost(1f)
+                    for ((index, opacity) in entries) {
+                        val frame = canvasRepository.compositeOnionFrame(index) ?: continue
+                        val ratio = (previewEdge / maxOf(frame.width, frame.height)).coerceAtMost(1f)
                         val preview =
                             if (ratio < 1f) {
                                 withContext(Dispatchers.Default) {
@@ -1404,13 +1405,16 @@ class ArtFlowCanvasView
                             } else {
                                 frame
                             }
-                        val tint = OnionSkin.tint(state.settings, offset)
+                        val tint = OnionSkin.tint(state.settings, index - active)
                         val ghost =
-                            if (tint == null) preview
-                            else withContext(Dispatchers.Default) { OnionSkinTint.silhouette(preview, tint) }
-                        ghosts += ghost to OnionSkin.opacity(state.settings, offset)
+                            if (tint == null) {
+                                preview
+                            } else {
+                                withContext(Dispatchers.Default) { OnionSkinTint.silhouette(preview, tint) }
+                            }
+                        ghosts += ghost to opacity
                     }
-                    renderer.setOnionSkins(ghosts, OnionSkin.primaryOpacity(state.settings))
+                    renderer.setOnionSkins(ghosts, if (ghosts.isEmpty()) 1f else OnionSkin.primaryOpacity(state.settings))
                     requestRender()
                 }
         }

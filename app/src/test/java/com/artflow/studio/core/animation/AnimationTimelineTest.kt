@@ -159,10 +159,10 @@ class AnimationTimelineTest {
     }
 
     @Test
-    fun onionGhostCountIsCappedAtFiveOnEachSide() {
-        val ghosts = AnimationTimeline.onionGhosts(state(12, AnimationSettings(onionSkinFrames = 9), active = 6))
-        assertEquals(listOf(5, 4, 3, 2, 1), ghosts.previous.map { it.first })
-        assertEquals(listOf(7, 8, 9, 10, 11), ghosts.next.map { it.first })
+    fun onionGhostCountIsCappedAtTwelveOnEachSide() {
+        val ghosts = AnimationTimeline.onionGhosts(state(30, AnimationSettings(onionSkinFrames = 99), active = 15))
+        assertEquals((3..14).reversed().toList(), ghosts.previous.map { it.first })
+        assertEquals((16..27).toList(), ghosts.next.map { it.first })
     }
 
     @Test
@@ -183,9 +183,9 @@ class AnimationTimelineTest {
     }
 
     @Test
-    fun onionOpacityIsKeptAboveTheVisibleFloor() {
+    fun zeroOnionOpacityHidesAllGhosts() {
         val ghosts = AnimationTimeline.onionGhosts(state(3, AnimationSettings(onionSkinFrames = 1, onionSkinOpacity = 0f), active = 1))
-        assertGhosts(listOf(0 to 0.05f), ghosts.previous)
+        assertTrue(ghosts.previous.isEmpty() && ghosts.next.isEmpty())
     }
 
     @Test

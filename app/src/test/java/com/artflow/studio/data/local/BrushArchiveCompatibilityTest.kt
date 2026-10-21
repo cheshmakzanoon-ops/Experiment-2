@@ -68,7 +68,7 @@ class BrushArchiveCompatibilityTest {
     @Test fun signedValuesNormalizedAnglesAndIndependentCurvesSurviveParsing() {
         val params = ProcreateBrush.read(primary()).parameters
         assertEquals(-0.75f, params.pressureToSize, 0.00001f)
-        assertEquals(-0.25f, params.pressureToOpacity, 0.00001f)
+        assertEquals(-0.25f, params.pressureToFlow, 0.00001f)
         assertEquals(-0.4f, params.velocityToSize, 0.00001f)
         assertEquals(-0.5f, params.velocityToOpacity, 0.00001f)
         assertEquals(270f, params.rotation, 0.0001f)
@@ -78,13 +78,14 @@ class BrushArchiveCompatibilityTest {
         assertEquals(listOf(0f, 0.2f, 1f), response.overall?.points?.map { it.input })
         assertEquals(0.7f, requireNotNull(response.overall).map(0.2f), 0.00001f)
         assertEquals(0.8f, requireNotNull(response.size).map(0.2f), 0.00001f)
-        assertEquals(0.48f, requireNotNull(response.opacity).map(0.2f), 0.00001f)
+        assertEquals(0.48f, requireNotNull(response.flow).map(0.2f), 0.00001f)
     }
 
     @Test fun malformedCurvesDoNotBecomeNonFiniteDynamics() {
         val params = ProcreateBrush.read(Base64.getDecoder().decode(INVALID_CURVES)).parameters
         assertNull(params.importedPressure?.size)
         assertNull(params.importedPressure?.opacity)
+        assertNull(params.importedPressure?.flow)
         assertTrue(params.calculateEffectiveSize(0.5f).isFinite())
     }
 

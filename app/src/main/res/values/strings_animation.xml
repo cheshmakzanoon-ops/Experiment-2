@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="animation_frame_role">Selected frame</string>
+    <string name="animation_frame_visible">Visible in animation</string>
+    <string name="animation_pins_explanation">Background and foreground drawings stay visible across moving frames. You can pin more than one.</string>
+    <string name="animation_playback_range">Playback and animation export range</string>
+    <string name="animation_range_start">First frame</string>
+    <string name="animation_range_end">Last frame</string>
+    <string name="animation_full_range">Use full timeline</string>
+    <string name="animation_playback_summary">%1$d moving frames · %2$d ms per cycle</string>
+    <string name="animation_no_playable_frames">Show at least one animated frame in this range to export.</string>
+    <string name="animation_previous_color">Previous frame color</string>
+    <string name="animation_next_color">Next frame color</string>
+    <string name="animation_use_color">Use color</string>
+    <string name="animation_cancel">Cancel</string>
+    <string name="animation_hidden">Hidden</string>
+    <string name="animation_export_sequence">Uses the playback range, visible frames and playback direction. Frame holds are preserved.</string>
+</resources>

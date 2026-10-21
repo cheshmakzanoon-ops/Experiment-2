@@ -1,7 +1,7 @@
 package com.artflow.studio.data
 
 import android.content.Context
-import com.artflow.studio.core.canvas.LayerTransform
+import com.artflow.studio.core.pixels.LayerTransform
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.data.local.ProjectStorage

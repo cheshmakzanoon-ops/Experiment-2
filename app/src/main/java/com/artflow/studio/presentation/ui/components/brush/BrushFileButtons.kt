@@ -1,5 +1,6 @@
 package com.artflow.studio.presentation.ui.components.brush
 
+import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
@@ -9,25 +10,31 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.FileProvider
 import com.artflow.studio.R
 import com.artflow.studio.core.export.AbrReader
 import com.artflow.studio.data.local.BrushArchives
+import com.artflow.studio.data.local.BrushFiles
+import com.artflow.studio.data.local.BrushShareFiles
+import com.artflow.studio.data.local.BrushShareFormat
 import com.artflow.studio.data.local.GrainStorage
 import com.artflow.studio.data.renderer.BitmapPixelBridge
-import com.artflow.studio.data.local.BrushFiles
-import com.artflow.studio.data.local.BrushImports
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.SavedBrush
 import com.artflow.studio.domain.model.brush.StudioBrushes
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 
 /** Share the brush being edited as an `.artbrush` or Procreate `.brush` file, or import brushes (ArtFlow, Procreate or Photoshop). */
 @Composable
@@ -40,6 +47,7 @@ internal fun BrushFileButtons(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val latestControls by rememberUpdatedState(controls)
+    var choosingFormat by remember { mutableStateOf(false) }
     val picker =
         rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
             if (uri == null) return@rememberLauncherForActivityResult
@@ -66,26 +74,56 @@ internal fun BrushFileButtons(
                 }
             }
         }
-    TextButton(onClick = {
-        scope.launch {
-            val name = StudioBrushes.presets.firstOrNull { it.parameters == parameters }?.name ?: "Custom brush"
-            val file =
-                withContext(Dispatchers.IO) {
-                    runCatching {
-                        val directory = File(context.filesDir, "exports/brushes").apply { mkdirs() }
-                        File(directory, BrushFiles.fileName(name)).apply {
-                            writeText(BrushFiles.encode(listOf(SavedBrush("shared", name, parameters))))
-                        }
-                    }.getOrNull()
-                }
-            if (file == null) {
-                onFailure(context.getString(R.string.brushfilebuttons_could_not_share))
-            } else {
-                runCatching { share(context, file) }
-            }
-        }
-    }, enabled = enabled) { Text("Share") }
+    TextButton(onClick = { choosingFormat = true }, enabled = enabled) { Text(stringResource(R.string.brush_share_confirm)) }
     TextButton(onClick = { runCatching { picker.launch("*/*") } }, enabled = enabled) { Text("Import") }
+    if (choosingFormat) {
+        BrushShareDialog(
+            isSet = false,
+            onDismiss = { choosingFormat = false },
+            onShare = { format ->
+                choosingFormat = false
+                scope.launch {
+                    val name = StudioBrushes.presets.firstOrNull { it.parameters == parameters }?.name ?: "Custom brush"
+                    if (!shareBrushes(context, name, listOf(SavedBrush("shared", name, parameters)), format)) {
+                        onFailure(context.getString(R.string.brushfilebuttons_could_not_share))
+                    }
+                }
+            },
+        )
+    }
+}
+
+/** Writes the chosen format off the UI thread, then opens the platform chooser on the main thread. */
+internal suspend fun shareBrushes(
+    context: Context,
+    name: String,
+    brushes: List<SavedBrush>,
+    format: BrushShareFormat = BrushShareFormat.ARTFLOW,
+): Boolean {
+    if (brushes.isEmpty()) return false
+    return try {
+        val file =
+            withContext(Dispatchers.IO) {
+                val encoded = BrushShareFiles.encode(name, brushes, format)
+                val directory = File(context.filesDir, "exports/brushes")
+                check(directory.isDirectory || directory.mkdirs()) { "The brush export directory could not be created" }
+                File(directory, encoded.fileName).apply { writeBytes(encoded.bytes) }
+            }
+        withContext(Dispatchers.Main) { share(context, file) }
+        true
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (failed: IOException) {
+        false
+    } catch (failed: IllegalArgumentException) {
+        false
+    } catch (failed: IllegalStateException) {
+        false
+    } catch (failed: ActivityNotFoundException) {
+        false
+    } catch (failed: SecurityException) {
+        false
+    }
 }
 
 /** Procreate `.brush` and `.brushset` files: each brush comes in with its name, settings, shape and grain. */
@@ -113,7 +151,6 @@ private fun importAbr(
 }
 
 private const val MAX_ARCHIVE_BYTES = 64 * 1024 * 1024
-private const val PROCREATE_BRUSH_EXTENSION = "brush"
 
 /** Stores the file's images under their content identities and points the brushes at them. */
 private fun importBrushes(

@@ -3,8 +3,6 @@ package com.artflow.studio.core.perspective
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import kotlin.math.abs
-import kotlin.math.hypot
 
 class SquareGridTest {
     private val grid = PerspectiveGuide.Settings(type = PerspectiveGuide.GuideType.GRID, gridSpacing = 100, snapRadius = 24f)

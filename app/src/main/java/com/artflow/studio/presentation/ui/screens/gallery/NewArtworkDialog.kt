@@ -89,7 +89,7 @@ internal fun NewArtworkHost(
 ) {
     NewArtworkDialog(
         defaultPresetName = settings.defaultPresetName,
-        saved = settings.canvasPresets,
+        saved = settings.savedCanvasPresets,
         onDismiss = onDismiss,
         onSavePreset = viewModel::saveCanvasPreset,
         onDeletePreset = viewModel::deleteCanvasPreset,

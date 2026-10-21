@@ -23,6 +23,7 @@ import com.artflow.studio.core.export.ExportOptions
 import com.artflow.studio.core.export.ExportResult
 import com.artflow.studio.core.export.FitMode
 import com.artflow.studio.core.export.GifEncoder
+import com.artflow.studio.core.export.LayerMaskExport
 import com.artflow.studio.core.export.PdfPageSize
 import com.artflow.studio.core.export.ProcreateWriter
 import com.artflow.studio.core.export.PsdCodec
@@ -30,7 +31,6 @@ import com.artflow.studio.core.export.PsdFolders
 import com.artflow.studio.core.export.TiffCodec
 import com.artflow.studio.core.pixels.BlendModes
 import com.artflow.studio.core.pixels.PixelBuffer
-import com.artflow.studio.core.render.LayerGroups
 import com.artflow.studio.core.three.ObjExport
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.renderer.BitmapPixelBridge
@@ -88,6 +88,7 @@ class ArtworkExporter
             options: ExportOptions,
             hasAdjustmentLayers: Boolean = false,
             groups: List<Layer> = emptyList(),
+            layerMasks: Map<Long, PixelBuffer> = emptyMap(),
         ): Result<ExportResult> =
             withContext(Dispatchers.Default) {
                 try {
@@ -107,6 +108,7 @@ class ArtworkExporter
 
                     val prepared = prepare(composite, targetWidth, targetHeight, options)
                     val fileName = ExportNaming.fileName(projectName, options)
+                    var resizedPsdMasks = false
 
                     val bytes: ByteArray =
                         when (options.format) {
@@ -137,7 +139,9 @@ class ArtworkExporter
                             }
 
                             ExportFormat.PSD -> {
-                                buildPsd(prepared, layers, options, hasAdjustmentLayers, groups)
+                                val document = buildPsd(prepared, layers, options, hasAdjustmentLayers, groups, layerMasks)
+                                resizedPsdMasks = document.resizedMasks
+                                document.bytes
                             }
 
                             ExportFormat.TIFF -> {
@@ -173,10 +177,16 @@ class ArtworkExporter
                             width = prepared.width,
                             height = prepared.height,
                             warning =
-                                if (layeredDocument(options.format) && hasAdjustmentLayers) {
-                                    "Adjustment/filter effects are baked into Artwork; original pixel layers are included hidden."
-                                } else {
-                                    null
+                                when {
+                                    resizedPsdMasks && hasAdjustmentLayers ->
+                                        "Resized masks and adjustment/filter effects are rendered into Artwork; " +
+                                            "editable layers and masks are included hidden."
+                                    resizedPsdMasks ->
+                                        "Resized masks are rendered into Artwork to preserve appearance; " +
+                                            "editable layers and masks are included hidden."
+                                    layeredDocument(options.format) && hasAdjustmentLayers ->
+                                        "Adjustment/filter effects are baked into Artwork; original pixel layers are included hidden."
+                                    else -> null
                                 },
                         )
                     Timber.d("Exported ${options.format} (${result.sizeLabel}) to ${file.name}")
@@ -216,7 +226,9 @@ class ArtworkExporter
                         )
                     }
 
-                    require(frames.size <= ProjectStorage.MAX_FRAMES) { "Too many frames to export" }
+                    // A finite ping-pong clip returns to, and holds, the first frame before stopping.
+                    require(frames.size <= ProjectStorage.MAX_FRAMES * 2 - 1) { "Too many frames to export" }
+                    require(delaysMs.size == frames.size) { "Every animation frame must have a duration" }
                     require(targetWidth.toLong() * targetHeight * 4L * frames.size <= Runtime.getRuntime().maxMemory() / 4) {
                         "The animation is too large for this device; reduce the output scale"
                     }
@@ -415,16 +427,37 @@ class ArtworkExporter
             }
         }
 
+        private data class PsdOutput(
+            val bytes: ByteArray,
+            val resizedMasks: Boolean,
+        )
+
         private fun buildPsd(
             composite: PixelBuffer,
             layers: List<LayerRaster>,
             options: ExportOptions,
             hasAdjustmentLayers: Boolean,
             groups: List<Layer>,
-        ): ByteArray {
+            layerMasks: Map<Long, PixelBuffer>,
+        ): PsdOutput {
+            var resizedMasks = false
+
             fun shown(layer: Layer) = !hasAdjustmentLayers && (options.includeHiddenLayers || layer.isVisible)
 
             fun opacity(layer: Layer) = (layer.opacity * 255f).roundToInt().coerceIn(0, 255)
+
+            fun mask(layer: Layer): PsdCodec.PsdMask? =
+                layerMasks[layer.id]?.let { coverage ->
+                    if (layer.maskEnabled &&
+                        LayerMaskExport.requiresResampling(coverage, composite.width, composite.height, options.fitMode)
+                    ) {
+                        resizedMasks = true
+                    }
+                    LayerMaskExport.psd(
+                        LayerMaskExport.resize(coverage, composite.width, composite.height, options.fitMode),
+                        layer.maskEnabled,
+                    )
+                }
             val psdLayers =
                 PsdFolders
                     .records(
@@ -433,7 +466,9 @@ class ArtworkExporter
                         groups = groups,
                         includeHidden = options.includeHiddenLayers,
                         header = { group ->
-                            PsdCodec.PsdLayer.groupHeader(group.name, opacity(group), shown(group), PsdFolders.headerBlend(group))
+                            PsdCodec.PsdLayer
+                                .groupHeader(group.name, opacity(group), shown(group), PsdFolders.headerBlend(group))
+                                .copy(mask = mask(group))
                         },
                     ) { entry ->
                         PsdCodec.PsdLayer(
@@ -443,10 +478,17 @@ class ArtworkExporter
                             isVisible = shown(entry.layer),
                             blendMode = entry.layer.blendMode,
                             isClippingMask = entry.layer.isClippingMask,
+                            mask = mask(entry.layer),
                         )
                     }.toMutableList()
-            if (hasAdjustmentLayers) {
-                psdLayers += PsdCodec.PsdLayer("Artwork (rendered effects)", flatten(composite, options))
+            if (resizedMasks) {
+                // The separately resized paint and mask remain editable, but their interpolation
+                // can expose hidden paint. Only the correctly resized composite is shown.
+                for (index in psdLayers.indices) psdLayers[index] = psdLayers[index].copy(isVisible = false)
+            }
+            if (hasAdjustmentLayers || resizedMasks) {
+                val name = if (resizedMasks) "Artwork (resized masks)" else "Artwork (rendered effects)"
+                psdLayers += PsdCodec.PsdLayer(name, flatten(composite, options))
             } else if (options.flattenOntoBackground) {
                 psdLayers.add(
                     0,
@@ -456,13 +498,16 @@ class ArtworkExporter
                     ),
                 )
             }
-            return PsdCodec.write(
-                width = composite.width,
-                height = composite.height,
-                layers = psdLayers,
-                composite = flatten(composite, options),
-                dpi = options.dpi,
-                useRle = options.psdUseRle,
+            return PsdOutput(
+                PsdCodec.write(
+                    width = composite.width,
+                    height = composite.height,
+                    layers = psdLayers,
+                    composite = flatten(composite, options),
+                    dpi = options.dpi,
+                    useRle = options.psdUseRle,
+                ),
+                resizedMasks,
             )
         }
 

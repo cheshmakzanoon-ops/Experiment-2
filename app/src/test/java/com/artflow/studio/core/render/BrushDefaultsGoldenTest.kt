@@ -15,9 +15,9 @@ import kotlin.math.sin
 /**
  * Pins the pixels brushes paint with the settings that existed before wet-mix, rendering-mode and
  * path-jitter fields were added. A brush that leaves the newer fields at their defaults must keep
- * painting exactly these pixels. The constants were captured from the engine before those fields existed,
- * then recaptured once after the October audit merge, which deliberately changed default output (dab spacing
- * follows each dab's diameter; round and elliptical tips have an anti-aliased rim).
+ * painting exactly these pixels. The constants pin the base codebase at adf0bc7208974f1579095ea5a890b7c1375f02f9,
+ * independently compiled from Git before accepting the native brush mapping changes. Its renderer already
+ * disagreed with the earlier constants; see docs/BRUSH_BASELINE_VALIDATION_2026-10-21.md for the comparison.
  */
 class BrushDefaultsGoldenTest {
     private val width = 180
@@ -63,7 +63,7 @@ class BrushDefaultsGoldenTest {
             val params = preset.parameters.copy(size = preset.parameters.size.coerceAtMost(28f))
             combined = 31 * combined + paintedHash(params)
         }
-        assertEquals(4869832796849639109L, combined)
+        assertEquals(-2657600560538100551L, combined)
     }
 
     @Test
@@ -109,12 +109,12 @@ class BrushDefaultsGoldenTest {
                 )
             combined = 31 * combined + paintedHash(params)
         }
-        assertEquals(-7086734929218753221L, combined)
+        assertEquals(6912832811445097011L, combined)
     }
 
     @Test
     fun eraserStrokesPaintTheCapturedPixels() {
         val eraser = stroke(BrushParams(size = 14f, spacing = 0.1f, flow = 0.5f, wetMix = 0f)).copy(isEraser = true)
-        assertEquals(6766843957270658821L, fingerprint(layer.copy().also { StrokeRasterizer().draw(it, eraser) }.pixels))
+        assertEquals(2947699143526432517L, fingerprint(layer.copy().also { StrokeRasterizer().draw(it, eraser) }.pixels))
     }
 }

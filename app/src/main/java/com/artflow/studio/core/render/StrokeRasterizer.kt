@@ -10,7 +10,6 @@ import com.artflow.studio.core.pixels.Stamping
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.DualBrush
 import com.artflow.studio.domain.model.brush.GrainBlend
-import com.artflow.studio.domain.model.brush.RenderingMode
 import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.model.brush.StrokePoint
 import com.artflow.studio.domain.model.layer.BlendMode
@@ -511,7 +510,7 @@ class StrokeRasterizer(
         val sizeTilt = params.tiltInfluence.coerceIn(0f, 1f) * tilt
         val opacityTilt = (params.tiltOpacityInfluence ?: params.tiltInfluence).coerceIn(0f, 1f) * tilt
         val size = params.calculateEffectiveSize(pressure, velocity, random) * (1f + TILT_SIZE_GAIN * sizeTilt)
-        val baseOpacity = params.calculateEffectiveOpacity(pressure, velocity, random) * params.flow.coerceIn(0f, 1f)
+        val baseOpacity = params.calculateEffectiveOpacity(pressure, velocity, random) * params.flowAt(pressure)
         val opacity = baseOpacity * (1f - TILT_OPACITY_LOSS * opacityTilt)
 
         // Tapering thins the stroke over the first and last portion of its length.
@@ -530,7 +529,21 @@ class StrokeRasterizer(
         val colorRandom = if (params.colorJitterPerStroke) Random(strokeColorSeed(stroke.id)) else random
         val fresh = params.applyColorJitter(stroke.color, pressure, velocity, colorRandom, stroke.secondaryColor, tilt)
         val loaded = walk.carried?.let { carried -> carriedColor(fresh, carried, params) } ?: fresh
-        val color = wetColor(context, loaded, x, y, wetPickup(params), params.wetBlur.coerceIn(0f, 1f) * params.size / 2f)
+        val color =
+            if (params.picksUpCanvas || params.dilution > 0f) {
+                val wetSample =
+                    WetBrushPickup.Sample(
+                        x,
+                        y,
+                        if (distance > 0f) (current.x - previous.x) / distance else 0f,
+                        if (distance > 0f) (current.y - previous.y) / distance else 0f,
+                        accumulatedDistance,
+                        pressure,
+                    )
+                WetBrushPickup.color(params, context.canvas, loaded, wetSample, random)
+            } else {
+                loaded
+            }
         walk.carried = color
 
         // Scatter offsets each dab; count repeats it along a random perpendicular offset.
@@ -587,12 +600,6 @@ class StrokeRasterizer(
         return turned.copy(image = { u, v -> image(if (flipX) 1f - u else u, if (flipY) 1f - v else v) })
     }
 
-    /** Wet mix, raised by dilution: watery paint picks up more of the layer. */
-    private fun wetPickup(params: BrushParams): Float {
-        val wetMix = params.wetMix.coerceIn(0f, 1f)
-        return wetMix + (1f - wetMix) * DILUTION_PICKUP * params.dilution.coerceIn(0f, 1f)
-    }
-
     /** The fresh colour mixed toward the paint still on the brush; alpha stays the fresh colour's. */
     private fun carriedColor(
         fresh: Int,
@@ -605,59 +612,6 @@ class StrokeRasterizer(
         val amount = pull.toDouble().pow(params.spacing.coerceIn(MIN_PULL_STEP, 1f).toDouble()).toFloat()
         val mixed = ImageFilters.lerpArgb(fresh or 0xFF000000.toInt(), carried or 0xFF000000.toInt(), amount)
         return (fresh and 0xFF000000.toInt()) or (mixed and 0x00FFFFFF)
-    }
-
-    /**
-     * Wet mix: the dab takes up the paint already on the layer and mixes it into its own colour. Each
-     * step reads only the dab's own sample of the canvas and its position on the path, so live frames,
-     * full redraws and region renders agree. With no wet mix field set, the colour is returned unchanged.
-     *
-     * - Pickup, from Wetness ([BrushParams.wetMix]) and Bleed, leans the colour toward the canvas in
-     *   proportion to that canvas's opacity at the sample.
-     * - Attack ([pickupRamp]) scales pickup in from the stroke's start.
-     * - Pull moves the sample back along the path; blur averages the canvas around it ([canvasUnder]).
-     * - Charge below one leans the colour toward the canvas further, even with no pickup from Wetness.
-     * - Dilution leans the colour toward the canvas and removes the same share of the dab's alpha.
-     */
-    private fun wetColor(
-        context: DabContext,
-        color: Int,
-        x: Float,
-        y: Float,
-        wetMix: Float,
-        blurReach: Float = 0f,
-    ): Int {
-        val canvas = context.canvas ?: return color
-        if (wetMix <= 0f) return color
-        val under = if (blurReach >= 1f) blurredUnder(canvas, x, y, blurReach) else canvas.getSafe(floor(x).toInt(), floor(y).toInt())
-        val pickup = wetMix.coerceIn(0f, 1f) * WET_PICKUP * ((under ushr 24) / 255f)
-        if (pickup <= 0f) return color
-        val mixed = ImageFilters.lerpArgb(color or 0xFF000000.toInt(), under or 0xFF000000.toInt(), pickup)
-        return (color and 0xFF000000.toInt()) or (mixed and 0x00FFFFFF)
-    }
-
-    /** Wet Mix Blur: the paint under the dab averaged with four points [reach] pixels around it. */
-    private fun blurredUnder(
-        canvas: PixelBuffer,
-        x: Float,
-        y: Float,
-        reach: Float,
-    ): Int {
-        var a = 0f
-        var r = 0f
-        var g = 0f
-        var b = 0f
-        for ((dx, dy) in BLUR_TAPS) {
-            val p = canvas.getSafe(floor(x + dx * reach).toInt(), floor(y + dy * reach).toInt())
-            val alpha = (p ushr 24) / 255f
-            a += alpha
-            r += ((p shr 16) and 0xFF) * alpha
-            g += ((p shr 8) and 0xFF) * alpha
-            b += (p and 0xFF) * alpha
-        }
-        if (a <= 0f) return 0
-        val count = BLUR_TAPS.size
-        return Channels.argb((a / count * 255f).roundToInt(), (r / a).roundToInt(), (g / a).roundToInt(), (b / a).roundToInt())
     }
 
     /**
@@ -681,7 +635,7 @@ class StrokeRasterizer(
     ): Boolean =
         params.spacing <= 0f &&
             params.roundness >= 1f &&
-            params.wetMix <= 0f &&
+            !params.picksUpCanvas &&
             params.dilution <= 0f &&
             params.pull <= 0f &&
             params.tiltInfluence <= 0f &&
@@ -720,8 +674,8 @@ class StrokeRasterizer(
     ) {
         val startSize = params.calculateEffectiveSize(start.pressure, random = random)
         val endSize = params.calculateEffectiveSize(end.pressure, random = random)
-        val startAlpha = params.calculateEffectiveOpacity(start.pressure, random = random) * params.flow.coerceIn(0f, 1f)
-        val endAlpha = params.calculateEffectiveOpacity(end.pressure, random = random) * params.flow.coerceIn(0f, 1f)
+        val startAlpha = params.calculateEffectiveOpacity(start.pressure, random = random) * params.flowAt(start.pressure)
+        val endAlpha = params.calculateEffectiveOpacity(end.pressure, random = random) * params.flowAt(end.pressure)
         val averageAlpha = (startAlpha + endAlpha) / 2f
         val color =
             params.applyColorJitter(
@@ -968,14 +922,8 @@ private const val DUAL_SEED = 7919L
 /** How dark a burnt rim gets at full Burnt Edges, as a share of the colour. */
 private const val BURNT_DEPTH = 0.6f
 
-/** How much of the paint under a dab a fully wet brush picks up. */
-private const val WET_PICKUP = 0.6f
-
 /** Fully diluted paint keeps a quarter of its opacity. */
 private const val DILUTION_THINNING = 0.75f
-
-/** Fully diluted paint with no wet mix picks up as much as half wet mix does. */
-private const val DILUTION_PICKUP = 0.5f
 
 /** Spacing below this still counts as this step, so very dense brushes keep some pull. */
 private const val MIN_PULL_STEP = 0.01f
@@ -994,14 +942,8 @@ private const val FALLOFF_RANGE = 39f
 /** Degrees in a full turn, for a randomized tip angle. */
 private const val FULL_TURN = 360f
 
-/** Where Wet Mix Blur samples the layer: the dab's centre and four points around it. */
-private val BLUR_TAPS = listOf(0f to 0f, 1f to 0f, -1f to 0f, 0f to 1f, 0f to -1f)
-
 /** Tip sharpness at full raises the taper ramp to this extra power. */
 private const val SHARPNESS_CURVE = 3f
-
-/** Renderings the single-capsule fast path reproduces exactly. */
-private val CAPSULE_RENDERINGS = setOf(RenderingMode.LIGHT_GLAZE, RenderingMode.UNIFORM_BLENDING)
 
 /**
  * A well-mixed seed for a stroke's own colour sequence (SplitMix64's finaliser). Stroke ids count

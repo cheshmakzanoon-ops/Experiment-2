@@ -30,9 +30,23 @@ class BrushLimitsTest {
     @Test
     fun fingerStrokesUseTheTouchTaper() {
         val brush = BrushParams(taperStart = 0.1f, taperEnd = 0.2f)
-        assertEquals(brush, brush.forTouch())
+        assertEquals(brush.taperStart, brush.forTouch().taperStart, 0f)
+        assertEquals(brush.taperEnd, brush.forTouch().taperEnd, 0f)
         val touch = brush.copy(touchTaperStart = 0.5f).forTouch()
         assertEquals(0.5f, touch.taperStart, 0f)
         assertEquals(0.2f, touch.taperEnd, 0f)
+    }
+
+    @Test
+    fun aFingerStrokeDoesNotRunInversePenPressureOrItsCompoundComponent() {
+        val secondary = BrushParams(pressureToFlow = -1f, pressureToSize = -1f)
+        val original = BrushParams(pressureToFlow = -1f, dual = DualBrush(secondary))
+        val finger = original.forTouch()
+        assertEquals(0f, finger.pressureToFlow, 0f)
+        assertEquals(original.flow, finger.flowAt(1f), 0f)
+        assertEquals(secondary.flow, requireNotNull(finger.dual).params.flowAt(1f), 0f)
+        assertEquals(secondary.size, finger.dual.params.calculateEffectiveSize(1f), 0f)
+        // Taking a finger-specific copy never edits the saved pen brush.
+        assertEquals(-1f, original.pressureToFlow, 0f)
     }
 }

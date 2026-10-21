@@ -1,6 +1,8 @@
 package com.artflow.studio.domain.model.animation
 
 import com.artflow.studio.domain.model.layer.Layer
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 
 /**
@@ -36,6 +38,7 @@ data class AnimationFrame(
 }
 
 /** Playback and onion-skinning configuration (Phases 43-44). */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class AnimationSettings(
     val fps: Int = 12,
@@ -61,6 +64,17 @@ data class AnimationSettings(
     val backgroundFrame: Boolean = false,
     /** Animation Assist's Foreground: the last frame stays in front of every other frame. */
     val foregroundFrame: Boolean = false,
+    /**
+     * Stable identities allow multiple pins. Omit empty additions even with encodeDefaults enabled:
+     * older signed documents must re-encode identically when their checksum is verified.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val backgroundFrameIds: Set<Long> = emptySet(),
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val foregroundFrameIds: Set<Long> = emptySet(),
+    /** Hidden frames stay editable and saved, but are omitted from playback, ghosts and animation export. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val hiddenFrameIds: Set<Long> = emptySet(),
 ) {
     /** Milliseconds a single frame is displayed, derived from [fps]. */
     val frameDurationMs: Int get() = (1000f / fps.coerceIn(1, 60)).toInt().coerceAtLeast(16)
@@ -68,7 +82,7 @@ data class AnimationSettings(
     companion object {
         const val MIN_FPS = 1
         const val MAX_FPS = 60
-        const val MAX_ONION_SKIN_FRAMES = 5
+        const val MAX_ONION_SKIN_FRAMES = 12
     }
 }
 

@@ -1,0 +1,3 @@
+<resources>
+    <string name="export_psd_masks">Layer and folder masks stay editable at the original pixel size. When masked artwork is resized, a rendered Artwork layer preserves its appearance; editable layers and masks are included hidden.</string>
+</resources>

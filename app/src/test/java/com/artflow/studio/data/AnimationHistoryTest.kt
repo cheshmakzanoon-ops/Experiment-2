@@ -11,6 +11,8 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.mockito.Mockito.mock
@@ -53,7 +55,10 @@ class AnimationHistoryTest {
             repository.addFrame(false)
             val defaults = repository.timeline.value.settings
             repository.updateAnimationSettings(defaults.copy(fps = 24))
-            repository.updateAnimationSettings(repository.timeline.value.settings.copy(onionSkinOpacity = 0.7f))
+            repository.updateAnimationSettings(
+                repository.timeline.value.settings
+                    .copy(onionSkinOpacity = 0.7f),
+            )
             repository.undo()
             val restored = repository.timeline.value.settings
             assertEquals(defaults.fps, restored.fps)
@@ -75,5 +80,79 @@ class AnimationHistoryTest {
             repository.undo()
             assertEquals(original, repository.frames()[0].durationMs)
             assertEquals(2, repository.frames().size)
+        }
+
+    @Test fun framePinsAndVisibilitySurviveReorderUndoAndRedoByIdentity() =
+        runTest {
+            repository.createCanvas(8, 6, 72)
+            repository.addFrame(false)
+            repository.addFrame(false)
+            val ids = repository.frames().map { it.id }
+            repository.updateAnimationSettings(
+                repository.timeline.value.settings
+                    .copy(backgroundFrameIds = setOf(ids[0]), hiddenFrameIds = setOf(ids[1])),
+            )
+            val before = repository.timeline.value
+            assertTrue(repository.moveFrame(0, 2))
+            assertEquals(listOf(ids[1], ids[2], ids[0]), repository.frames().map { it.id })
+            assertEquals(before.settings, repository.timeline.value.settings)
+            assertTrue(repository.undo())
+            assertEquals(before, repository.timeline.value)
+            assertTrue(repository.redo())
+            assertEquals(before.settings, repository.timeline.value.settings)
+        }
+
+    @Test fun deletingAPinPrunesItsSettingsAndUndoRestoresThem() =
+        runTest {
+            repository.createCanvas(8, 6, 72)
+            repository.addFrame(false)
+            repository.addFrame(false)
+            val ids = repository.frames().map { it.id }
+            repository.updateAnimationSettings(
+                repository.timeline.value.settings
+                    .copy(backgroundFrameIds = setOf(ids[0], ids[1]), hiddenFrameIds = setOf(ids[0])),
+            )
+            val before = repository.timeline.value
+            assertTrue(repository.deleteFrame(0))
+            assertEquals(setOf(ids[1]), repository.timeline.value.settings.backgroundFrameIds)
+            assertTrue(
+                repository.timeline.value.settings.hiddenFrameIds
+                    .isEmpty(),
+            )
+            assertTrue(repository.undo())
+            assertEquals(before, repository.timeline.value)
+        }
+
+    @Test fun legacyPinsDoNotJumpToTheNewLastFrameWhenAddingADrawing() =
+        runTest {
+            repository.createCanvas(8, 6, 72)
+            repository.addFrame(false)
+            val pinned = repository.frames().last().id
+            repository.updateAnimationSettings(
+                repository.timeline.value.settings
+                    .copy(foregroundFrame = true),
+            )
+            repository.addFrame(false)
+            val settings = repository.timeline.value.settings
+            assertFalse(settings.foregroundFrame)
+            assertEquals(setOf(pinned), settings.foregroundFrameIds)
+            assertFalse(repository.frames().last().id in settings.foregroundFrameIds)
+        }
+
+    @Test fun tintAndPrimaryBlendAreViewingPreferencesThatSurviveUndo() =
+        runTest {
+            repository.createCanvas(8, 6, 72)
+            repository.addFrame(false)
+            repository.undo()
+            val depth = repository.undoDepth
+            repository.updateAnimationSettings(
+                repository.timeline.value.settings
+                    .copy(onionSkinTinted = true, blendPrimaryFrame = true),
+            )
+            assertEquals(depth, repository.undoDepth)
+            assertEquals(1, repository.redoDepth)
+            assertTrue(repository.redo())
+            assertTrue(repository.timeline.value.settings.onionSkinTinted)
+            assertTrue(repository.timeline.value.settings.blendPrimaryFrame)
         }
 }

@@ -119,7 +119,11 @@ object AnimationTimeline {
         val frames = state.frames.toMutableList()
         val target = index.coerceIn(0, frames.size)
         frames.add(target, frame)
-        return state.copy(frames = frames, activeIndex = target)
+        return state.copy(
+            frames = frames,
+            activeIndex = target,
+            settings = AnimationPlayback.materializePins(state.frames.map { it.id }, state.settings),
+        )
     }
 
     /** Deletes the frame at [index]. The last remaining frame can never be deleted. */
@@ -136,7 +140,12 @@ object AnimationTimeline {
                 index == state.activeIndex -> index.coerceAtMost(frames.lastIndex)
                 else -> state.activeIndex
             }
-        return state.copy(frames = frames, activeIndex = active)
+        val pinned = AnimationPlayback.materializePins(state.frames.map { it.id }, state.settings)
+        return state.copy(
+            frames = frames,
+            activeIndex = active,
+            settings = AnimationPlayback.materializePins(frames.map { it.id }, pinned),
+        )
     }
 
     /** Moves a frame from [from] to [to] and keeps the moved frame active. */
@@ -151,7 +160,11 @@ object AnimationTimeline {
         val frames = state.frames.toMutableList()
         val frame = frames.removeAt(from)
         frames.add(target, frame)
-        return state.copy(frames = frames, activeIndex = target)
+        return state.copy(
+            frames = frames,
+            activeIndex = target,
+            settings = AnimationPlayback.materializePins(state.frames.map { it.id }, state.settings),
+        )
     }
 
     /** Adds a layer to every frame (used by "add a persistent background"). */
@@ -262,26 +275,13 @@ object AnimationTimeline {
      * active one has `opacity / n`, so ghosts fade the further they sit from it.
      */
     fun onionGhosts(state: State): OnionSkin {
-        if (state.frames.isEmpty()) return OnionSkin(emptyList(), emptyList())
-        val count = state.settings.onionSkinFrames.coerceIn(0, AnimationSettings.MAX_ONION_SKIN_FRAMES)
-        if (count == 0) return OnionSkin(emptyList(), emptyList())
-
-        val baseOpacity = state.settings.onionSkinOpacity.coerceIn(0.05f, 1f)
-        val previous = mutableListOf<Pair<Int, Float>>()
-        val next = mutableListOf<Pair<Int, Float>>()
-
-        for (offset in 1..count) {
-            val before = state.activeIndex - offset
-            if (before >= 0) {
-                // Older frames fade out faster.
-                previous += before to (baseOpacity / offset)
-            }
-            val after = state.activeIndex + offset
-            if (after <= state.frames.lastIndex) {
-                next += after to (baseOpacity / offset)
-            }
-        }
-        return OnionSkin(previous, next)
+        val baseOpacity = state.settings.onionSkinOpacity.coerceIn(0f, 1f)
+        if (baseOpacity == 0f) return OnionSkin(emptyList(), emptyList())
+        val (before, after) = AnimationPlayback.ghostIndices(state)
+        return OnionSkin(
+            before.mapIndexed { rank, index -> index to (baseOpacity / (rank + 1)) },
+            after.mapIndexed { rank, index -> index to (baseOpacity / (rank + 1)) },
+        )
     }
 
     /** Frame names for the timeline strip; ensures they stay unique after edits. */

@@ -13,6 +13,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.data.export.ArtworkExporter
+import com.artflow.studio.data.export.TimelapseRecorder
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.domain.model.Project
 import com.artflow.studio.domain.model.settings.AppSettings
@@ -60,6 +61,8 @@ class StudioWorkspaceUiTest {
 
     @Inject lateinit var exporter: ArtworkExporter
 
+    @Inject lateinit var timelapse: TimelapseRecorder
+
     @Inject lateinit var storage: ProjectStorage
 
     private lateinit var viewModel: CanvasViewModel
@@ -69,7 +72,7 @@ class StudioWorkspaceUiTest {
     @Before fun setup() {
         hilt.inject()
         projectId = runBlocking { projects.saveProject(Project(0L, "Evening study", "", null, 256, 256, 72, 1L, 1L)) }
-        runBlocking(Dispatchers.Main) { viewModel = CanvasViewModel(canvas, projects, settings, exporter) }
+        runBlocking(Dispatchers.Main) { viewModel = CanvasViewModel(canvas, projects, settings, exporter, timelapse) }
     }
 
     private fun setEditorContent(content: @Composable () -> Unit) {

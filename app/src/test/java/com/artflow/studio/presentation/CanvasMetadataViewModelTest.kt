@@ -2,6 +2,7 @@ package com.artflow.studio.presentation
 
 import androidx.lifecycle.viewModelScope
 import com.artflow.studio.core.canvas.CanvasOperations
+import com.artflow.studio.core.canvas.StylusAction
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.data.export.ArtworkExporter
@@ -38,6 +39,33 @@ import org.mockito.Mockito.`when`
 /** The real repository's metadata notifications must reach the state used by the exit dialog. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class CanvasMetadataViewModelTest {
+    @Test
+    fun savedInputSwitchesReachTheEditorWithoutReplacingItsTool() =
+        runTest {
+            Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+            val fixture =
+                Fixture(
+                    AppSettings(
+                        autosaveEnabled = false,
+                        quickShape = false,
+                        touchHoldEyedropper = false,
+                        stylusSecondaryButton = StylusAction.UNDO,
+                    ),
+                )
+            try {
+                fixture.viewModel.setTool(ToolType.ERASER)
+                runCurrent()
+                val input = fixture.viewModel.input.value
+                assertFalse(input.quickShape)
+                assertFalse(input.touchHoldEyedropper)
+                assertEquals(StylusAction.UNDO, input.stylus.secondary)
+                assertEquals(ToolType.ERASER, input.tool)
+            } finally {
+                fixture.close()
+                Dispatchers.resetMain()
+            }
+        }
+
     @Test
     fun dpiOnlyEditEnablesSaveWarningAndUndoWithoutAPixelEdit() =
         runTest {
@@ -267,7 +295,9 @@ class CanvasMetadataViewModelTest {
         }
     }
 
-    private class Fixture {
+    private class Fixture(
+        storedSettings: AppSettings = AppSettings(autosaveEnabled = false),
+    ) {
         private val storage =
             mock(ProjectStorage::class.java) { call ->
                 when (call.method.name) {
@@ -285,7 +315,7 @@ class CanvasMetadataViewModelTest {
             }
         private val settings =
             mock(SettingsRepository::class.java).also {
-                `when`(it.settings).thenReturn(flowOf(AppSettings(autosaveEnabled = false)))
+                `when`(it.settings).thenReturn(flowOf(storedSettings))
             }
         val viewModel =
             CanvasViewModel(

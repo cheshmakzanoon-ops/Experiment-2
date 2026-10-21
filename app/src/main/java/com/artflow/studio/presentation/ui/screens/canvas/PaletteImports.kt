@@ -12,11 +12,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
-import com.artflow.studio.core.color.Palette
 import com.artflow.studio.R
+import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.color.PaletteCodec
 import com.artflow.studio.core.color.PaletteExtractor
-import com.artflow.studio.core.color.ProcreateSwatches
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -94,8 +93,8 @@ fun rememberPaletteImports(
             onError = onError,
         )
     return PaletteImports(
-        fromFile = { launchSafely(onError) { file.launch(arrayOf("*/*")) } },
-        fromPhoto = { launchSafely(onError) { photo.launch("image/*") } },
+        fromFile = { launchSafely(onError, noPickerMessage) { file.launch(arrayOf("*/*")) } },
+        fromPhoto = { launchSafely(onError, noPickerMessage) { photo.launch("image/*") } },
         fromCamera = camera,
         share = { palette ->
             scope.launch {
@@ -126,7 +125,9 @@ private fun sharePaletteFile(
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-    launchSafely(onError) { context.startActivity(Intent.createChooser(send, "Share palette")) }
+    launchSafely(onError, context.getString(R.string.paletteimports_could_not_share)) {
+        context.startActivity(Intent.createChooser(send, "Share palette"))
+    }
 }
 
 /** A file name for the palette called [name] that is safe on every platform. */

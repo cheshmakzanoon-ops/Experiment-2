@@ -8,12 +8,11 @@ import java.util.Base64
 object BrushLibraryCodec {
     const val MAX_BRUSHES = 128
     const val MAX_NAME = 80
+
     // 128 source-preserving brushes can include ~200 metadata scalars each.
     // Still bounded: per-field and per-library validation prevents unbounded allocations.
     private const val MAX_CHARACTERS = 3_145_728
 
-    /** The rasterizer repeats each dab at most this many times; Procreate's Count reaches 16. */
-    private const val MAX_DAB_COUNT = 32
     private val GRAIN_IDS = setOf(null, "paper", "charcoal", "canvas", "fine", "blotch", "bristle", "halftone", "hatch", "speckle")
 
     /** Grains imported from photos; their tiles live beside the library. */
@@ -54,8 +53,11 @@ object BrushLibraryCodec {
     }
 
     private fun validateParameters(params: BrushParams) {
-        require(params.size in 1f..512f && params.spacing in 0.01f..1f) { "Unsupported brush size or spacing" }
-        require(params.count in 1..16 && params.scatter in 0f..2f) { "Unsupported brush scatter or dab count" }
+        require(params.sourceImportVersion in 0..NATIVE_BRUSH_IMPORT_VERSION) { "Unsupported source brush import version" }
+        // The renderer accepts sparse stamps up to four diameters apart and up to 32 dabs.
+        // Built-in spray/stamp presets already use spacing and scatter beyond the slider's old range.
+        require(params.size in 1f..512f && params.spacing in 0.01f..4f) { "Unsupported brush size or spacing" }
+        require(params.count in 1..32 && params.scatter in 0f..4f) { "Unsupported brush scatter or dab count" }
         require(params.rotation in 0f..360f && params.textureRotation in 0f..360f) { "Unsupported brush rotation" }
         require(params.textureScale in 0.05f..8f) { "Unsupported grain scale" }
         require(params.textureId in GRAIN_IDS || params.textureId?.matches(IMPORTED_GRAIN) == true) { "Unsupported grain source" }
@@ -85,13 +87,19 @@ object BrushLibraryCodec {
                 params.countJitter,
                 params.minOpacity,
                 params.tipSharpness,
-                params.pressureToFlow,
                 params.touchTaperStart ?: 0f,
                 params.touchTaperEnd ?: 0f,
                 params.maxOpacity,
                 params.wetBlur,
+                params.wetAttack,
+                params.wetCharge,
+                params.wetDilution,
+                params.wetPull,
+                params.wetBlurJitter,
+                params.bleed,
                 params.flow,
                 params.tiltInfluence,
+                params.tiltOpacityInfluence ?: 0f,
                 params.velocityToHue,
                 params.secondaryPressure,
                 params.secondaryJitter,
@@ -102,9 +110,11 @@ object BrushLibraryCodec {
         require(params.importedSourceScalars.size <= SourceBrushScalar.MAX_FIELDS) {
             "Too many source brush scalar settings"
         }
-        require(params.importedSourceScalars.all { (name, field) ->
-            SourceBrushScalar.validName(name) && field.isValid()
-        }) { "Invalid imported source brush scalar" }
+        require(
+            params.importedSourceScalars.all { (name, field) ->
+                SourceBrushScalar.validName(name) && field.isValid()
+            },
+        ) { "Invalid imported source brush scalar" }
         params.importedSourceColorData?.let { encoded ->
             require(encoded.length == 24) { "Invalid source brush colour data" }
             val bytes = runCatching { Base64.getDecoder().decode(encoded) }.getOrNull()
@@ -115,16 +125,27 @@ object BrushLibraryCodec {
         require(params.importedSourceStructures.size <= SourceBrushStructuredField.MAX_OBJECTS) {
             "Too many source brush structured fields"
         }
-        require(params.importedSourceStructures.all { (name, entry) ->
-            entry.isValidFor(name)
-        }) { "Invalid source brush structured field" }
+        require(
+            params.importedSourceStructures.all { (name, entry) ->
+                entry.isValidFor(name)
+            },
+        ) { "Invalid source brush structured field" }
         require(params.importedAuxiliaryCurves.size <= MAX_AUXILIARY_CURVES) {
             "Too many source pressure curve components"
         }
         require(params.importedAuxiliaryCurves.keys.all { it.matches(AUXILIARY_CURVE_KEY) }) {
             "Invalid imported pressure curve field name"
         }
-        val signedValues = listOf(params.pressureToSize, params.pressureToOpacity, params.velocityToSize, params.velocityToOpacity)
+        val signedValues =
+            listOf(
+                params.pressureToSize,
+                params.pressureToOpacity,
+                params.pressureToFlow,
+                params.velocityToSize,
+                params.velocityToOpacity,
+                params.grainBrightness,
+                params.grainContrast,
+            )
         require(signedValues.all { it in -1f..1f }) { "Signed brush dynamics must be finite values between minus one and one" }
         // Both pressure response types validate their control points during deserialization.
     }

@@ -1,10 +1,9 @@
 package com.artflow.studio.data.repository.settings
 
 import com.artflow.studio.core.canvas.CanvasOperations
-import com.artflow.studio.core.canvas.StylusAction
-import com.artflow.studio.core.canvas.StylusEraserEnd
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.color.PaletteCodec
+import com.artflow.studio.core.gallery.GalleryOrder
 import com.artflow.studio.core.pixels.AreaSample
 import com.artflow.studio.data.local.dao.SettingsDao
 import com.artflow.studio.data.local.entity.SettingsEntity
@@ -220,9 +219,17 @@ class SettingsRepositoryImpl
         private suspend fun ensureLoaded() {
             if (loaded) return
             val rows = dao.getAllSettings().first()
-            state.value = decode(rows.associate { it.key to it.value }).ownedCopy()
+            state.value = decode(rows.associate { it.key to it.value }.withLegacyKeys()).ownedCopy()
             loaded = true
         }
+
+        /** Prefer the current key, including an intentionally empty value, over an older alias. */
+        private fun Map<String, String>.withLegacyKeys(): Map<String, String> =
+            toMutableMap().also { normalized ->
+                LEGACY_KEYS.forEach { (key, legacy) ->
+                    this[legacy]?.let { normalized.putIfAbsent(key, it) }
+                }
+            }
 
         private suspend fun persist(
             settings: AppSettings,
@@ -392,9 +399,9 @@ class SettingsRepositoryImpl
                 modifyHoldQuickMenu = stored.flag(KEY_MODIFY_QUICK_MENU, defaults.modifyHoldQuickMenu),
                 quickShape = stored.flag(KEY_QUICKSHAPE_ENABLED, defaults.quickShape),
                 touchHoldEyedropper = stored.flag(KEY_TOUCH_EYEDROPPER, defaults.touchHoldEyedropper),
-                stylusPrimaryButton = stored[KEY_STYLUS_PRIMARY]?.let { name -> StylusAction.entries.firstOrNull { it.name == name } } ?: defaults.stylusPrimaryButton,
-                stylusSecondaryButton = stored[KEY_STYLUS_SECONDARY]?.let { name -> StylusAction.entries.firstOrNull { it.name == name } } ?: defaults.stylusSecondaryButton,
-                stylusEraserEnd = stored[KEY_STYLUS_ERASER]?.let { name -> StylusEraserEnd.entries.firstOrNull { it.name == name } } ?: defaults.stylusEraserEnd,
+                stylusPrimaryButton = stored.enumValue(KEY_STYLUS_PRIMARY, defaults.stylusPrimaryButton),
+                stylusSecondaryButton = stored.enumValue(KEY_STYLUS_SECONDARY, defaults.stylusSecondaryButton),
+                stylusEraserEnd = stored.enumValue(KEY_STYLUS_ERASER, defaults.stylusEraserEnd),
                 timelapseMaxSide =
                     stored[KEY_TIMELAPSE_SIDE]?.toIntOrNull()?.takeIf { it in TIMELAPSE_SIDES } ?: defaults.timelapseMaxSide,
                 recordTimelapse = stored.flag(KEY_RECORD_TIMELAPSE, defaults.recordTimelapse),
@@ -424,6 +431,11 @@ class SettingsRepositoryImpl
                 paletteRecoveryRequired = unreadablePalettes != null,
             )
         }
+
+        private inline fun <reified T : Enum<T>> Map<String, String>.enumValue(
+            key: String,
+            fallback: T,
+        ): T = enumValues<T>().firstOrNull { it.name == this[key] } ?: fallback
 
         private fun readPalettes(stored: String?): List<Palette> {
             unreadablePalettes = null
@@ -492,7 +504,7 @@ class SettingsRepositoryImpl
             private const val KEY_LAYER_ALPHA_LOCK = "gesture.layerTwoFingerAlphaLock"
             private const val KEY_LAYER_SELECT = "gesture.layerTwoFingerSelect"
             private const val KEY_MODIFY_QUICK_MENU = "gesture.modifyHoldQuickMenu"
-            private const val KEY_QUICKSHAPE_ENABLED = "gesture.quickShapeEnabled"
+            private const val KEY_QUICKSHAPE_ENABLED = "input.quickShape"
             private const val KEY_TOUCH_EYEDROPPER = "gesture.touchHoldEyedropper"
             private const val KEY_STYLUS_PRIMARY = "input.stylusPrimaryButton"
             private const val KEY_STYLUS_SECONDARY = "input.stylusSecondaryButton"
@@ -512,7 +524,7 @@ class SettingsRepositoryImpl
             private const val KEY_AUTOSAVE = "general.autosave"
             private const val KEY_AUTOSAVE_INTERVAL = "general.autosaveInterval"
             private const val KEY_DEFAULT_PRESET = "general.defaultPreset"
-            private const val KEY_SAVED_PRESETS = "general.savedCanvasPresets"
+            private const val KEY_SAVED_PRESETS = "canvas.sizePresets"
             private const val KEY_DEFAULT_PALETTE = "color.defaultPalette"
             private const val KEY_QUICK_MENU = "studio.quickMenu"
             private const val KEY_GALLERY_SORT = "gallery.sort"
@@ -521,5 +533,11 @@ class SettingsRepositoryImpl
             private const val KEY_TIPS = "general.dismissedTips"
             private const val KEY_RECENT_COLORS = "color.recent"
             private const val KEY_PALETTES = "color.palettes"
+
+            private val LEGACY_KEYS =
+                mapOf(
+                    KEY_QUICKSHAPE_ENABLED to "gesture.quickShapeEnabled",
+                    KEY_SAVED_PRESETS to "general.savedCanvasPresets",
+                )
         }
     }

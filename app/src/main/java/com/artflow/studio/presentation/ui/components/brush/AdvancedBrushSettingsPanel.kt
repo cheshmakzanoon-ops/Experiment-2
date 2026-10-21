@@ -240,17 +240,19 @@ private fun BrushPressureSettings(
         BrushParameterSlider(
             label = "Pressure → Flow",
             value = brushParams.pressureToFlow,
-            onValueChange = { onBrushParamsChanged(brushParams.copy(pressureToFlow = it.coerceIn(0f, 1f))) },
-            valueRange = 0f..1f,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(pressureToFlow = it.coerceIn(-1f, 1f))) },
+            valueRange = -1f..1f,
             valueDisplay = "%.0f%%".format(brushParams.pressureToFlow * 100),
         )
 
-        if (brushParams.importedPressure != null) {
+        if (brushParams.importedPressure != null || brushParams.importedAuxiliaryCurves.isNotEmpty()) {
             Text(
-                "Imported overall, size and opacity curves remain active. ArtFlow interpolates their saved points linearly.",
+                "Imported pressure curves can change how individual controls respond.",
                 style = MaterialTheme.typography.bodySmall,
             )
-            TextButton(onClick = { onBrushParamsChanged(brushParams.copy(importedPressure = null)) }) {
+            TextButton(
+                onClick = { onBrushParamsChanged(brushParams.copy(importedPressure = null, importedAuxiliaryCurves = emptyMap())) },
+            ) {
                 Text("Reset imported pressure curves")
             }
         }
@@ -630,7 +632,7 @@ private fun BrushWetSettings(
             valueDisplay = "%.0f%%".format(brushParams.wetMix * 100),
         )
         BrushParameterSlider(
-            label = "Dilution",
+            label = "Pigment dilution",
             value = brushParams.dilution,
             onValueChange = { onBrushParamsChanged(brushParams.copy(dilution = it.coerceIn(0f, 1f))) },
             valueRange = 0f..1f,
@@ -644,12 +646,13 @@ private fun BrushWetSettings(
             valueDisplay = "%.0f%%".format(brushParams.wetBlur * 100),
         )
         BrushParameterSlider(
-            label = "Pull",
+            label = "Colour carry",
             value = brushParams.pull,
             onValueChange = { onBrushParamsChanged(brushParams.copy(pull = it.coerceIn(0f, 1f))) },
             valueRange = 0f..1f,
             valueDisplay = "%.0f%%".format(brushParams.pull * 100),
         )
+        BrushWetPickupSettings(brushParams, onBrushParamsChanged)
         BrushParameterSlider(
             label = "Wet edges",
             value = brushParams.wetEdges,
@@ -690,37 +693,47 @@ private fun BrushWetSettings(
     }
 }
 
-/** One family of rendering modes as a row of chips: how overlapping dabs inside one stroke combine. */
 @Composable
-private fun RenderingModeRow(
-    title: String,
-    modes: List<RenderingMode>,
-    selected: RenderingMode,
-    onSelect: (RenderingMode) -> Unit,
+private fun BrushWetPickupSettings(
+    brushParams: BrushParams,
+    onBrushParamsChanged: (BrushParams) -> Unit,
 ) {
-    Text(title, style = MaterialTheme.typography.labelLarge)
-    Row(
-        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        modes.forEach { mode ->
-            FilterChip(
-                selected = selected == mode,
-                onClick = { onSelect(mode) },
-                label = { Text(renderingModeLabel(mode)) },
-            )
-        }
-    }
+    BrushParameterSlider(
+        label = "Water dilution",
+        value = brushParams.wetDilution,
+        onValueChange = { onBrushParamsChanged(brushParams.copy(wetDilution = it.coerceIn(0f, 1f))) },
+        valueRange = 0f..1f,
+        valueDisplay = "%.0f%%".format(brushParams.wetDilution * 100),
+    )
+    BrushParameterSlider(
+        label = "Charge",
+        value = brushParams.wetCharge,
+        onValueChange = { onBrushParamsChanged(brushParams.copy(wetCharge = it.coerceIn(0f, 1f))) },
+        valueRange = 0f..1f,
+        valueDisplay = "%.0f%%".format(brushParams.wetCharge * 100),
+    )
+    BrushParameterSlider(
+        label = "Attack",
+        value = brushParams.wetAttack,
+        onValueChange = { onBrushParamsChanged(brushParams.copy(wetAttack = it.coerceIn(0f, 1f))) },
+        valueRange = 0f..1f,
+        valueDisplay = "%.0f%%".format(brushParams.wetAttack * 100),
+    )
+    BrushParameterSlider(
+        label = "Canvas pull",
+        value = brushParams.wetPull,
+        onValueChange = { onBrushParamsChanged(brushParams.copy(wetPull = it.coerceIn(0f, 1f))) },
+        valueRange = 0f..1f,
+        valueDisplay = "%.0f%%".format(brushParams.wetPull * 100),
+    )
+    BrushParameterSlider(
+        label = "Blur jitter",
+        value = brushParams.wetBlurJitter,
+        onValueChange = { onBrushParamsChanged(brushParams.copy(wetBlurJitter = it.coerceIn(0f, 1f))) },
+        valueRange = 0f..1f,
+        valueDisplay = "%.0f%%".format(brushParams.wetBlurJitter * 100),
+    )
 }
-
-@Composable
-private fun renderingModeLabel(mode: RenderingMode): String =
-    when (mode) {
-        RenderingMode.GLAZE_LIGHT -> stringResource(R.string.brush_adv_render_light)
-        RenderingMode.GLAZE_UNIFORM, RenderingMode.BLEND_UNIFORM -> stringResource(R.string.brush_adv_render_uniform)
-        RenderingMode.GLAZE_INTENSE, RenderingMode.BLEND_INTENSE -> stringResource(R.string.brush_adv_render_intense)
-        RenderingMode.GLAZE_HEAVY, RenderingMode.BLEND_HEAVY -> stringResource(R.string.brush_adv_render_heavy)
-    }
 
 @Composable
 private fun BrushSpeedSettings(

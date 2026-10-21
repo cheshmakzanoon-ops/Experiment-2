@@ -2,12 +2,12 @@ package com.artflow.studio.core.export
 
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
 import org.junit.Test
 import java.io.ByteArrayOutputStream
 
 /**
- * A layer mask written by Photoshop (not by ArtFlow, whose export bakes masks into the pixels) must
+ * A layer mask written independently of ArtFlow's writer must
  * hide the same pixels after import. The file is built byte by byte so the mask record is exact.
  */
 class PsdLayerMaskTest {
@@ -127,7 +127,9 @@ class PsdLayerMaskTest {
     }
 
     @Test
-    fun disabledMaskHasNoEffect() {
-        assertNull(checkNotNull(PsdCodec.read(psdWithMask(flags = 2))).layers.single().mask)
+    fun disabledMaskKeepsEditableCoverageAndItsDisabledFlag() {
+        val mask = checkNotNull(checkNotNull(PsdCodec.read(psdWithMask(flags = 2))).layers.single().mask)
+        assertFalse(mask.isEnabled)
+        assertArrayEquals(byteArrayOf(0, -128), mask.coverage)
     }
 }

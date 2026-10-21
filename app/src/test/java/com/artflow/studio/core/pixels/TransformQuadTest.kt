@@ -34,7 +34,14 @@ class TransformQuadTest {
         val source = block(16, 2, 2, 4)
         val target = PixelBuffer(16, 16)
         val bounds = LayerTransform.floatingBounds(source, null)!!
-        TransformQuad.render(source, target, bounds, Quad(2f, 2f, 2f, 2f, 10f, 2f, 10f, 10f), null, highQuality = false)
+        TransformQuad.render(
+            source,
+            target,
+            bounds,
+            Quad(2f, 2f, 2f, 2f, 10f, 2f, 10f, 10f),
+            null,
+            interpolation = TransformQuad.Interpolation.NEAREST,
+        )
         assertTrue(source.pixels.contentEquals(target.pixels))
     }
 
@@ -43,7 +50,7 @@ class TransformQuadTest {
         val target = PixelBuffer(16, 16)
         val bounds = LayerTransform.floatingBounds(source, null)!!
         val moved = TransformQuad.translate(Quad.fromBounds(bounds), 6f, 3f)
-        TransformQuad.render(source, target, bounds, moved, SelectionMask(16, 16), highQuality = false)
+        TransformQuad.render(source, target, bounds, moved, SelectionMask(16, 16), interpolation = TransformQuad.Interpolation.NEAREST)
         assertTrue(source.pixels.contentEquals(target.pixels))
     }
 

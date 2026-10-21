@@ -54,8 +54,10 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Test the artifact verifier
-        run: python -m unittest discover -s .github/scripts -p 'test_*.py'
+      - name: Test artifact verification and reference parsers
+        run: |
+          python -m unittest discover -s .github/scripts -p 'test_*.py'
+          python -m unittest discover -s tools -p 'test_*.py'
 
       - name: Verify production builds reject missing signing inputs
         run: |

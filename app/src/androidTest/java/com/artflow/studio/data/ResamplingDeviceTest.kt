@@ -5,9 +5,9 @@ import android.content.ContextWrapper
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artflow.studio.core.canvas.CanvasOperations
-import com.artflow.studio.core.canvas.LayerTransform
 import com.artflow.studio.core.export.ExportFormat
 import com.artflow.studio.core.export.ExportOptions
+import com.artflow.studio.core.pixels.LayerTransform
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.tool.LiquifyTool

@@ -29,14 +29,16 @@ class ProcreateBrushTest {
         assertEquals(4, brush.count)
         assertEquals(0.5f, brush.roundness, 1e-6f)
         assertEquals(0.8f, brush.pressureToSize, 1e-6f)
-        assertEquals(0.1f, brush.pressureToOpacity, 1e-6f)
+        // Native archive decoding identifies the historical "Opacity" field as pressure Flow.
+        assertEquals(0.1f, brush.pressureToFlow, 1e-6f)
+        assertEquals(0f, brush.pressureToOpacity, 0f)
         assertEquals(24f, brush.size, 1e-4f)
         assertEquals(0.9f, brush.opacity, 1e-6f)
         // The extended blend mode wins over the older field.
         assertEquals(BlendMode.LINEAR_LIGHT, brush.blendMode)
         assertEquals(0.25f, brush.taperStart, 1e-6f)
         assertEquals(0.15f, brush.hueJitter, 1e-6f)
-        assertEquals(0.4f, brush.wetMix, 1e-6f)
+        assertEquals(0.4f, brush.wetDilution, 1e-6f)
         assertEquals(0.7f, brush.flow, 1e-6f)
         assertEquals(1.5f, brush.textureScale, 1e-6f)
         assertTrue(brush.tipRandomized && brush.buildUp && brush.grainMoving)
@@ -65,9 +67,9 @@ class ProcreateBrushTest {
                     "dynamicsSpeedOpacity" to -1.0,
                 ),
             )
-        // A negative angle turns into [0, 360); a grain scale below the stored minimum is raised to it.
+        // A negative angle turns into [0, 360); fine grain scales supported by the renderer are retained.
         assertEquals(331.35f, settings.rotation, 0.01f)
-        assertEquals(0.25f, settings.textureScale, 1e-6f)
+        assertEquals(0.1f, settings.textureScale, 1e-6f)
         assertEquals(16, settings.count)
         assertEquals(-0.6f, settings.velocityToSize, 1e-6f)
         assertEquals(-1f, settings.velocityToOpacity, 1e-6f)

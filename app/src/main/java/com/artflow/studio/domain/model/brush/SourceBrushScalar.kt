@@ -46,7 +46,8 @@ data class SourceBrushScalar(
                 is Float -> value.takeIf { it.isFinite() }?.let { SourceBrushScalar(Type.REAL, it.toString()) }
                 is Double -> value.takeIf { it.isFinite() }?.let { SourceBrushScalar(Type.REAL, it.toString()) }
                 is String ->
-                    value.takeIf { it.length <= MAX_VALUE_LENGTH && '\u0000' !in it }
+                    value
+                        .takeIf { it.length <= MAX_VALUE_LENGTH && '\u0000' !in it }
                         ?.let { SourceBrushScalar(Type.TEXT, it) }
                 else -> null
             }

@@ -197,6 +197,14 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
 
+// Local unit tests run on the host JDK. Keep its independent ImageIO decoders available to
+// test exported PNG/GIF files; production and device-test compilation remain Android-only.
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    if (name.endsWith("UnitTestKotlin")) {
+        compilerOptions.noJdk.set(false)
+    }
+}
+
 // ---------------------------------------------------------------------------------------------
 // Static analysis
 // ---------------------------------------------------------------------------------------------

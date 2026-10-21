@@ -31,10 +31,18 @@ object SelectionClipboard {
         color: Int,
         alphaLocked: Boolean = false,
     ) {
-        val mask = usable(selection, target) ?: return target.fill(color)
+        val mask = usable(selection, target)
+        if (mask == null && !alphaLocked) return target.fill(color)
         for (i in target.pixels.indices) {
-            val alpha = mask.alphaAt(i)
-            if (alpha > 0f) target.pixels[i] = ImageFilters.lerpArgb(target.pixels[i], color, alpha)
+            val alpha = mask?.alphaAt(i) ?: 1f
+            if (alpha > 0f) {
+                target.pixels[i] =
+                    if (alphaLocked) {
+                        BlendModes.sourceAtop(target.pixels[i], Channels.scaleAlpha(color, alpha))
+                    } else {
+                        ImageFilters.lerpArgb(target.pixels[i], color, alpha)
+                    }
+            }
         }
     }
 

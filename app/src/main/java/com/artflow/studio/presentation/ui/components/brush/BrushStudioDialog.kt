@@ -150,6 +150,7 @@ fun StudioBrushLibrary(
     val recent = library?.state?.recent.orEmpty()
     var naming by remember { mutableStateOf(false) }
     var shareFailed by remember { mutableStateOf(false) }
+    var choosingShareFormat by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val matches =
@@ -208,16 +209,26 @@ fun StudioBrushLibrary(
         }
         if (library != null && category in sets) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = {
-                    val brushes = matches.map { SavedBrush(it.id, it.name, it.parameters) }
-                    scope.launch { if (!shareBrushes(context, category, brushes)) shareFailed = true }
-                }, enabled = matches.isNotEmpty()) { Text("Share the set") }
+                TextButton(onClick = { choosingShareFormat = true }, enabled = matches.isNotEmpty()) {
+                    Text(stringResource(R.string.brush_share_set))
+                }
                 TextButton(onClick = {
                     library.deleteSet(category)
                     category = "All"
                 }) { Text("Delete the set $category") }
             }
-            if (shareFailed) Text("The set could not be shared", color = MaterialTheme.colorScheme.error)
+            if (shareFailed) Text(stringResource(R.string.brush_share_set_failed), color = MaterialTheme.colorScheme.error)
+            if (choosingShareFormat) {
+                BrushShareDialog(
+                    isSet = true,
+                    onDismiss = { choosingShareFormat = false },
+                    onShare = { format ->
+                        choosingShareFormat = false
+                        val brushes = matches.map { SavedBrush(it.id, it.name, it.parameters) }
+                        scope.launch { shareFailed = !shareBrushes(context, category, brushes, format) }
+                    },
+                )
+            }
         }
         if (naming && library != null) {
             NewSetDialog(taken = categories.toSet(), onDismiss = { naming = false }) { name ->

@@ -1,5 +1,7 @@
 package com.artflow.studio.domain.model.brush
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 
 /**
@@ -43,9 +45,13 @@ data class PressureMapping(
 }
 
 /** Separate channel curves follow the imported overall mapping, rather than replacing each other. */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class ImportedPressure(
     val overall: PressureMapping? = null,
     val size: PressureMapping? = null,
     val opacity: PressureMapping? = null,
+    /** Preserve older signed documents' canonical JSON when no distinct flow curve was stored. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val flow: PressureMapping? = null,
 )

@@ -196,11 +196,10 @@ object GifEncoder {
             matteColor: Int,
             reserveTransparent: Boolean,
         ): Quantized {
-            val targetColors = maxColors.coerceIn(2, 256)
+            val targetColors = maxColors.coerceIn(1, if (reserveTransparent) 255 else 256)
 
             // Composite over the matte colour once so every later step works with opaque colours.
             val opaque = IntArray(frame.size)
-            var transparentCount = 0
             for (i in frame.indices) {
                 val pixel = frame[i]
                 val alpha = (pixel ushr 24) and 0xFF
@@ -208,18 +207,20 @@ object GifEncoder {
                     // A GIF pixel is either transparent or opaque. Below the threshold it is transparent; at or
                     // above it, it keeps its own colour. Blending onto the matte would tint the edge.
                     reserveTransparent && alpha < HARD_EDGE_ALPHA -> {
-                        transparentCount++
                         opaque[i] = matteColor
                     }
                     reserveTransparent -> opaque[i] = pixel or OPAQUE_ALPHA
                     alpha == 0 -> {
-                        transparentCount++
                         opaque[i] = matteColor
                     }
                     alpha == 255 -> opaque[i] = pixel
                     else -> opaque[i] = blend(matteColor, pixel, alpha / 255f)
                 }
             }
+
+            // Flat artwork often fits GIF's palette exactly. Check only up to the available slots,
+            // before the bounded histogram would discard low channel bits (255 becoming 248).
+            exactPalette(frame, opaque, targetColors, reserveTransparent)?.let { return it }
 
             // Histogram, quantised to 5 bits per channel to keep the bucket count manageable.
             val histogram = HashMap<Int, Int>(1 shl 14)
@@ -275,6 +276,36 @@ object GifEncoder {
             }
 
             return Quantized(indices, paletteArray)
+        }
+
+        /** Retains exact colours when they fit, using at most 256 entries while checking. */
+        private fun exactPalette(
+            frame: IntArray,
+            opaque: IntArray,
+            maxColors: Int,
+            reserveTransparent: Boolean,
+        ): Quantized? {
+            val offset = if (reserveTransparent) 1 else 0
+            val colors = linkedMapOf<Int, Int>()
+            for (index in opaque.indices) {
+                if (reserveTransparent && (frame[index] ushr 24) < HARD_EDGE_ALPHA) continue
+                val color = opaque[index]
+                if (color !in colors) {
+                    if (colors.size == maxColors) return null
+                    colors[color] = colors.size + offset
+                }
+            }
+            val palette = IntArray(colors.size + offset)
+            colors.forEach { (color, index) -> palette[index] = color }
+            val indices =
+                ByteArray(frame.size) { index ->
+                    if (reserveTransparent && (frame[index] ushr 24) < HARD_EDGE_ALPHA) {
+                        0
+                    } else {
+                        colors.getValue(opaque[index]).toByte()
+                    }
+                }
+            return Quantized(indices, palette)
         }
 
         private fun blend(

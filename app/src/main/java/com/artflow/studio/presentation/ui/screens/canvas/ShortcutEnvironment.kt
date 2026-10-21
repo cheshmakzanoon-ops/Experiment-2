@@ -13,4 +13,3 @@ internal class ShortcutEnvironment(
     val toggleInterface: () -> Unit,
     val openExport: () -> Unit,
 )
-

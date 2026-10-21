@@ -7,24 +7,25 @@ import com.artflow.studio.core.render.CustomGrains
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.ColorDynamics
 import com.artflow.studio.domain.model.brush.ImportedPressure
-import com.artflow.studio.domain.model.brush.SourceBrushScalar
-import com.artflow.studio.domain.model.brush.SourceBrushStructuredField
 import com.artflow.studio.domain.model.brush.PressureMapping
 import com.artflow.studio.domain.model.brush.SavedBrush
+import com.artflow.studio.domain.model.brush.SourceBrushScalar
+import com.artflow.studio.domain.model.brush.SourceBrushStructuredField
 import com.artflow.studio.domain.model.layer.BlendMode
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.util.zip.ZipInputStream
 import java.util.Base64
+import java.util.zip.ZipInputStream
 
 /**
  * Procreate brushes written by [ProcreateBrushWriter] and read back through [BrushArchives.read], the import
- * path the app uses: settings within float rounding, names and order, and the shape and grain pixels exactly.
+ * path the app uses: settings within float rounding, names and order, and shape/grain pixels. Fixed
+ * flips normalize into the shape image, rather than an unsupported source property.
  */
 class BrushExportRoundTripTest {
     private val decode: (ByteArray) -> PixelBuffer? = { TestPng.decode(it) }
@@ -42,13 +43,16 @@ class BrushExportRoundTripTest {
             taperOpacity = 0.4f,
             pressureToSize = 0.6f,
             pressureToOpacity = 0.35f,
+            pressureToFlow = -0.25f,
             hueJitter = 0.1f,
             saturationJitter = 0.2f,
             brightnessJitter = 0.3f,
             sizeJitter = 0.15f,
             opacityJitter = 0.05f,
             smoothing = 0.45f,
-            wetMix = 0.4f,
+            wetDilution = 0.4f,
+            wetAttack = 0.8f,
+            wetPull = 0.5f,
             flow = 0.7f,
             textureScale = 1.5f,
             tiltInfluence = 0.5f,
@@ -104,13 +108,16 @@ class BrushExportRoundTripTest {
         close("taperOpacity", expected.taperOpacity, actual.taperOpacity)
         close("pressureToSize", expected.pressureToSize, actual.pressureToSize)
         close("pressureToOpacity", expected.pressureToOpacity, actual.pressureToOpacity)
+        close("pressureToFlow", expected.pressureToFlow, actual.pressureToFlow)
         close("hueJitter", expected.hueJitter, actual.hueJitter)
         close("saturationJitter", expected.saturationJitter, actual.saturationJitter)
         close("brightnessJitter", expected.brightnessJitter, actual.brightnessJitter)
         close("sizeJitter", expected.sizeJitter, actual.sizeJitter)
         close("opacityJitter", expected.opacityJitter, actual.opacityJitter)
         close("smoothing", expected.smoothing, actual.smoothing)
-        close("wetMix", expected.wetMix, actual.wetMix)
+        close("wetDilution", expected.wetDilution, actual.wetDilution)
+        close("wetAttack", expected.wetAttack, actual.wetAttack)
+        close("wetPull", expected.wetPull, actual.wetPull)
         close("flow", expected.flow, actual.flow)
         close("textureScale", expected.textureScale, actual.textureScale)
         close("tiltInfluence", expected.tiltInfluence, actual.tiltInfluence)
@@ -133,7 +140,7 @@ class BrushExportRoundTripTest {
     }
 
     @Test
-    fun aBrushFileReadsBackItsSettingsNameAndImages() {
+    fun aBrushFileKeepsSettingsAndBakesItsFixedFlipIntoTheShape() {
         val shape = shapeTile(seed = 0)
         val grain = shapeTile(seed = 91)
         CustomGrains.register("custom-7e1a", shape)
@@ -143,9 +150,15 @@ class BrushExportRoundTripTest {
         val imported = BrushArchives.read(BrushArchives.procreateBrush(brush), decode).single()
 
         assertEquals("Round Ink", imported.name)
-        assertSettings(settings, requireNotNull(imported.settings).parameters)
+        assertSettings(settings.copy(tipFlipX = false), requireNotNull(imported.settings).parameters)
         assertEquals("Round Ink", imported.settings?.name)
-        assertArrayEquals(shape.values, requireNotNull(imported.shape).values)
+        val flippedRows =
+            shape.values
+                .toList()
+                .chunked(shape.size)
+                .flatMap { it.asReversed() }
+                .toByteArray()
+        assertArrayEquals(flippedRows, requireNotNull(imported.shape).values)
         assertArrayEquals(grain.values, requireNotNull(imported.grain).values)
         assertEquals(false, imported.settings?.shapeInverted)
     }
@@ -183,7 +196,8 @@ class BrushExportRoundTripTest {
             )
         val brushes = BrushArchives.read(bytes, decode)
         assertEquals(listOf("First", "Second", "Third"), brushes.map { it.name })
-        assertSettings(settings, requireNotNull(brushes[0].settings).parameters)
+        // With no image, the round/flat procedural tip is already symmetric about either axis.
+        assertSettings(settings.copy(tipFlipX = false), requireNotNull(brushes[0].settings).parameters)
         assertSettings(second, requireNotNull(brushes[1].settings).parameters)
         assertSettings(third, requireNotNull(brushes[2].settings).parameters)
         assertArrayEquals(shapeTile(seed = 5).values, requireNotNull(brushes[1].shape).values)
@@ -255,10 +269,15 @@ class BrushExportRoundTripTest {
         val brushFile = ProcreateBrushWriter.brush(ProcreateBrushWriter.Brush("Auxiliary curves", source))
         val imported = requireNotNull(BrushArchives.read(brushFile, decode).single().settings).parameters
         assertEquals(curves, imported.importedAuxiliaryCurves)
-        val saved = com.artflow.studio.domain.model.brush.BrushLibraryCodec.encode(
-            listOf(SavedBrush("curves", "Curves", imported)),
-        )
-        val restored = com.artflow.studio.domain.model.brush.BrushLibraryCodec.decode(saved).single().parameters
+        val saved =
+            com.artflow.studio.domain.model.brush.BrushLibraryCodec.encode(
+                listOf(SavedBrush("curves", "Curves", imported)),
+            )
+        val restored =
+            com.artflow.studio.domain.model.brush.BrushLibraryCodec
+                .decode(saved)
+                .single()
+                .parameters
         assertEquals(curves, restored.importedAuxiliaryCurves)
     }
 
@@ -277,9 +296,13 @@ class BrushExportRoundTripTest {
         assertEquals(SourceBrushScalar(SourceBrushScalar.Type.BOOLEAN, "true"), source.importedSourceScalars["shapeCountRoll"])
         assertEquals(SourceBrushScalar(SourceBrushScalar.Type.INTEGER, "34"), source.importedSourceScalars["burntEdgesBlendModeExtended"])
         val brush = SavedBrush("raw", "Source", source)
-        val restored = com.artflow.studio.domain.model.brush.BrushLibraryCodec.decode(
-            com.artflow.studio.domain.model.brush.BrushLibraryCodec.encode(listOf(brush)),
-        ).single().parameters
+        val restored =
+            com.artflow.studio.domain.model.brush.BrushLibraryCodec
+                .decode(
+                    com.artflow.studio.domain.model.brush.BrushLibraryCodec
+                        .encode(listOf(brush)),
+                ).single()
+                .parameters
         assertEquals(source.importedSourceScalars, restored.importedSourceScalars)
         val modified = restored.copy(spacing = 0.35f)
         val exported = ProcreateBrushWriter.brush(ProcreateBrushWriter.Brush("Edited source", modified))
@@ -318,7 +341,9 @@ class BrushExportRoundTripTest {
 
     @Test
     fun keyedRollParametersDatesAndSavedSizeArraysPreserveTheirTypes() {
-        val archive = com.artflow.studio.core.export.KeyedArchiveBuilder()
+        val archive =
+            com.artflow.studio.core.export
+                .KeyedArchiveBuilder()
         val roll =
             archive.instance(
                 "ValkyrieBrushRollParameters",
@@ -332,25 +357,32 @@ class BrushExportRoundTripTest {
         val date = archive.instance("NSDate", mapOf("NS.time" to 595235271.168956))
         val sizes = archive.instance("NSArray", mapOf("NS.objects" to listOf(archive.add(0.24))))
         val original =
-            com.artflow.studio.core.export.ProcreateBrush.read(
-                archive.encode(
-                    mapOf(
-                        "name" to archive.add("Structured"),
-                        "attackRollParameters" to roll,
-                        "creationDate" to date,
-                        "savedPaintSizes" to sizes,
+            com.artflow.studio.core.export.ProcreateBrush
+                .read(
+                    archive.encode(
+                        mapOf(
+                            "name" to archive.add("Structured"),
+                            "attackRollParameters" to roll,
+                            "creationDate" to date,
+                            "savedPaintSizes" to sizes,
+                        ),
                     ),
-                ),
-            ).parameters
+                ).parameters
         val stored = original.importedSourceStructures
         assertEquals(3, stored.size)
         assertEquals("ValkyrieBrushRollParameters", stored.getValue("attackRollParameters").className)
-        assertEquals(SourceBrushScalar(SourceBrushScalar.Type.REAL, "595235271.168956"), stored.getValue("creationDate").fields["NS.time"])
+        val storedDate = stored.getValue("creationDate").fields.getValue("NS.time")
+        assertEquals(SourceBrushScalar.Type.REAL, storedDate.type)
+        assertEquals(595235271.168956, storedDate.value.toDouble(), 0.0)
         assertEquals(SourceBrushStructuredField.Kind.ARRAY, stored.getValue("savedPaintSizes").kind)
         val brush = SavedBrush("structured", "Structured", original)
-        val reopened = com.artflow.studio.domain.model.brush.BrushLibraryCodec.decode(
-            com.artflow.studio.domain.model.brush.BrushLibraryCodec.encode(listOf(brush)),
-        ).single().parameters
+        val reopened =
+            com.artflow.studio.domain.model.brush.BrushLibraryCodec
+                .decode(
+                    com.artflow.studio.domain.model.brush.BrushLibraryCodec
+                        .encode(listOf(brush)),
+                ).single()
+                .parameters
         val exported = ProcreateBrushWriter.brush(ProcreateBrushWriter.Brush("Structured", reopened))
         val imported = requireNotNull(BrushArchives.read(exported, decode).single().settings).parameters
         assertEquals(stored, imported.importedSourceStructures)
@@ -359,25 +391,33 @@ class BrushExportRoundTripTest {
     @Test
     fun sourceSixteenByteColourDataSurvivesKeyedArchiveAndSavedLibrary() {
         val payload = ByteArray(16) { index -> (index * 13).toByte() }
-        val keyed = com.artflow.studio.core.export.KeyedArchiveBuilder()
+        val keyed =
+            com.artflow.studio.core.export
+                .KeyedArchiveBuilder()
         val original =
-            com.artflow.studio.core.export.ProcreateBrush.read(
-                keyed.encode(mapOf("name" to keyed.add("Binary colour"), "color" to keyed.add(payload))),
-            ).parameters
+            com.artflow.studio.core.export.ProcreateBrush
+                .read(
+                    keyed.encode(mapOf("name" to keyed.add("Binary colour"), "color" to keyed.add(payload))),
+                ).parameters
         val encoded = Base64.getEncoder().encodeToString(payload)
         assertEquals(encoded, original.importedSourceColorData)
         val saved = SavedBrush("binary-colour", "Binary colour", original)
-        val restored = com.artflow.studio.domain.model.brush.BrushLibraryCodec.decode(
-            com.artflow.studio.domain.model.brush.BrushLibraryCodec.encode(listOf(saved)),
-        ).single().parameters
+        val restored =
+            com.artflow.studio.domain.model.brush.BrushLibraryCodec
+                .decode(
+                    com.artflow.studio.domain.model.brush.BrushLibraryCodec
+                        .encode(listOf(saved)),
+                ).single()
+                .parameters
         assertEquals(encoded, restored.importedSourceColorData)
         val exported = ProcreateBrushWriter.brush(ProcreateBrushWriter.Brush("Binary colour", restored))
-        val roundTripped = com.artflow.studio.core.export.ProcreateBrush.read(
-            ZipInputStream(exported.inputStream()).use { zip ->
-                check(zip.nextEntry.name == "Brush.archive")
-                zip.readBytes()
-            },
-        )
+        val roundTripped =
+            com.artflow.studio.core.export.ProcreateBrush.read(
+                ZipInputStream(exported.inputStream()).use { zip ->
+                    check(zip.nextEntry.name == "Brush.archive")
+                    zip.readBytes()
+                },
+            )
         assertEquals(encoded, roundTripped.parameters.importedSourceColorData)
         assertThrows(IllegalArgumentException::class.java) {
             com.artflow.studio.domain.model.brush.BrushLibraryCodec.encode(
@@ -387,7 +427,7 @@ class BrushExportRoundTripTest {
     }
 
     @Test
-    fun allThreePrimaryPressureCurvesExportAsTheirObservedKeyedArchiveClass() {
+    fun allFourPrimaryPressureCurvesExportAsTheirObservedKeyedArchiveClass() {
         val overall =
             PressureMapping(
                 listOf(
@@ -397,19 +437,28 @@ class BrushExportRoundTripTest {
                 ),
             )
         val falling = PressureMapping(listOf(PressureMapping.Point(0f, 1f), PressureMapping.Point(1f, 0f)))
-        val channels = ImportedPressure(overall = overall, size = falling, opacity = overall)
+        val channels = ImportedPressure(overall = overall, size = falling, opacity = overall, flow = falling)
         val source = BrushParams(importedPressure = channels)
-        val exported = ProcreateBrushWriter.brush(ProcreateBrushWriter.Brush("Three pressure curves", source))
+        val exported = ProcreateBrushWriter.brush(ProcreateBrushWriter.Brush("Four pressure curves", source))
         val archiveData =
             ZipInputStream(exported.inputStream()).use { zip ->
                 check(zip.nextEntry.name == "Brush.archive")
                 zip.readBytes()
             }
-        val keyed = com.artflow.studio.core.export.KeyedArchive(
-            com.artflow.studio.core.export.BinaryPlist.read(archiveData),
-        )
+        val keyed =
+            com.artflow.studio.core.export.KeyedArchive(
+                com.artflow.studio.core.export.BinaryPlist
+                    .read(archiveData),
+            )
         val root = requireNotNull(keyed.root)
-        for (field in listOf("dynamicsPressureOverall", "dynamicsPressureSizeCurve", "dynamicsPressureOpacityCurve")) {
+        val curveFields =
+            listOf(
+                "dynamicsPressureOverall",
+                "dynamicsPressureSizeCurve",
+                "dynamicsPressureTransferModulationCurve",
+                "dynamicsPressureOpacityCurve",
+            )
+        for (field in curveFields) {
             assertEquals("ValkyrieMagnitudinalCurve", keyed.className(root[field]))
             val curve = requireNotNull(keyed.map(root[field]))
             // Both the serialized curve class and its nested mutable point array
@@ -440,19 +489,26 @@ class BrushExportRoundTripTest {
         // These are deliberately ArtFlow's *clamped* effective controls.
         assertEquals(192f, imported.size, 1e-6f)
         assertEquals(0.01f, imported.spacing, 1e-6f)
-        assertEquals(0.25f, imported.textureScale, 1e-6f)
+        assertEquals(0.1f, imported.textureScale, 1e-6f)
         val exported = ProcreateBrushWriter.brush(ProcreateBrushWriter.Brush("Raw values", imported))
         val archiveData =
             ZipInputStream(exported.inputStream()).use { zip ->
                 check(zip.nextEntry.name == "Brush.archive")
                 zip.readBytes()
             }
-        val root = requireNotNull(
-            com.artflow.studio.core.export.KeyedArchive(
-                com.artflow.studio.core.export.BinaryPlist.read(archiveData),
-            ).root,
-        )
-        fun exact(key: String, value: Double) = assertEquals(key, value, (root[key] as Number).toDouble(), 0.000001)
+        val root =
+            requireNotNull(
+                com.artflow.studio.core.export
+                    .KeyedArchive(
+                        com.artflow.studio.core.export.BinaryPlist
+                            .read(archiveData),
+                    ).root,
+            )
+
+        fun exact(
+            key: String,
+            value: Double,
+        ) = assertEquals(key, value, (root[key] as Number).toDouble(), 0.000001)
         exact("maxSize", 16.0)
         exact("paintSize", 4.58)
         exact("plotSpacing", 0.0)
@@ -461,7 +517,10 @@ class BrushExportRoundTripTest {
         exact("textureMovement", 0.23)
         exact("maxOpacity", 0.8)
         exact("paintOpacity", 2.0)
-        val restored = com.artflow.studio.core.export.ProcreateBrush.read(archiveData).parameters
+        val restored =
+            com.artflow.studio.core.export.ProcreateBrush
+                .read(archiveData)
+                .parameters
         assertEquals(imported.size, restored.size, 1e-6f)
         assertEquals(imported.spacing, restored.spacing, 1e-6f)
         assertEquals(imported.textureScale, restored.textureScale, 1e-6f)
@@ -480,11 +539,14 @@ class BrushExportRoundTripTest {
                 check(zip.nextEntry.name == "Brush.archive")
                 zip.readBytes()
             }
-        val root = requireNotNull(
-            com.artflow.studio.core.export.KeyedArchive(
-                com.artflow.studio.core.export.BinaryPlist.read(archiveData),
-            ).root,
-        )
+        val root =
+            requireNotNull(
+                com.artflow.studio.core.export
+                    .KeyedArchive(
+                        com.artflow.studio.core.export.BinaryPlist
+                            .read(archiveData),
+                    ).root,
+            )
         assertEquals(3.0, (root["maxSize"] as Number).toDouble(), 1e-6)
         assertEquals(1.0, (root["paintSize"] as Number).toDouble(), 1e-6)
         assertEquals(0.4, (root["plotSpacing"] as Number).toDouble(), 1e-6)
@@ -493,8 +555,11 @@ class BrushExportRoundTripTest {
 
     @Test
     fun unmappedNativeBlendIdentifiersArePreservedUntilTheBlendModeIsEdited() {
-        val unknown = com.artflow.studio.core.export.ProcreateBrush.parameters(mapOf("extendedBlend" to 28L))
+        val unknown =
+            com.artflow.studio.core.export.ProcreateBrush
+                .parameters(mapOf("extendedBlend" to 28L))
         assertEquals(BlendMode.NORMAL, unknown.blendMode)
+
         fun root(params: BrushParams): Map<String, Any?> {
             val bytes = ProcreateBrushWriter.brush(ProcreateBrushWriter.Brush("Unknown blend", params))
             val archiveData =
@@ -503,16 +568,20 @@ class BrushExportRoundTripTest {
                     zip.readBytes()
                 }
             return requireNotNull(
-                com.artflow.studio.core.export.KeyedArchive(
-                    com.artflow.studio.core.export.BinaryPlist.read(archiveData),
-                ).root,
+                com.artflow.studio.core.export
+                    .KeyedArchive(
+                        com.artflow.studio.core.export.BinaryPlist
+                            .read(archiveData),
+                    ).root,
             )
         }
         assertEquals(28L, root(unknown)["extendedBlend"])
         assertEquals(1L, root(unknown.copy(blendMode = BlendMode.MULTIPLY))["extendedBlend"])
         // In the legacy schema, creating an extra extendedBlend would shadow the
         // unsupported source blendMode code when Procreate imports the file.
-        val legacy = com.artflow.studio.core.export.ProcreateBrush.parameters(mapOf("blendMode" to 28L))
+        val legacy =
+            com.artflow.studio.core.export.ProcreateBrush
+                .parameters(mapOf("blendMode" to 28L))
         val kept = root(legacy)
         assertEquals(28L, kept["blendMode"])
         assertTrue("Preserve the original legacy mode without fabricating an override", "extendedBlend" !in kept)

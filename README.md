@@ -1,3 +1,28 @@
+### Native-informed parity implementation (21 October 2026)
+
+The [latest implementation report](docs/PARITY_IMPLEMENTATION_2026-10-21.md) records changes
+based on the supplied Procreate **5.4.4 / 56832** IPA and actual Android Gradle verification.
+[Hash-pinned native evidence](docs/REA_NATIVE_CONTRACTS_2026-10-21.md) establishes corrected
+pressure-flow/opacity and wet-control mappings. Those controls now reach painting and brush
+interchange; five additional pressure graphs affect colour and bleed.
+
+Animation preview and export share playback ranges, hidden frames, multiple stable background/
+foreground pins and ping-pong ordering. PSD export retains independent editable layer and folder
+masks, including disabled masks, with unmasked artwork alpha preserved. Brush sharing exposes
+ArtFlow and Procreate formats in the editor. Persisted gesture preferences and stylus-button
+controls are connected through the editor's existing input pipeline.
+
+Local verification passed **1,325 JVM tests with zero failures or skips**, including the supplied
+534-component brush corpus and five genuine Procreate documents. Debug and instrumentation APKs,
+the unsigned release bundle, formatting, detekt, debug/release lint and packaged-artifact checks
+also passed. Instrumentation was compiled but not executed locally; device acceptance still
+requires the published revision's completed CI and physical-device checks.
+
+**Full Procreate parity remains unestablished.** Native wet-paint equations, 24 retained pressure
+graphs, several compound-brush modes and physical-device behavior still need work. The report
+separates executed JVM/build checks from device tests and reference-app pixel validation. Older
+dated entries below describe their own earlier revisions and should not override that record.
+
 ### REA source-value drift audit (21 October 2026)
 
 An offline, hash-pinned audit found **477 of 534** component settings records contain at least one source scalar that ArtFlow's approximate importer would normally clamp or quantize. The [exporter repair](https://github.com/cheshmakzanoon-ops/Experiment-2/commit/9dec2c473702ec6deb113a7b80321fdd58e13b97) now preserves original primitive values for unedited brush controls, including source spacing and grain scaling outside ArtFlow's limits. See [the reproducible drift-risk report](docs/REA_SCALAR_DRIFT_RISKS.md). This is archive-data retention, not reference-app rendering or runtime equivalence.
@@ -16,7 +41,7 @@ The linked [reference archive](https://drive.google.com/file/d/1xPr6e53L76Cq8exG
 
 The [full archive static inventory workflow](.github/workflows/reference-ipa-static-inventory.yml) uses the original SHA-256 to validate provenance before inspecting bundle plists, declared executable headers and Mach-O encryption markers, and attempts REA CLI artifact inspection. Its completion and results must be checked at the exact workflow run; the presence of a workflow is **not proof** it has finished.
 
-The consolidated main has historically failed Android Kotlin compilation (706 compiler diagnostics, 34 files, often cascading). The [compiler audit](docs/CI_COMPILER_TRIAGE_2026-10-21.md) records the failure's exact CI job. The Procreate brush decoder's malformed scope and two brush-export data-loss cases received source fixes and a synthetic regression test, but a passing exact-commit Android build and device matrix have **not** been established. **Whole-app source recovery and 1:1 Procreate parity are not achieved.**
+The consolidated main historically failed Android Kotlin compilation (706 compiler diagnostics, 34 files, often cascading). The [compiler audit](docs/CI_COMPILER_TRIAGE_2026-10-21.md) records that failure's exact CI job. The new implementation record at the top of this file supersedes its local build status; historical CI results are retained as evidence. **Whole-app source recovery and 1:1 Procreate parity are not achieved.**
 
 ### Run 84 Android-system recovery
 

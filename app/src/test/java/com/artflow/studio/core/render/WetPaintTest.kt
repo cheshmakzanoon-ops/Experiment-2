@@ -123,11 +123,11 @@ class WetPaintTest {
         val soft = BrushParams(size = 12f, spacing = 0.3f, pressureToSize = 0f, pressureToOpacity = 0f, opacity = 0.5f, flow = 0.4f)
 
         fun painted(params: BrushParams) = PixelBuffer(width, height).also { StrokeRasterizer().draw(it, strokeOf(params)) }
-        assertArrayEquals(painted(soft).pixels, painted(soft.copy(renderingMode = RenderingMode.LIGHT_GLAZE)).pixels)
+        assertArrayEquals(painted(soft).pixels, painted(soft.copy(renderingMode = RenderingMode.GLAZE_UNIFORM)).pixels)
         val built = soft.copy(buildUp = true)
-        assertArrayEquals(painted(built).pixels, painted(built.copy(renderingMode = RenderingMode.UNIFORM_BLENDING)).pixels)
+        assertArrayEquals(painted(built).pixels, painted(built.copy(renderingMode = RenderingMode.BLEND_UNIFORM)).pixels)
         val light = alpha(painted(soft).getSafe(80, 20))
-        val intense = alpha(painted(soft.copy(renderingMode = RenderingMode.INTENSE_GLAZE)).getSafe(80, 20))
+        val intense = alpha(painted(soft.copy(renderingMode = RenderingMode.GLAZE_INTENSE)).getSafe(80, 20))
         assertTrue("Intense glaze lays more paint ($intense vs $light)", intense > light)
     }
 

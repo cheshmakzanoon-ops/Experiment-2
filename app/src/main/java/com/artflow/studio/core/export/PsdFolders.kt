@@ -46,7 +46,7 @@ object PsdFolders {
      */
     fun headerBlend(group: Layer): BlendMode =
         when {
-            !LayerGroups.isolates(group) -> BlendMode.PASS_THROUGH
+            !LayerGroups.isolates(group) && !group.hasActiveMask() -> BlendMode.PASS_THROUGH
             group.blendMode == BlendMode.PASS_THROUGH -> BlendMode.NORMAL
             else -> group.blendMode
         }

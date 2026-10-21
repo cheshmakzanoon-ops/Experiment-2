@@ -13,7 +13,6 @@ import com.artflow.studio.core.color.ColorProfile
 import com.artflow.studio.core.color.ColorProfiles
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.color.PaletteLibrary
-import com.artflow.studio.core.export.ExportArea
 import com.artflow.studio.core.export.ExportFormat
 import com.artflow.studio.core.export.ExportOptions
 import com.artflow.studio.core.export.ExportResult
@@ -52,7 +51,6 @@ import com.artflow.studio.presentation.ui.components.canvas.EditorInput
 import com.artflow.studio.presentation.ui.components.canvas.GestureControls
 import com.artflow.studio.presentation.ui.components.canvas.SelectionCombineMode
 import com.artflow.studio.presentation.ui.components.canvas.ShapeKind
-import com.artflow.studio.presentation.ui.components.canvas.gestureControls
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -242,26 +240,7 @@ class CanvasViewModel
                     _settings.value = stored
                     _recentColors.value = stored.recentColors
                     _palettes.value = stored.customPalettes + PaletteLibrary.BUILT_IN
-                    _input.value =
-                        _input.value.copy(
-                            symmetry = _input.value.symmetry,
-                            snapToGuides = stored.snapToGuides,
-                            fingerPainting = stored.fingerPainting,
-                            pressureCurve = stored.pressureCurve,
-                            stabilization = stored.stabilization,
-                            motionFiltering = stored.motionFiltering,
-                            motionExpression = stored.motionExpression,
-                            pressureSmoothing = stored.pressureSmoothing,
-                            pulledString = stored.pulledString,
-                            pressureResponse = stored.pressureResponse,
-                            haptics = stored.haptics,
-                            reduceMotion = stored.reduceMotion,
-                            brushCursor = stored.brushCursor,
-                            gestures = stored.gestureControls(),
-                            dynamicBrushScaling = stored.dynamicBrushScaling,
-                            stylus = stored.stylusButtons(),
-                            haptics = stored.haptics,
-                        )
+                    _input.value = _input.value.withPreferences(stored)
                 }
             }
             viewModelScope.launch(editorErrors) {
@@ -1306,7 +1285,10 @@ class CanvasViewModel
             y: Float,
         ) {
             val size = canvasRepository.getCanvasSize()
-            if (!x.isFinite() || !y.isFinite() || x < 0f || y < 0f || x >= size.width || y >= size.height) {
+            val finite = x.isFinite() && y.isFinite()
+            val insideWidth = x >= 0f && x < size.width
+            val insideHeight = y >= 0f && y < size.height
+            if (!finite || !insideWidth || !insideHeight) {
                 notify("Tap inside the artwork to position text")
                 return
             }
@@ -1450,63 +1432,22 @@ class CanvasViewModel
         /** Layers across every frame, the count the layer limit applies to (Canvas information). */
         fun layerTotal(): Int = CanvasInformation.layerTotal(canvasRepository.frames().map { it.layers.size })
 
+        private val exportController =
+            CanvasExportController(
+                canvasRepository,
+                exporter,
+                timelapse,
+                _exportState,
+                viewModelScope + editorErrors,
+                { currentProjectId to (project?.name ?: "Artwork") },
+                { _dirty.value = canvasRepository.hasUnsavedChanges() },
+            )
+
         /** Runs an export through the shared pipeline and keeps the result for the dialog. */
-        fun export(options: ExportOptions) {
-            val projectId = currentProjectId
-            if (projectId == 0L || _exportState.value is ExportUiState.Running) return
-            _exportState.value = ExportUiState.Running
-            viewModelScope.launch(editorErrors) {
-                try {
-                    val name = project?.name ?: "Artwork"
-                    val resolved =
-                        if (options.area == ExportArea.ALL_FRAMES && options.format == ExportFormat.PNG) {
-                            options.copy(format = ExportFormat.FRAME_SEQUENCE, colorProfile = canvasRepository.getColorProfile())
-                        } else {
-                            options.copy(colorProfile = canvasRepository.getColorProfile())
-                        }
-                    val result =
-                        if (resolved.format == ExportFormat.ARTFLOW) {
-                            // The package holds the saved document, so the artwork is saved first.
-                            checkNotNull(canvasRepository.saveCanvas(projectId)) { "The artwork could not be saved" }
-                            _dirty.value = canvasRepository.hasUnsavedChanges()
-                            exporter.exportPackage(projectId, name, resolved)
-                        } else {
-                            renderedExport(canvasRepository, exporter, projectId, name, resolved)
-                        }
-                    _exportState.value =
-                        result.fold(
-                            onSuccess = { ExportUiState.Done(it) },
-                            onFailure = { ExportUiState.Failed(it.message ?: "Export failed") },
-                        )
-                } catch (cancelled: CancellationException) {
-                    _exportState.value = ExportUiState.Idle
-                    throw cancelled
-                } catch (error: Exception) {
-                    // Codec/storage errors remain visible; cancellation is never reported as success.
-                    Timber.e(error, "Export failed")
-                    _exportState.value = ExportUiState.Failed(error.message ?: "Export failed")
-                }
-            }
-        }
+        fun export(options: ExportOptions) = exportController.export(options)
 
         /** Encodes the recorded time-lapse as an MP4 replay and shows it in the export dialog. */
-        fun exportTimelapse(fullLength: Boolean = false) {
-            val projectId = currentProjectId
-            if (projectId == 0L || _exportState.value is ExportUiState.Running) return
-            _exportState.value = ExportUiState.Running
-            viewModelScope.launch(editorErrors) {
-                try {
-                    _exportState.value =
-                        timelapse.export(projectId, project?.name ?: "Artwork", fullLength).fold(
-                            onSuccess = { ExportUiState.Done(it) },
-                            onFailure = { ExportUiState.Failed(it.message ?: "Time-lapse export failed") },
-                        )
-                } catch (cancelled: CancellationException) {
-                    _exportState.value = ExportUiState.Idle
-                    throw cancelled
-                }
-            }
-        }
+        fun exportTimelapse(fullLength: Boolean = false) = exportController.exportTimelapse(fullLength)
 
         fun setTimelapseRecording(recording: Boolean) {
             val projectId = currentProjectId
@@ -1614,7 +1555,9 @@ class CanvasViewModel
                         while (true) {
                             if (projectId != canvasRepository.projectId()) break
                             // The timeline snapshot already holds each frame's id and duration.
-                            val frame = canvasRepository.timeline.value.frames.getOrNull(cursor.index) ?: break
+                            val frame =
+                                canvasRepository.timeline.value.frames
+                                    .getOrNull(cursor.index) ?: break
                             delay(frame.durationMs.toLong().coerceAtLeast(16L))
                             if (projectId != canvasRepository.projectId()) break
                             val state = canvasRepository.timeline.value

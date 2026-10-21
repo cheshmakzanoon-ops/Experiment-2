@@ -1,12 +1,16 @@
 package com.artflow.studio.data
 
 import com.artflow.studio.core.canvas.CanvasOperations
+import com.artflow.studio.core.canvas.StylusAction
+import com.artflow.studio.core.canvas.StylusEraserEnd
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.color.PaletteCodec
 import com.artflow.studio.data.local.dao.SettingsDao
 import com.artflow.studio.data.local.entity.SettingsEntity
 import com.artflow.studio.data.repository.settings.SettingsRepositoryImpl
 import com.artflow.studio.domain.model.brush.PressureResponse
+import com.artflow.studio.domain.model.settings.AppSettings
+import com.artflow.studio.domain.model.settings.GallerySort
 import com.artflow.studio.domain.model.settings.ThemeMode
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -244,11 +248,54 @@ class SettingsRepositoryTest {
             val banner = CanvasOperations.Preset("Banner", 4000, 1000, 150)
             repository.saveCanvasPreset(poster)
             repository.saveCanvasPreset(banner)
-            assertEquals(listOf(banner, poster), SettingsRepositoryImpl(dao).settings.first().canvasPresets)
+            assertEquals(listOf(banner, poster), SettingsRepositoryImpl(dao).settings.first().savedCanvasPresets)
             repository.deleteCanvasPreset("Banner")
-            assertEquals(listOf(poster), SettingsRepositoryImpl(dao).settings.first().canvasPresets)
+            assertEquals(listOf(poster), SettingsRepositoryImpl(dao).settings.first().savedCanvasPresets)
             val damaged = MemorySettingsDao(mapOf("canvas.sizePresets" to "Poster\t3000\t4000\t200\nnot a preset\nHuge\t99999\t99999\t72"))
-            assertEquals(listOf(poster), SettingsRepositoryImpl(damaged).settings.first().canvasPresets)
+            assertEquals(listOf(poster), SettingsRepositoryImpl(damaged).settings.first().savedCanvasPresets)
+        }
+
+    @Test
+    fun previousQuickShapeAndCanvasPresetKeysRemainReadableAndMigrateOnAnEdit() =
+        runTest {
+            val storedPreset = "Poster\t3000\t4000\t200"
+            val dao =
+                MemorySettingsDao(
+                    mapOf(
+                        "gesture.quickShapeEnabled" to "false",
+                        "general.savedCanvasPresets" to storedPreset,
+                    ),
+                )
+            val repository = SettingsRepositoryImpl(dao)
+            val loaded = repository.settings.first()
+            assertFalse(loaded.quickShape)
+            assertEquals(listOf(CanvasOperations.Preset("Poster", 3000, 4000, 200)), loaded.savedCanvasPresets)
+            assertEquals("Reading legacy preferences must not write", 0, dao.writes)
+
+            repository.setHighContrast(true)
+            assertEquals("false", dao.rows["input.quickShape"]!!.value)
+            assertEquals(storedPreset, dao.rows["canvas.sizePresets"]!!.value)
+            val reopened = SettingsRepositoryImpl(dao).settings.first()
+            assertFalse(reopened.quickShape)
+            assertEquals(loaded.savedCanvasPresets, reopened.savedCanvasPresets)
+        }
+
+    @Test
+    fun canonicalPreferenceKeysWinOverStaleAliasesIncludingDeletedPresets() =
+        runTest {
+            val dao =
+                MemorySettingsDao(
+                    mapOf(
+                        "input.quickShape" to "true",
+                        "gesture.quickShapeEnabled" to "false",
+                        "canvas.sizePresets" to "",
+                        "general.savedCanvasPresets" to "Poster\t3000\t4000\t200",
+                    ),
+                )
+            val loaded = SettingsRepositoryImpl(dao).settings.first()
+            assertTrue(loaded.quickShape)
+            assertTrue(loaded.savedCanvasPresets.isEmpty())
+            assertEquals(0, dao.writes)
         }
 
     @Test

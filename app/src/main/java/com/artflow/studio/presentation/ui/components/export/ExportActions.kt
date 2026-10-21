@@ -15,6 +15,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import com.artflow.studio.core.export.ExportOptions
 import com.artflow.studio.core.export.ExportResult
 import com.artflow.studio.presentation.ui.viewmodel.CanvasViewModel
 import com.artflow.studio.presentation.ui.viewmodel.ExportUiState
@@ -27,6 +28,8 @@ data class ExportActions(
     val gallery: (ExportResult) -> Unit,
     val exportTimelapse: (() -> Unit)? = null,
     val clearTimelapse: (() -> Unit)? = null,
+    val export: (ExportOptions) -> Unit = {},
+    val dismissResult: () -> Unit = {},
 )
 
 @Composable
@@ -55,6 +58,8 @@ fun rememberExportActions(viewModel: CanvasViewModel): ExportActions {
             }
         }
     return ExportActions(
+        export = { viewModel.export(it) },
+        dismissResult = viewModel::resetExportState,
         exportTimelapse = viewModel::exportTimelapse,
         clearTimelapse = viewModel::clearTimelapse,
         share = { result -> openSafely(viewModel::notify) { context.startActivity(viewModel.shareIntent(result)) } },

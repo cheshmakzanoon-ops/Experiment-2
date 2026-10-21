@@ -3,10 +3,11 @@ package com.artflow.studio.core.export
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.ColorDynamics
 import com.artflow.studio.domain.model.brush.ImportedPressure
+import com.artflow.studio.domain.model.brush.NATIVE_BRUSH_IMPORT_VERSION
 import com.artflow.studio.domain.model.brush.PressureMapping
+import com.artflow.studio.domain.model.brush.RenderingMode
 import com.artflow.studio.domain.model.brush.SourceBrushScalar
 import com.artflow.studio.domain.model.brush.SourceBrushStructuredField
-import com.artflow.studio.domain.model.brush.RenderingMode
 import com.artflow.studio.domain.model.layer.BlendMode
 import java.util.Base64
 import kotlin.math.roundToInt
@@ -19,7 +20,7 @@ import kotlin.math.roundToInt
  * dynamics, tapers, wet mix, flow, blend mode, grain scale and orientation) as a close start.
  */
 object ProcreateBrush {
-    /** REA-observed curve dictionaries with real control points, beyond overall / size / opacity. */
+    /** REA-observed curve dictionaries with real control points, beyond overall / size / opacity / flow. */
     internal val AUXILIARY_CURVE_KEYS: Set<String> =
         setOf(
             "dynamicsPressureAttackCurve",
@@ -50,7 +51,6 @@ object ProcreateBrush {
             "dynamicsPressureSmudgePullCurve",
             "dynamicsPressureStampCountCurve",
             "dynamicsPressureStampCountJitterCurve",
-            "dynamicsPressureTransferModulationCurve",
             "dynamicsPressureWetPullCurve",
         )
 
@@ -75,41 +75,7 @@ object ProcreateBrush {
     fun read(archive: ByteArray): Settings {
         val keyed = KeyedArchive(BinaryPlist.read(archive))
         val brush = requireNotNull(keyed.root) { "This is not a Procreate brush" }
-        // Preserve source scalar values before ArtFlow's intentionally approximate
-        // mapping clamps its own editable brush controls. Nested archive objects
-        // and image data are never copied into the saved brush model.
-        val sourceScalars =
-            brush.mapNotNull { (name, raw) ->
-                if (!SourceBrushScalar.validName(name)) return@mapNotNull null
-                val field = SourceBrushScalar.capture(keyed.resolve(raw)) ?: return@mapNotNull null
-                name to field
-            }.toMap()
-        require(sourceScalars.size <= SourceBrushScalar.MAX_FIELDS) { "Too many source brush scalar settings" }
-        val sourceStructures =
-            STRUCTURED_OBJECT_KEYS.mapNotNull { key ->
-                val original = brush[key] ?: return@mapNotNull null
-                val className = keyed.className(original) ?: return@mapNotNull null
-                val objectFields = keyed.map(original) ?: return@mapNotNull null
-                val captured =
-                    if (key in ARRAY_OBJECT_KEYS) {
-                        val rawValues = keyed.array(original)
-                        if (rawValues.size > SourceBrushStructuredField.MAX_ITEMS) return@mapNotNull null
-                        val values = rawValues.mapNotNull(SourceBrushScalar::capture)
-                        if (values.size != rawValues.size) return@mapNotNull null
-                        SourceBrushStructuredField(className, SourceBrushStructuredField.Kind.ARRAY, items = values)
-                    } else {
-                        val originalFields = objectFields.filterKeys { it != "\$class" }
-                        if (originalFields.size > SourceBrushStructuredField.MAX_FIELDS) return@mapNotNull null
-                        val values =
-                            originalFields.mapNotNull { (name, value) ->
-                                val scalar = SourceBrushScalar.capture(keyed.resolve(value)) ?: return@mapNotNull null
-                                name to scalar
-                            }.toMap()
-                        if (values.size != originalFields.size) return@mapNotNull null
-                        SourceBrushStructuredField(className, SourceBrushStructuredField.Kind.FIELDS, fields = values)
-                    }
-                if (captured.isValidFor(key)) key to captured else null
-            }.toMap()
+
         fun number(key: String): Float? = (brush[key] as? Number)?.toFloat()?.takeIf { it.isFinite() }
 
         fun unit(key: String): Float = number(key)?.coerceIn(0f, 1f) ?: 0f
@@ -123,6 +89,7 @@ object ProcreateBrush {
                 ?: number("blendMode")?.roundToInt()?.let(ProcreateBlendModes::of)
         val parameters =
             BrushParams(
+                sourceImportVersion = NATIVE_BRUSH_IMPORT_VERSION,
                 size =
                     (
                         BASE_SIZE * (number("maxSize") ?: 1f).coerceIn(MIN_SCALE, MAX_SCALE) *
@@ -132,26 +99,28 @@ object ProcreateBrush {
                 spacing = (number("plotSpacing") ?: DEFAULT_SPACING).coerceIn(MIN_SPACING, 1f),
                 scatter = unit("plotJitter"),
                 count = 1 + (unit("shapeCount") * (MAX_COUNT - 1)).roundToInt(),
+                countJitter = unit("shapeCountJitter"),
                 rotation = normalizedAngle(number("shapeAngle") ?: 0f),
                 taperStart = unit("pencilTaperStartLength"),
                 taperEnd = unit("pencilTaperEndLength"),
                 taperOpacity = unit("pencilTaperOpacity"),
                 pressureToSize = signed("dynamicsPressureSize"),
-                pressureToOpacity = signed("dynamicsPressureOpacity"),
-                importedPressure =
-                    ImportedPressure(
-                        overall = curve(keyed, brush["dynamicsPressureOverall"]),
-                        size = curve(keyed, brush["dynamicsPressureSizeCurve"]),
-                        opacity = curve(keyed, brush["dynamicsPressureOpacityCurve"]),
-                    ).takeIf { it.overall != null || it.size != null || it.opacity != null },
+                // Native initWithCoder/getter offsets establish these historical archive aliases.
+                // The field called Opacity is Flow; OpacityTransfer is the actual opacity channel.
+                pressureToFlow = signed("dynamicsPressureOpacity"),
+                pressureToOpacity = signed("dynamicsPressureOpacityTransfer"),
+                importedPressure = primaryCurves(keyed, brush),
                 importedAuxiliaryCurves =
-                    AUXILIARY_CURVE_KEYS.mapNotNull { key ->
-                        curve(keyed, brush[key])?.let { mapping -> key to mapping }
-                    }.toMap(),
-                importedSourceScalars = sourceScalars,
-                importedSourceStructures = sourceStructures,
+                    AUXILIARY_CURVE_KEYS
+                        .mapNotNull { key ->
+                            curve(keyed, brush[key])?.let { mapping -> key to mapping }
+                        }.toMap(),
+                importedSourceScalars = sourceScalars(keyed, brush),
+                importedSourceStructures = sourceStructures(keyed, brush),
                 importedSourceColorData =
-                    keyed.data(brush["color"])?.takeIf { it.size == SOURCE_COLOR_BYTES }
+                    keyed
+                        .data(brush["color"])
+                        ?.takeIf { it.size == SOURCE_COLOR_BYTES }
                         ?.let { Base64.getEncoder().encodeToString(it) },
                 hueJitter = unit("dynamicsJitterHue"),
                 saturationJitter = unit("dynamicsJitterSaturation"),
@@ -170,7 +139,13 @@ object ProcreateBrush {
                 sizeJitter = unit("dynamicsJitterSize"),
                 opacityJitter = unit("dynamicsJitterOpacity"),
                 smoothing = maxOf(unit("plotSmoothing"), unit("plotMovingAverageStabilization"), unit("plotFFTSmoothingAmount")),
-                wetMix = unit("dynamicsMix"),
+                // Native getters prove Mix is Dilution and PressureMix is Attack.
+                wetDilution = unit("dynamicsMix"),
+                wetAttack = (number("dynamicsPressureMix") ?: 1f).coerceIn(0f, 1f),
+                wetPull = (number("dynamicsWetAccumulation") ?: number("dynamicsSmudgeAccumulation") ?: 0f).coerceIn(0f, 1f),
+                bleed = unit("dynamicsPressureBleed"),
+                wetBlur = unit("dynamicsBlur"),
+                wetBlurJitter = unit("dynamicsBlurJitter"),
                 flow = (number("dynamicsGlazedFlow") ?: 1f).coerceIn(MIN_OPACITY, 1f),
                 textureScale = (number("textureScale") ?: 1f).coerceIn(MIN_GRAIN_SCALE, MAX_SCALE),
                 tiltInfluence = unit("dynamicsTiltSize"),
@@ -209,8 +184,66 @@ object ProcreateBrush {
      * Inspect a synthetic, decoded settings dictionary using the same importer as real
      * Brush.archive inputs. This is deliberately not a second, divergent parser.
      */
-    fun parameters(fields: Map<String, Any?>): BrushParams =
-        read(KeyedArchiveBuilder().encode(fields)).parameters
+    fun parameters(fields: Map<String, Any?>): BrushParams = read(KeyedArchiveBuilder().encode(fields)).parameters
+
+    private fun primaryCurves(
+        keyed: KeyedArchive,
+        brush: Map<String, Any?>,
+    ): ImportedPressure? =
+        ImportedPressure(
+            overall = curve(keyed, brush["dynamicsPressureOverall"]),
+            size = curve(keyed, brush["dynamicsPressureSizeCurve"]),
+            opacity = curve(keyed, brush["dynamicsPressureTransferModulationCurve"]),
+            flow = curve(keyed, brush["dynamicsPressureOpacityCurve"]),
+        ).takeIf { it.overall != null || it.size != null || it.opacity != null || it.flow != null }
+
+    /** Preserve bounded source values before the editable renderer parameters are clamped. */
+    private fun sourceScalars(
+        keyed: KeyedArchive,
+        brush: Map<String, Any?>,
+    ): Map<String, SourceBrushScalar> {
+        val scalars =
+            brush
+                .mapNotNull { (name, raw) ->
+                    if (!SourceBrushScalar.validName(name)) return@mapNotNull null
+                    val field = SourceBrushScalar.capture(keyed.resolve(raw)) ?: return@mapNotNull null
+                    name to field
+                }.toMap()
+        require(scalars.size <= SourceBrushScalar.MAX_FIELDS) { "Too many source brush scalar settings" }
+        return scalars
+    }
+
+    /** Only observed primitive arrays/objects are retained; arbitrary nested archive data stays out. */
+    private fun sourceStructures(
+        keyed: KeyedArchive,
+        brush: Map<String, Any?>,
+    ): Map<String, SourceBrushStructuredField> =
+        STRUCTURED_OBJECT_KEYS
+            .mapNotNull { key ->
+                val original = brush[key] ?: return@mapNotNull null
+                val className = keyed.className(original) ?: return@mapNotNull null
+                val objectFields = keyed.map(original) ?: return@mapNotNull null
+                val captured =
+                    if (key in ARRAY_OBJECT_KEYS) {
+                        val rawValues = keyed.array(original)
+                        if (rawValues.size > SourceBrushStructuredField.MAX_ITEMS) return@mapNotNull null
+                        val values = rawValues.mapNotNull(SourceBrushScalar::capture)
+                        if (values.size != rawValues.size) return@mapNotNull null
+                        SourceBrushStructuredField(className, SourceBrushStructuredField.Kind.ARRAY, items = values)
+                    } else {
+                        val originalFields = objectFields.filterKeys { it != "\$class" }
+                        if (originalFields.size > SourceBrushStructuredField.MAX_FIELDS) return@mapNotNull null
+                        val values =
+                            originalFields
+                                .mapNotNull { (name, value) ->
+                                    val scalar = SourceBrushScalar.capture(keyed.resolve(value)) ?: return@mapNotNull null
+                                    name to scalar
+                                }.toMap()
+                        if (values.size != originalFields.size) return@mapNotNull null
+                        SourceBrushStructuredField(className, SourceBrushStructuredField.Kind.FIELDS, fields = values)
+                    }
+                if (captured.isValidFor(key)) key to captured else null
+            }.toMap()
 
     private fun normalizedAngle(radians: Float): Float {
         val degrees = Math.toDegrees(radians.toDouble()) % FULL_TURN
@@ -250,15 +283,12 @@ object ProcreateBrush {
     private const val MAX_SCALE = 8f
 
     /** The smallest grain scale the library stores and the renderer uses. */
-    private const val MIN_GRAIN_SCALE = 0.25f
+    private const val MIN_GRAIN_SCALE = 0.05f
     private const val MIN_OPACITY = 0.05f
     private const val DEFAULT_SPACING = 0.1f
     private const val MIN_SPACING = 0.01f
     private const val MAX_COUNT = 16
     private const val FULL_TURN = 360f
-
-    /** Kotlin's % keeps the sign of the dividend, so a negative angle needs wrapping to [0, 360). */
-    private fun wrapDegrees(degrees: Float): Float = ((degrees % FULL_TURN) + FULL_TURN) % FULL_TURN
 
     private const val MIN_ROUNDNESS = 0.05f
     private const val MOVING_GRAIN = 0.5f

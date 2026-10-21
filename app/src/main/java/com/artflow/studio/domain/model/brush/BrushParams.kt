@@ -1,6 +1,8 @@
 package com.artflow.studio.domain.model.brush
 
 import com.artflow.studio.domain.model.layer.BlendMode
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import java.util.Random
 import kotlin.math.abs
@@ -10,6 +12,7 @@ import kotlin.math.abs
  * Used by the brush engine to control stroke rendering
  * Implements Phase 9: Advanced Brush Parameters
  */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class BrushParams(
     val size: Float = 20f, // Brush size in pixels
@@ -25,8 +28,9 @@ data class BrushParams(
     val pressureToOpacity: Float = 0.3f, // How much pressure affects opacity
     val pressureCurve: PressureCurve = PressureCurve.LINEAR,
     val customPressure: PressureResponse = PressureResponse(),
-    val importedPressure: ImportedPressure? = null, // Preserved independent per-brush and per-channel responses
-    /** Imported source pressure curves not yet mapped to ArtFlow's renderer; valid points retained for interchange. */
+    /** Preserved independent per-brush and per-channel responses. */
+    val importedPressure: ImportedPressure? = null,
+    /** Source channel curves; colour and bleed curves are applied, other valid graphs remain available for interchange. */
     val importedAuxiliaryCurves: Map<String, PressureMapping> = emptyMap(),
     /** Bounded native settings scalars retained as data, including fields unknown to this renderer. */
     val importedSourceScalars: Map<String, SourceBrushScalar> = emptyMap(),
@@ -99,13 +103,38 @@ data class BrushParams(
     val wetBlurJitter: Float = 0f,
     val wetCharge: Float = 1f,
     val wetDilution: Float = 0f,
+    /**
+     * Pickup reaches full strength immediately at one, or ramps in over four brush widths at zero.
+     * Omit the default so older checksummed stroke documents re-encode without this new field.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val wetAttack: Float = 1f,
     val renderingMode: RenderingMode? = null,
+    /** Import interpretation used when comparing edited settings with retained source archive values. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val sourceImportVersion: Int = 0,
 ) {
     /** Flow at [pressure], after Pressure → Flow thins it for lighter presses. */
-    fun flowAt(pressure: Float): Float = flow.coerceIn(0f, 1f) * (1f - pressureToFlow.coerceIn(0f, 1f) * (1f - pressureResponse(pressure)))
+    fun flowAt(pressure: Float): Float {
+        val overall = pressureResponse(pressure)
+        val response = importedPressure?.flow?.map(overall) ?: overall
+        return flow.coerceIn(0f, 1f) * pressureFactor(response, pressureToFlow)
+    }
 
-    /** These settings for a finger stroke: the Touch taper replaces the stylus (pressure) taper. */
-    fun forTouch(): BrushParams = copy(taperStart = touchTaperStart ?: taperStart, taperEnd = touchTaperEnd ?: taperEnd)
+    /** A finger has no measured pen pressure; keep its touch taper without running pen-only dynamics. */
+    fun forTouch(): BrushParams =
+        copy(
+            taperStart = touchTaperStart ?: taperStart,
+            taperEnd = touchTaperEnd ?: taperEnd,
+            pressureToSize = 0f,
+            pressureToOpacity = 0f,
+            pressureToFlow = 0f,
+            colorPressure = false,
+            secondaryPressure = 0f,
+            bleed = 0f,
+            colorDynamics = colorDynamics.copy(pressureHue = 0f, pressureSaturation = 0f, pressureBrightness = 0f),
+            dual = dual?.copy(params = dual.params.forTouch()),
+        )
 
     /** Canonical mode consumed by the rasterizer and Brush Studio. */
     val rendering: RenderingMode
@@ -234,6 +263,18 @@ data class BrushParams(
         return importedPressure?.overall?.map(mapped) ?: mapped
     }
 
+    /**
+     * A source channel follows the overall response, just as imported size and opacity do.
+     * The stored nodes use ArtFlow's linear interpolation; this is not the native interpolation.
+     */
+    fun channelPressure(
+        pressure: Float,
+        curve: String,
+    ): Float {
+        val overall = pressureResponse(pressure)
+        return importedAuxiliaryCurves[curve]?.map(overall) ?: overall
+    }
+
     private fun pressureFactor(
         response: Float,
         amount: Float,
@@ -268,7 +309,16 @@ data class BrushParams(
         tilt: Float = 0f,
     ): Int {
         val mixed = towardSecondary(baseColor, secondary, pressure, random)
-        return colorDynamics.apply(jittered(mixed, pressure, velocity, random), pressureResponse(pressure), tilt)
+        val jittered = jittered(mixed, pressure, velocity, random)
+        if (!colorDynamics.isActive) return jittered
+        val overall = pressureResponse(pressure)
+        val channels =
+            ColorPressure(
+                hue = importedAuxiliaryCurves["dynamicsPressureHueCurve"]?.map(overall) ?: overall,
+                saturation = importedAuxiliaryCurves["dynamicsPressureSaturationCurve"]?.map(overall) ?: overall,
+                brightness = importedAuxiliaryCurves["dynamicsPressureBrightnessCurve"]?.map(overall) ?: overall,
+            )
+        return colorDynamics.apply(jittered, channels, tilt)
     }
 
     /** Procreate's secondary colour dynamics: pressure and per-dab jitter blend toward [secondary]. */
@@ -281,7 +331,7 @@ data class BrushParams(
         if (secondary == null || (secondaryPressure <= 0f && secondaryJitter <= 0f)) return baseColor
         val amount =
             (
-                secondaryPressure.coerceIn(0f, 1f) * pressureResponse(pressure) +
+                secondaryPressure.coerceIn(0f, 1f) * channelPressure(pressure, "dynamicsPressureSecondaryColorCurve") +
                     secondaryJitter.coerceIn(0f, 1f) * (random?.nextFloat() ?: 0.5f)
             ).coerceIn(0f, 1f)
 
@@ -356,6 +406,9 @@ data class BrushParams(
 const val MIN_BRUSH_SIZE = 1f
 const val MAX_BRUSH_SIZE = 512f
 
+/** Native getter/serialization contracts that distinguish pressure flow, opacity and wet controls. */
+const val NATIVE_BRUSH_IMPORT_VERSION = 1
+
 /** The faintest opacity a brush slider offers. */
 const val MIN_BRUSH_OPACITY = 0.01f
 
@@ -373,8 +426,8 @@ private fun limits(
 
 /**
  * Procreate's Colour Pressure and Colour Tilt: how far a light press (and a pen tilted toward flat)
- * moves the colour from the one chosen. Each amount is 0 to 1; at full press and upright pen the
- * colour is exactly the chosen one.
+ * moves the colour from the one chosen. Signed amounts also support imported opposite responses.
+ * Colour uses an HSV approximation; imported channel graphs do not establish native colour math.
  */
 @Serializable
 data class ColorDynamics(
@@ -394,20 +447,30 @@ data class ColorDynamics(
         color: Int,
         pressure: Float,
         tilt: Float,
+    ): Int = apply(color, ColorPressure(pressure, pressure, pressure), tilt)
+
+    /** Each channel's source curve is independent, and follows the overall pressure response. */
+    fun apply(
+        color: Int,
+        pressure: ColorPressure,
+        tilt: Float,
     ): Int {
         if (!isActive) return color
-        val light = 1f - pressure.coerceIn(0f, 1f)
+        val lightHue = 1f - pressure.hue.coerceIn(0f, 1f)
+        val lightSaturation = 1f - pressure.saturation.coerceIn(0f, 1f)
+        val lightBrightness = 1f - pressure.brightness.coerceIn(0f, 1f)
         val flat = tilt.coerceIn(0f, 1f)
         // No transform at full pressure with an upright pen: avoid an RGB->HSV->RGB
         // rounding change to the original colour even when dynamics are enabled.
-        if (light == 0f && flat == 0f) return color
+        val fullPressure = lightHue == 0f && lightSaturation == 0f && lightBrightness == 0f
+        if (fullPressure && flat == 0f) return color
         val hsv =
             com.artflow.studio.domain.model.Color
                 .rgbToHsv(color)
-        val hueShift = (signed(pressureHue) * light + signed(tiltHue) * flat) * HALF_TURN
+        val hueShift = (signed(pressureHue) * lightHue + signed(tiltHue) * flat) * HALF_TURN
         hsv[0] = ((hsv[0] + hueShift) % FULL_TURN + FULL_TURN) % FULL_TURN
-        hsv[1] *= (1f - signed(pressureSaturation) * light) * (1f - signed(tiltSaturation) * flat)
-        hsv[2] *= (1f - signed(pressureBrightness) * light) * (1f - signed(tiltBrightness) * flat)
+        hsv[1] *= (1f - signed(pressureSaturation) * lightSaturation) * (1f - signed(tiltSaturation) * flat)
+        hsv[2] *= (1f - signed(pressureBrightness) * lightBrightness) * (1f - signed(tiltBrightness) * flat)
         val rgb =
             com.artflow.studio.domain.model.Color
                 .hsvToRgb(hsv[0], hsv[1].coerceIn(0f, 1f), hsv[2].coerceIn(0f, 1f))
@@ -422,6 +485,13 @@ data class ColorDynamics(
         const val FULL_TURN = 360f
     }
 }
+
+/** Already-mapped pressure inputs for independent colour channels, not persisted brush settings. */
+data class ColorPressure(
+    val hue: Float,
+    val saturation: Float,
+    val brightness: Float,
+)
 
 /** Procreate's grain blend modes: how the grain value combines with the stroke's own coverage. */
 @Serializable

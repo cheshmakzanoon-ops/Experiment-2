@@ -15,10 +15,11 @@ class LayerTransformTest {
 
     @Test fun repositoryTransformRequestKeepsOriginalAndMovesPixels() {
         val source = dot(8, 1, 2)
-        val moved = LayerTransform.apply(
-            source,
-            LayerTransform.Parameters(translationX = 2f, translationY = 1f),
-        )
+        val moved =
+            LayerTransform.apply(
+                source,
+                LayerTransform.Parameters(translationX = 2f, translationY = 1f),
+            )
         assertEquals(red, moved.pixels[3 * 8 + 3])
         assertEquals(red, source.pixels[2 * 8 + 1])
         assertEquals(0, source.pixels[3 * 8 + 3])

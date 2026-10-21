@@ -1,0 +1,182 @@
+{
+  "architecture": "arm64",
+  "brush_curve_contracts": [
+    {
+      "archive_key": "dynamicsPressureOpacityCurve",
+      "bridge": "0x100159080",
+      "curve_index": 3,
+      "native_property": "dynamicsPressureFlow",
+      "switch_arm": "0x100a3f34c"
+    },
+    {
+      "archive_key": "dynamicsPressureTransferModulationCurve",
+      "bridge": "0x1001590b0",
+      "curve_index": 10,
+      "native_property": "dynamicsPressureOpacity",
+      "switch_arm": "0x100a3f328"
+    }
+  ],
+  "brush_scalar_contracts": [
+    {
+      "archive_key": "dynamicsPressureOpacity",
+      "decode_call": "0x100a3ff48",
+      "getter": "0x100a45da8",
+      "ivar_offset": "0x1d8",
+      "key_reference": "0x100a3ff3c",
+      "native_property": "dynamicsPressureFlow",
+      "store_instruction": "0x100a3ff4c"
+    },
+    {
+      "archive_key": "dynamicsPressureOpacityTransfer",
+      "decode_call": "0x100a408a0",
+      "getter": "0x100a461ec",
+      "ivar_offset": "0x278",
+      "key_reference": "0x100a40894",
+      "native_property": "dynamicsPressureOpacity",
+      "store_instruction": "0x100a408a4"
+    },
+    {
+      "archive_key": "dynamicsMix",
+      "decode_call": "0x100a4048c",
+      "getter": "0x100a46468",
+      "ivar_offset": "0x2f4",
+      "key_reference": "0x100a40480",
+      "native_property": "dynamicsDilution",
+      "store_instruction": "0x100a40490"
+    },
+    {
+      "archive_key": "dynamicsMixSoftening",
+      "decode_call": "0x100a404a0",
+      "getter": "0x100a46478",
+      "ivar_offset": "0x2f8",
+      "key_reference": "0x100a40494",
+      "native_property": "dynamicsGrade",
+      "store_instruction": "0x100a404a4"
+    },
+    {
+      "archive_key": "dynamicsLoad",
+      "decode_call": "0x100a404b4",
+      "getter": "0x100a45df8",
+      "ivar_offset": "0x1ec",
+      "key_reference": "0x100a404a8",
+      "native_property": "dynamicsLoad",
+      "store_instruction": "0x100a404b8"
+    },
+    {
+      "archive_key": "dynamicsPressureMix",
+      "decode_call": "0x100a40050",
+      "getter": "0x100a46488",
+      "ivar_offset": "0x2fc",
+      "key_reference": "0x100a40044",
+      "native_property": "dynamicsAttack",
+      "store_instruction": "0x100a40054"
+    },
+    {
+      "archive_key": "dynamicsPressureBleed",
+      "decode_call": "0x100a40064",
+      "getter": "0x100a4621c",
+      "ivar_offset": "0x284",
+      "key_reference": "0x100a40058",
+      "native_property": "dynamicsPressureBleed",
+      "store_instruction": "0x100a4006c"
+    },
+    {
+      "archive_key": "dynamicsWetAccumulation",
+      "decode_call": "0x100a40944",
+      "getter": "0x100a46498",
+      "ivar_offset": "0x300",
+      "key_reference": "0x100a40938",
+      "native_property": "dynamicsWetPull",
+      "store_instruction": "0x100a40950"
+    },
+    {
+      "archive_key": "dynamicsBlur",
+      "decode_call": "0x100a408c8",
+      "getter": "0x100a464b8",
+      "ivar_offset": "0x308",
+      "key_reference": "0x100a408bc",
+      "native_property": "dynamicsBlur",
+      "store_instruction": "0x100a408cc"
+    },
+    {
+      "archive_key": "dynamicsBlurJitter",
+      "decode_call": "0x100a408dc",
+      "getter": "0x100a464c8",
+      "ivar_offset": "0x30c",
+      "key_reference": "0x100a408d0",
+      "native_property": "dynamicsBlurJitter",
+      "store_instruction": "0x100a408e0"
+    },
+    {
+      "archive_key": "shapeCountJitter",
+      "decode_call": "0x100a3fa30",
+      "getter": "0x100a45f90",
+      "ivar_offset": "0x220",
+      "key_reference": "0x100a3fa24",
+      "native_property": "shapeCountJitter",
+      "store_instruction": "0x100a3fa34"
+    }
+  ],
+  "class_count": 1707,
+  "encrypted": false,
+  "executable_bytes": 19119424,
+  "executable_path": "Payload/Procreate.app/Procreate",
+  "executable_sha256": "76d3ff1249a987b8f03ac3ecc64c54e48f618bac467e9fbb1f238b91fab1487b",
+  "external_bind_pointers": 29856,
+  "limitations": [
+    "No target code was executed. Declared methods are not runtime observations.",
+    "Native renderer equations, GPU shaders, brush feel and pixel parity remain unverified.",
+    "Curve bridge/key correspondence does not establish the original curve interpolation algorithm.",
+    "PSD independent-mask semantics are verified narrowly; complete PSD interoperability is not established.",
+    "Only the pinned ARM64 build and supported metadata encodings are accepted."
+  ],
+  "method_count": 20368,
+  "psd_mask_contract": {
+    "calls": {
+      "0x100b71d34": "maskChannelLength",
+      "0x100b720c4": "maskVisible",
+      "0x100b72788": "maskdata",
+      "0x100b72800": "compactChannel:data:forRect:channels:invertValues:",
+      "0x100b72818": "setMaskChannelLength:"
+    },
+    "channel_count_argument": 1,
+    "channel_id": -2,
+    "invert_argument": false
+  },
+  "rebased_pointers": 134018,
+  "scope": "Static native archive-key/property correspondences and selected PSD/animation declarations",
+  "selected_native_methods": {
+    "SiPSDDataSourceLayer": {
+      "maskRect": "0x100b713b0",
+      "maskVisible": "0x100b713a0",
+      "maskdata": "0x100b71430"
+    },
+    "SiPSDRecordLayer": {
+      "channelCount": "0x100b72444",
+      "dataForMask": "0x100b72738",
+      "maskChannelLength": "0x100b73a08",
+      "record": "0x100b718d4"
+    },
+    "ValkyrieComposite": {
+      "onionSkinNextFrameColor": "0x100a5bdb4",
+      "onionSkinPreviousFrameColor": "0x100a5bda0",
+      "onionSkinPrimaryMixed": "0x100a5bd90"
+    },
+    "ValkyrieDocument": {
+      "animationItemsForBackground": "0x100b21a0c",
+      "animationItemsForForeground": "0x100b21a68",
+      "visibleAnimationItemsForBackground": "0x100b21ac4",
+      "visibleAnimationItemsForForeground": "0x100b21b60"
+    },
+    "ValkyrieGroup": {
+      "animationHeldLength": "0x100b28c84",
+      "isAnimationBackground": "0x100b28c8c"
+    },
+    "ValkyrieLayer": {
+      "animationHeldLength": "0x100b35338",
+      "isAnimationBackground": "0x100b35364"
+    }
+  },
+  "source_bytes": 777430382,
+  "source_sha256": "7b1dad3ac95f8aeca3c22b432b5d6fd94182a3bf9f84fb93588adb126368b54e"
+}

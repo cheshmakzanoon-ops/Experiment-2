@@ -272,8 +272,8 @@ object PerspectiveGuide {
         if (settings.gridRotation % 360f != 0f) return rotatedGridLines(settings, width, height)
         val lines = mutableListOf<GuideLine>()
         // The grid is centred on the canvas, matching the square-grid snapping origin.
-        val phaseX = (width / 2f) % spacing
-        val phaseY = (height / 2f) % spacing
+        val phaseX = squareGridPhase(width, spacing)
+        val phaseY = squareGridPhase(height, spacing)
         var x = phaseX
         while (x <= width) {
             lines += GuideLine(x, 0f, x, height.toFloat(), pointIndex = -1)
@@ -287,11 +287,21 @@ object PerspectiveGuide {
         return lines
     }
 
+    /** First non-negative grid line when the square grid is anchored at the canvas centre. */
+    fun squareGridPhase(
+        dimension: Int,
+        spacing: Int,
+    ): Float = (dimension / 2f) % spacing.coerceIn(8, 512)
+
     /**
      * Rotated 2D grid about the canvas centre: both orthogonal families retain the
      * same spacing and rotation as the user's guide settings.
      */
-    private fun rotatedGridLines(settings: Settings, width: Int, height: Int): List<GuideLine> {
+    private fun rotatedGridLines(
+        settings: Settings,
+        width: Int,
+        height: Int,
+    ): List<GuideLine> {
         val spacing = settings.gridSpacing.coerceIn(8, 512).toFloat()
         val angle = Math.toRadians(settings.gridRotation.toDouble())
         val centreX = width / 2f
@@ -310,8 +320,10 @@ object PerspectiveGuide {
                     val oy = centreY + ny * step * spacing
                     val ray =
                         GuideLine(
-                            ox - dx * diagonal, oy - dy * diagonal,
-                            ox + dx * diagonal, oy + dy * diagonal,
+                            ox - dx * diagonal,
+                            oy - dy * diagonal,
+                            ox + dx * diagonal,
+                            oy + dy * diagonal,
                             pointIndex = -1,
                         )
                     clipToCanvas(ray, width, height)?.let(::add)

@@ -38,15 +38,16 @@ fun ExportSheet(
     canvasDpi: Int,
     previewBytes: ByteArray?,
     exportState: ExportUiState,
-    onExport: (ExportOptions) -> Unit,
     actions: ExportActions,
-    onDismissResult: () -> Unit,
     modifier: Modifier = Modifier,
+    animationLoop: Boolean = true,
 ) {
+    val onExport = actions.export
+    val onDismissResult = actions.dismissResult
     val onExportTimelapse = actions.exportTimelapse
     val onClearTimelapse = actions.clearTimelapse
     var options by remember {
-        mutableStateOf(ExportOptions(format = availableFormats.firstOrNull() ?: ExportFormat.PNG, dpi = canvasDpi))
+        mutableStateOf(ExportOptions(format = availableFormats.firstOrNull() ?: ExportFormat.PNG, dpi = canvasDpi, gifLoop = animationLoop))
     }
     val (width, height) = ExportNaming.resolveSize(canvasWidth, canvasHeight, options)
     val safe = CanvasOperations.isSizeSafe(width, height)
@@ -60,6 +61,9 @@ fun ExportSheet(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(stringResource(R.string.export_title), style = MaterialTheme.typography.titleMedium)
+        if (options.format.requiresAnimation) {
+            Text(stringResource(R.string.animation_export_sequence), style = MaterialTheme.typography.bodySmall)
+        }
         ExportPreview(previewBytes)
         Text(stringResource(R.string.export_format), style = MaterialTheme.typography.labelMedium)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -210,6 +214,7 @@ private fun FormatControls(
         }
     }
     if (options.format == ExportFormat.PSD) {
+        Text(stringResource(R.string.export_psd_masks), style = MaterialTheme.typography.bodySmall)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(options.psdUseRle, onCheckedChange = { onChange(options.copy(psdUseRle = it)) })
             Spacer(Modifier.width(8.dp))

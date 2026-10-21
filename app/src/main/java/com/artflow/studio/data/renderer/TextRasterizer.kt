@@ -59,20 +59,18 @@ object TextRasterizer {
         }
         var baseline = content.y + TextLayout.estimatedAscent(style)
         lines.forEach { (line, stretch) ->
-            if (stretch && style.alignment == TextLayout.Alignment.JUSTIFY && style.maxWidth != null) {
-                TextLayout.justify(line, { paint.measureText(it) }, maxWidth, content.x).forEach { run ->
-                    canvas.drawText(run.text, run.x, baseline, paint)
-                }
-            } else {
-                val measured = paint.measureText(line)
-                val startX =
-                    when (style.alignment) {
-                        TextLayout.Alignment.CENTER -> content.x + (maxWidth - measured) / 2f
-                        TextLayout.Alignment.RIGHT -> content.x + maxWidth - measured
-                        else -> content.x
-                    }
-                canvas.drawText(line, startX, baseline, paint)
-            }
+            drawLine(
+                canvas,
+                paint,
+                line,
+                Placement(
+                    content.x,
+                    maxWidth,
+                    baseline,
+                    style.alignment,
+                    stretch && style.alignment == TextLayout.Alignment.JUSTIFY && style.maxWidth != null,
+                ),
+            )
             baseline += style.lineHeightPx
         }
         val result = BitmapPixelBridge.fromBitmap(bitmap)

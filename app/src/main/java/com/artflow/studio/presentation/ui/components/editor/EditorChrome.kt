@@ -8,8 +8,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -340,8 +340,6 @@ fun GuidesOverlay(
             }
 
             if (showPerspective && perspective.isActive()) {
-                val perspectiveWidth = perspective.lineStyle.widthInCanvasPixels(scale)
-                val perspectiveColour = Color(perspective.lineStyle.argb())
                 PerspectiveGuide.guideLines(perspective, canvasWidth, canvasHeight).forEach { line ->
                     val clipped = PerspectiveGuide.clipToCanvas(line, canvasWidth, canvasHeight) ?: return@forEach
                     drawLine(

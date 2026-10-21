@@ -84,6 +84,7 @@ data class StudioPrefs(
     val dynamicBrushScaling: Boolean = false,
     val selectionMaskVisibility: Float = 0.28f,
     val projectCanvas: Boolean = false,
+    val stylus: StylusButtons = StylusButtons(),
 )
 
 data class PrefActions(
@@ -101,6 +102,7 @@ data class PrefActions(
     val onDynamicBrushScaling: (Boolean) -> Unit = {},
     val onSelectionMaskVisibility: (Float) -> Unit = {},
     val onProjectCanvas: (Boolean) -> Unit = {},
+    val onStylus: (StylusButtons) -> Unit = {},
 )
 
 /** Canvas facts shown under Canvas > Canvas information. */
@@ -367,9 +369,37 @@ private fun PrefsTab(
         range = 200f..1500f,
         readout = "%.2f s".format(gestures.quickShapeDelayMs / 1000f),
     ) { actions.onGestures(gestures.copy(quickShapeDelayMs = (it / 50f).roundToInt() * 50)) }
+    StylusPreferences(prefs.stylus, actions.onStylus)
     HorizontalDivider()
     ActionRow("Full screen", actions.onFullScreen)
     ActionRow("More preferences…", actions.onMoreSettings)
+}
+
+@Composable
+private fun StylusPreferences(
+    buttons: StylusButtons,
+    onChange: (StylusButtons) -> Unit,
+) {
+    HorizontalDivider()
+    Text(stringResource(R.string.actionspanel_stylus), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
+    ChoiceRow(
+        stringResource(R.string.actionspanel_stylus_primary_button),
+        buttons.primary,
+        StylusAction.entries,
+        StylusAction::labelRes,
+    ) { onChange(buttons.copy(primary = it)) }
+    ChoiceRow(
+        stringResource(R.string.actionspanel_stylus_secondary_button),
+        buttons.secondary,
+        StylusAction.entries,
+        StylusAction::labelRes,
+    ) { onChange(buttons.copy(secondary = it)) }
+    ChoiceRow(
+        stringResource(R.string.actionspanel_stylus_eraser_end),
+        buttons.eraserEnd,
+        StylusEraserEnd.entries,
+        StylusEraserEnd::labelRes,
+    ) { onChange(buttons.copy(eraserEnd = it)) }
 }
 
 @Composable

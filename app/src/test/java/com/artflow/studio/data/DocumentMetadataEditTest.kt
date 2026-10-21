@@ -183,7 +183,7 @@ class DocumentMetadataEditTest {
     fun equivalentNormalizedAnimationSettingsAreANoOp() =
         runTest {
             repository.createCanvas(8, 6, 72)
-            val normalized = AnimationSettings(fps = 60, onionSkinFrames = 5, onionSkinOpacity = 1f)
+            val normalized = AnimationSettings(fps = 60, onionSkinFrames = AnimationSettings.MAX_ONION_SKIN_FRAMES, onionSkinOpacity = 1f)
             repository.updateAnimationSettings(normalized)
             val depth = repository.undoDepth
             val revision = repository.contentRevision

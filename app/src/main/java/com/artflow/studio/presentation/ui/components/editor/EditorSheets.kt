@@ -35,8 +35,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.artflow.studio.R
+import com.artflow.studio.core.animation.AnimationPlayback
 import com.artflow.studio.core.animation.AnimationTimeline
-import com.artflow.studio.core.animation.OnionSkinTint
 import com.artflow.studio.core.animation.PlayMode
 import com.artflow.studio.core.animation.withPlayMode
 import com.artflow.studio.core.canvas.CanvasOperations
@@ -102,6 +102,8 @@ data class LayerRowActions(
     val onSelectContents: (Long) -> Unit = {},
     /** Touch and hold the visibility box: show only this layer, or bring the others back. */
     val onSolo: (Long) -> Unit = {},
+    /** Enabled layer gestures, supplied from the user's gesture preferences. */
+    val twoFingerGestures: Set<TwoFingerLayerGesture.Kind> = TwoFingerLayerGesture.Kind.entries.toSet(),
 )
 
 data class LayerStackActions(
@@ -929,7 +931,10 @@ fun AnimationSheet(
                 IconButton(onClick = { clipboard.onPaste(timeline.activeIndex + 1) }, enabled = clipboard.canPaste) {
                     Icon(Icons.Default.ContentPaste, contentDescription = stringResource(R.string.editorsheets_paste_frame))
                 }
-                IconButton(onClick = onTogglePlayback) {
+                IconButton(
+                    onClick = onTogglePlayback,
+                    enabled = timeline.isPlaying || AnimationPlayback.forwardIndices(timeline).size > 1,
+                ) {
                     Icon(
                         imageVector = if (timeline.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                         contentDescription = if (timeline.isPlaying) "Pause" else "Play",
@@ -980,16 +985,8 @@ fun AnimationSheet(
                 )
             }
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Switch(checked = settings.backgroundFrame, onCheckedChange = { onSettings(settings.copy(backgroundFrame = it)) })
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.editorsheets_first_frame_is_the_background), style = MaterialTheme.typography.bodySmall)
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Switch(checked = settings.foregroundFrame, onCheckedChange = { onSettings(settings.copy(foregroundFrame = it)) })
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.editorsheets_last_frame_is_the_foreground), style = MaterialTheme.typography.bodySmall)
-        }
+        AnimationFrameSettings(timeline, onSettings)
+        AnimationRangeSettings(timeline, onSettings)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(checked = onion.enabled, onCheckedChange = onion.onToggle)
             Spacer(Modifier.width(8.dp))
@@ -998,13 +995,13 @@ fun AnimationSheet(
         LabeledSlider(
             label = stringResource(R.string.editorsheets_onion_skin_frames),
             value = settings.onionSkinFrames.toFloat(),
-            range = 0f..5f,
+            range = 0f..AnimationSettings.MAX_ONION_SKIN_FRAMES.toFloat(),
             onChange = { onSettings(settings.copy(onionSkinFrames = it.toInt())) },
         )
         LabeledSlider(
             label = stringResource(R.string.editorsheets_onion_skin_opacity),
             value = settings.onionSkinOpacity,
-            range = 0.05f..1f,
+            range = 0f..1f,
             onChange = { onSettings(settings.copy(onionSkinOpacity = it)) },
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1017,6 +1014,7 @@ fun AnimationSheet(
             Spacer(Modifier.width(8.dp))
             Text("Blend primary frame", style = MaterialTheme.typography.bodySmall)
         }
+        AnimationOnionColors(settings, onSettings)
     }
 }
 
@@ -1349,6 +1347,13 @@ private fun FrameStrip(
             ) {
                 Column(modifier = Modifier.padding(6.dp)) {
                     Text("${index + 1}", style = MaterialTheme.typography.labelLarge)
+                    val role = AnimationPlayback.role(timeline.frames.map { it.id }, timeline.settings, index)
+                    if (role != AnimationPlayback.Role.ANIMATED) {
+                        Text(role.label, style = MaterialTheme.typography.labelSmall)
+                    }
+                    if (frame.id in timeline.settings.hiddenFrameIds) {
+                        Text(stringResource(R.string.animation_hidden), style = MaterialTheme.typography.labelSmall)
+                    }
                     Text(
                         "${frame.durationMs} ms",
                         style = MaterialTheme.typography.labelSmall,
@@ -1401,7 +1406,6 @@ fun TextSheet(
     onStyleChange: (TextLayout.TextStyle) -> Unit,
     onColorChange: (Int) -> Unit,
     onPlace: () -> Unit,
-    hasPosition: Boolean = true,
     modifier: Modifier = Modifier,
     importedFonts: List<String> = emptyList(),
     onImportFont: (() -> Unit)? = null,

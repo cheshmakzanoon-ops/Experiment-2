@@ -320,7 +320,7 @@ class PointerGestureRouter(
                 scrubReversals++
             }
         }
-        if (scrubReversals >= SCRUB_REVERSALS) {
+        if (Gesture.THREE_FINGER_SCRUB_CLEAR in enabled && scrubReversals >= SCRUB_REVERSALS) {
             multiGestureFired = true
             return Route(Action.THREE_FINGER_SCRUB)
         }

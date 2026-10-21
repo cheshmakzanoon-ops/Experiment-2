@@ -621,6 +621,9 @@ interface CanvasRepository {
         transparentBackground: Boolean = false,
     ): PixelBuffer?
 
+    /** Renders only a frame's own artwork for onion skinning, without persistent pins or background color. */
+    suspend fun compositeOnionFrame(index: Int): PixelBuffer?
+
     /** Provisional pixel-tool preview; never used by persistence or exports. */
     suspend fun compositePreview(): PixelBuffer?
 
@@ -652,11 +655,17 @@ interface CanvasRepository {
         applyAdjustments: Boolean,
     ): PixelBuffer?
 
-    /** Captures pixels, layer properties, selection and frame timing from one document revision. */
+    /**
+     * Captures pixels, layer properties, selection and frame timing from one document revision.
+     * [animationPlayback] filters all-frame requests before allocation, then records the encoded
+     * cycle in [CanvasExportSnapshot.frameOrder]. Other all-frame requests retain every source frame.
+     */
     suspend fun exportSnapshot(
         allFrames: Boolean,
         includeHidden: Boolean,
         includeLayers: Boolean,
+        preserveLayerMasks: Boolean = false,
+        animationPlayback: Boolean = false,
     ): CanvasExportSnapshot
 
     /** Layer rasters alongside their properties, for PSD export. */
@@ -746,4 +755,12 @@ data class CanvasExportSnapshot(
     val hasAdjustmentLayers: Boolean,
     /** Every layer group of the exported frame, hidden ones included, so layered formats keep the folders. */
     val groups: List<Layer> = emptyList(),
+    /** Identities of the rendered sources, in [frames] order. Playback order is already resolved in [frameOrder]. */
+    val frameIds: List<Long> = emptyList(),
+    /** Settings of the original timeline, captured with the pixels before any source filtering. */
+    val animation: AnimationSettings = AnimationSettings(),
+    /** Effective coverage for unmasked entries in [layers] and folder masks, keyed by layer id. */
+    val layerMasks: Map<Long, PixelBuffer> = emptyMap(),
+    /** Output sequence as indices into [frames]; repeated ping-pong samples share their rendered buffer. */
+    val frameOrder: List<Int> = frames.indices.toList(),
 )

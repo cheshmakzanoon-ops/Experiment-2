@@ -14,8 +14,10 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -32,6 +34,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -42,7 +45,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.compose.ui.res.stringResource
 import com.artflow.studio.R
 import com.artflow.studio.core.canvas.CanvasInformation
 import com.artflow.studio.core.canvas.CropBox
@@ -78,8 +80,8 @@ import com.artflow.studio.presentation.ui.components.canvas.BrushCursor
 import com.artflow.studio.presentation.ui.components.canvas.CanvasProjection
 import com.artflow.studio.presentation.ui.components.canvas.DragPreview
 import com.artflow.studio.presentation.ui.components.canvas.EditorInput
-import com.artflow.studio.presentation.ui.components.canvas.NavigationReadout
 import com.artflow.studio.presentation.ui.components.canvas.EyedropperLoupe
+import com.artflow.studio.presentation.ui.components.canvas.NavigationReadout
 import com.artflow.studio.presentation.ui.components.canvas.ShapeEditState
 import com.artflow.studio.presentation.ui.components.canvas.gestureControls
 import com.artflow.studio.presentation.ui.components.canvas.imageDropTarget
@@ -221,8 +223,6 @@ fun CanvasScreen(
     val exportActions = rememberExportActions(viewModel)
 
     var panel by remember { mutableStateOf(EditorPanel.NONE) }
-    var focusCanvas by rememberSaveable(projectId) { mutableStateOf(false) }
-    var showWorkspaceMenu by remember { mutableStateOf(false) }
     var canvasView by remember { mutableStateOf<ArtFlowCanvasView?>(null) }
     var dragPreview by remember { mutableStateOf<DragPreview?>(null) }
     var previewBytes by remember { mutableStateOf<ByteArray?>(null) }
@@ -876,9 +876,8 @@ fun CanvasScreen(
                     canvasDpi = ready?.dpi ?: 72,
                     previewBytes = previewBytes,
                     exportState = exportState,
-                    onExport = { viewModel.export(it) },
                     actions = exportActions,
-                    onDismissResult = { viewModel.resetExportState() },
+                    animationLoop = timeline.settings.loop,
                 )
             }
 
@@ -935,6 +934,7 @@ fun CanvasScreen(
                             dynamicBrushScaling = settings.dynamicBrushScaling,
                             selectionMaskVisibility = settings.selectionMaskVisibility,
                             projectCanvas = settings.projectCanvas,
+                            stylus = settings.stylusButtons(),
                         ),
                     add =
                         AddActions(
@@ -1021,6 +1021,7 @@ fun CanvasScreen(
                             onDynamicBrushScaling = { on -> viewModel.updateSettings { it.copy(dynamicBrushScaling = on) } },
                             onSelectionMaskVisibility = { v -> viewModel.updateSettings { it.copy(selectionMaskVisibility = v) } },
                             onProjectCanvas = { on -> viewModel.updateSettings { it.copy(projectCanvas = on) } },
+                            onStylus = viewModel::setStylusButtons,
                         ),
                     onShare = { panel = EditorPanel.EXPORT },
                     canPaste = hasClipboard,

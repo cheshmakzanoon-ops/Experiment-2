@@ -139,6 +139,14 @@ object CanvasDocumentCodec {
         require(frames.all { it.durationMs in AnimationFrame.MIN_DURATION_MS..AnimationFrame.MAX_DURATION_MS }) {
             "Invalid animation frame duration"
         }
+        val frameIds = frames.map { it.id }.toSet()
+        val animation = document.animation
+        require((animation.backgroundFrameIds + animation.foregroundFrameIds + animation.hiddenFrameIds).all { it in frameIds }) {
+            "Animation settings refer to missing frames"
+        }
+        require(animation.backgroundFrameIds.intersect(animation.foregroundFrameIds).isEmpty()) {
+            "An animation frame cannot be both background and foreground"
+        }
         layers.forEach { layer ->
             require(layer.opacity.isFinite() && layer.opacity in 0f..1f) { "Invalid layer opacity" }
         }

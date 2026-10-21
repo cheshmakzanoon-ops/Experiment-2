@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="brush_share_title">Share brush</string>
+    <string name="brush_share_set_title">Share brush set</string>
+    <string name="brush_share_artflow">ArtFlow (.artbrush)</string>
+    <string name="brush_share_procreate_brush">Procreate (.brush)</string>
+    <string name="brush_share_procreate_set">Procreate (.brushset)</string>
+    <string name="brush_share_artflow_description">Keeps all ArtFlow brush settings and available source images.</string>
+    <string name="brush_share_procreate_description">Procreate format with supported settings and available source images.</string>
+    <string name="brush_share_confirm">Share</string>
+    <string name="brush_share_cancel">Cancel</string>
+    <string name="brush_share_set">Share the set</string>
+    <string name="brush_share_set_failed">The set could not be shared</string>
+</resources>

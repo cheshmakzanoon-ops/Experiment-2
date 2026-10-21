@@ -83,10 +83,7 @@ object LayerImports {
                     }
                     applyLook(repository, layer.id, source)
                     if (source.isClippingMask) repository.setLayerClippingMask(layer.id, true)
-                    source.mask?.let { mask ->
-                        val coverage = mask.coverageFor(size.width, size.height, dx, dy)
-                        repository.addLayerMask(layer.id, SelectionMask(size.width, size.height, coverage))
-                    }
+                    applyPsdMask(repository, layer.id, source.mask, dx, dy)
                     (open.lastOrNull() ?: root) += Node.Pixels(layer.id)
                     added++
                 }
@@ -94,7 +91,7 @@ object LayerImports {
         }
         // Folders left open by a damaged file keep their layers ungrouped.
         open.forEach { root += it }
-        root.forEach { node -> if (node is Node.Folder) group(repository, node) }
+        root.forEach { node -> if (node is Node.Folder) group(repository, node, dx, dy) }
         return added
     }
 
@@ -236,19 +233,36 @@ object LayerImports {
     private suspend fun group(
         repository: CanvasRepository,
         folder: Node.Folder,
+        offsetX: Int,
+        offsetY: Int,
     ): Long? {
         val ids =
             folder.members.mapNotNull { member ->
                 when (member) {
                     is Node.Pixels -> member.id
-                    is Node.Folder -> group(repository, member)
+                    is Node.Folder -> group(repository, member, offsetX, offsetY)
                 }
             }
         if (ids.isEmpty()) return null
         val id = repository.groupLayers(ids) ?: return null
         repository.setLayerName(id, folder.header.name.ifBlank { "Group" })
         applyLook(repository, id, folder.header)
+        applyPsdMask(repository, id, folder.header.mask, offsetX, offsetY)
         return id
+    }
+
+    private suspend fun applyPsdMask(
+        repository: CanvasRepository,
+        id: Long,
+        mask: PsdCodec.PsdMask?,
+        offsetX: Int,
+        offsetY: Int,
+    ) {
+        if (mask == null) return
+        val size = repository.getCanvasSize()
+        val coverage = mask.coverageFor(size.width, size.height, offsetX, offsetY)
+        repository.addLayerMask(id, SelectionMask(size.width, size.height, coverage))
+        if (!mask.isEnabled) repository.setLayerMaskEnabled(id, false)
     }
 
     private suspend fun applyLook(

@@ -3,6 +3,8 @@ package com.artflow.studio.core.export
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.render.CustomGrains
 import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.DualBrush
+import com.artflow.studio.domain.model.brush.PressureMapping
 import com.artflow.studio.domain.model.brush.SourceBrushScalar
 import com.artflow.studio.domain.model.brush.SourceBrushStructuredField
 import java.io.ByteArrayOutputStream
@@ -17,10 +19,15 @@ import java.util.zip.ZipOutputStream
  * "Grain.png"), and a `.brushset` is a zip of such folders with "brushset.plist" listing them in order.
  *
  * Each setting is written on the scale [ProcreateBrush.read] maps it back from, so a brush read back has
- * the same value within float rounding wherever the value is in range. This writer
- * does not reconstruct the second brush's exact native storage, nor the renderer's texture rotation.
+ * the same value within float rounding wherever the value is in range. Compound brushes retain a
+ * second settings archive and its own images in Sub01, matching the observed source structure.
+ * Original dual blend identifiers survive unchanged. New or edited local combine modes use the
+ * existing approximate document blend identifiers; their equivalence to native dual math is unverified.
+ * Renderer texture rotation has no verified source setting and is not reconstructed.
  * Known pressure curve graphs are serialized as ValkyrieMagnitudinalCurve archives; source interpolation
  * and pixel parity are not verified. Signed pressure/tilt scalar values survive in the archive.
+ * Fixed tip flips are baked into an available shape image; the imported flags normalize to false,
+ * while per-dab mirror jitter stays independent. A missing shape image cannot be reconstructed.
  */
 object ProcreateBrushWriter {
     /** One brush to write: its name, settings, and its shape and grain tiles (null when it has none). */
@@ -29,6 +36,9 @@ object ProcreateBrushWriter {
         val parameters: BrushParams,
         val shape: CustomGrains.Tile? = null,
         val grain: CustomGrains.Tile? = null,
+        /** Explicit assets for the second component; otherwise resolve its content-addressed image IDs. */
+        val secondaryShape: CustomGrains.Tile? = null,
+        val secondaryGrain: CustomGrains.Tile? = null,
     )
 
     /** A `.brush` file: the brush's archive and images at the top of the zip. */
@@ -52,8 +62,32 @@ object ProcreateBrushWriter {
         prefix: String,
         brush: Brush,
     ) {
+        val dual = brush.parameters.dual
+        require(dual != null || (brush.secondaryShape == null && brush.secondaryGrain == null)) {
+            "Secondary images need a dual brush"
+        }
+        require(dual?.params?.dual == null) { "A dual brush combines exactly two brushes" }
+        componentFolder(out, prefix, brush)
+        if (dual == null) return
+        val sourceName = dual.params.importedSourceScalars["name"]
+        val name = sourceName?.takeIf { it.type == SourceBrushScalar.Type.TEXT && it.value.isNotBlank() }?.value ?: brush.name
+        val secondary =
+            Brush(
+                name,
+                dual.params,
+                brush.secondaryShape ?: CustomGrains.get(dual.params.shapeId),
+                brush.secondaryGrain ?: CustomGrains.get(dual.params.textureId),
+            )
+        componentFolder(out, prefix + "Sub01/", secondary)
+    }
+
+    private fun componentFolder(
+        out: ZipOutputStream,
+        prefix: String,
+        brush: Brush,
+    ) {
         entry(out, prefix + ARCHIVE, archive(brush))
-        brush.shape?.let { entry(out, prefix + SHAPE, png(it)) }
+        brush.shape?.let { entry(out, prefix + SHAPE, png(it, brush.parameters.tipFlipX, brush.parameters.tipFlipY)) }
         brush.grain?.let { entry(out, prefix + GRAIN, png(it)) }
     }
 
@@ -61,14 +95,9 @@ object ProcreateBrushWriter {
     private fun archive(brush: Brush): ByteArray {
         val keyed = KeyedArchiveBuilder()
         // REA's reference archive identifies these as ValkyrieMagnitudinalCurve objects
-        // containing NSArrays of point strings. Preserve the class and all three primary
+        // containing NSArrays of point strings. Preserve the class and all four primary
         // curves as well as the supported auxiliary keys (no native interpolation inferred).
-        val primary =
-            mapOf(
-                "dynamicsPressureOverall" to brush.parameters.importedPressure?.overall,
-                "dynamicsPressureSizeCurve" to brush.parameters.importedPressure?.size,
-                "dynamicsPressureOpacityCurve" to brush.parameters.importedPressure?.opacity,
-            ).filterValues { it != null }
+        val primary = primaryCurves(brush.parameters).filterValues { it != null }
         val curves =
             primary + brush.parameters.importedAuxiliaryCurves.filterKeys { it in ProcreateBrush.AUXILIARY_CURVE_KEYS }
         val keyedCurves =
@@ -80,8 +109,10 @@ object ProcreateBrushWriter {
         val originalScalars = brush.parameters.importedSourceScalars
         require(originalScalars.size <= SourceBrushScalar.MAX_FIELDS) { "Too many source brush scalar settings" }
         require(originalScalars.keys.all(SourceBrushScalar::validName)) { "Invalid source brush scalar field name" }
+        // An embedded shape is the authoritative, possibly edited source. Do not leave a stale
+        // bundle path pointing at the unflipped original. Native loader precedence is unverified.
         val preservedScalars =
-            originalScalars.mapValues { (_, scalar) ->
+            originalScalars.filterKeys { keepSourceScalar(brush, it) }.mapValues { (_, scalar) ->
                 require(scalar.isValid()) { "Invalid stored source brush scalar" }
                 when (scalar.type) {
                     SourceBrushScalar.Type.BOOLEAN -> scalar.value == "true"
@@ -94,9 +125,11 @@ object ProcreateBrushWriter {
         require(originalStructures.size <= SourceBrushStructuredField.MAX_OBJECTS) {
             "Too many source brush structured settings"
         }
-        require(originalStructures.all { (name, data) ->
-            data.isValidFor(name)
-        }) { "Invalid source brush structured setting" }
+        require(
+            originalStructures.all { (name, data) ->
+                data.isValidFor(name)
+            },
+        ) { "Invalid source brush structured setting" }
         val preservedStructures =
             originalStructures.mapValues { (_, data) ->
                 val values: Map<String, Any?> =
@@ -105,9 +138,10 @@ object ProcreateBrushWriter {
                             data.fields.mapValues { (_, scalar) -> sourceValue(keyed, scalar) }
                         SourceBrushStructuredField.Kind.ARRAY ->
                             mapOf(
-                                "NS.objects" to requireNotNull(data.items).map { scalar ->
-                                    keyed.add(sourceValue(keyed, scalar))
-                                },
+                                "NS.objects" to
+                                    requireNotNull(data.items).map { scalar ->
+                                        keyed.add(sourceValue(keyed, scalar))
+                                    },
                             )
                     }
                 keyed.instance(data.className, values)
@@ -121,13 +155,55 @@ object ProcreateBrushWriter {
                 }
                 mapOf("color" to keyed.add(data))
             } ?: emptyMap()
+        // Loaded tiles already include source inversion. If a tile is unavailable, preserve the
+        // original flag alongside its resource reference rather than claiming to have normalized it.
+        val imageSettings =
+            buildMap<String, Any> {
+                if (brush.shape != null) put("shapeInverted", false)
+                if (brush.grain != null) put("textureInverted", false)
+            }
         // Editable ArtFlow settings win for known scalar fields; source-only
         // primitive, structured and bounded 16-byte color data stay with the brush.
         val root =
             preservedScalars + preservedStructures + originalColor +
                 mapOf("\$class" to keyed.classOf(BRUSH_CLASS), "name" to keyed.add(brush.name)) +
-                sourceAwareSettings(brush.parameters) + keyedCurves
+                sourceAwareSettings(brush.parameters) + keyedCurves + imageSettings + dualSettings(brush.parameters.dual)
         return keyed.encode(root)
+    }
+
+    private fun keepSourceScalar(
+        brush: Brush,
+        name: String,
+    ): Boolean =
+        when (name) {
+            "bundledShapePath" -> brush.shape == null
+            "bundledGrainPath" -> brush.grain == null
+            // An edited combine mode must not keep an unrelated extended ID that could override it.
+            "dualBlendModeExtended" -> brush.parameters.dual?.let { retainedDualMode(it) != null } ?: true
+            else -> true
+        }
+
+    private fun dualSettings(dual: DualBrush?): Map<String, Any> {
+        if (dual == null) return emptyMap()
+        val mode =
+            retainedDualMode(dual) ?: when (dual.mode) {
+                DualBrush.Mode.MULTIPLY -> 1
+                DualBrush.Mode.ADD -> 3
+                DualBrush.Mode.SUBTRACT -> 7
+            }
+        return mapOf("dualBlendMode" to mode.toLong())
+    }
+
+    /** Preserve a source identifier only while its imported local approximation remains selected. */
+    private fun retainedDualMode(dual: DualBrush): Int? {
+        val source = dual.sourceBlendMode ?: return null
+        val approximation =
+            when (source) {
+                3 -> DualBrush.Mode.ADD
+                7 -> DualBrush.Mode.SUBTRACT
+                else -> DualBrush.Mode.MULTIPLY
+            }
+        return source.takeIf { dual.mode == approximation }
     }
 
     /**
@@ -146,9 +222,13 @@ object ProcreateBrushWriter {
         // The same source decoding path defines the baseline; do not implement a
         // second, subtly different set of scaling/clamping formulas here.
         val input = raw.mapValues { (_, value) -> sourceLiteral(value) }
-        val imported = ProcreateBrush.parameters(input)
+        val imported = importBaseline(params, input)
         val keepOriginal = mutableSetOf<String>()
-        fun retain(unchanged: Boolean, vararg fields: String) {
+
+        fun retain(
+            unchanged: Boolean,
+            vararg fields: String,
+        ) {
             if (unchanged) fields.forEach(keepOriginal::add)
         }
 
@@ -157,6 +237,7 @@ object ProcreateBrushWriter {
         retain(params.spacing == imported.spacing, "plotSpacing")
         retain(params.textureScale == imported.textureScale, "textureScale")
         retain(params.count == imported.count, "shapeCount")
+        retain(params.countJitter == imported.countJitter, "shapeCountJitter")
         retain(params.scatter == imported.scatter, "plotJitter")
         retain(params.rotation == imported.rotation, "shapeAngle")
         retain(params.roundness == imported.roundness, "shapeRoundness")
@@ -166,10 +247,16 @@ object ProcreateBrushWriter {
         retain(params.taperEnd == imported.taperEnd, "pencilTaperEndLength")
         retain(params.taperOpacity == imported.taperOpacity, "pencilTaperOpacity")
         retain(params.pressureToSize == imported.pressureToSize, "dynamicsPressureSize")
-        retain(params.pressureToOpacity == imported.pressureToOpacity, "dynamicsPressureOpacity")
+        retain(params.pressureToFlow == imported.pressureToFlow, "dynamicsPressureOpacity")
+        retain(params.pressureToOpacity == imported.pressureToOpacity, "dynamicsPressureOpacityTransfer")
         retain(params.velocityToSize == imported.velocityToSize, "dynamicsSpeedSize")
         retain(params.velocityToOpacity == imported.velocityToOpacity, "dynamicsSpeedOpacity")
-        retain(params.wetMix == imported.wetMix, "dynamicsMix")
+        retain(params.wetDilution == imported.wetDilution, "dynamicsMix")
+        retain(params.wetAttack == imported.wetAttack, "dynamicsPressureMix")
+        retain(params.wetPull == imported.wetPull, "dynamicsWetAccumulation")
+        retain(params.bleed == imported.bleed, "dynamicsPressureBleed")
+        retain(params.wetBlur == imported.wetBlur, "dynamicsBlur")
+        retain(params.wetBlurJitter == imported.wetBlurJitter, "dynamicsBlurJitter")
         retain(params.wetEdges == imported.wetEdges, "wetEdgesAmount")
         retain(params.burntEdges == imported.burntEdges, "burntEdgesAmount")
         retain(params.grainDepth == imported.grainDepth, "grainDepth")
@@ -203,10 +290,54 @@ object ProcreateBrushWriter {
         // the legacy blendMode key; adding one would shadow the native value on import.
         if (params.blendMode == imported.blendMode &&
             ("extendedBlend" in raw || "blendMode" in raw)
-        ) keepOriginal.add("extendedBlend")
+        ) {
+            keepOriginal.add("extendedBlend")
+        }
 
         return rewritten.filterKeys { key -> key !in keepOriginal }
     }
+
+    /**
+     * A saved library from before the native contract audit must keep its existing painting settings.
+     * Compare edits with that importer interpretation; an untouched local default must not erase a
+     * retained source field that the earlier importer did not understand. Re-import explicitly opts
+     * into the corrected channel interpretation and records the current version.
+     */
+    private fun importBaseline(
+        params: BrushParams,
+        source: Map<String, Any>,
+    ): BrushParams {
+        val current = ProcreateBrush.parameters(source)
+        if (!isLegacySource(params)) return current
+        return current.copy(
+            pressureToOpacity = current.pressureToFlow,
+            pressureToFlow = 0f,
+            wetMix = current.wetDilution,
+            wetDilution = 0f,
+            wetAttack = 1f,
+            wetPull = 0f,
+            bleed = 0f,
+            wetBlur = 0f,
+            wetBlurJitter = 0f,
+            countJitter = 0f,
+            textureScale = current.textureScale.coerceAtLeast(LEGACY_MIN_GRAIN_SCALE),
+        )
+    }
+
+    /** Legacy opacity graphs were archived flow graphs; actual opacity lived among the auxiliary keys. */
+    private fun primaryCurves(params: BrushParams): Map<String, PressureMapping?> {
+        val pressure = params.importedPressure
+        val legacy = isLegacySource(params)
+        return mapOf(
+            "dynamicsPressureOverall" to pressure?.overall,
+            "dynamicsPressureSizeCurve" to pressure?.size,
+            "dynamicsPressureTransferModulationCurve" to
+                if (legacy) params.importedAuxiliaryCurves["dynamicsPressureTransferModulationCurve"] else pressure?.opacity,
+            "dynamicsPressureOpacityCurve" to if (legacy) pressure?.flow ?: pressure?.opacity else pressure?.flow,
+        )
+    }
+
+    private fun isLegacySource(params: BrushParams): Boolean = params.sourceImportVersion == 0 && params.importedSourceScalars.isNotEmpty()
 
     /** A typed literal for baseline import (not a keyed reference to another object). */
     private fun sourceLiteral(value: SourceBrushScalar): Any {
@@ -219,7 +350,10 @@ object ProcreateBrushWriter {
         }
     }
 
-    private fun sourceValue(keyed: KeyedArchiveBuilder, scalar: SourceBrushScalar): Any {
+    private fun sourceValue(
+        keyed: KeyedArchiveBuilder,
+        scalar: SourceBrushScalar,
+    ): Any {
         require(scalar.isValid()) { "Invalid source brush scalar" }
         return when (scalar.type) {
             SourceBrushScalar.Type.BOOLEAN -> scalar.value == "true"
@@ -238,12 +372,14 @@ object ProcreateBrushWriter {
             "plotSpacing" to p.spacing.coerceIn(MIN_SPACING, 1f).toDouble(),
             "plotJitter" to unit(p.scatter),
             "shapeCount" to unit((p.count - 1) / (MAX_COUNT - 1f)),
+            "shapeCountJitter" to unit(p.countJitter),
             "shapeAngle" to Math.toRadians(p.rotation.toDouble()),
             "pencilTaperStartLength" to unit(p.taperStart),
             "pencilTaperEndLength" to unit(p.taperEnd),
             "pencilTaperOpacity" to unit(p.taperOpacity),
             "dynamicsPressureSize" to p.pressureToSize.coerceIn(-1f, 1f).toDouble(),
-            "dynamicsPressureOpacity" to p.pressureToOpacity.coerceIn(-1f, 1f).toDouble(),
+            "dynamicsPressureOpacity" to p.pressureToFlow.coerceIn(-1f, 1f).toDouble(),
+            "dynamicsPressureOpacityTransfer" to p.pressureToOpacity.coerceIn(-1f, 1f).toDouble(),
             "dynamicsPressureHue" to signed(p.colorDynamics.pressureHue),
             "dynamicsPressureSaturation" to signed(p.colorDynamics.pressureSaturation),
             "dynamicsPressureBrightness" to signed(p.colorDynamics.pressureBrightness),
@@ -256,7 +392,12 @@ object ProcreateBrushWriter {
             "dynamicsJitterSize" to unit(p.sizeJitter),
             "dynamicsJitterOpacity" to unit(p.opacityJitter),
             "plotSmoothing" to unit(p.smoothing),
-            "dynamicsMix" to unit(p.wetMix),
+            "dynamicsMix" to unit(p.wetDilution),
+            "dynamicsPressureMix" to unit(p.wetAttack),
+            "dynamicsWetAccumulation" to unit(p.wetPull),
+            "dynamicsPressureBleed" to unit(p.bleed),
+            "dynamicsBlur" to unit(p.wetBlur),
+            "dynamicsBlurJitter" to unit(p.wetBlurJitter),
             "dynamicsGlazedFlow" to p.flow.coerceIn(MIN_OPACITY, 1f).toDouble(),
             "textureScale" to p.textureScale.coerceIn(MIN_SCALE, MAX_SCALE).toDouble(),
             "dynamicsTiltSize" to unit(p.tiltInfluence),
@@ -276,8 +417,6 @@ object ProcreateBrushWriter {
             "textureMovement" to if (p.grainMoving) 1.0 else 0.0,
             "dynamicsPressureSecondaryColor" to unit(p.secondaryPressure),
             "jitterSecondary" to unit(p.secondaryJitter),
-            "shapeInverted" to false,
-            "textureInverted" to false,
         )
 
     private fun unit(value: Float): Double = value.coerceIn(0f, 1f).toDouble()
@@ -285,12 +424,23 @@ object ProcreateBrushWriter {
     /** Round-trip signed imported colour dynamics without writing non-finite scalar values. */
     private fun signed(value: Float): Double = if (value.isFinite()) value.coerceIn(-1f, 1f).toDouble() else 0.0
 
-    /** A tile as an opaque grey PNG: its values are the brightness, which the reader takes back as the tile. */
-    private fun png(tile: CustomGrains.Tile): ByteArray {
+    /**
+     * A tile as an opaque grey PNG. A fixed tip flip belongs in the pixels, since the verified native
+     * fields describe random mirroring only. Sample the original without mutating shared shape/grain tiles.
+     */
+    private fun png(
+        tile: CustomGrains.Tile,
+        flipX: Boolean = false,
+        flipY: Boolean = false,
+    ): ByteArray {
         val image = PixelBuffer(tile.size, tile.size)
-        for (index in tile.values.indices) {
-            val value = tile.values[index].toInt() and 0xFF
-            image.pixels[index] = (0xFF shl 24) or (value shl 16) or (value shl 8) or value
+        for (y in 0 until tile.size) {
+            val sourceY = if (flipY) tile.size - 1 - y else y
+            for (x in 0 until tile.size) {
+                val sourceX = if (flipX) tile.size - 1 - x else x
+                val value = tile.values[sourceY * tile.size + sourceX].toInt() and 0xFF
+                image.pixels[y * tile.size + x] = (0xFF shl 24) or (value shl 16) or (value shl 8) or value
+            }
         }
         return PngCodec.encode(image)
     }
@@ -323,5 +473,6 @@ object ProcreateBrushWriter {
     private const val MIN_OPACITY = 0.05f
     private const val MIN_SPACING = 0.01f
     private const val MIN_ROUNDNESS = 0.05f
+    private const val LEGACY_MIN_GRAIN_SCALE = 0.25f
     private const val MAX_COUNT = 16
 }

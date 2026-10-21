@@ -34,10 +34,13 @@ object LayerTransform {
     ) {
         val isIdentity: Boolean
             get() =
-                translationX == 0f && translationY == 0f &&
-                    scaleX == 1f && scaleY == 1f &&
+                translationX == 0f &&
+                    translationY == 0f &&
+                    scaleX == 1f &&
+                    scaleY == 1f &&
                     rotationDegrees % 360f == 0f &&
-                    !flipHorizontal && !flipVertical
+                    !flipHorizontal &&
+                    !flipVertical
     }
 
     /** Prepare a transformed pixel plane without mutating the source or repository state. */
@@ -48,8 +51,11 @@ object LayerTransform {
     ): PixelBuffer {
         require(
             listOf(
-                parameters.translationX, parameters.translationY, parameters.scaleX,
-                parameters.scaleY, parameters.rotationDegrees,
+                parameters.translationX,
+                parameters.translationY,
+                parameters.scaleX,
+                parameters.scaleY,
+                parameters.rotationDegrees,
             ).all { it.isFinite() },
         ) { "Transform parameters must be finite" }
         checkActive()

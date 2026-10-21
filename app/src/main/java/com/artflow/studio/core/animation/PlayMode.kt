@@ -24,8 +24,8 @@ enum class PlayMode(
 
     companion object {
         /**
-         * The mode the stored switches describe. Ping-pong with loop switched off was a
-         * combination the old two switches could hold but no mode names; it plays as [ONE_SHOT].
+         * The panel's mode label. A legacy non-looping bounce is labelled [ONE_SHOT] because it
+         * stops; playback preserves its ping-pong direction until a mode is explicitly selected.
          */
         fun of(settings: AnimationSettings): PlayMode =
             when {

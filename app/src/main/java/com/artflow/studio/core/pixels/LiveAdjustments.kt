@@ -62,6 +62,7 @@ object LiveAdjustments {
         alphaLocked: Boolean = false,
         checkpoint: () -> Unit = {},
     ): PixelBuffer {
+        checkpoint()
         val amount = settings.amount.coerceIn(0f, 1f)
         val type = kind.adjustmentType
         val filtered =
@@ -71,11 +72,21 @@ object LiveAdjustments {
                 kind == Kind.PERSPECTIVE_BLUR -> perspectiveBlur(source, settings)
                 amount <= 0f -> source.copy()
                 kind == Kind.NOISE -> noise(source, amount, settings.parameters)
-                else -> filter(kind, source, amount, settings.angleDegrees, settings.parameters)
+                else -> filter(kind, source, amount, settings.angleDegrees, settings.parameters, checkpoint)
             }
-        val mask = selection?.takeIf { it.width == source.width && it.height == source.height } ?: return filtered
+        checkpoint()
+        val mask = selection?.takeIf { it.width == source.width && it.height == source.height }
+        if (mask == null && !alphaLocked) return filtered
         for (i in filtered.pixels.indices) {
-            filtered.pixels[i] = ImageFilters.lerpArgb(source.pixels[i], filtered.pixels[i], mask.alphaAt(i))
+            if (i % source.width == 0) checkpoint()
+            val before = source.pixels[i]
+            val after = ImageFilters.lerpArgb(before, filtered.pixels[i], mask?.alphaAt(i) ?: 1f)
+            filtered.pixels[i] =
+                when {
+                    !alphaLocked -> after
+                    before ushr 24 == 0 -> before
+                    else -> Channels.withAlpha(after, before ushr 24)
+                }
         }
         return filtered
     }
@@ -86,11 +97,12 @@ object LiveAdjustments {
         amount: Float,
         angle: Float,
         parameters: Map<String, Float>,
+        checkpoint: () -> Unit,
     ): PixelBuffer =
         when (kind) {
             Kind.OPACITY -> faded(source, 1f - amount)
-            Kind.GAUSSIAN_BLUR -> ImageFilters.gaussianBlur(source, amount * MAX_BLUR_RADIUS)
-            Kind.MOTION_BLUR -> ImageFilters.motionBlur(source, amount * MAX_MOTION_DISTANCE, angle)
+            Kind.GAUSSIAN_BLUR -> ImageFilters.gaussianBlur(source, amount * MAX_BLUR_RADIUS, checkpoint)
+            Kind.MOTION_BLUR -> ImageFilters.motionBlur(source, amount * MAX_MOTION_DISTANCE, angle, checkpoint)
             Kind.SHARPEN -> ImageFilters.sharpen(source, amount * 2f)
             Kind.CHROMATIC_ABERRATION ->
                 ImageFilters.chromaticAberration(source, amount * MAX_ABERRATION, source.width / 2f, source.height / 2f)
@@ -101,6 +113,7 @@ object LiveAdjustments {
                     transition = parameters[BLOOM_TRANSITION] ?: DEFAULT_BLOOM_TRANSITION,
                     size = parameters[BLOOM_SIZE] ?: 1f,
                     burn = parameters[BLOOM_BURN] ?: 0f,
+                    checkpoint = checkpoint,
                 )
             Kind.GLITCH -> glitch(source, amount, glitchStyle(parameters))
             Kind.HALFTONE -> halftone(source, amount, halftoneStyle(parameters))
@@ -262,19 +275,22 @@ object LiveAdjustments {
         transition: Float = DEFAULT_BLOOM_TRANSITION,
         size: Float = 1f,
         burn: Float = 0f,
+        checkpoint: () -> Unit = {},
     ): PixelBuffer {
         val threshold = transition.coerceIn(0f, MAX_BLOOM_TRANSITION)
         val white = burn.coerceIn(0f, 1f)
         val bright = PixelBuffer(source.width, source.height)
         for (i in source.pixels.indices) {
+            if (i % source.width == 0) checkpoint()
             val p = source.pixels[i]
             val excess = ((Channels.luminance(p) - threshold) / (1f - threshold)).coerceIn(0f, 1f)
             val lit = if (white > 0f) ImageFilters.lerpArgb(p, p or 0x00FFFFFF, white) else p
             bright.pixels[i] = Channels.scaleAlpha(lit, excess)
         }
-        val glow = ImageFilters.gaussianBlur(bright, 4f + amount * size.coerceIn(0f, 1f) * MAX_BLOOM_RADIUS)
+        val glow = ImageFilters.gaussianBlur(bright, 4f + amount * size.coerceIn(0f, 1f) * MAX_BLOOM_RADIUS, checkpoint)
         val out = source.copy()
         for (i in out.pixels.indices) {
+            if (i % source.width == 0) checkpoint()
             val g = glow.pixels[i]
             val strength = Channels.alpha(g) / 255f * amount * 1.5f
             if (strength > 0f) out.pixels[i] = screen(out.pixels[i], g, strength.coerceAtMost(1f))

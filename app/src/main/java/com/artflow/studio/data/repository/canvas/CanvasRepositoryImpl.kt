@@ -1,9 +1,11 @@
 package com.artflow.studio.data.repository.canvas
 
+import com.artflow.studio.core.animation.AnimationPlayback
 import com.artflow.studio.core.animation.AnimationTimeline
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.color.ColorProfile
 import com.artflow.studio.core.color.ColorProfiles
+import com.artflow.studio.core.export.LayerMaskExport
 import com.artflow.studio.core.pixels.AdjustmentProcessor
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.LayerMaskFactory
@@ -24,6 +26,7 @@ import com.artflow.studio.data.renderer.TextRasterizer
 import com.artflow.studio.domain.model.animation.AnimationFrame
 import com.artflow.studio.domain.model.animation.AnimationSettings
 import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.ColorDynamics
 import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.model.brush.StrokeDestination
 import com.artflow.studio.domain.model.brush.StrokePoint
@@ -591,18 +594,7 @@ class CanvasRepositoryImpl
                 )
             strokeBrushParams[strokeId] =
                 if (destination.isMask) {
-                    brushParams.copy(
-                        hueJitter = 0f,
-                        saturationJitter = 0f,
-                        brightnessJitter = 0f,
-                        colorPressure = false,
-                        velocityToHue = 0f,
-                        wetMix = 0f,
-                        dilution = 0f,
-                        pull = 0f,
-                        secondaryPressure = 0f,
-                        secondaryJitter = 0f,
-                    )
+                    maskBrush(brushParams)
                 } else {
                     brushParams
                 }
@@ -613,6 +605,26 @@ class CanvasRepositoryImpl
             if (!destination.isMask) prepareStrokeCopy(strokeId, layer)
             return strokeId
         }
+
+        /** Mask strokes paint neutral coverage; neither brush in a pair picks up or tints mask pixels. */
+        private fun maskBrush(params: BrushParams): BrushParams =
+            params.copy(
+                hueJitter = 0f,
+                saturationJitter = 0f,
+                brightnessJitter = 0f,
+                colorPressure = false,
+                colorDynamics = ColorDynamics(),
+                velocityToHue = 0f,
+                wetMix = 0f,
+                dilution = 0f,
+                pull = 0f,
+                wetDilution = 0f,
+                wetCharge = 1f,
+                bleed = 0f,
+                secondaryPressure = 0f,
+                secondaryJitter = 0f,
+                dual = params.dual?.let { it.copy(params = maskBrush(it.params)) },
+            )
 
         override fun continueStroke(
             strokeId: Long,
@@ -1440,6 +1452,8 @@ class CanvasRepositoryImpl
                 onionSkinOpacity = source.onionSkinOpacity,
                 onionSkinPreviousColor = source.onionSkinPreviousColor,
                 onionSkinNextColor = source.onionSkinNextColor,
+                onionSkinTinted = source.onionSkinTinted,
+                blendPrimaryFrame = source.blendPrimaryFrame,
             )
 
         /** True when the last undo entry is an opacity change to [layerId] made moments ago. */
@@ -2362,6 +2376,7 @@ class CanvasRepositoryImpl
                 require(hasLayerCapacity(addedLayers)) { "Maximum project layer count reached" }
                 require(nextFrameId in 1 until Long.MAX_VALUE) { "Frame identifiers are exhausted" }
                 pushUndo()
+                animationSettings = AnimationPlayback.materializePins(frameList.map { it.id }, animationSettings)
                 val frame =
                     if (duplicateCurrent && source != null) {
                         FrameData(
@@ -2430,6 +2445,7 @@ class CanvasRepositoryImpl
                 require(hasLayerCapacity(clip.layers.size)) { "Maximum project layer count reached" }
                 require(nextFrameId in 1 until Long.MAX_VALUE) { "Frame identifiers are exhausted" }
                 pushUndo()
+                animationSettings = AnimationPlayback.materializePins(frameList.map { it.id }, animationSettings)
                 val frame =
                     FrameData(
                         id = nextFrameId++,
@@ -2460,7 +2476,9 @@ class CanvasRepositoryImpl
             withState {
                 if (frameList.size <= 1 || index !in frameList.indices) return@withState false
                 pushUndo()
+                animationSettings = AnimationPlayback.materializePins(frameList.map { it.id }, animationSettings)
                 frameList.removeAt(index)
+                animationSettings = AnimationPlayback.materializePins(frameList.map { it.id }, animationSettings)
                 activeFrame =
                     when {
                         index < activeFrame -> activeFrame - 1
@@ -2482,6 +2500,7 @@ class CanvasRepositoryImpl
                 val target = to.coerceIn(0, frameList.lastIndex)
                 if (from == target) return@withState true
                 pushUndo()
+                animationSettings = AnimationPlayback.materializePins(frameList.map { it.id }, animationSettings)
                 val frame = frameList.removeAt(from)
                 frameList.add(target, frame)
                 activeFrame = target
@@ -2525,11 +2544,20 @@ class CanvasRepositoryImpl
         override suspend fun updateAnimationSettings(settings: AnimationSettings) =
             withState {
                 require(settings.onionSkinOpacity.isFinite()) { "Onion-skin opacity must be finite" }
+                val resolved = AnimationPlayback.materializePins(frameList.map { it.id }, settings)
+                val rangeStart = settings.playbackRangeStart.coerceIn(0, frameList.lastIndex.coerceAtLeast(0))
                 val normalized =
-                    settings.copy(
+                    resolved.copy(
                         fps = settings.fps.coerceIn(AnimationSettings.MIN_FPS, AnimationSettings.MAX_FPS),
                         onionSkinFrames = settings.onionSkinFrames.coerceIn(0, AnimationSettings.MAX_ONION_SKIN_FRAMES),
-                        onionSkinOpacity = settings.onionSkinOpacity.coerceIn(0.05f, 1f),
+                        onionSkinOpacity = settings.onionSkinOpacity.coerceIn(0f, 1f),
+                        playbackRangeStart = rangeStart,
+                        playbackRangeEnd =
+                            if (settings.playbackRangeEnd < 0) {
+                                -1
+                            } else {
+                                settings.playbackRangeEnd.coerceIn(rangeStart, frameList.lastIndex.coerceAtLeast(rangeStart))
+                            },
                     )
                 if (normalized == animationSettings) return@withState
                 // Only the onion-skin look changed: a viewing preference, so it is not an undoable edit.
@@ -2569,11 +2597,24 @@ class CanvasRepositoryImpl
                 withState {
                     val frame = frameList.getOrNull(index) ?: return@withState null
                     markRastersShared()
-                    withPinnedFrames(index, frame.layers, frameList.map { it.layers }, animationSettings)
+                    withPinnedFrames(index, frame.layers, frameList.map { it.layers }, frameList.map { it.id }, animationSettings)
                         .map { it.snapshotCopy() } to canvasSnapshot()
                 } ?: return null
             return withContext(Dispatchers.Default) {
                 renderFrozen(snapshot.first, snapshot.second, transparentBackground = transparentBackground)
+            }
+        }
+
+        override suspend fun compositeOnionFrame(index: Int): PixelBuffer? {
+            val snapshot =
+                withState {
+                    val frame = frameList.getOrNull(index) ?: return@withState null
+                    if (frame.id in animationSettings.hiddenFrameIds) return@withState null
+                    markRastersShared()
+                    frame.layers.map { it.snapshotCopy() } to canvasSnapshot()
+                } ?: return null
+            return withContext(Dispatchers.Default) {
+                renderFrozen(snapshot.first, snapshot.second, transparentBackground = true)
             }
         }
 
@@ -2593,7 +2634,7 @@ class CanvasRepositoryImpl
             val snapshot =
                 withState {
                     markRastersShared()
-                    withPinnedFrames(activeFrame, currentLayers(), frameList.map { it.layers }, animationSettings)
+                    withPinnedFrames(activeFrame, currentLayers(), frameList.map { it.layers }, frameList.map { it.id }, animationSettings)
                         .filter { includePrivate || !it.isPrivate }
                         .map { it.snapshotCopy() } to canvasSnapshot()
                 }
@@ -2652,7 +2693,11 @@ class CanvasRepositoryImpl
             val index = layers.indexOfFirst { it.id == layerId }
             val layer = layers.getOrNull(index) ?: return null
             if (layer.parentGroupId != null || layer.isClippingMask) return null
-            if (withPinnedFrames(activeFrame, layers, frameList.map { it.layers }, animationSettings).size != layers.size) return null
+            if (withPinnedFrames(activeFrame, layers, frameList.map { it.layers }, frameList.map { it.id }, animationSettings).size !=
+                layers.size
+            ) {
+                return null
+            }
 
             fun id(value: Any?) = System.identityHashCode(value)
             return listOf(layerId, canvasWidth, canvasHeight, id(layers)) +
@@ -2671,7 +2716,13 @@ class CanvasRepositoryImpl
                 }
             // Only the pinned background and foreground frames need copies of their own.
             val layers =
-                withPinnedFrames(activeFrame, current, frameList.map { it.layers }, animationSettings).map { layer ->
+                withPinnedFrames(
+                    activeFrame,
+                    current,
+                    frameList.map { it.layers },
+                    frameList.map { it.id },
+                    animationSettings,
+                ).map { layer ->
                     if (current.any { it === layer }) layer else layer.snapshotCopy()
                 }
             return PreviewSnapshot(
@@ -2902,7 +2953,7 @@ class CanvasRepositoryImpl
             val eligible =
                 StrokeRasterizer.canDrawLive(stroke) &&
                     layer.strokes.isEmpty() &&
-                    (mirrors.size == 1 || (stroke.brushParams.wetMix <= 0f && stroke.brushParams.dilution <= 0f))
+                    (mirrors.size == 1 || (!stroke.brushParams.picksUpCanvas && stroke.brushParams.dilution <= 0f))
             val bytes = width.toLong() * height * BYTES_PER_PIXEL * mirrors.size
             if (!eligible || bytes > Runtime.getRuntime().maxMemory() / LIVE_HEAP_SHARE) return null
             val lives =
@@ -2960,24 +3011,65 @@ class CanvasRepositoryImpl
             allFrames: Boolean,
             includeHidden: Boolean,
             includeLayers: Boolean,
+            preserveLayerMasks: Boolean,
+            animationPlayback: Boolean,
         ): CanvasExportSnapshot {
+            require(!animationPlayback || allFrames) { "Animation playback requires an all-frame snapshot" }
             val frozen = withState { Triple(currentSnapshot(), canvasSnapshot(), activeSelection?.copy()) }
             val snapshot = frozen.first
-            val frames = if (allFrames) snapshot.frames else listOf(snapshot.frames[snapshot.activeFrame])
-            val selectedLayers = frames.first().layers.filter { !it.isReference && (includeHidden || it.isVisible) }
-            val buffers = frames.size + (if (includeLayers) selectedLayers.size else 0)
+            val frameLayers = snapshot.frames.map { it.layers }
+            val frameIds = snapshot.frames.map { it.id }
+            val requested =
+                when {
+                    animationPlayback -> AnimationPlayback.cycleIndices(frameIds, snapshot.animation)
+                    allFrames -> snapshot.frames.indices.toList()
+                    else -> listOf(snapshot.activeFrame)
+                }
+            require(requested.isNotEmpty()) { "No visible animated frames in the playback range" }
+            // Resolve the clip before budgeting or rendering. Pins remain available as sources,
+            // while reverse ping-pong samples reuse the forward pass's pixels instead of allocating.
+            val sourceIndices = requested.distinct()
+            val frames = sourceIndices.map { snapshot.frames[it] }
+            val renderedIndex = sourceIndices.withIndex().associate { it.value to it.index }
+            // The editable stack must describe the same artwork as the flattened preview, including
+            // every visible pinned background and foreground frame, their folders and their masks.
+            val sourceLayers =
+                withPinnedFrames(
+                    sourceIndices.first(),
+                    frames.first().layers,
+                    frameLayers,
+                    frameIds,
+                    snapshot.animation,
+                )
+            val selectedLayers = sourceLayers.filter { !it.isReference && (includeHidden || it.isVisible) }
+            val maskCount = if (includeLayers && preserveLayerMasks) selectedLayers.count { it.mask != null } else 0
+            val buffers = frames.size + (if (includeLayers) selectedLayers.size else 0) + maskCount
             val bytes = snapshot.width.toLong() * snapshot.height * 4L * (buffers + 2)
             require(bytes <= Runtime.getRuntime().maxMemory() / 3) { "This export is too large for the available memory" }
             return withContext(Dispatchers.Default) {
                 val renderer = Compositor(StrokeRasterizer())
                 try {
+                    val layerMasks = mutableMapOf<Long, PixelBuffer>()
                     val layerPixels =
                         if (!includeLayers) {
                             emptyList()
                         } else {
                             selectedLayers.mapIndexedNotNull { index, data ->
                                 val layer = data.toDomain(index)
-                                val input = Compositor.LayerInput(layer, data.raster, data.strokes.toList(), data.mask)
+                                // Layer effects render after masking. Keep that appearance baked until
+                                // those effects themselves have a native PSD representation.
+                                val independentMask = data.mask?.takeIf { preserveLayerMasks && layer.effects == null }
+                                if (independentMask != null) {
+                                    layerMasks[layer.id] =
+                                        LayerMaskExport.capture(renderer, layer, independentMask, snapshot.width, snapshot.height)
+                                }
+                                val input =
+                                    Compositor.LayerInput(
+                                        layer,
+                                        data.raster,
+                                        data.strokes.toList(),
+                                        if (independentMask == null) data.mask else null,
+                                    )
                                 val pixels =
                                     renderer.renderLayerContent(input, snapshot.width, snapshot.height)
                                         ?: return@mapIndexedNotNull null
@@ -2987,15 +3079,26 @@ class CanvasRepositoryImpl
                     CanvasExportSnapshot(
                         frames =
                             frames.mapIndexed { position, frame ->
-                                val index = if (allFrames) position else snapshot.activeFrame
-                                val shown = withPinnedFrames(index, frame.layers, snapshot.frames.map { it.layers }, snapshot.animation)
+                                val index = sourceIndices[position]
+                                val shown =
+                                    withPinnedFrames(
+                                        index,
+                                        frame.layers,
+                                        frameLayers,
+                                        frameIds,
+                                        snapshot.animation,
+                                    )
                                 renderFrozen(shown, frozen.second, includeHidden, transparentBackground = true)
                             },
                         delaysMs = frames.map { it.durationMs },
                         layers = layerPixels,
                         selection = frozen.third,
                         hasAdjustmentLayers = selectedLayers.any { it.adjustmentType != null || it.filterType != null },
-                        groups = frames.first().layers.mapIndexedNotNull { index, data -> data.takeIf { it.isGroup }?.toDomain(index) },
+                        groups = sourceLayers.mapIndexedNotNull { index, data -> data.takeIf { it.isGroup }?.toDomain(index) },
+                        frameIds = frames.map { it.id },
+                        animation = snapshot.animation,
+                        layerMasks = layerMasks,
+                        frameOrder = requested.map(renderedIndex::getValue),
                     )
                 } finally {
                     renderer.release()
@@ -3024,13 +3127,12 @@ class CanvasRepositoryImpl
             index: Int,
             layers: List<LayerData>,
             frames: List<List<LayerData>>,
+            frameIds: List<Long>,
             settings: AnimationSettings,
-        ): List<LayerData> {
-            if (frames.size < 2) return layers
-            val below = if (settings.backgroundFrame && index != 0) frames.first() else emptyList()
-            val above = if (settings.foregroundFrame && index != frames.lastIndex) frames.last() else emptyList()
-            return below + layers + above
-        }
+        ): List<LayerData> =
+            AnimationPlayback.compositeIndices(frameIds, settings, index).flatMap { source ->
+                if (source == index) layers else frames[source]
+            }
 
         private fun renderFrozen(
             layers: List<LayerData>,

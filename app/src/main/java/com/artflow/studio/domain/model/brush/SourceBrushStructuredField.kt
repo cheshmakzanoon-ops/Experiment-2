@@ -23,12 +23,15 @@ data class SourceBrushStructuredField(
         if (!className.matches(CLASS_NAME)) return false
         return when (kind) {
             Kind.FIELDS ->
-                items == null && fields.size in 1..MAX_FIELDS &&
+                items == null &&
+                    fields.size in 1..MAX_FIELDS &&
                     fields.all { (name, value) ->
                         name.matches(FIELD_NAME) && value.isValid()
                     }
             Kind.ARRAY ->
-                items != null && fields.isEmpty() && items.size <= MAX_ITEMS &&
+                items != null &&
+                    fields.isEmpty() &&
+                    items.size <= MAX_ITEMS &&
                     items.all { scalar ->
                         scalar.isValid() &&
                             (scalar.type == SourceBrushScalar.Type.REAL || scalar.type == SourceBrushScalar.Type.INTEGER)

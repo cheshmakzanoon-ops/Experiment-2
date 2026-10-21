@@ -84,6 +84,7 @@ class AnimationPlaybackUiTest {
         compose.setContent {
             val timeline by viewModel.timeline.collectAsState()
             val preferences by viewModel.settings.collectAsState()
+            val canPaste by viewModel.frameClipboard.canPaste.collectAsState()
             MaterialTheme {
                 AnimationSheet(
                     timeline = timeline,
@@ -97,7 +98,7 @@ class AnimationPlaybackUiTest {
                     onTogglePlayback = viewModel::togglePlayback,
                     clipboard =
                         FrameClipboard(
-                            canPaste = viewModel.frameClipboard.canPaste.value,
+                            canPaste = canPaste,
                             onCopy = viewModel.frameClipboard::copy,
                             onPaste = viewModel.frameClipboard::paste,
                         ),
@@ -177,5 +178,39 @@ class AnimationPlaybackUiTest {
         compose.runOnIdle { viewModel.saveRecoveryOnBackground() }
         compose.onNodeWithContentDescription("Play").assertIsDisplayed()
         compose.runOnIdle { assertFalse(viewModel.timeline.value.isPlaying) }
+    }
+
+    @Test
+    fun frameRoleAndVisibilityControlsReachTheDocumentAndDisableEmptyPlayback() {
+        val first =
+            canvas.timeline.value.frames
+                .first()
+                .id
+        compose.onNode(hasText("Background") and hasClickAction()).performScrollTo().performClick()
+        compose.waitUntil(5_000) { first in canvas.timeline.value.settings.backgroundFrameIds }
+        compose.onNodeWithContentDescription("Play").performScrollTo().assertIsNotEnabled()
+        compose.runOnIdle { viewModel.selectFrame(1) }
+        compose.waitUntil(5_000) { canvas.timeline.value.activeIndex == 1 }
+        val second =
+            canvas.timeline.value.frames[1]
+                .id
+        compose.onNodeWithContentDescription("Visible in animation").performScrollTo().performClick()
+        compose.waitUntil(5_000) { second in canvas.timeline.value.settings.hiddenFrameIds }
+        compose.onNodeWithText("Show at least one animated frame in this range to export.").performScrollTo().assertIsDisplayed()
+        compose.runOnIdle { assertEquals(2, canvas.frames().size) }
+    }
+
+    @Test
+    fun onionColorPickerAppliesOnlyOnConfirmationAndKeepsTheOtherColor() {
+        val before = canvas.timeline.value.settings
+        compose.onNodeWithText("Previous frame color").performScrollTo().performClick()
+        compose.onNodeWithTag("color-wheel").performTouchInput { click(center) }
+        compose.onNodeWithText("Cancel").performClick()
+        compose.runOnIdle { assertEquals(before.onionSkinPreviousColor, canvas.timeline.value.settings.onionSkinPreviousColor) }
+        compose.onNodeWithText("Previous frame color").performScrollTo().performClick()
+        compose.onNodeWithTag("color-wheel").performTouchInput { click(center) }
+        compose.onNodeWithText("Use color").performClick()
+        compose.waitUntil(5_000) { canvas.timeline.value.settings.onionSkinPreviousColor != before.onionSkinPreviousColor }
+        compose.runOnIdle { assertEquals(before.onionSkinNextColor, canvas.timeline.value.settings.onionSkinNextColor) }
     }
 }

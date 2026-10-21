@@ -37,9 +37,7 @@ class ExportUiRegressionTest {
                     canvasDpi = 144,
                     previewBytes = null,
                     exportState = ExportUiState.Idle,
-                    onExport = onExport,
-                    actions = ExportActions({}, {}, {}, {}),
-                    onDismissResult = {},
+                    actions = ExportActions({}, {}, {}, {}, export = onExport),
                 )
             }
         }
