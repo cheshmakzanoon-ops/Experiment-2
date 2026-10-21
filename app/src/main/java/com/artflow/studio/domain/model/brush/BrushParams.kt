@@ -390,6 +390,9 @@ data class ColorDynamics(
         if (!isActive) return color
         val light = 1f - pressure.coerceIn(0f, 1f)
         val flat = tilt.coerceIn(0f, 1f)
+        // No transform at full pressure with an upright pen: avoid an RGB->HSV->RGB
+        // rounding change to the original colour even when dynamics are enabled.
+        if (light == 0f && flat == 0f) return color
         val hsv =
             com.artflow.studio.domain.model.Color
                 .rgbToHsv(color)
