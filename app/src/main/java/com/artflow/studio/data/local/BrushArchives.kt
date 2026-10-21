@@ -8,6 +8,7 @@ import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.render.CustomGrains
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.DualBrush
+import com.artflow.studio.domain.model.brush.SavedBrush
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream

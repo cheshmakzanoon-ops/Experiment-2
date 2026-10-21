@@ -108,7 +108,7 @@ class SettingsRepositoryImpl
                 dismissedTips = dismissedTips.toSet(),
                 recentColors = recentColors.toList(),
                 customPalettes = customPalettes.map { it.copy(colors = it.colors.toList()) },
-                canvasPresets = canvasPresets.toList(),
+                savedCanvasPresets = savedCanvasPresets.toList(),
                 galleryOrder = galleryOrder.toList(),
             )
 
@@ -150,10 +150,18 @@ class SettingsRepositoryImpl
         override suspend fun setDefaultPreset(name: String) = update { it.copy(defaultPresetName = name) }
 
         override suspend fun saveCanvasPreset(preset: CanvasOperations.Preset) =
-            update { it.copy(canvasPresets = CanvasPresets.add(it.canvasPresets, preset)) }
+            update { settings ->
+                val normalized = preset.copy(name = CanvasOperations.presetName(preset.name))
+                if (!CanvasOperations.isValidPreset(normalized)) {
+                    settings
+                } else {
+                    val retained = settings.savedCanvasPresets.filterNot { it.name == normalized.name }
+                    settings.copy(savedCanvasPresets = (listOf(normalized) + retained).take(CanvasOperations.MAX_SAVED_PRESETS))
+                }
+            }
 
         override suspend fun deleteCanvasPreset(name: String) =
-            update { it.copy(canvasPresets = CanvasPresets.remove(it.canvasPresets, name)) }
+            update { it.copy(savedCanvasPresets = it.savedCanvasPresets.filterNot { preset -> preset.name == name }) }
 
         override suspend fun setGallerySort(sort: GallerySort) = update { it.copy(gallerySort = sort) }
 
