@@ -15,6 +15,41 @@ import kotlin.math.roundToInt
  * dynamics, tapers, wet mix, flow, blend mode, grain scale and orientation) as a close start.
  */
 object ProcreateBrush {
+    /** REA-observed curve dictionaries with real control points, beyond overall / size / opacity. */
+    internal val AUXILIARY_CURVE_KEYS: Set<String> =
+        setOf(
+        "dynamicsPressureAttackCurve",
+        "dynamicsPressureBleedCurve",
+        "dynamicsPressureBlurCurve",
+        "dynamicsPressureBrightnessCurve",
+        "dynamicsPressureCharge",
+        "dynamicsPressureDilutionCurve",
+        "dynamicsPressureGradeCurve",
+        "dynamicsPressureGrainDepthCurve",
+        "dynamicsPressureGrainDepthJitterCurve",
+        "dynamicsPressureGrainMovementCurve",
+        "dynamicsPressureGrainScaleCurve",
+        "dynamicsPressureGrainZoomCurve",
+        "dynamicsPressureHueCurve",
+        "dynamicsPressureHueJitterCurve",
+        "dynamicsPressureOpacityJitterCurve",
+        "dynamicsPressurePlotJitterCurve",
+        "dynamicsPressurePlotJitterLongitudinalCurve",
+        "dynamicsPressurePlotSpacingJitter",
+        "dynamicsPressureSaturationCurve",
+        "dynamicsPressureSecondaryColorCurve",
+        "dynamicsPressureShapeRoundessHorizontalJitterCurve",
+        "dynamicsPressureShapeRoundessVerticalJitterCurve",
+        "dynamicsPressureShapeRoundnessCurve",
+        "dynamicsPressureShapeScatterCurve",
+        "dynamicsPressureSizeJitterCurve",
+        "dynamicsPressureSmudgePullCurve",
+        "dynamicsPressureStampCountCurve",
+        "dynamicsPressureStampCountJitterCurve",
+        "dynamicsPressureTransferModulationCurve",
+        "dynamicsPressureWetPullCurve",
+        )
+
     class Settings(
         val name: String?,
         /** Settings without images; the importer adds the stored shape and grain. */
@@ -66,6 +101,10 @@ object ProcreateBrush {
                         size = curve(keyed, brush["dynamicsPressureSizeCurve"]),
                         opacity = curve(keyed, brush["dynamicsPressureOpacityCurve"]),
                     ).takeIf { it.overall != null || it.size != null || it.opacity != null },
+                importedAuxiliaryCurves =
+                    AUXILIARY_CURVE_KEYS.mapNotNull { key ->
+                        curve(keyed, brush[key])?.let { mapping -> key to mapping }
+                    }.toMap(),
                 hueJitter = unit("dynamicsJitterHue"),
                 saturationJitter = unit("dynamicsJitterSaturation"),
                 brightnessJitter = maxOf(unit("dynamicsJitterLightness"), unit("dynamicsJitterDarkness")),

@@ -56,8 +56,18 @@ object ProcreateBrushWriter {
     /** The brush's settings as a keyed archive of class SilicaBrush, the form [ProcreateBrush.read] reads. */
     private fun archive(brush: Brush): ByteArray {
         val keyed = KeyedArchiveBuilder()
+        // Preserve known source curve points as keyed NSArray values. Native interpolation,
+        // per-field response units and pixel output remain unverified.
+        val auxiliary =
+            brush.parameters.importedAuxiliaryCurves
+                .filterKeys { it in ProcreateBrush.AUXILIARY_CURVE_KEYS }
+                .mapValues { (_, curve) ->
+                    val points = keyed.array(curve.points.map { point -> keyed.add("{${point.input}, ${point.output}}") })
+                    keyed.instance("NSDictionary", mapOf("points" to points))
+                }
         val root =
-            mapOf("\$class" to keyed.classOf(BRUSH_CLASS), "name" to keyed.add(brush.name)) + settings(brush.parameters)
+            mapOf("\$class" to keyed.classOf(BRUSH_CLASS), "name" to keyed.add(brush.name)) +
+                settings(brush.parameters) + auxiliary
         return keyed.encode(root)
     }
 

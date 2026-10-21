@@ -26,6 +26,8 @@ data class BrushParams(
     val pressureCurve: PressureCurve = PressureCurve.LINEAR,
     val customPressure: PressureResponse = PressureResponse(),
     val importedPressure: ImportedPressure? = null, // Preserved independent per-brush and per-channel responses
+    /** Imported source pressure curves not yet mapped to ArtFlow's renderer; valid points retained for interchange. */
+    val importedAuxiliaryCurves: Map<String, PressureMapping> = emptyMap(),
     // Color dynamics - Phase 9: Advanced Brush Parameters
     val hueJitter: Float = 0f, // Hue variation (0.0 - 1.0)
     val saturationJitter: Float = 0f, // Saturation variation (0.0 - 1.0)

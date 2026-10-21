@@ -6,6 +6,7 @@ import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.render.CustomGrains
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.ColorDynamics
+import com.artflow.studio.domain.model.brush.PressureMapping
 import com.artflow.studio.domain.model.brush.SavedBrush
 import com.artflow.studio.domain.model.layer.BlendMode
 import org.junit.Assert.assertArrayEquals
@@ -220,6 +221,40 @@ class BrushExportRoundTripTest {
         val imported = requireNotNull(BrushArchives.read(archive, decode).single().settings).parameters
         assertEquals(dynamics, imported.colorDynamics)
         assertTrue(imported.colorDynamics.isActive)
+    }
+
+    @Test
+    fun sourceAuxiliaryCurvesSurviveBrushExportAndLibraryRoundTrip() {
+        val descending =
+            PressureMapping(
+                listOf(
+                    PressureMapping.Point(0f, 1f),
+                    PressureMapping.Point(0.35f, 0.6f),
+                    PressureMapping.Point(1f, 0f),
+                ),
+            )
+        val rising =
+            PressureMapping(
+                listOf(
+                    PressureMapping.Point(0f, 0.1f),
+                    PressureMapping.Point(1f, 0.9f),
+                ),
+            )
+        val curves =
+            mapOf(
+                "dynamicsPressureBleedCurve" to descending,
+                "dynamicsPressureGrainDepthCurve" to rising,
+                "dynamicsPressureWetPullCurve" to descending,
+            )
+        val source = BrushParams(importedAuxiliaryCurves = curves)
+        val brushFile = ProcreateBrushWriter.brush(ProcreateBrushWriter.Brush("Auxiliary curves", source))
+        val imported = requireNotNull(BrushArchives.read(brushFile, decode).single().settings).parameters
+        assertEquals(curves, imported.importedAuxiliaryCurves)
+        val saved = com.artflow.studio.domain.model.brush.BrushLibraryCodec.encode(
+            listOf(SavedBrush("curves", "Curves", imported)),
+        )
+        val restored = com.artflow.studio.domain.model.brush.BrushLibraryCodec.decode(saved).single().parameters
+        assertEquals(curves, restored.importedAuxiliaryCurves)
     }
 
     private companion object {
