@@ -1,0 +1,174 @@
+name: REA IPA static inventory
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/reference-ipa-static-inventory.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: rea-ipa-inventory
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify and inventory the original IPA without executing app code
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check gdown==5.2.0
+          mkdir -p ipa-evidence
+          python - <<'PY'
+          import collections, hashlib, json, pathlib, plistlib, struct, zipfile
+          import gdown
+          target=pathlib.Path('reference.ipa')
+          assert gdown.download(id='1xPr6e53L76Cq8exGFWOSvq96wt-NlLVC',output=str(target),quiet=True)
+          with target.open('rb') as f: sha=hashlib.file_digest(f,'sha256').hexdigest()
+          expected='7b1dad3ac95f8aeca3c22b432b5d6fd94182a3bf9f84fb93588adb126368b54e'
+          if sha!=expected: raise RuntimeError('Reference SHA-256 mismatch: '+sha)
+          evidence={'reference_sha256':sha,'archive_bytes':target.stat().st_size,
+                    'method':'read-only package metadata, plist and Mach-O load command inventory',
+                    'bundle_info':{},'executable_headers':{},'limitations':[]}
+          def parse_macho(buf):
+              if len(buf)<32: return {'status':'insufficient-data'}
+              magic=struct.unpack_from('<I',buf)[0]
+              if magic in (0xfeedface,0xfeedfacf): end='<'; is64=magic==0xfeedfacf
+              elif magic in (0xcefaedfe,0xcffaedfe): end='>'; is64=magic==0xcffaedfe
+              else: return {'status':'non-thin-or-fat-mach-o','note':'fat slices require separate inspection'}
+              h=32 if is64 else 28
+              _,cpu,_,filetype,ncmd,bytes_cmds,_=struct.unpack_from(end+'7I',buf)
+              if ncmd>65536 or bytes_cmds>8*1024**2 or h+bytes_cmds>len(buf):
+                  return {'status':'load-commands-unavailable','cpu':hex(cpu)}
+              encrypted=[]; dependencies=[]; offset=h
+              for _ in range(ncmd):
+                  if offset+8>len(buf): return {'status':'malformed-command-table'}
+                  cmd,size=struct.unpack_from(end+'II',buf,offset)
+                  if size<8 or offset+size>h+bytes_cmds: return {'status':'malformed-command'}
+                  if cmd in (0x21,0x2c) and size>=20:
+                      cryptoff,cryptsize,cryptid=struct.unpack_from(end+'III',buf,offset+8)
+                      encrypted.append({'cryptid':cryptid,'cryptoff':cryptoff,'cryptsize':cryptsize})
+                  if cmd in (0xc,0x18,0x1f,0x23,0x80000018,0x8000001f) and size>=24 and len(dependencies)<200:
+                      start=struct.unpack_from(end+'I',buf,offset+8)[0]
+                      if 24<=start<size:
+                          dependencies.append(buf[offset+start:offset+size].split(b'\0')[0].decode('utf-8','replace')[:250])
+                  offset+=size
+              return {'status':'parsed','architecture':{0x100000c:'arm64',0x1000007:'x86_64',12:'arm',7:'x86'}.get(cpu,hex(cpu)),
+                      'file_type':filetype,'load_commands':ncmd,'encryption':encrypted,'load_dylibs':dependencies}
+          with zipfile.ZipFile(target) as archive:
+              members=archive.infolist()
+              if len(members)>150000: raise RuntimeError('Excessive member count')
+              names=set(); roots=set(); frameworks=set(); kinds=collections.Counter(); total=0
+              for entry in members:
+                  n=entry.filename
+                  if not n or n.startswith('/') or '\\' in n or n in names or (entry.flag_bits&1) or any(x in ('.','..','') for x in n.rstrip('/').split('/')):
+                      raise RuntimeError('Unsafe, duplicate or encrypted member path')
+                  names.add(n); total+=entry.file_size
+                  if total>32*1024**3: raise RuntimeError('Expanded size limit exceeded')
+                  kind=pathlib.PurePosixPath(n.rstrip('/')).suffix.lower() or '[none]'
+                  kinds[kind]+=1
+                  segments=n.split('/')
+                  for i,seg in enumerate(segments):
+                      if i>0 and segments[0]=='Payload' and seg.endswith('.app'): roots.add('/'.join(segments[:i+1]))
+                      if seg.endswith('.framework'): frameworks.add(seg)
+              evidence.update(members=len(members),expanded_bytes_reported=total,application_roots=sorted(roots),
+                              framework_names=sorted(frameworks),resource_suffix_counts=dict(kinds.most_common(100)))
+              for entry in members:
+                  p=entry.filename
+                  if not p.endswith('/Info.plist') or entry.file_size>8*1024**2: continue
+                  try:
+                      obj=plistlib.loads(archive.read(entry))
+                      if not isinstance(obj,dict): raise ValueError('Not dictionary')
+                      keys=('CFBundleIdentifier','CFBundleName','CFBundleDisplayName','CFBundleExecutable',
+                            'CFBundleVersion','CFBundleShortVersionString','MinimumOSVersion','UIDeviceFamily')
+                      safe={k:obj[k] for k in keys if isinstance(obj.get(k),(str,int,float,bool))
+                            or isinstance(obj.get(k),list) and len(obj[k])<20 and all(isinstance(x,(int,str)) for x in obj[k])}
+                      evidence['bundle_info'][p]={'status':'parsed','fields':safe,
+                          'usage_description_keys':sorted(k for k in obj if k.endswith('UsageDescription'))}
+                      exe=safe.get('CFBundleExecutable')
+                      full=p.rsplit('/',1)[0]+'/'+exe if isinstance(exe,str) else ''
+                      if full in names and archive.getinfo(full).file_size<=1024**3:
+                          with archive.open(full) as f: data=f.read(min(archive.getinfo(full).file_size,8*1024**2))
+                          details=parse_macho(data)
+                          details['file_size']=archive.getinfo(full).file_size
+                          evidence['executable_headers'][full]=details
+                  except (ValueError,TypeError,OverflowError,plistlib.InvalidFileException,zipfile.BadZipFile) as ex:
+                      evidence['bundle_info'][p]={'status':'error','kind':type(ex).__name__}
+          evidence['limitations']=[
+              'Metadata and resource inventory only; app code was never executed.',
+              'Native function bodies, shader semantics and runtime features were not recovered by this scan.',
+              'A Mach-O cryptid above zero indicates an encrypted region; only bundle-declared thin Mach-O executable headers are parsed.',
+              'No source, artwork assets, application binaries or licensed textures are redistributed.',
+              'No pixel parity, UI parity or complete reverse engineering is established.']
+          out=pathlib.Path('ipa-evidence')
+          (out/'inventory.json').write_text(json.dumps(evidence,indent=2,sort_keys=True)+'\n')
+          report=['# Reference IPA — static forensic inventory','',
+              'This report describes source-package **metadata only**, not full decompilation or behavioral parity.','',
+              '- SHA-256: '+sha,'- Archive bytes: '+str(evidence['archive_bytes']),
+              '- Archive members: '+str(evidence['members']),
+              '- Declared expanded bytes: '+str(evidence['expanded_bytes_reported']),
+              '- App roots: '+(', '.join(sorted(roots)) or 'none'),
+              '- Embedded framework names: '+str(len(frameworks)),
+              '- Inspected bundle plists: '+str(len(evidence['bundle_info'])),
+              '- Inspected executable headers: '+str(len(evidence['executable_headers'])),
+              '', '## Bundle identifiers and versions']
+          for path,info in evidence['bundle_info'].items():
+              if path.count('/')<=3: report.append('- '+path+': '+json.dumps(info,ensure_ascii=True))
+          report+=['','## Bundle-declared main executables and encryption markers']
+          for path,info in evidence['executable_headers'].items():
+              if path.count('/')<=2: report.append('- '+path+': '+json.dumps(info,ensure_ascii=True))
+          report+=['','## File-extension counts (top 35)']
+          report+=['- '+str(k)+': '+str(v) for k,v in kinds.most_common(35)]
+          report+=['','## Limits']
+          report+=['- '+lim for lim in evidence['limitations']]
+          (out/'inventory.md').write_text('\n'.join(report)+'\n')
+          print(json.dumps({'hash':sha,'members':len(members),'app_roots':sorted(roots),'main_headers':len(evidence['executable_headers'])}))
+          PY
+      - name: Run REA against complete hash-verified archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/rea" --ignore-scripts rea-agents@6.7.0
+          set +e
+          timeout 1200 "$RUNNER_TEMP/rea/node_modules/.bin/rea" inspect-artifact reference.ipa --detail summary --evidence_output "$RUNNER_TEMP/rea-inventory-private.json" --json > ipa-evidence/rea-summary.json 2> ipa-evidence/rea-stderr.log
+          status=$?
+          set -e
+          printf '%s\n' "$status" > ipa-evidence/rea-exit-code.txt
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('ipa-evidence/rea-summary.json')
+          if p.exists() and p.stat().st_size>2*1024**2:
+              p.write_text('{"status":"full response exceeded 2 MiB; private Evidence kept only on runner"}')
+          e=Path('ipa-evidence/rea-stderr.log')
+          if e.exists(): e.write_text(e.read_text(errors='replace')[:6000])
+          PY
+      - name: Commit verified findings to main without copying reference assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp ipa-evidence/inventory.json docs/REA_IPA_STATIC_INVENTORY.json
+          cp ipa-evidence/inventory.md docs/REA_IPA_STATIC_INVENTORY.md
+          printf '\n## REA command outcome\n\nExit code (0 means successful REA artifact inspection): %s\n' "$(cat ipa-evidence/rea-exit-code.txt)" >> docs/REA_IPA_STATIC_INVENTORY.md
+          git add docs/REA_IPA_STATIC_INVENTORY.json docs/REA_IPA_STATIC_INVENTORY.md
+          git diff --cached --check
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'docs: add verified REA IPA package and Mach-O inventory'
+            git push origin HEAD:main
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rea-full-ipa-static-evidence
+          path: ipa-evidence/
+          retention-days: 7
+          if-no-files-found: warn
