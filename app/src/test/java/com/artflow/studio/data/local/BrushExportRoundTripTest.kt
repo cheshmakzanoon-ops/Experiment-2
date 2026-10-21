@@ -486,6 +486,33 @@ class BrushExportRoundTripTest {
         assertEquals(1.5, (root["textureScale"] as Number).toDouble(), 1e-6)
     }
 
+    @Test
+    fun unmappedNativeBlendIdentifiersArePreservedUntilTheBlendModeIsEdited() {
+        val unknown = com.artflow.studio.core.export.ProcreateBrush.parameters(mapOf("extendedBlend" to 28L))
+        assertEquals(BlendMode.NORMAL, unknown.blendMode)
+        fun root(params: BrushParams): Map<String, Any?> {
+            val bytes = ProcreateBrushWriter.brush(ProcreateBrushWriter.Brush("Unknown blend", params))
+            val archiveData =
+                ZipInputStream(bytes.inputStream()).use { zip ->
+                    check(zip.nextEntry.name == "Brush.archive")
+                    zip.readBytes()
+                }
+            return requireNotNull(
+                com.artflow.studio.core.export.KeyedArchive(
+                    com.artflow.studio.core.export.BinaryPlist.read(archiveData),
+                ).root,
+            )
+        }
+        assertEquals(28L, root(unknown)["extendedBlend"])
+        assertEquals(1L, root(unknown.copy(blendMode = BlendMode.MULTIPLY))["extendedBlend"])
+        // In the legacy schema, creating an extra extendedBlend would shadow the
+        // unsupported source blendMode code when Procreate imports the file.
+        val legacy = com.artflow.studio.core.export.ProcreateBrush.parameters(mapOf("blendMode" to 28L))
+        val kept = root(legacy)
+        assertEquals(28L, kept["blendMode"])
+        assertTrue("Preserve the original legacy mode without fabricating an override", "extendedBlend" !in kept)
+    }
+
     private companion object {
         const val TOLERANCE = 1e-4
     }
