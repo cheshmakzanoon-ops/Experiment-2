@@ -7,6 +7,7 @@ import com.artflow.studio.domain.model.brush.PressureMapping
 import com.artflow.studio.domain.model.brush.SourceBrushScalar
 import com.artflow.studio.domain.model.brush.SourceBrushStructuredField
 import com.artflow.studio.domain.model.layer.BlendMode
+import java.util.Base64
 import kotlin.math.roundToInt
 
 /**
@@ -148,6 +149,9 @@ object ProcreateBrush {
                     }.toMap(),
                 importedSourceScalars = sourceScalars,
                 importedSourceStructures = sourceStructures,
+                importedSourceColorData =
+                    keyed.data(brush["color"])?.takeIf { it.size == SOURCE_COLOR_BYTES }
+                        ?.let { Base64.getEncoder().encodeToString(it) },
                 hueJitter = unit("dynamicsJitterHue"),
                 saturationJitter = unit("dynamicsJitterSaturation"),
                 brightnessJitter = maxOf(unit("dynamicsJitterLightness"), unit("dynamicsJitterDarkness")),
@@ -256,6 +260,7 @@ object ProcreateBrush {
 
     private const val MIN_ROUNDNESS = 0.05f
     private const val MOVING_GRAIN = 0.5f
+    private const val SOURCE_COLOR_BYTES = 16
 
     private fun Map<String, Any?>.number(key: String): Float? = (this[key] as? Number)?.toFloat()?.takeIf { it.isFinite() }
 

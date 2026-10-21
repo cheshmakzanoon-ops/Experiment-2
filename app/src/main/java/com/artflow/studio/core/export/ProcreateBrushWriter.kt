@@ -6,6 +6,7 @@ import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.SourceBrushScalar
 import com.artflow.studio.domain.model.brush.SourceBrushStructuredField
 import java.io.ByteArrayOutputStream
+import java.util.Base64
 import java.util.UUID
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -102,11 +103,19 @@ object ProcreateBrushWriter {
                     }
                 keyed.instance(data.className, values)
             }
+        val originalColor =
+            brush.parameters.importedSourceColorData?.let { encoded ->
+                require(encoded.length == 24) { "Invalid source brush colour payload size" }
+                val data = Base64.getDecoder().decode(encoded)
+                require(data.size == 16 && Base64.getEncoder().encodeToString(data) == encoded) {
+                    "Invalid source brush colour payload"
+                }
+                mapOf("color" to keyed.add(data))
+            } ?: emptyMap()
         // Editable ArtFlow settings win for known scalar fields; source-only
-        // primitive and structured metadata remain attached to the brush.
-        // Neither original binary assets nor the reference app's algorithms are reproduced.
+        // primitive, structured and bounded 16-byte color data stay with the brush.
         val root =
-            preservedScalars + preservedStructures +
+            preservedScalars + preservedStructures + originalColor +
                 mapOf("\$class" to keyed.classOf(BRUSH_CLASS), "name" to keyed.add(brush.name)) +
                 settings(brush.parameters) + auxiliary
         return keyed.encode(root)

@@ -19,6 +19,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Assert.assertThrows
 import org.junit.Test
 import java.util.zip.ZipInputStream
+import java.util.Base64
 
 /**
  * Procreate brushes written by [ProcreateBrushWriter] and read back through [BrushArchives.read], the import
@@ -346,6 +347,36 @@ class BrushExportRoundTripTest {
         val exported = ProcreateBrushWriter.brush(ProcreateBrushWriter.Brush("Structured", reopened))
         val imported = requireNotNull(BrushArchives.read(exported, decode).single().settings).parameters
         assertEquals(stored, imported.importedSourceStructures)
+    }
+
+    @Test
+    fun sourceSixteenByteColourDataSurvivesKeyedArchiveAndSavedLibrary() {
+        val payload = ByteArray(16) { index -> (index * 13).toByte() }
+        val keyed = com.artflow.studio.core.export.KeyedArchiveBuilder()
+        val original =
+            com.artflow.studio.core.export.ProcreateBrush.read(
+                keyed.encode(mapOf("name" to keyed.add("Binary colour"), "color" to keyed.add(payload))),
+            ).parameters
+        val encoded = Base64.getEncoder().encodeToString(payload)
+        assertEquals(encoded, original.importedSourceColorData)
+        val saved = SavedBrush("binary-colour", "Binary colour", original)
+        val restored = com.artflow.studio.domain.model.brush.BrushLibraryCodec.decode(
+            com.artflow.studio.domain.model.brush.BrushLibraryCodec.encode(listOf(saved)),
+        ).single().parameters
+        assertEquals(encoded, restored.importedSourceColorData)
+        val exported = ProcreateBrushWriter.brush(ProcreateBrushWriter.Brush("Binary colour", restored))
+        val roundTripped = com.artflow.studio.core.export.ProcreateBrush.read(
+            ZipInputStream(exported.inputStream()).use { zip ->
+                check(zip.nextEntry.name == "Brush.archive")
+                zip.readBytes()
+            },
+        )
+        assertEquals(encoded, roundTripped.parameters.importedSourceColorData)
+        assertThrows(IllegalArgumentException::class.java) {
+            com.artflow.studio.domain.model.brush.BrushLibraryCodec.encode(
+                listOf(saved.copy(parameters = original.copy(importedSourceColorData = "not-base64"))),
+            )
+        }
     }
 
     private companion object {

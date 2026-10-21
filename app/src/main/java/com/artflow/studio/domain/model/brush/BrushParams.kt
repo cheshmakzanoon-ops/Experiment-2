@@ -32,6 +32,8 @@ data class BrushParams(
     val importedSourceScalars: Map<String, SourceBrushScalar> = emptyMap(),
     /** Additional primitive-field objects and saved slider arrays, not executed by this brush renderer. */
     val importedSourceStructures: Map<String, SourceBrushStructuredField> = emptyMap(),
+    /** The original 16-byte keyed `color` payload (Base64), retained without inferring its color space. */
+    val importedSourceColorData: String? = null,
     // Color dynamics - Phase 9: Advanced Brush Parameters
     val hueJitter: Float = 0f, // Hue variation (0.0 - 1.0)
     val saturationJitter: Float = 0f, // Saturation variation (0.0 - 1.0)

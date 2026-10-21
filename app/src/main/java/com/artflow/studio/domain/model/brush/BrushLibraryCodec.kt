@@ -2,6 +2,7 @@ package com.artflow.studio.domain.model.brush
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import java.util.Base64
 
 /** Versioned, bounded storage. Unrecognized or damaged data fails closed instead of becoming empty. */
 object BrushLibraryCodec {
@@ -104,6 +105,13 @@ object BrushLibraryCodec {
         require(params.importedSourceScalars.all { (name, field) ->
             SourceBrushScalar.validName(name) && field.isValid()
         }) { "Invalid imported source brush scalar" }
+        params.importedSourceColorData?.let { encoded ->
+            require(encoded.length == 24) { "Invalid source brush colour data" }
+            val bytes = runCatching { Base64.getDecoder().decode(encoded) }.getOrNull()
+            require(bytes?.size == 16 && Base64.getEncoder().encodeToString(bytes) == encoded) {
+                "Invalid source brush colour payload"
+            }
+        }
         require(params.importedSourceStructures.size <= SourceBrushStructuredField.MAX_OBJECTS) {
             "Too many source brush structured fields"
         }
