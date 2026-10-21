@@ -104,6 +104,13 @@ object ProcreateBrush {
         )
     }
 
+    /**
+     * Inspect a synthetic, decoded settings dictionary using the same importer as real
+     * Brush.archive inputs. This is deliberately not a second, divergent parser.
+     */
+    fun parameters(fields: Map<String, Any?>): BrushParams =
+        read(KeyedArchiveBuilder().encode(fields)).parameters
+
     private fun normalizedAngle(radians: Float): Float {
         val degrees = Math.toDegrees(radians.toDouble()) % FULL_TURN
         return ((degrees + FULL_TURN) % FULL_TURN).toFloat()
