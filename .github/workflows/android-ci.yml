@@ -276,16 +276,40 @@ jobs:
         if: failure()
         run: |
           python3 - <<'PY'
-          import glob, xml.etree.ElementTree as ET
+          import glob, os, xml.etree.ElementTree as ET
+
+          emitted = 0
+
+          def note(message):
+              # GitHub renders ::error:: lines as check annotations, which stay readable for a public
+              # repository even when the job log needs a sign-in. Keep them single-line and escaped.
+              global emitted
+              if emitted >= 10:
+                  return
+              emitted += 1
+              clean = " ".join(str(message).split()).replace("%", "%25")[:380]
+              print(f"::error::{clean}")
+
           for path in glob.glob("app/build/outputs/androidTest-results/**/*.xml", recursive=True):
               for case in ET.parse(path).getroot().iter("testcase"):
                   for problem in list(case.findall("failure")) + list(case.findall("error")):
                       text = (problem.get("message") or problem.text or "").strip().splitlines()
-                      print(f"FAILED {case.get('classname')}.{case.get('name')}: {' | '.join(text[:4])[:600]}")
+                      name = f"{case.get('classname')}.{case.get('name')}"
+                      print(f"FAILED {name}: {' | '.join(text[:4])[:600]}")
+                      note(f"FAILED {name}: {' | '.join(text[:4])[:300]}")
                       # The frames that say who did it: the app's own, the test's and any cause.
                       trace = (problem.text or "").splitlines()
                       for line in [l.strip() for l in trace if "com.artflow" in l or "Caused by" in l][:30]:
                           print(f"    {line[:300]}")
+          if emitted == 0:
+              root = os.path.join(os.environ.get("RUNNER_TEMP", ""), "artflow-device")
+              for path in glob.glob(os.path.join(root, "**", "*logcat*.txt"), recursive=True):
+                  try:
+                      for line in open(path, errors="ignore"):
+                          if "FATAL EXCEPTION" in line or "Fatal signal" in line or "Process: com.artflow" in line:
+                              note(line)
+                  except OSError:
+                      pass
           PY
           grep -rhE 'FAILED|Process crashed|INSTRUMENTATION_FAILED' "${RUNNER_TEMP}/artflow-device" 2>/dev/null | head -20 || true
           # The app's own crash, if any: the exception and the frames that explain it.
