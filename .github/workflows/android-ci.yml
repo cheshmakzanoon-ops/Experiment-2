@@ -2,7 +2,10 @@ name: Android CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      # Temporary: runs the full build and device matrix on the active agent branch.
+      - freebuff/a4328b0f1686f06ea6bd008a
   pull_request:
   workflow_dispatch:
 
