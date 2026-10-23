@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import com.artflow.studio.R
 import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.Quad
+import com.artflow.studio.core.pixels.SelectionCombineMode
 import com.artflow.studio.core.pixels.TransformQuad
 import com.artflow.studio.core.pixels.WarpMesh
 import com.artflow.studio.core.symmetry.SymmetryEngine
@@ -51,7 +52,6 @@ import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.domain.model.brush.MAX_BRUSH_SIZE
 import com.artflow.studio.domain.model.brush.MIN_BRUSH_OPACITY
 import com.artflow.studio.domain.model.brush.MIN_BRUSH_SIZE
-import com.artflow.studio.presentation.ui.components.canvas.SelectionCombineMode
 import kotlinx.coroutines.delay
 import kotlin.math.cos
 import kotlin.math.roundToInt

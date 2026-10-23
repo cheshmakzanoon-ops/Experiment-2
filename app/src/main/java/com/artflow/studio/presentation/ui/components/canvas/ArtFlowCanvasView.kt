@@ -47,9 +47,11 @@ import com.artflow.studio.core.pixels.LayerTransform
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.Quad
 import com.artflow.studio.core.pixels.RasterOverlay
+import com.artflow.studio.core.pixels.SelectionCombineMode
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.pixels.TransformQuad
 import com.artflow.studio.core.pixels.WarpMesh
+import com.artflow.studio.core.pixels.combine
 import com.artflow.studio.core.render.BrushPatch
 import com.artflow.studio.core.render.StrokeClock
 import com.artflow.studio.core.symmetry.SymmetryEngine
@@ -105,16 +107,6 @@ enum class ShapeKind(
     ELLIPSE("Ellipse"),
     LINE("Line"),
     POLYGON("Polygon"),
-}
-
-/** How a new selection combines with the existing one. */
-enum class SelectionCombineMode(
-    val displayName: String,
-) {
-    REPLACE("Replace"),
-    ADD("Add"),
-    SUBTRACT("Subtract"),
-    INTERSECT("Intersect"),
 }
 
 /**
@@ -3205,7 +3197,7 @@ class ArtFlowCanvasView
                         val mask = compute(session) ?: return@launch
                         val combined =
                             withContext(Dispatchers.Default) {
-                                combineSelection(session.original, mask, mode) { ensureActive() }
+                                SelectionMask.combine(session.original, mask, mode) { ensureActive() }
                             }
                         if (canvasRepository.commitSelectionEdit(session, combined)) {
                             onSelectionChanged?.invoke(combined, combined.selectedPixelCount())
@@ -3214,28 +3206,6 @@ class ArtFlowCanvasView
                         canvasRepository.cancelSelectionEdit(session)
                     }
                 }
-        }
-
-        private fun combineSelection(
-            existing: SelectionMask?,
-            added: SelectionMask,
-            mode: SelectionCombineMode,
-            checkActive: () -> Unit,
-        ): SelectionMask {
-            checkActive()
-            if (existing == null || mode == SelectionCombineMode.REPLACE) return added
-            if (existing.width != added.width || existing.height != added.height) return added
-            if (mode == SelectionCombineMode.INTERSECT) return SelectionMask.intersect(existing, added, checkActive)
-
-            val result = existing.copy()
-            for (i in result.coverage.indices) {
-                if (i % 8192 == 0) checkActive()
-                val a = result.coverage[i].toInt() and 0xFF
-                val b = added.coverage[i].toInt() and 0xFF
-                val value = if (mode == SelectionCombineMode.ADD) max(a, b) else max(0, a - b)
-                result.coverage[i] = value.toByte()
-            }
-            return result
         }
 
         private fun emitDragPreview(

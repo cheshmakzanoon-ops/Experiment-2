@@ -7,13 +7,13 @@ import android.view.ViewGroup
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.pixels.SelectionCombineMode
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView
 import com.artflow.studio.presentation.ui.components.canvas.EditorInput
-import com.artflow.studio.presentation.ui.components.canvas.SelectionCombineMode
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
 import kotlinx.coroutines.CompletableDeferred

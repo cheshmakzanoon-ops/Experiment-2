@@ -45,6 +45,7 @@ import com.artflow.studio.core.perspective.GuideLineStyle
 import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.pixels.SelectionCombineMode
 import com.artflow.studio.core.render.LayerGroups
 import com.artflow.studio.core.symmetry.SymmetryEngine
 import com.artflow.studio.core.text.TextLayout
@@ -54,7 +55,6 @@ import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.FilterType
 import com.artflow.studio.domain.model.layer.Layer
-import com.artflow.studio.presentation.ui.components.canvas.SelectionCombineMode
 import kotlin.math.roundToInt
 
 // ---------------------------------------------------------------------------------------------

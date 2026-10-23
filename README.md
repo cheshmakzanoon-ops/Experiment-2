@@ -1,3 +1,24 @@
+### Selection, clipboard and crop corrections (23 October 2026)
+
+Three gaps recorded in the 19 September parity sweep are closed:
+
+- **Remove and Intersect with nothing selected** no longer fall back to Add. Selection combination is
+  a pixel-core operation (`SelectionMask.combine`) with Replace, Add, Subtract and Intersect
+  semantics; a mask whose coverage has been emptied still selects nothing.
+- **Copy, Cut and Copy All with an emptied selection** refuse with "Nothing is selected" instead of
+  filling the clipboard with blank pixels, so Paste reports an empty clipboard rather than adding an
+  invisible layer.
+- **Crop & Resize has an aspect lock**: Freeform, 1:1, 4:3, 3:2 and 16:9. A locked corner drag anchors
+  the opposite corner, an edge drag grows the other side around the box centre, the box stays inside
+  the canvas, and moving the box ignores the lock.
+
+Executed locally on this revision: debug and instrumentation compilation, the full JVM suite
+(**1,342 tests, 0 failures, 0 errors, 2 skipped** — the pinned reference-brush corpus and the fetched
+Procreate sample documents), ktlint and detekt. Not executed here: Android lint, the APK/AAB builds
+and every emulator lane. The last published run (293 on `b33a695`) left all six device lanes red while
+its build job passed; that failure is still unexplained from the retained evidence, and none of these
+changes is device-verified.
+
 ### Native-informed parity implementation (21 October 2026)
 
 The [latest implementation report](docs/PARITY_IMPLEMENTATION_2026-10-21.md) records changes

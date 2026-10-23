@@ -1,5 +1,24 @@
 # ArtFlow / Procreate workflow comparison
 
+## Selection and crop corrections — 23 October 2026
+
+Three items from the 19 September sweep are closed by source changes with JVM regressions:
+
+- **Remove without an existing selection** acted as Add, and so did Intersect. Combination now lives
+  in the pixel core (`SelectionMask.combine`): with nothing selected, Replace and Add use the new
+  mask while Remove and Intersect select nothing, which is the set operation the buttons promise.
+- **Copy or Cut on an emptied selection** copied blank pixels, so Paste added an invisible layer. The
+  clipboard now refuses with "Nothing is selected" and leaves the previous clipboard untouched.
+- **Crop has no aspect lock** is closed: Crop & Resize offers Freeform, 1:1, 4:3, 3:2 and 16:9, keeps
+  the locked proportion while dragging (anchoring the opposite corner or the edge centre), stays on
+  the canvas, and ignores the lock while the box is moved.
+
+Executed evidence for this revision: the full JVM suite passed (1,342 tests, 0 failures, 0 errors,
+2 skipped reference corpora), debug and instrumentation APKs compile, and ktlint and detekt pass.
+Android lint, the APK/AAB builds and all six emulator lanes were **not** run on this revision. Run
+293 on `b33a695` remains red in every device lane with a passing build job and no established cause
+in the retained evidence, so no row above is device-verified by these changes.
+
 ## Native-informed implementation — 21 October 2026
 
 The [latest implementation and verification record](PARITY_IMPLEMENTATION_2026-10-21.md)

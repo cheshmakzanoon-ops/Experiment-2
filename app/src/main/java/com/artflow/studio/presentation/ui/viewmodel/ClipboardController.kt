@@ -2,6 +2,7 @@ package com.artflow.studio.presentation.ui.viewmodel
 
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionClipboard
+import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,7 +42,7 @@ class ClipboardController(
     fun copyMerged() =
         perform {
             val composite = checkNotNull(repository.compositeBuffer()) { "Nothing to copy" }
-            val selection = repository.selection()
+            val selection = requireCopiableSelection()
             image = withContext(Dispatchers.Default) { SelectionClipboard.extract(composite, selection) }
             _hasContent.value = true
         }
@@ -69,10 +70,20 @@ class ClipboardController(
         }
     }
 
+    /**
+     * The selection Copy and Cut may use. An emptied selection selects nothing, so copying it would
+     * only fill the clipboard with blank pixels and Paste would add an invisible layer; refuse instead.
+     */
+    private fun requireCopiableSelection(): SelectionMask? {
+        val selection = repository.selection()
+        require(selection == null || selection.isActive()) { "Nothing is selected" }
+        return selection
+    }
+
     private suspend fun copyLayer(cut: Boolean) {
         val layerId = repository.getActiveLayerId()
+        val selection = requireCopiableSelection()
         val pixels = checkNotNull(repository.layerPixels(layerId)) { "This layer has no pixels to copy" }
-        val selection = repository.selection()
         image = withContext(Dispatchers.Default) { SelectionClipboard.extract(pixels, selection) }
         _hasContent.value = true
         if (cut) repository.applyRasterEdit(layerId, "Cut") { SelectionClipboard.erase(it, selection) }

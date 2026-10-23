@@ -263,6 +263,7 @@ fun CanvasScreen(
     var referenceCanvas by rememberSaveable(projectId) { mutableStateOf(false) }
     var pageAssist by rememberSaveable(projectId) { mutableStateOf(false) }
     var cropBox by remember { mutableStateOf<CropBox.Box?>(null) }
+    var cropAspect by remember { mutableStateOf<CropBox.Aspect?>(null) }
     var opacityLayer by remember { mutableStateOf<Long?>(null) }
     var quickMenu by remember { mutableStateOf(false) }
     val navReadout = remember { mutableStateOf<NavigationReadout?>(null) }
@@ -974,6 +975,7 @@ fun CanvasScreen(
                                 // Crop & Resize starts with the box on the canvas; Settings has the exact sizes.
                                 panel = EditorPanel.NONE
                                 canvasView?.cancelActiveGesture()
+                                cropAspect = null
                                 cropBox = ready?.let { CropBox.Box.of(it.width, it.height) }
                             },
                             onAnimationAssist = { panel = EditorPanel.ANIMATION },
@@ -1488,17 +1490,27 @@ fun CanvasScreen(
                     canvasHeight = ready.height,
                     view = ViewTransform(viewScale, viewOffsetX, viewOffsetY, viewRotation),
                     onChange = { cropBox = it },
+                    aspect = cropAspect,
                     modifier = Modifier.fillMaxSize().zIndex(5f),
                 )
                 CropBar(
                     box = crop,
+                    aspect = cropAspect,
+                    onAspect = { cropAspect = it },
                     onSettings = {
                         cropBox = null
                         panel = EditorPanel.CANVAS
                     },
-                    onReset = { cropBox = CropBox.Box.of(ready.width, ready.height) },
-                    onCancel = { cropBox = null },
+                    onReset = {
+                        cropAspect = null
+                        cropBox = CropBox.Box.of(ready.width, ready.height)
+                    },
+                    onCancel = {
+                        cropAspect = null
+                        cropBox = null
+                    },
                     onDone = {
+                        cropAspect = null
                         cropBox = null
                         if (crop != CropBox.Box.of(ready.width, ready.height)) viewModel.canvasOps.cropCanvas(crop.toBounds())
                     },

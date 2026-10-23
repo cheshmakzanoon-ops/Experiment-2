@@ -36,9 +36,11 @@ fun CropOverlay(
     canvasHeight: Int,
     view: ViewTransform,
     onChange: (CropBox.Box) -> Unit,
+    aspect: CropBox.Aspect? = null,
     modifier: Modifier = Modifier,
 ) {
     val current by rememberUpdatedState(box)
+    val currentAspect by rememberUpdatedState(aspect)
     val accent = MaterialTheme.colorScheme.primary
     val cropDescription = stringResource(R.string.cropoverlay_crop_box)
     Canvas(
@@ -62,7 +64,17 @@ fun CropOverlay(
                     val held = grip ?: return@detectDragGestures
                     change.consume()
                     val point = toCanvas(change.position)
-                    onChange(CropBox.drag(start, held, point.x - origin.x, point.y - origin.y, canvasWidth, canvasHeight))
+                    onChange(
+                        CropBox.drag(
+                            start,
+                            held,
+                            point.x - origin.x,
+                            point.y - origin.y,
+                            canvasWidth,
+                            canvasHeight,
+                            aspect = currentAspect,
+                        ),
+                    )
                 }
             },
     ) {
@@ -110,6 +122,8 @@ fun CropBar(
     onReset: () -> Unit,
     onCancel: () -> Unit,
     onDone: () -> Unit,
+    aspect: CropBox.Aspect? = null,
+    onAspect: (CropBox.Aspect?) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 4.dp, shadowElevation = 6.dp, modifier = modifier.padding(12.dp)) {
@@ -124,6 +138,18 @@ fun CropBar(
                 style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier.align(Alignment.CenterVertically).padding(horizontal = 8.dp),
             )
+            FilterChip(
+                selected = aspect == null,
+                onClick = { onAspect(null) },
+                label = { Text("Freeform") },
+            )
+            CropBox.Aspect.presets.forEach { preset ->
+                FilterChip(
+                    selected = aspect == preset,
+                    onClick = { onAspect(if (aspect == preset) null else preset) },
+                    label = { Text(preset.label) },
+                )
+            }
             TextButton(onClick = onSettings) { Text(stringResource(R.string.cropoverlay_crop_settings)) }
             TextButton(onClick = onReset) { Text(stringResource(R.string.chip_reset)) }
             TextButton(onClick = onCancel) { Text(stringResource(R.string.cancel)) }
