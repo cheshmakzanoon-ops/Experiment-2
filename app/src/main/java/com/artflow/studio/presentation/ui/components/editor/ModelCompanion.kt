@@ -42,10 +42,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.artflow.studio.R
+import com.artflow.studio.core.three.MaterialChannel
 import com.artflow.studio.core.three.Mesh
 import com.artflow.studio.core.three.ModelLighting
 import com.artflow.studio.presentation.ui.components.canvas.ModelPainter
 import com.artflow.studio.presentation.ui.components.canvas.ModelView
+import kotlin.math.roundToInt
 
 /**
  * The 3D window: the model wearing the artwork. Turn mode spins it with one finger; Paint mode
@@ -59,6 +61,11 @@ fun ModelCompanion(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     interactive: Boolean = true,
+    materialMaps: Map<MaterialChannel, Bitmap> = emptyMap(),
+    materialChannel: MaterialChannel = MaterialChannel.COLOR,
+    materialValue: Float = 1f,
+    onMaterialChannel: (MaterialChannel) -> Unit = {},
+    onMaterialValue: (Float) -> Unit = {},
 ) {
     var painting by rememberSaveable { mutableStateOf(false) }
     var lightingOpen by rememberSaveable { mutableStateOf(false) }
@@ -66,6 +73,7 @@ fun ModelCompanion(
     var lighting by remember { mutableStateOf(ModelLighting()) }
     // The texture is sent to the view only when the artwork actually changes.
     val sent = remember { arrayOfNulls<Bitmap>(1) }
+    val sentMaps = remember { arrayOfNulls<Map<MaterialChannel, Bitmap>>(1) }
     BoxWithConstraints(modifier.fillMaxSize().padding(8.dp)) {
         val side = minOf(maxWidth, maxHeight, 360.dp)
         Surface(
@@ -99,6 +107,9 @@ fun ModelCompanion(
                         onClick = onClose,
                     ) { Icon(Icons.Default.Close, contentDescription = stringResource(R.string.modelcompanion_close_3d_view)) }
                 }
+                if (painting) {
+                    MaterialPaintControls(materialChannel, materialValue, onMaterialChannel, onMaterialValue)
+                }
                 Box(Modifier.weight(1f)) {
                     AndroidView(
                         factory = { context -> ModelView(context) },
@@ -109,6 +120,10 @@ fun ModelCompanion(
                             view.painter = painter
                             view.lighting = lighting
                             view.showMesh = showMesh
+                            if (sentMaps[0] !== materialMaps) {
+                                sentMaps[0] = materialMaps
+                                view.setMaterialMaps(materialMaps)
+                            }
                             if (artwork != null && sent[0] !== artwork) {
                                 sent[0] = artwork
                                 view.setTexture(artwork)
@@ -127,7 +142,7 @@ fun ModelCompanion(
     }
 }
 
-/** The lighting studio: presets, the key light's angle, height, brightness, fill and exposure, and the surface material. */
+/** View lighting: presets, the key light's angle, height, brightness, fill and exposure. */
 @Composable
 private fun LightingPanel(
     lighting: ModelLighting,
@@ -155,8 +170,6 @@ private fun LightingPanel(
             }
             LightSlider("Brightness", lighting.intensity, 0f..ModelLighting.MAX_INTENSITY) { onChange(lighting.copy(intensity = it)) }
             LightSlider("Fill", lighting.ambient, 0f..1f) { onChange(lighting.copy(ambient = it)) }
-            LightSlider("Metallic", lighting.metallic, 0f..1f) { onChange(lighting.copy(metallic = it)) }
-            LightSlider("Roughness", lighting.roughness, 0f..1f) { onChange(lighting.copy(roughness = it)) }
             LightSlider("Warmth", lighting.warmth, -1f..1f) { onChange(lighting.copy(warmth = it)) }
             LightSlider("Exposure", lighting.exposure, MIN_EXPOSURE..MAX_EXPOSURE) { onChange(lighting.copy(exposure = it)) }
             // Procreate's Add light: a second light, off until it is given some strength.
@@ -169,6 +182,35 @@ private fun LightingPanel(
                     onChange(lighting.copy(secondElevation = it))
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun MaterialPaintControls(
+    channel: MaterialChannel,
+    value: Float,
+    onChannel: (MaterialChannel) -> Unit,
+    onValue: (Float) -> Unit,
+) {
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp)) {
+        MaterialChannel.entries.forEach { entry ->
+            FilterChip(
+                selected = entry == channel,
+                onClick = { onChannel(entry) },
+                label = { Text(entry.displayName) },
+                modifier = Modifier.padding(end = 4.dp).semantics { contentDescription = "Model ${entry.displayName}" },
+            )
+        }
+    }
+    if (channel.isScalar) {
+        Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Paint ${(value * 100).roundToInt()}%", style = MaterialTheme.typography.labelSmall)
+            Slider(
+                value = value,
+                onValueChange = onValue,
+                modifier = Modifier.weight(1f).height(36.dp).semantics { contentDescription = "Material paint value" },
+            )
         }
     }
 }

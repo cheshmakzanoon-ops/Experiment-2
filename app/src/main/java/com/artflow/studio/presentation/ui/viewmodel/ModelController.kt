@@ -1,5 +1,6 @@
 package com.artflow.studio.presentation.ui.viewmodel
 
+import com.artflow.studio.core.three.MaterialChannel
 import com.artflow.studio.core.three.Mesh
 import com.artflow.studio.core.three.ObjParser
 import com.artflow.studio.domain.model.brush.BrushParams
@@ -28,6 +29,20 @@ class ModelController(
 ) {
     private val _mesh = MutableStateFlow<Mesh?>(null)
     val mesh: StateFlow<Mesh?> = _mesh.asStateFlow()
+    private val _paintValue = MutableStateFlow(1f)
+    val paintValue: StateFlow<Float> = _paintValue.asStateFlow()
+
+    fun selectChannel(channel: MaterialChannel) {
+        scope.launch {
+            if (repository.selectMaterialChannel(channel) == null) notify("Finish the current edit before changing the material channel")
+        }
+    }
+
+    fun setPaintValue(value: Float) {
+        if (!value.isFinite()) return
+        _paintValue.value = value.coerceIn(0f, 1f)
+        repository.setMaterialPaintValue(_paintValue.value)
+    }
 
     /** Loads the open artwork's model, if it has one. */
     fun load() {
@@ -84,12 +99,14 @@ class ModelController(
             ) {
                 if (rejected) return
                 val current =
-                    target ?: GestureTarget(repository.projectId(), repository.historyMark, layer(), params()).also { target = it }
+                    target ?: GestureTarget(repository.projectId(), repository.historyMark, layer(), params(), _paintValue.value)
+                        .also { target = it }
                 if (!current.matches(repository)) {
                     rejected = true
                     return
                 }
                 val (x, y) = toCanvas(u, v)
+                repository.setMaterialPaintValue(current.materialValue)
                 stroke = repository.beginStroke(x, y, pressure, current.params, current.layerId)
                 if (stroke == 0L) {
                     rejected = true
@@ -146,6 +163,7 @@ class ModelController(
                 stroke = 0L
                 target = null
                 rejected = false
+                repository.setMaterialPaintValue(_paintValue.value)
                 onPreviewChanged(false)
             }
         }
@@ -164,6 +182,7 @@ class ModelController(
         val history: Long,
         val layerId: Long,
         val params: BrushParams,
+        val materialValue: Float,
     ) {
         fun matches(repository: CanvasRepository): Boolean =
             projectId == repository.projectId() && history == repository.historyMark && layerId == repository.getActiveLayerId()

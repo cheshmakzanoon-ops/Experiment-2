@@ -8,6 +8,7 @@ import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.LayerTransform
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
+import com.artflow.studio.core.three.MaterialChannel
 import com.artflow.studio.domain.model.animation.AnimationFrame
 import com.artflow.studio.domain.model.animation.AnimationSettings
 import com.artflow.studio.domain.model.brush.BrushParams
@@ -250,6 +251,21 @@ interface CanvasRepository {
         description: String,
     ): Boolean
 
+    /** Inserts copied pixels above the active layer as one undo step, or leaves the document untouched. */
+    suspend fun pasteLayer(
+        pixels: PixelBuffer,
+        materialChannel: MaterialChannel = MaterialChannel.COLOR,
+    ): Long
+
+    /**
+     * Copies the active layer's selected pixels into a new layer, optionally removing that coverage
+     * from the source. Both changes commit together as one undo step. Returns a private clipboard copy.
+     */
+    suspend fun copySelectionToLayer(cut: Boolean): PixelBuffer
+
+    /** Removes selected source pixels as one transaction and returns their private clipboard copy. */
+    suspend fun cutSelection(): PixelBuffer
+
     /**
      * Affine transform of the complete active layer and its editable mask, as one undo step.
      * Rejects selections, in-flight gestures and stale callers; never transforms another frame.
@@ -454,6 +470,12 @@ interface CanvasRepository {
 
     fun getActiveLayerId(): Long
 
+    /** Selects an editable layer for a 3D texture channel, creating one as an undoable edit if needed. */
+    suspend fun selectMaterialChannel(channel: MaterialChannel): Long? = null
+
+    /** Value painted into a scalar material map; independent from the artist's current color. */
+    fun setMaterialPaintValue(value: Float) {}
+
     // -----------------------------------------------------------------------------------------
     // Masks, adjustments and filters
     // -----------------------------------------------------------------------------------------
@@ -650,6 +672,12 @@ interface CanvasRepository {
     /** Provisional pixel-tool preview; never used by persistence or exports. */
     suspend fun compositePreview(): PixelBuffer?
 
+    /** A transparent scalar-map overlay, including provisional strokes only when requested. */
+    suspend fun compositeMaterial(
+        channel: MaterialChannel,
+        provisional: Boolean = false,
+    ): PixelBuffer? = null
+
     /** A preview composite and the area that changed since the previous frame (null: all of it). */
     class PreviewFrame(
         val buffer: PixelBuffer,
@@ -689,6 +717,7 @@ interface CanvasRepository {
         includeLayers: Boolean,
         preserveLayerMasks: Boolean = false,
         animationPlayback: Boolean = false,
+        includeMaterials: Boolean = false,
     ): CanvasExportSnapshot
 
     /** Layer rasters alongside their properties, for PSD export. */
@@ -786,4 +815,7 @@ data class CanvasExportSnapshot(
     val layerMasks: Map<Long, PixelBuffer> = emptyMap(),
     /** Output sequence as indices into [frames]; repeated ping-pong samples share their rendered buffer. */
     val frameOrder: List<Int> = frames.indices.toList(),
+    /** Material-map overlays from the same frozen document revision as the color image. */
+    val materialMaps: Map<MaterialChannel, PixelBuffer> = emptyMap(),
+    val hasMaterialLayers: Boolean = false,
 )

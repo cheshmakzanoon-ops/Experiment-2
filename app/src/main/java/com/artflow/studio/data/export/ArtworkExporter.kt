@@ -16,6 +16,7 @@ import androidx.core.content.FileProvider
 import androidx.core.graphics.createBitmap
 import com.artflow.studio.core.color.ColorProfiles
 import com.artflow.studio.core.export.ApngEncoder
+import com.artflow.studio.core.export.ExportArea
 import com.artflow.studio.core.export.ExportError
 import com.artflow.studio.core.export.ExportFormat
 import com.artflow.studio.core.export.ExportNaming
@@ -31,6 +32,7 @@ import com.artflow.studio.core.export.PsdFolders
 import com.artflow.studio.core.export.TiffCodec
 import com.artflow.studio.core.pixels.BlendModes
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.three.MaterialChannel
 import com.artflow.studio.core.three.ObjExport
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.renderer.BitmapPixelBridge
@@ -91,6 +93,7 @@ class ArtworkExporter
             hasAdjustmentLayers: Boolean = false,
             groups: List<Layer> = emptyList(),
             layerMasks: Map<Long, PixelBuffer> = emptyMap(),
+            materialMaps: Map<MaterialChannel, PixelBuffer> = emptyMap(),
         ): Result<ExportResult> =
             withContext(Dispatchers.Default) {
                 try {
@@ -161,7 +164,7 @@ class ArtworkExporter
                             }
 
                             ExportFormat.MODEL_OBJ -> {
-                                buildModelZip(projectId, flatten(prepared, options), options)
+                                buildModelZip(projectId, flatten(prepared, options), options, materialMaps)
                             }
 
                             else -> {
@@ -182,6 +185,8 @@ class ArtworkExporter
                             height = prepared.height,
                             warning =
                                 when {
+                                    options.format == ExportFormat.MODEL_OBJ && materialMaps.isNotEmpty() ->
+                                        "Metallic and roughness use PBR material-map extensions; the receiving 3D app must support them."
                                     renderedNativePsdBlends ->
                                         "Native Darken is rendered into Artwork to preserve appearance; " +
                                             "editable source layers and masks are included hidden."
@@ -350,7 +355,12 @@ class ArtworkExporter
             projectId: Long,
             texture: PixelBuffer,
             options: ExportOptions,
+            materialMaps: Map<MaterialChannel, PixelBuffer>,
         ): ByteArray {
+            require(options.area == ExportArea.FULL_CANVAS || options.area == ExportArea.CURRENT_FRAME) {
+                "Export the full canvas to keep model texture coordinates aligned"
+            }
+            require(options.fitMode == FitMode.STRETCH) { "Use Stretch for model textures to preserve UV alignment" }
             val model = requireNotNull(storage.loadModel(projectId)) { "This artwork has no 3D model" }
             val out = ByteArrayOutputStream()
             ZipOutputStream(out).use { zip ->
@@ -358,11 +368,25 @@ class ArtworkExporter
                 zip.write(ObjExport.withMaterial(model).toByteArray())
                 zip.closeEntry()
                 zip.putNextEntry(ZipEntry(ObjExport.MTL))
-                zip.write(ObjExport.material().toByteArray())
+                zip.write(ObjExport.material(materialMaps.keys).toByteArray())
                 zip.closeEntry()
                 zip.putNextEntry(ZipEntry(ObjExport.TEXTURE))
                 zip.write(BitmapPixelBridge.toPngBytes(texture, options.dpi, options.outputProfile))
                 zip.closeEntry()
+                materialMaps.forEach { (channel, map) ->
+                    require(channel.isScalar) { "The color texture is exported separately" }
+                    val resolved = MaterialChannel.resolved(map, channel)
+                    val sized =
+                        if (resolved.width == texture.width && resolved.height == texture.height) {
+                            resolved
+                        } else {
+                            resolved.scaled(texture.width, texture.height)
+                        }
+                    zip.putNextEntry(ZipEntry(ObjExport.mapName(channel)))
+                    // Data values never go through the artwork's RGB profile conversion.
+                    zip.write(BitmapPixelBridge.toPngBytes(sized))
+                    zip.closeEntry()
+                }
             }
             return out.toByteArray()
         }

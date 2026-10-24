@@ -111,6 +111,47 @@ class CanvasMetadataViewModelTest {
         }
 
     @Test
+    fun smudgeOpacityUsesItsOwnBrushAndLimitsWithoutChangingPaint() =
+        runTest {
+            Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+            val fixture = Fixture()
+            try {
+                val vm = fixture.viewModel
+                vm.setBrushParams(BrushParams(opacity = 0.8f))
+                vm.setSmudgeParams(BrushParams(opacity = 0.3f, minOpacity = 0.2f, maxOpacity = 0.6f))
+                vm.setTool(ToolType.SMUDGE)
+                vm.setBrushOpacity(1f)
+                assertEquals(
+                    0.6f,
+                    vm.input.value.smudgeParams
+                        ?.opacity,
+                )
+                assertEquals(0.8f, vm.input.value.brushParams.opacity)
+                vm.setBrushOpacity(0f)
+                assertEquals(
+                    0.2f,
+                    vm.input.value.smudgeParams
+                        ?.opacity,
+                )
+                vm.setTool(ToolType.BRUSH)
+                vm.setBrushOpacity(0.7f)
+                assertEquals(0.7f, vm.input.value.brushParams.opacity)
+                assertEquals(
+                    0.2f,
+                    vm.input.value.smudgeParams
+                        ?.opacity,
+                )
+                vm.setTool(ToolType.SMUDGE)
+                vm.setSmudgeParams(null)
+                vm.setBrushOpacity(0.4f)
+                assertEquals(0.4f, vm.input.value.brushParams.opacity)
+            } finally {
+                fixture.close()
+                Dispatchers.resetMain()
+            }
+        }
+
+    @Test
     fun durationOnlyEditEnablesSaveWarningAndUndoWithoutAPixelEdit() =
         runTest {
             Dispatchers.setMain(StandardTestDispatcher(testScheduler))

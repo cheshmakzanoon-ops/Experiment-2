@@ -12,14 +12,17 @@ import com.artflow.studio.core.pixels.LayerMaskFactory
 import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.LayerTransform
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.pixels.SelectionClipboard
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.pixels.SelectionMaskCodec
 import com.artflow.studio.core.render.Compositor
+import com.artflow.studio.core.render.LayerGroups
 import com.artflow.studio.core.render.LayerStrokeRenderer
 import com.artflow.studio.core.render.StrokeRasterizer
 import com.artflow.studio.core.render.TileCache
 import com.artflow.studio.core.symmetry.SymmetryEngine
 import com.artflow.studio.core.text.TextLayerContent
+import com.artflow.studio.core.three.MaterialChannel
 import com.artflow.studio.data.local.CanvasDocument
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.renderer.BitmapPixelBridge
@@ -131,6 +134,7 @@ class CanvasRepositoryImpl
         private val strokeCopies = mutableMapOf<Long, StrokeCopy>()
 
         private var strokeColor: Int = 0xFF000000.toInt()
+        private var materialPaintValue: Float = 1f
         private var symmetrySettings = SymmetryEngine.Settings()
         private var activeSelection: SelectionMask? = null
 
@@ -438,6 +442,7 @@ class CanvasRepositoryImpl
                     isInternal = layer.isInternal,
                 ).apply {
                     blendContract = layer.blendContract
+                    materialChannel = layer.materialChannel
                     isGroup = layer.isGroup
                     parentGroupId = layer.parentGroupId
                     isFillReference = layer.isFillReference
@@ -598,6 +603,7 @@ class CanvasRepositoryImpl
                 Timber.w("Stroke rejected on unavailable or non-editable layer $layerId")
                 return 0L
             }
+            val paintColor = if (layer.materialChannel.isScalar) MaterialChannel.gray(materialPaintValue) else documentColor(strokeColor)
             activeStrokes[strokeId] =
                 mutableListOf(
                     StrokePoint(
@@ -605,18 +611,19 @@ class CanvasRepositoryImpl
                         y = y,
                         pressure = pressure,
                         timestamp = timestamp,
-                        color = destination.color(documentColor(strokeColor), layer.maskInverted),
+                        color = destination.color(paintColor, layer.maskInverted),
                     ),
                 )
             strokeBrushParams[strokeId] =
-                if (destination.isMask) {
+                if (destination.isMask || layer.materialChannel.isScalar) {
                     maskBrush(brushParams)
                 } else {
                     brushParams
                 }
             strokeLayerIds[strokeId] = layerId
             strokeErasers[strokeId] = isEraser && !destination.isMask
-            strokeSecondaries[strokeId] = secondaryStrokeColor
+            strokeSecondaries[strokeId] =
+                if (layer.materialChannel.isScalar) MaterialChannel.gray(materialPaintValue) else secondaryStrokeColor
             strokeDestinations[strokeId] = destination
             cacheableStrokes[strokeId] = activeStrokes.getValue(strokeId).first()
             if (!destination.isMask) prepareStrokeCopy(strokeId, layer)
@@ -997,6 +1004,125 @@ class CanvasRepositoryImpl
             }
         }
 
+        override suspend fun pasteLayer(
+            pixels: PixelBuffer,
+            materialChannel: MaterialChannel,
+        ): Long =
+            withState {
+                requireClipboardReady(paste = true)
+                val layers = currentLayers()
+                val active = activeLayerId()
+                val revision = editRevision
+                val width = canvasWidth
+                val height = canvasHeight
+                val prepared =
+                    withContext(Dispatchers.Default) {
+                        PixelBuffer(width, height).apply { drawInto(pixels, 0, 0) }
+                    }
+                coroutineContext.ensureActive()
+                requireClipboardTarget(layers, active, revision, paste = true)
+                insertPastedLayer(prepared, materialChannel = materialChannel)
+            }
+
+        override suspend fun copySelectionToLayer(cut: Boolean): PixelBuffer = prepareClipboardSelection(cut, paste = true)
+
+        override suspend fun cutSelection(): PixelBuffer = prepareClipboardSelection(cut = true, paste = false)
+
+        private suspend fun prepareClipboardSelection(
+            cut: Boolean,
+            paste: Boolean,
+        ): PixelBuffer =
+            withState {
+                val selected = activeSelection
+                require(selected == null || selected.isActive()) { "Nothing is selected" }
+                requireClipboardReady(paste)
+                val layer = checkNotNull(activeLayerData()) { "This layer has no pixels to copy" }
+                check(!cut || layer.canPaint()) { "This layer cannot be cut" }
+                val layers = currentLayers()
+                val revision = editRevision
+                val width = canvasWidth
+                val height = canvasHeight
+                val frozen = layer.snapshotCopy()
+                val selection = selected?.copy()
+                val prepared =
+                    withContext(Dispatchers.Default) {
+                        val source = checkNotNull(rawLayerPixels(frozen, width, height)) { "This layer has no pixels to copy" }
+                        val copied = SelectionClipboard.extract(source, selection)
+                        val remainder = if (cut) source.copy().also { SelectionClipboard.erase(it, selection) } else null
+                        val pasted = if (paste) PixelBuffer(width, height).apply { drawInto(copied, 0, 0) } else null
+                        Triple(copied, remainder, pasted)
+                    }
+                coroutineContext.ensureActive()
+                requireClipboardTarget(layers, layer.id, revision, paste)
+                check(activeSelection === selected) { "The selection changed; copy it again" }
+                if (paste) {
+                    insertPastedLayer(checkNotNull(prepared.third), layer.takeIf { cut }, prepared.second)
+                } else {
+                    pushUndo()
+                    replaceClipboardSource(layer, checkNotNull(prepared.second))
+                    dirty = true
+                    emit(CanvasInvalidationEvent.Full)
+                }
+                prepared.first
+            }
+
+        private fun requireClipboardReady(paste: Boolean) {
+            if (paste) require(hasLayerCapacity(1)) { "Maximum project layer count reached" }
+            check(activeStrokes.isEmpty() && pendingEdits.isEmpty() && pendingSelection == null) {
+                "Finish the current edit before using the clipboard"
+            }
+            requireCanvasMemory(canvasWidth, canvasHeight)
+        }
+
+        private fun requireClipboardTarget(
+            layers: MutableList<LayerData>,
+            active: Long,
+            revision: Long,
+            paste: Boolean,
+        ) {
+            check(currentLayers() === layers && activeLayerId() == active && editRevision == revision) {
+                "The artwork changed; try the command again"
+            }
+            requireClipboardReady(paste)
+        }
+
+        /** All buffers are prepared before this non-suspending commit changes pixels or history. */
+        private fun insertPastedLayer(
+            pixels: PixelBuffer,
+            source: LayerData? = null,
+            remainder: PixelBuffer? = null,
+            materialChannel: MaterialChannel = activeLayerData()?.materialChannel ?: MaterialChannel.COLOR,
+        ): Long {
+            val layers = currentLayers()
+            val pasted =
+                LayerData(id = nextLayerId, name = "Pasted").also {
+                    it.raster = pixels
+                    it.materialChannel = materialChannel
+                }
+            val insertAt = (layers.indexOfFirst { it.id == activeLayerId() } + 1).coerceIn(0, layers.size)
+            pushUndo()
+            if (source != null) {
+                replaceClipboardSource(source, checkNotNull(remainder))
+            }
+            nextLayerId++
+            layers.add(insertAt, pasted)
+            setActiveLayerId(pasted.id)
+            dirtyRasters += pasted.id
+            dirty = true
+            emit(CanvasInvalidationEvent.LayersChanged)
+            return pasted.id
+        }
+
+        private fun replaceClipboardSource(
+            source: LayerData,
+            pixels: PixelBuffer,
+        ) {
+            source.raster = pixels
+            source.strokes.clear()
+            source.rasterFile = null
+            dirtyRasters += source.id
+        }
+
         override suspend fun setLayerPixels(
             layerId: Long,
             buffer: PixelBuffer,
@@ -1153,7 +1279,7 @@ class CanvasRepositoryImpl
                         id = layerId,
                         name = name ?: "Layer ${layers.size}",
                         opacity = opacity.coerceIn(0f, 1f),
-                    )
+                    ).also { it.materialChannel = activeLayerData()?.materialChannel ?: MaterialChannel.COLOR }
                 val activeIndex = layers.indexOfFirst { it.id == activeLayerId() }
                 val insertAt = (index ?: (activeIndex + 1)).coerceIn(0, layers.size)
                 layers.add(insertAt, layer)
@@ -1162,6 +1288,31 @@ class CanvasRepositoryImpl
                 emit(CanvasInvalidationEvent.LayersChanged)
                 layer.toDomain(insertAt)
             }
+
+        override suspend fun selectMaterialChannel(channel: MaterialChannel): Long? =
+            withState {
+                if (activeStrokes.isNotEmpty() || pendingEdits.isNotEmpty()) return@withState null
+                val layers = currentLayers()
+                val existing =
+                    activeLayerData()?.takeIf { it.materialChannel == channel && it.canPaint() }
+                        ?: layers.lastOrNull { it.materialChannel == channel && it.canPaint() }
+                if (existing != null) {
+                    setActiveLayer(existing.id)
+                    return@withState existing.id
+                }
+                if (!hasLayerCapacity(1)) return@withState null
+                pushUndo()
+                val layer = LayerData(nextLayerId++, "${channel.displayName} paint").also { it.materialChannel = channel }
+                layers.add(layer)
+                setActiveLayerId(layer.id)
+                dirty = true
+                emit(CanvasInvalidationEvent.LayersChanged)
+                layer.id
+            }
+
+        override fun setMaterialPaintValue(value: Float) {
+            if (value.isFinite()) materialPaintValue = value.coerceIn(0f, 1f)
+        }
 
         override suspend fun addTextLayer(
             text: TextLayerContent,
@@ -1367,14 +1518,18 @@ class CanvasRepositoryImpl
             val candidate =
                 withContext(Dispatchers.Default) {
                     val selected = frozen.filter { it.id in selectedIds }
+                    val channels = selected.filterNot { it.isGroup }.map { it.materialChannel }.distinct()
+                    if (channels.size != 1) return@withContext null
+                    val channel = channels.single()
                     val baked = LayerData(id = mergedId, name = name)
+                    baked.materialChannel = channel
                     // The merged layer stays in the group its sources shared and stays private if any source was,
                     // so a private photo never reaches the time-lapse.
                     baked.parentGroupId = parentGroupId
                     baked.isPrivate = selected.any { it.isPrivate }
                     // Raster content excludes the canvas background. All per-layer effects are already
                     // baked; the replacement must have neutral opacity, blend mode, mask and strokes.
-                    baked.raster = renderFrozen(selected, document, transparentBackground = true)
+                    baked.raster = renderFrozen(selected, document, transparentBackground = true, materialChannel = channel)
                     val remaining = frozen.filter { keepOriginals || it.id !in selectedIds }.map { it.snapshotCopy() }.toMutableList()
                     if (keepOriginals) remaining.filter { it.id in selectedIds }.forEach { it.isVisible = false }
                     val position = frozen.take(insertionIndex).count { keepOriginals || it.id !in selectedIds }
@@ -1401,10 +1556,12 @@ class CanvasRepositoryImpl
             candidate: List<LayerData>,
             document: CanvasDocument,
         ): Boolean =
-            listOf(true, false).all { transparent ->
-                val before = renderFrozen(original, document, transparentBackground = transparent)
-                val after = renderFrozen(candidate, document, transparentBackground = transparent)
-                before.pixels.indices.all { index -> sameVisiblePixel(before.pixels[index], after.pixels[index]) }
+            (original.map { it.materialChannel } + candidate.map { it.materialChannel }).distinct().all { channel ->
+                listOf(true, false).all { transparent ->
+                    val before = renderFrozen(original, document, transparentBackground = transparent, materialChannel = channel)
+                    val after = renderFrozen(candidate, document, transparentBackground = transparent, materialChannel = channel)
+                    before.pixels.indices.all { index -> sameVisiblePixel(before.pixels[index], after.pixels[index]) }
+                }
             }
 
         private fun sameVisiblePixel(
@@ -2243,9 +2400,24 @@ class CanvasRepositoryImpl
 
         override suspend fun trimTransparent(): Boolean =
             withState {
-                val composite = renderFrozen(currentLayers(), canvasSnapshot(), transparentBackground = true)
-                val content = composite.contentBounds() ?: return@withState false
-                cropCanvas(content)
+                val document = canvasSnapshot()
+                // Cropping transforms every texture plane. A material artwork must retain painted
+                // coverage in every channel and frame, including zero-valued opaque scalar texels.
+                val stacks = if (allLayers().any { it.materialChannel.isScalar }) frameList.map { it.layers } else listOf(currentLayers())
+                var content: IntBounds? = null
+                for (layers in stacks) {
+                    for (channel in layers.map { it.materialChannel }.distinct()) {
+                        val bounds =
+                            renderFrozen(
+                                layers,
+                                document,
+                                transparentBackground = true,
+                                materialChannel = channel,
+                            ).contentBounds() ?: continue
+                        content = content?.union(bounds) ?: bounds
+                    }
+                }
+                cropCanvas(content ?: return@withState false)
             }
 
         override suspend fun setCanvasDpi(dpi: Int): Boolean =
@@ -2292,7 +2464,7 @@ class CanvasRepositoryImpl
                 val project = currentProjectId
                 val width = canvasWidth
                 val height = canvasHeight
-                val targets = allLayers().map { it.snapshotCopy() }
+                val targets = allLayers().filter { !it.materialChannel.isScalar }.map { it.snapshotCopy() }
                 val required = width.toLong() * height * 4L * (targets.size + 6L)
                 require(required <= Runtime.getRuntime().maxMemory() * 3 / 5) {
                     "Changing the colour profile needs more memory than this device provides"
@@ -2314,7 +2486,7 @@ class CanvasRepositoryImpl
                 if (undoable) pushUndo()
                 colorProfile = profile
                 backgroundColor = converted.second
-                allLayers().forEach { layer ->
+                allLayers().filter { !it.materialChannel.isScalar }.forEach { layer ->
                     val (raster, text) = converted.first.getValue(layer.id)
                     if (raster != null) {
                         layer.raster = raster
@@ -2764,12 +2936,12 @@ class CanvasRepositoryImpl
                 layers.take(index).map { listOf(id(it), id(it.raster), id(it.mask), it.strokes.size) }
         }
 
-        private fun takePreviewSnapshot(): PreviewSnapshot {
+        private fun takePreviewSnapshot(provisional: Boolean = true): PreviewSnapshot {
             markRastersShared()
             val current =
                 currentLayers().map { layer ->
                     layer.snapshotCopy().also { copy ->
-                        pendingEdits.values.firstOrNull { it.layer === layer }?.let { pending ->
+                        pendingEdits.values.firstOrNull { provisional && it.layer === layer }?.let { pending ->
                             copy.raster = pending.session.buffer.copy()
                         }
                     }
@@ -2788,7 +2960,7 @@ class CanvasRepositoryImpl
             return PreviewSnapshot(
                 layers,
                 canvasSnapshot(),
-                activeStrokes.keys.mapNotNull { activeStroke(it) },
+                if (provisional) activeStrokes.keys.mapNotNull { activeStroke(it) } else emptyList(),
                 strokeDestinations.toMap(),
                 activeSelection?.copy(),
                 symmetrySettings,
@@ -2873,6 +3045,20 @@ class CanvasRepositoryImpl
             return withContext(Dispatchers.Default) { renderPreview(snapshot) }
         }
 
+        override suspend fun compositeMaterial(
+            channel: MaterialChannel,
+            provisional: Boolean,
+        ): PixelBuffer? {
+            require(channel.isScalar) { "Use the artwork composite for color" }
+            val snapshot =
+                withState {
+                    takePreviewSnapshot(provisional).takeIf { preview ->
+                        preview.layers.any { it.materialChannel == channel }
+                    }
+                } ?: return null
+            return withContext(Dispatchers.Default) { MaterialChannel.grayscale(renderPreview(snapshot, channel)) }
+        }
+
         override suspend fun compositePreviewFrame(): CanvasRepository.PreviewFrame? =
             previewMutex.withLock {
                 val request =
@@ -2917,19 +3103,29 @@ class CanvasRepositoryImpl
                 }
             }
 
-        private suspend fun renderPreview(snapshot: PreviewSnapshot): PixelBuffer {
+        private suspend fun renderPreview(
+            snapshot: PreviewSnapshot,
+            channel: MaterialChannel = MaterialChannel.COLOR,
+        ): PixelBuffer {
             val strokesByLayer = snapshot.strokes.groupBy { it.layerId }
             for (layer in snapshot.layers) {
                 coroutineContext.ensureActive()
                 val active = strokesByLayer[layer.id] ?: continue
                 paintPreviewStrokes(layer, active, snapshot)
             }
-            val region = snapshot.region ?: return renderFrozen(snapshot.layers, snapshot.document, transparentBackground = true)
+            val region =
+                snapshot.region ?: return renderFrozen(
+                    snapshot.layers,
+                    snapshot.document,
+                    transparentBackground = true,
+                    materialChannel = channel,
+                )
             return renderFrozen(
                 snapshot.layers,
                 snapshot.document.copy(width = region.width, height = region.height),
                 transparentBackground = true,
                 origin = region,
+                materialChannel = channel,
             )
         }
 
@@ -3153,6 +3349,7 @@ class CanvasRepositoryImpl
             includeLayers: Boolean,
             preserveLayerMasks: Boolean,
             animationPlayback: Boolean,
+            includeMaterials: Boolean,
         ): CanvasExportSnapshot {
             require(!animationPlayback || allFrames) { "Animation playback requires an all-frame snapshot" }
             val frozen = withState { Triple(currentSnapshot(), canvasSnapshot(), activeSelection?.copy()) }
@@ -3181,9 +3378,16 @@ class CanvasRepositoryImpl
                     frameIds,
                     snapshot.animation,
                 )
-            val selectedLayers = sourceLayers.filter { !it.isReference && (includeHidden || it.isVisible) }
+            val materialChannels = sourceLayers.map { it.materialChannel }.filter { it.isScalar }.distinct()
+            val colorIds = LayerGroups.channelIds(sourceLayers.mapIndexed { index, data -> data.toDomain(index) }, MaterialChannel.COLOR)
+            val selectedLayers =
+                sourceLayers.filter {
+                    it.id in colorIds && !it.isReference && (includeHidden || it.isVisible)
+                }
             val maskCount = if (includeLayers && preserveLayerMasks) selectedLayers.count { it.mask != null } else 0
-            val buffers = frames.size + (if (includeLayers) selectedLayers.size else 0) + maskCount
+            val buffers =
+                frames.size + (if (includeLayers) selectedLayers.size else 0) + maskCount +
+                    (if (includeMaterials) materialChannels.size * 2 else 0)
             val bytes = snapshot.width.toLong() * snapshot.height * 4L * (buffers + 2)
             require(bytes <= Runtime.getRuntime().maxMemory() / 3) { "This export is too large for the available memory" }
             return withContext(Dispatchers.Default) {
@@ -3234,11 +3438,31 @@ class CanvasRepositoryImpl
                         layers = layerPixels,
                         selection = frozen.third,
                         hasAdjustmentLayers = selectedLayers.any { it.adjustmentType != null || it.filterType != null },
-                        groups = sourceLayers.mapIndexedNotNull { index, data -> data.takeIf { it.isGroup }?.toDomain(index) },
+                        groups =
+                            sourceLayers.mapIndexedNotNull { index, data ->
+                                data.takeIf { it.isGroup && it.id in colorIds }?.toDomain(index)
+                            },
                         frameIds = frames.map { it.id },
                         animation = snapshot.animation,
                         layerMasks = layerMasks,
                         frameOrder = requested.map(renderedIndex::getValue),
+                        materialMaps =
+                            if (includeMaterials) {
+                                materialChannels.associateWith { channel ->
+                                    MaterialChannel.grayscale(
+                                        renderFrozen(
+                                            sourceLayers,
+                                            frozen.second,
+                                            includeHidden,
+                                            transparentBackground = true,
+                                            materialChannel = channel,
+                                        ),
+                                    )
+                                }
+                            } else {
+                                emptyMap()
+                            },
+                        hasMaterialLayers = snapshot.frames.any { frame -> frame.layers.any { it.materialChannel.isScalar } },
                     )
                 } finally {
                     renderer.release()
@@ -3250,6 +3474,7 @@ class CanvasRepositoryImpl
             withState {
                 markRastersShared()
                 currentLayers().mapIndexedNotNull { index, data ->
+                    if (data.materialChannel.isScalar) return@mapIndexedNotNull null
                     val buffer =
                         data.raster?.copy() ?: run {
                             if (data.strokes.isEmpty()) return@mapIndexedNotNull null
@@ -3281,6 +3506,7 @@ class CanvasRepositoryImpl
             applyAdjustments: Boolean = true,
             transparentBackground: Boolean = false,
             origin: IntBounds? = null,
+            materialChannel: MaterialChannel = MaterialChannel.COLOR,
         ): PixelBuffer {
             val localCompositor = Compositor(StrokeRasterizer(origin?.left ?: 0, origin?.top ?: 0))
             return try {
@@ -3290,8 +3516,18 @@ class CanvasRepositoryImpl
                     },
                     document.width,
                     document.height,
-                    if (transparentBackground) 0 else document.backgroundColor,
-                    Compositor.Options(includeHiddenLayers = includeHidden, applyAdjustments = applyAdjustments),
+                    if (transparentBackground) {
+                        0
+                    } else if (materialChannel.isScalar) {
+                        materialChannel.defaultColor()
+                    } else {
+                        document.backgroundColor
+                    },
+                    Compositor.Options(
+                        includeHiddenLayers = includeHidden,
+                        applyAdjustments = applyAdjustments,
+                        materialChannel = materialChannel,
+                    ),
                 )
             } finally {
                 localCompositor.release()
@@ -3645,6 +3881,7 @@ class CanvasRepositoryImpl
             var isInternal: Boolean = false,
         ) {
             var blendContract: LayerBlendContract = LayerBlendContract.STANDARD
+            var materialChannel: MaterialChannel = MaterialChannel.COLOR
             var isGroup: Boolean = false
             var isFillReference: Boolean = false
             var drawingAssist: Boolean = false
@@ -3703,6 +3940,7 @@ class CanvasRepositoryImpl
                     isInternal = isInternal,
                 ).apply {
                     blendContract = this@LayerData.blendContract
+                    materialChannel = this@LayerData.materialChannel
                     isGroup = this@LayerData.isGroup
                     parentGroupId = this@LayerData.parentGroupId
                     isFillReference = this@LayerData.isFillReference
@@ -3756,6 +3994,7 @@ class CanvasRepositoryImpl
                     isInternal = isInternal,
                 ).apply {
                     blendContract = this@LayerData.blendContract
+                    materialChannel = this@LayerData.materialChannel
                     isGroup = this@LayerData.isGroup
                     parentGroupId = this@LayerData.parentGroupId
                     isFillReference = this@LayerData.isFillReference
@@ -3779,6 +4018,7 @@ class CanvasRepositoryImpl
                     isLocked = isLocked,
                     blendMode = blendMode,
                     blendContract = blendContract,
+                    materialChannel = materialChannel,
                     strokes = strokes.toList(),
                     isAlphaLocked = isAlphaLocked,
                     isClippingMask = isClippingMask,

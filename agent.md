@@ -37,8 +37,16 @@ phase describes · **⛔ unreachable** — the code exists but nothing calls it 
 | 17–24 | Smudge, liquify, clone stamp, healing, gradient, paint bucket, text, shapes | ✅ `PixelBrushes` (smudge/clone/heal) and `LiquifyTool` are driven from `ArtFlowCanvasView`, alongside paint bucket, gradient, text and shapes. Shape drawing lives in `ArtFlowCanvasView`; corner radius and boolean ops are ⬜. |
 | 25–30 | Adjustment layers, layer groups, reference layers, layer linking, filter layers, smart objects | 🟡 Adjustments (`AdjustmentProcessor`) and filter layers (`ImageFilters`, via `addFilterLayer` / `rasterizeFilterLayer`) are wired, and reference layers are set from the layer options. ✅ Layer groups (nested; explicit Normal and other non-Pass Through modes isolate; masked or faded groups also isolate). ⬜ Layer-linking UI, smart objects. |
 | 31–36 | Colour picker, palettes, symmetry, perspective guides, canvas properties, quick menu | ✅ `ColorPanel`, `Palette` with `PaletteCodec` for persistence, `ColorHarmony`, `SymmetryEngine`, `PerspectiveGuide`, `CanvasOperations` and the quick menu. ✅ A fixed hardware-keyboard shortcut table (`core/canvas/KeyboardShortcuts`, 41 bindings, offered to the editor by `MainActivity` before any view sees the key). ⬜ Shortcut remapping and stylus-button mapping. Palettes can be created, renamed, copied, extended and shared as Procreate `.swatches` (`PaletteEditor`, `ProcreateSwatches`). |
-| 37–42 | Save system, PNG/JPEG export, PSD, PDF, gallery, cloud sync | ✅ Wired: `.artflow` documents (v4: per-layer rasters, frames, timelapse metadata, distinct group scopes and corrected secondary-grain replay; checksum-first v1/v2/v3 migration), autosave with crash recovery, PNG/JPEG/WebP/PDF/PSD export and gallery publishing. ✅ PSD **import**, ⬜ cloud sync. |
+| 37–42 | Save system, PNG/JPEG export, PSD, PDF, gallery, cloud sync | ✅ Wired: `.artflow` documents (v6: independent material channels, per-layer rasters, frames, timelapse metadata, distinct group scopes and corrected secondary-grain replay; checksum-first v1/v2/v3 migration), autosave with crash recovery, PNG/JPEG/WebP/PDF/PSD export and gallery publishing. ✅ PSD **import**, ⬜ cloud sync. |
 | 43–50 | Animation timeline, animation export, timelapse, performance, tutorials, settings, QA, release | 🟡 Timeline, onion skinning and GIF/MP4/frame-sequence export work; settings, help centre and onboarding exist, and device regressions cover storage, rendering, duplication, exports and selected UI flows. ⬜ analytics/crash reporting, ⬜ benchmark module (`benchmark` is used for a minified launch smoke test, not a performance benchmark), 🟡 broader physical-device and end-to-end coverage. ✅ Signing configuration is validated; production builds can require it with `-PrequireReleaseSigning=true`. CI can build unsigned candidates, which are not approved releases. |
+
+### Current integration
+
+The [24 October follow-through](docs/PARITY_FOLLOW_THROUGH_2026-10-24.md) adds continuous Smudge
+input/dynamics, atomic clipboard transactions and independently paintable 3D material channels.
+Current `.artflow` storage is v6, with checksum-first migration of older color-only documents.
+See the implementation record and exact-revision Actions results for verification; these additions
+are not full Procreate parity or a repair for the unresolved Android 15 / 16 KB runtime crashes.
 
 ### Known gaps
 

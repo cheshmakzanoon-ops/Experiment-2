@@ -1,296 +1,90 @@
-### Emulator acceptance and parity corrections (24 October 2026)
-
-**Complete Procreate feature and quality parity remains unestablished.**
-[Run 314](docs/CI_RUN_314_2026-10-24.md), exact revision `47612ae`, passes its build and
-all seven emulator lanes: **1,522 JVM tests, 150 Python checks, 1,783 final device passes and
-two permitted Android 8 skips**. All 1,785 final identities are accounted for, all seven
-minified launches pass, and all 203 recorded UI positions have scoped visual acceptance.
-The main Android 15 / 16 KB lane needed one automatic recovery: its first attempt retains
-one pass, an empty ART-crash failure and 253 missing identities. The original case/process
-evidence qualifies under the existing narrow rule; the recorded boot ID changes before
-the full successful attempt. The independent 16 KB repeat passes without recovery.
-This accepts this revision's matrix with that qualification; it does not establish an ART repair.
-
-The completed run exercises these corrections:
-
-- [Wet preview history](docs/WET_PREVIEW_HISTORY_2026-10-24.md) retains earlier paint pickup
-  during full-frame fallback, sealed segments and historical vectors. All seven lanes now
-  execute the corrected test declaration and preserve its nine files, exact preview/commit
-  pixels, cancellation, undo/redo, signed storage and fresh reopen.
-- [Model header visibility](docs/MODEL_HEADER_VISIBILITY_2026-10-24.md) keeps the SurfaceView
-  below the visible title and controls, including Android 8. Actual screen pixels, taps,
-  model painting, cancellation, modal ordering and navigation are covered.
-- [Retry attribution](docs/ANDROID15_RETRY_ATTRIBUTION_2026-10-24.md) requires a supported
-  fatal signature from the interrupted case/process. Unrelated background crashes remain
-  recorded and do not independently authorize recovery.
-- [Opaque-layer compositing](docs/OPAQUE_SOURCE_OVER_2026-10-24.md) removes redundant alpha
-  operations while retaining the prior Float result. Both raw pixel oracles match on all
-  seven lanes. Alternating paired scalar timings show modest opaque-case median gains;
-  mixed-case timings vary, and no full-preview or input-to-display gain is established.
-
-The next correction preserves [six previously lost native pressure curves](docs/NATIVE_PRESSURE_CURVE_PRESERVATION_2026-10-24.md).
-Brush import, library storage and interchange now retain all 39 schema channels as four primary
-and 35 auxiliary mappings in both compound components. The six newly retained graphs have no
-new rendering consumers. The [local gate](docs/evidence/native-pressure-curves-local.json) passes
-**1,528 JVM tests / 254 suites**, all **156 Python checks**, Android compilation, formatting,
-static analysis and the complete pinned native schema inspection. The new Android lifecycle
-case raises the inventory to **256 per lane** and retains every previous identity. Its actual
-Room close/reopen and interchange evidence requires its own published-revision Actions run.
-No workflow, recovery, skip or analysis-baseline requirement changes.
-
-[The implementation record](docs/EMULATOR_PARITY_2026-10-24.md) covers stroke endpoints,
-zero-spacing modes, pen orientation, active-layer Automatic selection, group compositing,
-accurate blend previews, reference-window precedence and accessible tool controls. New imports
-follow the inspected [Count](docs/NATIVE_BRUSH_COUNT.md), [pressure spline](docs/NATIVE_PRESSURE_SPLINE.md)
-and [spacing-export](docs/NATIVE_SPACING_EXPORT_2026-10-24.md) contracts; historical brushes and
-signed documents retain their existing behavior.
-
-Native-document corrections preserve [mask coverage](docs/PROCREATE_MASK_IMPORT_2026-10-24.md),
-[layer hierarchy](docs/PROCREATE_HIERARCHY_IMPORT_2026-10-24.md),
-[sRGB/Display P3](docs/PROCREATE_COLOR_IMPORT_2026-10-24.md), and distinct
-[legacy Darken](docs/NATIVE_LAYER_DARKEN_2026-10-24.md). Signed `.artflow` v5 verifies old checksums
-before migration. [Native export](docs/PROCREATE_NATIVE_EXPORT_2026-10-24.md) separates pixel and
-group indexes; unsupported group blend/mask metadata uses an appearance layer with hidden
-editable sources. The pinned genuine corpus contains five files and four distinct archives.
-
-Native reference-app interchange, remaining pressure/input/wet/compound/grain consumers,
-profile-managed CMYK, complete 3D materials, physical stylus/display performance and artist
-acceptance remain open. [Preview timings](docs/PREVIEW_PERFORMANCE_2026-10-24.md) measure elapsed
-repository calls, including waits. They are not physical pen-to-screen latency.
-
-Earlier failed [309](docs/CI_RUN_309_2026-10-24.md), [311](docs/CI_RUN_311_2026-10-24.md),
-[312](docs/CI_RUN_312_2026-10-24.md), and [313](docs/CI_RUN_313_2026-10-24.md) runs retain their
-original evidence. The [runtime comparison](docs/ANDROID15_RUNTIME_COMPARISON_2026-10-24.md),
-[collector controls](docs/ANDROID15_COLLECTOR_CONTROL_2026-10-24.md), and
-[official repair review](docs/ANDROID15_OFFICIAL_REPAIR_REVIEW_2026-10-24.md) establish no
-Android 15 / 16 KB runtime repair. No lane or assertion is waived.
-
-### Selection, clipboard and crop corrections (23 October 2026)
-
-Three gaps recorded in the 19 September parity sweep are closed:
-
-- **Remove and Intersect with nothing selected** no longer fall back to Add. Selection combination is
-  a pixel-core operation (`SelectionMask.combine`) with Replace, Add, Subtract and Intersect
-  semantics; a mask whose coverage has been emptied still selects nothing.
-- **Copy, Cut and Copy All with an emptied selection** refuse with "Nothing is selected" instead of
-  filling the clipboard with blank pixels, so Paste reports an empty clipboard rather than adding an
-  invisible layer.
-- **Crop & Resize has an aspect lock**: Freeform, 1:1, 4:3, 3:2 and 16:9. A locked corner drag anchors
-  the opposite corner, an edge drag grows the other side around the box centre, the box stays inside
-  the canvas, and moving the box ignores the lock.
-
-Executed locally on this revision: debug and instrumentation compilation, the full JVM suite
-(**1,342 tests, 0 failures, 0 errors, 2 skipped** — the pinned reference-brush corpus and the fetched
-Procreate sample documents), ktlint and detekt. Not executed here: Android lint, the APK/AAB builds
-and every emulator lane. The last published run (293 on `b33a695`) left all six device lanes red while
-its build job passed; that failure is still unexplained from the retained evidence, and none of these
-changes is device-verified.
-
-### Native-informed parity implementation (21 October 2026)
-
-The [latest implementation report](docs/PARITY_IMPLEMENTATION_2026-10-21.md) records changes
-based on the supplied Procreate **5.4.4 / 56832** IPA and actual Android Gradle verification.
-[Hash-pinned native evidence](docs/REA_NATIVE_CONTRACTS_2026-10-21.md) establishes corrected
-pressure-flow/opacity and wet-control mappings. Those controls now reach painting and brush
-interchange; five additional pressure graphs affect colour and bleed.
-
-Animation preview and export share playback ranges, hidden frames, multiple stable background/
-foreground pins and ping-pong ordering. PSD export retains independent editable layer and folder
-masks, including disabled masks, with unmasked artwork alpha preserved. Brush sharing exposes
-ArtFlow and Procreate formats in the editor. Persisted gesture preferences and stylus-button
-controls are connected through the editor's existing input pipeline.
-
-Local verification passed **1,325 JVM tests with zero failures or skips**, including the supplied
-534-component brush corpus and five genuine Procreate documents. Debug and instrumentation APKs,
-the unsigned release bundle, formatting, detekt, debug/release lint and packaged-artifact checks
-also passed. Instrumentation was compiled but not executed locally; device acceptance still
-requires the published revision's completed CI and physical-device checks.
-
-**Full Procreate parity remains unestablished.** Native wet-paint equations, 24 retained pressure
-graphs, several compound-brush modes and physical-device behavior still need work. The report
-separates executed JVM/build checks from device tests and reference-app pixel validation. Older
-dated entries below describe their own earlier revisions and should not override that record.
-
-### REA source-value drift audit (21 October 2026)
-
-An offline, hash-pinned audit found **477 of 534** component settings records contain at least one source scalar that ArtFlow's approximate importer would normally clamp or quantize. The [exporter repair](https://github.com/cheshmakzanoon-ops/Experiment-2/commit/9dec2c473702ec6deb113a7b80321fdd58e13b97) now preserves original primitive values for unedited brush controls, including source spacing and grain scaling outside ArtFlow's limits. See [the reproducible drift-risk report](docs/REA_SCALAR_DRIFT_RISKS.md). This is archive-data retention, not reference-app rendering or runtime equivalence.
-
-### REA source schema capture (21 October 2026)
-
-Read-only REA analysis of the supplied IPA documents **264 distinct brush-setting fields**: 211 scalar, 33 pressure-curve, 19 structured-object, and one 16-byte color-data field. The current importer now has bounded preservation paths for those observed shapes, including saved-brush storage and synthetic keyed-archive export. **Structural capture is not identical NSKeyedArchiver bytes, original brush rendering, or full reverse engineering of the iOS application.** See the [complete source schema census](docs/REA_BRUSH_FULL_SCHEMA_CENSUS_2026-10-21.md); Android build/device verification remains pending.
-
-### REA supplemental pressure-curve recovery (21 October 2026)
-
-The reference corpus has 33 curve fields. The importer now retains 30 auxiliary source fields in addition to the original three, with **4,138 syntactically valid auxiliary curve instances** observed offline. Synthetic import/save/export round-trip tests were added; native brush behavior, pixel parity and exact-commit Android CI remain unverified. See [REA auxiliary curve recovery](docs/REA_AUXILIARY_CURVES_2026-10-21.md) and [reader mapping audit](docs/REA_BRUSH_READER_COVERAGE.md).
-
-### REA reference-analysis record — 21 October 2026
-
-The linked [reference archive](https://drive.google.com/file/d/1xPr6e53L76Cq8exGFWOSvq96wt-NlLVC/view) is a 777,430,382-byte ZIP / IPA, identified by SHA-256 `7b1dad3ac95f8aeca3c22b432b5d6fd94182a3bf9f84fb93588adb126368b54e`. A successful prior REA/keyed-archive workflow extracted 394 brush containers (140 dual-component; 534 settings components). New evidence-based reports include the [264-key schema inventory](docs/REA_IPA_BRUSH_SCHEMA_INVENTORY_2026-10-21.md) and [numeric range and importer-loss audit](docs/REA_IPA_BRUSH_RANGE_AUDIT_2026-10-21.md). Raw paid source assets and executables are not redistributed.
-
-The [full archive static inventory workflow](.github/workflows/reference-ipa-static-inventory.yml) uses the original SHA-256 to validate provenance before inspecting bundle plists, declared executable headers and Mach-O encryption markers, and attempts REA CLI artifact inspection. Its completion and results must be checked at the exact workflow run; the presence of a workflow is **not proof** it has finished.
-
-The consolidated main historically failed Android Kotlin compilation (706 compiler diagnostics, 34 files, often cascading). The [compiler audit](docs/CI_COMPILER_TRIAGE_2026-10-21.md) records that failure's exact CI job. The new implementation record at the top of this file supersedes its local build status; historical CI results are retained as evidence. **Whole-app source recovery and 1:1 Procreate parity are not achieved.**
-
-### Run 84 Android-system recovery
-
-Run `35509598187` proved that an app-only restart is insufficient after a classifier-proven Android 15/16 KB runtime crash: the first instrumentation attempt matched the known framework crash, then the retry aborted immediately with `INSTRUMENTATION_ABORTED: System has crashed`. The harness now preserves the first attempt, performs a real emulator reboot, proves the boot ID changed and Android reached `sys.boot_completed=1`, reapplies and verifies the Android 15 runtime configuration, clears only disposable test-package state, and then performs the single retry. Recovery itself is fail-closed and covered by standalone tests; application assertions and unrelated crashes are still never retried.
-
-### Run 81 CI stabilization
-
-Run `35501934611` left only the two Android 15/16 KB jobs red. The independent repeat did not reach tests: Maven Central returned HTTP 403 while Gradle was resolving `failureaccess-1.0.2.jar`. Device jobs now wait for the successful build job, run at most two in parallel, and precompile the debug/instrumentation artifacts with bounded retries before the emulator starts. This reduces concurrent dependency traffic and moves compilation/network failures out of the expensive emulator phase.
-
-The primary API 35 lane reached instrumentation but Android 15 itself segfaulted in `libart.so` on the Hilt runner thread before the named test body executed. The existing fail-closed runtime classifier now also recognizes only that proven environment: Android 15's x86_64 16 KB emulator, 16 KB page size, `com.artflow.studio` process, SIGSEGV, and a frame-zero `libart.so` tombstone. JUnit failure elements must be empty for this native case. Any ArtFlow assertion, Java/Kotlin exception, non-ART top frame, other Android version/page size, malformed evidence, or failed retry remains red.
-
-### Run 80 current-tip repair
-
-Run `35499537275` left two current failures. The primary API 35/16 KB process died inside ART while the low-level canvas test was unnecessarily launching the full Compose gallery; `CanvasInputDeviceTest` now uses the existing debug-only `SelectionCanvasTestActivity`, which hosts the real production canvas and Hilt repository without starting unrelated gallery composition. The independent API 35 repeat failed earlier because `adb root` restarted adbd and returned a transient closed transport; the runtime configurator now waits for reconnection and treats the verified post-reconnect root UID as authoritative. The configurator still fails closed if root was not actually granted.
-
-### Run 79 framework-crash containment
-
-Run `35485945078` reduced current CI to one red job: build/static analysis and five other device jobs passed, including the second API 35/16 KB lane. The remaining primary API 35 failure was not an ArtFlow assertion: Android 15's own `ReferenceQueueDaemon` threw a framework `NullPointerException` in `ReferenceQueue.enqueuePending`; Google Play Services showed the same runtime failure in that emulator session. The harness now retries once only when the preserved crash report and every JUnit failure element match that exact framework signature. Any ArtFlow assertion, different crash, malformed evidence, or second-attempt failure remains red. The first failed attempt is retained in the uploaded device artifact.
-
 # ArtFlow — Digital Art Studio for Android
 
-A native, offline painting studio built with **Kotlin, Jetpack Compose and a shared pixel engine**.
-Paint with pressure-sensitive brushes, compose layers and masks, animate frames, and save or export real documents.
+A native, offline painting studio built with Kotlin, Jetpack Compose and a shared pixel engine.
+Paint with pressure-sensitive brushes, edit layers and masks, animate frames, paint imported 3D
+models, and save or export real documents.
 
-**Working editor. Not yet Procreate-equivalent or approved for a production release.**
-The [Procreate comparison](docs/PROCREATE_PARITY.md) separates implemented workflows from missing capabilities.
-[Release readiness](docs/RELEASE_READINESS.md) tracks the separate distribution requirements.
+**Working editor. Full Procreate feature and quality parity remains unestablished.**
+The [comparison](docs/PROCREATE_PARITY.md) records implemented workflows and remaining gaps;
+[release readiness](docs/RELEASE_READINESS.md) tracks the separate distribution requirements.
 
-## Latest development session — 17 October 2026
+## Current development — 24 October 2026
 
-Every change made in the session that set out to reach Procreate parity, and was then wound down, is
-recorded with its evidence level in [docs/DEVELOPMENT_LOG_2026-10-17.md](docs/DEVELOPMENT_LOG_2026-10-17.md).
-In short: Procreate `.swatches` palettes, palette management, typed colour values, hardware-keyboard
-shortcuts, opening and sharing files into ArtFlow from other apps, a New artwork dialog with inch/cm/mm
-sizes, a Screen size preset and saved sizes, gallery stack commands, hand-arranged gallery order and bulk
-actions, a corrected Freehand selection and Clear, Justify text, a time-lapse recording switch and replay
-speeds. **Parity with Procreate has not been reached**; the log ends with the list of what is missing.
-These changes are compile- and lint-checked offline and their pure logic is covered by JVM tests; none has
-been run on a device and CI has not yet run on them.
+This revision targets three concrete gaps discovered while following the emulator tests:
 
-## Current CI follow-through
+- **Smudge input and continuity:** use the selected Smudge brush's opacity, flow, pressure and
+  tilt response; carry dab spacing across input events and include the release position.
+  Fast gestures must not leave unstamped gaps, and the opacity controls must edit the active tool.
+- **Clipboard integrity:** prepare Paste, Copy & Paste and Cut & Paste before changing the
+  document, commit each as one undo action, and preserve source pixels, prior clipboard and history
+  when the project has reached its layer limit. Material maps retain their channel when copied.
+- **3D material painting:** independently edit Color, Metallic and Roughness on persisted layers,
+  preview their effect on the model, and preserve the maps through undo, save/reopen and model export.
 
-Run **78** (`27b4c6cf`) passed all build/static/artifact checks and five of six device jobs.
-All prior tab and selection regressions passed on every device. The tablet completed 175 cases,
-with one failure in `AnimationPlaybackUiTest` **teardown**: a background atomic autosave was still
-renaming its temporary file while the test deleted the directory. Cancelling the ViewModel scope
-requests cancellation but does not wait for a blocking write to leave I/O.
+The [implementation and verification record](docs/PARITY_FOLLOW_THROUGH_2026-10-24.md) distinguishes
+implemented changes, executed local checks and published-revision device results. Emulator results
+cannot establish physical stylus feel, native Procreate rendering equivalence or artist acceptance.
 
-The follow-through now **cancels and joins the test-owned ViewModel jobs before disposing the
-repository or deleting project files**. A deterministic device regression holds a real atomic write
-open, verifies teardown cannot finish prematurely, then releases it and checks completion. The two
-original playback tests and production storage error propagation are unchanged. A local Kotlin/JVM
-probe reproduced the old cancel-only race and verified joining across 20 atomic-write schedules;
-all 38 Python checks passed. This next revision still needs its own completed Android CI result.
+## GitHub Actions acceptance
 
-The preceding repair sizes actual tab text from measured labels, restores the delegated selection
-pause hook, and configures/verifies the intended API 35 runtime mitigation. Both API 35 lanes in run
-78 completed 175 tests without failures and passed minified launch, with 16 KB pages and verified
-JIT-disabled settings. API 36/16 KB passed with its normal JIT enabled. This is a **CI environment
-mitigation**, not proof of production API 35 + JIT readiness or a permanent native-crash fix.
+The required matrix covers Android 8 (API 26), Android 15 (API 35, 4 KB and two independent 16 KB
+lanes), and Android 16 (API 36, 4 KB, 16 KB and a Pixel C tablet). Every lane inventories the declared
+tests, rejects missing or unexpected outcomes, retains original failure evidence and requires a
+minified launch. The two existing Android 8 skips concern APIs unavailable on that OS.
 
-The [failure ledger and repair record](docs/CI_REPAIR_FOLLOW_THROUGH.md) retains exact baseline runs,
-failed cases, artifact IDs and verification boundaries. Earlier red runs are not erased. All six
-device lanes, original test cases, page-size checks and minified launches remain required.
+[Run 314](docs/CI_RUN_314_2026-10-24.md) passed its final seven-lane matrix on `47612ae`, including
+one narrowly classified Android 15 recovery. That result applies to its own source revision.
+The subsequent [run 315](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40134242551)
+on `9b868dc` passed its build checks but both Android 15 / 16 KB lanes crashed inside ART with
+incomplete test coverage. The retained runtime failures remain unresolved; neither a feature
+implementation nor a later successful lane establishes an Android runtime repair.
 
-## Brush attribute navigation and connected dynamics
+## Editor workflows
 
-Brush Studio provides **ten named setting groups** plus **All settings**. Wide panes use a scrollable
-sidebar; compact panes use a horizontal selector. Returning from Library or Drawing pad retains the
-selected group and draft. Changing groups starts the new panel at the top without resetting values.
-Navigation and the pressure toggle honour the larger-touch-target preference.
+The workspace has a canvas toolbar, size/opacity sidebar, left/right-handed layouts, hide-interface
+mode, gesture shortcuts and a reference-image companion. Brush Studio stages changes until
+**Use brush**, with a live drawing pad, exact-value controls, saved copies, custom brush sets,
+imported tips/grains, and brush sharing. Paint, Smudge and Erase have selectable brushes.
 
-**Speed & colour** exposes speed-controlled size, opacity and hue, plus pressure-dependent
-brightness, using the same exact-value entry and staged Use brush/Cancel workflow. Saved copies
-preserve the complete parameter model. Stylus tilt widens and lightens dabs, with tilt opacity set
-apart from tilt size; tilt-to-rotation and the Rotation setting turn flat and imported tips.
-Procedural **grain rotation** works. The stylus azimuth sign and tilt curves are unvalidated on hardware.
+Layers support masks, clipping, alpha lock and nested groups. Selection and transformation tools
+operate on real pixels with cancel and undo. Actions exposes document, export, animation, time-lapse,
+input and display settings. The application owns its assets and identity; Procreate is the workflow
+reference, not a claim of original-app source recovery.
 
-## Neutral, adaptive workspace
+## Reference and historical evidence
 
-Neutral Material surfaces keep artwork visually dominant. The UI palette adjusts accent colours
-for readable foreground/background pairs; tested normal-text pairs meet 4.5:1 and high-contrast
-pairs meet 7:1. These are palette contracts, not whole-app accessibility certification. Artwork
-pixels and working colours are not changed by UI contrast adjustment.
+Native file and brush investigations use the supplied, SHA-256-pinned Procreate 5.4.4 / 56832 IPA
+as an analysis input. Raw paid assets and executables are not redistributed. Archive-data retention
+and reconstructed arithmetic are distinct from executing the original application.
 
-Interface scale applies once to controls/text while retaining Android's independent font-size
-preference. On sufficiently wide and tall windows, Brush Studio shows Library or Settings beside
-the drawing pad; compact windows retain the three-tab layout. Practice marks preserve their aspect
-ratio. Draft settings and retained paths survive layout and light/dark theme changes.
-
-## Saved custom brushes
-
-Brush Studio now has **Save a copy** and a **Saved** library category. Give a tuned brush a name,
-reopen the studio or restart the app, and select that saved copy again. The row menu supports
-rename and **confirmed deletion**. Built-in presets cannot be renamed or deleted by these controls.
-Saved brushes participate in search; copies have independent identities even when names match.
-
-A saved copy preserves the **entire brush parameter model**, including custom pressure response,
-procedural grain, colour/velocity settings, tilt settings and wet mix. Saving a copy is an explicit library
-operation independent of **Use brush**: it does not apply the draft or edit artwork. Closing the
-studio still discards unapplied draft changes but does not undo a confirmed library save.
-
-Storage uses a versioned, bounded JSON document in one existing Room settings row, separate from
-artwork and older partial brush records. Mutations serialize; state is published only after the
-Room write succeeds. A failed write leaves the prior library intact. Corrupt, oversized, invalid
-or newer-format data produces a visible error and retry action, never a silent reset/overwrite.
-The library currently supports **128 saved copies**, with names up to **80 characters**. Sharing,
-import/export, custom texture assets, favorites and user-defined brush sets remain unfinished.
-
-## Brush Studio
-
-Open **Brush** in the editor. **Library** searches eight original starter presets and filters
-Sketch, Ink, Texture and Paint, with samples rendered by the painting engine. **Settings** edits
-size, opacity, spacing, smoothing, pressure curves, taper, procedural grain, scatter, jitter and wet
-mix. Attribute navigation and speed/colour controls are connected. General tip rotation
-turns flat and imported tips; grain rotation is active. Tap a displayed value for exact numeric entry. **Drawing pad** tests your own
-marks without touching the artwork; return after changing settings to see those marks re-rendered.
-
-Changes remain a **draft** until **Use brush**. Close, Back or outside dismissal discards the draft;
-**Restore initial** restores the opening parameters. Applying selects Brush and preserves an
-already-active brush mask destination. Preset selection and practice strokes do not alter document
-pixels or undo history. Opening the studio cancels an active canvas gesture.
-
-Numeric entry accepts decimal points/commas, maps percentages to engine values, rejects out-of-range
-values, and rejects fractions for integer controls. The practice buffer is **320×180**, retains the
-last **8 strokes**, caps each at **128 points**, and limits preview brush sizes to **48 pixels**.
-These are preview limits, not document limits. Presets are original starting points, not Procreate
-assets or a professionally validated equivalent library. Imported shape and grain textures and dual brushes are available, and Procreate and Photoshop brush files import.
-
-## Studio workflows
-
-**Workspace.** Brush, Smudge and Eraser stay in a compact dock; All tools exposes the other tools.
-Focus mode hides the bars without replacing the drawing surface. A visible exit button or Android
-Back restores the workspace before the unsaved-document prompt. Guides, Animation, Canvas and Text
-have actual menu routes and explicit close controls.
-
-**Reference.** The floating window offers a Canvas overview that refreshes after artwork edits and
-an Image tab for a picker-granted image. Drag the window, pan/pinch, zoom/fit and sample colours by
-long press or pick mode; a centre-sample accessibility action is also available. Imported images
-are decoded to at most 1024 pixels per axis. The content URI is remembered per artwork and persistent
-read access is requested, but the source image remains external and can become unavailable.
-Reference controls do not add layers or artwork history, and imported reference images stay out of
-artwork exports. Source embedding and manual window resizing remain unsupported.
-
-**Layers and text.** Layers display topmost-first with working up/down ordering, visibility,
-opacity, blending, alpha lock, clipping, masks, adjustments and filters. Text uses
-edit → Place on canvas → tap position → confirm; cancelling an anchor does not stamp text.
-Canvas background state follows the document through edits and undo/redo.
+- [All 39 native brush pressure curves](docs/NATIVE_PRESSURE_CURVE_PRESERVATION_2026-10-24.md),
+  [native spline](docs/NATIVE_PRESSURE_SPLINE.md), [Count](docs/NATIVE_BRUSH_COUNT.md), and
+  [spacing interchange](docs/NATIVE_SPACING_EXPORT_2026-10-24.md).
+- [Native document masks](docs/PROCREATE_MASK_IMPORT_2026-10-24.md),
+  [hierarchy](docs/PROCREATE_HIERARCHY_IMPORT_2026-10-24.md),
+  [color profiles](docs/PROCREATE_COLOR_IMPORT_2026-10-24.md),
+  [Darken blending](docs/NATIVE_LAYER_DARKEN_2026-10-24.md), and
+  [native export](docs/PROCREATE_NATIVE_EXPORT_2026-10-24.md).
+- [Wet-preview integrity](docs/WET_PREVIEW_HISTORY_2026-10-24.md),
+  [model input and display](docs/MODEL_EDITOR_2026-10-24.md), and
+  [measured preview-call performance](docs/PREVIEW_PERFORMANCE_2026-10-24.md).
+- [Earlier development](docs/DEVELOPMENT_LOG_2026-10-17.md),
+  [emulator corrections](docs/EMULATOR_PARITY_2026-10-24.md), and
+  [Android 15 repair investigation](docs/ANDROID15_OFFICIAL_REPAIR_REVIEW_2026-10-24.md).
 
 ## Capability boundaries
 
 | Area | Available | Important gaps |
 | --- | --- | --- |
-| Painting | Pressure/dynamics, smoothing, taper, flow, wet mix, jitter, procedural and imported grains, tilt, dual brushes, staged Brush Studio | Curated-library and stylus-feel parity; tilt azimuth sign and curves unvalidated on hardware |
-| Tools | Brush, eraser, smudge, clone, healing, liquify, bucket, gradients, text and shapes; QuickShape recognition with hold-to-adjust and Edit Shape; ColorDrop with adjustable threshold and Continue Filling | Artist validation of shape recognition and handle gestures; comparative fill thresholds and anti-aliased edge quality |
+| Painting | Pressure/dynamics, smoothing, taper, flow, wet mix, jitter, procedural and imported grains, tilt, dual brushes, staged Brush Studio | Native wet/compound/grain equivalence and unused retained pressure graphs; large-canvas responsiveness, curated-library and physical stylus validation |
+| Tools | Brush, eraser, continuous pressure/opacity/flow-aware Smudge, clone, healing, liquify, bucket, gradients, text and shapes; QuickShape recognition with hold-to-adjust and Edit Shape; ColorDrop with adjustable threshold and Continue Filling | Artist validation of shape recognition and handle gestures; comparative fill thresholds and anti-aliased edge quality |
 | Selections | Automatic samples the active layer with an adjustable threshold; freehand, rectangle and ellipse; Add/Remove/Intersect, invert/feather and Save & Load; Remove without an existing selection keeps it empty | Gesture ergonomics and artist validation; comparative reference-app thresholds and selection-edge quality |
 | Transform | Freeform, uniform, distort and warp with snapping, cancel and undo | Device validation of large multi-layer moves |
-| Layers | Pixel/mask/effect workflows, nested groups, clipping, alpha lock, reorder | Merge Down bakes opacity and blend mode into pixels and does not carry alpha lock or clipping |
-| Colour | Disc, Classic (HSB), Value (RGB/HSV/CMYK), palettes, harmonies, Display P3 canvases | Classic model parity unverified; print proof not validated against real press output |
+| Layers | Pixel/mask/effect workflows, nested groups, clipping, alpha lock, reorder; atomic clipboard commands | Merge Down bakes opacity and blend mode into pixels and does not carry alpha lock or clipping |
+| Colour | Disc, Classic (HSB), Value (RGB/HSV/CMYK), palettes, harmonies, Display P3 canvases | Profile-managed CMYK and arbitrary ICC transforms; Classic model parity and real print-proof validation |
 | Animation | Frames, duration/FPS, loop, one-shot and ping-pong; preview and animation export share playback range, frame visibility and order; background/foreground pins, separate previous/next onion colours, timelapse and GIF/MP4/APNG export | Reference hold-count semantics and artist-tested timing; long-animation playback/encoding performance and physical-device qualification; native `.procreate` animation metadata |
-| Documents | Atomic `.artflow` saves, thumbnails, autosave and recovery | Broader interruption, low-storage and long-session acceptance |
+| 3D materials | Independent Color/Metallic/Roughness paint layers, live model preview, undo, persistence and OBJ scalar-map export | Single UV atlas and approximate lighting; imported scalar textures, independent source material sets, native/glTF/USDZ material export and physical GPU validation |
+| Documents | Atomic signed `.artflow` v6 saves, thumbnails, autosave and recovery; older checksums verified before migration | Broader interruption, low-storage and long-session acceptance |
 | Export | PNG/JPEG/WebP/PDF/PSD/TIFF/GIF/APNG/MP4, layer PNG zip and frame-sequence ZIP; `.procreate` with supported sRGB/Display P3 channels, a generated Display P3 profile, layer hierarchy and the native Darken contract; picker/gallery/sharing | Opening exported files in Procreate and broader external interoperability; native group blend/mask metadata, arbitrary ICC transforms and PSB. PSD retains supported independent masks; post-mask effects use baked masks, while resized enabled masks and native Darken use a rendered appearance layer with hidden editable sources |
 
 The [parity register](docs/PROCREATE_PARITY.md) tracks the current implementation and remaining work.
@@ -328,8 +122,8 @@ python -m unittest discover -s .github/scripts -p 'test_*.py'
 python .github/scripts/verify_android_artifacts.py app/build/outputs/apk/debug/app-debug.apk app/build/outputs/bundle/release/app-release.aab
 ```
 
-CI retains API 26, API 35/16 KB, API 36/4 KB, an independent API 35/16 KB repeat and API 36/16 KB,
-and adds API 36 with a Pixel C tablet profile. Every lane retains the minified launch checks. `benchmark` is a release-like smoke-test variant, not a performance suite.
+CI requires API 26, API 35/4 KB, API 35/16 KB, an independent API 35/16 KB repeat, API 36/4 KB,
+API 36/16 KB, and API 36 with a Pixel C tablet profile. Every lane retains the minified launch checks. `benchmark` is a release-like smoke-test variant, not a performance suite.
 Read completed reports for the **exact commit**. Existing detekt baselines, lint warnings and physical
 latency/artist-validation gaps are not erased by a passing build. `TestEvidence` stores running-app
 captures via UTP's `additionalTestOutputDir`; CI archives `connected_android_test_additional_output`.

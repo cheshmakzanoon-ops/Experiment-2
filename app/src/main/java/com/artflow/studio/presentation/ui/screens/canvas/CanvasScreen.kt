@@ -57,6 +57,7 @@ import com.artflow.studio.core.pixels.LiveAdjustments
 import com.artflow.studio.core.pixels.Quad
 import com.artflow.studio.core.pixels.WarpMesh
 import com.artflow.studio.core.text.TextLayerContent
+import com.artflow.studio.core.three.MaterialChannel
 import com.artflow.studio.core.tool.ToolGroup
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.data.local.FontLibrary
@@ -281,6 +282,10 @@ fun CanvasScreen(
     val canvasPreviewBitmap =
         remember(canvasPreview) { canvasPreview?.let { BitmapPixelBridge.toBitmap(it) } }
     val modelMesh by viewModel.model.mesh.collectAsState()
+    val materialMaps by viewModel.canvasPreview.materialMaps.collectAsState()
+    val materialBitmaps = remember(materialMaps) { materialMaps.mapValues { BitmapPixelBridge.toBitmap(it.value) } }
+    val materialValue by viewModel.model.paintValue.collectAsState()
+    val materialChannel = layers.firstOrNull { it.id == activeLayerId }?.materialChannel ?: MaterialChannel.COLOR
     var showModel by rememberSaveable(projectId) { mutableStateOf(true) }
     var proof by rememberSaveable(projectId) { mutableStateOf(CmykProof.Mode.OFF) }
     var viewFilter by rememberSaveable(projectId) { mutableStateOf(ViewFilter.OFF) }
@@ -585,7 +590,7 @@ fun CanvasScreen(
                 BrushOptionsRow(
                     tool = input.tool,
                     size = (input.smudgeParams?.takeIf { input.tool == ToolType.SMUDGE } ?: input.brushParams).size,
-                    opacity = input.brushParams.opacity,
+                    opacity = (input.smudgeParams?.takeIf { input.tool == ToolType.SMUDGE } ?: input.brushParams).opacity,
                     eraserSize = input.eraserSize,
                     tolerance = input.fillTolerance,
                     onSizeChanged = viewModel::setBrushSize,
@@ -595,7 +600,7 @@ fun CanvasScreen(
                     ranges =
                         SliderRanges(
                             (input.smudgeParams?.takeIf { input.tool == ToolType.SMUDGE } ?: input.brushParams).sizeLimits,
-                            input.brushParams.opacityLimits,
+                            (input.smudgeParams?.takeIf { input.tool == ToolType.SMUDGE } ?: input.brushParams).opacityLimits,
                         ),
                 )
                 ToolOptionsPanel(viewModel, input, canvasView)
@@ -1285,6 +1290,11 @@ fun CanvasScreen(
                     mesh = model3d,
                     artwork = canvasPreviewBitmap,
                     painter = modelPainter,
+                    materialMaps = materialBitmaps,
+                    materialChannel = materialChannel,
+                    materialValue = materialValue,
+                    onMaterialChannel = viewModel.model::selectChannel,
+                    onMaterialValue = viewModel.model::setPaintValue,
                     onClose = { showModel = false },
                     interactive = modelInteractive,
                     // Modal content and its scrim keep input precedence without recreating the model view.
@@ -1301,7 +1311,7 @@ fun CanvasScreen(
                                     input.tool == ToolType.SMUDGE -> (input.smudgeParams ?: input.brushParams).size
                                     else -> input.brushParams.size
                                 },
-                            opacity = input.brushParams.opacity,
+                            opacity = (input.smudgeParams?.takeIf { input.tool == ToolType.SMUDGE } ?: input.brushParams).opacity,
                             canUndo = history.canUndo,
                             canRedo = history.canRedo,
                             eyedropperActive = input.tool == ToolType.EYEDROPPER,
@@ -1311,7 +1321,12 @@ fun CanvasScreen(
                                     ToolType.SMUDGE -> (input.smudgeParams ?: input.brushParams).sizeLimits
                                     else -> input.brushParams.sizeLimits
                                 },
-                            opacityRange = input.brushParams.opacityLimits,
+                            opacityRange =
+                                (
+                                    input.smudgeParams?.takeIf {
+                                        input.tool == ToolType.SMUDGE
+                                    } ?: input.brushParams
+                                ).opacityLimits,
                         ),
                     actions =
                         StudioSidebarActions(

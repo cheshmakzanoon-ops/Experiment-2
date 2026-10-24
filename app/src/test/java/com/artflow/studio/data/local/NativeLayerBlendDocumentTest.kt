@@ -61,7 +61,7 @@ class NativeLayerBlendDocumentTest {
         CanvasDocumentCodec.requireValidHeader(reopened)
         CanvasDocumentCodec.requireValidStructure(reopened)
         assertEquals(animated, reopened)
-        assertEquals(5, reopened.version)
+        assertEquals(CanvasDocument.CURRENT_VERSION, reopened.version)
         assertEquals("cdd509411a1ba3ceb86b652d1f91e4122ad9833a3bf0ad6e0db6bf5e2eb4b359", pixelSha(render(reopened)))
         assertArrayEquals(bytes, CanvasDocumentCodec.encode(reopened))
     }

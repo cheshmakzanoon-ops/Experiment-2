@@ -16,6 +16,7 @@ import com.artflow.studio.core.tool.LiquifyTool
 import com.artflow.studio.core.tool.PixelBrushes
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.data.local.ProjectStorage
+import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.data.renderer.TextRasterizer
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
@@ -38,6 +39,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 import javax.inject.Inject
 
 /** Synthetic MotionEvents drive the real View and document, not a replacement input handler. */
@@ -843,6 +845,195 @@ class CanvasInputDeviceTest {
             assertArrayEquals(original.pixels, requireNotNull(repository.layerPixels(layer)).pixels)
         }
 
+    @Test
+    fun smudgeNoOpsPressureAndCancellationPreservePixelsAndHistory() =
+        withCanvas(27) { canvas ->
+            val layer = repository.getActiveLayerId()
+            val original = liquifyFixture()
+            repository.setLayerPixels(layer, original, "Smudge dynamics fixture")
+            val plain = brush.brushParams.copy(size = 16f, opacity = 1f, flow = 1f)
+            val options = brush.copy(tool = ToolType.SMUDGE, smudge = PixelBrushes.SmudgeSettings(strength = 1f, hardness = 1f))
+            val depth = repository.undoDepth
+            for ((params, pressure) in listOf(
+                plain.copy(opacity = 0f) to 1f,
+                plain.copy(flow = 0f) to 1f,
+                plain.copy(pressureToOpacity = 1f) to 0f,
+                plain.copy(pressureToFlow = 1f) to 0f,
+            )) {
+                canvas.setEditorInput(options.copy(smudgeParams = params))
+                val pen = Touch(4, 8f, 32f, MotionEvent.TOOL_TYPE_STYLUS, pressure)
+                send(canvas, MotionEvent.ACTION_DOWN, pen)
+                send(canvas, MotionEvent.ACTION_UP, pen.copy(x = 52f))
+                awaitRasterIdle(layer)
+                assertArrayEquals("Zero selected-brush coverage must not smudge", original.pixels, image().pixels)
+                assertEquals("A no-op must not consume an undo entry", depth, repository.undoDepth)
+            }
+            canvas.setEditorInput(options.copy(smudgeParams = plain))
+            repository.setSelection(SelectionMask(64, 64))
+            val pen = Touch(4, 8f, 32f, MotionEvent.TOOL_TYPE_STYLUS)
+            send(canvas, MotionEvent.ACTION_DOWN, pen)
+            send(canvas, MotionEvent.ACTION_UP, pen.copy(x = 52f))
+            awaitRasterIdle(layer)
+            assertArrayEquals("An empty selection rejects smudging", original.pixels, image().pixels)
+            assertEquals(depth, repository.undoDepth)
+            repository.setSelection(null)
+            send(canvas, MotionEvent.ACTION_DOWN, pen)
+            send(canvas, MotionEvent.ACTION_MOVE, pen.copy(x = 42f))
+            assertArrayEquals("A provisional smudge must not enter committed output", original.pixels, image().pixels)
+            send(canvas, MotionEvent.ACTION_CANCEL, pen.copy(x = 52f))
+            awaitRasterIdle(layer)
+            assertArrayEquals("Cancelled smudging must discard every provisional stamp", original.pixels, image().pixels)
+            assertEquals(depth, repository.undoDepth)
+
+            val dynamic = options.copy(smudgeParams = plain.copy(pressureToOpacity = 1f))
+            canvas.setEditorInput(dynamic)
+            send(canvas, MotionEvent.ACTION_DOWN, pen.copy(pressure = 0.2f))
+            send(canvas, MotionEvent.ACTION_UP, pen.copy(x = 52f, pressure = 0.2f))
+            await { repository.undoDepth == depth + 1 }
+            val light = image()
+            assertTrue(repository.undo())
+            send(canvas, MotionEvent.ACTION_DOWN, pen)
+            send(canvas, MotionEvent.ACTION_UP, pen.copy(x = 52f))
+            await { repository.undoDepth == depth + 1 }
+            assertTrue(
+                "Actual stylus pressure must change smudge strength",
+                pixelDifference(original, light) < pixelDifference(original, image()),
+            )
+        }
+
+    @Test
+    fun sparseSmudgeMatchesSubdividedMovesAndPreservesReleaseHistoryAndStorage() =
+        withCanvas(28) { canvas ->
+            val layer = repository.getActiveLayerId()
+            val original = liquifyFixture()
+            repository.setLayerPixels(layer, original, "Smudge continuity fixture")
+            canvas.setEditorInput(
+                brush.copy(
+                    tool = ToolType.SMUDGE,
+                    smudgeParams = brush.brushParams.copy(size = 16f),
+                    smudge = PixelBrushes.SmudgeSettings(strength = 1f, hardness = 1f),
+                ),
+            )
+            val depth = repository.undoDepth
+            val pen = Touch(4, 8f, 32f, MotionEvent.TOOL_TYPE_STYLUS)
+            send(canvas, MotionEvent.ACTION_DOWN, pen)
+            send(canvas, MotionEvent.ACTION_UP, pen.copy(x = 52.75f))
+            await { repository.undoDepth == depth + 1 }
+            val sparse = image()
+            assertTrue("The middle of a fast gesture must be smudged", sparse.getSafe(28, 32) != original.getSafe(28, 32))
+            assertTrue("The final fractional interval must be committed", sparse.getSafe(59, 32) != original.getSafe(59, 32))
+            assertTrue(repository.undo())
+            assertArrayEquals(original.pixels, image().pixels)
+            send(canvas, MotionEvent.ACTION_DOWN, pen)
+            for (x in 9..52) send(canvas, MotionEvent.ACTION_MOVE, pen.copy(x = x.toFloat()))
+            send(canvas, MotionEvent.ACTION_UP, pen.copy(x = 52.75f))
+            await { repository.undoDepth == depth + 1 }
+            assertArrayEquals("Equivalent input subdivisions must keep the same pixels", sparse.pixels, image().pixels)
+            assertTrue(repository.undo())
+            assertArrayEquals(original.pixels, image().pixels)
+            assertTrue(repository.redo())
+            assertArrayEquals(sparse.pixels, image().pixels)
+            val project = repository.projectId()
+            repository.saveCanvas(project)
+            repository.loadCanvas(project)
+            assertArrayEquals("Stored smudging must survive a fresh document read", sparse.pixels, image().pixels)
+            File(TestEvidence.directory(), "smudge-source.png").writeBytes(BitmapPixelBridge.toPngBytes(original, 72))
+            File(TestEvidence.directory(), "smudge-continuous.png").writeBytes(BitmapPixelBridge.toPngBytes(sparse, 72))
+        }
+
+    @Test
+    fun batchedSmudgeRetainsHistoricalPressureTiltOrientationAndCorners() =
+        withCanvas(29) { canvas ->
+            val layer = repository.getActiveLayerId()
+            val original = liquifyFixture()
+            repository.setLayerPixels(layer, original, "Smudge batched fixture")
+            canvas.setEditorInput(
+                brush.copy(
+                    tool = ToolType.SMUDGE,
+                    smudgeParams =
+                        brush.brushParams.copy(
+                            size = 16f,
+                            pressureToSize = 1f,
+                            pressureToOpacity = 1f,
+                            tiltInfluence = 0.4f,
+                            tiltOpacityInfluence = 0.2f,
+                            roundness = 0.3f,
+                            tiltToRotation = true,
+                        ),
+                    smudge = PixelBrushes.SmudgeSettings(strength = 1f),
+                ),
+            )
+            val depth = repository.undoDepth
+            val start = Touch(4, 8f, 12f, MotionEvent.TOOL_TYPE_STYLUS, 0.25f)
+            val corner = start.copy(x = 20f, y = 40f, pressure = 0.5f, tilt = 0.5f, orientation = 0.6f)
+            val middle = corner.copy(x = 42f, pressure = 0.75f, tilt = 1f, orientation = 1.2f)
+            val end = middle.copy(x = 52.75f, pressure = 1f, orientation = 1.4f)
+            send(canvas, MotionEvent.ACTION_DOWN, start)
+            send(canvas, MotionEvent.ACTION_MOVE, corner)
+            send(canvas, MotionEvent.ACTION_MOVE, middle)
+            send(canvas, MotionEvent.ACTION_UP, end)
+            await { repository.undoDepth == depth + 1 }
+            val separate = image()
+            assertFalse(original.pixels.contentEquals(separate.pixels))
+            assertTrue(repository.undo())
+            send(canvas, MotionEvent.ACTION_DOWN, start)
+            sendSmudgeBatch(canvas, corner, middle)
+            send(canvas, MotionEvent.ACTION_UP, end)
+            await { repository.undoDepth == depth + 1 }
+            assertArrayEquals("Batching must preserve both the path and every brush input channel", separate.pixels, image().pixels)
+            File(TestEvidence.directory(), "smudge-batched-tilt.png").writeBytes(BitmapPixelBridge.toPngBytes(separate, 72))
+        }
+
+    private fun sendSmudgeBatch(
+        canvas: ArtFlowCanvasView,
+        historical: Touch,
+        current: Touch,
+    ) {
+        fun coords(touch: Touch): Array<MotionEvent.PointerCoords> {
+            val point = canvas.canvasToView(touch.x, touch.y)
+            return arrayOf(
+                MotionEvent.PointerCoords().apply {
+                    x = point.first
+                    y = point.second
+                    pressure = touch.pressure
+                    setAxisValue(MotionEvent.AXIS_TILT, touch.tilt)
+                    setAxisValue(MotionEvent.AXIS_ORIENTATION, touch.orientation)
+                },
+            )
+        }
+        eventTime += 10
+        val event =
+            MotionEvent.obtain(
+                downTime,
+                eventTime,
+                MotionEvent.ACTION_MOVE,
+                1,
+                arrayOf(
+                    MotionEvent.PointerProperties().apply {
+                        id = historical.id
+                        toolType = historical.type
+                    },
+                ),
+                coords(historical),
+                0,
+                0,
+                1f,
+                1f,
+                0,
+                0,
+                InputDevice.SOURCE_STYLUS,
+                0,
+            )
+        try {
+            eventTime += 10
+            event.addBatch(eventTime, coords(current), 0)
+            assertEquals(1, event.historySize)
+            assertTrue(canvas.onTouchEvent(event))
+        } finally {
+            event.recycle()
+        }
+    }
+
     private suspend fun awaitRasterIdle(layerId: Long) {
         // Yield to the completed gesture, then acquire/release a real edit as a settlement barrier.
         delay(1)
@@ -949,6 +1140,8 @@ class CanvasInputDeviceTest {
         val y: Float,
         val type: Int = MotionEvent.TOOL_TYPE_FINGER,
         val pressure: Float = 1f,
+        val tilt: Float = 0f,
+        val orientation: Float = 0f,
     )
 
     private fun send(
@@ -978,6 +1171,8 @@ class CanvasInputDeviceTest {
                         y = point.second
                         pressure = touch.pressure
                         size = 0.1f
+                        setAxisValue(MotionEvent.AXIS_TILT, touch.tilt)
+                        setAxisValue(MotionEvent.AXIS_ORIENTATION, touch.orientation)
                     }
                 }.toTypedArray()
         val event =

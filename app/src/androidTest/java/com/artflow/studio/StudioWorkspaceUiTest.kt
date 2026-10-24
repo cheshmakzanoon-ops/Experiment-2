@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -25,6 +26,7 @@ import com.artflow.studio.data.export.ArtworkExporter
 import com.artflow.studio.data.export.TimelapseRecorder
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.domain.model.Project
+import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.settings.AppSettings
 import com.artflow.studio.domain.model.settings.ThemeMode
 import com.artflow.studio.domain.repository.ProjectRepository
@@ -152,6 +154,36 @@ class StudioWorkspaceUiTest {
         compose.onNodeWithText("Prefs").performScrollTo().performClick()
         compose.onNodeWithText("Full screen").performScrollTo().performClick()
         compose.onNodeWithContentDescription("Exit focus mode").assertIsDisplayed()
+    }
+
+    @Test fun smudgeSidebarUsesItsOwnOpacityAndLeavesPaintUnchanged() {
+        openEditor()
+        compose.runOnIdle {
+            viewModel.setBrushParams(BrushParams(opacity = 0.8f))
+            viewModel.setSmudgeParams(BrushParams(opacity = 0.3f, minOpacity = 0.2f, maxOpacity = 0.6f))
+            viewModel.setTool(ToolType.SMUDGE)
+        }
+        compose
+            .onNodeWithContentDescription(
+                "Opacity 30%",
+            ).assertIsDisplayed()
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(1f) }
+        compose.onNodeWithContentDescription("Opacity 60%").assertIsDisplayed()
+        compose.runOnIdle {
+            assertEquals(0.6f, requireNotNull(viewModel.input.value.smudgeParams).opacity, 0.0001f)
+            assertEquals(0.8f, viewModel.input.value.brushParams.opacity, 0.0001f)
+        }
+        workspaceScreenshot("studio-smudge-opacity.png")
+        compose.onNodeWithContentDescription("Paint").performClick()
+        compose.onNodeWithContentDescription("Opacity 80%").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Smudge").performClick()
+        compose
+            .onNodeWithContentDescription(
+                "Opacity 60%",
+            ).assertIsDisplayed()
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(0f) }
+        compose.onNodeWithContentDescription("Opacity 20%").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(0.8f, viewModel.input.value.brushParams.opacity, 0.0001f) }
     }
 
     @Test fun focusHidesTheChromeAndBackRestoresTheEditor() {

@@ -30,6 +30,7 @@ internal suspend fun renderedExport(
             resolved.format.needsLayers,
             preserveLayerMasks = resolved.format == ExportFormat.PSD,
             animationPlayback = allFrames && resolved.format.requiresAnimation,
+            includeMaterials = resolved.format == ExportFormat.MODEL_OBJ,
         )
     val order = snapshot.frameOrder
     require(order.isNotEmpty()) { "No visible animated frames in the playback range" }
@@ -40,25 +41,41 @@ internal suspend fun renderedExport(
     val delays =
         resolved.animationFpsOverride?.let { fps -> List(frames.size) { 1000 / fps.coerceIn(1, 60) } }
             ?: order.map { snapshot.delaysMs[it] }
-    return if (allFrames || resolved.format.requiresAnimation) {
-        exporter.exportAnimation(projectId, name, frames, delays, resolved)
+    val result =
+        if (allFrames || resolved.format.requiresAnimation) {
+            exporter.exportAnimation(projectId, name, frames, delays, resolved)
+        } else {
+            val layers =
+                snapshot.layers.map { (layer, buffer) ->
+                    LayerRaster(layer.name, ExportRegion.apply(buffer, snapshot.selection, resolved.area, region), layer)
+                }
+            // Selection coverage already clips the layer's alpha; applying it to the independent mask
+            // too would square feathered selection edges. Only crop the mask to the shared rectangle.
+            val layerMasks = snapshot.layerMasks.mapValues { (_, mask) -> region?.let { mask.crop(it) } ?: mask }
+            exporter.exportStill(
+                projectId,
+                name,
+                frames.first(),
+                layers,
+                resolved,
+                snapshot.hasAdjustmentLayers,
+                snapshot.groups,
+                layerMasks,
+                snapshot.materialMaps,
+            )
+        }
+    return if (snapshot.hasMaterialLayers && resolved.format != ExportFormat.MODEL_OBJ) {
+        result.map { exported ->
+            exported.copy(
+                warning =
+                    listOfNotNull(
+                        exported.warning,
+                        "This format contains the color artwork. Use ArtFlow artwork to preserve editable material layers, " +
+                            "or 3D model to export maps.",
+                    ).joinToString(" "),
+            )
+        }
     } else {
-        val layers =
-            snapshot.layers.map { (layer, buffer) ->
-                LayerRaster(layer.name, ExportRegion.apply(buffer, snapshot.selection, resolved.area, region), layer)
-            }
-        // Selection coverage already clips the layer's alpha; applying it to the independent mask
-        // too would square feathered selection edges. Only crop the mask to the shared rectangle.
-        val layerMasks = snapshot.layerMasks.mapValues { (_, mask) -> region?.let { mask.crop(it) } ?: mask }
-        exporter.exportStill(
-            projectId,
-            name,
-            frames.first(),
-            layers,
-            resolved,
-            snapshot.hasAdjustmentLayers,
-            snapshot.groups,
-            layerMasks,
-        )
+        result
     }
 }

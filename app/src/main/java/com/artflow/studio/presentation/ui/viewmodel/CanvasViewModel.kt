@@ -510,9 +510,16 @@ class CanvasViewModel
         /** Gives Smudge its own brush; null smudges with the paint brush. */
         fun setSmudgeParams(params: com.artflow.studio.domain.model.brush.BrushParams?) = updateInput { it.copy(smudgeParams = params) }
 
-        /** Sets the brush opacity within the brush's own opacity limits. */
+        /** Sets the active paint or Smudge brush's opacity within its own limits. */
         fun setBrushOpacity(opacity: Float) =
-            updateInput { it.copy(brushParams = it.brushParams.copy(opacity = opacity.coerceIn(it.brushParams.opacityLimits))) }
+            updateInput { current ->
+                val smudge = current.smudgeParams?.takeIf { current.tool == ToolType.SMUDGE }
+                if (smudge != null) {
+                    current.copy(smudgeParams = smudge.copy(opacity = opacity.coerceIn(smudge.opacityLimits)))
+                } else {
+                    current.copy(brushParams = current.brushParams.copy(opacity = opacity.coerceIn(current.brushParams.opacityLimits)))
+                }
+            }
 
         fun setBrushParams(params: com.artflow.studio.domain.model.brush.BrushParams) = updateInput { it.copy(brushParams = params) }
 
@@ -1499,17 +1506,10 @@ class CanvasViewModel
 
         fun viewIntent(result: ExportResult): Intent = exporter.viewIntent(result)
 
-        fun resetExportState() {
-            _exportState.value = ExportUiState.Idle
-        }
+        fun resetExportState() = exportController.reset()
 
         /** Exports offered for the current document. */
-        fun availableFormats(): List<ExportFormat> =
-            if ((_uiState.value as? CanvasUiState.Ready)?.frameCount ?: 1 > 1) {
-                ExportFormat.stillFormats() + ExportFormat.animationFormats()
-            } else {
-                ExportFormat.stillFormats()
-            } + listOfNotNull(ExportFormat.MODEL_OBJ.takeIf { model.mesh.value != null })
+        fun availableFormats(): List<ExportFormat> = exportController.availableFormats(_uiState.value, model.mesh.value != null)
 
         /** The selection, ready to be baked into a new layer or used by a filter. */
         fun activeSelection(): SelectionMask? = canvasRepository.selection()

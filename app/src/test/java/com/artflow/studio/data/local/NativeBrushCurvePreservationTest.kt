@@ -109,13 +109,16 @@ class NativeBrushCurvePreservationTest {
     @Test
     fun signedCurveDocumentsRetainPublishedBytesAndRejectTampering() {
         for ((sourceVersion, publishedHash) in PUBLISHED_DOCUMENT_HASHES.withIndex()) {
-            val original = document(completeAuxiliaryParams().copy(sourceImportVersion = sourceVersion))
+            val original = document(completeAuxiliaryParams().copy(sourceImportVersion = sourceVersion)).copy(version = 5)
             val encoded = CanvasDocumentCodec.encode(original)
-            // Captured independently from unchanged 8d8d application classes, before the schema correction.
+            // Published by unchanged 8d8d application classes using document v5, before the schema correction.
+            // Keep that historical representation fixed when the application's current version advances.
             assertEquals(publishedHash, sha256(encoded))
             val reopened = CanvasDocumentCodec.decode(encoded.decodeToString())
-            assertEquals(original, reopened)
-            assertArrayEquals(encoded, CanvasDocumentCodec.encode(reopened))
+            assertEquals(original.copy(version = CanvasDocument.CURRENT_VERSION), reopened)
+            assertArrayEquals(encoded, CanvasDocumentCodec.encode(reopened.copy(version = original.version)))
+            val migrated = CanvasDocumentCodec.encode(reopened)
+            assertArrayEquals(migrated, CanvasDocumentCodec.encode(CanvasDocumentCodec.decode(migrated.decodeToString())))
             val altered = encoded.decodeToString().replaceFirst("\"output\":0.015625", "\"output\":0.03125")
             assertFalse(altered == encoded.decodeToString())
             val failure = assertThrows(IllegalArgumentException::class.java) { CanvasDocumentCodec.decode(altered) }

@@ -1,5 +1,6 @@
 package com.artflow.studio.domain.model.layer
 
+import com.artflow.studio.core.three.MaterialChannel
 import com.artflow.studio.domain.model.brush.Stroke
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -69,6 +70,9 @@ data class Layer(
     /** Omitted for historical documents so their signed representation and standard blends remain unchanged. */
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val blendContract: LayerBlendContract = LayerBlendContract.STANDARD,
+    /** Omitted on ordinary layers so every historical signed document keeps its exact encoding. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val materialChannel: MaterialChannel = MaterialChannel.COLOR,
 ) {
     /**
      * Check if this layer can be edited
@@ -154,6 +158,7 @@ data class Layer(
             textContent = this.textContent,
             hasInMemoryMask = hasInMemoryMask,
             blendContract = if (blendMode == this.blendMode) this.blendContract else LayerBlendContract.STANDARD,
+            materialChannel = this.materialChannel,
         )
 }
 

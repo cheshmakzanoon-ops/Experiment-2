@@ -6,6 +6,8 @@ import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.pixels.Stamping
+import com.artflow.studio.core.render.BrushPatch
+import com.artflow.studio.domain.model.brush.BrushParams
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
@@ -21,6 +23,14 @@ import kotlin.math.sqrt
  * but differ in where the patch comes from and how it is corrected before it lands.
  */
 object PixelBrushes {
+    private const val HALF_PI = (Math.PI / 2).toFloat()
+    private const val FULL_TURN = (Math.PI * 2).toFloat()
+
+    // More than twice the diagonal of the largest supported 8192-square canvas. At the
+    // minimum half-pixel step this bounds one event to 65,536 dabs; rejected outliers do not
+    // replace the last valid input, so a subsequent ordinary sample can resume the gesture.
+    private const val MAX_SMUDGE_SEGMENT = 32_768.0
+
     /** Shared brush geometry used by all three tools. */
     data class BrushShape(
         val size: Float = 60f,
@@ -45,63 +55,170 @@ object PixelBrushes {
      * layer itself and the sample point lags the pointer by a fraction of the brush size.
      */
     class SmudgeSession(
-        private val startX: Float,
-        private val startY: Float,
+        startX: Float,
+        startY: Float,
         var settings: SmudgeSettings = SmudgeSettings(),
+        pressure: Float = 1f,
+        tilt: Float = 0f,
+        orientation: Float = 0f,
     ) {
-        var lastX: Float = startX
+        private var last = SmudgeSample(startX, startY, pressure, tilt, orientation)
+        private var stamped = last
+        private var travelled = 0.0
+        private var nextDab = step(last)
+        private var stampedDistance = 0.0
+        private var finished = false
+        private var patch = IntArray(0)
+
+        /** Actual patch writes, useful for checking that wide brushes do not resample per pixel. */
+        var dabCount: Int = 0
             private set
-        var lastY: Float = startY
-            private set
-        private var accumulatedDistance = 0f
+
+        val lastX: Float get() = last.x
+        val lastY: Float get() = last.y
 
         /** Total distance travelled, exposed for the timelapse and for the "rate" readout. */
-        val distance: Float get() = accumulatedDistance
+        val distance: Float get() = travelled.toFloat()
 
+        /**
+         * Place dabs on a carried distance grid, not once for each input event. Pressure and pen
+         * orientation interpolate between actual samples. Collinear sample subdivision therefore
+         * keeps the same stamp locations and pickup history; corners retain the supplied path.
+         */
         fun dragTo(
             x: Float,
             y: Float,
             target: PixelBuffer,
+            pressure: Float = 1f,
+            tilt: Float = 0f,
+            orientation: Float = 0f,
         ): IntBounds? {
-            val dx = x - lastX
-            val dy = y - lastY
-            val distance = sqrt(dx * dx + dy * dy)
-            if (distance < 0.01f) return null
+            check(!finished) { "The smudge gesture has finished" }
+            val end = SmudgeSample(x, y, pressure, tilt, orientation)
+            val dx = end.x.toDouble() - last.x.toDouble()
+            val dy = end.y.toDouble() - last.y.toDouble()
+            val length = kotlin.math.hypot(dx, dy)
+            val limit = min(MAX_SMUDGE_SEGMENT, 2.0 * (target.width + target.height) + 1536.0)
+            if (length > limit) return null
+            val until = travelled + length
+            var changed: IntBounds? = null
+            while (length > 0.0 && nextDab <= until) {
+                val sample = last.between(end, ((nextDab - travelled) / length).toFloat().coerceIn(0f, 1f))
+                stamp(sample, target)?.let { changed = changed?.union(it) ?: it }
+                stampedDistance = nextDab
+                nextDab += step(sample)
+            }
+            travelled = until
+            last = end
+            return changed
+        }
 
-            // Read the colour from *behind* the pointer and write it at the pointer. That offset is
-            // what turns a drag into a streak instead of a re-stamp of the pixel under the cursor.
-            val lag = min(distance, settings.radius * settings.sampleLag)
-            val sampleX = lastX - (dx / distance) * lag
-            val sampleY = lastY - (dy / distance) * lag
+        /** The release position gets one final dab when it lies beyond the last spacing interval. */
+        fun finish(target: PixelBuffer): IntBounds? {
+            if (finished) return null
+            finished = true
+            return if (travelled > stampedDistance && travelled > 0.0) stamp(last, target) else null
+        }
 
-            val strength = (settings.strength * if (settings.fingerMode) 0.6f else 1f).coerceIn(0f, 1f)
-            Stamping.smudgeSegment(
+        private fun step(sample: SmudgeSample): Double = (diameter(sample) / 4f).coerceAtLeast(0.5f).toDouble()
+
+        private fun diameter(sample: SmudgeSample): Float {
+            val brush = settings.brushParams ?: return settings.size.coerceIn(1f, 512f)
+            val tilt = (sample.tilt / HALF_PI).coerceIn(0f, 1f)
+            // Use Paint's existing local size response; this does not implement native wet dynamics.
+            return (brush.calculateEffectiveSize(sample.pressure) * (1f + 2f * brush.tiltInfluence.coerceIn(0f, 1f) * tilt))
+                .coerceIn(1f, 1536f)
+        }
+
+        private fun strength(sample: SmudgeSample): Float {
+            val brush = settings.brushParams
+            val dynamic =
+                if (brush == null) {
+                    1f
+                } else {
+                    val tilt = (sample.tilt / HALF_PI).coerceIn(0f, 1f)
+                    val tiltAmount = (brush.tiltOpacityInfluence ?: brush.tiltInfluence).coerceIn(0f, 1f) * tilt
+                    brush.calculateEffectiveOpacity(sample.pressure) * brush.flowAt(sample.pressure) * (1f - 0.6f * tiltAmount)
+                }
+            return (settings.strength * dynamic * if (settings.fingerMode) 0.6f else 1f).coerceIn(0f, 1f)
+        }
+
+        private fun stamp(
+            sample: SmudgeSample,
+            target: PixelBuffer,
+        ): IntBounds? {
+            val dx = sample.x - stamped.x
+            val dy = sample.y - stamped.y
+            val movement = kotlin.math.hypot(dx, dy)
+            stamped = sample
+            val strength = strength(sample)
+            if (movement <= 0f || strength <= 0f) return null
+            val radius = diameter(sample) / 2f
+            val outsideX = sample.x + radius < 0f || sample.x - radius >= target.width
+            val outsideY = sample.y + radius < 0f || sample.y - radius >= target.height
+            if (outsideX || outsideY) return null
+            // Read just behind this dab, using the previous dabs' output to carry the paint.
+            val lag = min(movement, radius * settings.sampleLag.coerceIn(0f, 1f))
+            val brush = settings.brushParams
+            val texture =
+                if (brush?.tiltToRotation == true) {
+                    BrushPatch.texture(brush.copy(rotation = brush.rotation + Math.toDegrees(sample.orientation.toDouble()).toFloat()))
+                } else {
+                    settings.texture
+                }
+            val patchSide = 2 * ceil(radius).toInt() + 1
+            if (patch.size != patchSide * patchSide) patch = IntArray(patchSide * patchSide)
+            // Snapshot the complete source before writing; reusing storage must not feed a
+            // partly overwritten destination back into the same dab.
+            Stamping.readPatch(target, sample.x - dx / movement * lag, sample.y - dy / movement * lag, radius, patch)
+            Stamping.stampPatch(
                 target = target,
-                fromX = sampleX,
-                fromY = sampleY,
-                toX = x,
-                toY = y,
-                radius = settings.radius,
+                patch = patch,
+                centerX = sample.x,
+                centerY = sample.y,
+                radius = radius,
                 strength = strength,
                 hardness = settings.hardness,
                 mask = settings.mask,
                 alphaLock = settings.alphaLock,
-                texture = settings.texture,
+                texture = texture,
             )
+            dabCount++
+            return IntBounds.aroundRectangle(sample.x, sample.y, sample.x, sample.y, ceil(radius).toInt() + 1)
+        }
+    }
 
-            accumulatedDistance += distance
-            val bounds =
-                IntBounds.aroundRectangle(
-                    min(lastX, x),
-                    min(lastY, y),
-                    max(lastX, x),
-                    max(lastY, y),
-                    padding = ceil(settings.radius).toInt() + 1,
-                )
+    private class SmudgeSample(
+        val x: Float,
+        val y: Float,
+        rawPressure: Float,
+        rawTilt: Float,
+        rawOrientation: Float,
+    ) {
+        val pressure = rawPressure.coerceIn(0f, 1f)
+        val tilt = rawTilt.coerceIn(0f, HALF_PI)
+        val orientation = rawOrientation % FULL_TURN
 
-            lastX = x
-            lastY = y
-            return bounds
+        init {
+            require(x.isFinite() && y.isFinite() && rawPressure.isFinite() && rawTilt.isFinite() && rawOrientation.isFinite()) {
+                "Smudge input must be finite"
+            }
+        }
+
+        fun between(
+            end: SmudgeSample,
+            fraction: Float,
+        ): SmudgeSample {
+            var turn = (end.orientation - orientation) % FULL_TURN
+            if (turn > Math.PI.toFloat()) turn -= FULL_TURN
+            if (turn < -Math.PI.toFloat()) turn += FULL_TURN
+            return SmudgeSample(
+                x + (end.x - x) * fraction,
+                y + (end.y - y) * fraction,
+                pressure + (end.pressure - pressure) * fraction,
+                tilt + (end.tilt - tilt) * fraction,
+                orientation + turn * fraction,
+            )
         }
     }
 
@@ -121,6 +238,8 @@ object PixelBrushes {
         val alphaLock: Boolean = false,
         /** The selected brush's tip and grain, so smudging carries its texture as in Procreate. */
         val texture: Stamping.PatchTexture = Stamping.PatchTexture(),
+        /** Selected brush dynamics, captured at gesture start; null preserves the standalone tool defaults. */
+        val brushParams: BrushParams? = null,
     ) {
         val radius: Float get() = (size / 2f).coerceAtLeast(0.5f)
     }
@@ -129,7 +248,10 @@ object PixelBrushes {
         x: Float,
         y: Float,
         settings: SmudgeSettings,
-    ): SmudgeSession = SmudgeSession(x, y, settings)
+        pressure: Float = 1f,
+        tilt: Float = 0f,
+        orientation: Float = 0f,
+    ): SmudgeSession = SmudgeSession(x, y, settings, pressure, tilt, orientation)
 
     // ---------------------------------------------------------------------------------------
     // Clone stamp (Phase 19)

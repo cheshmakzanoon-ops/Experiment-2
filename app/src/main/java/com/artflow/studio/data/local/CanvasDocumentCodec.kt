@@ -1,6 +1,7 @@
 package com.artflow.studio.data.local
 
 import com.artflow.studio.core.canvas.CanvasOperations
+import com.artflow.studio.core.three.MaterialChannel
 import com.artflow.studio.domain.model.animation.AnimationFrame
 import com.artflow.studio.domain.model.animation.AnimationSettings
 import com.artflow.studio.domain.model.animation.TimelapseRecording
@@ -26,6 +27,8 @@ import java.security.MessageDigest
  *   Earlier vector strokes retain their historical Multiply grain behavior when loaded.
  * - **v5** preserves the distinct native archive19 Darken contract on newly imported layers.
  *   Older documents retain their standard blends; older readers reject v5 instead of changing its pixels.
+ * - **v6** separates color, metallic and roughness layers. Older readers must not paint material
+ *   maps over the color image; pre-v6 documents retain their original color-only semantics.
  *
  * Kept in the data layer because it is purely a storage concern.
  */
@@ -82,7 +85,7 @@ data class CanvasDocument(
 
     companion object {
         /** Bump when storage or replay semantics require migration code. */
-        const val CURRENT_VERSION = 5
+        const val CURRENT_VERSION = 6
     }
 }
 
@@ -177,6 +180,10 @@ object CanvasDocumentCodec {
     private fun requireBlendContracts(document: CanvasDocument) {
         val layers = document.layers.asSequence() + document.frames.asSequence().flatMap { it.layers.asSequence() }
         layers.forEach { layer ->
+            if (layer.materialChannel != MaterialChannel.COLOR) {
+                require(document.version >= 6) { "Material layers require project version 6" }
+                require(!layer.isGroup) { "A group cannot be a material paint layer" }
+            }
             if (layer.blendContract != LayerBlendContract.STANDARD) {
                 require(document.version >= 5) { "Native layer blends require project version 5" }
                 require(

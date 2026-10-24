@@ -32,6 +32,10 @@ class ModelRenderer : GLSurfaceView.Renderer {
 
     private val pendingMesh = AtomicReference<Mesh?>(null)
     private val pendingTexture = AtomicReference<Bitmap?>(null)
+    private val pendingMaterials = AtomicReference<List<Bitmap>?>(null)
+    private var materialBitmaps: List<Bitmap>? = null
+    private var colorBitmap: Bitmap? = null
+    private var texturesLost = true
     private var program = 0
     private var wireProgram = 0
     private var buffers = IntArray(3)
@@ -45,6 +49,7 @@ class ModelRenderer : GLSurfaceView.Renderer {
     /** The mesh whose buffers are on the GPU now (set on the GL thread). */
     private var uploadedMesh: Mesh? = null
     private var texture = 0
+    private val materialTextures = IntArray(2)
     private var width = 1
     private var height = 1
     private val projection = FloatArray(16)
@@ -59,10 +64,21 @@ class ModelRenderer : GLSurfaceView.Renderer {
         pendingMesh.set(mesh)
     }
 
-    /** A copy of the artwork to paint the model with; the renderer recycles it after upload. */
+    /** Takes ownership of artwork pixels, retained for context restoration until the next update. */
     fun setTexture(bitmap: Bitmap) {
         pendingTexture.getAndSet(bitmap)?.recycle()
     }
+
+    /** Takes ownership of the maps; transparent fallback texels leave the scalar defaults intact. */
+    fun setMaterialMaps(
+        metallic: Bitmap?,
+        roughness: Bitmap?,
+    ) {
+        val maps = listOf(metallic ?: blankTexture(), roughness ?: blankTexture())
+        pendingMaterials.getAndSet(maps)?.forEach { it.recycle() }
+    }
+
+    private fun blankTexture(): Bitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
 
     override fun onSurfaceCreated(
         unused: GL10?,
@@ -76,13 +92,20 @@ class ModelRenderer : GLSurfaceView.Renderer {
         val ids = IntArray(1)
         GLES20.glGenTextures(1, ids, 0)
         texture = ids[0]
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture)
-        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
-        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
-        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
-        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
+        GLES20.glGenTextures(2, materialTextures, 0)
+        (listOf(texture) + materialTextures.toList()).forEach { name ->
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, name)
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
+            val blank = blankTexture()
+            GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, blank, 0)
+            blank.recycle()
+        }
         // A plain white texture until the artwork arrives.
         val white = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888).apply { eraseColor(-1) }
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture)
         GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, white, 0)
         white.recycle()
         GLES20.glEnable(GLES20.GL_DEPTH_TEST)
@@ -90,6 +113,7 @@ class ModelRenderer : GLSurfaceView.Renderer {
         corners = 0
         uploadedMesh = null
         lastMesh?.let { pendingMesh.compareAndSet(null, it) }
+        texturesLost = true
     }
 
     override fun onSurfaceChanged(
@@ -104,11 +128,29 @@ class ModelRenderer : GLSurfaceView.Renderer {
 
     override fun onDrawFrame(unused: GL10?) {
         pendingMesh.getAndSet(null)?.let(::upload)
-        pendingTexture.getAndSet(null)?.let { bitmap ->
-            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture)
-            GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
-            bitmap.recycle()
+        val color = pendingTexture.getAndSet(null)
+        if (color != null) {
+            colorBitmap?.recycle()
+            colorBitmap = color
         }
+        if (color != null || texturesLost) {
+            colorBitmap?.let { bitmap ->
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture)
+                GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
+            }
+        }
+        val materials = pendingMaterials.getAndSet(null)
+        if (materials != null) {
+            materialBitmaps?.forEach { it.recycle() }
+            materialBitmaps = materials
+        }
+        if (materials != null || texturesLost) {
+            materialBitmaps?.forEachIndexed { index, bitmap ->
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, materialTextures[index])
+                GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
+            }
+        }
+        texturesLost = false
         GLES20.glClearColor(BACKGROUND, BACKGROUND, BACKGROUND, 1f)
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT or GLES20.GL_DEPTH_BUFFER_BIT)
         if (corners == 0) return
@@ -127,8 +169,7 @@ class ModelRenderer : GLSurfaceView.Renderer {
         GLES20.glUniform3f(GLES20.glGetUniformLocation(program, "uEye"), eye.x, eye.y, eye.z)
         GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "uAmbient"), light.ambient)
         GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "uMetallic"), light.metallic)
-        GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "uPower"), light.highlightPower())
-        GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "uSpecular"), light.highlightStrength())
+        GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "uRoughness"), light.roughness)
         GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "uExposure"), light.exposure)
         val second = light.secondDirection()
         GLES20.glUniform3f(GLES20.glGetUniformLocation(program, "uLight2Dir"), second.x, second.y, second.z)
@@ -139,6 +180,12 @@ class ModelRenderer : GLSurfaceView.Renderer {
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture)
         GLES20.glUniform1i(GLES20.glGetUniformLocation(program, "uTexture"), 0)
+        materialTextures.forEachIndexed { index, name ->
+            GLES20.glActiveTexture(GLES20.GL_TEXTURE1 + index)
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, name)
+            val uniform = if (index == 0) "uMetallicMap" else "uRoughnessMap"
+            GLES20.glUniform1i(GLES20.glGetUniformLocation(program, uniform), index + 1)
+        }
         attribute("aPosition", buffers[0], 3)
         attribute("aNormal", buffers[1], 3)
         attribute("aUv", buffers[2], 2)
@@ -263,13 +310,14 @@ class ModelRenderer : GLSurfaceView.Renderer {
         const val FRAGMENT = """
             precision mediump float;
             uniform sampler2D uTexture;
+            uniform sampler2D uMetallicMap;
+            uniform sampler2D uRoughnessMap;
             uniform vec3 uLightDir;
             uniform vec3 uLightColour;
             uniform vec3 uEye;
             uniform float uAmbient;
             uniform float uMetallic;
-            uniform float uPower;
-            uniform float uSpecular;
+            uniform float uRoughness;
             uniform float uExposure;
             uniform vec3 uLight2Dir;
             uniform float uLight2;
@@ -278,16 +326,23 @@ class ModelRenderer : GLSurfaceView.Renderer {
             varying vec2 vUv;
             void main() {
                 vec4 colour = texture2D(uTexture, vUv);
+                vec4 metalMap = texture2D(uMetallicMap, vUv);
+                vec4 roughMap = texture2D(uRoughnessMap, vUv);
+                // Android bitmap uploads are premultiplied. Recover the scalar before applying coverage.
+                float metallic = mix(uMetallic, metalMap.r / max(metalMap.a, 0.00001), metalMap.a);
+                float roughness = mix(uRoughness, roughMap.r / max(roughMap.a, 0.00001), roughMap.a);
+                float power = 120.0 * (1.0 - roughness) + 4.0;
+                float specular = (0.3 + 0.7 * metallic) * (0.15 + 0.85 * (1.0 - roughness));
                 vec3 toEye = normalize(uEye - vPosition);
                 vec3 normal = normalize(vNormal);
                 // Light both faces of open meshes: turn the normal toward the viewer.
                 if (dot(normal, toEye) < 0.0) normal = -normal;
                 float diffuse = max(dot(normal, uLightDir), 0.0);
-                float highlight = pow(max(dot(normal, normalize(uLightDir + toEye)), 0.0), uPower) * uSpecular * diffuse;
+                float highlight = pow(max(dot(normal, normalize(uLightDir + toEye)), 0.0), power) * specular * diffuse;
                 // Metals have no diffuse body colour; their highlights take the surface colour instead.
-                vec3 highlightColour = mix(uLightColour, colour.rgb * uLightColour, uMetallic);
+                vec3 highlightColour = mix(uLightColour, colour.rgb * uLightColour, metallic);
                 float second = max(dot(normal, uLight2Dir), 0.0) * uLight2;
-                vec3 body = colour.rgb * (uAmbient + (diffuse * uLightColour + second) * (1.0 - 0.8 * uMetallic));
+                vec3 body = colour.rgb * (uAmbient + (diffuse * uLightColour + second) * (1.0 - 0.8 * metallic));
                 vec3 lit = body + highlight * highlightColour * 4.0;
                 gl_FragColor = vec4(clamp(lit * uExposure, 0.0, 1.0), 1.0);
             }

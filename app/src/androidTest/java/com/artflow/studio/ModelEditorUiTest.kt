@@ -18,6 +18,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsMatcher
@@ -35,12 +36,14 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.ColorUtils
 import androidx.lifecycle.viewModelScope
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.three.MaterialChannel
 import com.artflow.studio.core.three.MeshPicker
 import com.artflow.studio.core.three.OrbitCamera
 import com.artflow.studio.core.three.SurfaceHit
@@ -281,6 +284,85 @@ class ModelEditorUiTest {
         )
         TestEvidence.screenshot("model-editor-committed.png")
         assertPinchStillNavigatesWithoutPainting(reopened, committed)
+    }
+
+    @Test fun materialControlsPaintIndependentMapsAndPresentProvisionalUndoableLighting() {
+        tapAt(modelChip("Paint"))
+        compose.onNodeWithContentDescription("Model Metallic").assertIsDisplayed().performClick()
+        compose.waitUntil(5_000) {
+            viewModel.layers.value.any {
+                it.id == viewModel.activeLayerId.value &&
+                    it.materialChannel == MaterialChannel.METALLIC
+            }
+        }
+        compose.onNodeWithContentDescription("Model Metallic").assertIsSelected()
+        val slider = compose.onNodeWithContentDescription("Material paint value").assertIsDisplayed()
+        slider.performSemanticsAction(SemanticsActions.SetProgress) { it(1f) }
+        val view = modelView()
+        val path = seamPath(view)
+        awaitModelPixels(false, path)
+        val screen =
+            compose.runOnIdle {
+                val origin = IntArray(2).also(view::getLocationOnScreen)
+                origin[0] +
+                    path.left.point.x
+                        .roundToInt() to origin[1] +
+                    path.left.point.y
+                        .roundToInt()
+            }
+        val before = requireNotNull(TestEvidence.colorsAtScreenPoints(listOf(screen))).single()
+        val metalLayer = compose.runOnIdle { canvas.getActiveLayerId() }
+        send(view, MotionEvent.ACTION_DOWN, path.left.point)
+        awaitModelPoint(view, path.left.point, "model-material-provisional-timeout.png") { actual ->
+            (0..16 step 8).any { shift -> abs((actual ushr shift and 255) - (before ushr shift and 255)) >= 8 }
+        }
+        runBlocking(Dispatchers.Main) {
+            assertTrue(requireNotNull(canvas.compositeMaterial(MaterialChannel.METALLIC, true)).pixels.any { it ushr 24 > 0 })
+            assertTrue(requireNotNull(canvas.compositeMaterial(MaterialChannel.METALLIC)).pixels.all { it == 0 })
+            assertArrayEquals(original, requireNotNull(canvas.compositeBuffer()).pixels)
+        }
+        assertStoredPixels(original)
+        TestEvidence.screenshot("model-material-provisional.png")
+        send(view, MotionEvent.ACTION_CANCEL, path.left.point)
+        awaitModelPoint(view, path.left.point, "model-material-cancelled-timeout.png") { closeColor(it, before) }
+        TestEvidence.screenshot("model-material-cancelled.png")
+        send(view, MotionEvent.ACTION_DOWN, path.left.point)
+        send(view, MotionEvent.ACTION_UP, path.left.point)
+        val metalPixels =
+            runBlocking(Dispatchers.Main) {
+                val committed = requireNotNull(canvas.layerPixels(metalLayer)).pixels.copyOf()
+                assertTrue(committed.any { it ushr 24 > 0 })
+                assertTrue(canvas.undo())
+                assertTrue(requireNotNull(canvas.compositeMaterial(MaterialChannel.METALLIC)).pixels.all { it == 0 })
+                assertTrue(canvas.redo())
+                assertArrayEquals(committed, requireNotNull(canvas.layerPixels(metalLayer)).pixels)
+                committed
+            }
+        compose.onNodeWithContentDescription("Model Roughness").assertIsDisplayed().performClick()
+        compose.waitUntil(5_000) {
+            viewModel.layers.value.any {
+                it.id == viewModel.activeLayerId.value &&
+                    it.materialChannel == MaterialChannel.ROUGHNESS
+            }
+        }
+        compose.onNodeWithContentDescription("Model Roughness").assertIsSelected()
+        slider.performSemanticsAction(SemanticsActions.SetProgress) { it(0.25f) }
+        compose.waitUntil(5_000) { viewModel.model.paintValue.value == 0.25f }
+        val roughPath = seamPath(modelView())
+        send(view, MotionEvent.ACTION_DOWN, roughPath.right.point)
+        send(view, MotionEvent.ACTION_UP, roughPath.right.point)
+        runBlocking(Dispatchers.Main) {
+            assertArrayEquals(metalPixels, requireNotNull(canvas.layerPixels(metalLayer)).pixels)
+            val roughPixels = requireNotNull(canvas.compositeMaterial(MaterialChannel.ROUGHNESS))
+            assertTrue(roughPixels.pixels.any { it ushr 24 > 200 && (it and 255) == 64 })
+            assertArrayEquals(original, requireNotNull(canvas.compositeBuffer()).pixels)
+            File(TestEvidence.directory(), "model-material-roughness-layer.png").writeBytes(BitmapPixelBridge.toPngBytes(roughPixels))
+        }
+        compose.onNodeWithContentDescription("Model Color").assertIsDisplayed().performClick()
+        compose.waitUntil(5_000) { viewModel.activeLayerId.value == layer }
+        assertStoredPixels(original)
+        assertModelHeaderVisible()
+        TestEvidence.screenshot("model-material-committed.png")
     }
 
     private fun assertCancelled(

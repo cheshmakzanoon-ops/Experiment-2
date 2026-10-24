@@ -6,6 +6,7 @@ import com.artflow.studio.core.pixels.ImageFilters
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.PixelBufferPool
 import com.artflow.studio.core.pixels.SelectionMask
+import com.artflow.studio.core.three.MaterialChannel
 import com.artflow.studio.domain.model.brush.RectF
 import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.model.layer.FilterType
@@ -58,6 +59,8 @@ class Compositor(
         val selection: SelectionMask? = null,
         /** Skip stack adjustment/filter layers (used to preview raw layer content). */
         val applyAdjustments: Boolean = true,
+        /** Scalar material layers never enter the ordinary artwork, thumbnails or color exports. */
+        val materialChannel: MaterialChannel = MaterialChannel.COLOR,
     )
 
     private val bufferPool = PixelBufferPool()
@@ -100,7 +103,7 @@ class Compositor(
         inputs: List<LayerInput>,
         options: Options = Options(),
     ) {
-        compositeEntries(target, LayerGroups.plan(inputs), options)
+        compositeEntries(target, LayerGroups.plan(channelInputs(inputs, options)), options)
         options.selection?.let { selection -> applySelection(target, selection) }
     }
 
@@ -112,8 +115,17 @@ class Compositor(
         options: Options,
     ) {
         if ((backgroundColor ushr 24) != 0) result.fill(backgroundColor)
-        compositeEntries(result, LayerGroups.plan(inputs), options)
+        compositeEntries(result, LayerGroups.plan(channelInputs(inputs, options)), options)
         options.selection?.let { selection -> applySelection(result, selection) }
+    }
+
+    private fun channelInputs(
+        inputs: List<LayerInput>,
+        options: Options,
+    ): List<LayerInput> {
+        if (options.materialChannel == MaterialChannel.COLOR && inputs.none { it.layer.materialChannel.isScalar }) return inputs
+        val included = LayerGroups.channelIds(inputs.map { it.layer }, options.materialChannel)
+        return inputs.filter { it.layer.id in included }
     }
 
     /**

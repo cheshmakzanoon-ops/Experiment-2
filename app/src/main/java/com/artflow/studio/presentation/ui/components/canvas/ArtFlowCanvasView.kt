@@ -1467,24 +1467,12 @@ class ArtFlowCanvasView
                 }
 
                 PointerGestureRouter.Action.MOVE_TOOL -> {
-                    for (history in 0 until event.historySize) {
-                        continueGesture(
-                            event,
-                            route.index,
-                            event.getHistoricalX(route.index, history),
-                            event.getHistoricalY(route.index, history),
-                            history,
-                        )
-                    }
+                    continueHistoricalSamples(event, route.index)
                     continueGesture(event, route.index, event.getX(route.index), event.getY(route.index))
                 }
 
                 PointerGestureRouter.Action.END_TOOL -> {
-                    val x = event.getX(route.index)
-                    val y = event.getY(route.index)
-                    // Pointer-up can carry the final segment without an intervening MOVE.
-                    if (x != lastPointerX || y != lastPointerY) continueGesture(event, route.index, x, y)
-                    endGesture(event, x, y, cancelled = false)
+                    endPointerToolGesture(event, route.index)
                 }
 
                 PointerGestureRouter.Action.CANCEL -> {
@@ -1530,6 +1518,36 @@ class ArtFlowCanvasView
                 }
             }
             return true
+        }
+
+        private fun continueHistoricalSamples(
+            event: MotionEvent,
+            index: Int,
+        ) {
+            for (history in 0 until event.historySize) {
+                continueGesture(
+                    event,
+                    index,
+                    event.getHistoricalX(index, history),
+                    event.getHistoricalY(index, history),
+                    history,
+                )
+            }
+        }
+
+        private fun endPointerToolGesture(
+            event: MotionEvent,
+            index: Int,
+        ) {
+            val x = event.getX(index)
+            val y = event.getY(index)
+            // Smudge needs pressure/orientation at release and any batched final path.
+            if (gestureTool == ToolType.SMUDGE) continueHistoricalSamples(event, index)
+            // Pointer-up can carry the final segment without an intervening MOVE.
+            if (x != lastPointerX || y != lastPointerY || gestureTool == ToolType.SMUDGE) {
+                continueGesture(event, index, x, y)
+            }
+            endGesture(event, x, y, cancelled = false)
         }
 
         /** Starts colour sampling under the screen point ([x], [y]) for as long as the button or pointer is held. */
@@ -1717,7 +1735,15 @@ class ArtFlowCanvasView
                 }
 
                 ToolType.SMUDGE -> {
-                    startPixelGesture(tool, canvasX, canvasY, pressure, "Smudge")
+                    startPixelGesture(
+                        tool,
+                        canvasX,
+                        canvasY,
+                        pressure,
+                        "Smudge",
+                        axisOf(event, index, MotionEvent.AXIS_TILT, -1),
+                        axisOf(event, index, MotionEvent.AXIS_ORIENTATION, -1),
+                    )
                 }
 
                 ToolType.CLONE_STAMP -> {
@@ -1844,7 +1870,13 @@ class ArtFlowCanvasView
                 ToolType.LIQUIFY, ToolType.MOVE, ToolType.TRANSFORM,
                 -> {
                     if (tool == ToolType.CLONE_STAMP && gestureMoved > TAP_SLOP) cloneDragStarted = true
-                    queuePixelSample(canvasX, canvasY, pressure)
+                    queuePixelSample(
+                        canvasX,
+                        canvasY,
+                        pressure,
+                        axisOf(event, index, MotionEvent.AXIS_TILT, history),
+                        axisOf(event, index, MotionEvent.AXIS_ORIENTATION, history),
+                    )
                 }
 
                 ToolType.GRADIENT, ToolType.SHAPE,
@@ -2504,6 +2536,8 @@ class ArtFlowCanvasView
             y: Float,
             pressure: Float,
             description: String,
+            tilt: Float = 0f,
+            orientation: Float = 0f,
         ) {
             cancelPixelInteraction()
             if (tool == ToolType.MOVE || tool == ToolType.TRANSFORM) {
@@ -2530,7 +2564,12 @@ class ArtFlowCanvasView
             transformPreviewQuad = null
 
             val layerId = activeLayerId
-            val gestureInput = input
+            val gestureInput =
+                if (tool == ToolType.SMUDGE && strokeFromTouch) {
+                    input.copy(smudgeParams = (input.smudgeParams ?: input.brushParams).forTouch())
+                } else {
+                    input
+                }
             val gestureSelection = canvasRepository.selection()
             moveSelection = if (tool == ToolType.MOVE) gestureSelection else null
             pixelOpenJob =
@@ -2566,7 +2605,7 @@ class ArtFlowCanvasView
                                 rasterBase
                             }
                     }
-                    initToolSession(tool, session.buffer, x, y, pressure, gestureInput, gestureSelection)
+                    initToolSession(tool, session.buffer, x, y, pressure, gestureInput, gestureSelection, tilt, orientation)
                     // These tools report exactly what each sample changed, so previews redraw only that.
                     if (tool in DAMAGE_TRACKED_TOOLS) canvasRepository.trackPreviewDamage(session)
                     rasterBuffer = session.buffer
@@ -2617,6 +2656,8 @@ class ArtFlowCanvasView
             pressure: Float,
             gestureInput: EditorInput,
             selection: SelectionMask?,
+            tilt: Float,
+            orientation: Float,
         ) {
             val alphaLocked = rasterSession?.alphaLocked == true
             when (tool) {
@@ -2630,7 +2671,11 @@ class ArtFlowCanvasView
                                 mask = selection,
                                 alphaLock = alphaLocked,
                                 texture = BrushPatch.texture(gestureInput.smudgeParams ?: gestureInput.brushParams),
+                                brushParams = gestureInput.smudgeParams ?: gestureInput.brushParams,
                             ),
+                            pressure,
+                            tilt,
+                            orientation,
                         )
                 }
 
@@ -2689,31 +2734,35 @@ class ArtFlowCanvasView
             x: Float,
             y: Float,
             pressure: Float,
+            tilt: Float,
+            orientation: Float,
         ) {
             if (rasterBuffer == null) {
                 if (pendingSamples.size < MAX_PENDING_SAMPLES) {
-                    pendingSamples.add(floatArrayOf(x, y, pressure))
+                    pendingSamples.add(floatArrayOf(x, y, pressure, tilt, orientation))
                 }
                 return
             }
-            applyPixelSample(x, y, pressure)
+            applyPixelSample(x, y, pressure, tilt, orientation)
         }
 
         private fun drainPendingSamples() {
             val samples = pendingSamples.toList()
             pendingSamples.clear()
-            samples.forEach { applyPixelSample(it[0], it[1], it[2]) }
+            samples.forEach { applyPixelSample(it[0], it[1], it[2], it[3], it[4]) }
         }
 
         private fun applyPixelSample(
             x: Float,
             y: Float,
             pressure: Float,
+            tilt: Float,
+            orientation: Float,
         ) {
             val buffer = rasterBuffer ?: return
             val changed =
                 when (pixelTool) {
-                    ToolType.SMUDGE -> smudgeSession?.dragTo(x, y, buffer)
+                    ToolType.SMUDGE -> smudgeSession?.dragTo(x, y, buffer, pressure, tilt, orientation)
                     ToolType.CLONE_STAMP -> cloneSession?.dragTo(x, y, buffer, rasterSource ?: buffer)
                     ToolType.HEALING -> healingSession?.dragTo(x, y, buffer, rasterSource ?: buffer)
                     else -> null
@@ -2836,6 +2885,7 @@ class ArtFlowCanvasView
 
         private fun commitPixelGesture(cancelled: Boolean) {
             val session = rasterSession ?: return
+            if (!cancelled) smudgeSession?.finish(session.buffer)
             val description = pixelCommitDescription
             val finalLiquify = liquifySession
             val reference = gestureLiquifyReference

@@ -17,8 +17,8 @@ data class ModelLighting(
     val elevation: Float = 40f,
     val intensity: Float = 1f,
     val ambient: Float = 0.3f,
-    val metallic: Float = 0f,
-    val roughness: Float = 0.6f,
+    val metallic: Float = MaterialChannel.METALLIC.defaultValue,
+    val roughness: Float = MaterialChannel.ROUGHNESS.defaultValue,
     val exposure: Float = 1f,
     val warmth: Float = 0f,
     /** Procreate's Add light: a second, white light from its own angle and height; 0 strength is off. */

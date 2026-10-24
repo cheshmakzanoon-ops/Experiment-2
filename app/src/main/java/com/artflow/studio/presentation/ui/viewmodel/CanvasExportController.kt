@@ -24,6 +24,20 @@ internal class CanvasExportController(
     private val currentProject: () -> Pair<Long, String>,
     private val onDocumentSaved: () -> Unit,
 ) {
+    fun reset() {
+        state.value = ExportUiState.Idle
+    }
+
+    fun availableFormats(
+        uiState: CanvasUiState,
+        hasModel: Boolean,
+    ): List<ExportFormat> =
+        if ((uiState as? CanvasUiState.Ready)?.frameCount ?: 1 > 1) {
+            ExportFormat.stillFormats() + ExportFormat.animationFormats()
+        } else {
+            ExportFormat.stillFormats()
+        } + listOfNotNull(ExportFormat.MODEL_OBJ.takeIf { hasModel })
+
     fun export(options: ExportOptions) {
         val (projectId, name) = currentProject()
         run(projectId, "Export failed") {

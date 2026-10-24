@@ -1,6 +1,7 @@
 package com.artflow.studio.presentation.ui.viewmodel
 
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.three.MaterialChannel
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -25,6 +26,8 @@ class CanvasPreviewController(
 ) {
     private val _preview = MutableStateFlow<PixelBuffer?>(null)
     val preview: StateFlow<PixelBuffer?> = _preview.asStateFlow()
+    private val _materialMaps = MutableStateFlow<Map<MaterialChannel, PixelBuffer>>(emptyMap())
+    val materialMaps: StateFlow<Map<MaterialChannel, PixelBuffer>> = _materialMaps.asStateFlow()
     private var worker: Job? = null
     private val requests = Channel<Request>(Channel.CONFLATED)
     private var generation = 0L
@@ -70,6 +73,13 @@ class CanvasPreviewController(
                 val preview = withContext(renderDispatcher) { shrink(frame) }
                 if (request.generation == generation) _preview.value = preview
             }
+            val maps = mutableMapOf<MaterialChannel, PixelBuffer>()
+            MaterialChannel.entries.filter { it.isScalar }.forEach { channel ->
+                repository.compositeMaterial(channel, request.mode == Mode.PROVISIONAL)?.let { pixels ->
+                    maps[channel] = withContext(renderDispatcher) { shrink(pixels) }
+                }
+            }
+            if (request.generation == generation) _materialMaps.value = maps
             // One serial worker bounds raster work; a burst of moves retains only the latest request.
             if (request.mode == Mode.PROVISIONAL && request.generation == generation) delay(PROVISIONAL_INTERVAL_MS)
         }

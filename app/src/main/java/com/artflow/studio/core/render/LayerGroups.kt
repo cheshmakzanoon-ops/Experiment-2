@@ -1,6 +1,7 @@
 package com.artflow.studio.core.render
 
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.three.MaterialChannel
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.Layer
 
@@ -11,6 +12,26 @@ import com.artflow.studio.domain.model.layer.Layer
  * A mask or reduced group opacity also requires merging members before applying that coverage.
  */
 object LayerGroups {
+    /** A channel's leaves and ancestor folders; other channels cannot create empty clipping bases. */
+    fun channelIds(
+        layers: List<Layer>,
+        channel: MaterialChannel,
+    ): Set<Long> {
+        val groups = layers.filter { it.isGroup }.associateBy { it.id }
+        val occupied = mutableSetOf<Long>()
+        val included = mutableSetOf<Long>()
+        layers.filterNot { it.isGroup }.forEach { layer ->
+            val parents = ancestors(layer, groups).map { it.id }
+            occupied.addAll(parents)
+            if (layer.materialChannel == channel) {
+                included.add(layer.id)
+                included.addAll(parents)
+            }
+        }
+        if (channel == MaterialChannel.COLOR) included.addAll(groups.keys - occupied)
+        return included
+    }
+
     /**
      * One step of the stack: a layer, or an isolated group whose [members] are merged first. A group's
      * [mask] is applied to that merged result.

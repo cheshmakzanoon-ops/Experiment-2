@@ -6,7 +6,7 @@ inventory in [`README.md`](README.md).
 
 ## Before you start
 
-- Read the ["Project status"](README.md#-project-status) and ["Known gaps"](README.md#-known-gaps)
+- Read the ["Current development"](README.md#current-development--24-october-2026) and ["Capability boundaries"](README.md#capability-boundaries)
   sections first. They list exactly which features exist and which do not, so you do not spend time
   rebuilding something that is already shipped.
 - Anything listed as *not implemented* there is a welcome target.
@@ -41,7 +41,7 @@ narrows it). It is a quick check, not a substitute for the Gradle tasks above.
 
 Release builds need signing credentials in a git-ignored `keystore.properties` at the repository
 root; without it `./gradlew assembleRelease` produces an unsigned APK. See
-["Building for release"](README.md#-building-for-release). Use
+["Signed releases"](README.md#signed-releases). Use
 `./gradlew bundleRelease -PrequireReleaseSigning=true` for a production signing request; it must
 fail when credentials are missing. Never commit or upload private signing keys.
 

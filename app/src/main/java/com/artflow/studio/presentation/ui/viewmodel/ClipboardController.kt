@@ -3,6 +3,7 @@ package com.artflow.studio.presentation.ui.viewmodel
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionClipboard
 import com.artflow.studio.core.pixels.SelectionMask
+import com.artflow.studio.core.three.MaterialChannel
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,6 +20,7 @@ class ClipboardController(
     private val perform: (suspend () -> Unit) -> Unit,
 ) {
     private var image: PixelBuffer? = null
+    private var imageChannel = MaterialChannel.COLOR
     private val _hasContent = MutableStateFlow(false)
     val hasContent: StateFlow<Boolean> = _hasContent.asStateFlow()
 
@@ -28,14 +30,16 @@ class ClipboardController(
 
     fun copyAndPaste() =
         perform {
-            copyLayer(cut = false)
-            pasteAsLayer()
+            image = repository.copySelectionToLayer(cut = false)
+            imageChannel = repository.getActiveLayer()?.materialChannel ?: MaterialChannel.COLOR
+            _hasContent.value = true
         }
 
     fun cutAndPaste() =
         perform {
-            copyLayer(cut = true)
-            pasteAsLayer()
+            image = repository.copySelectionToLayer(cut = true)
+            imageChannel = repository.getActiveLayer()?.materialChannel ?: MaterialChannel.COLOR
+            _hasContent.value = true
         }
 
     /** Copy All: the visible artwork (all layers merged) inside the selection. */
@@ -44,6 +48,7 @@ class ClipboardController(
             val composite = checkNotNull(repository.compositeBuffer()) { "Nothing to copy" }
             val selection = requireCopiableSelection()
             image = withContext(Dispatchers.Default) { SelectionClipboard.extract(composite, selection) }
+            imageChannel = MaterialChannel.COLOR
             _hasContent.value = true
         }
 
@@ -81,17 +86,23 @@ class ClipboardController(
     }
 
     private suspend fun copyLayer(cut: Boolean) {
+        if (cut) {
+            image = repository.cutSelection()
+            imageChannel = repository.getActiveLayer()?.materialChannel ?: MaterialChannel.COLOR
+            _hasContent.value = true
+            return
+        }
         val layerId = repository.getActiveLayerId()
+        val channel = repository.getActiveLayer()?.materialChannel ?: MaterialChannel.COLOR
         val selection = requireCopiableSelection()
         val pixels = checkNotNull(repository.layerPixels(layerId)) { "This layer has no pixels to copy" }
         image = withContext(Dispatchers.Default) { SelectionClipboard.extract(pixels, selection) }
+        imageChannel = channel
         _hasContent.value = true
-        if (cut) repository.applyRasterEdit(layerId, "Cut") { SelectionClipboard.erase(it, selection) }
     }
 
     private suspend fun pasteAsLayer() {
         val copied = image ?: error("Nothing has been copied yet")
-        val layer = repository.addLayer(name = "Pasted")
-        repository.applyRasterEdit(layer.id, "Paste") { target -> target.drawInto(copied, 0, 0) }
+        repository.pasteLayer(copied, imageChannel)
     }
 }

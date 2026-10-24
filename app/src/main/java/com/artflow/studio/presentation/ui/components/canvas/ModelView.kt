@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.opengl.GLSurfaceView
 import android.os.Build
 import android.view.MotionEvent
+import com.artflow.studio.core.three.MaterialChannel
 import com.artflow.studio.core.three.Mesh
 import com.artflow.studio.core.three.MeshPicker
 import com.artflow.studio.core.three.ModelLighting
@@ -114,6 +115,15 @@ class ModelView(
     /** Paints the model with a copy of [artwork]. */
     fun setTexture(artwork: Bitmap) {
         renderer.setTexture(artwork.copy(Bitmap.Config.ARGB_8888, false))
+        requestRender()
+    }
+
+    /** Each data map is independent from the color texture; missing maps use the channel default. */
+    fun setMaterialMaps(maps: Map<MaterialChannel, Bitmap>) {
+        renderer.setMaterialMaps(
+            maps[MaterialChannel.METALLIC]?.copy(Bitmap.Config.ARGB_8888, false),
+            maps[MaterialChannel.ROUGHNESS]?.copy(Bitmap.Config.ARGB_8888, false),
+        )
         requestRender()
     }
 

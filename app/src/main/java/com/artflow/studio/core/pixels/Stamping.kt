@@ -391,16 +391,17 @@ object Stamping {
         val grain: ((Int, Int) -> Float)? = null,
     )
 
-    /** Reads a circular patch into a (2r+1)^2 buffer so it can be written back displaced. */
+    /** Reads a patch into a (2r+1)^2 buffer, reusing an exactly sized scratch when supplied. */
     fun readPatch(
         source: PixelBuffer,
         centerX: Float,
         centerY: Float,
         radius: Float,
+        reusablePatch: IntArray? = null,
     ): IntArray {
         val r = ceil(radius).toInt()
         val size = r * 2 + 1
-        val patch = IntArray(size * size)
+        val patch = reusablePatch?.takeIf { it.size == size * size } ?: IntArray(size * size)
         for (dy in -r..r) {
             for (dx in -r..r) {
                 patch[(dy + r) * size + (dx + r)] =
