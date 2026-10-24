@@ -3,6 +3,7 @@ package com.artflow.studio.core.pixels
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Base64
 
@@ -27,6 +28,24 @@ class SelectionMaskCodecTest {
         assertEquals(true, decoded.isFull())
     }
 
+    /** Raw 2048 × 2048 coverage is 4 MB; a full-canvas selection must not cost that per save. */
+    @Test
+    fun aFullCanvasMaskStaysSmallOnDisk() {
+        val mask = SelectionMask(2048, 2048).apply { selectAll() }
+        val encoded = SelectionMaskCodec.encode(mask)
+
+        assertTrue("Encoded ${encoded.length} characters", encoded.length < 64 * 1024)
+        assertEquals(true, requireNotNull(SelectionMaskCodec.decode(encoded, 2048, 2048)).isFull())
+    }
+
+    @Test
+    fun noisyCoverageStillRoundTrips() {
+        val mask = SelectionMask(64, 64)
+        for (i in mask.coverage.indices) mask.coverage[i] = (i * 37 + i / 5).toByte()
+        val decoded = requireNotNull(SelectionMaskCodec.decode(SelectionMaskCodec.encode(mask), 64, 64))
+        assertArrayEquals(mask.coverage, decoded.coverage)
+    }
+
     @Test
     fun aMaskForAnotherCanvasIsRejectedInsteadOfStretched() {
         val encoded = SelectionMaskCodec.encode(SelectionMask(4, 4))
@@ -41,5 +60,13 @@ class SelectionMaskCodecTest {
         val bytes = Base64.getDecoder().decode(encoded)
         bytes[0] = 'X'.code.toByte()
         assertNull("Foreign header", SelectionMaskCodec.decode(Base64.getEncoder().encodeToString(bytes), 4, 4))
+        val garbage = bytes.copyOf()
+        garbage[HEADER] = 0x7F
+        garbage[HEADER + 1] = 0x7F
+        assertNull("Broken deflate stream", SelectionMaskCodec.decode(Base64.getEncoder().encodeToString(garbage), 4, 4))
+    }
+
+    private companion object {
+        const val HEADER = 12
     }
 }
