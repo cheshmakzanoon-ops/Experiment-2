@@ -155,8 +155,11 @@ class PsdMaskExportTest {
 
     @Test
     fun activeFolderMaskKeepsTheCompositorsIsolatedGroupSemantics() {
-        val group = Layer(9, "Group", 0, isGroup = true, hasInMemoryMask = true)
+        val group = Layer(9, "Group", 0, isGroup = true, blendMode = BlendMode.PASS_THROUGH, hasInMemoryMask = true)
         assertEquals(BlendMode.NORMAL, PsdFolders.headerBlend(group))
         assertEquals(BlendMode.PASS_THROUGH, PsdFolders.headerBlend(group.copy(maskEnabled = false)))
+        val normal = group.copy(blendMode = BlendMode.NORMAL)
+        assertEquals(BlendMode.NORMAL, PsdFolders.headerBlend(normal))
+        assertEquals(BlendMode.NORMAL, PsdFolders.headerBlend(normal.copy(maskEnabled = false)))
     }
 }

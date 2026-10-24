@@ -209,7 +209,7 @@ class CanvasDocumentCodecTest {
         CanvasDocumentCodec.requireValidHeader(document)
         CanvasDocumentCodec.requireValidStructure(document)
 
-        assertEquals(1, document.version)
+        assertEquals(CanvasDocument.CURRENT_VERSION, document.version)
         assertTrue(document.frames.isEmpty())
         val frames = document.resolvedFrames()
         assertEquals(1, frames.size)

@@ -3,9 +3,11 @@ package com.artflow.studio.core.render
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.domain.model.brush.BrushLibraryCodec
 import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.ColorDynamics
 import com.artflow.studio.domain.model.brush.SavedBrush
 import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.model.brush.StrokePoint
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -65,10 +67,11 @@ class BrushTiltTest {
     private fun dab(
         params: BrushParams,
         azimuth: Float = 0f,
+        color: Int = black,
     ): PixelBuffer =
         PixelBuffer(41, 41).also { canvas ->
             val point = StrokePoint(20.5f, 20.5f, 1f, tiltX = flat, tiltY = azimuth, timestamp = 0L)
-            StrokeRasterizer().draw(canvas, Stroke(id = 9, points = listOf(point), brushParams = params, layerId = 1, color = black))
+            StrokeRasterizer().draw(canvas, Stroke(id = 9, points = listOf(point), brushParams = params, layerId = 1, color = color))
         }
 
     @Test fun tiltToRotationTurnsAFlatTipWithThePen() {
@@ -84,6 +87,51 @@ class BrushTiltTest {
         val chisel = BrushParams(size = 24f, roundness = 0.2f, spacing = 0.1f)
         assertTrue(alpha(dab(chisel, flat), 28, 20) > 0)
         assertEquals(0, alpha(dab(chisel, flat), 20, 28))
+    }
+
+    @Test fun tipRotationInterpolatesBetweenPenSamples() {
+        val chisel = BrushParams(size = 12f, roundness = 0.2f, spacing = 2.5f, tiltToRotation = true)
+        val points =
+            listOf(
+                StrokePoint(10.5f, 20.5f, tiltY = 0f, timestamp = 0L),
+                StrokePoint(70.5f, 20.5f, tiltY = flat, timestamp = 60L),
+            )
+
+        fun paint(samples: List<StrokePoint>): PixelBuffer =
+            PixelBuffer(82, 41).also {
+                StrokeRasterizer().draw(it, Stroke(id = 9, points = samples, brushParams = chisel, layerId = 1, color = black))
+            }
+
+        val midpoint = StrokePoint(40.5f, 20.5f, tiltY = flat / 2f, timestamp = 30L)
+        assertArrayEquals(paint(listOf(points.first(), midpoint, points.last())).pixels, paint(points).pixels)
+    }
+
+    @Test fun tipRotationCrossesTheAngleBoundaryWithTheShortTurn() {
+        val chisel = BrushParams(size = 20f, roundness = 0.1f, spacing = 0.75f, tiltToRotation = true)
+        val angle = Math.toRadians(170.0).toFloat()
+        val points =
+            listOf(
+                StrokePoint(10.5f, 20.5f, tiltY = angle, timestamp = 0L),
+                StrokePoint(70.5f, 20.5f, tiltY = -angle, timestamp = 60L),
+            )
+        val actual =
+            PixelBuffer(82, 41).also {
+                StrokeRasterizer().draw(it, Stroke(id = 9, points = points, brushParams = chisel, layerId = 1, color = black))
+            }
+        // The middle dab faces 180 degrees. Adopting the end sample would move this pixel
+        // from the strong centre of the narrow tip into its soft outer edge.
+        assertTrue(alpha(actual, 44, 20) > 180)
+        assertEquals(0, alpha(actual, 40, 29))
+        assertEquals("a quarter-turn sample must not take the long route through 85 degrees", 0, alpha(actual, 25, 26))
+    }
+
+    @Test fun zeroSpacingStillAppliesTiltColourDynamics() {
+        val colourTilt = BrushParams(size = 24f, colorDynamics = ColorDynamics(tiltBrightness = 1f))
+        val color = 0xFFE04020.toInt()
+        assertArrayEquals(
+            dab(colourTilt.copy(spacing = 0.1f), color = color).pixels,
+            dab(colourTilt.copy(spacing = 0f), color = color).pixels,
+        )
     }
 
     @Test fun anImportedTipTurnsWithItsRotation() {

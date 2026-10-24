@@ -1,5 +1,19 @@
 # Release readiness and evidence
 
+## Current emulator acceptance contract — 24 October 2026
+
+[Emulator acceptance and parity corrections](EMULATOR_PARITY_2026-10-24.md) records the current
+changes and their compatibility boundaries. Each of the six device jobs must account for every
+declared instrumentation case, pass its permitted API-specific skip rules, measure its requested
+runtime and complete the minified launch. Its artifact includes `verification.json` and
+`verification.md`. These generated results and the exact commit's Actions conclusion supersede
+historical status statements below; code or workflow presence does not constitute an executed pass.
+
+The app now writes `.artflow` v3 so new Normal-group semantics cannot be misread by old builds.
+Existing v1/v2 documents migrate after checksum verification. Native `.procreate` group metadata
+still uses a bounded appearance fallback where necessary. No production signing, store publication,
+physical-device qualification or complete Procreate equivalence is asserted by these changes.
+
 This is a verification record, not a certification that an app has no bugs. `agent.md` preserves
 all 50 original development phases. The currently implemented offline editor is narrower than
 that roadmap; the missing features listed below have **not** been silently removed from the goals.

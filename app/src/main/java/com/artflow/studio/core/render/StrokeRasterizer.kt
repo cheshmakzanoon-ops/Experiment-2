@@ -383,9 +383,9 @@ class StrokeRasterizer(
         // Speed of the last segment that had elapsed time; a segment without any keeps it.
         var velocity = 0f
 
-        // Travelled value of the most recently stamped dab, used to avoid stamping the path end
-        // twice when the spacing grid already lands exactly on it.
-        var lastDabTravelled = Float.NaN
+        // Distance along the entire path of the most recent dab. A short segment can have no dabs,
+        // so a segment-local position cannot tell whether the spacing grid reached the path end.
+        var lastDabDistance = Float.NaN
 
         // Wet paint the brush carries from dab to dab when pull is on; null before the first dab.
         var carried: Int? = null
@@ -416,7 +416,7 @@ class StrokeRasterizer(
             var travelled = walk.carry
             while (travelled <= distance) {
                 drawDabAt(context, walk, previous, current, travelled / distance, distance, walk.accumulated + travelled, velocity)
-                walk.lastDabTravelled = travelled
+                walk.lastDabDistance = walk.accumulated + travelled
                 travelled += dabSpacing(context, previous, current, travelled / distance, walk.accumulated + travelled, velocity)
             }
             walk.carry = travelled - distance
@@ -465,7 +465,7 @@ class StrokeRasterizer(
         val endDx = last.x - lastPrevious.x
         val endDy = last.y - lastPrevious.y
         val endDistance = sqrt(endDx * endDx + endDy * endDy)
-        if (endDistance > 0.0001f && walk.lastDabTravelled != endDistance) {
+        if (endDistance > 0.0001f && walk.lastDabDistance != walk.accumulated) {
             drawDabAt(context, walk, lastPrevious, last, 1f, endDistance, walk.accumulated, walk.velocity)
         }
     }
@@ -521,8 +521,7 @@ class StrokeRasterizer(
             opacity * (1f - params.taperOpacity.coerceIn(0f, 1f) * (1f - taper)) * falloffFactor(params, accumulatedDistance) *
                 (1f - DILUTION_THINNING * params.dilution.coerceIn(0f, 1f))
         val rendering = params.rendering
-        // Intense rendering lays down more paint per dab: twice as much of what is left to cover.
-        val dabOpacity = if (rendering.intense) 1f - (1f - plainOpacity).let { it * it } else plainOpacity
+        val dabOpacity = renderingOpacity(plainOpacity, params)
 
         // Pull keeps some of the paint the brush already carries instead of reloading the fresh colour.
         // Per-stroke jitter draws from a sequence that restarts at every dab, so each dab gets the same colour.
@@ -550,6 +549,7 @@ class StrokeRasterizer(
         val most = params.count.coerceIn(1, 32)
         val jitter = params.countJitter.coerceIn(0f, 1f)
         val dabs = if (jitter > 0f && most > 1) most - (random.nextFloat() * jitter * most).toInt().coerceAtMost(most - 1) else most
+        val azimuth = if (params.tiltToRotation) interpolatedAzimuth(previous.tiltY, current.tiltY, t) else 0f
         repeat(dabs) { index ->
             val scatter = params.scatter.coerceIn(0f, 4f) * params.size
             val jitterX = if (scatter > 0f) ((random.nextFloat() * 2f - 1f) * scatter / 2f) else 0f
@@ -570,11 +570,11 @@ class StrokeRasterizer(
                     ),
                 strength = 1f,
                 // Flow controls deposited coverage. Glazing caps it within a stroke; blending builds it up.
-                hardness = if (rendering.uniformEdges) 1f else hardnessForFlow(params),
+                hardness = hardnessFor(params),
                 mode = if (rendering.blending) Stamping.Mode.SOURCE_OVER else Stamping.Mode.MAX_COVERAGE,
                 alphaLock = alphaLock,
                 mask = mask,
-                tip = tipFor(context.tip, params, current, random),
+                tip = tipFor(context.tip, params, azimuth, random),
             )
             dabCount.incrementAndGet()
         }
@@ -584,12 +584,12 @@ class StrokeRasterizer(
     private fun tipFor(
         tip: Stamping.TipShape,
         params: BrushParams,
-        point: StrokePoint,
+        azimuth: Float,
         random: Random,
     ): Stamping.TipShape {
         val turned =
             if (params.tiltToRotation) {
-                tip.copy(angleDegrees = tip.angleDegrees + Math.toDegrees(point.tiltY.toDouble()).toFloat())
+                tip.copy(angleDegrees = tip.angleDegrees + Math.toDegrees(azimuth.toDouble()).toFloat())
             } else {
                 tip
             }
@@ -598,6 +598,18 @@ class StrokeRasterizer(
         val image = turned.image
         if (image == null || (!flipX && !flipY)) return turned
         return turned.copy(image = { u, v -> image(if (flipX) 1f - u else u, if (flipY) 1f - v else v) })
+    }
+
+    /** Follow the shortest turn between input samples, including a pen crossing the angle boundary. */
+    private fun interpolatedAzimuth(
+        start: Float,
+        end: Float,
+        fraction: Float,
+    ): Float {
+        var turn = (end - start) % FULL_TURN_RADIANS
+        if (turn > Math.PI.toFloat()) turn -= FULL_TURN_RADIANS
+        if (turn < -Math.PI.toFloat()) turn += FULL_TURN_RADIANS
+        return start + turn * fraction
     }
 
     /** The fresh colour mixed toward the paint still on the brush; alpha stays the fresh colour's. */
@@ -634,6 +646,7 @@ class StrokeRasterizer(
         points: List<StrokePoint>,
     ): Boolean =
         params.spacing <= 0f &&
+            !params.rendering.blending &&
             params.roundness >= 1f &&
             !params.picksUpCanvas &&
             params.dilution <= 0f &&
@@ -660,6 +673,9 @@ class StrokeRasterizer(
                 params.secondaryPressure,
                 params.secondaryJitter,
                 params.pressureToFlow,
+                params.colorDynamics.tiltHue,
+                params.colorDynamics.tiltSaturation,
+                params.colorDynamics.tiltBrightness,
             ).all { it == 0f }
 
     private fun drawSegment(
@@ -677,6 +693,7 @@ class StrokeRasterizer(
         val startAlpha = params.calculateEffectiveOpacity(start.pressure, random = random) * params.flowAt(start.pressure)
         val endAlpha = params.calculateEffectiveOpacity(end.pressure, random = random) * params.flowAt(end.pressure)
         val averageAlpha = (startAlpha + endAlpha) / 2f
+        val strength = params.rendering.strength
         val color =
             params.applyColorJitter(
                 stroke.color,
@@ -694,9 +711,9 @@ class StrokeRasterizer(
                 color =
                     Channels.withAlpha(
                         color,
-                        (Channels.alpha(color) * startAlpha * params.effectiveRenderingMode.strength).roundToInt().coerceIn(0, 255),
+                        (Channels.alpha(color) * renderingOpacity(startAlpha, params) * strength).roundToInt().coerceIn(0, 255),
                     ),
-                hardness = hardnessForFlow(params),
+                hardness = hardnessFor(params),
                 mode = Stamping.Mode.MAX_COVERAGE,
                 alphaLock = alphaLock,
                 mask = mask,
@@ -716,9 +733,9 @@ class StrokeRasterizer(
             color =
                 Channels.withAlpha(
                     color,
-                    (Channels.alpha(color) * averageAlpha * params.effectiveRenderingMode.strength).roundToInt().coerceIn(0, 255),
+                    (Channels.alpha(color) * renderingOpacity(averageAlpha, params) * strength).roundToInt().coerceIn(0, 255),
                 ),
-            hardness = hardnessForFlow(params),
+            hardness = hardnessFor(params),
             mode = Stamping.Mode.MAX_COVERAGE,
             alphaLock = alphaLock,
             mask = mask,
@@ -726,8 +743,15 @@ class StrokeRasterizer(
         dabCount.incrementAndGet()
     }
 
-    /** Low flow spreads the paint more softly, mirroring how an airbrush behaves. */
-    private fun hardnessForFlow(params: BrushParams): Float {
+    /** Intense modes lay down more paint; both a dab and a zero-spacing capsule use the same transfer. */
+    private fun renderingOpacity(
+        opacity: Float,
+        params: BrushParams,
+    ): Float = if (params.rendering.intense) 1f - (1f - opacity).let { it * it } else opacity
+
+    /** Uniform edges stay hard at low flow; other modes soften as their paint flow decreases. */
+    private fun hardnessFor(params: BrushParams): Float {
+        if (params.rendering.uniformEdges) return 1f
         val flow = params.flow.coerceIn(0f, 1f)
         return (0.45f + 0.55f * flow).coerceIn(0.1f, 1f)
     }
@@ -941,6 +965,8 @@ private const val FALLOFF_RANGE = 39f
 
 /** Degrees in a full turn, for a randomized tip angle. */
 private const val FULL_TURN = 360f
+
+private const val FULL_TURN_RADIANS = (Math.PI * 2).toFloat()
 
 /** Tip sharpness at full raises the taper ramp to this extra power. */
 private const val SHARPNESS_CURVE = 3f

@@ -1,6 +1,5 @@
 package com.artflow.studio
 
-import android.graphics.Bitmap
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalDensity
@@ -10,7 +9,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewModelScope
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.data.export.ArtworkExporter
@@ -40,7 +38,6 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.io.File
 import javax.inject.Inject
 
 /** Real editor plus actual tool palette; screenshots are execution evidence, not design mockups. */
@@ -274,14 +271,5 @@ class StudioWorkspaceUiTest {
         }
     }
 
-    private fun screenshot(name: String) {
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val directory = File(instrumentation.targetContext.getExternalFilesDir(null), "test-evidence").apply { mkdirs() }
-        val bitmap = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
-        try {
-            File(directory, name).outputStream().use { stream -> assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)) }
-        } finally {
-            bitmap.recycle()
-        }
-    }
+    private fun screenshot(name: String) = TestEvidence.screenshot(name)
 }

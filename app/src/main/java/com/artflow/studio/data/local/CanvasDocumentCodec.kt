@@ -4,6 +4,7 @@ import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.domain.model.animation.AnimationFrame
 import com.artflow.studio.domain.model.animation.AnimationSettings
 import com.artflow.studio.domain.model.animation.TimelapseRecording
+import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.Layer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -17,6 +18,8 @@ import java.security.MessageDigest
  * - **v2** adds per-layer pixel files ([Layer.rasterFile]), layer masks, adjustment/filter layer
  *   parameters, animation frames and the timelapse recording. v1 documents still load: their
  *   single layer list becomes frame 0.
+ * - **v3** distinguishes isolated Normal groups from Pass Through groups. Older opaque,
+ *   unmasked Normal groups are migrated to Pass Through to preserve their rendered appearance.
  *
  * Kept in the data layer because it is purely a storage concern.
  */
@@ -73,7 +76,7 @@ data class CanvasDocument(
 
     companion object {
         /** Bump when the JSON shape changes in a way that needs migration code. */
-        const val CURRENT_VERSION = 2
+        const val CURRENT_VERSION = 3
     }
 }
 
@@ -113,10 +116,28 @@ object CanvasDocumentCodec {
      */
     fun decode(text: String): CanvasDocument {
         val document = json.decodeFromString(CanvasDocument.serializer(), text)
-        val stored = document.checksum ?: return document
         val unsigned = document.copy(checksum = null)
-        require(checksumOf(unsigned) == stored) { "The project data does not match its checksum" }
-        return unsigned
+        document.checksum?.let { stored ->
+            // Verify the original representation before changing its version or group semantics.
+            require(checksumOf(unsigned) == stored) { "The project data does not match its checksum" }
+        }
+        return migrateGroups(unsigned)
+    }
+
+    private fun migrateGroups(document: CanvasDocument): CanvasDocument {
+        if (document.version !in 1..2) return document
+
+        fun migrate(layer: Layer): Layer {
+            if (!layer.isGroup || layer.blendMode != BlendMode.NORMAL) return layer
+            if (layer.opacity != 1f || layer.hasActiveMask()) return layer
+            return layer.copy(blendMode = BlendMode.PASS_THROUGH)
+        }
+
+        return document.copy(
+            version = CanvasDocument.CURRENT_VERSION,
+            layers = document.layers.map(::migrate),
+            frames = document.frames.map { frame -> frame.copy(layers = frame.layers.map(::migrate)) },
+        )
     }
 
     private fun checksumOf(document: CanvasDocument): String =

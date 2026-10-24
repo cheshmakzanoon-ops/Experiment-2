@@ -2,6 +2,7 @@
 
 package com.artflow.studio.presentation.ui.components.layer
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,10 +16,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.artflow.studio.R
+import com.artflow.studio.core.pixels.BlendModes
 import com.artflow.studio.domain.model.layer.BlendMode
 
 /**
@@ -30,25 +36,18 @@ fun BlendModeSelectorDialog(
     currentBlendMode: BlendMode,
     onBlendModeSelected: (BlendMode) -> Unit,
     onDismiss: () -> Unit,
+    isGroup: Boolean = false,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(stringResource(R.string.blendmodeselector_blend_mode))
-                Badge {
-                    Text(stringResource(R.string.blendmodeselector_phase_12))
-                }
-            }
+            Text(stringResource(R.string.blendmodeselector_blend_mode))
         },
         text = {
             BlendModeGrid(
                 selectedBlendMode = currentBlendMode,
                 onBlendModeSelected = onBlendModeSelected,
+                isGroup = isGroup,
                 modifier =
                     Modifier
                         .fillMaxWidth()
@@ -71,8 +70,9 @@ private fun BlendModeGrid(
     selectedBlendMode: BlendMode,
     onBlendModeSelected: (BlendMode) -> Unit,
     modifier: Modifier = Modifier,
+    isGroup: Boolean = false,
 ) {
-    val blendModes = BlendMode.entries.filter { it != BlendMode.PASS_THROUGH }
+    val blendModes = BlendMode.entries.filter { isGroup || it != BlendMode.PASS_THROUGH }
 
     LazyVerticalGrid(
         columns = GridCells.Fixed(3),
@@ -160,72 +160,33 @@ private fun BlendModeChip(
     }
 }
 
-/**
- * Visual preview showing blend mode effect
- */
+/** The same two colours in every chip, blended by the canvas engine rather than illustrative tints. */
 @Composable
-private fun BlendModePreview(
+internal fun BlendModePreview(
     blendMode: BlendMode,
     modifier: Modifier = Modifier,
 ) {
-    Box(
-        modifier = modifier,
-        contentAlignment = Alignment.Center,
-    ) {
-        // Base layer (white background)
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .background(Color.White),
+    val overlap =
+        remember(blendMode) {
+            Color(BlendModes.previewBlend(0xFFC08040.toInt(), 0xFF4080C0.toInt(), blendMode))
+        }
+    val description = stringResource(R.string.blendmodeselector_preview, blendMode.displayName)
+    Canvas(modifier = modifier.semantics { contentDescription = description }) {
+        drawRect(Color(0xFFE8E8E8))
+        drawRect(
+            color = Color(0xFFC08040),
+            topLeft = Offset(size.width * 0.08f, size.height * 0.08f),
+            size = Size(size.width * 0.62f, size.height * 0.62f),
         )
-
-        // Sample gradient overlay to show blend effect
-        Box(
-            modifier =
-                Modifier
-                    .size(24.dp)
-                    .background(
-                        brush =
-                            androidx.compose.ui.graphics.Brush.radialGradient(
-                                colors =
-                                    listOf(
-                                        Color(0xFFFF6B5C),
-                                        Color(0xFFFF6B5C).copy(alpha = 0.5f),
-                                        Color.Transparent,
-                                    ),
-                            ),
-                        shape = RoundedCornerShape(4.dp),
-                    ),
+        drawRect(
+            color = Color(0xFF4080C0),
+            topLeft = Offset(size.width * 0.38f, size.height * 0.38f),
+            size = Size(size.width * 0.54f, size.height * 0.54f),
         )
-
-        // Overlay color to demonstrate blending
-        Box(
-            modifier =
-                Modifier
-                    .size(16.dp)
-                    .background(
-                        color =
-                            when (blendMode) {
-                                BlendMode.MULTIPLY -> Color(0xFF4A90D9).copy(alpha = 0.6f)
-                                BlendMode.SCREEN -> Color(0xFFD94A90).copy(alpha = 0.6f)
-                                BlendMode.OVERLAY -> Color(0xFF90D94A).copy(alpha = 0.6f)
-                                BlendMode.DARKEN -> Color(0xFFD9A04A).copy(alpha = 0.6f)
-                                BlendMode.LIGHTEN -> Color(0xFF4AD9D9).copy(alpha = 0.6f)
-                                BlendMode.COLOR_DODGE -> Color(0xFFFFD94A).copy(alpha = 0.6f)
-                                BlendMode.COLOR_BURN -> Color(0xFFD94A4A).copy(alpha = 0.6f)
-                                BlendMode.HARD_LIGHT -> Color(0xFFA04AD9).copy(alpha = 0.6f)
-                                BlendMode.SOFT_LIGHT -> Color(0xFF4AD9A0).copy(alpha = 0.6f)
-                                BlendMode.DIFFERENCE -> Color(0xFFD94AD9).copy(alpha = 0.6f)
-                                BlendMode.EXCLUSION -> Color(0xFF888888).copy(alpha = 0.6f)
-                                BlendMode.HUE -> Color(0xFFFF8844).copy(alpha = 0.6f)
-                                BlendMode.SATURATION -> Color(0xFF44FF88).copy(alpha = 0.6f)
-                                BlendMode.COLOR -> Color(0xFF4488FF).copy(alpha = 0.6f)
-                                BlendMode.LUMINOSITY -> Color(0xFFFF4488).copy(alpha = 0.6f)
-                                else -> Color.Gray.copy(alpha = 0.5f)
-                            },
-                        shape = RoundedCornerShape(2.dp),
-                    ),
+        drawRect(
+            color = overlap,
+            topLeft = Offset(size.width * 0.38f, size.height * 0.38f),
+            size = Size(size.width * 0.32f, size.height * 0.32f),
         )
     }
 }

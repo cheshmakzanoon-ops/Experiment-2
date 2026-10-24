@@ -1,3 +1,20 @@
+### Emulator acceptance and parity corrections (24 October 2026)
+
+[The implementation and acceptance record](docs/EMULATOR_PARITY_2026-10-24.md) covers corrected
+stroke endpoints, zero-spacing rendering modes, interpolated pen orientation, active-layer
+Automatic selection, explicit Normal/Pass Through group compositing, and accurate blend-mode
+previews. `.artflow` v3 migrates older group behavior without changing existing artwork; older app
+builds cannot read new v3 documents. PSD preserves group modes. Unsupported native `.procreate`
+group metadata uses a rendered appearance layer with hidden editable sources.
+
+The full six-lane GitHub Actions emulator matrix now requires every declared device test to appear
+in its results, permits only documented API-specific skips, verifies the actual API/page size and
+minified launch, and publishes `verification.json` / `verification.md` plus a job-summary table.
+New device cases cover saved-selection persistence, pixel-exact PNG export, selection source,
+group interchange, brush endpoints and the blend picker. The narrow Android-runtime retry rule
+cannot discard failures encoded in JUnit attributes. Read the **exact commit's completed workflow**
+for execution results; **complete Procreate quality and feature parity remains unestablished**.
+
 ### Selection, clipboard and crop corrections (23 October 2026)
 
 Three gaps recorded in the 19 September parity sweep are closed:

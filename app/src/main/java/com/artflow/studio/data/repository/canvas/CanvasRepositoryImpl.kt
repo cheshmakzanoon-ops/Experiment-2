@@ -1696,6 +1696,8 @@ class CanvasRepositoryImpl
                 val group =
                     LayerData(id = groupId, name = "Group ${layers.count { it.isGroup } + 1}").apply {
                         isGroup = true
+                        // Organising layers must not change their blends with the existing backdrop.
+                        blendMode = BlendMode.PASS_THROUGH
                         parentGroupId = roots.last().parentGroupId
                     }
                 // Keep members contiguous, in stack order, where the topmost member used to be.

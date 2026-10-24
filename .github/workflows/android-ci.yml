@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-      # Temporary: runs the full build and device matrix on the active agent branch.
-      - freebuff/a4328b0f1686f06ea6bd008a
   pull_request:
   workflow_dispatch:
 
@@ -255,6 +253,23 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -memory 4096
           script: bash .github/scripts/run-device-tests.sh
+      - name: Verify complete device coverage and publish evidence summary
+        if: always()
+        env:
+          EXPECTED_API: ${{ matrix.api }}
+          EXPECTED_PAGE_SIZE: ${{ matrix.page_size }}
+        run: |
+          status=0
+          python .github/scripts/summarize_device_results.py \
+            --source app/src/androidTest/java \
+            --results app/build/outputs/androidTest-results/connected/debug \
+            --evidence app/build/outputs/connected_android_test_additional_output \
+            --launch "${RUNNER_TEMP}/artflow-device/minified-launch.txt" \
+            --api "$EXPECTED_API" --page-size "$EXPECTED_PAGE_SIZE" \
+            --revision "$(git rev-parse HEAD)" \
+            --output "${RUNNER_TEMP}/artflow-device" || status=$?
+          cat "${RUNNER_TEMP}/artflow-device/verification.md" >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
       - name: Upload device test results
         if: always()
         uses: actions/upload-artifact@v4

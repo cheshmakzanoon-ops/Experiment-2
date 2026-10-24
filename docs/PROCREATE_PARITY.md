@@ -1,5 +1,19 @@
 # ArtFlow / Procreate workflow comparison
 
+## Emulator acceptance and corrections — 24 October 2026
+
+The [current implementation and acceptance record](EMULATOR_PARITY_2026-10-24.md) covers brush
+sampling/rendering corrections, active-layer Automatic selection, distinct Normal/Pass Through
+group scopes, PSD interchange, v1/v2 document migration and accurate blend-picker examples.
+The six emulator lanes now compare actual results with every declared device test and publish
+exact-revision summaries. Saved selections are tested through real storage, reopening, constrained
+edits and independently decoded PNG exports. Consult the completed Actions run for the published
+revision; older dated execution statements below describe only their respective revisions.
+
+Native `.procreate` group blend/mask metadata remains incomplete: affected exports preserve the
+rendered appearance with editable sources hidden below it. Passing Android tests alone does not
+prove Procreate-native rendering, physical stylus quality or artist acceptance.
+
 ## Saved selections, device lane diagnosis — 24 October 2026
 
 Run 293's six emulator lanes had no readable cause in the repository. The workflow now publishes every
@@ -84,7 +98,7 @@ by artists is still outstanding for every row.
 | Transform | Freeform, Uniform, Distort and Warp with snapping [3] | On-canvas box with corner, edge and rotation handles; Freeform, Uniform, Distort and Warp (4 × 4 Bézier mesh); Magnetics (45° moves, 15° rotation, proportional corners) and Snapping to canvas edges and centre with guides; flip, rotate, fit, reset and interpolation choice | Device validation of large multi-layer moves; Move with a selection lifts only the selected pixels |
 | Layer organisation | Thumbnails, options, swipe actions, groups [4] | Thumbnails, tap-the-selected-layer options, swipe left for Lock/Duplicate/Delete, swipe right to multi-select then Group, Merge, Delete or Transform together, touch-and-hold drag reordering, two-finger swipe for Alpha Lock, two-finger tap then slide for opacity, two-finger hold to select contents, Background colour row with a visibility checkbox, all 26 blend modes in five families (darken, lighten, contrast, inversion, component; Linear Burn, Darker Color, Add, Lighter Color, Vivid, Linear and Pin Light, Hard Mix, Subtract and Divide included and kept through PSD), blend-mode codes, groups that nest (group groups; drag a layer or a whole group into or out of a group), whose blend mode and opacity apply to the merged group, editable text layers | Artist validation of deep group stacks; Merge Down bakes opacity and blend mode into pixels and does not carry alpha lock or clipping |
 | Reference companion | Floating canvas/image reference [5] | Movable window with a live Canvas view or an imported image, pan/zoom/fit and colour sampling | Artist validation of window placement on phones |
-| Selections and fill | Automatic/freehand/rectangle/ellipse, Save & Load, ColorDrop [6] | Automatic with slide-to-set threshold, freehand, rectangle, ellipse; Add/Remove; invert, feather, Save & Load, Colour Fill, Copy & Paste; ColorDrop with slide-to-set threshold and Continue Filling (each further tap fills another area at the same threshold), Reference layers that bound ColorDrop | Artist validation of fills over anti-aliased line art; automatic selection still samples every visible layer rather than the layer being edited |
+| Selections and fill | Automatic/freehand/rectangle/ellipse, Save & Load, ColorDrop [6] | Automatic samples the active layer with slide-to-set threshold, freehand, rectangle, ellipse; Add/Remove; invert, feather, Save & Load, Colour Fill, Copy & Paste; ColorDrop with slide-to-set threshold and Continue Filling (each further tap fills another area at the same threshold), Reference layers that bound ColorDrop | Artist validation of fills over anti-aliased line art and comparative reference-app selection thresholds |
 | Drawing assistance | QuickShape, grids, perspective and symmetry [7] | QuickShape lines, polylines, ellipses, triangles, rectangles and polygons, adjustable while held with 45° line snapping, and Edit Shape afterwards (drag line ends, corners or ellipse axis ends; the stroke is redrawn as one undo step); symmetry, perspective, isometric and grid guides that assist only layers with Drawing Assist; stabilization | Device validation of guide dragging and of the on-canvas handles on phones; artist review of guide defaults |
 | Colour | Disc, Classic, Harmony, Value, Palettes; ICC profiles [8] | Disc, Classic, Harmony, Value and Palettes tabs with history, a previous-colour swatch and a secondary colour swatch (tap to swap; brushes can blend toward it by pressure or per dab); palette import (ASE, GIMP, hex) and New from photo; sRGB or Display P3 canvas profile (New artwork or Actions > Canvas) shown correctly on screen, embedded as ICC in PNG and JPEG exports and converted to sRGB for other formats CMYK print proof on screen (process-ink simulation) with an option to grey out colours that won't print. | Artist validation of the print proof against real press output; Classic picker is HSB only, with RGB, CMYK and Hex in the Value tab |
 | Animation | Animation Assist timeline and onion skin [9] | Frame editing, duration/FPS, loop, one-shot and ping-pong; stable multiple background/foreground pins; hidden frames and previous/next onion colour controls; shared preview/export range and frame ordering; exact GIF colours when the palette fits | Artist-tested navigation and timing; reference hold-count semantics; `.procreate` animation metadata; long-animation performance and device MP4/APNG validation |
@@ -277,7 +291,7 @@ device lanes. CI on the pushed commit is the first real gate.
 **Open after the historical sweep** (subsequent changes are identified in the latest record above):
 - Liquify Freeze Mask has no UI; editing text drops its transform; word spacing and text on a curve have
   no UI.
-- Automatic selection samples every visible layer rather than the layer being edited.
+- Automatic selection now samples the active layer (24 October correction); comparative reference-app threshold validation remains.
 
 Closed since that sweep: Copy or Cut on an empty selection no longer pastes a blank layer, Remove
 without an existing selection no longer acts as Add, saved selections are stored with the document,

@@ -342,7 +342,7 @@
     <string name="brushparameterslider_value">Value</string>
     <string name="brushparameterslider_set_value">Set value</string>
     <string name="blendmodeselector_blend_mode">Blend Mode</string>
-    <string name="blendmodeselector_phase_12">Phase 12</string>
+    <string name="blendmodeselector_preview">%1$s blend preview</string>
     <string name="colorwheel_brightness">Brightness</string>
     <string name="privacypolicyentry_privacy_policy">Privacy policy</string>
     <string name="privacypolicyentry_artflow_privacy_policy">ArtFlow Privacy Policy</string>

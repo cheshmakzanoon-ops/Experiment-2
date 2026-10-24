@@ -272,7 +272,9 @@ object LayerImports {
     ) {
         if (source.opacity < 255) repository.setLayerOpacity(id, source.opacity / 255f)
         val blend = PsdFolders.importedBlend(source.blendMode)
-        if (blend != BlendMode.NORMAL) repository.setLayerBlendMode(id, blend)
+        // Newly organised groups start as Pass Through, so a PSD's explicit Normal folder
+        // must also be assigned, rather than mistaken for the destination's default.
+        repository.setLayerBlendMode(id, blend)
         if (!source.isVisible) repository.setLayerVisibility(id, false)
     }
 }

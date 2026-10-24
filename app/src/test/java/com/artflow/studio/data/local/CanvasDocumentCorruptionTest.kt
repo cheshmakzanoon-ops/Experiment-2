@@ -106,7 +106,7 @@ class CanvasDocumentCorruptionTest {
         val layers = CanvasDocumentFixtures.richDocument().layers
         val cases =
             listOf(
-                "Unsupported project version" to withEdit { copy(version = 3) },
+                "Unsupported project version" to withEdit { copy(version = CanvasDocument.CURRENT_VERSION + 1) },
                 "Unsupported project version" to withEdit { copy(version = 0) },
                 "Invalid project dimensions" to withEdit { copy(width = 0) },
                 "Invalid project dimensions" to withEdit { copy(width = 8192, height = 8192) },

@@ -3170,8 +3170,11 @@ class ArtFlowCanvasView
             val cy = floor(y).toInt()
             val contiguous = input.fillContiguous
             val mode = input.selectionMode
-            runSelectionEdit(mode) {
-                val source = canvasRepository.compositeBuffer() ?: return@runSelectionEdit null
+            val layer = canvasRepository.getActiveLayer()?.takeUnless { it.isGroup } ?: return
+            runSelectionEdit(mode) { session ->
+                // Automatic selects this layer's colour and transparency, independently of the
+                // background, overlaid artwork, group blending and fill-reference layers.
+                val source = canvasRepository.layerPixels(layer.id) ?: PixelBuffer(session.width, session.height)
                 withContext(Dispatchers.Default) {
                     SelectionMask.magicWand(
                         buffer = source,

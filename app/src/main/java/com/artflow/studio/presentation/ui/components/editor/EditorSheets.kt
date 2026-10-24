@@ -266,6 +266,7 @@ fun LayersSheet(
     blendTarget?.let { layer ->
         com.artflow.studio.presentation.ui.components.layer.BlendModeSelectorDialog(
             currentBlendMode = layer.blendMode,
+            isGroup = layer.isGroup,
             onBlendModeSelected = { mode ->
                 onBlendMode(layer.id, mode)
                 blendTarget = null

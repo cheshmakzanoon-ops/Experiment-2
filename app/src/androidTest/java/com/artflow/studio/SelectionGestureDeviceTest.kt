@@ -175,6 +175,53 @@ class SelectionGestureDeviceTest {
             assertHalf(left = true)
         }
 
+    @Test fun automaticSelectionIgnoresCoveringLayersAndFillReferences() =
+        withCanvas(14) { canvas ->
+            val target = repository.getActiveLayerId()
+            val cover = repository.addLayer("Cover").id
+            repository.setLayerPixels(cover, PixelBuffer.filled(64, 64, Color.BLUE), "Cover fixture")
+            repository.setLayerFillReference(cover, true)
+            repository.setActiveLayer(target)
+            tap(canvas, 12f, 30f)
+            awaitSelection(canvas)
+            // The composed canvas is uniformly blue; the selected layer remains red/green.
+            assertHalf(left = true)
+        }
+
+    @Test fun automaticSelectionDistinguishesTransparentPixelsFromTheCanvasBackground() =
+        withCanvas(15) { canvas ->
+            val pixels = PixelBuffer(64, 64)
+            for (y in 0 until 64) {
+                for (x in 0 until 32) pixels.pixels[y * 64 + x] = Color.WHITE
+            }
+            repository.setLayerPixels(repository.getActiveLayerId(), pixels, "White on transparent")
+            tap(canvas, 52f, 30f)
+            awaitSelection(canvas)
+            // Both halves look white against the background, but only the right half is transparent.
+            assertHalf(left = false)
+        }
+
+    @Test fun anEmptyActiveLayerSelectsItsTransparencyWithoutSamplingArtworkBelow() =
+        withCanvas(16) { canvas ->
+            val empty = repository.addLayer("Empty").id
+            repository.setActiveLayer(empty)
+            canvas.setActiveLayerId(empty)
+            tap(canvas, 12f, 30f)
+            awaitSelection(canvas)
+            assertTrue(requireNotNull(repository.selection()).isFull())
+        }
+
+    @Test fun switchingActiveLayerRejectsAnEarlierAutomaticSelection() =
+        withCanvas(17) { canvas ->
+            val original = repository.getActiveLayerId()
+            val other = repository.addLayer("Other").id
+            repository.setActiveLayer(original)
+            withSamplePaused(canvas, start = { tap(canvas, 12f, 30f) }) {
+                repository.setActiveLayer(other)
+            }
+            assertNull(repository.selection())
+        }
+
     /** Supersede at the actual commit boundary; a fast worker cannot invalidate this schedule. */
     private suspend fun atCommitBoundary(
         canvas: ArtFlowCanvasView,
@@ -203,7 +250,7 @@ class SelectionGestureDeviceTest {
         }
     }
 
-    /** Pause only the first real composite snapshot, leaving all selection and repository code intact. */
+    /** Pause only the first real layer snapshot, leaving all selection and repository code intact. */
     private suspend fun withSamplePaused(
         canvas: ArtFlowCanvasView,
         start: () -> Unit,
@@ -216,15 +263,8 @@ class SelectionGestureDeviceTest {
         var first = true
         canvas.canvasRepository =
             object : CanvasRepository by delegate {
-                // Kotlin delegation forwards each overload independently. Without this override,
-                // the no-argument call goes straight to the delegate and never reaches this hook.
-                override suspend fun compositeBuffer(): PixelBuffer? = compositeBuffer(false, true)
-
-                override suspend fun compositeBuffer(
-                    includeHidden: Boolean,
-                    applyAdjustments: Boolean,
-                ): PixelBuffer? {
-                    val buffer = delegate.compositeBuffer(includeHidden, applyAdjustments)
+                override suspend fun layerPixels(layerId: Long): PixelBuffer? {
+                    val buffer = delegate.layerPixels(layerId)
                     if (first) {
                         first = false
                         reachedSample.complete(Unit)

@@ -11,7 +11,7 @@ import org.junit.Test
 
 class LayerGroupsTest {
     @Test fun plainGroupPassesMembersThrough() {
-        val group = Layer(id = 10, name = "Group", index = 2, isGroup = true)
+        val group = Layer(id = 10, name = "Group", index = 2, isGroup = true, blendMode = BlendMode.PASS_THROUGH)
         val member = Layer(id = 1, name = "A", index = 0, opacity = 0.8f, parentGroupId = 10)
         val loose = Layer(id = 2, name = "B", index = 1)
         val resolved = LayerGroups.resolve(listOf(member, loose, group).map { Compositor.LayerInput(it) })
@@ -31,7 +31,8 @@ class LayerGroupsTest {
         assertEquals(listOf(3L, 10L), plan.map { it.layer.id })
         assertEquals(listOf(1L, 2L), plan[1].members.map { it.layer.id })
         assertTrue(LayerGroups.isolates(group.copy(opacity = 1f, blendMode = BlendMode.MULTIPLY)))
-        assertFalse(LayerGroups.isolates(group.copy(opacity = 1f)))
+        assertTrue(LayerGroups.isolates(group.copy(opacity = 1f)))
+        assertFalse(LayerGroups.isolates(group.copy(opacity = 1f, blendMode = BlendMode.PASS_THROUGH)))
     }
 
     @Test fun groupOpacityAppliesToTheMergedMembers() {
@@ -50,7 +51,7 @@ class LayerGroupsTest {
 
     @Test fun nestedGroupsApplyEveryLevel() {
         val outer = Layer(id = 20, name = "Outer", index = 4, opacity = 0.5f, isGroup = true)
-        val inner = Layer(id = 10, name = "Inner", index = 3, isGroup = true, parentGroupId = 20)
+        val inner = Layer(id = 10, name = "Inner", index = 3, isGroup = true, parentGroupId = 20, blendMode = BlendMode.PASS_THROUGH)
         val a = Layer(id = 1, name = "A", index = 1, parentGroupId = 10)
         val b = Layer(id = 2, name = "B", index = 2, parentGroupId = 20)
         val loose = Layer(id = 3, name = "C", index = 0)
@@ -82,5 +83,42 @@ class LayerGroupsTest {
         assertEquals(flat.pixels[0], grouped.pixels[0])
         // Multiply darkens the grey paper; an isolated folder would show the ink colour unchanged.
         assertNotEquals(0xFF800000.toInt(), grouped.pixels[0])
+    }
+
+    @Test fun normalGroupBlendsItsMembersAgainstTransparencyInsteadOfTheOutsideBackdrop() {
+        val paper = Compositor.LayerInput(Layer(1, "Paper", 0), PixelBuffer.filled(2, 1, 0xFF808080.toInt()))
+        val ink =
+            Compositor.LayerInput(
+                Layer(2, "Ink", 1, blendMode = BlendMode.MULTIPLY, parentGroupId = 10),
+                PixelBuffer(2, 1, intArrayOf(0xFF800000.toInt(), 0x80800000.toInt())),
+            )
+        val group = Layer(10, "Normal", 2, isGroup = true)
+        val grouped = Compositor().composite(listOf(paper, ink, Compositor.LayerInput(group)), 2, 1)
+        val expected =
+            Compositor().composite(
+                listOf(paper, ink.copy(layer = ink.layer.copy(parentGroupId = null, blendMode = BlendMode.NORMAL))),
+                2,
+                1,
+            )
+        assertEquals(0xFF800000.toInt(), grouped.pixels[0])
+        assertEquals(expected.pixels.toList(), grouped.pixels.toList())
+
+        val passing =
+            Compositor().composite(listOf(paper, ink, Compositor.LayerInput(group.copy(blendMode = BlendMode.PASS_THROUGH))), 2, 1)
+        assertNotEquals(grouped.pixels[0], passing.pixels[0])
+        assertNotEquals(grouped.pixels[1], passing.pixels[1])
+    }
+
+    @Test fun aNormalInnerGroupRetainsItsScopeInsideAPassThroughGroup() {
+        val paper = Compositor.LayerInput(Layer(1, "Paper", 0), PixelBuffer.filled(1, 1, 0xFF808080.toInt()))
+        val ink =
+            Compositor.LayerInput(
+                Layer(2, "Ink", 1, blendMode = BlendMode.MULTIPLY, parentGroupId = 10),
+                PixelBuffer.filled(1, 1, 0xFF800000.toInt()),
+            )
+        val inner = Layer(10, "Inner", 2, isGroup = true, parentGroupId = 20)
+        val outer = Layer(20, "Outer", 3, isGroup = true, blendMode = BlendMode.PASS_THROUGH)
+        val result = Compositor().composite(listOf(paper, ink, Compositor.LayerInput(inner), Compositor.LayerInput(outer)), 1, 1)
+        assertEquals(0xFF800000.toInt(), result.pixels.single())
     }
 }

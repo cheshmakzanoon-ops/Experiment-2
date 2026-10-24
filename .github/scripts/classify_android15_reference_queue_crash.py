@@ -24,6 +24,14 @@ def _contains_reference_queue_crash(text: str) -> bool:
     return all(marker in text for marker in REFERENCE_QUEUE_MARKERS)
 
 
+def _is_reference_queue_failure(text: str) -> bool:
+    # A matching framework stack can appear as the cause of an application/test
+    # failure. A wrapper assertion or application frame still makes that outcome
+    # ineligible for infrastructure recovery.
+    unrelated = ("AssertionError", "AssertionFailedError", "ComparisonFailure", "at com.artflow.")
+    return _contains_reference_queue_crash(text) and not any(marker in text for marker in unrelated)
+
+
 def _contains_art_sigsegv(text: str) -> bool:
     if not all(marker in text for marker in ART_SIGSEGV_MARKERS):
         return False
@@ -40,8 +48,31 @@ def _failure_texts(results_root: Path) -> list[str] | None:
             root = ET.parse(path).getroot()
         except (ET.ParseError, OSError):
             return None
+        # Some runners report a suite error only in the counter. Missing detail is
+        # not permission to retry; inconsistent or invalid evidence fails closed.
+        for suite in root.iter():
+            if suite.tag in ("testsuite", "testsuites"):
+                try:
+                    if int(suite.get("errors", "0")) != 0:
+                        return None
+                except ValueError:
+                    return None
+        # An <error> is a separate JUnit outcome, not an empty native-process failure.
+        # Do not discard it merely because another testcase has a recognized crash.
+        if any(True for _ in root.iter("error")):
+            return None
         for failure in root.iter("failure"):
-            failures.append("".join(failure.itertext()))
+            # JUnit writers may put the entire exception in message/type and leave the
+            # body empty. Those attributes are evidence too; ignoring them can turn
+            # an application assertion into an apparently empty, retryable crash.
+            failure_type = failure.get("type", "").strip()
+            if failure_type not in ("", "java.lang.NullPointerException"):
+                return None
+            failures.append("\n".join(filter(None, (
+                failure_type,
+                failure.get("message", ""),
+                "".join(failure.itertext()),
+            ))))
     return failures if found_xml else None
 
 
@@ -63,7 +94,7 @@ def is_retryable(results_root: Path) -> bool:
     reference_queue = any(_contains_reference_queue_crash(text) for text in logs)
     if reference_queue:
         # When system_server itself dies, the app's interrupted test has an empty failure element.
-        return all(not text.strip() or _contains_reference_queue_crash(text) for text in failures)
+        return all(not text.strip() or _is_reference_queue_failure(text) for text in failures)
 
     art_sigsegv = any(_contains_art_sigsegv(text) for text in logs)
     if not art_sigsegv:

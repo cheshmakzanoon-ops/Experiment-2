@@ -80,14 +80,15 @@ class PsdGroupsTest {
     }
 
     @Test
-    fun plainGroupsStayPassThroughAndIsolatedGroupsKeepTheirBlendAcrossAFileRoundTrip() {
-        // ArtFlow composites a Normal, fully opaque group straight through; anything else is isolated.
+    fun normalAndPassThroughGroupsKeepTheirDistinctScopesAcrossAFileRoundTrip() {
         val plain = Layer(10, "Plain", 0, isGroup = true)
         val multiply = Layer(11, "Multiply", 0, isGroup = true, blendMode = BlendMode.MULTIPLY)
         val faded = Layer(12, "Faded", 0, isGroup = true, opacity = 0.5f)
-        assertEquals(BlendMode.PASS_THROUGH, PsdFolders.headerBlend(plain))
+        val passing = Layer(13, "Pass Through", 0, isGroup = true, blendMode = BlendMode.PASS_THROUGH)
+        assertEquals(BlendMode.NORMAL, PsdFolders.headerBlend(plain))
         assertEquals(BlendMode.MULTIPLY, PsdFolders.headerBlend(multiply))
         assertEquals(BlendMode.NORMAL, PsdFolders.headerBlend(faded))
+        assertEquals(BlendMode.PASS_THROUGH, PsdFolders.headerBlend(passing))
 
         // Each folder holds one layer: records are bottom first, so the divider comes before its header.
         val layers =
@@ -101,13 +102,16 @@ class PsdGroupsTest {
                 PsdLayer.groupEnd(),
                 PsdLayer("FadedInk", solid(0xFF000000.toInt())),
                 PsdLayer.groupHeader("Faded", opacity = 128, blendMode = PsdFolders.headerBlend(faded)),
+                PsdLayer.groupEnd(),
+                PsdLayer("PassingInk", solid(0xFF000000.toInt())),
+                PsdLayer.groupHeader("Pass Through", blendMode = PsdFolders.headerBlend(passing)),
             )
         val read = requireNotNull(PsdCodec.read(PsdCodec.write(4, 4, layers, solid(0xFFFFFFFF.toInt()))))
         val folders = read.layers.filter { it.section.isGroupHeader }
-        assertEquals(listOf("Plain", "Multiply", "Faded"), folders.map { it.name })
-        assertEquals(listOf(BlendMode.PASS_THROUGH, BlendMode.MULTIPLY, BlendMode.NORMAL), folders.map { it.blendMode })
+        assertEquals(listOf("Plain", "Multiply", "Faded", "Pass Through"), folders.map { it.name })
+        assertEquals(listOf(BlendMode.NORMAL, BlendMode.MULTIPLY, BlendMode.NORMAL, BlendMode.PASS_THROUGH), folders.map { it.blendMode })
         // Read back the way the importer does, each folder isolates exactly when it did before the export.
-        listOf(plain, multiply, faded).zip(folders).forEach { (original, folder) ->
+        listOf(plain, multiply, faded, passing).zip(folders).forEach { (original, folder) ->
             val reimported =
                 Layer(
                     original.id,

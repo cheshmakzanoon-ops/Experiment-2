@@ -46,6 +46,77 @@ class Android15RuntimeClassifierTest(unittest.TestCase):
     def test_app_assertion_is_never_retryable_even_with_matching_art_tombstone(self):
         self.assertFalse(is_retryable(self.fixture(failure="java.lang.AssertionError: pixels changed", log=ART_SIGSEGV)))
 
+    def test_message_only_assertion_is_not_an_empty_native_failure(self):
+        root = self.fixture(failure="", log=ART_SIGSEGV)
+        (root / "TEST-emulator.xml").write_text(
+            '<testsuite><testcase><failure message="java.lang.AssertionError: pixels changed"/></testcase></testsuite>'
+        )
+        self.assertFalse(is_retryable(root))
+
+    def test_failure_type_cannot_hide_an_assertion(self):
+        root = self.fixture(failure="", log=ART_SIGSEGV)
+        (root / "TEST-emulator.xml").write_text(
+            '<testsuite><testcase><failure type="java.lang.AssertionError"/></testcase></testsuite>'
+        )
+        self.assertFalse(is_retryable(root))
+
+    def test_reference_queue_text_cannot_override_an_assertion_attribute(self):
+        root = self.fixture()
+        (root / "TEST-emulator.xml").write_text(
+            '<testsuite><testcase><failure type="java.lang.AssertionError" message="unexpected crash">'
+            + REFERENCE_QUEUE_FAILURE + '</failure></testcase></testsuite>'
+        )
+        self.assertFalse(is_retryable(root))
+
+    def test_reference_queue_cause_does_not_hide_an_application_failure(self):
+        for extra in (
+            'java.lang.AssertionError: artwork changed\n',
+            'junit.framework.AssertionFailedError: artwork changed\n',
+            'org.junit.ComparisonFailure: artwork changed\n',
+            'at com.artflow.studio.Editor.apply(Editor.kt:42)\n',
+        ):
+            with self.subTest(extra=extra):
+                root = self.fixture(failure=extra + REFERENCE_QUEUE_FAILURE)
+                self.assertFalse(is_retryable(root))
+
+    def test_error_alongside_empty_native_failure_is_never_retryable(self):
+        for error in (
+            '<error>java.lang.AssertionError: artwork changed</error>',
+            '<error message="java.lang.IllegalStateException: document unavailable"/>',
+            '<error/>',
+        ):
+            with self.subTest(error=error):
+                root = self.fixture(failure="", log=ART_SIGSEGV)
+                (root / "TEST-emulator.xml").write_text(
+                    '<testsuite><testcase><failure/></testcase><testcase>' + error + '</testcase></testsuite>'
+                )
+                self.assertFalse(is_retryable(root))
+
+    def test_failure_in_another_report_cannot_be_ignored(self):
+        root = self.fixture(failure="", log=ART_SIGSEGV)
+        (root / "device" / "TEST-app.xml").write_text(
+            '<testsuite><testcase><failure message="wrong exported pixels"/></testcase></testsuite>'
+        )
+        self.assertFalse(is_retryable(root))
+
+    def test_suite_error_count_cannot_be_hidden_by_an_empty_native_failure(self):
+        for count in ("1", "-1", "not-a-number"):
+            with self.subTest(count=count):
+                root = self.fixture(failure="", log=ART_SIGSEGV)
+                (root / "TEST-emulator.xml").write_text(
+                    '<testsuites errors="' + count + '"><testsuite tests="1" failures="1">'
+                    '<testcase><failure/></testcase></testsuite></testsuites>'
+                )
+                self.assertFalse(is_retryable(root))
+
+    def test_reference_queue_exception_attributes_are_kept_as_evidence(self):
+        root = self.fixture()
+        (root / "TEST-emulator.xml").write_text(
+            '<testsuite><testcase><failure type="java.lang.NullPointerException" message="runtime failure">'
+            + REFERENCE_QUEUE_FAILURE + '</failure></testcase></testsuite>'
+        )
+        self.assertTrue(is_retryable(root))
+
     def test_non_art_top_frame_is_not_retryable(self):
         log = ART_SIGSEGV.replace(
             "#00 pc 00000000008519ea  /apex/com.android.art/lib64/libart.so",

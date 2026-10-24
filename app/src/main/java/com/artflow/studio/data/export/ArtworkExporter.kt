@@ -34,6 +34,7 @@ import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.three.ObjExport
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.renderer.BitmapPixelBridge
+import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.Layer
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
@@ -516,8 +517,9 @@ class ArtworkExporter
 
         /**
          * The layers as a Procreate document, nested as the groups are. Like PSD, a stack with adjustment
-         * effects keeps its pixel layers hidden and adds the rendered artwork on top; a flattened export
-         * shows the background colour.
+         * effects keeps its pixel layers hidden and adds the rendered artwork on top. Group blend modes
+         * and group masks have no verified archive representation, so they use the same appearance fallback.
+         * A flattened export shows the background colour.
          */
         private fun buildProcreate(
             composite: PixelBuffer,
@@ -527,9 +529,12 @@ class ArtworkExporter
             hasAdjustmentLayers: Boolean,
             groups: List<Layer>,
         ): ByteArray {
-            fun shown(layer: Layer) = !hasAdjustmentLayers && (options.includeHiddenLayers || layer.isVisible)
+            val needsRenderedAppearance =
+                hasAdjustmentLayers || groups.any { it.blendMode != BlendMode.PASS_THROUGH || it.hasActiveMask() }
+
+            fun shown(layer: Layer) = !needsRenderedAppearance && (options.includeHiddenLayers || layer.isVisible)
             val rendered: List<ProcreateWriter.Node> =
-                if (hasAdjustmentLayers) {
+                if (needsRenderedAppearance) {
                     listOf(ProcreateWriter.Layer("Artwork (rendered effects)", composite))
                 } else {
                     emptyList()

@@ -86,6 +86,34 @@ class StrokePreviewRegressionTest {
         }
 
     @Test
+    fun shortFinalSegmentSurvivesPreviewCommitHistoryAndReopen() =
+        runBlocking(Dispatchers.Main) {
+            val layer = open()
+            val before = preview().copyOf()
+            val depth = repository.undoDepth
+            val params = brush.copy(size = 10f, spacing = 1f)
+            val color = 0xFFFF0000.toInt()
+            repository.setStrokeColor(color)
+            val id = repository.beginStroke(5.5f, 16.5f, 1f, params, layer, false)
+            repository.continueStroke(id, 11.5f, 16.5f, 1f)
+            repository.continueStroke(id, 17.5f, 16.5f, 1f)
+            repository.continueStroke(id, 21.5f, 16.5f, 1f)
+            val provisional = preview().copyOf()
+            // Only the closing dab can reach this pixel; the previous grid dab ends at x=20.5.
+            assertEquals("the live stroke must reach its final sample", color, provisional[16 * 32 + 25])
+            repository.endStroke(id)
+            assertArrayEquals(provisional, preview())
+            assertEquals(depth + 1, repository.undoDepth)
+            repository.undo()
+            assertArrayEquals(before, preview())
+            repository.redo()
+            assertArrayEquals(provisional, preview())
+            repository.saveCanvas(projectId)
+            repository.loadCanvas(projectId)
+            assertArrayEquals(provisional, preview())
+        }
+
+    @Test
     fun liveEraserRevealsUnderlyingLayersInsteadOfPaintingInkOnTop() =
         runBlocking(Dispatchers.Main) {
             val background = open()
