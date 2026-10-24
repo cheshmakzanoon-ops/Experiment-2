@@ -343,6 +343,8 @@
     <string name="brushparameterslider_set_value">Set value</string>
     <string name="blendmodeselector_blend_mode">Blend Mode</string>
     <string name="blendmodeselector_preview">%1$s blend preview</string>
+    <string name="blendmodeselector_imported_darken">Imported Darken</string>
+    <string name="blendmodeselector_imported_darken_choice">Choosing a mode here replaces the imported Darken effect and may change how this layer looks.</string>
     <string name="colorwheel_brightness">Brightness</string>
     <string name="privacypolicyentry_privacy_policy">Privacy policy</string>
     <string name="privacypolicyentry_artflow_privacy_policy">ArtFlow Privacy Policy</string>

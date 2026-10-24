@@ -76,9 +76,9 @@ Eight renderer regressions cover independent solo/compound values, the strict Ha
 all three dual modes, primary/secondary opacity, erasing, neutral or missing grain, cropped origins
 and six whole-buffer historical Multiply hashes captured with the unchanged published renderer.
 Seven document regressions cover signed historical fixtures, original-checksum rejection, all
-legacy versions and frame stacks, new v4 behavior, group isolation, raster/metadata preservation
+legacy versions and frame stacks, the behavior introduced in v4, group isolation, raster/metadata preservation
 and independent saved-brush definitions. The added Android storage case checks historical pixels,
-checksum rejection, poisoned texture-cache disk reload, v4 save/reopen, new Subtract/Hard Mix
+checksum rejection, poisoned texture-cache disk reload, current-version save/reopen, new Subtract/Hard Mix
 pixels and the exact saved PNG composite. These declarations require fresh exact-revision CI;
 results from another source revision are not reused as acceptance evidence.
 
@@ -107,6 +107,33 @@ version change. Existing artworks and standard blend equations remain unchanged.
 sample fetch is pinned to an exact repository revision and all five complete file hashes are
 checked; one file is a duplicate, giving four distinct archive inputs.
 
+## Native layer rendering and document export
+
+[The pinned native layer pipeline](NATIVE_LAYER_DARKEN_2026-10-24.md) distinguishes archive19
+Darken from archive34 standard Darken. On ordinary premultiplied RGBA inputs, source19 preserves
+the destination alpha and cannot paint into a transparent destination. Previously importing both
+as standard Darken introduced visible pixels where the saved native composite was transparent.
+New imports preserve a separate layer contract through copies, frames, history and storage. Existing
+v1–v4 ArtFlow drawings keep standard Darken; the original signed v4 fixture retains its exact pixels.
+An explicit mode choice clears the imported contract even when the selected public mode remains
+Darken. The actual layer dialog explains that choice and keeps dismissal free of edits.
+
+Native export writes the verified current and fallback blend keys. PSD cannot directly represent
+the distinct source19 alpha behavior, so it uses a visible rendered-appearance layer with editable
+sources hidden and an explicit warning. This does not change standard brush or layer blending.
+The byte renderer implements the recovered finite real equation, not native half arithmetic or all
+possible native group/clipping routes. Selected genuine-file points agree exactly; complete-image
+recomposition differences remain descriptive, not an equality gate.
+
+[The document export audit](PROCREATE_NATIVE_EXPORT_2026-10-24.md) also separates the native
+flat pixel-layer index from the nested group tree, reuses each leaf object once, excludes masks and
+the composite from that index, and writes native group visibility. P3 exports preserve supported
+native channels and the application's generated ICC profile. Opening a hidden-background document
+as a new artwork replaces the default white with transparency; insertion into an existing artwork
+retains its existing background behavior. Four additional Android identities cover the Darken
+storage lifecycle, the actual blend-dialog route and both export/background workflows. All require
+their own exact-source emulator execution. Native application opening remains unverified.
+
 ## Group compositing and file compatibility
 
 Explicit **Normal** groups now composite their members against transparency before blending
@@ -115,18 +142,21 @@ with outside layers. Pass Through is available in the group picker and excluded 
 New organizational groups default to Pass Through so grouping alone does not alter the picture.
 PSD import/export preserves the distinction.
 
-The `.artflow` format is now **v4**. The original checksum, when present, is verified before any migration.
+The `.artflow` format is now **v5**. The original checksum, when present, is verified before any migration.
 Historical unsigned documents retain their existing unverified acceptance.
 Using the original document version, v1/v2 opaque, unmasked Normal groups become explicit Pass
 Through in every animation frame; previously isolated faded/masked groups and v3 Normal groups
 keep their existing scope. Stored vector strokes from v1/v2/v3 also retain their actual historical
 secondary-grain behavior by migrating that immediate secondary setting to Multiply. Both the
-main layer list and every frame are covered. New v4 strokes retain corrected Subtract and Hard Mix.
+main layer list and every frame are covered. Strokes saved in v4 and later retain corrected
+Subtract and Hard Mix. Existing standard layer blends keep their rendering in every earlier version.
 
 Existing raster pixels, primary grain, nested source settings and imported metadata are not
 rewritten. Brush-library and `.artbrush` definitions remain outside document migration. Opening
-migrates the in-memory model; the next save writes a checksummed v4 file. Older application builds
-reject new v4 files instead of silently replaying their corrected stroke or group semantics.
+migrates the in-memory model; the next save writes a checksummed v5 file. Older application builds
+reject new v5 files instead of silently replaying their corrected stroke, group or native-layer semantics.
+The new native marker is omitted from standard layers' serialized representation, preserving
+historical checksum verification. Invalid marker/mode/version combinations are rejected.
 
 Native `.procreate` group blend/mask metadata remains unverified. Exporting an isolated or
 actively masked group therefore uses the existing rendered-appearance fallback, with editable
@@ -145,7 +175,10 @@ the Procreate application.
 | Imported pressure | Real `.brushset` import, constant/descending/curved native lookup values on Android, and exact `.artbrush` persistence |
 | Automatic selection | Real MotionEvents, covered active layer, transparent areas, empty layers, obsolete pending work |
 | Groups and interchange | PSD import, distinct scopes, real save/reopen, PSD export, enabled/disabled masks and bounded `.procreate` appearance fallback |
-| Historical vector grain | Signed v3 fixture from the published renderer, raw checksum rejection before migration, real grain-file reload, exact historical layer pixels, v4 save/reopen, corrected new strokes and Android PNG decoding |
+| Historical vector grain | Signed v3 fixture from the published renderer, raw checksum rejection before migration, real grain-file reload, exact historical layer pixels, current-version save/reopen, corrected new strokes and Android PNG decoding |
+| Native Darken | Frozen signed v4 standard pixels, checksum rejection, authored native import, v5 fresh reopen, exact PNG, explicit standard selection with undo/redo and PSD appearance fallback |
+| Imported blend dialog | Actual LayersSheet/row/dialog route, imported-effect notice, no ordinary selection highlight, unchanged Done/Back dismissal and deliberate mode callback |
+| Native document export | Direct archive index/tree object identity, native group visibility, exact P3 channels/profile/background, fresh storage reopen and independently decoded PNG; hidden-background new import versus insertion |
 | Saved selections | Real file storage, fresh repository/controller, fractional mask coverage, constrained Fill Layer, undo/redo, independent Android PNG decoding, slot deletion and document switching |
 | Blend picker | Group-only Pass Through navigation and independently expected pixels captured from the actual Compose previews |
 | Floating Reference | Real editor coordinate taps/drags inside verified left/right sidebar intersections, modal precedence, outside-window sidebar and Zoom input, both focus target sizes, restored position and unchanged brush/artwork/history |
@@ -187,7 +220,8 @@ configured reference inputs so a previously skipped corpus result cannot substit
 This corpus tests import and serialization contracts, not reference-renderer pixels. Reference
 archive bytes and assets are not included in the application or uploaded as CI artifacts.
 The same pinned input also gates the recovered archive/property mappings and stamp-count conversion, native spline anchors
-and every committed spline fixture, plus the compound source-mode and shader dataflow contracts.
+and every committed spline fixture, plus the compound source-mode, layer Darken pipeline,
+native document-encoder and selected shader dataflow contracts.
 These checks inspect reference bytes as data; they do not execute the reference application.
 CI uses Python 3.11, Capstone 5.0.6 and llvmlite 0.44.0 and retains only small derived JSON reports
 inside `verification-reports`. Fixture checking is read-only and cannot silently regenerate the
@@ -220,6 +254,39 @@ Use the [Android CI workflow](https://github.com/cheshmakzanoon-ops/Experiment-2
 for the exact published commit, then inspect each lane's generated verification summary.
 A queued, skipped, cancelled or failed run is not a completed gate. An artifact from an earlier
 commit does not validate later source changes.
+
+### Local validation of the combined v5 candidate
+
+The integrated native Darken/export candidate passed 1,485 JVM tests in 245 suites with zero
+failures, errors or skips. All JVM reports were regenerated after the corrected gate started;
+the 30 new identities add to the previous 1,455 without removing or renaming a case.
+Android test compilation, all five ktlint reports, detekt against its unchanged baseline and
+133 Python checks passed. The device source inventory contains 250 identities: the previous
+246 plus four new lifecycle/export/dialog cases. These local results are not emulator execution.
+
+The first local gate passed the same JVM suite and Android compilation but failed formatting
+and a newly lengthened internal layer constructor. Formatting was corrected, and the new mutable
+contract field now follows the existing layer-property/copy pattern without extending that
+constructor. No analysis threshold or baseline was relaxed. The full corrected gate then passed.
+The P3 device test also now verifies the signature on raw saved bytes: the loader intentionally
+clears that field after verification, so asserting its presence on the editable model was invalid.
+The corrected case preserves all colour, ICC, background, fresh-reopen and byte-stability checks.
+
+### Completed run 309
+
+[Run 309](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40108692849) completed
+**FAILURE** on `33eeb87cd9156be88099ee02d675c1a3063d5cd2`. The build passed 1,455 JVM tests,
+126 Python checks and its static/build/package gates. Every final emulator attempt ran all 246
+identities, totalling 1,713 passes, two permitted API 26 skips and seven identical P3 checksum
+assertion failures. No minified-launch step was reached. The corrected raw-persisted-signature
+test must pass on the next revision before its downstream P3 reopen/export steps are accepted.
+
+The independent Android 15 / 16 KB lane additionally retains ten passes and one ART native-process
+failure from its first attempt, with 235 identities then missing. The narrow existing classifier
+allowed one verified recovery; the full retry subsequently failed only the P3 assertion.
+[The complete run record](CI_RUN_309_2026-10-24.md) preserves original ZIP hashes, final and first
+attempt counts, runtime/recovery details and the separate Google-process events. No failure was
+reclassified as acceptance, and no unchanged-source manual rerun was requested.
 
 ### Completed run 308
 

@@ -17,6 +17,7 @@ import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.FilterType
 import com.artflow.studio.domain.model.layer.Layer
+import com.artflow.studio.domain.model.layer.LayerBlendContract
 import com.artflow.studio.domain.model.layer.LayerEffects
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -375,9 +376,11 @@ interface CanvasRepository {
         isLocked: Boolean,
     ): Boolean
 
+    /** An explicit standard blend selection also clears a native import's compatibility contract. */
     suspend fun setLayerBlendMode(
         layerId: Long,
         blendMode: BlendMode,
+        blendContract: LayerBlendContract = LayerBlendContract.STANDARD,
     ): Boolean
 
     suspend fun setLayerAlphaLock(

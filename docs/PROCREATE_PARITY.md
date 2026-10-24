@@ -4,7 +4,7 @@
 
 The [current implementation and acceptance record](EMULATOR_PARITY_2026-10-24.md) covers brush
 sampling/rendering corrections, active-layer Automatic selection, distinct Normal/Pass Through
-group scopes, PSD interchange, checksum-first v1/v2/v3 migration into v4 and accurate blend-picker examples.
+group scopes, PSD interchange, checksum-first historical migration into v5 and accurate blend-picker examples.
 It also covers shared compound-brush importing, authored mask coverage, source mode precedence,
 and the inspected native spline used by newly imported pressure graphs. Existing graphs retain
 their stored algorithm and signed-document checksums.
@@ -16,6 +16,12 @@ The added standard Android 15 / 4 KB lane uses its default runtime; both origina
 lanes remain required. Their unresolved crashes and the unchanged-source comparison are recorded
 in the [runtime diagnosis](ANDROID15_RUNTIME_COMPARISON_2026-10-24.md).
 
+[Run 309](CI_RUN_309_2026-10-24.md) executed all 246 final identities on every emulator but failed
+the new P3 case's assertion about a checksum that the verified loader intentionally clears.
+The corrected case checks the persisted signature directly and retains every later colour/reopen
+assertion. Its next full matrix also covers the new v5/native-export cases. The preserved first
+attempt's ART crash in the independent Android 15 lane remains a separate runtime qualification.
+
 Native `.procreate` group blend/mask metadata remains incomplete: affected exports preserve the
 rendered appearance with editable sources hidden below it. Passing Android tests alone does not
 prove Procreate-native rendering, physical stylus quality or artist acceptance.
@@ -25,6 +31,16 @@ the separate [native layer hierarchy](PROCREATE_HIERARCHY_IMPORT_2026-10-24.md),
 [sRGB/Display P3 import](PROCREATE_COLOR_IMPORT_2026-10-24.md). The pinned genuine corpus contains
 five files but four unique archive byte sequences. Unknown profiles and native group blend/mask,
 animation, editable-text and guide metadata remain separate limitations.
+
+[Native source19 Darken](NATIVE_LAYER_DARKEN_2026-10-24.md) now has a separate persisted layer
+contract. New native imports preserve its distinct alpha behavior; existing v1–v4 drawings keep
+standard Darken. The actual blend dialog identifies the imported effect before a deliberate mode
+choice replaces it, with repository undo restoring the original contract. Version5 prevents an old
+reader from silently rendering the new state with its ordinary Darken equation.
+[Native export](PROCREATE_NATIVE_EXPORT_2026-10-24.md) now separates the flat pixel index from the
+group tree, retains supported P3 channels/profile and native group visibility, and preserves a hidden
+background when opening as a new artwork. Required static-source checks and real-storage device
+regressions bound these corrections; they do not establish full native-app interchange or pixel parity.
 
 ## Saved selections, device lane diagnosis — 24 October 2026
 

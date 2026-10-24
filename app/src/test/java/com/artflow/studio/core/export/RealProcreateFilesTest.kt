@@ -5,6 +5,7 @@ import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.render.Compositor
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.Layer
+import com.artflow.studio.domain.model.layer.LayerBlendContract
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -72,7 +73,10 @@ class RealProcreateFilesTest {
                 assertEquals(ColorProfile.DISPLAY_P3, document.colorProfile)
                 assertFalse(document.hasUnsupportedColorProfile)
                 val archive = KeyedArchive(BinaryPlist.read(requireNotNull(files.read("Document.archive"))))
-                val descriptor = archive.map(requireNotNull(archive.root)["colorProfile"])
+                val root = requireNotNull(archive.root)
+                val indexed = archive.array(root["layers"]).map { archive.string(archive.map(it)?.get("UUID")) }
+                assertEquals("Native flat index and tree leaves must retain order and multiplicity", indexed, layers.map { it.uuid })
+                val descriptor = archive.map(root["colorProfile"])
                 val icc = requireNotNull(archive.data(descriptor?.get("SiColorProfileArchiveICCDataKey")))
                 assertEquals(536, icc.size)
                 val expectedIcc = if (sample.name in DERIVED_PROFILES) DERIVED_ICC_SHA else APPLE_ICC_SHA
@@ -83,6 +87,7 @@ class RealProcreateFilesTest {
             val step = maxOf(1, maxOf(document.width, document.height) / GRID)
             val recomposited = recomposite(document, step)
             if (sample.name == "Mask_Test_File.procreate") checkNativeMask(document, recomposited, step)
+            if (sample.name in NATIVE_COUNTS && sample.name != "Mask_Test_File.procreate") checkNativeDarken(document, recomposited, step)
             val difference = document.composite()?.let { meanDifference(subsample(it, step), recomposited, document.background ?: WHITE) }
             report.appendLine(
                 "${sample.name}: ${document.width}x${document.height} ${document.dpi} dpi, " +
@@ -115,6 +120,24 @@ class RealProcreateFilesTest {
             val pixel = if (coverage == 128) 0xFF7F7F7F.toInt() else 0xFF000000.toInt()
             assertEquals(pixel, composite.pixels[y * document.width + x])
             assertEquals(pixel, recomposited.pixels[(y / step) * recomposited.width + x / step])
+        }
+    }
+
+    /** Exact saved pixels distinguish native source19 from standard source-over Darken. */
+    private fun checkNativeDarken(
+        document: ProcreateReader.Document,
+        recomposited: PixelBuffer,
+        step: Int,
+    ) {
+        val source = document.layers().single { it.uuid == "6C209783-2DA6-4426-BD7C-2D70438E3AD8" }
+        assertEquals(BlendMode.DARKEN, source.blendMode)
+        assertEquals(LayerBlendContract.PROCREATE_DARKEN_19, source.blendContract)
+        val pixels = document.pixels(source)
+        val stored = requireNotNull(document.composite())
+        for ((x, y, expected) in listOf(Triple(1340, 1336, 0), Triple(1336, 1396, 0x01000000), Triple(1336, 1372, 0x04004040))) {
+            assertEquals(0xFE151633.toInt(), pixels.pixels[y * document.width + x])
+            assertEquals(expected, stored.pixels[y * document.width + x])
+            assertEquals(expected, recomposited.pixels[(y / step) * recomposited.width + x / step])
         }
     }
 
@@ -157,6 +180,7 @@ class RealProcreateFilesTest {
                             node.visible,
                             node.opacity,
                             blendMode = node.blendMode,
+                            blendContract = node.blendContract,
                             isClippingMask = node.clipped,
                             parentGroupId = parent,
                         )

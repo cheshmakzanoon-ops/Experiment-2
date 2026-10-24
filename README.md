@@ -3,9 +3,9 @@
 [The implementation and acceptance record](docs/EMULATOR_PARITY_2026-10-24.md) covers corrected
 stroke endpoints, zero-spacing rendering modes, interpolated pen orientation, active-layer
 Automatic selection, explicit Normal/Pass Through group compositing, and accurate blend-mode
-previews. `.artflow` v4 migrates older group behavior and stored secondary-grain strokes after
-verifying their original checksums when present, preserving existing artwork; older app builds cannot read new
-v4 documents. PSD preserves group modes. Unsupported native `.procreate`
+previews. `.artflow` v5 preserves distinct imported native Darken while retaining the earlier
+group and secondary-grain migrations after original-checksum verification. Existing artwork keeps
+its historical rendering; older app builds reject new v5 documents. PSD preserves group modes. Unsupported native `.procreate`
 group metadata uses a rendered appearance layer with hidden editable sources.
 Brush interchange also preserves tilt-opacity settings and authored mask coverage, while Count
 Jitter reaches its documented range. Theme evidence waits for actual repainted dialog pixels.
@@ -43,6 +43,10 @@ Native archive mappings, pressure-spline fixtures and compound-brush contracts a
 that same input, with derived reports retained in the build artifact.
 Completed [run 308](docs/CI_RUN_308_2026-10-24.md) accepted revision `c5cf20d7` across the build
 and all seven emulator configurations, with no test retry. Later changes need their own run.
+[Run 309](docs/CI_RUN_309_2026-10-24.md) passed its build but failed one new P3 checksum assertion
+on every emulator. Its independent Android 15 repeat also preserves a first-attempt ART crash and
+one automatic recovery. The checksum test now verifies saved bytes according to the codec's actual
+contract; the corrected 250-case candidate still needs its own completed emulator matrix.
 
 New native-document corrections preserve [one-byte mask coverage](docs/PROCREATE_MASK_IMPORT_2026-10-24.md),
 the actual [layer-group hierarchy](docs/PROCREATE_HIERARCHY_IMPORT_2026-10-24.md), and recognized
@@ -51,6 +55,15 @@ native channels; insertion into an existing canvas converts once into its profil
 calibration compares both images in sRGB, and unsupported profiles receive an explicit notice.
 The genuine corpus is pinned to a source revision and complete-file hashes: five files represent
 four distinct archives. Existing saved artworks are not reinterpreted by these import changes.
+
+[Native legacy Darken](docs/NATIVE_LAYER_DARKEN_2026-10-24.md) now keeps its distinct alpha behavior
+on import, through undo, layer/frame copies, save/reopen and native export. The blend dialog identifies
+the imported effect before an explicit standard-mode choice replaces it. PSD preserves its visible
+appearance with hidden editable sources when its standard blend cannot represent the effect.
+[Native export corrections](docs/PROCREATE_NATIVE_EXPORT_2026-10-24.md) write a separate flat pixel
+index and group tree, native group visibility and supported P3 profiles. Opening a document with a
+hidden background now creates a transparent canvas. These later changes require their own completed
+exact-revision emulator gate; static native contracts do not establish reference-app execution.
 
 ### Selection, clipboard and crop corrections (23 October 2026)
 

@@ -35,6 +35,7 @@ import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.FilterType
 import com.artflow.studio.domain.model.layer.Layer
+import com.artflow.studio.domain.model.layer.LayerBlendContract
 import com.artflow.studio.domain.model.layer.LayerEffects
 import com.artflow.studio.domain.repository.canvas.CanvasExportSnapshot
 import com.artflow.studio.domain.repository.canvas.CanvasInvalidationEvent
@@ -433,6 +434,7 @@ class CanvasRepositoryImpl
                     filterAmount = layer.filterAmount,
                     isInternal = layer.isInternal,
                 ).apply {
+                    blendContract = layer.blendContract
                     isGroup = layer.isGroup
                     parentGroupId = layer.parentGroupId
                     isFillReference = layer.isFillReference
@@ -1545,12 +1547,15 @@ class CanvasRepositoryImpl
         override suspend fun setLayerBlendMode(
             layerId: Long,
             blendMode: BlendMode,
+            blendContract: LayerBlendContract,
         ): Boolean =
             withState {
                 val layer = layerById(layerId) ?: return@withState false
-                if (layer.blendMode == blendMode) return@withState true
+                if (blendContract != LayerBlendContract.STANDARD && (blendMode != BlendMode.DARKEN || layer.isGroup)) return@withState false
+                if (layer.blendMode == blendMode && layer.blendContract == blendContract) return@withState true
                 pushUndo()
                 layer.blendMode = blendMode
+                layer.blendContract = blendContract
                 dirty = true
                 emit(CanvasInvalidationEvent.LayersChanged)
                 true
@@ -3533,6 +3538,7 @@ class CanvasRepositoryImpl
             var filterAmount: Float = 0f,
             var isInternal: Boolean = false,
         ) {
+            var blendContract: LayerBlendContract = LayerBlendContract.STANDARD
             var isGroup: Boolean = false
             var isFillReference: Boolean = false
             var drawingAssist: Boolean = false
@@ -3590,6 +3596,7 @@ class CanvasRepositoryImpl
                     filterAmount = filterAmount,
                     isInternal = isInternal,
                 ).apply {
+                    blendContract = this@LayerData.blendContract
                     isGroup = this@LayerData.isGroup
                     parentGroupId = this@LayerData.parentGroupId
                     isFillReference = this@LayerData.isFillReference
@@ -3642,6 +3649,7 @@ class CanvasRepositoryImpl
                     filterAmount = filterAmount,
                     isInternal = isInternal,
                 ).apply {
+                    blendContract = this@LayerData.blendContract
                     isGroup = this@LayerData.isGroup
                     parentGroupId = this@LayerData.parentGroupId
                     isFillReference = this@LayerData.isFillReference
@@ -3664,6 +3672,7 @@ class CanvasRepositoryImpl
                     opacity = opacity,
                     isLocked = isLocked,
                     blendMode = blendMode,
+                    blendContract = blendContract,
                     strokes = strokes.toList(),
                     isAlphaLocked = isAlphaLocked,
                     isClippingMask = isClippingMask,

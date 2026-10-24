@@ -11,19 +11,38 @@ historical status statements below; code or workflow presence does not constitut
 The standard Android 15 / 4 KB default-runtime lane is additional coverage. It does not replace
 either existing Android 15 / 16 KB lane or erase their preserved failures.
 
-The app now writes `.artflow` v4 so isolated Normal groups and corrected secondary Grain Blend
-cannot be silently replayed with older semantics. Existing v1/v2/v3 documents migrate after
+The app now writes `.artflow` v5 so isolated Normal groups, corrected secondary Grain Blend and
+the distinct imported native Darken contract cannot be silently replayed with older semantics.
+Existing v1–v4 documents migrate after
 verification of the original checksum when present; historical unsigned documents retain their
-existing unverified acceptance. Old vector strokes preserve their historical Multiply coverage. Native `.procreate` group metadata
+existing unverified acceptance. Old vector strokes preserve their historical Multiply coverage;
+existing Darken layers remain standard. Native `.procreate` group metadata
 still uses a bounded appearance fallback where necessary. No production signing, store publication,
 physical-device qualification or complete Procreate equivalence is asserted by these changes.
 
-The next native-import corrections preserve one-byte mask coverage, the native group hierarchy
+The native-import corrections preserve one-byte mask coverage, the native group hierarchy
 and recognized sRGB/Display P3 source profiles. Their actual import, persistence and export
 regressions add four device identities. The fixed genuine-file inputs and independent synthetic
 colour fixtures are documented in the [hierarchy](PROCREATE_HIERARCHY_IMPORT_2026-10-24.md),
 [mask](PROCREATE_MASK_IMPORT_2026-10-24.md) and [colour](PROCREATE_COLOR_IMPORT_2026-10-24.md) audits.
 Their acceptance belongs to their exact completed publication run, not the preceding v4 run.
+
+[Run 309](CI_RUN_309_2026-10-24.md) on `33eeb87cd9156be88099ee02d675c1a3063d5cd2` passed its build
+with 1,455 JVM tests and 126 Python checks. All seven final device attempts ran their 246 cases,
+totalling 1,713 passes, two allowed skips and seven failures of the same P3 checksum-model assertion.
+Minified launch was not reached. The corrected test now verifies the raw stored signature and
+the loader's cleared-model contract without removing any colour or reopen assertion. The independent
+Android 15 lane's first-attempt ART crash and automatic recovery remain separately preserved.
+That run failed and does not accept these changes; the next exact revision must complete its gate.
+
+The subsequent [native Darken](NATIVE_LAYER_DARKEN_2026-10-24.md) and
+[native export](PROCREATE_NATIVE_EXPORT_2026-10-24.md) corrections add four further Android identities:
+the version4/version5 real-storage lifecycle, the used blend-dialog route, P3 archive export/reopen,
+and hidden-background new-document versus existing-canvas behavior. The reference gate additionally
+checks the selected native layer pipeline and document-encoder contracts against the pinned input.
+These are derived static contracts; native application execution, exported-file opening in Procreate
+and physical stylus/display performance remain outside the evidence. Their own completed exact-source
+run is required before treating these later changes as device-accepted.
 
 The preceding v4 revision `c5cf20d7e6ca075d1a49be76026d401dafeada1e` passed the build and all seven
 emulator lanes in [run 308](CI_RUN_308_2026-10-24.md), with 1,432 JVM tests, 126 Python checks and

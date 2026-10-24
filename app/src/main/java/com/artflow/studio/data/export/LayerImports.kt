@@ -124,7 +124,12 @@ object LayerImports {
         val profile = repository.getColorProfile()
         // The new canvas's own empty layer goes once the document's layers are in.
         val starting = repository.getAllLayers().filter { !it.isGroup }.map { it.id }
-        document.background?.let { repository.setCanvasBackgroundColor(it, document.colorProfile) }
+        if (preserveDocumentProfile) {
+            // A new artwork also inherits a hidden native background, rather than the blank canvas's white.
+            repository.setCanvasBackgroundColor(document.background ?: 0, document.colorProfile)
+        } else {
+            document.background?.let { repository.setCanvasBackgroundColor(it, document.colorProfile) }
+        }
         val layers = document.layers()
         val bytes = document.width.toLong() * document.height * BYTES_PER_PIXEL
         val flattened = (layers.size + WORKING_COPIES) * bytes > rasterBudgetBytes
@@ -179,7 +184,7 @@ object LayerImports {
                 val pixels = withContext(Dispatchers.Default) { document.pixels(node) }
                 val id = addPixels(repository, node.name.ifBlank { "Layer" }, pixels, document.colorProfile, profile)
                 if (node.opacity < 1f) repository.setLayerOpacity(id, node.opacity)
-                if (node.blendMode != BlendMode.NORMAL) repository.setLayerBlendMode(id, node.blendMode)
+                if (node.blendMode != BlendMode.NORMAL) repository.setLayerBlendMode(id, node.blendMode, node.blendContract)
                 if (!node.visible) repository.setLayerVisibility(id, false)
                 if (node.clipped) repository.setLayerClippingMask(id, true)
                 if (node.alphaLocked) repository.setLayerAlphaLock(id, true)

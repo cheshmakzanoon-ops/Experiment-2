@@ -1,6 +1,8 @@
 package com.artflow.studio.domain.model.layer
 
 import com.artflow.studio.domain.model.brush.Stroke
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 
 /**
@@ -8,6 +10,7 @@ import kotlinx.serialization.Serializable
  * Layers are stacked and composited to create the final image
  */
 @Serializable
+@OptIn(ExperimentalSerializationApi::class)
 data class Layer(
     val id: Long,
     val name: String,
@@ -63,6 +66,9 @@ data class Layer(
     val textContent: com.artflow.studio.core.text.TextLayerContent? = null,
     /** Runtime mask presence is independent of whether its immutable PNG has been saved yet. */
     @kotlinx.serialization.Transient val hasInMemoryMask: Boolean = false,
+    /** Omitted for historical documents so their signed representation and standard blends remain unchanged. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val blendContract: LayerBlendContract = LayerBlendContract.STANDARD,
 ) {
     /**
      * Check if this layer can be edited
@@ -147,6 +153,7 @@ data class Layer(
             effects = this.effects,
             textContent = this.textContent,
             hasInMemoryMask = hasInMemoryMask,
+            blendContract = if (blendMode == this.blendMode) this.blendContract else LayerBlendContract.STANDARD,
         )
 }
 

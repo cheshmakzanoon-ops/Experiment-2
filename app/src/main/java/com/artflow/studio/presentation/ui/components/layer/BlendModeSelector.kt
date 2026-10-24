@@ -21,11 +21,13 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.artflow.studio.R
 import com.artflow.studio.core.pixels.BlendModes
 import com.artflow.studio.domain.model.layer.BlendMode
+import com.artflow.studio.domain.model.layer.LayerBlendContract
 
 /**
  * Blend mode selector dialog for choosing layer blend modes
@@ -37,22 +39,41 @@ fun BlendModeSelectorDialog(
     onBlendModeSelected: (BlendMode) -> Unit,
     onDismiss: () -> Unit,
     isGroup: Boolean = false,
+    currentBlendContract: LayerBlendContract = LayerBlendContract.STANDARD,
 ) {
+    val importedDarken = currentBlendContract == LayerBlendContract.PROCREATE_DARKEN_19
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(stringResource(R.string.blendmodeselector_blend_mode))
         },
         text = {
-            BlendModeGrid(
-                selectedBlendMode = currentBlendMode,
-                onBlendModeSelected = onBlendModeSelected,
-                isGroup = isGroup,
+            Column(
                 modifier =
                     Modifier
                         .fillMaxWidth()
                         .heightIn(max = 400.dp),
-            )
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (importedDarken) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            stringResource(R.string.blendmodeselector_imported_darken),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            stringResource(R.string.blendmodeselector_imported_darken_choice),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+                BlendModeGrid(
+                    selectedBlendMode = currentBlendMode.takeUnless { importedDarken },
+                    onBlendModeSelected = onBlendModeSelected,
+                    isGroup = isGroup,
+                    modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
+                )
+            }
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
@@ -67,7 +88,7 @@ fun BlendModeSelectorDialog(
  */
 @Composable
 private fun BlendModeGrid(
-    selectedBlendMode: BlendMode,
+    selectedBlendMode: BlendMode?,
     onBlendModeSelected: (BlendMode) -> Unit,
     modifier: Modifier = Modifier,
     isGroup: Boolean = false,
@@ -114,7 +135,8 @@ private fun BlendModeChip(
                     } else {
                         Modifier
                     },
-                ).clickable(onClick = onClick),
+                ).clickable(onClick = onClick)
+                .semantics { selected = isSelected },
         colors =
             CardDefaults.cardColors(
                 containerColor =

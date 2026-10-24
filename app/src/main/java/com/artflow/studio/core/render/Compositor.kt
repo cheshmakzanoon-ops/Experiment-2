@@ -213,11 +213,7 @@ class Compositor(
         clipped: Boolean,
     ) {
         try {
-            if (clipped) {
-                BlendModes.compositeClipped(destination, content, layer.blendMode, layer.opacity)
-            } else {
-                BlendModes.composite(destination, content, layer.blendMode, layer.opacity)
-            }
+            LayerBlending.composite(destination, content, layer, clipped)
         } finally {
             bufferPool.release(content)
         }

@@ -1,8 +1,11 @@
 package com.artflow.studio.core.export
 
+import com.artflow.studio.core.color.ColorProfile
+import com.artflow.studio.core.color.IccProfile
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.domain.model.layer.BlendMode
+import com.artflow.studio.domain.model.layer.LayerBlendContract
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -20,8 +23,9 @@ import com.artflow.studio.domain.model.layer.Layer as StackLayer
  * The file has no thumbnail. [ProcreateReader] calibrates its tile layout against a thumbnail when one is
  * present, and a symmetrical artwork can calibrate to a mirrored layout, so the writer leaves the layout alone.
  *
- * Verified only by round trip through [ProcreateReader] and by checking the archive with Python's plistlib and
- * lz4 bindings; it has not been opened in Procreate itself.
+ * Tree/profile field placement follows the pinned native document encoder and genuine archives. Pixel
+ * containers are checked through [ProcreateReader] and independent plist/LZ4 parsing. Exported files have
+ * not been opened in Procreate itself; this does not establish complete native document compatibility.
  */
 object ProcreateWriter {
     /** One entry of the document's tree: a [Layer] or a [Group]. */
@@ -40,6 +44,7 @@ object ProcreateWriter {
         val clipped: Boolean = false,
         val alphaLocked: Boolean = false,
         val mask: SelectionMask? = null,
+        val blendContract: LayerBlendContract = LayerBlendContract.STANDARD,
     ) : Node
 
     /** A group of layers; [children] are top first, as Procreate lists them. */
@@ -53,7 +58,8 @@ object ProcreateWriter {
     /**
      * Writes a document of [width] by [height] pixels. [nodes] are the top-level layers and groups, top first;
      * [composite] is the flattened artwork without the background (transparent where nothing is painted), and
-     * [background] is the background colour as ARGB, or null when the background is hidden.
+     * [background] is the background colour as ARGB, or null when the background is hidden. All colour
+     * channels are already encoded in [colorProfile]; this writer tags them without converting them.
      */
     fun write(
         width: Int,
@@ -63,6 +69,7 @@ object ProcreateWriter {
         background: Int? = null,
         dpi: Int = DEFAULT_DPI,
         name: String = "",
+        colorProfile: ColorProfile = ColorProfile.SRGB,
     ): ByteArray {
         require(width in 1..ProcreateReader.MAX_SIDE && height in 1..ProcreateReader.MAX_SIDE) {
             "This canvas is too large for a Procreate document"
@@ -86,16 +93,28 @@ object ProcreateWriter {
             )
         val compositeLayer = archive.instance(LAYER, compositeFields)
         val colour = backgroundBytes(background)
+        val profile =
+            IccProfile.forProfile(colorProfile)?.let { icc ->
+                archive.instance(
+                    "SiColorProfile",
+                    mapOf(
+                        "SiColorProfileArchiveICCNameKey" to archive.add(colorProfile.label),
+                        "SiColorProfileArchiveICCDataKey" to archive.add(icc),
+                    ),
+                )
+            } ?: BinaryPlist.Uid(0)
         val document =
             mapOf(
                 "\$class" to archive.classOf(DOCUMENT),
                 "size" to archive.add("{$width, $height}"),
                 "tileSize" to TILE.toLong(),
-                "layers" to archive.array(tree),
+                "layers" to archive.array(builder.pixelLayers),
+                "unwrappedLayers" to archive.array(tree),
                 "composite" to compositeLayer,
                 "name" to archive.add(name),
                 "backgroundColor" to archive.add(colour),
                 "backgroundHidden" to (background == null),
+                "colorProfile" to profile,
                 "SilicaDocumentArchiveDPIKey" to dpi.toDouble(),
                 "orientation" to 1L,
             )
@@ -188,6 +207,10 @@ object ProcreateWriter {
         val archive = KeyedArchiveBuilder()
         val pending = ArrayList<Pending>()
 
+        // Native documents index each pixel-layer object once, separately from the nested tree.
+        // Masks and the saved composite are not entries of this index.
+        val pixelLayers = ArrayList<BinaryPlist.Uid>()
+
         fun uuid(): String = UUID.randomUUID().toString().uppercase()
 
         fun nodes(
@@ -219,6 +242,7 @@ object ProcreateWriter {
                     layer.blendMode,
                     layer.clipped,
                     layer.alphaLocked,
+                    layer.blendContract,
                 ).toMutableMap()
             layer.mask?.let { mask ->
                 require(mask.width == width && mask.height == height) { "The mask of \"${layer.name}\" is not the size of the document" }
@@ -226,7 +250,7 @@ object ProcreateWriter {
                 pending += Pending(maskUuid, null, mask)
                 fields["mask"] = archive.instance(LAYER, layerFields(maskUuid, "Mask", 1f, true, BlendMode.NORMAL, false, false))
             }
-            return archive.instance(LAYER, fields)
+            return archive.instance(LAYER, fields).also { pixelLayers += it }
         }
 
         private fun group(
@@ -239,6 +263,7 @@ object ProcreateWriter {
                 GROUP,
                 mapOf(
                     "name" to archive.add(group.name),
+                    "isHidden" to !group.visible,
                     "hidden" to !group.visible,
                     "opacity" to group.opacity.coerceIn(0f, 1f).toDouble(),
                     "children" to children,
@@ -255,15 +280,17 @@ object ProcreateWriter {
             mode: BlendMode,
             clipped: Boolean,
             alphaLocked: Boolean,
+            blendContract: LayerBlendContract = LayerBlendContract.STANDARD,
         ): Map<String, Any?> {
-            val number = ProcreateBlendModes.numberOf(mode).toLong()
+            val blend = ProcreateLayerBlendModes.encode(mode, blendContract)
             return mapOf(
                 "UUID" to archive.add(uuid),
                 "name" to archive.add(name),
                 "opacity" to opacity.coerceIn(0f, 1f).toDouble(),
                 "hidden" to !visible,
-                "blend" to number,
-                "extendedBlend" to number,
+                "blend" to blend.getValue("blend"),
+                "extendedBlend" to blend.getValue("extendedBlend"),
+                "extendedBlend2" to blend.getValue("extendedBlend2"),
                 "clipped" to clipped,
                 "preserve" to alphaLocked,
             )

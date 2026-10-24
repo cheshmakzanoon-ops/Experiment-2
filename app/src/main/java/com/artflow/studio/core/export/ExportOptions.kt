@@ -36,7 +36,7 @@ enum class ExportFormat(
     ;
 
     /** Formats that embed an ICC profile, so Display P3 artwork keeps its colours. */
-    val keepsColorProfile: Boolean get() = this == PNG || this == JPEG || this == LAYER_PNGS
+    val keepsColorProfile: Boolean get() = this == PNG || this == JPEG || this == LAYER_PNGS || this == PROCREATE
 
     /** Formats built from the individual layers as well as the composite. */
     val needsLayers: Boolean get() = this == PSD || this == LAYER_PNGS || this == PROCREATE

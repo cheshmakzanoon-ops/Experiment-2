@@ -51,7 +51,7 @@ class SecondaryGrainDocumentMigrationTest {
             val migrated = CanvasDocumentCodec.decode(bytes.decodeToString())
             CanvasDocumentCodec.requireValidHeader(migrated)
             CanvasDocumentCodec.requireValidStructure(migrated)
-            assertEquals(4, migrated.version)
+            assertEquals(CanvasDocument.CURRENT_VERSION, migrated.version)
             assertNull(migrated.checksum)
             assertEquals(
                 GrainBlend.MULTIPLY,
@@ -98,7 +98,7 @@ class SecondaryGrainDocumentMigrationTest {
                         ),
                 )
             val migrated = roundTrip(input)
-            assertEquals(4, migrated.version)
+            assertEquals(CanvasDocument.CURRENT_VERSION, migrated.version)
             assertEquals(
                 expectedPrimary,
                 migrated.layers
@@ -186,11 +186,12 @@ class SecondaryGrainDocumentMigrationTest {
             val current = original.copy(version = 4, checksum = null)
             val bytes = CanvasDocumentCodec.encode(current)
             val reopened = CanvasDocumentCodec.decode(bytes.decodeToString())
-            assertEquals(current, reopened)
+            assertEquals(current.copy(version = CanvasDocument.CURRENT_VERSION), reopened)
             val pixels = render(reopened)
             assertEquals(pixelExpectation.first, pixels.pixels[30 * pixels.width + 30] ushr 24)
             assertEquals(pixelExpectation.second, pixelSha(pixels))
-            assertArrayEquals(bytes, CanvasDocumentCodec.encode(reopened))
+            val resaved = CanvasDocumentCodec.encode(reopened)
+            assertArrayEquals(resaved, CanvasDocumentCodec.encode(CanvasDocumentCodec.decode(resaved.decodeToString())))
         }
     }
 
@@ -229,9 +230,9 @@ class SecondaryGrainDocumentMigrationTest {
         val raster = Layer(1, "Raster", 0, rasterFile = "layers/1/original.png", maskFile = "layers/1/mask.png", maskDensity = 0.7f)
         val vectors = Layer(2, "Vector", 1, strokes = listOf(stroke(primary).copy(layerId = 2)))
         val input = document(listOf(raster, vectors), 3).copy(trackedMs = 123L)
-        assertEquals(input.copy(version = 4), roundTrip(input))
-        val future = roundTrip(input.copy(version = 5))
-        assertEquals(5, future.version)
+        assertEquals(input.copy(version = CanvasDocument.CURRENT_VERSION), roundTrip(input))
+        val future = roundTrip(input.copy(version = CanvasDocument.CURRENT_VERSION + 1))
+        assertEquals(CanvasDocument.CURRENT_VERSION + 1, future.version)
         assertThrows(IllegalArgumentException::class.java) { CanvasDocumentCodec.requireValidHeader(future) }
     }
 

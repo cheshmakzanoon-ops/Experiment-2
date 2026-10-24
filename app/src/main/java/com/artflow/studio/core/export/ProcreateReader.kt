@@ -7,6 +7,7 @@ import com.artflow.studio.core.color.KnownIccProfiles
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.domain.model.layer.BlendMode
+import com.artflow.studio.domain.model.layer.LayerBlendContract
 import java.util.zip.Inflater
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -46,6 +47,7 @@ object ProcreateReader {
         val alphaLocked: Boolean,
         internal val uuid: String?,
         internal val maskUuid: String?,
+        val blendContract: LayerBlendContract = LayerBlendContract.STANDARD,
     ) : Node
 
     class Group(
@@ -173,18 +175,17 @@ object ProcreateReader {
             val visible = (item["isHidden"] as? Boolean ?: item["hidden"] as? Boolean) != true
             return Group(name, opacity, visible, children)
         }
-        val mode =
-            number(item["extendedBlend"])?.toInt()?.let(ProcreateBlendModes::of)
-                ?: number(item["blend"])?.toInt()?.let(ProcreateBlendModes::of)
+        val blend = ProcreateLayerBlendModes.decode(item)
         return Layer(
             name = name,
             opacity = opacity,
             visible = item["hidden"] != true,
-            blendMode = mode ?: BlendMode.NORMAL,
+            blendMode = blend.mode,
             clipped = item["clipped"] == true,
             alphaLocked = item["preserve"] == true,
             uuid = archive.string(item["UUID"]),
             maskUuid = archive.string(archive.map(item["mask"])?.get("UUID")),
+            blendContract = blend.contract,
         )
     }
 

@@ -7,6 +7,7 @@ import com.artflow.studio.domain.model.animation.TimelapseRecording
 import com.artflow.studio.domain.model.brush.GrainBlend
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.Layer
+import com.artflow.studio.domain.model.layer.LayerBlendContract
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.security.MessageDigest
@@ -23,6 +24,8 @@ import java.security.MessageDigest
  *   unmasked Normal groups are migrated to Pass Through to preserve their rendered appearance.
  * - **v4** applies the second brush's selected grain blend when replaying a compound stroke.
  *   Earlier vector strokes retain their historical Multiply grain behavior when loaded.
+ * - **v5** preserves the distinct native archive19 Darken contract on newly imported layers.
+ *   Older documents retain their standard blends; older readers reject v5 instead of changing its pixels.
  *
  * Kept in the data layer because it is purely a storage concern.
  */
@@ -79,7 +82,7 @@ data class CanvasDocument(
 
     companion object {
         /** Bump when storage or replay semantics require migration code. */
-        const val CURRENT_VERSION = 4
+        const val CURRENT_VERSION = 5
     }
 }
 
@@ -107,6 +110,7 @@ object CanvasDocumentCodec {
 
     /** Encodes [document] with a fresh [CanvasDocument.checksum]. */
     fun encode(document: CanvasDocument): ByteArray {
+        requireBlendContracts(document)
         val unsigned = document.copy(checksum = null)
         val signed = unsigned.copy(checksum = checksumOf(unsigned))
         return json.encodeToString(CanvasDocument.serializer(), signed).toByteArray()
@@ -124,12 +128,14 @@ object CanvasDocumentCodec {
             // Verify the original representation before changing its version or replay semantics.
             require(checksumOf(unsigned) == stored) { "The project data does not match its checksum" }
         }
+        requireBlendContracts(unsigned)
         return migrate(unsigned)
     }
 
     private fun migrate(document: CanvasDocument): CanvasDocument {
-        if (document.version !in 1..3) return document
+        if (document.version !in 1 until CanvasDocument.CURRENT_VERSION) return document
         val migrateGroups = document.version < 3
+        val migrateGrain = document.version < 4
 
         fun migrateLayer(layer: Layer): Layer {
             val legacyNormalGroup = migrateGroups && layer.isGroup && layer.blendMode == BlendMode.NORMAL
@@ -143,7 +149,7 @@ object CanvasDocumentCodec {
                 layer.strokes.map { stroke ->
                     val params = stroke.brushParams
                     val dual = params.dual
-                    if (dual == null || dual.params.grainBlend == GrainBlend.MULTIPLY) {
+                    if (!migrateGrain || dual == null || dual.params.grainBlend == GrainBlend.MULTIPLY) {
                         stroke
                     } else {
                         stroke.copy(
@@ -167,6 +173,19 @@ object CanvasDocumentCodec {
             .digest(json.encodeToString(CanvasDocument.serializer(), document).toByteArray())
             .joinToString("") { "%02x".format(it.toInt() and 255) }
 
+    /** A native contract must never be hidden inside a version that older readers would accept. */
+    private fun requireBlendContracts(document: CanvasDocument) {
+        val layers = document.layers.asSequence() + document.frames.asSequence().flatMap { it.layers.asSequence() }
+        layers.forEach { layer ->
+            if (layer.blendContract != LayerBlendContract.STANDARD) {
+                require(document.version >= 5) { "Native layer blends require project version 5" }
+                require(
+                    layer.blendMode == BlendMode.DARKEN && !layer.isGroup,
+                ) { "The native Darken contract requires a pixel Darken layer" }
+            }
+        }
+    }
+
     /** Version, canvas size and DPI. These are the only checks a packaged manifest receives before import. */
     fun requireValidHeader(document: CanvasDocument) {
         require(document.version in 1..CanvasDocument.CURRENT_VERSION) { "Unsupported project version ${document.version}" }
@@ -176,6 +195,7 @@ object CanvasDocumentCodec {
 
     /** Frames, layer identifiers, durations and opacity. Pixel-file paths are checked by the storage layer. */
     fun requireValidStructure(document: CanvasDocument) {
+        requireBlendContracts(document)
         val frames = document.resolvedFrames()
         require(frames.size in 1..MAX_FRAMES) { "Project has too many animation frames" }
         require(frames.map { it.id }.distinct().size == frames.size) { "Duplicate frame identifiers" }

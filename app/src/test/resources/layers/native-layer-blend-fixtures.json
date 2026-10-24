@@ -1,0 +1,241 @@
+{
+  "schemaVersion": 1,
+  "referenceSha256": "7b1dad3ac95f8aeca3c22b432b5d6fd94182a3bf9f84fb93588adb126368b54e",
+  "description": "Analyst-derived exact rational values from statically verified layer dataflow; no reference runtime execution or half-precision emulation.",
+  "fixtures": [
+    {
+      "name": "transparent-base",
+      "contract": "source19/gpu35",
+      "base": [
+        "0",
+        "0",
+        "0",
+        "0"
+      ],
+      "sourceBeforeOpacity": [
+        "1/8",
+        "1/4",
+        "3/8",
+        "1/2"
+      ],
+      "opacity": "1",
+      "maskCoverage": "1",
+      "preserveTarget": false,
+      "output": [
+        "0",
+        "0",
+        "0",
+        "0"
+      ],
+      "oracle": "Exact rational evaluation of recovered scalar dataflow; not native execution"
+    },
+    {
+      "name": "opaque-base",
+      "contract": "source19/gpu35",
+      "base": [
+        "3/4",
+        "1/4",
+        "1/2",
+        "1"
+      ],
+      "sourceBeforeOpacity": [
+        "1/8",
+        "1/4",
+        "1/8",
+        "1/2"
+      ],
+      "opacity": "1",
+      "maskCoverage": "1",
+      "preserveTarget": false,
+      "output": [
+        "1/2",
+        "1/4",
+        "3/8",
+        "1"
+      ],
+      "oracle": "Exact rational evaluation of recovered scalar dataflow; not native execution"
+    },
+    {
+      "name": "partial-base",
+      "contract": "source19/gpu35",
+      "base": [
+        "1/4",
+        "1/8",
+        "3/8",
+        "1/2"
+      ],
+      "sourceBeforeOpacity": [
+        "1/8",
+        "1/4",
+        "1/16",
+        "1/2"
+      ],
+      "opacity": "1",
+      "maskCoverage": "1",
+      "preserveTarget": false,
+      "output": [
+        "1/4",
+        "1/8",
+        "1/4",
+        "1/2"
+      ],
+      "oracle": "Exact rational evaluation of recovered scalar dataflow; not native execution"
+    },
+    {
+      "name": "half-layer-opacity",
+      "contract": "source19/gpu35",
+      "base": [
+        "1/4",
+        "1/8",
+        "3/8",
+        "1/2"
+      ],
+      "sourceBeforeOpacity": [
+        "1/8",
+        "1/4",
+        "1/16",
+        "1/2"
+      ],
+      "opacity": "1/2",
+      "maskCoverage": "1",
+      "preserveTarget": false,
+      "output": [
+        "1/4",
+        "1/8",
+        "5/16",
+        "1/2"
+      ],
+      "oracle": "Exact rational evaluation of recovered scalar dataflow; not native execution"
+    },
+    {
+      "name": "half-mask",
+      "contract": "source19/gpu35",
+      "base": [
+        "1/4",
+        "1/8",
+        "3/8",
+        "1/2"
+      ],
+      "sourceBeforeOpacity": [
+        "1/8",
+        "1/4",
+        "1/16",
+        "1/2"
+      ],
+      "opacity": "1",
+      "maskCoverage": "1/2",
+      "preserveTarget": false,
+      "output": [
+        "1/4",
+        "1/8",
+        "5/16",
+        "1/2"
+      ],
+      "oracle": "Exact rational evaluation of recovered scalar dataflow; not native execution"
+    },
+    {
+      "name": "preserve-target-branch",
+      "contract": "source19/gpu35",
+      "base": [
+        "1/4",
+        "1/8",
+        "3/8",
+        "1/2"
+      ],
+      "sourceBeforeOpacity": [
+        "1/8",
+        "1/4",
+        "1/16",
+        "1/2"
+      ],
+      "opacity": "1",
+      "maskCoverage": "1",
+      "preserveTarget": true,
+      "output": [
+        "3/16",
+        "1/8",
+        "7/32",
+        "1/2"
+      ],
+      "oracle": "Exact rational evaluation of recovered scalar dataflow; not native execution"
+    },
+    {
+      "name": "preserve-target-half-mask",
+      "contract": "source19/gpu35",
+      "base": [
+        "1/4",
+        "1/8",
+        "3/8",
+        "1/2"
+      ],
+      "sourceBeforeOpacity": [
+        "1/8",
+        "1/4",
+        "1/16",
+        "1/2"
+      ],
+      "opacity": "1",
+      "maskCoverage": "1/2",
+      "preserveTarget": true,
+      "output": [
+        "7/32",
+        "1/8",
+        "19/64",
+        "1/2"
+      ],
+      "oracle": "Exact rational evaluation of recovered scalar dataflow; not native execution"
+    },
+    {
+      "name": "modern-transparent-base",
+      "contract": "source34/gpu47",
+      "base": [
+        "0",
+        "0",
+        "0",
+        "0"
+      ],
+      "sourceBeforeOpacity": [
+        "1/8",
+        "1/4",
+        "1/16",
+        "1/2"
+      ],
+      "opacity": "1",
+      "maskCoverage": "1",
+      "preserveTarget": false,
+      "output": [
+        "1/8",
+        "1/4",
+        "1/16",
+        "1/2"
+      ],
+      "oracle": "Exact rational evaluation of recovered scalar dataflow; not native execution"
+    },
+    {
+      "name": "modern-partial-base",
+      "contract": "source34/gpu47",
+      "base": [
+        "1/4",
+        "1/8",
+        "3/8",
+        "1/2"
+      ],
+      "sourceBeforeOpacity": [
+        "1/8",
+        "1/4",
+        "1/16",
+        "1/2"
+      ],
+      "opacity": "1",
+      "maskCoverage": "1",
+      "preserveTarget": false,
+      "output": [
+        "1/4",
+        "1/4",
+        "1/4",
+        "3/4"
+      ],
+      "oracle": "Exact rational evaluation of recovered scalar dataflow; not native execution"
+    }
+  ]
+}

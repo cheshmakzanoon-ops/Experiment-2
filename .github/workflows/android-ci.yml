@@ -155,6 +155,10 @@ jobs:
             --check app/src/test/resources/brush/native-spline-fixtures.json \
             --report "$reports/pressure-spline.json"
           python tools/ipa_brush_blend_contracts.py "$ARTFLOW_REFERENCE_IPA" --out "$reports/dual-brush-contracts.json"
+          python tools/ipa_layer_blend_contracts.py "$ARTFLOW_REFERENCE_IPA" \
+            --check app/src/test/resources/layers/native-layer-blend-fixtures.json \
+            --out "$reports/layer-blend-contracts.json"
+          python tools/ipa_native_document_contracts.py "$ARTFLOW_REFERENCE_IPA" --out "$reports/native-document-contracts.json"
 
       - name: Run JVM unit tests
         run: |

@@ -24,7 +24,7 @@ import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -90,8 +90,12 @@ class ProcreateColorProfileDeviceTest {
                 repository.dispose()
             }
 
+            val persisted = storage.documentFile(601).readBytes()
+            assertPersistedChecksum(persisted)
             val saved = requireNotNull(storage.loadDocument(601))
-            assertNotNull(saved.checksum)
+            // The decoder verifies the disk signature, then clears it on the editable model.
+            assertNull(saved.checksum)
+            assertArrayEquals(persisted, storage.documentFile(601).readBytes())
             assertEquals(ColorProfile.DISPLAY_P3.name, saved.colorProfile)
             assertEquals(NATIVE_BACKGROUND, saved.backgroundColor)
             val preview = storage.flattenedFile(601).readBytes()
@@ -111,7 +115,9 @@ class ProcreateColorProfileDeviceTest {
             } finally {
                 reopened.dispose()
             }
-            File(TestEvidence.directory(), "procreate-p3-imported.artflow").writeBytes(storage.documentFile(601).readBytes())
+            val reopenedBytes = storage.documentFile(601).readBytes()
+            assertPersistedChecksum(reopenedBytes)
+            File(TestEvidence.directory(), "procreate-p3-imported.artflow").writeBytes(reopenedBytes)
             File(TestEvidence.directory(), "procreate-p3-preview.png").writeBytes(preview)
         }
 
@@ -256,6 +262,16 @@ class ProcreateColorProfileDeviceTest {
             }
         }
         return null
+    }
+
+    private fun assertPersistedChecksum(bytes: ByteArray) {
+        val text = bytes.toString(Charsets.UTF_8)
+        val fields = Regex("\"checksum\":\"([0-9a-f]{64})\"").findAll(text).toList()
+        assertEquals("The saved manifest must contain exactly one SHA-256 signature", 1, fields.size)
+        val field = fields.single()
+        // Hash the actual saved representation, preserving defaults and omitted compatibility fields.
+        val unsigned = text.replaceRange(field.range, "\"checksum\":null").toByteArray(Charsets.UTF_8)
+        assertEquals("The raw saved manifest must match its signature", field.groupValues[1], sha256(unsigned))
     }
 
     private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }

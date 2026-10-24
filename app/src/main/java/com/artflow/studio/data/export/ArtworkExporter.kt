@@ -36,6 +36,7 @@ import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.Layer
+import com.artflow.studio.domain.model.layer.LayerBlendContract
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -110,6 +111,7 @@ class ArtworkExporter
                     val prepared = prepare(composite, targetWidth, targetHeight, options)
                     val fileName = ExportNaming.fileName(projectName, options)
                     var resizedPsdMasks = false
+                    var renderedNativePsdBlends = false
 
                     val bytes: ByteArray =
                         when (options.format) {
@@ -142,6 +144,7 @@ class ArtworkExporter
                             ExportFormat.PSD -> {
                                 val document = buildPsd(prepared, layers, options, hasAdjustmentLayers, groups, layerMasks)
                                 resizedPsdMasks = document.resizedMasks
+                                renderedNativePsdBlends = document.nativeBlendFallback
                                 document.bytes
                             }
 
@@ -179,6 +182,9 @@ class ArtworkExporter
                             height = prepared.height,
                             warning =
                                 when {
+                                    renderedNativePsdBlends ->
+                                        "Native Darken is rendered into Artwork to preserve appearance; " +
+                                            "editable source layers and masks are included hidden."
                                     resizedPsdMasks && hasAdjustmentLayers ->
                                         "Resized masks and adjustment/filter effects are rendered into Artwork; " +
                                             "editable layers and masks are included hidden."
@@ -431,6 +437,7 @@ class ArtworkExporter
         private data class PsdOutput(
             val bytes: ByteArray,
             val resizedMasks: Boolean,
+            val nativeBlendFallback: Boolean,
         )
 
         private fun buildPsd(
@@ -442,8 +449,10 @@ class ArtworkExporter
             layerMasks: Map<Long, PixelBuffer>,
         ): PsdOutput {
             var resizedMasks = false
+            val nativeBlendFallback = layers.any { it.layer.blendContract == LayerBlendContract.PROCREATE_DARKEN_19 }
+            val needsRenderedAppearance = hasAdjustmentLayers || nativeBlendFallback
 
-            fun shown(layer: Layer) = !hasAdjustmentLayers && (options.includeHiddenLayers || layer.isVisible)
+            fun shown(layer: Layer) = !needsRenderedAppearance && (options.includeHiddenLayers || layer.isVisible)
 
             fun opacity(layer: Layer) = (layer.opacity * 255f).roundToInt().coerceIn(0, 255)
 
@@ -487,8 +496,13 @@ class ArtworkExporter
                 // can expose hidden paint. Only the correctly resized composite is shown.
                 for (index in psdLayers.indices) psdLayers[index] = psdLayers[index].copy(isVisible = false)
             }
-            if (hasAdjustmentLayers || resizedMasks) {
-                val name = if (resizedMasks) "Artwork (resized masks)" else "Artwork (rendered effects)"
+            if (needsRenderedAppearance || resizedMasks) {
+                val name =
+                    when {
+                        nativeBlendFallback -> "Artwork (native layer blending)"
+                        resizedMasks -> "Artwork (resized masks)"
+                        else -> "Artwork (rendered effects)"
+                    }
                 psdLayers += PsdCodec.PsdLayer(name, flatten(composite, options))
             } else if (options.flattenOntoBackground) {
                 psdLayers.add(
@@ -509,6 +523,7 @@ class ArtworkExporter
                     useRle = options.psdUseRle,
                 ),
                 resizedMasks,
+                nativeBlendFallback,
             )
         }
 
@@ -556,6 +571,7 @@ class ArtworkExporter
                             blendMode = entry.layer.blendMode,
                             clipped = entry.layer.isClippingMask,
                             alphaLocked = entry.layer.isAlphaLocked,
+                            blendContract = entry.layer.blendContract,
                         )
                     },
                 )
@@ -567,6 +583,7 @@ class ArtworkExporter
                 background = if (options.flattenOntoBackground) options.outputBackground else null,
                 dpi = options.dpi,
                 name = projectName,
+                colorProfile = options.outputProfile,
             )
         }
 

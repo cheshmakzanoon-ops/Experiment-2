@@ -115,14 +115,14 @@ class SecondaryGrainMigrationDeviceTest {
 
             repository.saveCanvas(PROJECT_ID)
             val migrated = documentFile.readBytes()
-            assertSigned(migrated, 4)
+            assertSigned(migrated, CanvasDocument.CURRENT_VERSION)
             evidence("secondary-grain-v4-migrated.artflow", migrated)
             reopen()
             assertArrayEquals(legacyPixels, pixels(legacyLayer))
             assertMigratedBrush(expectedMigrated)
             assertArrayEquals(migrated, documentFile.readBytes())
 
-            // New strokes on the saved/reopened v4 document use the corrected secondary modes.
+            // New strokes on the saved/reopened document use the secondary modes introduced in v4.
             val subtractLayer = paint("New Subtract", originalBrush, GrainBlend.SUBTRACT)
             val subtractPixels = pixels(subtractLayer)
             assertEquals(13, subtractPixels[CENTRE_INDEX] ushr 24)
@@ -135,7 +135,7 @@ class SecondaryGrainMigrationDeviceTest {
             val expectedLayers = mapOf(legacyLayer to legacyPixels, subtractLayer to subtractPixels, hardMixLayer to hardMixPixels)
             repository.saveCanvas(PROJECT_ID)
             val saved = documentFile.readBytes()
-            assertSigned(saved, 4)
+            assertSigned(saved, CanvasDocument.CURRENT_VERSION)
             evidence("secondary-grain-v4-new-strokes.artflow", saved)
             val png = requireNotNull(storage.loadFlattenedBytes(PROJECT_ID))
             evidence("secondary-grain-v4-new-strokes.png", png)
@@ -147,13 +147,13 @@ class SecondaryGrainMigrationDeviceTest {
             reopen()
             expectedLayers.forEach { (id, expected) -> assertArrayEquals("Reopened layer $id", expected, pixels(id)) }
             assertArrayEquals(composite.pixels, requireNotNull(repository.compositeBuffer()).pixels)
-            assertArrayEquals("Reopening must not rewrite a valid v4 manifest", saved, documentFile.readBytes())
+            assertArrayEquals("Reopening must not rewrite a valid saved manifest", saved, documentFile.readBytes())
             assertArrayEquals(png, requireNotNull(storage.loadFlattenedBytes(PROJECT_ID)))
         }
 
     private suspend fun assertMigratedBrush(expected: BrushParams) {
         val document = requireNotNull(storage.loadDocument(PROJECT_ID))
-        assertEquals(4, document.version)
+        assertEquals(CanvasDocument.CURRENT_VERSION, document.version)
         val layer = document.layers.single()
         val actual = layer.strokes.single().brushParams
         // Full parameter equality also protects primary grain, retained source metadata and images.
