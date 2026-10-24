@@ -129,6 +129,13 @@ interface CanvasRepository {
 
     fun cancelStroke(strokeId: Long)
 
+    /**
+     * Releases canvas-sized caches for a finished segment that is still provisional. Its points
+     * remain visible in previews until [endStroke] or [cancelStroke]; pixels and history are untouched.
+     * Later samples, if any, are rendered without retaining another full-canvas live cache.
+     */
+    fun sealStrokeSegment(strokeId: Long) {}
+
     /** Strokes currently in flight, so the canvas view can render the live stroke. */
     fun activeStroke(strokeId: Long): Stroke?
 

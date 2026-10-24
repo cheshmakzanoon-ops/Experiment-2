@@ -60,6 +60,7 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -255,6 +256,7 @@ class CanvasRepositoryImpl
             activeSelection = null
             savedSelectionSlots.clear()
             activeStrokes.clear()
+            cacheableStrokes.clear()
             synchronized(liveLock) { liveStrokes.clear() }
             strokeBrushParams.clear()
             strokeLayerIds.clear()
@@ -391,6 +393,7 @@ class CanvasRepositoryImpl
                 SelectionMaskCodec.decode(encoded, canvasWidth, canvasHeight)?.let { savedSelectionSlots += it }
             }
             activeStrokes.clear()
+            cacheableStrokes.clear()
             synchronized(liveLock) { liveStrokes.clear() }
             strokeBrushParams.clear()
             strokeLayerIds.clear()
@@ -615,6 +618,7 @@ class CanvasRepositoryImpl
             strokeErasers[strokeId] = isEraser && !destination.isMask
             strokeSecondaries[strokeId] = secondaryStrokeColor
             strokeDestinations[strokeId] = destination
+            cacheableStrokes[strokeId] = activeStrokes.getValue(strokeId).first()
             if (!destination.isMask) prepareStrokeCopy(strokeId, layer)
             return strokeId
         }
@@ -664,12 +668,14 @@ class CanvasRepositoryImpl
         }
 
         override fun endStroke(strokeId: Long) {
+            cacheableStrokes.remove(strokeId)
             val prepared = strokeCopies.remove(strokeId)
             try {
                 commitStroke(strokeId, prepared)
             } finally {
                 // A copy the commit used has already finished, so cancelling it changes nothing.
                 prepared?.job?.cancel()
+                synchronized(liveLock) { liveStrokes.remove(strokeId) }
             }
         }
 
@@ -819,6 +825,7 @@ class CanvasRepositoryImpl
             }
 
         override fun cancelStroke(strokeId: Long) {
+            cacheableStrokes.remove(strokeId)
             synchronized(liveLock) { liveStrokes.remove(strokeId) }
             strokeCopies.remove(strokeId)?.job?.cancel()
             activeStrokes.remove(strokeId)
@@ -827,6 +834,17 @@ class CanvasRepositoryImpl
             strokeErasers.remove(strokeId)
             strokeSecondaries.remove(strokeId)
             strokeDestinations.remove(strokeId)
+            emitAsync(CanvasInvalidationEvent.Full)
+        }
+
+        override fun sealStrokeSegment(strokeId: Long) {
+            if (strokeId !in activeStrokes) return
+            cacheableStrokes.remove(strokeId)
+            strokeCopies.remove(strokeId)?.job?.cancel()
+            synchronized(liveLock) { liveStrokes.remove(strokeId) }
+            // The uncached renderer completes this segment's endpoint. Redraw even if its points
+            // did not change since the last live preview, without committing any pixels or history.
+            previewDamage = null
             emitAsync(CanvasInvalidationEvent.Full)
         }
 
@@ -2697,6 +2715,9 @@ class CanvasRepositoryImpl
         private val liveStrokes = HashMap<Long, List<StrokeRasterizer.LiveStroke>>()
         private val liveLock = Any()
 
+        /** First-point identity also excludes old preview snapshots after a document reuses an id. */
+        private val cacheableStrokes = ConcurrentHashMap<Long, StrokePoint>()
+
         /** The layers below the one being painted, composited once per area while a stroke goes on. */
         private val belowCache = TileCache()
 
@@ -2782,6 +2803,7 @@ class CanvasRepositoryImpl
             val selection = activeSelection
             val local =
                 pendingEdits.keys.all { it in damageTrackedSessions } &&
+                    !hasProvisionalPickupDependency() &&
                     (selection == null || (selection.width == canvasWidth && selection.height == canvasHeight)) &&
                     layers.none { it.filterType != null || it.maskFeather > 0f || it.effects != null } &&
                     layers.all { canvasSized(it.raster) && canvasSized(it.mask) }
@@ -2796,6 +2818,20 @@ class CanvasRepositoryImpl
                 document,
                 layers.associate { it.id to listOf(id(it), id(sessionBuffers[it.id] ?: it.raster), id(it.mask)) },
             )
+        }
+
+        /** Wet pickup needs earlier provisional paint along the whole path, outside a damage crop too. */
+        private fun hasProvisionalPickupDependency(): Boolean {
+            val paintedLayers = HashSet<Long>()
+            for (id in activeStrokes.keys) {
+                val destination = strokeDestinations[id] ?: StrokeDestination.LAYER
+                val layer = strokeLayerIds[id]
+                val params = strokeBrushParams[id]
+                if (destination == StrokeDestination.LAYER && layer != null && params != null) {
+                    if (!paintedLayers.add(layer) && (params.picksUpCanvas || params.dilution > 0f)) return true
+                }
+            }
+            return false
         }
 
         private fun canvasSized(buffer: PixelBuffer?): Boolean =
@@ -2958,7 +2994,16 @@ class CanvasRepositoryImpl
             val region = snapshot.region
             synchronized(liveLock) {
                 val lives = liveFor(stroke, mirrors, layer, document.width, document.height) ?: return false
-                val target = layer.raster?.copy() ?: PixelBuffer(region?.width ?: document.width, region?.height ?: document.height)
+                val base = layer.raster
+                // Only cropPreview sets region; its raster is already private to this render.
+                // Full snapshots still share repository/history pixels and must copy them.
+                // Wet pickup reads snapshot.fullRasters, which retains the unchanged full source.
+                val target =
+                    when {
+                        base == null -> PixelBuffer(region?.width ?: document.width, region?.height ?: document.height)
+                        region != null -> base
+                        else -> base.copy()
+                    }
                 val rasterizer = StrokeRasterizer(region?.left ?: 0, region?.top ?: 0)
                 try {
                     mirrors.zip(lives).forEach { (mirror, live) ->
@@ -2986,6 +3031,7 @@ class CanvasRepositoryImpl
             width: Int,
             height: Int,
         ): List<StrokeRasterizer.LiveStroke>? {
+            if (cacheableStrokes[stroke.id] !== stroke.points.firstOrNull()) return null
             val eligible =
                 StrokeRasterizer.canDrawLive(stroke) &&
                     layer.strokes.isEmpty() &&
@@ -3005,41 +3051,63 @@ class CanvasRepositoryImpl
             active: List<Stroke>,
             snapshot: PreviewSnapshot,
         ) {
-            val region = snapshot.region
+            var precedingPaint = false
             for (stroke in active) {
                 val destination = snapshot.destinations[stroke.id] ?: StrokeDestination.LAYER
-                val mirrors =
-                    SymmetryEngine.mirrorStroke(
-                        stroke,
-                        snapshot.document.width,
-                        snapshot.document.height,
-                        symmetryFor(layer, snapshot.symmetry),
-                    )
-                val done =
-                    !canReceiveStroke(layer, destination) ||
-                        (destination == StrokeDestination.LAYER && paintLive(layer, stroke, mirrors, snapshot))
-                if (done) continue
-                // Shift the mirrored strokes into the region being rendered.
-                val incoming =
-                    mirrors.map { if (region == null) it else PreviewCache.translate(it, -region.left.toFloat(), -region.top.toFloat()) }
-                val pixels =
-                    LayerStrokeRenderer.render(
-                        if (destination.isMask) layer.mask else layer.raster,
-                        if (destination.isMask) emptyList() else layer.strokes.toList(),
-                        incoming,
-                        region?.width ?: snapshot.document.width,
-                        region?.height ?: snapshot.document.height,
-                        !destination.isMask && layer.isAlphaLocked,
-                        snapshot.selection,
-                        originX = region?.left ?: 0,
-                        originY = region?.top ?: 0,
-                    )
-                if (destination.isMask) {
-                    layer.mask = pixels
-                } else {
-                    layer.raster = pixels
-                    layer.strokes.clear()
+                if (canReceiveStroke(layer, destination)) {
+                    val needsPreviousPaint =
+                        precedingPaint && (stroke.brushParams.picksUpCanvas || stroke.brushParams.dilution > 0f)
+                    precedingPaint = precedingPaint || destination == StrokeDestination.LAYER
+                    paintPreviewStroke(layer, stroke, destination, snapshot, needsPreviousPaint)
                 }
+            }
+        }
+
+        private fun paintPreviewStroke(
+            layer: LayerData,
+            stroke: Stroke,
+            destination: StrokeDestination,
+            snapshot: PreviewSnapshot,
+            needsPreviousPaint: Boolean,
+        ) {
+            val region = snapshot.region
+            val mirrors =
+                SymmetryEngine.mirrorStroke(
+                    stroke,
+                    snapshot.document.width,
+                    snapshot.document.height,
+                    symmetryFor(layer, snapshot.symmetry),
+                )
+            if (destination == StrokeDestination.LAYER) {
+                // A live buffer samples the committed source, which omits preceding provisional
+                // segments. Rebuild this dependent stroke against the pixels just painted above.
+                if (needsPreviousPaint) {
+                    synchronized(liveLock) {
+                        if (cacheableStrokes[stroke.id] === stroke.points.firstOrNull()) liveStrokes.remove(stroke.id)
+                    }
+                }
+                if (!needsPreviousPaint && paintLive(layer, stroke, mirrors, snapshot)) return
+            }
+            // Shift the mirrored strokes into the region being rendered.
+            val incoming =
+                mirrors.map { if (region == null) it else PreviewCache.translate(it, -region.left.toFloat(), -region.top.toFloat()) }
+            val pixels =
+                LayerStrokeRenderer.render(
+                    if (destination.isMask) layer.mask else layer.raster,
+                    if (destination.isMask) emptyList() else layer.strokes.toList(),
+                    incoming,
+                    region?.width ?: snapshot.document.width,
+                    region?.height ?: snapshot.document.height,
+                    !destination.isMask && layer.isAlphaLocked,
+                    snapshot.selection,
+                    originX = region?.left ?: 0,
+                    originY = region?.top ?: 0,
+                )
+            if (destination.isMask) {
+                layer.mask = pixels
+            } else {
+                layer.raster = pixels
+                layer.strokes.clear()
             }
         }
 
@@ -3357,6 +3425,7 @@ class CanvasRepositoryImpl
             pendingSelection = null
             activeSelection = snapshot.selection?.copy()
             activeStrokes.clear()
+            cacheableStrokes.clear()
             synchronized(liveLock) { liveStrokes.clear() }
             strokeBrushParams.clear()
             strokeLayerIds.clear()
@@ -3500,6 +3569,7 @@ class CanvasRepositoryImpl
             pendingEdits.clear()
             damageTrackedSessions.clear()
             activeStrokes.clear()
+            cacheableStrokes.clear()
             synchronized(liveLock) { liveStrokes.clear() }
             strokeBrushParams.clear()
             strokeLayerIds.clear()

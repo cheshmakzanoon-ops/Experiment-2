@@ -126,4 +126,75 @@ class SurfaceStrokeTest {
         assertEquals(2, begins)
         assertEquals(2, ends)
     }
+
+    @Test fun cancellationDiscardsAllSegmentsAndLateMovesCannotStartAnotherGesture() {
+        val calls = mutableListOf<String>()
+        val stroker = lifecycleStroker(calls)
+        stroker.down(20f, 50f, 1f)
+        stroker.move(80f, 50f, 1f)
+        assertEquals(2, calls.count { it == "begin" })
+        assertEquals(1, calls.count { it == "end" })
+        stroker.cancel()
+        val cancelled = calls.toList()
+        stroker.move(20f, 50f, 1f)
+        stroker.up()
+        stroker.cancel()
+        assertEquals(cancelled, calls)
+        assertEquals(1, calls.count { it == "cancel" })
+        assertEquals(0, calls.count { it == "finish" })
+        stroker.down(20f, 50f, 1f)
+        stroker.up()
+        assertEquals(1, calls.count { it == "finish" })
+    }
+
+    @Test fun replacementDownCancelsTheOldGestureWhileUpOutsideTheMeshStillFinishes() {
+        val calls = mutableListOf<String>()
+        val stroker = lifecycleStroker(calls)
+        stroker.down(20f, 50f, 1f)
+        stroker.down(80f, 50f, 1f)
+        assertEquals(listOf("begin", "cancel", "begin"), calls)
+        stroker.move(80f, -20f, 1f)
+        assertEquals(1, calls.count { it == "end" })
+        assertEquals(0, calls.count { it == "finish" })
+        stroker.up()
+        assertEquals(1, calls.count { it == "finish" })
+        assertEquals("A segment ended in a gap is not ended twice", 1, calls.count { it == "end" })
+    }
+
+    private fun lifecycleStroker(calls: MutableList<String>): SurfaceStroker =
+        SurfaceStroker(
+            pick = { x, y ->
+                if (y < 0f) null else SurfaceHit(x / 100f, y / 100f, if (x < 50f) 0 else 1)
+            },
+            sink =
+                object : SurfaceSink {
+                    override fun begin(
+                        u: Float,
+                        v: Float,
+                        pressure: Float,
+                    ) {
+                        calls += "begin"
+                    }
+
+                    override fun move(
+                        u: Float,
+                        v: Float,
+                        pressure: Float,
+                    ) {
+                        calls += "move"
+                    }
+
+                    override fun end() {
+                        calls += "end"
+                    }
+
+                    override fun finish() {
+                        calls += "finish"
+                    }
+
+                    override fun cancel() {
+                        calls += "cancel"
+                    }
+                },
+        )
 }

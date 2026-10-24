@@ -15,8 +15,9 @@ The app now writes `.artflow` v5 so isolated Normal groups, corrected secondary 
 the distinct imported native Darken contract cannot be silently replayed with older semantics.
 Existing v1–v4 documents migrate after
 verification of the original checksum when present; historical unsigned documents retain their
-existing unverified acceptance. Old vector strokes preserve their historical Multiply coverage;
-existing Darken layers remain standard. Native `.procreate` group metadata
+existing unverified acceptance. Stored vector strokes from v1–v3 preserve their historical Multiply
+coverage; v4 and later retain their selected secondary Grain Blend. Darken layers in all v1–v4
+drawings remain standard. Native `.procreate` group metadata
 still uses a bounded appearance fallback where necessary. No production signing, store publication,
 physical-device qualification or complete Procreate equivalence is asserted by these changes.
 
@@ -33,7 +34,7 @@ totalling 1,713 passes, two allowed skips and seven failures of the same P3 chec
 Minified launch was not reached. The corrected test now verifies the raw stored signature and
 the loader's cleared-model contract without removing any colour or reopen assertion. The independent
 Android 15 lane's first-attempt ART crash and automatic recovery remain separately preserved.
-That run failed and does not accept these changes; the next exact revision must complete its gate.
+That run failed. The later result below belongs to the corrected source and preserves its own failures.
 
 The subsequent [native Darken](NATIVE_LAYER_DARKEN_2026-10-24.md) and
 [native export](PROCREATE_NATIVE_EXPORT_2026-10-24.md) corrections add four further Android identities:
@@ -41,8 +42,31 @@ the version4/version5 real-storage lifecycle, the used blend-dialog route, P3 ar
 and hidden-background new-document versus existing-canvas behavior. The reference gate additionally
 checks the selected native layer pipeline and document-encoder contracts against the pinned input.
 These are derived static contracts; native application execution, exported-file opening in Procreate
-and physical stylus/display performance remain outside the evidence. Their own completed exact-source
-run is required before treating these later changes as device-accepted.
+and physical stylus/display performance remain outside the evidence.
+
+[Run 311](CI_RUN_311_2026-10-24.md), exact revision `e2aa900b91298fe08eca8529d0345220faa9e2eb`,
+passed 1,485 JVM tests, 133 Python checks and the static/build/package gates. Six emulator lanes
+completed all 250 identities and minified launch; API 26 has the same two permitted skips. The
+main Android 15 / 16 KB lane needed one recovery. The independent 16 KB lane crashed twice in ART
+and ended with 213 passes, one empty native-process failure and 36 missing identities. The final
+matrix has 1,711 passes, two skips and one failure; first attempts remain counted separately.
+**The run failed and does not meet the seven-lane acceptance contract.** The native-document cases
+passed in all final attempts, but their scoped success does not waive the incomplete lane.
+
+The later [preview/segment changes](PREVIEW_PERFORMANCE_2026-10-24.md),
+[model-editor lifecycle](MODEL_EDITOR_2026-10-24.md) and
+[native spacing export](NATIVE_SPACING_EXPORT_2026-10-24.md) have a combined local gate of
+1,511 JVM tests, 139 Python checks, Android test compilation, formatting and detekt. The first
+combined invocation's two loop-style findings were refactored without changing a baseline or
+suppressing a rule; the full follow-up gate passed. Its 253 declared Android cases retain all prior
+250 and require a new exact-revision matrix. No local result or earlier device artifact accepts
+that source's device execution.
+
+The [collector diagnostics](ANDROID15_COLLECTOR_CONTROL_2026-10-24.md) also remain failed.
+The corrected control recorded CC and compatible boot artifacts, but the selected system servers
+crashed before configured-phase reporting finished. No application case completed; later native
+flag recovery invalidated the requested configuration. These results establish no runtime repair
+and do not waive either required Android 15 / 16 KB lane.
 
 The preceding v4 revision `c5cf20d7e6ca075d1a49be76026d401dafeada1e` passed the build and all seven
 emulator lanes in [run 308](CI_RUN_308_2026-10-24.md), with 1,432 JVM tests, 126 Python checks and

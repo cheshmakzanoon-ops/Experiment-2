@@ -294,6 +294,9 @@ fun CanvasScreen(
             viewModel.model.painter(
                 params = { viewModel.input.value.brushParams },
                 layer = { viewModel.activeLayerId.value },
+                onPreviewChanged = { growing ->
+                    if (growing) viewModel.canvasPreview.refreshProvisional() else viewModel.canvasPreview.finishProvisional()
+                },
             )
         }
     var referenceImportProject by rememberSaveable(projectId) { mutableStateOf<Long?>(null) }
@@ -1277,12 +1280,15 @@ fun CanvasScreen(
             }
             val model3d = modelMesh
             if (model3d != null && showModel && !focusMode) {
+                val modelInteractive = panel == EditorPanel.NONE && !showCopyPaste
                 ModelCompanion(
                     mesh = model3d,
                     artwork = canvasPreviewBitmap,
                     painter = modelPainter,
                     onClose = { showModel = false },
-                    modifier = Modifier.zIndex(4f),
+                    interactive = modelInteractive,
+                    // Modal content and its scrim keep input precedence without recreating the model view.
+                    modifier = Modifier.zIndex(if (modelInteractive) 4f else 0f),
                 )
             }
             if (ready != null && !focusMode) {

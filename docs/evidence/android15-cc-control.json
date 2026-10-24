@@ -1,0 +1,1894 @@
+{
+  "schemaVersion": 1,
+  "reportKind": "android15-same-image-collector-control",
+  "conclusion": "All four diagnostic lanes failed; zero completed application cases; no stable CC configuration established.",
+  "applicationRevision": "e2aa900b91298fe08eca8529d0345220faa9e2eb",
+  "expectedCountPerLane": 250,
+  "identityEncoding": "Sorted fully qualified Class#method strings joined with LF, including a final LF, UTF-8",
+  "identitySHA256": "308b1663e5f2711c2279997de1e4a5b34ace31bbf8dd5a440db1aae5342a54c2",
+  "expectedIdentities": [
+    "com.artflow.studio.AnimationPlaybackUiTest#backgroundCallbackClearsTheVisiblePauseState",
+    "com.artflow.studio.AnimationPlaybackUiTest#frameRoleAndVisibilityControlsReachTheDocumentAndDisableEmptyPlayback",
+    "com.artflow.studio.AnimationPlaybackUiTest#onionColorPickerAppliesOnlyOnConfirmationAndKeepsTheOtherColor",
+    "com.artflow.studio.AnimationPlaybackUiTest#realPlayButtonBecomesPauseWhileFramesAdvanceAndReturnsAfterPause",
+    "com.artflow.studio.AnimationPlaybackUiTest#teardownWaitsForAnAtomicWriteAlreadyInFlight",
+    "com.artflow.studio.AppLaunchTest#activityLaunchesAndReachesResumed",
+    "com.artflow.studio.ArtworkWorkflowTest#createPaintSaveReopenRecreateAndDiscardPreserveTheSavedPixels",
+    "com.artflow.studio.BlendModePreviewDeviceTest#modeChipsShowTheActualBlendOfConsistentSampleColours",
+    "com.artflow.studio.BrushAttributeUiTest#cancellingAnAttributeEditLeavesThePublishedBrushUntouched",
+    "com.artflow.studio.BrushAttributeUiTest#compactNavigationShowsOnlyTheSelectedGroupAndRetainsEdits",
+    "com.artflow.studio.BrushAttributeUiTest#countReachesEveryDabCountTheLibraryStores",
+    "com.artflow.studio.BrushAttributeUiTest#largerTargetsRemainAvailableInTheCompactNavigator",
+    "com.artflow.studio.BrushAttributeUiTest#newlyReachableDynamicsUpdateOnlyTheMatchingParameters",
+    "com.artflow.studio.BrushAttributeUiTest#reversedSpeedCanBeSetFromTheDynamicsPanel",
+    "com.artflow.studio.BrushAttributeUiTest#studioRetainsTheChosenGroupAcrossTabsAndPublishesOnlyOnUse",
+    "com.artflow.studio.BrushAttributeUiTest#tiltOpacityCanBeSetApartFromTiltSize",
+    "com.artflow.studio.BrushSettingsAccessibilityTest#collapsingASectionPreservesEditedParametersAndScrollAccess",
+    "com.artflow.studio.BrushSettingsAccessibilityTest#settingsAcrossTheWholeBrushPanelRemainReachableInABoundedViewport",
+    "com.artflow.studio.BrushShareFormatUiTest#cancelDoesNotShareOrCommitAFormat",
+    "com.artflow.studio.BrushShareFormatUiTest#setChoiceUsesTheBrushsetFormat",
+    "com.artflow.studio.BrushShareFormatUiTest#singleBrushDefaultsToArtflowAndCanExplicitlySelectProcreate",
+    "com.artflow.studio.BrushShareFormatUiTest#theDraftShareButtonShowsCurrentPrimaryAndSecondaryCounts",
+    "com.artflow.studio.BrushShareFormatUiTest#theSavedSetShareButtonRefreshesTheNamedComponentConversions",
+    "com.artflow.studio.BrushStudioTabsTest#labelsAndSelectionSurviveRightToLeftAndFontChanges",
+    "com.artflow.studio.BrushStudioTabsTest#labelsFitAtDefaultAndLargeFontScales",
+    "com.artflow.studio.BrushStudioTabsTest#labelsFitAtFractionalDisplayDensity",
+    "com.artflow.studio.BrushStudioUiTest#cancelledPracticeGesturesDoNotBecomeStrokesAndHistoryIsBounded",
+    "com.artflow.studio.BrushStudioUiTest#categorySearchAndEmptyResultsCanBeRecovered",
+    "com.artflow.studio.BrushStudioUiTest#exactPercentageEntryRejectsOutOfRangeAndCancelDoesNotCommit",
+    "com.artflow.studio.BrushStudioUiTest#integerValuesCannotBeFractionalAndSliderValuesSnapToIntegers",
+    "com.artflow.studio.BrushStudioUiTest#practiceStrokesSurviveTabChangesButNeverApplyBrushSettingsByThemselves",
+    "com.artflow.studio.BrushStudioUiTest#restoringTheDraftAndApplyingUseTheCorrectSnapshot",
+    "com.artflow.studio.BrushStudioUiTest#searchingAndSelectingAPresetDoesNotApplyUntilConfirmed",
+    "com.artflow.studio.BrushStudioUiTest#selectingAndUsingAPresetPublishesExactlyOnce",
+    "com.artflow.studio.CanvasInputDeviceTest#aTapWithFreehandKeepsTheSelectionInsteadOfReplacingItWithNothing",
+    "com.artflow.studio.CanvasInputDeviceTest#actionCancelWithMultiplePointersDiscardsAllProvisionalInk",
+    "com.artflow.studio.CanvasInputDeviceTest#asynchronousShapeStaysBoundToItsOriginalLayer",
+    "com.artflow.studio.CanvasInputDeviceTest#batchedStylusSamplesRetainTheActualPath",
+    "com.artflow.studio.CanvasInputDeviceTest#canceledCloneTapCannotSetSourceAndPauseCancelsPainting",
+    "com.artflow.studio.CanvasInputDeviceTest#canceledSelectionsAndClearedPendingSelectionsStayCleared",
+    "com.artflow.studio.CanvasInputDeviceTest#cancelledPointerFlagsRejectPalmWithoutRejectingPen",
+    "com.artflow.studio.CanvasInputDeviceTest#cancellingReconstructKeepsTheLastSuccessfulReference",
+    "com.artflow.studio.CanvasInputDeviceTest#centeredPinchChangesViewWithoutUndoOrPainting",
+    "com.artflow.studio.CanvasInputDeviceTest#changingAlphaLockDuringAnOpenToolDiscardsTheStaleEdit",
+    "com.artflow.studio.CanvasInputDeviceTest#cloneSampleAllLayersSwitchControlsTheCapturedSourceEvenForImmediateRelease",
+    "com.artflow.studio.CanvasInputDeviceTest#emptyOverlaySelectionDoesNotChangePixelsOrHistory",
+    "com.artflow.studio.CanvasInputDeviceTest#frozenAndZeroPressureLiquifyGesturesCreateNoUndoEntries",
+    "com.artflow.studio.CanvasInputDeviceTest#layerChangeCancelsShapeAndDisablingFingerPaintingCancelsFingerStroke",
+    "com.artflow.studio.CanvasInputDeviceTest#liquifyCommitsTheCompleteMapEvenWhenItsLastPreviewWasThrottled",
+    "com.artflow.studio.CanvasInputDeviceTest#liquifyReconstructRestoresEarlierArtworkAndRemainsUndoable",
+    "com.artflow.studio.CanvasInputDeviceTest#moveToolUsesTheDragDirectionAndCommitsTheFinalPosition",
+    "com.artflow.studio.CanvasInputDeviceTest#outlinedShapesHaveVisibleBordersAndPolygonStaysWithinDragBounds",
+    "com.artflow.studio.CanvasInputDeviceTest#penKeepsDrawingWithPalmAndDoesNotAdoptTheRemainingFinger",
+    "com.artflow.studio.CanvasInputDeviceTest#physicalEraserRemovesPixelsWithoutChangingTheSelectedBrush",
+    "com.artflow.studio.CanvasInputDeviceTest#reconstructNeverOverwritesAnInterveningEditOrAnotherDocument",
+    "com.artflow.studio.CanvasInputDeviceTest#retouchToolsHonorLayerAlphaLockFromTheActualDocument",
+    "com.artflow.studio.CanvasInputDeviceTest#savedReloadChangesRevisionEvenWhenProjectAndLayerIdsAreReused",
+    "com.artflow.studio.CanvasInputDeviceTest#selectionsKeepTheirGeometryAndIncludePointerUpPosition",
+    "com.artflow.studio.CanvasInputDeviceTest#shapeSelectionFeatheringPreservesBackdropAndAlphaLock",
+    "com.artflow.studio.CanvasInputDeviceTest#shapesAndTextPreserveExistingArtworkAndUndoExactly",
+    "com.artflow.studio.CanvasInputDeviceTest#twoFingerNavigationCancelsFingerInkAndHistoryWaitsForFinalUp",
+    "com.artflow.studio.CanvasInputDeviceTest#zoomToolCancellationAndPinchTakeoverNeverApplyAnExtraTapOrPaint",
+    "com.artflow.studio.CanvasInputDeviceTest#zoomToolDragUsesStartScaleAndAnchorAcrossReversalsAndClamps",
+    "com.artflow.studio.CanvasInputDeviceTest#zoomToolTapKeepsItsInitialAnchorWithFingerPaintingDisabled",
+    "com.artflow.studio.CanvasInputDeviceTest#zoomToolUsesFinalUpMovementAndIgnoresHorizontalOnlyDrags",
+    "com.artflow.studio.ColorWheelGestureTest#blankSpaceDoesNotChooseAColour",
+    "com.artflow.studio.ColorWheelGestureTest#callbackReplacementDuringTheDragIsObservedWithoutRestartingIt",
+    "com.artflow.studio.ColorWheelGestureTest#ringCanChooseHueWhileBlackAndBrightnessRestoresIt",
+    "com.artflow.studio.ColorWheelGestureTest#squareCornerTapDoesNotChangeHueOrAlpha",
+    "com.artflow.studio.ColorWheelGestureTest#squareDragContinuesAcrossMultipleRecompositions",
+    "com.artflow.studio.ColorWheelGestureTest#squareDragKeepsItsRegionOutsideTheSquare",
+    "com.artflow.studio.EditorRenderingTest#editorRetainsArtworkAcrossRedrawContextLossAndReattachment",
+    "com.artflow.studio.EditorRenderingTest#realPointerMaskStrokePreviewsAndUndoesOnTheGlSurface",
+    "com.artflow.studio.EditorRenderingTest#redrawsCompleteWhileNewInvalidationsKeepArriving",
+    "com.artflow.studio.ExportUiRegressionTest#jpegDoesNotOfferAnUnsupportedMultiFrameFile",
+    "com.artflow.studio.ExportUiRegressionTest#printPresetSubmitsItsResolutionAndOversampling",
+    "com.artflow.studio.ExportUiRegressionTest#privacyPolicyIsAvailableOfflineAndCanBeDismissed",
+    "com.artflow.studio.FillGestureDeviceTest#bucketCannotCommitUnderAnObsoleteAlphaLock",
+    "com.artflow.studio.FillGestureDeviceTest#bucketKeepsItsCapturedColourAfterRelease",
+    "com.artflow.studio.FillGestureDeviceTest#bucketPreservesLayerAlphaAndUndo",
+    "com.artflow.studio.FillGestureDeviceTest#completedBucketRemainsValidWhenAlphaLockChangesLater",
+    "com.artflow.studio.FillGestureDeviceTest#completedGradientRemainsValidWhenAlphaLockChangesLater",
+    "com.artflow.studio.FillGestureDeviceTest#emptySelectionBucketIsNotAnUndoStep",
+    "com.artflow.studio.FillGestureDeviceTest#emptySelectionGradientIsNotAnUndoStep",
+    "com.artflow.studio.FillGestureDeviceTest#gradientCannotCommitUnderAnObsoleteAlphaLock",
+    "com.artflow.studio.FillGestureDeviceTest#gradientKeepsItsCapturedStopsAfterRelease",
+    "com.artflow.studio.FillGestureDeviceTest#gradientPreservesLayerAlphaAndUndo",
+    "com.artflow.studio.FillGestureDeviceTest#identicalBucketIsNotAnUndoStep",
+    "com.artflow.studio.FillGestureDeviceTest#identicalGradientIsNotAnUndoStep",
+    "com.artflow.studio.GroupBlendUiTest#groupCanReturnFromNormalToPassThrough",
+    "com.artflow.studio.GroupBlendUiTest#pixelLayersDoNotOfferTheFolderOnlyPassThroughMode",
+    "com.artflow.studio.GuideStatusUiTest#statusRequiresAnActiveVisibleGuideAndHidesInFocusMode",
+    "com.artflow.studio.HardwareKeyboardTest#aKeyPressResolvesToItsAction",
+    "com.artflow.studio.HardwareKeyboardTest#ctrlAndMetaBothCountAsThePrimaryModifier",
+    "com.artflow.studio.HardwareKeyboardTest#keyCodesMapToTheTokensTheTableUses",
+    "com.artflow.studio.HardwareKeyboardTest#theSystemShortcutListCoversEveryBinding",
+    "com.artflow.studio.IncomingFilesTest#openWithAndEditWithCarryTheDataUri",
+    "com.artflow.studio.IncomingFilesTest#otherIntentsCarryNothing",
+    "com.artflow.studio.IncomingFilesTest#shareCarriesTheStreamExtra",
+    "com.artflow.studio.LayerEffectsUiTest#eachEffectChangeIsAppliedAsItIsMade",
+    "com.artflow.studio.NativeLibraryCompatibilityTest#packagedGraphicsLibraryLoadsAndIteratesPaths",
+    "com.artflow.studio.PaletteRecoveryUiTest#aRunningBackupCannotBeStartedTwice",
+    "com.artflow.studio.PaletteRecoveryUiTest#cancellingConfirmationDoesNotStartBackupOrReset",
+    "com.artflow.studio.PaletteRecoveryUiTest#confirmingRequestsAUserSelectedBackupInsteadOfResettingImmediately",
+    "com.artflow.studio.ProcreateImportedBlendUiTest#layersDialogExplainsImportedDarkenAndOnlyAnExplicitModeChoiceReplacesIt",
+    "com.artflow.studio.ReferenceCompanionTest#contentProviderImagesAreDownsampledAndCanBeSampled",
+    "com.artflow.studio.ReferenceCompanionTest#draggingAndChangingAvailableSpaceKeepTheWindowAndCloseControlOnScreen",
+    "com.artflow.studio.ReferenceCompanionTest#letterboxTapsDoNotSampleAndCentreSamplingIsAccessible",
+    "com.artflow.studio.ReferenceCompanionTest#pickingZoomFitAndCallbackReplacementUseTheVisibleImageWithoutPaintingBehindIt",
+    "com.artflow.studio.ReferenceCompanionTest#unsupportedAndUnreadableSourcesOfferRecoveryWithoutAStaleImage",
+    "com.artflow.studio.ReferenceEditorUiTest#referenceAndFocusExitRemainReachableWithEitherTouchTargetSize",
+    "com.artflow.studio.ReferenceEditorUiTest#referenceControlsStayAboveEitherSidebarWithoutBlockingTheRestOfTheEditor",
+    "com.artflow.studio.RuntimeEnvironmentTest#processPageSizeMatchesRequestedTestEnvironment",
+    "com.artflow.studio.SavedBrushUiTest#failedSaveRetainsTheNameAndDoesNotPretendItWasSaved",
+    "com.artflow.studio.SavedBrushUiTest#savedRowsCanBeRenamedAndDeleteRequiresConfirmation",
+    "com.artflow.studio.SavedBrushUiTest#savingUsesAnExplicitSnapshotAndDoesNotApplyTheBrush",
+    "com.artflow.studio.SelectionGestureDeviceTest#addSubtractIntersectAndReplaceAfterEmptyWorkTogether",
+    "com.artflow.studio.SelectionGestureDeviceTest#anEmptyActiveLayerSelectsItsTransparencyWithoutSamplingArtworkBelow",
+    "com.artflow.studio.SelectionGestureDeviceTest#automaticSelectionDistinguishesTransparentPixelsFromTheCanvasBackground",
+    "com.artflow.studio.SelectionGestureDeviceTest#automaticSelectionIgnoresCoveringLayersAndFillReferences",
+    "com.artflow.studio.SelectionGestureDeviceTest#bottomSubpixelTapRemainsInsideTheCanvas",
+    "com.artflow.studio.SelectionGestureDeviceTest#featherCannotOverwriteANewerExplicitSelection",
+    "com.artflow.studio.SelectionGestureDeviceTest#negativeSubpixelTapDoesNotSelectPixelZero",
+    "com.artflow.studio.SelectionGestureDeviceTest#newerWandWinsWhenTwoTapsArriveBeforeAWorkerReturns",
+    "com.artflow.studio.SelectionGestureDeviceTest#panelClearCannotBeUndoneByAPendingWand",
+    "com.artflow.studio.SelectionGestureDeviceTest#panelClearSupersedesProvisionalMarquee",
+    "com.artflow.studio.SelectionGestureDeviceTest#panelSelectAllSupersedesAPendingWand",
+    "com.artflow.studio.SelectionGestureDeviceTest#replacementDocumentRejectsOldSelectionDimensions",
+    "com.artflow.studio.SelectionGestureDeviceTest#subpixelTapInTheLastColumnIsNotOutsideTheCanvas",
+    "com.artflow.studio.SelectionGestureDeviceTest#subpixelWandTapUsesTheContainingPixel",
+    "com.artflow.studio.SelectionGestureDeviceTest#switchingActiveLayerRejectsAnEarlierAutomaticSelection",
+    "com.artflow.studio.SelectionGestureDeviceTest#uniformCanvasWandDoesNotCrash",
+    "com.artflow.studio.SelectionGestureDeviceTest#wandReplaceCanLeaveThePreviousSelection",
+    "com.artflow.studio.StudioAdaptiveTest#interfaceScaleIsAppliedOnceAndSystemTextScaleIsPreserved",
+    "com.artflow.studio.StudioAdaptiveTest#studioAdaptsToTheDeviceAndKeepsDraftsAndPracticeAcrossThemeChanges",
+    "com.artflow.studio.StudioControlsTest#cropBarShowsTheNewSizeAndFinishes",
+    "com.artflow.studio.StudioControlsTest#pageStripSelectsAddsAndProtectsTheLastPage",
+    "com.artflow.studio.StudioControlsTest#quickMenuRunsAnActionAndCloses",
+    "com.artflow.studio.StudioControlsTest#slidingAcrossTheCanvasChangesLayerOpacity",
+    "com.artflow.studio.StudioToolDockTest#everydayToolsHaveSelectedSemanticsAndSecondaryToolsRemainReachable",
+    "com.artflow.studio.StudioWorkspaceUiTest#dismissingTextClearsItsPositionAndDoesNotPlaceArtwork",
+    "com.artflow.studio.StudioWorkspaceUiTest#everyEditorToolIsReachableThroughTheRealLargeTextToolOptions",
+    "com.artflow.studio.StudioWorkspaceUiTest#focusHidesTheChromeAndBackRestoresTheEditor",
+    "com.artflow.studio.StudioWorkspaceUiTest#lightWorkspaceKeepsPrimaryControlsReachable",
+    "com.artflow.studio.StudioWorkspaceUiTest#standalonePaletteRemainsReadableAndSelectableAtLargeTextSize",
+    "com.artflow.studio.StudioWorkspaceUiTest#textSettingsChoosesPositionPlacesOnceAndRestoresExactUndo",
+    "com.artflow.studio.StudioWorkspaceUiTest#uiScaleAppliesOnceAndKeepsTheSystemTextPreference",
+    "com.artflow.studio.StudioWorkspaceUiTest#workflowPanelsAreReachableFromTheTopBarActions",
+    "com.artflow.studio.TransformUiRegressionTest#activeSelectionCannotSilentlyTransformTheWholeLayer",
+    "com.artflow.studio.TransformUiRegressionTest#cancelDoesNotApplyAndInvalidNumbersDisableCommit",
+    "com.artflow.studio.TransformUiRegressionTest#draftControlsDoNotMutateUntilApplyAndUseUniformScale",
+    "com.artflow.studio.TransformUiRegressionTest#signedNumbersAndWrappedControlsRemainUsableWithLargeText",
+    "com.artflow.studio.data.BrushImportPersistenceDeviceTest#artbrushCompoundImportRemapsSecondaryImagesAndSurvivesStorageReload",
+    "com.artflow.studio.data.BrushImportPersistenceDeviceTest#importedPressureCurvesUseNativeTablesAndSurviveArtbrushReload",
+    "com.artflow.studio.data.BrushImportPersistenceDeviceTest#nonDivisibleProcreateImagesKeepLastRowAndColumnThroughDiskReload",
+    "com.artflow.studio.data.BrushImportPersistenceDeviceTest#procreateCompoundImportKeepsBothComponentsAndUnstretchedCoverageOnDisk",
+    "com.artflow.studio.data.DocumentMutationDeviceTest#effectParameterUndoAndRedoSurviveRealStorageReload",
+    "com.artflow.studio.data.DocumentMutationDeviceTest#layeredPsdContainsTheVisibleFilteredAppearanceAndHiddenOriginals",
+    "com.artflow.studio.data.DocumentMutationDeviceTest#mergedFilterAndMaskedAlphaSurviveSaveReopen",
+    "com.artflow.studio.data.DocumentMutationDeviceTest#noOpAndInvalidParametersLeaveSavedArtworkCleanAndReadable",
+    "com.artflow.studio.data.DocumentMutationDeviceTest#transformedLegacyInkMasksAndFramesSurviveRealStorageReload",
+    "com.artflow.studio.data.ExportDeviceTest#exportedFilesCanBeReadAndCopiedButEditableDocumentsCannotBeShared",
+    "com.artflow.studio.data.ExportDeviceTest#galleryPublishesPngAsImageAndMp4AsVideo",
+    "com.artflow.studio.data.ExportDeviceTest#invalidVideoSizeReturnsFailureWithoutPublishingAFile",
+    "com.artflow.studio.data.ExportDeviceTest#jpegWebpGifAndPsdAreRealDecodableFiles",
+    "com.artflow.studio.data.ExportDeviceTest#mp4ContainsAllFramesCorrectTimingAndDecodedColours",
+    "com.artflow.studio.data.ExportDeviceTest#pdfUsesMultiplePagesAndPreservesAspectRatio",
+    "com.artflow.studio.data.ExportDeviceTest#pngKeepsAlphaAndFlatteningActuallyRemovesIt",
+    "com.artflow.studio.data.ExportDeviceTest#sequenceContainsEveryFrameWithItsActualPixels",
+    "com.artflow.studio.data.ExportDeviceTest#snapshotContainsMaskedPixelsBeforeTheFirstSaveAndIsIndependentOfLaterEdits",
+    "com.artflow.studio.data.MaskEditingRegressionTest#alphaAndGradientSourcesSurviveSaveReloadWithoutChangingLayerPixels",
+    "com.artflow.studio.data.MaskEditingRegressionTest#cancelledMaskPaintCannotLeakIntoSaveExportOrUndo",
+    "com.artflow.studio.data.MaskEditingRegressionTest#invalidSourcesAndLockedDestinationsDoNotCreateHistoryEntries",
+    "com.artflow.studio.data.MaskEditingRegressionTest#maskPaintRespectsSoftSelectionsAndRemainsOneUndoStep",
+    "com.artflow.studio.data.MaskEditingRegressionTest#maskStrokePreviewCommitUndoAndRedoNeverModifyInk",
+    "com.artflow.studio.data.MaskEditingRegressionTest#revealAndHideRespectInvertedMasksAndIgnoreInkColorDynamics",
+    "com.artflow.studio.data.PersistenceRegressionTest#androidBitmapBridgeIsMutableAndPngPreservesLowAlphaColors",
+    "com.artflow.studio.data.PersistenceRegressionTest#animationSettingsAndFrameDurationAreUndoable",
+    "com.artflow.studio.data.PersistenceRegressionTest#autosaveCannotOverwriteExplicitlySavedArtwork",
+    "com.artflow.studio.data.PersistenceRegressionTest#callerOwnedBuffersCannotMutateCommittedArtwork",
+    "com.artflow.studio.data.PersistenceRegressionTest#cancelledBrushStrokeDoesNotCommitOrAddHistory",
+    "com.artflow.studio.data.PersistenceRegressionTest#corruptDocumentIsNeverReplacedWithABlankCanvas",
+    "com.artflow.studio.data.PersistenceRegressionTest#explicitSaveClearsRecoveryOnlyAfterCommit",
+    "com.artflow.studio.data.PersistenceRegressionTest#failedAtomicWritePreservesOriginalBytesAndRemovesTemporaryFile",
+    "com.artflow.studio.data.PersistenceRegressionTest#failedToolDoesNotChangePixelsOrHistory",
+    "com.artflow.studio.data.PersistenceRegressionTest#firstSaveRetainsRasterPixelsAfterReopen",
+    "com.artflow.studio.data.PersistenceRegressionTest#lockedLayersCannotStartPixelTools",
+    "com.artflow.studio.data.PersistenceRegressionTest#maskPixelsAndSettingsRoundTrip",
+    "com.artflow.studio.data.PersistenceRegressionTest#missingRasterIsAnErrorNotAnEmptyLayer",
+    "com.artflow.studio.data.PersistenceRegressionTest#newerEditsRemainDirtyWhenAnOlderSnapshotFinishesSaving",
+    "com.artflow.studio.data.PersistenceRegressionTest#projectAndExportPathsCannotEscapeTheirDirectory",
+    "com.artflow.studio.data.PersistenceRegressionTest#provisionalPixelSessionIsNotSavedAndCancellationDoesNotRemoveUnrelatedUndo",
+    "com.artflow.studio.data.PersistenceRegressionTest#savesEveryFrameNotJustTheActiveFrame",
+    "com.artflow.studio.data.PersistenceRegressionTest#selectionDoesNotErasePixelsFromTheSavedComposite",
+    "com.artflow.studio.data.PersistenceRegressionTest#staleSessionCannotOverwriteAnInterveningEdit",
+    "com.artflow.studio.data.PreviewBelowCacheDeviceTest#framesMatchAFullRedrawWhilePaintingAMiddleLayer",
+    "com.artflow.studio.data.ProcreateColorProfileDeviceTest#insertionAndFlattenedFallbackConvertIntoTheExistingCanvasProfileExactlyOnce",
+    "com.artflow.studio.data.ProcreateColorProfileDeviceTest#nativeP3DocumentKeepsItsChannelsBackgroundAndProfileThroughDiskReopen",
+    "com.artflow.studio.data.ProcreateHierarchyImportDeviceTest#nativeHierarchyAndHiddenGroupsRemainEditableAfterSaveReopenAndExport",
+    "com.artflow.studio.data.ProcreateLegacyDarkenDeviceTest#nativeDarkenSurvivesImportEditUndoAndReopenWithoutReinterpretingSignedV4",
+    "com.artflow.studio.data.ProcreateMaskImportDeviceTest#nativeMaskCoverageSurvivesImportSaveReopenAndPngExport",
+    "com.artflow.studio.data.ProcreateNativeExportDeviceTest#aHiddenNativeBackgroundReplacesNewCanvasWhiteWhileInsertionKeepsItsBackground",
+    "com.artflow.studio.data.ProcreateNativeExportDeviceTest#p3ExportKeepsNativeChannelsAndHiddenNestedGroupsThroughImportAndDiskReopen",
+    "com.artflow.studio.data.ProjectDuplicationTest#concurrentCreatesNeverReplaceOneAnother",
+    "com.artflow.studio.data.ProjectDuplicationTest#copyRetainsIndependentSavedRecoveryMasksAndFrames",
+    "com.artflow.studio.data.ProjectDuplicationTest#copySkipsOrphanedStorageRatherThanOverwritingIt",
+    "com.artflow.studio.data.ProjectDuplicationTest#deletedProjectIdentifiersAreNeverReused",
+    "com.artflow.studio.data.ProjectDuplicationTest#exhaustedIdentifiersFailWithoutWrappingOrDeletingFiles",
+    "com.artflow.studio.data.ProjectDuplicationTest#explicitUnknownIdCannotClaimOrphanedArtwork",
+    "com.artflow.studio.data.ProjectDuplicationTest#invalidCreationInputsDoNotLeaveGalleryRows",
+    "com.artflow.studio.data.ProjectDuplicationTest#missingRasterRollsBackTheRowAndOwnedDirectory",
+    "com.artflow.studio.data.ProjectDuplicationTest#newProjectsSkipOrphanedStorageEvenWithAnEmptyDatabase",
+    "com.artflow.studio.data.ProjectDuplicationTest#newProjectsSkipOrphansAboveExistingRows",
+    "com.artflow.studio.data.ProjectDuplicationTest#savingKnownIdUpdatesMetadataWithoutReplacingItsIdentity",
+    "com.artflow.studio.data.ProjectDuplicationTest#unknownProjectCannotBeDuplicated",
+    "com.artflow.studio.data.PsdGroupsDeviceTest#groupsRoundTripThroughPsd",
+    "com.artflow.studio.data.PsdGroupsDeviceTest#normalAndPassThroughPsdFoldersRetainPixelsAcrossImportSaveReopenAndExport",
+    "com.artflow.studio.data.PsdGroupsDeviceTest#onlyAnEnabledGroupMaskRequiresProcreateAppearanceFallback",
+    "com.artflow.studio.data.PsdMasksDeviceTest#disabledMaskExportsAndImportsAsEditableCoverageWithoutDestroyingHiddenInk",
+    "com.artflow.studio.data.PsdMasksDeviceTest#folderMaskSurvivesExportAndImport",
+    "com.artflow.studio.data.PsdMasksDeviceTest#selectionExportClipsOriginalAlphaOnceAndKeepsIndependentMaskCrop",
+    "com.artflow.studio.data.ResamplingDeviceTest#affineLayerAndMaskSurviveUndoSaveReloadAndIndependentEditing",
+    "com.artflow.studio.data.ResamplingDeviceTest#displacedEdgesSurviveRealPngEncodingWithoutDarkening",
+    "com.artflow.studio.data.ResamplingDeviceTest#resizeEdgesSurviveUndoStorageAndScaledPngExport",
+    "com.artflow.studio.data.SavedBrushStorageTest#completeBrushesSurviveClosingAndReopeningTheActualRoomDatabase",
+    "com.artflow.studio.data.SavedSelectionWorkflowDeviceTest#savedSoftSelectionReopensConstrainsEditingAndKeepsItsPixelsThroughExport",
+    "com.artflow.studio.data.SavedSelectionWorkflowDeviceTest#switchingArtworkCannotReuseAnotherDocumentsSavedSelection",
+    "com.artflow.studio.data.SecondaryGrainMigrationDeviceTest#signedV3VectorsKeepHistoricalCoverageWhileNewV4StrokesRetainTheirGrainModes",
+    "com.artflow.studio.data.SettingsPersistenceTest#completePreferencesAndPaletteNamesSurviveDatabaseReopen",
+    "com.artflow.studio.data.SettingsPersistenceTest#failurePartwayThroughBatchRollsBackEveryRowAndLeavesCacheUnchanged",
+    "com.artflow.studio.data.SettingsPersistenceTest#unreadablePaletteRowSurvivesUnrelatedEditsAndOnlyResetsAfterBackup",
+    "com.artflow.studio.data.StorageTraversalDeviceTest#atomicWritesRejectLinkedParentsAndPreserveTargets",
+    "com.artflow.studio.data.StorageTraversalDeviceTest#deletingARootLinkDoesNotDeleteAnotherProject",
+    "com.artflow.studio.data.StorageTraversalDeviceTest#exportCleanupCannotDeleteAnotherProjectsArtworkThroughADirectoryLink",
+    "com.artflow.studio.data.StorageTraversalDeviceTest#exportFileLinksAreNotListedOrPruned",
+    "com.artflow.studio.data.StorageTraversalDeviceTest#linkedExportsContainerCannotMakeEditableArtworkShareable",
+    "com.artflow.studio.data.StorageTraversalDeviceTest#linkedProjectContainerCannotRedirectSizeOrDelete",
+    "com.artflow.studio.data.StorageTraversalDeviceTest#linkedProjectRootCannotRedirectReadsOrWrites",
+    "com.artflow.studio.data.StorageTraversalDeviceTest#metadataAndRasterLinksCannotReadOtherProjectPixels",
+    "com.artflow.studio.data.StorageTraversalDeviceTest#pruneSizeAndDeleteStayInsideTheOwnedProject",
+    "com.artflow.studio.data.StorageTraversalDeviceTest#pruningThroughALinkedProjectCannotDeleteAnotherProject",
+    "com.artflow.studio.data.StorageTraversalDeviceTest#repeatedHousekeepingDoesNotAccumulateFilesOrFollowCycles",
+    "com.artflow.studio.data.StrokePreviewRegressionTest#cancelledStrokeCannotLeakIntoExportSaveOrUndo",
+    "com.artflow.studio.data.StrokePreviewRegressionTest#inFlightStrokeIsHiddenByHigherOpaqueLayer",
+    "com.artflow.studio.data.StrokePreviewRegressionTest#legacyVectorStrokesAreBakedBeforeNewPaintInsteadOfCoveringIt",
+    "com.artflow.studio.data.StrokePreviewRegressionTest#liveEraserRevealsUnderlyingLayersInsteadOfPaintingInkOnTop",
+    "com.artflow.studio.data.StrokePreviewRegressionTest#previewEqualsCommitForPressureGrainOpacitySelectionAndLayerBlend",
+    "com.artflow.studio.data.StrokePreviewRegressionTest#previewHonorsAlphaLockAndLayerMask",
+    "com.artflow.studio.data.StrokePreviewRegressionTest#shortFinalSegmentSurvivesPreviewCommitHistoryAndReopen",
+    "com.artflow.studio.data.StrokeTimingDeviceTest#liveStrokeFramesAreTimed"
+  ],
+  "sourceScope": "Each diagnostic source archive is byte-exact to its own published revision. All 864 existing e2aa source files are unchanged; each tree adds the same five allowed diagnostic paths. The second revision corrects propagation waiting, headless version capture and exact-base fetching. It is a new revision, not a same-source rerun.",
+  "diagnosticPaths": [
+    ".github/scripts/configure-android15-cc-control.sh",
+    ".github/scripts/run-android15-cc-control.sh",
+    ".github/scripts/test_verify_android15_cc_control.py",
+    ".github/scripts/verify_android15_cc_control.py",
+    ".github/workflows/android15-cc-control.yml"
+  ],
+  "diagnostics": [
+    {
+      "run": {
+        "id": 40119181068,
+        "run_number": 1,
+        "head_sha": "a143fc15aa1f8b9ad3af4b0aa5357089f073e852",
+        "head_branch": "codex/android15-cc-control-e2aa900",
+        "status": "completed",
+        "conclusion": "failure",
+        "run_attempt": 1,
+        "created_at": "2026-10-24T18:06:32Z",
+        "updated_at": "2026-10-24T18:12:50Z",
+        "html_url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40119181068"
+      },
+      "applicationRevision": "e2aa900b91298fe08eca8529d0345220faa9e2eb",
+      "conclusion": "FAILED_SETUP",
+      "manifest": {
+        "bytes": 24596,
+        "sha256": "513a7be0ecc1d31c3307748435c0d2d47570f92d4216bc35b7d170ae862dee41"
+      },
+      "identitySHA256": "308b1663e5f2711c2279997de1e4a5b34ace31bbf8dd5a440db1aae5342a54c2",
+      "lanes": [
+        {
+          "lane": "A",
+          "status": "FAILED_SETUP",
+          "job": {
+            "id": 120946782072,
+            "name": "Same-image CC control (A)",
+            "head_sha": "a143fc15aa1f8b9ad3af4b0aa5357089f073e852",
+            "status": "completed",
+            "conclusion": "failure",
+            "started_at": "2026-10-24T18:06:34Z",
+            "completed_at": "2026-10-24T18:12:50Z",
+            "run_attempt": 1,
+            "labels": [
+              "ubuntu-latest"
+            ]
+          },
+          "jobDurationSeconds": 376.0,
+          "artifact": {
+            "id": 12570493408,
+            "name": "android15-cc-control-A",
+            "bytes": 6533240,
+            "sha256": "03ce60b3be8aef9a0a908dfc8bf5ccea5bee9cebd26cdb665a1ad3763b83a2dc",
+            "url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40119181068/artifacts/12570493408",
+            "originalFiles": 36,
+            "downloadedOnce": true,
+            "originalBytesVerified": true
+          },
+          "sourceArchive": {
+            "tarSHA256": "137842ae75380e76f8272c94134fa181c5d896a7479d51a58866c92c09a8f608",
+            "gzipSHA256": "c01cfb9784287f84ece004ffc13679ea9ab8bd42825d85314d4e7b7b58f59322",
+            "byteExactPublishedTree": true,
+            "totalFiles": 869,
+            "unchangedApplicationFiles": 864,
+            "addedDiagnosticFiles": 5
+          },
+          "expectedCases": 250,
+          "completedCases": 0,
+          "counts": {
+            "passed": 0,
+            "failure": 0,
+            "error": 0,
+            "skipped": 0
+          },
+          "missingCount": 250,
+          "missingIdentities": "all identities in the shared expectedIdentities array",
+          "extra": [],
+          "duplicates": [],
+          "instrumentationInvocations": 0,
+          "automaticRetries": 0,
+          "manualRetries": 0,
+          "minifiedLaunch": "not reached",
+          "visualNativePixelAndTimingEvidence": "not reached",
+          "observedPhases": {
+            "before": {
+              "bootId": "34ce5c29-7e46-4d85-8fe2-24021ca513f0",
+              "properties": {
+                "ro.build.fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys",
+                "ro.build.version.sdk": "35",
+                "ro.product.cpu.abilist": "x86_64,arm64-v8a",
+                "ro.kernel.qemu": "1",
+                "ro.debuggable": "1",
+                "ro.build.version.security_patch": "2024-09-05",
+                "ro.build.id": "AE3A.240806.043",
+                "ro.build.version.incremental": "12960925",
+                "sys.boot_completed": "1",
+                "dalvik.vm.usejit": "false",
+                "dalvik.vm.usejitprofiles": "false",
+                "dalvik.vm.gctype": "",
+                "ro.dalvik.vm.enable_uffd_gc": "true",
+                "persist.device_config.runtime_native_boot.enable_uffd_gc_2": "",
+                "persist.device_config.runtime_native_boot.force_disable_uffd_gc": ""
+              },
+              "libartSHA256": "6ac4d052d0cf6f7d69ff817444f610afa25e583bb032d2a0e310346c0f8b7133",
+              "kernelVersion": "#1 SMP PREEMPT Fri Oct 18 23:59:20 UTC 2024",
+              "cacheForceDisable": "false",
+              "cacheSHA256": "ce16b105f7538e5ca154105f69f2b3952a264cd45f57a3da902d89aa39acf723",
+              "processes": {
+                "zygote": {
+                  "pid": 2364,
+                  "cmdline": "zygote64",
+                  "collector": "CollectorTypeCMC",
+                  "collectorLogLines": [
+                    {
+                      "line": 30322,
+                      "text": "10-24 18:12:18.417  2364  2364 I zygote64: Using CollectorTypeCMC GC."
+                    },
+                    {
+                      "line": 77766,
+                      "text": "10-24 18:12:18.417  2364  2364 I zygote64: Using CollectorTypeCMC GC."
+                    }
+                  ],
+                  "mapsSHA256": "17198a3b065ab26e53d35b69f875c448250cf842450f7c301263f7390b182c26",
+                  "logSHA256": "6c164448c365b6220963c5b2bbf6f9d98d1fe4e6b95a9beb4f2ed6510f2ff56a",
+                  "rebuiltPrimaryImagesMapped": false,
+                  "ownImageFallbackDetected": false
+                },
+                "system-server": {
+                  "pid": 2434,
+                  "cmdline": "system_server",
+                  "collector": "CollectorTypeCMC",
+                  "collectorLogLines": [
+                    {
+                      "line": 30634,
+                      "text": "10-24 18:12:19.130  2434  2434 I system_server: Using CollectorTypeCMC GC."
+                    },
+                    {
+                      "line": 78078,
+                      "text": "10-24 18:12:19.130  2434  2434 I system_server: Using CollectorTypeCMC GC."
+                    }
+                  ],
+                  "mapsSHA256": "5cf204a99940433f74421a69dd530d8dbe6596802d4473ea686227f30e7753cd",
+                  "logSHA256": "6c164448c365b6220963c5b2bbf6f9d98d1fe4e6b95a9beb4f2ed6510f2ff56a",
+                  "rebuiltPrimaryImagesMapped": false,
+                  "ownImageFallbackDetected": false
+                }
+              },
+              "scope": "Retained configuration facts; no claim of continued process health."
+            }
+          },
+          "stableSetupAccepted": false,
+          "failure": {
+            "line": 724,
+            "text": "2026-10-24T18:12:37.9780139Z DeviceConfig property was not propagated"
+          },
+          "failureForceDisableProperties": {},
+          "propagation": {
+            "rawPostWriteGetRetained": false,
+            "inference": "The exact script reached line93, so its preceding line92 DeviceConfig get comparison succeeded; the raw value was not separately retained.",
+            "baselineValue": "null",
+            "mapperOrFlagLogMatches": [],
+            "propagationInterpretation": "Lane B's later trap capture contains true after the immediate check failed. This is consistent with asynchronous propagation; the exact delay and A's later state are unobserved."
+          },
+          "fullRebootObserved": false,
+          "rebuiltCCCacheObserved": false,
+          "applicationCollectorObserved": false,
+          "host": {
+            "startupImageVersion": "20261012.334.1",
+            "environmentImage": {
+              "ImageOS": "ubuntu24",
+              "ImageVersion": "20261012.334.1"
+            },
+            "imageVersionDisagreement": false,
+            "osRelease": "PRETTY_NAME=\"Ubuntu 24.04.5 LTS\"\nNAME=\"Ubuntu\"\nVERSION_ID=\"24.04\"\nVERSION=\"24.04.5 LTS (Noble Numbat)\"\nVERSION_CODENAME=noble\nID=ubuntu\nID_LIKE=debian\nHOME_URL=\"https://www.ubuntu.com/\"\nSUPPORT_URL=\"https://help.ubuntu.com/\"\nBUG_REPORT_URL=\"https://bugs.launchpad.net/ubuntu/\"\nPRIVACY_POLICY_URL=\"https://www.ubuntu.com/legal/terms-and-policies/privacy-policy\"\nUBUNTU_CODENAME=noble\nLOGO=ubuntu-logo\n",
+            "emulatorLaunchEvidence": {
+              "line": 578,
+              "text": "2026-10-24T18:11:30.5925970Z INFO         | Android emulator version 37.2.12.0 (build_id 16428233) (CL:N/A)"
+            },
+            "emulatorVersionCaptureFailure": "/usr/local/lib/android/sdk/emulator/qemu/linux-x86_64/qemu-system-x86_64: error while loading shared libraries: libpulse.so.0: cannot open shared object file: No such file or directory",
+            "installedImageDigestCapture": "not reached after separate emulator-version exit 127"
+          },
+          "separateBaselineEvents": [],
+          "scope": "Baseline runtime/source verification only. No application test, changed-collector outcome, performance result or stability conclusion is established."
+        },
+        {
+          "lane": "B",
+          "status": "FAILED_SETUP",
+          "job": {
+            "id": 120946782327,
+            "name": "Same-image CC control (B)",
+            "head_sha": "a143fc15aa1f8b9ad3af4b0aa5357089f073e852",
+            "status": "completed",
+            "conclusion": "failure",
+            "started_at": "2026-10-24T18:06:34Z",
+            "completed_at": "2026-10-24T18:12:44Z",
+            "run_attempt": 1,
+            "labels": [
+              "ubuntu-latest"
+            ]
+          },
+          "jobDurationSeconds": 370.0,
+          "artifact": {
+            "id": 12569319975,
+            "name": "android15-cc-control-B",
+            "bytes": 6028091,
+            "sha256": "41829bcbe5be55e146d36ffb3e86d1bc66341d3ef74af5d383ca7e172b99d2ee",
+            "url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40119181068/artifacts/12569319975",
+            "originalFiles": 36,
+            "downloadedOnce": true,
+            "originalBytesVerified": true
+          },
+          "sourceArchive": {
+            "tarSHA256": "137842ae75380e76f8272c94134fa181c5d896a7479d51a58866c92c09a8f608",
+            "gzipSHA256": "c01cfb9784287f84ece004ffc13679ea9ab8bd42825d85314d4e7b7b58f59322",
+            "byteExactPublishedTree": true,
+            "totalFiles": 869,
+            "unchangedApplicationFiles": 864,
+            "addedDiagnosticFiles": 5
+          },
+          "expectedCases": 250,
+          "completedCases": 0,
+          "counts": {
+            "passed": 0,
+            "failure": 0,
+            "error": 0,
+            "skipped": 0
+          },
+          "missingCount": 250,
+          "missingIdentities": "all identities in the shared expectedIdentities array",
+          "extra": [],
+          "duplicates": [],
+          "instrumentationInvocations": 0,
+          "automaticRetries": 0,
+          "manualRetries": 0,
+          "minifiedLaunch": "not reached",
+          "visualNativePixelAndTimingEvidence": "not reached",
+          "observedPhases": {
+            "before": {
+              "bootId": "28800ed4-b53f-4f60-a398-ae34c0c8b35f",
+              "properties": {
+                "ro.build.fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys",
+                "ro.build.version.sdk": "35",
+                "ro.product.cpu.abilist": "x86_64,arm64-v8a",
+                "ro.kernel.qemu": "1",
+                "ro.debuggable": "1",
+                "ro.build.version.security_patch": "2024-09-05",
+                "ro.build.id": "AE3A.240806.043",
+                "ro.build.version.incremental": "12960925",
+                "sys.boot_completed": "1",
+                "dalvik.vm.usejit": "false",
+                "dalvik.vm.usejitprofiles": "false",
+                "dalvik.vm.gctype": "",
+                "ro.dalvik.vm.enable_uffd_gc": "true",
+                "persist.device_config.runtime_native_boot.enable_uffd_gc_2": "",
+                "persist.device_config.runtime_native_boot.force_disable_uffd_gc": ""
+              },
+              "libartSHA256": "6ac4d052d0cf6f7d69ff817444f610afa25e583bb032d2a0e310346c0f8b7133",
+              "kernelVersion": "#1 SMP PREEMPT Fri Oct 18 23:59:20 UTC 2024",
+              "cacheForceDisable": "false",
+              "cacheSHA256": "4096b8b9510a115698eecad9c528b703daffb201b404a951a98d7b8ada6c6c8f",
+              "processes": {
+                "zygote": {
+                  "pid": 2515,
+                  "cmdline": "zygote64",
+                  "collector": "CollectorTypeCMC",
+                  "collectorLogLines": [
+                    {
+                      "line": 24371,
+                      "text": "10-24 18:12:12.885  2515  2515 I zygote64: Using CollectorTypeCMC GC."
+                    },
+                    {
+                      "line": 67325,
+                      "text": "10-24 18:12:12.885  2515  2515 I zygote64: Using CollectorTypeCMC GC."
+                    }
+                  ],
+                  "mapsSHA256": "306ce0e36866bc0e2cab46263541bf0e76ba9073484406d524ef4bd972c784fd",
+                  "logSHA256": "c48ffe1ba39e56d7707550e09cf5dd28bfbc66b8ede0befe619a8bed8dca5cc1",
+                  "rebuiltPrimaryImagesMapped": false,
+                  "ownImageFallbackDetected": false
+                },
+                "system-server": {
+                  "pid": 2587,
+                  "cmdline": "system_server",
+                  "collector": "CollectorTypeCMC",
+                  "collectorLogLines": [
+                    {
+                      "line": 24672,
+                      "text": "10-24 18:12:13.605  2587  2587 I system_server: Using CollectorTypeCMC GC."
+                    },
+                    {
+                      "line": 67626,
+                      "text": "10-24 18:12:13.605  2587  2587 I system_server: Using CollectorTypeCMC GC."
+                    }
+                  ],
+                  "mapsSHA256": "6eba1dee5c922c3b99fce6d2a4672f2e26b4d6e2441920fca877d269d8162c32",
+                  "logSHA256": "c48ffe1ba39e56d7707550e09cf5dd28bfbc66b8ede0befe619a8bed8dca5cc1",
+                  "rebuiltPrimaryImagesMapped": false,
+                  "ownImageFallbackDetected": false
+                }
+              },
+              "scope": "Retained configuration facts; no claim of continued process health."
+            }
+          },
+          "stableSetupAccepted": false,
+          "failure": {
+            "line": 752,
+            "text": "2026-10-24T18:12:32.3819529Z DeviceConfig property was not propagated"
+          },
+          "failureForceDisableProperties": {
+            "persist.device_config.aconfig_flags.runtime_native_boot.force_disable_uffd_gc": "true",
+            "persist.device_config.runtime_native_boot.force_disable_uffd_gc": "true"
+          },
+          "propagation": {
+            "rawPostWriteGetRetained": false,
+            "inference": "The exact script reached line93, so its preceding line92 DeviceConfig get comparison succeeded; the raw value was not separately retained.",
+            "baselineValue": "null",
+            "mapperOrFlagLogMatches": [],
+            "propagationInterpretation": "Lane B's later trap capture contains true after the immediate check failed. This is consistent with asynchronous propagation; the exact delay and A's later state are unobserved."
+          },
+          "fullRebootObserved": false,
+          "rebuiltCCCacheObserved": false,
+          "applicationCollectorObserved": false,
+          "host": {
+            "startupImageVersion": "20261012.334.1",
+            "environmentImage": {
+              "ImageOS": "ubuntu24",
+              "ImageVersion": "20261023.334.3"
+            },
+            "imageVersionDisagreement": true,
+            "osRelease": "PRETTY_NAME=\"Ubuntu 24.04.5 LTS\"\nNAME=\"Ubuntu\"\nVERSION_ID=\"24.04\"\nVERSION=\"24.04.5 LTS (Noble Numbat)\"\nVERSION_CODENAME=noble\nID=ubuntu\nID_LIKE=debian\nHOME_URL=\"https://www.ubuntu.com/\"\nSUPPORT_URL=\"https://help.ubuntu.com/\"\nBUG_REPORT_URL=\"https://bugs.launchpad.net/ubuntu/\"\nPRIVACY_POLICY_URL=\"https://www.ubuntu.com/legal/terms-and-policies/privacy-policy\"\nUBUNTU_CODENAME=noble\nLOGO=ubuntu-logo\n",
+            "emulatorLaunchEvidence": {
+              "line": 579,
+              "text": "2026-10-24T18:11:25.3878554Z INFO         | Android emulator version 37.2.12.0 (build_id 16428233) (CL:N/A)"
+            },
+            "emulatorVersionCaptureFailure": "/usr/local/lib/android/sdk/emulator/qemu/linux-x86_64/qemu-system-x86_64: error while loading shared libraries: libpulse.so.0: cannot open shared object file: No such file or directory",
+            "installedImageDigestCapture": "not reached after separate emulator-version exit 127"
+          },
+          "separateBaselineEvents": [
+            {
+              "line": 5439,
+              "text": "10-24 18:12:02.817   551   566 F libc    : Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0 in tid 566 (binder:551_1), pid 551 (system_server)"
+            },
+            {
+              "line": 6385,
+              "text": "10-24 18:12:04.018  1206  1206 E AndroidRuntime: FATAL EXCEPTION: main"
+            },
+            {
+              "line": 6398,
+              "text": "10-24 18:12:04.031  1206  1206 E DeviceDoctorHandler: FATAL EXCEPTION: main"
+            },
+            {
+              "line": 6467,
+              "text": "10-24 18:12:04.408  1085  1085 E AndroidRuntime: FATAL EXCEPTION: main"
+            },
+            {
+              "line": 6483,
+              "text": "10-24 18:12:04.410  1076  1076 E AndroidRuntime: FATAL EXCEPTION: main"
+            }
+          ],
+          "scope": "Baseline runtime/source verification only. No application test, changed-collector outcome, performance result or stability conclusion is established."
+        }
+      ]
+    },
+    {
+      "run": {
+        "id": 40120334470,
+        "run_number": 2,
+        "head_sha": "409ef9981ee03902be97ed8ef84d16036d4da831",
+        "head_branch": "codex/android15-cc-control-e2aa900",
+        "status": "completed",
+        "conclusion": "failure",
+        "run_attempt": 1,
+        "created_at": "2026-10-24T18:21:37Z",
+        "updated_at": "2026-10-24T18:27:55Z",
+        "html_url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40120334470"
+      },
+      "applicationRevision": "e2aa900b91298fe08eca8529d0345220faa9e2eb",
+      "conclusion": "FAILED_BOTH_LANES_BEFORE_COMPLETED_CASES",
+      "manifest": {
+        "bytes": 24596,
+        "sha256": "aef3eacec05b900aeeee0f435144a78952b834dfe68419d0d2b89a405f0a5a3a"
+      },
+      "identitySHA256": "308b1663e5f2711c2279997de1e4a5b34ace31bbf8dd5a440db1aae5342a54c2",
+      "lanes": [
+        {
+          "lane": "A",
+          "status": "FAILED_SYSTEM_RUNTIME_BEFORE_COMPLETED_CASES",
+          "job": {
+            "id": 120950291029,
+            "name": "Same-image CC control (A)",
+            "head_sha": "409ef9981ee03902be97ed8ef84d16036d4da831",
+            "status": "completed",
+            "conclusion": "failure",
+            "started_at": "2026-10-24T18:21:39Z",
+            "completed_at": "2026-10-24T18:27:49Z",
+            "run_attempt": 1,
+            "labels": [
+              "ubuntu-latest"
+            ]
+          },
+          "jobDurationSeconds": 370.0,
+          "artifact": {
+            "id": 12570907294,
+            "name": "android15-cc-control-A",
+            "bytes": 15897557,
+            "sha256": "dbdbba10382caa023c41d4871d72982957008b7ef5c217ad282afdd2df6b542a",
+            "url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40120334470/artifacts/12570907294",
+            "originalFiles": 102,
+            "downloadedOnce": true,
+            "originalBytesVerified": true
+          },
+          "sourceArchive": {
+            "tarSHA256": "21ddf363b79334d337d933612fd4759b3183018437d665bf487f803acd7ca8a4",
+            "gzipSHA256": "3192fc74cd7be8d3b1f20174dfb3637960bc1053fb4e375a818693023c8ada8e",
+            "byteExactPublishedTree": true,
+            "totalFiles": 869,
+            "unchangedApplicationFiles": 864,
+            "addedDiagnosticFiles": 5
+          },
+          "expectedCases": 250,
+          "completedCases": 0,
+          "counts": {
+            "passed": 0,
+            "failure": 0,
+            "error": 0,
+            "skipped": 0
+          },
+          "missingCount": 250,
+          "missingIdentities": "all identities in the shared expectedIdentities array",
+          "extra": [],
+          "duplicates": [],
+          "instrumentationInvocations": 1,
+          "automaticRetries": 0,
+          "manualRetries": 0,
+          "minifiedLaunch": "not reached",
+          "visualNativePixelAndTimingEvidence": "not reached",
+          "observedPhases": {
+            "before": {
+              "bootId": "7d088b54-b200-468b-88bb-8208f521aff2",
+              "properties": {
+                "ro.build.fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys",
+                "ro.build.version.sdk": "35",
+                "ro.product.cpu.abilist": "x86_64,arm64-v8a",
+                "ro.kernel.qemu": "1",
+                "ro.debuggable": "1",
+                "ro.build.version.security_patch": "2024-09-05",
+                "ro.build.id": "AE3A.240806.043",
+                "ro.build.version.incremental": "12960925",
+                "sys.boot_completed": "1",
+                "dalvik.vm.usejit": "false",
+                "dalvik.vm.usejitprofiles": "false",
+                "dalvik.vm.gctype": "",
+                "ro.dalvik.vm.enable_uffd_gc": "true",
+                "persist.device_config.runtime_native_boot.enable_uffd_gc_2": "",
+                "persist.device_config.runtime_native_boot.force_disable_uffd_gc": ""
+              },
+              "libartSHA256": "6ac4d052d0cf6f7d69ff817444f610afa25e583bb032d2a0e310346c0f8b7133",
+              "kernelVersion": "#1 SMP PREEMPT Fri Oct 18 23:59:20 UTC 2024",
+              "cacheForceDisable": "false",
+              "cacheSHA256": "4f76e3b12840854f94880621f03c850f27bd9576d5b74802355aa74792c9315f",
+              "processes": {
+                "zygote": {
+                  "pid": 1825,
+                  "cmdline": "zygote64",
+                  "collector": "CollectorTypeCMC",
+                  "collectorLogLines": [
+                    {
+                      "line": 23848,
+                      "text": "10-24 18:25:44.700  1825  1825 I zygote64: Using CollectorTypeCMC GC."
+                    },
+                    {
+                      "line": 67135,
+                      "text": "10-24 18:25:44.700  1825  1825 I zygote64: Using CollectorTypeCMC GC."
+                    }
+                  ],
+                  "mapsSHA256": "fa08e7d9124b60210d02a863ef4092a47efc7b523a4114ec6aa1d6ec20770fcf",
+                  "logSHA256": "ac2d1c20b059c8ad3115a4ce3db097c1262e124ab7fd3d4abef7c0525b87ce58",
+                  "rebuiltPrimaryImagesMapped": false,
+                  "ownImageFallbackDetected": false
+                },
+                "system-server": {
+                  "pid": 1881,
+                  "cmdline": "system_server",
+                  "collector": "CollectorTypeCMC",
+                  "collectorLogLines": [
+                    {
+                      "line": 24164,
+                      "text": "10-24 18:25:45.283  1881  1881 I system_server: Using CollectorTypeCMC GC."
+                    },
+                    {
+                      "line": 67451,
+                      "text": "10-24 18:25:45.283  1881  1881 I system_server: Using CollectorTypeCMC GC."
+                    }
+                  ],
+                  "mapsSHA256": "7aba71f76de8cc6e757f2ef52b17a0a8b74dfc873cab9812eb97c229f2146bdc",
+                  "logSHA256": "ac2d1c20b059c8ad3115a4ce3db097c1262e124ab7fd3d4abef7c0525b87ce58",
+                  "rebuiltPrimaryImagesMapped": false,
+                  "ownImageFallbackDetected": false
+                }
+              },
+              "scope": "Retained configuration facts; no claim of continued process health."
+            },
+            "rebooted": {
+              "bootId": "f80c8c20-486a-4232-987a-d9f9a4fd8065",
+              "properties": {
+                "ro.build.fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys",
+                "ro.build.version.sdk": "35",
+                "ro.product.cpu.abilist": "x86_64,arm64-v8a",
+                "ro.kernel.qemu": "1",
+                "ro.debuggable": "1",
+                "ro.build.version.security_patch": "2024-09-05",
+                "ro.build.id": "AE3A.240806.043",
+                "ro.build.version.incremental": "12960925",
+                "sys.boot_completed": "1",
+                "dalvik.vm.usejit": "true",
+                "dalvik.vm.usejitprofiles": "",
+                "dalvik.vm.gctype": "",
+                "ro.dalvik.vm.enable_uffd_gc": "true",
+                "persist.device_config.runtime_native_boot.enable_uffd_gc_2": "",
+                "persist.device_config.runtime_native_boot.force_disable_uffd_gc": "true"
+              },
+              "libartSHA256": "6ac4d052d0cf6f7d69ff817444f610afa25e583bb032d2a0e310346c0f8b7133",
+              "kernelVersion": "#1 SMP PREEMPT Fri Oct 18 23:59:20 UTC 2024",
+              "cacheForceDisable": "true",
+              "cacheSHA256": "c8c0e00be1e89e8ba5fcb3a10ee43e19542b424b2e4c30a4268466e6e8b4ef71",
+              "processes": {
+                "zygote": {
+                  "pid": 2447,
+                  "cmdline": "zygote64",
+                  "collector": "CollectorTypeCC",
+                  "collectorLogLines": [
+                    {
+                      "line": 37043,
+                      "text": "10-24 18:26:34.881  2447  2447 I zygote64: Using CollectorTypeCC GC."
+                    },
+                    {
+                      "line": 61213,
+                      "text": "10-24 18:26:34.881  2447  2447 I zygote64: Using CollectorTypeCC GC."
+                    }
+                  ],
+                  "mapsSHA256": "0760213f4378d634eca5bc09bdaa5fdb32d7085048e39037108bed9b6694ae76",
+                  "logSHA256": "c678a970cd45582334265c267b536a15e4d9e7bc764325623522c2e287de7917",
+                  "rebuiltPrimaryImagesMapped": true,
+                  "ownImageFallbackDetected": false
+                },
+                "system-server": {
+                  "pid": 2512,
+                  "cmdline": "system_server",
+                  "collector": "CollectorTypeCC",
+                  "collectorLogLines": [
+                    {
+                      "line": 37360,
+                      "text": "10-24 18:26:35.288  2512  2512 I system_server: Using CollectorTypeCC GC."
+                    },
+                    {
+                      "line": 61523,
+                      "text": "10-24 18:26:35.288  2512  2512 I system_server: Using CollectorTypeCC GC."
+                    }
+                  ],
+                  "mapsSHA256": "514d98c4e04e8618fdc117c6e93c0fd36423d284226e8e19e8af1d0f51035eae",
+                  "logSHA256": "c678a970cd45582334265c267b536a15e4d9e7bc764325623522c2e287de7917",
+                  "rebuiltPrimaryImagesMapped": true,
+                  "ownImageFallbackDetected": false
+                }
+              },
+              "scope": "Retained configuration facts; no claim of continued process health."
+            },
+            "configured": {
+              "bootId": "f80c8c20-486a-4232-987a-d9f9a4fd8065",
+              "properties": {
+                "ro.build.fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys",
+                "ro.build.version.sdk": "35",
+                "ro.product.cpu.abilist": "x86_64,arm64-v8a",
+                "ro.kernel.qemu": "1",
+                "ro.debuggable": "1",
+                "ro.build.version.security_patch": "2024-09-05",
+                "ro.build.id": "AE3A.240806.043",
+                "ro.build.version.incremental": "12960925",
+                "sys.boot_completed": "1",
+                "dalvik.vm.usejit": "false",
+                "dalvik.vm.usejitprofiles": "false",
+                "dalvik.vm.gctype": "",
+                "ro.dalvik.vm.enable_uffd_gc": "true",
+                "persist.device_config.runtime_native_boot.enable_uffd_gc_2": "",
+                "persist.device_config.runtime_native_boot.force_disable_uffd_gc": "true"
+              },
+              "libartSHA256": "6ac4d052d0cf6f7d69ff817444f610afa25e583bb032d2a0e310346c0f8b7133",
+              "kernelVersion": "#1 SMP PREEMPT Fri Oct 18 23:59:20 UTC 2024",
+              "cacheForceDisable": "true",
+              "cacheSHA256": "c8c0e00be1e89e8ba5fcb3a10ee43e19542b424b2e4c30a4268466e6e8b4ef71",
+              "processes": {
+                "zygote": {
+                  "pid": 4282,
+                  "cmdline": "zygote64",
+                  "collector": "CollectorTypeCC",
+                  "collectorLogLines": [
+                    {
+                      "line": 35298,
+                      "text": "10-24 18:26:48.378  4282  4282 I zygote64: Using CollectorTypeCC GC."
+                    },
+                    {
+                      "line": 87108,
+                      "text": "10-24 18:26:48.378  4282  4282 I zygote64: Using CollectorTypeCC GC."
+                    }
+                  ],
+                  "mapsSHA256": "7e331993ca9042b1aebcb70fb10425154d37e8338c343c91e153d71763c3635d",
+                  "logSHA256": "7b7593337b1619fe0e1b0f0e0e08450d77a24bf7b76af88b0681cbe83af954ea",
+                  "rebuiltPrimaryImagesMapped": true,
+                  "ownImageFallbackDetected": false
+                },
+                "system-server": {
+                  "pid": 4345,
+                  "cmdline": "system_server",
+                  "collector": "CollectorTypeCC",
+                  "collectorLogLines": [
+                    {
+                      "line": 35580,
+                      "text": "10-24 18:26:48.868  4345  4345 I system_server: Using CollectorTypeCC GC."
+                    },
+                    {
+                      "line": 87390,
+                      "text": "10-24 18:26:48.868  4345  4345 I system_server: Using CollectorTypeCC GC."
+                    }
+                  ],
+                  "mapsSHA256": "3771e72a6cacf93ff97e1d73f5f22bd8b9520583e19978846c25ebc470fd1c4d",
+                  "logSHA256": "7b7593337b1619fe0e1b0f0e0e08450d77a24bf7b76af88b0681cbe83af954ea",
+                  "rebuiltPrimaryImagesMapped": true,
+                  "ownImageFallbackDetected": false
+                }
+              },
+              "scope": "Retained configuration facts; no claim of continued process health."
+            }
+          },
+          "stableSetupAccepted": false,
+          "propagation": {
+            "observations": [
+              {
+                "attempt": 1,
+                "elapsed_seconds": 0.031009094000012283,
+                "utc": "2026-10-24T18:25:56.413168+00:00",
+                "values": {
+                  "device_config": {
+                    "status": 0,
+                    "stderr": "",
+                    "value": "true"
+                  },
+                  "persistent_property": {
+                    "status": 0,
+                    "stderr": "",
+                    "value": ""
+                  }
+                }
+              },
+              {
+                "attempt": 2,
+                "elapsed_seconds": 1.0708026340000174,
+                "utc": "2026-10-24T18:25:57.452960+00:00",
+                "values": {
+                  "device_config": {
+                    "status": 0,
+                    "stderr": "",
+                    "value": "true"
+                  },
+                  "persistent_property": {
+                    "status": 0,
+                    "stderr": "",
+                    "value": ""
+                  }
+                }
+              },
+              {
+                "attempt": 3,
+                "elapsed_seconds": 2.119095506000008,
+                "utc": "2026-10-24T18:25:58.501253+00:00",
+                "values": {
+                  "device_config": {
+                    "status": 0,
+                    "stderr": "",
+                    "value": "true"
+                  },
+                  "persistent_property": {
+                    "status": 0,
+                    "stderr": "",
+                    "value": "true"
+                  }
+                }
+              }
+            ],
+            "attempts": 3,
+            "elapsedSeconds": 2.119095506000008,
+            "setupCompleted": true,
+            "scope": "Retained command observations and setup status; changed boot, rebuilt cache and own-PID collector evidence are independently checked separately."
+          },
+          "phaseMarkers": {
+            "before": {
+              "line": 725,
+              "timestamp": "2026-10-24T18:25:56.2956212Z",
+              "status": "PASS"
+            },
+            "rebooted": {
+              "line": 731,
+              "timestamp": "2026-10-24T18:26:42.0428406Z",
+              "status": "PASS"
+            },
+            "configured": {
+              "line": 752,
+              "timestamp": "2026-10-24T18:26:57.8582429Z",
+              "status": "PASS"
+            },
+            "instrumentation": {
+              "line": 1107,
+              "timestamp": "2026-10-24T18:27:19.5276294Z",
+              "status": "FAIL"
+            }
+          },
+          "configuredPIDFatalBeforePassMarker": {
+            "line": 51685,
+            "text": "10-24 18:26:56.572  4345  4357 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 4357 (FinalizerDaemon), pid 4345 (system_server)"
+          },
+          "setupFalseSuccessBoundary": "The verifier accepted retained configuration snapshots after the captured system_server PID had already emitted a fatal signal. The PASS marker is not evidence of a healthy or stable runtime.",
+          "junit": {
+            "path": "Experiment-2/Experiment-2/app/build/outputs/androidTest-results/connected/debug/TEST-emulator-5554 - 15-_app-.xml",
+            "attributes": {
+              "tests": "0",
+              "failures": "0",
+              "errors": "0",
+              "skipped": "0",
+              "time": "0.041",
+              "timestamp": "2026-10-24T18:27:17",
+              "hostname": "localhost"
+            },
+            "systemError": "ErrorName: UNKNOWN\nNameSpace: DdmlibAndroidDeviceController\nErrorCode: 1\nErrorType: TEST\nMessage: Failed to install split APK(s): [/home/runner/work/Experiment-2/Experiment-2/app/build/outputs/apk/debug/app-debug.apk]\nFailed to install split APK(s): [/home/runner/work/Experiment-2/Experiment-2/app/build/outputs/apk/debug/app-debug.apk]\n'package install-create -r --bypass-low-target-sdk-block -t --user 0 -S 24299639' returns error 'Unknown failure: cmd: Can't find service: package'\ncom.android.ddmlib.InstallException: 'package install-create -r --bypass-low-target-sdk-block -t --user 0 -S 24299639' returns error 'Unknown failure: cmd: Can't find service: package'\n\tat com.android.ddmlib.SplitApkInstallerBase.createMultiInstallSession(SplitApkInstallerBase.java:124)\n\tat com.android.ddmlib.SplitApkInstaller.install(SplitApkInstaller.java:68)\n\tat com.android.ddmlib.IDeviceSharedImpl.installPackages(IDeviceSharedImpl.java:395)\n\tat com.android.ddmlib.internal.DeviceImpl.lambda$installPackages$34(DeviceImpl.java:1491)\n\tat com.android.ddmlib.internal.DeviceImpl.logRun3(DeviceImpl.java:1833)\n\tat com.android.ddmlib.internal.DeviceImpl.installPackages(DeviceImpl.java:1488)\n\tat com.android.ddmlib.internal.DeviceImpl.lambda$installPackages$35(DeviceImpl.java:1503)\n\tat com.android.ddmlib.internal.DeviceImpl.logRun3(DeviceImpl.java:1833)\n\tat com.android.ddmlib.internal.DeviceImpl.installPackages(DeviceImpl.java:1499)\n\tat com.android.tools.utp.plugins.deviceprovider.ddmlib.DdmlibAndroidDevice.installPackages(DdmlibAndroidDevice.kt:76)\n\tat com.android.tools.utp.plugins.deviceprovider.ddmlib.DdmlibAndroidDeviceController$executeAsync$deferred$1.invokeSuspend(DdmlibAndroidDeviceController.kt:259)\n\tat kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:33)\n\tat kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:108)\n\tat kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:584)\n\tat kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:793)\n\tat kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:697)\n\tat kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:684)\n\n"
+          },
+          "host": {
+            "emulatorVersion": "37.2.12.0",
+            "emulatorBuild": "16428233",
+            "emulatorSourceProperties": {
+              "Pkg.UserSrc": "false",
+              "Pkg.Revision": "37.2.12",
+              "Pkg.Path": "emulator",
+              "Pkg.Desc": "Android Emulator",
+              "Pkg.BuildId": "16428233"
+            },
+            "systemImageProperties": {
+              "Pkg.Desc": "System Image Page Size 16k x86_64 with Google APIs.",
+              "Pkg.Revision": "5",
+              "Pkg.Dependencies": "emulator#33.1.24",
+              "AndroidVersion.ApiLevel": "35",
+              "AndroidVersion.ExtensionLevel": "13",
+              "AndroidVersion.IsBaseSdk": "true",
+              "SystemImage.Abi": "x86_64",
+              "SystemImage.TagId": "google_apis,page_size_16kb",
+              "SystemImage.TagDisplay": "Google APIs,16 KB Page Size",
+              "SystemImage.GpuSupport": "true",
+              "Addon.VendorId": "google",
+              "Addon.VendorDisplay": "Google Inc."
+            },
+            "recordedSystemImageFiles": {
+              "system.img": {
+                "bytes": 3891265536,
+                "sha256": "5c5dabeee5c63652e485947e62f2849f4ae3fba5d425eeba9df24c3f1e5f042c"
+              },
+              "vendor.img": {
+                "bytes": 114294784,
+                "sha256": "dce0d80f197a17214e99c16be0992e2bc0b8a83a18c61400a36051fbbd2d618a"
+              },
+              "ramdisk.img": {
+                "bytes": 2154596,
+                "sha256": "815828912f1ad2652e683a8b81487bebb64d2620d05a8b84e2c6dc2f9a743a90"
+              },
+              "kernel-ranchu": {
+                "bytes": 20374528,
+                "sha256": "987818a35792fb62f6ea6aa604d5fa476e1e85c84fc1cbac3979e1ae26965f46"
+              },
+              "source.properties": {
+                "bytes": 401,
+                "sha256": "ed5a16eb74b8bc0e58c938eb9d3159a986855e3aebbd53f79a3273962630f663"
+              },
+              "package.xml": {
+                "bytes": 18839,
+                "sha256": "0b27beb4f4ce1d0f3b20c1ca8077c611819a60a947658df4aa533e6c84d1c700"
+              }
+            },
+            "hostOS": "PRETTY_NAME=\"Ubuntu 24.04.5 LTS\"\nNAME=\"Ubuntu\"\nVERSION_ID=\"24.04\"\nVERSION=\"24.04.5 LTS (Noble Numbat)\"\nVERSION_CODENAME=noble\nID=ubuntu\nID_LIKE=debian\nHOME_URL=\"https://www.ubuntu.com/\"\nSUPPORT_URL=\"https://help.ubuntu.com/\"\nBUG_REPORT_URL=\"https://bugs.launchpad.net/ubuntu/\"\nPRIVACY_POLICY_URL=\"https://www.ubuntu.com/legal/terms-and-policies/privacy-policy\"\nUBUNTU_CODENAME=noble\nLOGO=ubuntu-logo",
+            "hostImage": "ImageOS=ubuntu24\nImageVersion=20261023.334.3",
+            "scope": "Actual captured version/identity and hash records. Retained metadata bytes are independently hashed; large installed image blobs are not uploaded or independently re-read here.",
+            "startupImageVersion": "20261012.334.1",
+            "environmentImage": {
+              "ImageOS": "ubuntu24",
+              "ImageVersion": "20261023.334.3"
+            },
+            "imageLabelDisagreement": true,
+            "provisionerVersion": "20261021.618",
+            "region": "centralus",
+            "runnerVersion": "2.338.0"
+          },
+          "instrumentationStarts": [
+            {
+              "line": 843,
+              "text": "2026-10-24T18:27:17.5328587Z Starting 0 tests on emulator-5554 - 15"
+            }
+          ],
+          "instrumentationFinishes": [
+            {
+              "line": 840,
+              "text": "2026-10-24T18:27:17.5323258Z Finished 0 tests on emulator-5554 - 15"
+            }
+          ],
+          "capturedApplicationProcess": null,
+          "applicationFatalLines": [],
+          "postRebootNativeSignals": [
+            {
+              "line": 2670,
+              "text": "10-24 18:26:21.869   643   921 F libc    : Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0 in tid 921 (AsyncTask #1), pid 643 (system_server)"
+            },
+            {
+              "line": 3338,
+              "text": "10-24 18:26:28.245  1214  1532 F libc    : Fatal signal 11 (SIGSEGV), code 128 (SI_KERNEL), fault addr 0x0 in tid 1532 (binder:1214_A), pid 1214 (system_server)"
+            },
+            {
+              "line": 6252,
+              "text": "10-24 18:26:32.848  1811  1823 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 1823 (FinalizerDaemon), pid 1811 (system_server)"
+            },
+            {
+              "line": 22989,
+              "text": "10-24 18:26:40.287  2512  2524 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 2524 (FinalizerDaemon), pid 2512 (system_server)"
+            },
+            {
+              "line": 32692,
+              "text": "10-24 18:26:45.885  3753  4056 F libc    : Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0 in tid 4056 (binder:3753_8), pid 3753 (system_server)"
+            },
+            {
+              "line": 51685,
+              "text": "10-24 18:26:56.572  4345  4357 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 4357 (FinalizerDaemon), pid 4345 (system_server)"
+            },
+            {
+              "line": 69513,
+              "text": "10-24 18:27:05.691  5853  6066 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 6066 (binder:5853_5), pid 5853 (system_server)"
+            },
+            {
+              "line": 95386,
+              "text": "10-24 18:27:16.194  6435  6446 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 6446 (ReferenceQueueD), pid 6435 (system_server)"
+            }
+          ],
+          "abortMessages": [
+            {
+              "line": 7314,
+              "text": "10-24 18:26:33.404  2346  2346 F DEBUG   : Abort message: 'Scudo ERROR: corrupted chunk header at address 0x748f1b306820'"
+            },
+            {
+              "line": 34848,
+              "text": "10-24 18:26:47.226  4083  4083 F DEBUG   : Abort message: 'Binder thread started or Java binder used, but env null. Attach JVM?'"
+            },
+            {
+              "line": 55668,
+              "text": "10-24 18:27:00.443  5458  5458 F DEBUG   : Abort message: 'Scudo ERROR: corrupted chunk header at address 0x7c8fbd3bdd90'"
+            },
+            {
+              "line": 69707,
+              "text": "10-24 18:27:05.955  6314  6314 F DEBUG   : Abort message: 'Assertion failed: editable == nullptr'"
+            }
+          ],
+          "postInstrumentation": {
+            "sameBootObserved": true,
+            "properties": {
+              "ro.build.fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys",
+              "ro.build.version.sdk": "35",
+              "ro.build.version.security_patch": "2024-09-05",
+              "ro.build.id": "AE3A.240806.043",
+              "ro.build.version.incremental": "12960925",
+              "ro.product.cpu.abilist": "x86_64,arm64-v8a",
+              "ro.kernel.qemu": "1",
+              "ro.debuggable": "1",
+              "sys.boot_completed": "1",
+              "dalvik.vm.usejit": "false",
+              "dalvik.vm.usejitprofiles": "false",
+              "dalvik.vm.gctype": "",
+              "ro.dalvik.vm.enable_uffd_gc": "true",
+              "persist.device_config.runtime_native_boot.enable_uffd_gc_2": "",
+              "persist.device_config.runtime_native_boot.force_disable_uffd_gc": ""
+            },
+            "changedKeys": {
+              "persist.device_config.runtime_native_boot.force_disable_uffd_gc": {
+                "configured": "true",
+                "postInstrumentation": ""
+              }
+            },
+            "captureScope": "All 15 exact keys were retained. The exact runner writes each line only after its timeout/adb/getprop pipeline succeeds; the final key exists with an empty value. Command success is inferred from that branch, not from a separate per-read exit-status file. This is an observed empty read, not a truncated capture. No post-run DeviceConfig-value or rebuilt-cache capture was taken."
+          },
+          "flagHealthCheck": {
+            "events": [
+              {
+                "line": 57106,
+                "text": "10-24 18:27:01.950     0     0 I init    : processing action (sys.init.updatable_crashing=1) from (/system/etc/init/flags_health_check.rc:10)"
+              },
+              {
+                "line": 57107,
+                "text": "10-24 18:27:01.954     0     0 I init    : starting service 'exec 35 (/system/bin/flags_health_check UPDATABLE_CRASHING)'..."
+              },
+              {
+                "line": 57109,
+                "text": "10-24 18:27:01.981     0     0 I init    : ... started service 'exec 35 (/system/bin/flags_health_check UPDATABLE_CRASHING)' has pid 5790"
+              },
+              {
+                "line": 57110,
+                "text": "10-24 18:27:01.983     0     0 I init    : SVC_EXEC service 'exec 35 (/system/bin/flags_health_check UPDATABLE_CRASHING)' pid 5790 (uid 1000 gid 1000+0 context default) started; waiting..."
+              },
+              {
+                "line": 57111,
+                "text": "10-24 18:27:01.857  5790  5790 I flags_health_check: ServerConfigurableFlagsReset updatable crashing detected, resetting flags."
+              },
+              {
+                "line": 57115,
+                "text": "10-24 18:27:01.864  5790  5790 I flags_health_check: ResetAllFlags successfully write to file /data/server_configurable_flags/reset_flags"
+              },
+              {
+                "line": 57176,
+                "text": "10-24 18:27:02.110     0     0 I init    : Service 'exec 35 (/system/bin/flags_health_check UPDATABLE_CRASHING)' (pid 5790) exited with status 0 waiting took 0.152000 seconds"
+              },
+              {
+                "line": 57181,
+                "text": "10-24 18:27:02.129     0     0 I init    : Sending signal 9 to service 'exec 35 (/system/bin/flags_health_check UPDATABLE_CRASHING)' (pid 5790) process group..."
+              },
+              {
+                "line": 69963,
+                "text": "10-24 18:27:06.864     0     0 I init    : processing action (sys.init.updatable_crashing=1) from (/system/etc/init/flags_health_check.rc:10)"
+              },
+              {
+                "line": 69964,
+                "text": "10-24 18:27:06.869     0     0 I init    : starting service 'exec 38 (/system/bin/flags_health_check UPDATABLE_CRASHING)'..."
+              },
+              {
+                "line": 69966,
+                "text": "10-24 18:27:06.751  6346  6346 I flags_health_check: ServerConfigurableFlagsReset updatable crashing detected, resetting flags."
+              },
+              {
+                "line": 69967,
+                "text": "10-24 18:27:06.878     0     0 I init    : SVC_EXEC service 'exec 38 (/system/bin/flags_health_check UPDATABLE_CRASHING)' pid 6346 (uid 1000 gid 1000+0 context default) started; waiting..."
+              },
+              {
+                "line": 69968,
+                "text": "10-24 18:27:06.882     0     0 I init    : Service 'exec 38 (/system/bin/flags_health_check UPDATABLE_CRASHING)' (pid 6346) exited with status 0 waiting took 0.010000 seconds"
+              },
+              {
+                "line": 69969,
+                "text": "10-24 18:27:06.884     0     0 I init    : Sending signal 9 to service 'exec 38 (/system/bin/flags_health_check UPDATABLE_CRASHING)' (pid 6346) process group..."
+              },
+              {
+                "line": 163913,
+                "text": "10-24 18:27:06.877     0     0 I init    : ... started service 'exec 38 (/system/bin/flags_health_check UPDATABLE_CRASHING)' has pid 6346"
+              }
+            ],
+            "perKeyResetFileRetained": false,
+            "rescuePartyLines": [
+              {
+                "line": 30371,
+                "text": "10-24 18:26:45.040  3753  3753 V RescueParty: Disabled because of manual property"
+              },
+              {
+                "line": 40597,
+                "text": "10-24 18:26:50.553  4345  4345 V RescueParty: Disabled because of manual property"
+              },
+              {
+                "line": 62997,
+                "text": "10-24 18:27:03.914  5853  5853 V RescueParty: Disabled because of manual property"
+              },
+              {
+                "line": 76359,
+                "text": "10-24 18:27:08.666  6435  6435 V RescueParty: Disabled because of manual property"
+              }
+            ],
+            "settingsMapperLines": [],
+            "interpretation": "The logs directly record crash-triggered flag-reset execution and successful reset_flags file output. Android 15 r1 source clears nonempty persist.device_config.* properties except attempted_boot_count. This supports a reset mechanism for the later empty force flag; the individual per-key reset remains inferred because reset_flags was not retained. No cause of the earlier heap corruption is established."
+          },
+          "scope": "Source and observed runtime facts verified; controlled application/quality/stability acceptance failed. No application test result or native-rendering/performance conclusion can be drawn."
+        },
+        {
+          "lane": "B",
+          "status": "FAILED_SYSTEM_RUNTIME_BEFORE_COMPLETED_CASES",
+          "job": {
+            "id": 120950291168,
+            "name": "Same-image CC control (B)",
+            "head_sha": "409ef9981ee03902be97ed8ef84d16036d4da831",
+            "status": "completed",
+            "conclusion": "failure",
+            "started_at": "2026-10-24T18:21:39Z",
+            "completed_at": "2026-10-24T18:27:55Z",
+            "run_attempt": 1,
+            "labels": [
+              "ubuntu-latest"
+            ]
+          },
+          "jobDurationSeconds": 376.0,
+          "artifact": {
+            "id": 12571420524,
+            "name": "android15-cc-control-B",
+            "bytes": 15523566,
+            "sha256": "824c880766d66bc6895c7fc022992de76adff2df2d296b10bed7ee630e31becb",
+            "url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40120334470/artifacts/12571420524",
+            "originalFiles": 110,
+            "downloadedOnce": true,
+            "originalBytesVerified": true
+          },
+          "sourceArchive": {
+            "tarSHA256": "21ddf363b79334d337d933612fd4759b3183018437d665bf487f803acd7ca8a4",
+            "gzipSHA256": "3192fc74cd7be8d3b1f20174dfb3637960bc1053fb4e375a818693023c8ada8e",
+            "byteExactPublishedTree": true,
+            "totalFiles": 869,
+            "unchangedApplicationFiles": 864,
+            "addedDiagnosticFiles": 5
+          },
+          "expectedCases": 250,
+          "completedCases": 0,
+          "counts": {
+            "passed": 0,
+            "failure": 0,
+            "error": 0,
+            "skipped": 0
+          },
+          "missingCount": 250,
+          "missingIdentities": "all identities in the shared expectedIdentities array",
+          "extra": [],
+          "duplicates": [],
+          "instrumentationInvocations": 1,
+          "automaticRetries": 0,
+          "manualRetries": 0,
+          "minifiedLaunch": "not reached",
+          "visualNativePixelAndTimingEvidence": "not reached",
+          "observedPhases": {
+            "before": {
+              "bootId": "a837d121-c688-450b-9ca9-74214bfbe86e",
+              "properties": {
+                "ro.build.fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys",
+                "ro.build.version.sdk": "35",
+                "ro.product.cpu.abilist": "x86_64,arm64-v8a",
+                "ro.kernel.qemu": "1",
+                "ro.debuggable": "1",
+                "ro.build.version.security_patch": "2024-09-05",
+                "ro.build.id": "AE3A.240806.043",
+                "ro.build.version.incremental": "12960925",
+                "sys.boot_completed": "1",
+                "dalvik.vm.usejit": "false",
+                "dalvik.vm.usejitprofiles": "false",
+                "dalvik.vm.gctype": "",
+                "ro.dalvik.vm.enable_uffd_gc": "true",
+                "persist.device_config.runtime_native_boot.enable_uffd_gc_2": "",
+                "persist.device_config.runtime_native_boot.force_disable_uffd_gc": ""
+              },
+              "libartSHA256": "6ac4d052d0cf6f7d69ff817444f610afa25e583bb032d2a0e310346c0f8b7133",
+              "kernelVersion": "#1 SMP PREEMPT Fri Oct 18 23:59:20 UTC 2024",
+              "cacheForceDisable": "false",
+              "cacheSHA256": "5df59a593cc0f515e2a272e43d5f2d993ac25bb605abda7dac0a4223ad76eda6",
+              "processes": {
+                "zygote": {
+                  "pid": 2042,
+                  "cmdline": "zygote64",
+                  "collector": "CollectorTypeCMC",
+                  "collectorLogLines": [
+                    {
+                      "line": 21499,
+                      "text": "10-24 18:26:01.188  2042  2042 I zygote64: Using CollectorTypeCMC GC."
+                    },
+                    {
+                      "line": 58922,
+                      "text": "10-24 18:26:01.188  2042  2042 I zygote64: Using CollectorTypeCMC GC."
+                    }
+                  ],
+                  "mapsSHA256": "0d2446bcfdfa43bb4ac422854c0b00e18828be6daa1fb8cea1183816010426e4",
+                  "logSHA256": "ab8f3bd5b84646be3b1d260240a0ee200fb94c1351f864894363aeeb74bed96f",
+                  "rebuiltPrimaryImagesMapped": false,
+                  "ownImageFallbackDetected": false
+                },
+                "system-server": {
+                  "pid": 2080,
+                  "cmdline": "system_server",
+                  "collector": "CollectorTypeCMC",
+                  "collectorLogLines": [
+                    {
+                      "line": 21760,
+                      "text": "10-24 18:26:01.737  2080  2080 I system_server: Using CollectorTypeCMC GC."
+                    },
+                    {
+                      "line": 59183,
+                      "text": "10-24 18:26:01.737  2080  2080 I system_server: Using CollectorTypeCMC GC."
+                    }
+                  ],
+                  "mapsSHA256": "50e11d2f154bda4a40f0da6722129125422541351db848f80216fdb4f06bc0b3",
+                  "logSHA256": "ab8f3bd5b84646be3b1d260240a0ee200fb94c1351f864894363aeeb74bed96f",
+                  "rebuiltPrimaryImagesMapped": false,
+                  "ownImageFallbackDetected": false
+                }
+              },
+              "scope": "Retained configuration facts; no claim of continued process health."
+            },
+            "rebooted": {
+              "bootId": "3b248423-25a1-484d-acf5-42a1b450565b",
+              "properties": {
+                "ro.build.fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys",
+                "ro.build.version.sdk": "35",
+                "ro.product.cpu.abilist": "x86_64,arm64-v8a",
+                "ro.kernel.qemu": "1",
+                "ro.debuggable": "1",
+                "ro.build.version.security_patch": "2024-09-05",
+                "ro.build.id": "AE3A.240806.043",
+                "ro.build.version.incremental": "12960925",
+                "sys.boot_completed": "1",
+                "dalvik.vm.usejit": "true",
+                "dalvik.vm.usejitprofiles": "",
+                "dalvik.vm.gctype": "",
+                "ro.dalvik.vm.enable_uffd_gc": "true",
+                "persist.device_config.runtime_native_boot.enable_uffd_gc_2": "",
+                "persist.device_config.runtime_native_boot.force_disable_uffd_gc": "true"
+              },
+              "libartSHA256": "6ac4d052d0cf6f7d69ff817444f610afa25e583bb032d2a0e310346c0f8b7133",
+              "kernelVersion": "#1 SMP PREEMPT Fri Oct 18 23:59:20 UTC 2024",
+              "cacheForceDisable": "true",
+              "cacheSHA256": "1648f0bd2491100b7e2cb96d547acdb93098bcd88adf93a883bbf681f41d5c47",
+              "processes": {
+                "zygote": {
+                  "pid": 1063,
+                  "cmdline": "zygote64",
+                  "collector": "CollectorTypeCC",
+                  "collectorLogLines": [
+                    {
+                      "line": 12564,
+                      "text": "10-24 18:26:36.155  1063  1063 I zygote64: Using CollectorTypeCC GC."
+                    },
+                    {
+                      "line": 34967,
+                      "text": "10-24 18:26:36.155  1063  1063 I zygote64: Using CollectorTypeCC GC."
+                    }
+                  ],
+                  "mapsSHA256": "2030dd3767461ba6d5bbcb77ffe2da8cfff8bffc0284032b5e768c5718113928",
+                  "logSHA256": "4a3cac097a56cd1f2106f026585b1bdbc64d52976eecd5f4e91863f884857fc8",
+                  "rebuiltPrimaryImagesMapped": true,
+                  "ownImageFallbackDetected": false
+                },
+                "system-server": {
+                  "pid": 1125,
+                  "cmdline": "system_server",
+                  "collector": "CollectorTypeCC",
+                  "collectorLogLines": [
+                    {
+                      "line": 12856,
+                      "text": "10-24 18:26:36.751  1125  1125 I system_server: Using CollectorTypeCC GC."
+                    },
+                    {
+                      "line": 35252,
+                      "text": "10-24 18:26:36.751  1125  1125 I system_server: Using CollectorTypeCC GC."
+                    }
+                  ],
+                  "mapsSHA256": "3327fb6c42d8684ae5a225f0fa2e996ee99a43bc943d292416539920e6b06eaf",
+                  "logSHA256": "4a3cac097a56cd1f2106f026585b1bdbc64d52976eecd5f4e91863f884857fc8",
+                  "rebuiltPrimaryImagesMapped": true,
+                  "ownImageFallbackDetected": false
+                }
+              },
+              "scope": "Retained configuration facts; no claim of continued process health."
+            },
+            "configured": {
+              "bootId": "3b248423-25a1-484d-acf5-42a1b450565b",
+              "properties": {
+                "ro.build.fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys",
+                "ro.build.version.sdk": "35",
+                "ro.product.cpu.abilist": "x86_64,arm64-v8a",
+                "ro.kernel.qemu": "1",
+                "ro.debuggable": "1",
+                "ro.build.version.security_patch": "2024-09-05",
+                "ro.build.id": "AE3A.240806.043",
+                "ro.build.version.incremental": "12960925",
+                "sys.boot_completed": "1",
+                "dalvik.vm.usejit": "false",
+                "dalvik.vm.usejitprofiles": "false",
+                "dalvik.vm.gctype": "",
+                "ro.dalvik.vm.enable_uffd_gc": "true",
+                "persist.device_config.runtime_native_boot.enable_uffd_gc_2": "",
+                "persist.device_config.runtime_native_boot.force_disable_uffd_gc": "true"
+              },
+              "libartSHA256": "6ac4d052d0cf6f7d69ff817444f610afa25e583bb032d2a0e310346c0f8b7133",
+              "kernelVersion": "#1 SMP PREEMPT Fri Oct 18 23:59:20 UTC 2024",
+              "cacheForceDisable": "true",
+              "cacheSHA256": "1648f0bd2491100b7e2cb96d547acdb93098bcd88adf93a883bbf681f41d5c47",
+              "processes": {
+                "zygote": {
+                  "pid": 3554,
+                  "cmdline": "zygote64",
+                  "collector": "CollectorTypeCC",
+                  "collectorLogLines": [
+                    {
+                      "line": 47432,
+                      "text": "10-24 18:27:00.037  3554  3554 I zygote64: Using CollectorTypeCC GC."
+                    },
+                    {
+                      "line": 110127,
+                      "text": "10-24 18:27:00.037  3554  3554 I zygote64: Using CollectorTypeCC GC."
+                    }
+                  ],
+                  "mapsSHA256": "5b2eda008b7219b89358856bec2f02014926c66caeeb19fada59d3e877ceba23",
+                  "logSHA256": "d9be519ad939bd9275d440fd608a8da87240defbb25ececf580c0141381e2614",
+                  "rebuiltPrimaryImagesMapped": true,
+                  "ownImageFallbackDetected": false
+                },
+                "system-server": {
+                  "pid": 3618,
+                  "cmdline": "system_server",
+                  "collector": "CollectorTypeCC",
+                  "collectorLogLines": [
+                    {
+                      "line": 47725,
+                      "text": "10-24 18:27:00.441  3618  3618 I system_server: Using CollectorTypeCC GC."
+                    },
+                    {
+                      "line": 110420,
+                      "text": "10-24 18:27:00.441  3618  3618 I system_server: Using CollectorTypeCC GC."
+                    }
+                  ],
+                  "mapsSHA256": "26bf4bf4d198b8c605b8db523abb087f5ce65c827d4969206206ca7543e95267",
+                  "logSHA256": "d9be519ad939bd9275d440fd608a8da87240defbb25ececf580c0141381e2614",
+                  "rebuiltPrimaryImagesMapped": true,
+                  "ownImageFallbackDetected": false
+                }
+              },
+              "scope": "Retained configuration facts; no claim of continued process health."
+            }
+          },
+          "stableSetupAccepted": false,
+          "propagation": {
+            "observations": [
+              {
+                "attempt": 1,
+                "elapsed_seconds": 0.03911498100001154,
+                "utc": "2026-10-24T18:26:09.571317+00:00",
+                "values": {
+                  "device_config": {
+                    "status": 0,
+                    "stderr": "",
+                    "value": "true"
+                  },
+                  "persistent_property": {
+                    "status": 0,
+                    "stderr": "",
+                    "value": ""
+                  }
+                }
+              },
+              {
+                "attempt": 2,
+                "elapsed_seconds": 1.0904002589999777,
+                "utc": "2026-10-24T18:26:10.622600+00:00",
+                "values": {
+                  "device_config": {
+                    "status": 0,
+                    "stderr": "",
+                    "value": "true"
+                  },
+                  "persistent_property": {
+                    "status": 0,
+                    "stderr": "",
+                    "value": "true"
+                  }
+                }
+              }
+            ],
+            "attempts": 2,
+            "elapsedSeconds": 1.0904002589999777,
+            "setupCompleted": true,
+            "scope": "Retained command observations and setup status; changed boot, rebuilt cache and own-PID collector evidence are independently checked separately."
+          },
+          "phaseMarkers": {
+            "before": {
+              "line": 748,
+              "timestamp": "2026-10-24T18:26:09.4359296Z",
+              "status": "PASS"
+            },
+            "rebooted": {
+              "line": 752,
+              "timestamp": "2026-10-24T18:26:47.3914518Z",
+              "status": "PASS"
+            },
+            "configured": {
+              "line": 757,
+              "timestamp": "2026-10-24T18:27:07.5946220Z",
+              "status": "PASS"
+            },
+            "instrumentation": {
+              "line": 1092,
+              "timestamp": "2026-10-24T18:27:24.6859026Z",
+              "status": "FAIL"
+            }
+          },
+          "configuredPIDFatalBeforePassMarker": {
+            "line": 62524,
+            "text": "10-24 18:27:05.199  3618  3628 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 3628 (HeapTaskDaemon), pid 3618 (system_server)"
+          },
+          "setupFalseSuccessBoundary": "The verifier accepted retained configuration snapshots after the captured system_server PID had already emitted a fatal signal. The PASS marker is not evidence of a healthy or stable runtime.",
+          "junit": {
+            "path": "Experiment-2/Experiment-2/app/build/outputs/androidTest-results/connected/debug/TEST-emulator-5554 - 15-_app-.xml",
+            "attributes": {
+              "tests": "0",
+              "failures": "0",
+              "errors": "0",
+              "skipped": "0",
+              "time": "0.493",
+              "timestamp": "2026-10-24T18:27:22",
+              "hostname": "localhost"
+            },
+            "systemError": "Test run failed to complete. No test results. onError: commandError=false message=INSTRUMENTATION_ABORTED: System has crashed.\nLogcat of last crash: \nProcess: com.artflow.studio, PID: 5923\nDeadSystemException: The system died; earlier logs will point to the root cause\n\n"
+          },
+          "host": {
+            "emulatorVersion": "37.2.12.0",
+            "emulatorBuild": "16428233",
+            "emulatorSourceProperties": {
+              "Pkg.UserSrc": "false",
+              "Pkg.Revision": "37.2.12",
+              "Pkg.Path": "emulator",
+              "Pkg.Desc": "Android Emulator",
+              "Pkg.BuildId": "16428233"
+            },
+            "systemImageProperties": {
+              "Pkg.Desc": "System Image Page Size 16k x86_64 with Google APIs.",
+              "Pkg.Revision": "5",
+              "Pkg.Dependencies": "emulator#33.1.24",
+              "AndroidVersion.ApiLevel": "35",
+              "AndroidVersion.ExtensionLevel": "13",
+              "AndroidVersion.IsBaseSdk": "true",
+              "SystemImage.Abi": "x86_64",
+              "SystemImage.TagId": "google_apis,page_size_16kb",
+              "SystemImage.TagDisplay": "Google APIs,16 KB Page Size",
+              "SystemImage.GpuSupport": "true",
+              "Addon.VendorId": "google",
+              "Addon.VendorDisplay": "Google Inc."
+            },
+            "recordedSystemImageFiles": {
+              "system.img": {
+                "bytes": 3891265536,
+                "sha256": "5c5dabeee5c63652e485947e62f2849f4ae3fba5d425eeba9df24c3f1e5f042c"
+              },
+              "vendor.img": {
+                "bytes": 114294784,
+                "sha256": "dce0d80f197a17214e99c16be0992e2bc0b8a83a18c61400a36051fbbd2d618a"
+              },
+              "ramdisk.img": {
+                "bytes": 2154596,
+                "sha256": "815828912f1ad2652e683a8b81487bebb64d2620d05a8b84e2c6dc2f9a743a90"
+              },
+              "kernel-ranchu": {
+                "bytes": 20374528,
+                "sha256": "987818a35792fb62f6ea6aa604d5fa476e1e85c84fc1cbac3979e1ae26965f46"
+              },
+              "source.properties": {
+                "bytes": 401,
+                "sha256": "ed5a16eb74b8bc0e58c938eb9d3159a986855e3aebbd53f79a3273962630f663"
+              },
+              "package.xml": {
+                "bytes": 18839,
+                "sha256": "0b27beb4f4ce1d0f3b20c1ca8077c611819a60a947658df4aa533e6c84d1c700"
+              }
+            },
+            "hostOS": "PRETTY_NAME=\"Ubuntu 24.04.5 LTS\"\nNAME=\"Ubuntu\"\nVERSION_ID=\"24.04\"\nVERSION=\"24.04.5 LTS (Noble Numbat)\"\nVERSION_CODENAME=noble\nID=ubuntu\nID_LIKE=debian\nHOME_URL=\"https://www.ubuntu.com/\"\nSUPPORT_URL=\"https://help.ubuntu.com/\"\nBUG_REPORT_URL=\"https://bugs.launchpad.net/ubuntu/\"\nPRIVACY_POLICY_URL=\"https://www.ubuntu.com/legal/terms-and-policies/privacy-policy\"\nUBUNTU_CODENAME=noble\nLOGO=ubuntu-logo",
+            "hostImage": "ImageOS=ubuntu24\nImageVersion=20261012.334.1",
+            "scope": "Actual captured version/identity and hash records. Retained metadata bytes are independently hashed; large installed image blobs are not uploaded or independently re-read here.",
+            "startupImageVersion": "20261012.334.1",
+            "environmentImage": {
+              "ImageOS": "ubuntu24",
+              "ImageVersion": "20261012.334.1"
+            },
+            "imageLabelDisagreement": false,
+            "provisionerVersion": "20261012.601",
+            "region": "westus3",
+            "runnerVersion": "2.338.0"
+          },
+          "instrumentationStarts": [
+            {
+              "line": 847,
+              "text": "2026-10-24T18:27:22.5278538Z Starting 0 tests on emulator-5554 - 15"
+            }
+          ],
+          "instrumentationFinishes": [
+            {
+              "line": 849,
+              "text": "2026-10-24T18:27:22.9276939Z Finished 0 tests on emulator-5554 - 15"
+            }
+          ],
+          "capturedApplicationProcess": {
+            "pid": 5923,
+            "cmdline": "com.artflow.studio",
+            "collector": "CollectorTypeCC",
+            "collectorLogLines": [
+              {
+                "line": 82580,
+                "text": "10-24 18:27:16.320  5923  5923 I .artflow.studio: Using CollectorTypeCC GC."
+              },
+              {
+                "line": 172739,
+                "text": "10-24 18:27:16.320  5923  5923 I .artflow.studio: Using CollectorTypeCC GC."
+              }
+            ],
+            "mapsSHA256": "d7248aa056b94024f939a48905757e498caf6df9eec960ddaf4bdd204ce6ad4c",
+            "logSHA256": "71616a3a98db901595cb7bc75569721c99e24028ac659ba58eb65aa3e6e8056a",
+            "rebuiltPrimaryImagesMapped": true,
+            "ownImageFallbackDetected": false
+          },
+          "applicationFatalLines": [
+            {
+              "line": 86830,
+              "text": "10-24 18:27:20.538  5923  5923 E AndroidRuntime: FATAL EXCEPTION: main"
+            },
+            {
+              "line": 86831,
+              "text": "10-24 18:27:20.538  5923  5923 E AndroidRuntime: Process: com.artflow.studio, PID: 5923"
+            },
+            {
+              "line": 86832,
+              "text": "10-24 18:27:20.538  5923  5923 E AndroidRuntime: DeadSystemException: The system died; earlier logs will point to the root cause"
+            }
+          ],
+          "postRebootNativeSignals": [
+            {
+              "line": 3093,
+              "text": "10-24 18:26:33.886   654   848 F libc    : Fatal signal 11 (SIGSEGV), code 128 (SI_KERNEL), fault addr 0x0 in tid 848 (ackgroundThread), pid 654 (system_server)"
+            },
+            {
+              "line": 18240,
+              "text": "10-24 18:26:44.405  1125  1142 F libc    : Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x101010101 in tid 1142 (FinalizerDaemon), pid 1125 (system_server)"
+            },
+            {
+              "line": 31490,
+              "text": "10-24 18:26:51.387  2250  2262 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 2262 (FinalizerDaemon), pid 2250 (system_server)"
+            },
+            {
+              "line": 45207,
+              "text": "10-24 18:26:58.581  2942  2952 F libc    : Fatal signal 11 (SIGSEGV), code 128 (SI_KERNEL), fault addr 0x0 in tid 2952 (HeapTaskDaemon), pid 2942 (system_server)"
+            },
+            {
+              "line": 62524,
+              "text": "10-24 18:27:05.199  3618  3628 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 3628 (HeapTaskDaemon), pid 3618 (system_server)"
+            },
+            {
+              "line": 84130,
+              "text": "10-24 18:27:17.986  5054  6184 F libc    : Fatal signal 11 (SIGSEGV), code 128 (SI_KERNEL), fault addr 0x0 in tid 6184 (binder:5054_17), pid 5054 (system_server)"
+            }
+          ],
+          "abortMessages": [
+            {
+              "line": 32708,
+              "text": "10-24 18:26:51.961  2774  2774 F DEBUG   : Abort message: 'Scudo ERROR: corrupted chunk header at address 0x79c63d52f490'"
+            },
+            {
+              "line": 67626,
+              "text": "10-24 18:27:09.442  4645  4645 F DEBUG   : Abort message: 'Scudo ERROR: corrupted chunk header at address 0x76419171db50'"
+            }
+          ],
+          "postInstrumentation": {
+            "sameBootObserved": true,
+            "properties": {
+              "ro.build.fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys",
+              "ro.build.version.sdk": "35",
+              "ro.build.version.security_patch": "2024-09-05",
+              "ro.build.id": "AE3A.240806.043",
+              "ro.build.version.incremental": "12960925",
+              "ro.product.cpu.abilist": "x86_64,arm64-v8a",
+              "ro.kernel.qemu": "1",
+              "ro.debuggable": "1",
+              "sys.boot_completed": "1",
+              "dalvik.vm.usejit": "false",
+              "dalvik.vm.usejitprofiles": "false",
+              "dalvik.vm.gctype": "",
+              "ro.dalvik.vm.enable_uffd_gc": "true",
+              "persist.device_config.runtime_native_boot.enable_uffd_gc_2": "",
+              "persist.device_config.runtime_native_boot.force_disable_uffd_gc": ""
+            },
+            "changedKeys": {
+              "persist.device_config.runtime_native_boot.force_disable_uffd_gc": {
+                "configured": "true",
+                "postInstrumentation": ""
+              }
+            },
+            "captureScope": "All 15 exact keys were retained. The exact runner writes each line only after its timeout/adb/getprop pipeline succeeds; the final key exists with an empty value. Command success is inferred from that branch, not from a separate per-read exit-status file. This is an observed empty read, not a truncated capture. No post-run DeviceConfig-value or rebuilt-cache capture was taken."
+          },
+          "flagHealthCheck": {
+            "events": [
+              {
+                "line": 87187,
+                "text": "10-24 18:27:21.007     0     0 I init    : processing action (sys.init.updatable_crashing=1) from (/system/etc/init/flags_health_check.rc:10)"
+              },
+              {
+                "line": 87188,
+                "text": "10-24 18:27:21.009     0     0 I init    : starting service 'exec 37 (/system/bin/flags_health_check UPDATABLE_CRASHING)'..."
+              },
+              {
+                "line": 87189,
+                "text": "10-24 18:27:21.012     0     0 I init    : ... started service 'exec 37 (/system/bin/flags_health_check UPDATABLE_CRASHING)' has pid 6437"
+              },
+              {
+                "line": 87190,
+                "text": "10-24 18:27:21.014     0     0 I init    : SVC_EXEC service 'exec 37 (/system/bin/flags_health_check UPDATABLE_CRASHING)' pid 6437 (uid 1000 gid 1000+0 context default) started; waiting..."
+              },
+              {
+                "line": 87192,
+                "text": "10-24 18:27:20.864  6437  6437 I flags_health_check: ServerConfigurableFlagsReset updatable crashing detected, resetting flags."
+              },
+              {
+                "line": 87200,
+                "text": "10-24 18:27:20.886  6437  6437 I flags_health_check: ResetAllFlags successfully write to file /data/server_configurable_flags/reset_flags"
+              },
+              {
+                "line": 87258,
+                "text": "10-24 18:27:21.098     0     0 I init    : Service 'exec 37 (/system/bin/flags_health_check UPDATABLE_CRASHING)' (pid 6437) exited with status 0 waiting took 0.085000 seconds"
+              },
+              {
+                "line": 87260,
+                "text": "10-24 18:27:21.100     0     0 I init    : Sending signal 9 to service 'exec 37 (/system/bin/flags_health_check UPDATABLE_CRASHING)' (pid 6437) process group..."
+              }
+            ],
+            "perKeyResetFileRetained": false,
+            "rescuePartyLines": [
+              {
+                "line": 52255,
+                "text": "10-24 18:27:01.746  3618  3618 V RescueParty: Disabled because of manual property"
+              },
+              {
+                "line": 74623,
+                "text": "10-24 18:27:12.595  5054  5054 V RescueParty: Disabled because of manual property"
+              },
+              {
+                "line": 183730,
+                "text": "10-24 18:27:23.000  6533  6533 V RescueParty: Disabled because of manual property"
+              }
+            ],
+            "settingsMapperLines": [],
+            "interpretation": "The logs directly record crash-triggered flag-reset execution and successful reset_flags file output. Android 15 r1 source clears nonempty persist.device_config.* properties except attempted_boot_count. This supports a reset mechanism for the later empty force flag; the individual per-key reset remains inferred because reset_flags was not retained. No cause of the earlier heap corruption is established."
+          },
+          "scope": "Source and observed runtime facts verified; controlled application/quality/stability acceptance failed. No application test result or native-rendering/performance conclusion can be drawn."
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "workflowRevisions": 2,
+    "lanes": 4,
+    "completedCases": 0,
+    "missingLaneCaseIdentities": 1000,
+    "instrumentationInvocations": 2,
+    "minifiedLaunches": 0,
+    "automaticRetries": 0,
+    "manualRetries": 0
+  },
+  "officialFlagResetSources": {
+    "repository": "platform/system/server_configurable_flags",
+    "tag": "android-15.0.0_r1",
+    "commit": "3b6d3e8d7d20d2f1876c8882dcbdf347b16f80dc",
+    "files": {
+      "server_configurable_flags.cc": {
+        "url": "https://android.googlesource.com/platform/system/server_configurable_flags/+/3b6d3e8d7d20d2f1876c8882dcbdf347b16f80dc/libflags/server_configurable_flags.cc",
+        "sha256": "c9ddc732eefcb0ca5e5b6febc68e01c33c4689851b01eec0eae6ac95fa92f2cc",
+        "bytes": 5811
+      },
+      "flags_health_check.rc": {
+        "url": "https://android.googlesource.com/platform/system/server_configurable_flags/+/3b6d3e8d7d20d2f1876c8882dcbdf347b16f80dc/disaster_recovery/flags_health_check.rc",
+        "sha256": "76c3bf64f41057bc9c9ce0ca433f71c5d6a0f42cd4bd17c0b696debb97763239",
+        "bytes": 504
+      },
+      "disaster_recovery.cc": {
+        "url": "https://android.googlesource.com/platform/system/server_configurable_flags/+/3b6d3e8d7d20d2f1876c8882dcbdf347b16f80dc/disaster_recovery/disaster_recovery.cc",
+        "sha256": "1097be5c9b5e4fcc6dff55fe7593f94147ab47f80f44b85f584f26435e1e798a",
+        "bytes": 2132
+      }
+    }
+  },
+  "resetInferenceBoundary": "Logs directly show the native crash-triggered reset and successful reset_flags file write, followed by a complete capture with an empty force-disable key. Source supports clearing this key, but the per-key reset file and installed health-check binary were not retained/matched. The individual key write and source/binary identity remain inferred/unproven; this does not explain the earlier heap corruption.",
+  "syntheticInspectorChecks": {
+    "passed": 22,
+    "scope": "Prepublication synthetic positive/negative checks of the separate v2 inspector; not emulator or application results.",
+    "testFile": {
+      "file": "test_cc250_v2_control_evidence_helpers.py",
+      "bytes": 11468,
+      "sha256": "3b7e70fe5f3322336db82d74b1aaa0a52fada7014b2e46a1797f3862962f530f"
+    },
+    "frozenControlHelper": {
+      "file": "cc2_control_evidence_helpers.py",
+      "bytes": 22103,
+      "sha256": "4691d665ddcedb130cf13203c6081aa2f152f7c2f567a23b84e886c71e0c87cf"
+    },
+    "coverage": [
+      "Exact source/identities",
+      "Own-PID collector and rebuilt image maps",
+      "Changed and stable kernel boot",
+      "Live and cached flags/JIT",
+      "Missing/foreign/duplicate/failed test identities",
+      "Second invocation and retained retries",
+      "Missing raw evidence despite reported PASS",
+      "Propagation timeout/nonzero status",
+      "Version banner with nonzero command status"
+    ]
+  },
+  "metadataAuditCorrection": {
+    "file": "cc2_control_evidence_helpers_observed_metadata.py",
+    "bytes": 22494,
+    "sha256": "6b7eee7538c34c0b27918245e6e83ef1994faf7008825901813adaefb3200fa0",
+    "reason": "The official SDK source.properties TagId is google_apis,page_size_16kb, while the installed package.xml path uses google_apis_ps16k. The separate audit copy checks both actual fields. The original frozen helper and all original CI/source/artifact bytes remain unchanged; no failed runtime or test gate was waived."
+  },
+  "fullAuditFiles": [
+    {
+      "file": "cc250-setup-failure-acceptance.json",
+      "bytes": 182858,
+      "sha256": "a2f95876cd9abeed9662d2396ddb5435666e41a17ce55dba44b993d2f7661b83"
+    },
+    {
+      "file": "cc250-setup-failure-acceptance.md",
+      "bytes": 4005,
+      "sha256": "a430c6a96febb29701b4d713bc2ef2feb5e8340591d411c0dcbf5e5df2d74675"
+    },
+    {
+      "file": "cc2-runtime-failure-acceptance.json",
+      "bytes": 175666,
+      "sha256": "0348886f56d32614a53cfcc91088e3d4edd15491945bf537aad1a864cf382ea2"
+    },
+    {
+      "file": "cc2-runtime-failure-acceptance.md",
+      "bytes": 10227,
+      "sha256": "4c5b8a80307fa55b213ad4325e5d1f4cc910e43c9b944ed8d10fd009f5d62837"
+    },
+    {
+      "file": "android15-collector-analysis/CC2_RUNTIME_TRIAGE.json",
+      "bytes": 26369,
+      "sha256": "c0b1de94185a90119586e5ac5ef22812f5886db8a476f12c8481b93ec7fe50d6"
+    },
+    {
+      "file": "android15-collector-analysis/CC2_RUNTIME_TRIAGE.md",
+      "bytes": 7141,
+      "sha256": "556c24a104fa9b613b98e8796b713a0e79e05575efa7928ab4b1892af82fb8aa"
+    }
+  ],
+  "disposition": "Keep both diagnostic revisions failed. Do not adopt this control in main or infer a repair/common cause; no further same-source retry, skip expansion or original failure waiver is supported. Main run311 remains failed."
+}

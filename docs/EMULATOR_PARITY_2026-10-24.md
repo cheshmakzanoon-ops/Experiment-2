@@ -134,6 +134,34 @@ retains its existing background behavior. Four additional Android identities cov
 storage lifecycle, the actual blend-dialog route and both export/background workflows. All require
 their own exact-source emulator execution. Native application opening remains unverified.
 
+## Preview transfer and native-pressure boundaries
+
+The [preview optimization](PREVIEW_PERFORMANCE_2026-10-24.md) removes general source-over work
+when placing a raster on transparent black, and reuses a cropped raster that is already private
+to its preview snapshot. Full shared snapshots still copy, and an eligible live stroke retains its
+original full-canvas pickup source. Three added JVM identities check every alpha/channel value, dirty pool reuse,
+exact stored pixels and history during paint/eraser previews, cancellation, commit and undo/redo.
+One added device identity records paired isolated transfer calls with exact output checks and raw
+timings. It introduces no speed threshold or input/display-latency claim.
+
+The [model editor](MODEL_EDITOR_2026-10-24.md) now yields to modal panels, keeps UV-seam segments
+provisional through cancellation, rejects stale point ownership and consumes historical/final
+pointer samples. One preview worker coalesces growing model paint and rejects late cancelled
+results. Sealing drops retained segment rasters while keeping their points visible; later wet
+segments use preceding provisional paint with full-frame pickup history. Nine model/controller
+and five repository JVM cases cover that lifecycle, cache ownership and exact sequential pixels.
+Two actual-editor Android identities add coordinate/modal, real MotionEvent and presented GL checks.
+
+[Native spacing export](NATIVE_SPACING_EXPORT_2026-10-24.md) additionally preserves each imported
+component's explicit or implicit placement version when spacing is unchanged, even if combine
+metadata changes. A deliberate spacing edit follows the inspected native setter's version one.
+Nine actual-archive JVM cases and six native-inspector mutation cases cover that bounded contract.
+
+The separate [Count/control-pressure analysis](NATIVE_CONTROL_PRESSURE_2026-10-24.md) establishes
+selected native Count, temporal-filter and four-control equations. It also identifies the missing
+processed-input, placement and random-stream contracts. No graph consumer or guessed Android
+pressure mapping is introduced by that analysis; its derived fixtures are not native-app output.
+
 ## Group compositing and file compatibility
 
 Explicit **Normal** groups now composite their members against transparency before blending
@@ -182,6 +210,8 @@ the Procreate application.
 | Saved selections | Real file storage, fresh repository/controller, fractional mask coverage, constrained Fill Layer, undo/redo, independent Android PNG decoding, slot deletion and document switching |
 | Blend picker | Group-only Pass Through navigation and independently expected pixels captured from the actual Compose previews |
 | Floating Reference | Real editor coordinate taps/drags inside verified left/right sidebar intersections, modal precedence, outside-window sidebar and Zoom input, both focus target sizes, restored position and unchanged brush/artwork/history |
+| Floating model | Real overlapping modal tap, focus/close/reopen, batched and final-UP texture painting, complete seam cancellation/flag/detachment rollback, exact undo/redo and presented GL pinch without painting |
+| Raster transfer | Exact raw alpha/channel bytes, dirty pooled-buffer reuse, unchanged source, six warmup and twenty measured pairs with retained order/timings; no speed threshold |
 | Existing editor | Full declared instrumentation suite, including GL restoration, pressure/palm input, Zoom pointer behavior, all 20 tools through the actual large-text editor route, active guide status, fills, transforms, recovery, animation, platform export codecs and adaptive controls |
 | Packaged application | Native library loading, measured process page size and sustained launch of the R8-minified benchmark build |
 
@@ -254,6 +284,32 @@ Use the [Android CI workflow](https://github.com/cheshmakzanoon-ops/Experiment-2
 for the exact published commit, then inspect each lane's generated verification summary.
 A queued, skipped, cancelled or failed run is not a completed gate. An artifact from an earlier
 commit does not validate later source changes.
+
+### Completed run 311 and the next preview candidate
+
+[Run 311](CI_RUN_311_2026-10-24.md) on `e2aa900b91298fe08eca8529d0345220faa9e2eb` completed
+**FAILURE**. Its build passed 1,485 JVM tests / 245 suites, 133 Python checks, static analysis,
+debug/release packaging and the signed-input/native-contract checks. Six emulator lanes completed
+250 identities each and minified launch, with the two documented API 26 skips. The main Android 15 /
+16 KB lane passed only after one interrupted attempt and recovery. The independent 16 KB repeat
+crashed twice in ART and its final attempt contained 213 passes, one failure and 36 missing identities.
+The corrected P3 and all four new native-document cases passed where reached. Full counts, hashes,
+scoped image review, native stacks and the six retained timing records are in the immutable run report.
+
+The initial preview-only optimization passed 1,488 unique JVM identities / 246 suites. After the
+model/segment and spacing-export corrections, the [combined local gate](evidence/preview-model-local.json)
+passed **1,511 JVM tests / 251 suites**, zero failures, errors or skips, **139 Python checks**, Android
+test compilation, all five ktlint checks and detekt with the unchanged baseline. Compared with run
+311, this adds 26 JVM and three Android identities, removing none. The combined device inventory
+is **253**. An earlier combined invocation's two loop-style findings were refactored; all tests and
+the static gates then passed again. These local checks do not execute the new Android cases or
+replace the failed runtime requirement; the published source needs its own complete Actions matrix.
+
+The separate [collector controls](ANDROID15_COLLECTOR_CONTROL_2026-10-24.md) preserve two failed
+diagnostic revisions with unchanged application/tests. The corrected revision observed CC and
+compatible boot images, then system-server crashes and native flag recovery before any reported
+case. All four diagnostic lanes remain failed, with zero completed and 1,000 missing lane-identities.
+They establish no stability repair and leave the ordinary seven-lane contract intact.
 
 ### Local validation of the combined v5 candidate
 

@@ -1,7 +1,6 @@
 package com.artflow.studio.core.render
 
 import com.artflow.studio.core.pixels.AdjustmentProcessor
-import com.artflow.studio.core.pixels.BlendModes
 import com.artflow.studio.core.pixels.Channels
 import com.artflow.studio.core.pixels.ImageFilters
 import com.artflow.studio.core.pixels.PixelBuffer
@@ -306,8 +305,9 @@ class Compositor(
     }
 
     /**
-     * [PixelBuffer.drawInto] onto a cleared [canvas], with the same result: opaque pixels are
-     * copied and transparent ones skipped, so only partly transparent pixels need blending.
+     * [PixelBuffer.drawInto] onto a cleared [canvas], with the same result. A nonzero-alpha
+     * source over transparent black retains its straight RGB and alpha bytes; transparent
+     * pixels stay cleared, including any hidden RGB in the source.
      */
     private fun placeOnClear(
         canvas: PixelBuffer,
@@ -318,11 +318,7 @@ class Compositor(
         val target = canvas.pixels
         for (i in source.indices) {
             val pixel = source[i]
-            when (pixel ushr 24) {
-                0 -> Unit
-                OPAQUE -> target[i] = pixel
-                else -> target[i] = BlendModes.sourceOver(0, pixel)
-            }
+            if (pixel ushr 24 != 0) target[i] = pixel
         }
     }
 
@@ -550,7 +546,6 @@ class Compositor(
     private companion object {
         /** Padding added around a vector layer's stroke bounds when sizing its thumbnail. */
         const val THUMBNAIL_PADDING = 16
-        const val OPAQUE = 255
     }
 }
 

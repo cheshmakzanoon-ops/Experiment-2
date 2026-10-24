@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 1,
+  "base": "e2aa900b91298fe08eca8529d0345220faa9e2eb",
+  "scope": "Combined local code gate; Android execution, packaging/lint/signing gates and physical/native-app equivalence require their own evidence.",
+  "conclusion": "PASS",
+  "duration": "3m27s",
+  "buildCacheDisabled": true,
+  "tasks": [
+    "testDebugUnitTest",
+    "compileDebugAndroidTestKotlin",
+    "ktlintCheck",
+    "detekt"
+  ],
+  "jvm": {
+    "suites": 251,
+    "tests": 1511,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "uniqueIdentities": 1511,
+    "identitySHA256": "6a023efd25cc0f096724d9573c23f1b9342b06e34e7bc89a9fe5be7ff6e650c6",
+    "addedIdentities": [
+      "com.artflow.studio.core.render.CompositorRasterTransferTest#pooledRasterPlacementMatchesGeneralSourceOverForEveryAlphaAndChannelValue",
+      "com.artflow.studio.core.three.SurfaceStrokeTest#cancellationDiscardsAllSegmentsAndLateMovesCannotStartAnotherGesture",
+      "com.artflow.studio.core.three.SurfaceStrokeTest#replacementDownCancelsTheOldGestureWhileUpOutsideTheMeshStillFinishes",
+      "com.artflow.studio.data.IncrementalPreviewTest#regionalPaintAndEraserPreviewsLeaveCommittedPixelsAndHistoryIntactWhenCancelled",
+      "com.artflow.studio.data.IncrementalPreviewTest#regionalPreviewAndCommitKeepAnIndependentRasterForUndoAndRedo",
+      "com.artflow.studio.data.ProvisionalStrokeSegmentsTest#manySealedSegmentsRemainVisibleAndCancellableWithoutRetainingTheirCanvasBuffers",
+      "com.artflow.studio.data.ProvisionalStrokeSegmentsTest#openingANewCanvasDropsSealedStateAndAReusedIdCanDrawNormally",
+      "com.artflow.studio.data.ProvisionalStrokeSegmentsTest#sealedSegmentsCommitInOrderWithTheSamePixelsAndIndependentUndoSnapshots",
+      "com.artflow.studio.data.ProvisionalWetStrokeSegmentsTest#cancellingSealedAndGrowingWetSegmentsRestoresOriginalPixelsAndHistory",
+      "com.artflow.studio.data.ProvisionalWetStrokeSegmentsTest#laterWetPreviewBeforeAndAfterSealingMatchesSequentialCommittedPixels",
+      "com.artflow.studio.data.local.BrushSpacingExportTest#addingASecondaryCannotChangeAnImplicitVersionOneSourceToVersionZero",
+      "com.artflow.studio.data.local.BrushSpacingExportTest#deliberateSpacingEditsUseVersionOneIndependentlyForEachComponent",
+      "com.artflow.studio.data.local.BrushSpacingExportTest#extendedOnlySourceKeepsVersionOneWhenAnEditedCombineModeAddsTheLegacyKey",
+      "com.artflow.studio.data.local.BrushSpacingExportTest#legacyCombineKeyPresenceKeepsVersionZeroAcrossCombineChangesAndRemoval",
+      "com.artflow.studio.data.local.BrushSpacingExportTest#libraryArtbrushAndBrushsetKeepIndependentComponentHistories",
+      "com.artflow.studio.data.local.BrushSpacingExportTest#localSingleAndCompoundComponentsAllUseVersionOne",
+      "com.artflow.studio.data.local.BrushSpacingExportTest#omittedSourceSpacingIsNotSynthesizedByAnUnrelatedEdit",
+      "com.artflow.studio.data.local.BrushSpacingExportTest#unchangedClampedSourceSpacingStaysExactUntilEdited",
+      "com.artflow.studio.data.local.BrushSpacingExportTest#untouchedExplicitVersionsSurviveEveryStoredImportVersion",
+      "com.artflow.studio.presentation.CanvasPreviewControllerTest#cancellingRejectsTheLateProvisionalFrameAndImmediatelyRequestsCommittedPixels",
+      "com.artflow.studio.presentation.CanvasPreviewControllerTest#growingSamplesCoalesceWhileOneRenderContinuesAndStillPublishDuringTheGesture",
+      "com.artflow.studio.presentation.CanvasPreviewControllerTest#ordinaryReferenceRefreshStillDebouncesButAProvisionalRequestBypassesTheSettleWait",
+      "com.artflow.studio.presentation.ModelControllerGestureTest#aStaleGestureCannotCommitAcrossOrUndoAnUnrelatedEdit",
+      "com.artflow.studio.presentation.ModelControllerGestureTest#cancelDiscardsEndedAndGrowingSegmentsWithoutPixelsOrHistory",
+      "com.artflow.studio.presentation.ModelControllerGestureTest#finishingKeepsSequentialSegmentPixelsAndTheirExistingUndoSteps",
+      "com.artflow.studio.presentation.ModelControllerGestureTest#reusedStrokeIdsAfterCanvasReplacementAreNotMovedSealedCommittedOrCancelled"
+    ],
+    "removedIdentities": []
+  },
+  "android": {
+    "declared": 253,
+    "identitySHA256": "4e76353b9c571de94d348176485f7205ebf6648c0d6ce76641acd8a8c80b5b66",
+    "addedIdentities": [
+      "com.artflow.studio.ModelEditorUiTest#cancelledModelPaintDiscardsEverySeamSegmentAndSuccessfulUpKeepsUndoablePixels",
+      "com.artflow.studio.ModelEditorUiTest#modalControlsAboveTheRealModelRemainReachableAndFocusRestoresTheView",
+      "com.artflow.studio.data.CompositorRasterTransferDeviceTest#pooledRasterTransferKeepsEveryByteAndRecordsPairedElapsedCalls"
+    ],
+    "removedIdentities": [],
+    "execution": "Not part of this local gate"
+  },
+  "ktlintReportsEmpty": 5,
+  "detektErrors": 0,
+  "detektBaselineUnchanged": true,
+  "detektBaselineSHA256": "dcb67ce1082602a311c05c7f0110065bc64db97d0c83aa80872055a38f8e9279",
+  "pythonAndNative": {
+    "python_tools": 57,
+    "python_ci": 82,
+    "python_total": 139,
+    "failures": 0,
+    "errors": 0,
+    "skips": 0,
+    "native_spacing_contract": "PASS",
+    "source_base": "e2aa900b91298fe08eca8529d0345220faa9e2eb",
+    "files": [
+      {
+        "path": "preview-batch-python-gate.log",
+        "bytes": 156,
+        "sha256": "9f123ed81070a3a60b0cddc0607b7f15232d04cf76ad44d89090b920a95a53a5"
+      },
+      {
+        "path": "preview-batch-ci-python-gate.log",
+        "bytes": 181,
+        "sha256": "729da2fbc1a81471de185a42c9fb25d06b6f96c62d60d99427091dc75d50ca91"
+      },
+      {
+        "path": "preview-batch-native-archive-contracts.log",
+        "bytes": 229,
+        "sha256": "003b30384f7467c02f156bcf68072c4fcf44e774ff6b5a6c0c458ab642d97339"
+      },
+      {
+        "path": "preview-batch-native-archive-contracts.json",
+        "bytes": 7990,
+        "sha256": "2a7fecb393b27c9ff39acc7d43499b3e47366a38c0e2c512522895e13e091639"
+      }
+    ]
+  },
+  "earlierCombinedGate": {
+    "status": "FAILED_STATIC",
+    "elapsed": "4m15s",
+    "jvm": {
+      "tests": 1511,
+      "suites": 251,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "android_compile": "PASS",
+    "ktlint": "PASS",
+    "detekt": {
+      "count": 2,
+      "rule": "LoopWithTooManyJumpStatements",
+      "file": "CanvasRepositoryImpl.kt",
+      "lines": [
+        2826,
+        3054
+      ]
+    },
+    "log_sha256": "2a4545b608f4c5b907fef4c61e5636cb7d480c86f56bda2945df254b141db277"
+  },
+  "gateLogSHA256": "956616b0b6bb991b0de34009090b81cc4e326b6002d42c7fd4fe5a9b102e408a",
+  "sourceFiles": {
+    "app/src/androidTest/java/com/artflow/studio/ModelEditorUiTest.kt": "e9e870a74f4b7a7de7f1c3ab401b04435a2ec647ec9e5977c1a7a6f678bddd2c",
+    "app/src/androidTest/java/com/artflow/studio/data/CompositorRasterTransferDeviceTest.kt": "15b2579f0ec735e69b5c435733b1d88b5f627b0c51ba0548cee81466eb316c3f",
+    "app/src/main/java/com/artflow/studio/core/export/ProcreateBrushWriter.kt": "9ca099a9282d5507e26b2bd0832ae4eeba10131fe9b684dab7817f0c9b572489",
+    "app/src/main/java/com/artflow/studio/core/render/Compositor.kt": "d0fce3b5eaf917f7bddd7868e4b07f2fc859061543dcac367e53dcaeb03e8d58",
+    "app/src/main/java/com/artflow/studio/core/three/SurfaceStroke.kt": "6b0e46aa3678b650db4eb733f2f8eaaf5732e4a97cc6d30f872acdfbf68c4a25",
+    "app/src/main/java/com/artflow/studio/data/repository/canvas/CanvasRepositoryImpl.kt": "148ca22b85896084fb20d7a31a06f65c84d993704f8958f81e36d12d243695e9",
+    "app/src/main/java/com/artflow/studio/domain/repository/canvas/CanvasRepository.kt": "e99942a15c69675aa27c282d4cf40f67e4b88da6090ee4806c89cbae626591fb",
+    "app/src/main/java/com/artflow/studio/presentation/ui/components/canvas/ModelView.kt": "d3b118f3bd11bb7aaa2d9f600f6accba16ae2d409ca5853ff262c6e0e9daf686",
+    "app/src/main/java/com/artflow/studio/presentation/ui/components/editor/EditorChrome.kt": "724e2e5a87d02ac81bb362e1d5bdc7d9218d18d551bfb0ea57b71949aabfc363",
+    "app/src/main/java/com/artflow/studio/presentation/ui/components/editor/ModelCompanion.kt": "3c446b23ee8dd188c723d997689a2d604e6f86f6f6f8af8ff9422b88ddcd4b74",
+    "app/src/main/java/com/artflow/studio/presentation/ui/screens/canvas/CanvasScreen.kt": "88cc59790b752db05d36aa31806c9cdebc59450eb8158faea2b2932070bfedee",
+    "app/src/main/java/com/artflow/studio/presentation/ui/viewmodel/CanvasPreviewController.kt": "ed4a038d1a28c15a39689be6aad47ee7226b486f2e75ee18acbc90cc10c0945a",
+    "app/src/main/java/com/artflow/studio/presentation/ui/viewmodel/ModelController.kt": "be5333366f164015c7a3da9eced4e34ea92d4c7c62b8c02cb68500ec58c1528f",
+    "app/src/test/java/com/artflow/studio/core/render/CompositorRasterTransferTest.kt": "a70a7427d470809481eafc6b8396a3b60fe7997c148dee9cdfbfadb33416c973",
+    "app/src/test/java/com/artflow/studio/core/three/SurfaceStrokeTest.kt": "6803ed29e18fb53e63f6adf1b46fa8b218e754227541757fe6e7f22e92ec6f06",
+    "app/src/test/java/com/artflow/studio/data/IncrementalPreviewTest.kt": "bd2b92a6076a866dd1c30b81eb8ea512b1f35efffff4e7fd778448f26e5a516a",
+    "app/src/test/java/com/artflow/studio/data/ProvisionalStrokeSegmentsTest.kt": "64dfe75cb7de1a4316cf4526f81f6007dc18824913a930e4a79566f28247dba0",
+    "app/src/test/java/com/artflow/studio/data/ProvisionalWetStrokeSegmentsTest.kt": "ba46f8593d433231455dcd2ebacd33138603d1f14fc7c2548f76baa15d4e1c22",
+    "app/src/test/java/com/artflow/studio/data/local/BrushSpacingExportTest.kt": "217da9d755fafba0d7c46897df217b94523648fdda42525431d2959dd5e17607",
+    "app/src/test/java/com/artflow/studio/presentation/CanvasPreviewControllerTest.kt": "6cb8be41f97a37de0aa783f8536d6e3df3d5fdc726d9378986c3d85958b95f98",
+    "app/src/test/java/com/artflow/studio/presentation/ModelControllerGestureTest.kt": "d3582024b2fe876cffda4b3c2e5aa40944a43edc6456020ffe757ad46ae27f8f",
+    "tools/ipa_native_contracts.py": "cb98d797cce7590059e2c20ffaaa00d302df1decb02e11518d9ba217c165d07b",
+    "tools/test_ipa_native_contracts.py": "d2d7a90523184780585f7265b23f26fa83811e771a181817c5d4668ccd549563"
+  },
+  "sourceChangesAfterEarlierGate": {
+    "app/src/main/java/com/artflow/studio/data/repository/canvas/CanvasRepositoryImpl.kt": "Refactor two loops without changing stroke order, pickup dependency or ownership checks.",
+    "app/src/androidTest/java/com/artflow/studio/ModelEditorUiTest.kt": "Use consistent pointer IDs and preserve separate timeout captures for both methods."
+  }
+}

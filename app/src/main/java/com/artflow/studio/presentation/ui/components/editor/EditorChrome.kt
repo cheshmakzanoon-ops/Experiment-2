@@ -228,6 +228,7 @@ fun BrushOptionsRow(
                     onChange = { onToleranceChanged(it.toInt()) },
                     modifier = Modifier.weight(1f),
                 )
+            tool == ToolType.ZOOM -> Unit
             else ->
                 Text(
                     text = "Adjust ${tool.displayName.lowercase()} in the tool panel",

@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.opengl.GLSurfaceView
+import android.os.Build
 import android.view.MotionEvent
 import com.artflow.studio.core.three.Mesh
 import com.artflow.studio.core.three.MeshPicker
@@ -28,6 +29,7 @@ class ModelView(
     private val renderer = ModelRenderer()
     var mesh: Mesh? = null
         set(value) {
+            if (field !== value) cancelPainting()
             field = value
             value?.let(renderer::setMesh)
             requestRender()
@@ -47,7 +49,20 @@ class ModelView(
             requestRender()
         }
     var painting = false
+        set(value) {
+            if (field != value) cancelPainting()
+            field = value
+        }
+    var gesturesEnabled = true
+        set(value) {
+            if (!value) cancelPainting()
+            field = value
+        }
     var painter: ModelPainter? = null
+        set(value) {
+            if (field !== value) cancelPainting()
+            field = value
+        }
     private val stroker =
         SurfaceStroker(
             pick = ::pick,
@@ -71,6 +86,14 @@ class ModelView(
 
                     override fun end() {
                         painter?.end()
+                    }
+
+                    override fun finish() {
+                        painter?.finish()
+                    }
+
+                    override fun cancel() {
+                        painter?.cancel()
                     }
                 },
         )
@@ -96,9 +119,17 @@ class ModelView(
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (!gesturesEnabled) return false
+        if (
+            event.actionMasked == MotionEvent.ACTION_CANCEL ||
+            (Build.VERSION.SDK_INT >= 33 && event.flags and MotionEvent.FLAG_CANCELED != 0)
+        ) {
+            cancelPainting()
+            return true
+        }
         if (event.actionMasked == MotionEvent.ACTION_DOWN) gestureOnly = false
         if (event.pointerCount >= 2) {
-            stroker.up()
+            if (!gestureOnly) cancelPainting()
             gestureOnly = true
             twoFingers(event)
         } else if (painting) {
@@ -107,6 +138,17 @@ class ModelView(
             turn(event)
         }
         return true
+    }
+
+    private fun cancelPainting() {
+        stroker.cancel()
+        gestureOnly = true
+        lastSpan = 0f
+    }
+
+    override fun onDetachedFromWindow() {
+        cancelPainting()
+        super.onDetachedFromWindow()
     }
 
     private fun twoFingers(event: MotionEvent) {
@@ -148,9 +190,23 @@ class ModelView(
         val pressure = event.pressure.coerceIn(MIN_PRESSURE, 1f)
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> stroker.down(event.x, event.y, pressure)
-            MotionEvent.ACTION_MOVE -> stroker.move(event.x, event.y, pressure)
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> stroker.up()
+            MotionEvent.ACTION_MOVE -> moveSamples(event)
+            MotionEvent.ACTION_UP -> {
+                moveSamples(event)
+                stroker.up()
+            }
         }
+    }
+
+    private fun moveSamples(event: MotionEvent) {
+        for (index in 0 until event.historySize) {
+            stroker.move(
+                event.getHistoricalX(index),
+                event.getHistoricalY(index),
+                event.getHistoricalPressure(index).coerceIn(MIN_PRESSURE, 1f),
+            )
+        }
+        stroker.move(event.x, event.y, event.pressure.coerceIn(MIN_PRESSURE, 1f))
     }
 
     private fun pick(

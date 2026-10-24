@@ -3,6 +3,7 @@ package com.artflow.studio.presentation.ui.viewmodel
 import com.artflow.studio.core.three.Mesh
 import com.artflow.studio.core.three.ObjParser
 import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.StrokePoint
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import com.artflow.studio.presentation.ui.components.canvas.ModelPainter
 import kotlinx.coroutines.CoroutineScope
@@ -64,22 +65,39 @@ class ModelController(
         }
     }
 
-    /** Paints with the current brush on the active layer; [params] and [layer] are read per stroke. */
+    /** Captures the brush and layer once per pointer gesture, including its seam-separated segments. */
     fun painter(
         params: () -> BrushParams,
         layer: () -> Long,
+        onPreviewChanged: (Boolean) -> Unit = {},
     ): ModelPainter =
         object : ModelPainter {
             private var stroke = 0L
+            private val segments = mutableListOf<Segment>()
+            private var target: GestureTarget? = null
+            private var rejected = false
 
             override fun begin(
                 u: Float,
                 v: Float,
                 pressure: Float,
             ) {
+                if (rejected) return
+                val current =
+                    target ?: GestureTarget(repository.projectId(), repository.historyMark, layer(), params()).also { target = it }
+                if (!current.matches(repository)) {
+                    rejected = true
+                    return
+                }
                 val (x, y) = toCanvas(u, v)
-                stroke = repository.beginStroke(x, y, pressure, params(), layer())
-                if (stroke == 0L) notify("Choose an unlocked, visible layer to paint the model")
+                stroke = repository.beginStroke(x, y, pressure, current.params, current.layerId)
+                if (stroke == 0L) {
+                    rejected = true
+                    notify("Choose an unlocked, visible layer to paint the model")
+                } else {
+                    segments += Segment(stroke, requireNotNull(repository.activeStroke(stroke)).points.first())
+                    onPreviewChanged(true)
+                }
             }
 
             override fun move(
@@ -88,15 +106,68 @@ class ModelController(
                 pressure: Float,
             ) {
                 if (stroke == 0L) return
+                val segment = segments.lastOrNull()?.takeIf { it.id == stroke }
+                if (target?.matches(repository) != true || segment?.belongsTo(repository) != true) {
+                    rejected = true
+                    return
+                }
                 val (x, y) = toCanvas(u, v)
                 repository.continueStroke(stroke, x, y, pressure)
+                onPreviewChanged(true)
             }
 
             override fun end() {
-                if (stroke != 0L) repository.endStroke(stroke)
+                val segment = segments.lastOrNull()?.takeIf { it.id == stroke }
+                if (segment?.belongsTo(repository) == true) {
+                    repository.sealStrokeSegment(segment.id)
+                    onPreviewChanged(true)
+                }
                 stroke = 0L
             }
+
+            override fun finish() {
+                end()
+                val current = target
+                val valid =
+                    !rejected &&
+                        current?.matches(repository) == true &&
+                        segments.all { it.belongsTo(repository) }
+                try {
+                    if (valid) segments.forEach { repository.endStroke(it.id) }
+                } finally {
+                    // Also releases any remaining provisional state if rendering throws part-way through.
+                    cancel()
+                }
+            }
+
+            override fun cancel() {
+                segments.forEach { if (it.belongsTo(repository)) repository.cancelStroke(it.id) }
+                segments.clear()
+                stroke = 0L
+                target = null
+                rejected = false
+                onPreviewChanged(false)
+            }
         }
+
+    private data class Segment(
+        val id: Long,
+        val first: StrokePoint,
+    ) {
+        // An activeStroke snapshot preserves immutable point instances. IDs alone can be reused
+        // after a reload, so a stale model gesture must not touch an unrelated replacement stroke.
+        fun belongsTo(repository: CanvasRepository): Boolean = repository.activeStroke(id)?.points?.firstOrNull() === first
+    }
+
+    private data class GestureTarget(
+        val projectId: Long,
+        val history: Long,
+        val layerId: Long,
+        val params: BrushParams,
+    ) {
+        fun matches(repository: CanvasRepository): Boolean =
+            projectId == repository.projectId() && history == repository.historyMark && layerId == repository.getActiveLayerId()
+    }
 
     /** Texture coordinates have v = 0 at the bottom; the artwork's first row is its top. */
     private fun toCanvas(

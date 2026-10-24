@@ -1,0 +1,1156 @@
+{
+  "schemaVersion": 1,
+  "run": {
+    "id": 40115177921,
+    "run_number": 311,
+    "run_attempt": 1,
+    "head_sha": "e2aa900b91298fe08eca8529d0345220faa9e2eb",
+    "html_url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40115177921",
+    "status": "completed",
+    "conclusion": "failure",
+    "created_at": "2026-10-24T17:13:59Z",
+    "updated_at": "2026-10-24T17:53:02Z"
+  },
+  "deviceAcceptance": "FAIL",
+  "deviceIdentityManifest": {
+    "revision": "e2aa900b91298fe08eca8529d0345220faa9e2eb",
+    "tests": [
+      "com.artflow.studio.AnimationPlaybackUiTest#backgroundCallbackClearsTheVisiblePauseState",
+      "com.artflow.studio.AnimationPlaybackUiTest#frameRoleAndVisibilityControlsReachTheDocumentAndDisableEmptyPlayback",
+      "com.artflow.studio.AnimationPlaybackUiTest#onionColorPickerAppliesOnlyOnConfirmationAndKeepsTheOtherColor",
+      "com.artflow.studio.AnimationPlaybackUiTest#realPlayButtonBecomesPauseWhileFramesAdvanceAndReturnsAfterPause",
+      "com.artflow.studio.AnimationPlaybackUiTest#teardownWaitsForAnAtomicWriteAlreadyInFlight",
+      "com.artflow.studio.AppLaunchTest#activityLaunchesAndReachesResumed",
+      "com.artflow.studio.ArtworkWorkflowTest#createPaintSaveReopenRecreateAndDiscardPreserveTheSavedPixels",
+      "com.artflow.studio.BlendModePreviewDeviceTest#modeChipsShowTheActualBlendOfConsistentSampleColours",
+      "com.artflow.studio.BrushAttributeUiTest#cancellingAnAttributeEditLeavesThePublishedBrushUntouched",
+      "com.artflow.studio.BrushAttributeUiTest#compactNavigationShowsOnlyTheSelectedGroupAndRetainsEdits",
+      "com.artflow.studio.BrushAttributeUiTest#countReachesEveryDabCountTheLibraryStores",
+      "com.artflow.studio.BrushAttributeUiTest#largerTargetsRemainAvailableInTheCompactNavigator",
+      "com.artflow.studio.BrushAttributeUiTest#newlyReachableDynamicsUpdateOnlyTheMatchingParameters",
+      "com.artflow.studio.BrushAttributeUiTest#reversedSpeedCanBeSetFromTheDynamicsPanel",
+      "com.artflow.studio.BrushAttributeUiTest#studioRetainsTheChosenGroupAcrossTabsAndPublishesOnlyOnUse",
+      "com.artflow.studio.BrushAttributeUiTest#tiltOpacityCanBeSetApartFromTiltSize",
+      "com.artflow.studio.BrushSettingsAccessibilityTest#collapsingASectionPreservesEditedParametersAndScrollAccess",
+      "com.artflow.studio.BrushSettingsAccessibilityTest#settingsAcrossTheWholeBrushPanelRemainReachableInABoundedViewport",
+      "com.artflow.studio.BrushShareFormatUiTest#cancelDoesNotShareOrCommitAFormat",
+      "com.artflow.studio.BrushShareFormatUiTest#setChoiceUsesTheBrushsetFormat",
+      "com.artflow.studio.BrushShareFormatUiTest#singleBrushDefaultsToArtflowAndCanExplicitlySelectProcreate",
+      "com.artflow.studio.BrushShareFormatUiTest#theDraftShareButtonShowsCurrentPrimaryAndSecondaryCounts",
+      "com.artflow.studio.BrushShareFormatUiTest#theSavedSetShareButtonRefreshesTheNamedComponentConversions",
+      "com.artflow.studio.BrushStudioTabsTest#labelsAndSelectionSurviveRightToLeftAndFontChanges",
+      "com.artflow.studio.BrushStudioTabsTest#labelsFitAtDefaultAndLargeFontScales",
+      "com.artflow.studio.BrushStudioTabsTest#labelsFitAtFractionalDisplayDensity",
+      "com.artflow.studio.BrushStudioUiTest#cancelledPracticeGesturesDoNotBecomeStrokesAndHistoryIsBounded",
+      "com.artflow.studio.BrushStudioUiTest#categorySearchAndEmptyResultsCanBeRecovered",
+      "com.artflow.studio.BrushStudioUiTest#exactPercentageEntryRejectsOutOfRangeAndCancelDoesNotCommit",
+      "com.artflow.studio.BrushStudioUiTest#integerValuesCannotBeFractionalAndSliderValuesSnapToIntegers",
+      "com.artflow.studio.BrushStudioUiTest#practiceStrokesSurviveTabChangesButNeverApplyBrushSettingsByThemselves",
+      "com.artflow.studio.BrushStudioUiTest#restoringTheDraftAndApplyingUseTheCorrectSnapshot",
+      "com.artflow.studio.BrushStudioUiTest#searchingAndSelectingAPresetDoesNotApplyUntilConfirmed",
+      "com.artflow.studio.BrushStudioUiTest#selectingAndUsingAPresetPublishesExactlyOnce",
+      "com.artflow.studio.CanvasInputDeviceTest#aTapWithFreehandKeepsTheSelectionInsteadOfReplacingItWithNothing",
+      "com.artflow.studio.CanvasInputDeviceTest#actionCancelWithMultiplePointersDiscardsAllProvisionalInk",
+      "com.artflow.studio.CanvasInputDeviceTest#asynchronousShapeStaysBoundToItsOriginalLayer",
+      "com.artflow.studio.CanvasInputDeviceTest#batchedStylusSamplesRetainTheActualPath",
+      "com.artflow.studio.CanvasInputDeviceTest#canceledCloneTapCannotSetSourceAndPauseCancelsPainting",
+      "com.artflow.studio.CanvasInputDeviceTest#canceledSelectionsAndClearedPendingSelectionsStayCleared",
+      "com.artflow.studio.CanvasInputDeviceTest#cancelledPointerFlagsRejectPalmWithoutRejectingPen",
+      "com.artflow.studio.CanvasInputDeviceTest#cancellingReconstructKeepsTheLastSuccessfulReference",
+      "com.artflow.studio.CanvasInputDeviceTest#centeredPinchChangesViewWithoutUndoOrPainting",
+      "com.artflow.studio.CanvasInputDeviceTest#changingAlphaLockDuringAnOpenToolDiscardsTheStaleEdit",
+      "com.artflow.studio.CanvasInputDeviceTest#cloneSampleAllLayersSwitchControlsTheCapturedSourceEvenForImmediateRelease",
+      "com.artflow.studio.CanvasInputDeviceTest#emptyOverlaySelectionDoesNotChangePixelsOrHistory",
+      "com.artflow.studio.CanvasInputDeviceTest#frozenAndZeroPressureLiquifyGesturesCreateNoUndoEntries",
+      "com.artflow.studio.CanvasInputDeviceTest#layerChangeCancelsShapeAndDisablingFingerPaintingCancelsFingerStroke",
+      "com.artflow.studio.CanvasInputDeviceTest#liquifyCommitsTheCompleteMapEvenWhenItsLastPreviewWasThrottled",
+      "com.artflow.studio.CanvasInputDeviceTest#liquifyReconstructRestoresEarlierArtworkAndRemainsUndoable",
+      "com.artflow.studio.CanvasInputDeviceTest#moveToolUsesTheDragDirectionAndCommitsTheFinalPosition",
+      "com.artflow.studio.CanvasInputDeviceTest#outlinedShapesHaveVisibleBordersAndPolygonStaysWithinDragBounds",
+      "com.artflow.studio.CanvasInputDeviceTest#penKeepsDrawingWithPalmAndDoesNotAdoptTheRemainingFinger",
+      "com.artflow.studio.CanvasInputDeviceTest#physicalEraserRemovesPixelsWithoutChangingTheSelectedBrush",
+      "com.artflow.studio.CanvasInputDeviceTest#reconstructNeverOverwritesAnInterveningEditOrAnotherDocument",
+      "com.artflow.studio.CanvasInputDeviceTest#retouchToolsHonorLayerAlphaLockFromTheActualDocument",
+      "com.artflow.studio.CanvasInputDeviceTest#savedReloadChangesRevisionEvenWhenProjectAndLayerIdsAreReused",
+      "com.artflow.studio.CanvasInputDeviceTest#selectionsKeepTheirGeometryAndIncludePointerUpPosition",
+      "com.artflow.studio.CanvasInputDeviceTest#shapeSelectionFeatheringPreservesBackdropAndAlphaLock",
+      "com.artflow.studio.CanvasInputDeviceTest#shapesAndTextPreserveExistingArtworkAndUndoExactly",
+      "com.artflow.studio.CanvasInputDeviceTest#twoFingerNavigationCancelsFingerInkAndHistoryWaitsForFinalUp",
+      "com.artflow.studio.CanvasInputDeviceTest#zoomToolCancellationAndPinchTakeoverNeverApplyAnExtraTapOrPaint",
+      "com.artflow.studio.CanvasInputDeviceTest#zoomToolDragUsesStartScaleAndAnchorAcrossReversalsAndClamps",
+      "com.artflow.studio.CanvasInputDeviceTest#zoomToolTapKeepsItsInitialAnchorWithFingerPaintingDisabled",
+      "com.artflow.studio.CanvasInputDeviceTest#zoomToolUsesFinalUpMovementAndIgnoresHorizontalOnlyDrags",
+      "com.artflow.studio.ColorWheelGestureTest#blankSpaceDoesNotChooseAColour",
+      "com.artflow.studio.ColorWheelGestureTest#callbackReplacementDuringTheDragIsObservedWithoutRestartingIt",
+      "com.artflow.studio.ColorWheelGestureTest#ringCanChooseHueWhileBlackAndBrightnessRestoresIt",
+      "com.artflow.studio.ColorWheelGestureTest#squareCornerTapDoesNotChangeHueOrAlpha",
+      "com.artflow.studio.ColorWheelGestureTest#squareDragContinuesAcrossMultipleRecompositions",
+      "com.artflow.studio.ColorWheelGestureTest#squareDragKeepsItsRegionOutsideTheSquare",
+      "com.artflow.studio.EditorRenderingTest#editorRetainsArtworkAcrossRedrawContextLossAndReattachment",
+      "com.artflow.studio.EditorRenderingTest#realPointerMaskStrokePreviewsAndUndoesOnTheGlSurface",
+      "com.artflow.studio.EditorRenderingTest#redrawsCompleteWhileNewInvalidationsKeepArriving",
+      "com.artflow.studio.ExportUiRegressionTest#jpegDoesNotOfferAnUnsupportedMultiFrameFile",
+      "com.artflow.studio.ExportUiRegressionTest#printPresetSubmitsItsResolutionAndOversampling",
+      "com.artflow.studio.ExportUiRegressionTest#privacyPolicyIsAvailableOfflineAndCanBeDismissed",
+      "com.artflow.studio.FillGestureDeviceTest#bucketCannotCommitUnderAnObsoleteAlphaLock",
+      "com.artflow.studio.FillGestureDeviceTest#bucketKeepsItsCapturedColourAfterRelease",
+      "com.artflow.studio.FillGestureDeviceTest#bucketPreservesLayerAlphaAndUndo",
+      "com.artflow.studio.FillGestureDeviceTest#completedBucketRemainsValidWhenAlphaLockChangesLater",
+      "com.artflow.studio.FillGestureDeviceTest#completedGradientRemainsValidWhenAlphaLockChangesLater",
+      "com.artflow.studio.FillGestureDeviceTest#emptySelectionBucketIsNotAnUndoStep",
+      "com.artflow.studio.FillGestureDeviceTest#emptySelectionGradientIsNotAnUndoStep",
+      "com.artflow.studio.FillGestureDeviceTest#gradientCannotCommitUnderAnObsoleteAlphaLock",
+      "com.artflow.studio.FillGestureDeviceTest#gradientKeepsItsCapturedStopsAfterRelease",
+      "com.artflow.studio.FillGestureDeviceTest#gradientPreservesLayerAlphaAndUndo",
+      "com.artflow.studio.FillGestureDeviceTest#identicalBucketIsNotAnUndoStep",
+      "com.artflow.studio.FillGestureDeviceTest#identicalGradientIsNotAnUndoStep",
+      "com.artflow.studio.GroupBlendUiTest#groupCanReturnFromNormalToPassThrough",
+      "com.artflow.studio.GroupBlendUiTest#pixelLayersDoNotOfferTheFolderOnlyPassThroughMode",
+      "com.artflow.studio.GuideStatusUiTest#statusRequiresAnActiveVisibleGuideAndHidesInFocusMode",
+      "com.artflow.studio.HardwareKeyboardTest#aKeyPressResolvesToItsAction",
+      "com.artflow.studio.HardwareKeyboardTest#ctrlAndMetaBothCountAsThePrimaryModifier",
+      "com.artflow.studio.HardwareKeyboardTest#keyCodesMapToTheTokensTheTableUses",
+      "com.artflow.studio.HardwareKeyboardTest#theSystemShortcutListCoversEveryBinding",
+      "com.artflow.studio.IncomingFilesTest#openWithAndEditWithCarryTheDataUri",
+      "com.artflow.studio.IncomingFilesTest#otherIntentsCarryNothing",
+      "com.artflow.studio.IncomingFilesTest#shareCarriesTheStreamExtra",
+      "com.artflow.studio.LayerEffectsUiTest#eachEffectChangeIsAppliedAsItIsMade",
+      "com.artflow.studio.NativeLibraryCompatibilityTest#packagedGraphicsLibraryLoadsAndIteratesPaths",
+      "com.artflow.studio.PaletteRecoveryUiTest#aRunningBackupCannotBeStartedTwice",
+      "com.artflow.studio.PaletteRecoveryUiTest#cancellingConfirmationDoesNotStartBackupOrReset",
+      "com.artflow.studio.PaletteRecoveryUiTest#confirmingRequestsAUserSelectedBackupInsteadOfResettingImmediately",
+      "com.artflow.studio.ProcreateImportedBlendUiTest#layersDialogExplainsImportedDarkenAndOnlyAnExplicitModeChoiceReplacesIt",
+      "com.artflow.studio.ReferenceCompanionTest#contentProviderImagesAreDownsampledAndCanBeSampled",
+      "com.artflow.studio.ReferenceCompanionTest#draggingAndChangingAvailableSpaceKeepTheWindowAndCloseControlOnScreen",
+      "com.artflow.studio.ReferenceCompanionTest#letterboxTapsDoNotSampleAndCentreSamplingIsAccessible",
+      "com.artflow.studio.ReferenceCompanionTest#pickingZoomFitAndCallbackReplacementUseTheVisibleImageWithoutPaintingBehindIt",
+      "com.artflow.studio.ReferenceCompanionTest#unsupportedAndUnreadableSourcesOfferRecoveryWithoutAStaleImage",
+      "com.artflow.studio.ReferenceEditorUiTest#referenceAndFocusExitRemainReachableWithEitherTouchTargetSize",
+      "com.artflow.studio.ReferenceEditorUiTest#referenceControlsStayAboveEitherSidebarWithoutBlockingTheRestOfTheEditor",
+      "com.artflow.studio.RuntimeEnvironmentTest#processPageSizeMatchesRequestedTestEnvironment",
+      "com.artflow.studio.SavedBrushUiTest#failedSaveRetainsTheNameAndDoesNotPretendItWasSaved",
+      "com.artflow.studio.SavedBrushUiTest#savedRowsCanBeRenamedAndDeleteRequiresConfirmation",
+      "com.artflow.studio.SavedBrushUiTest#savingUsesAnExplicitSnapshotAndDoesNotApplyTheBrush",
+      "com.artflow.studio.SelectionGestureDeviceTest#addSubtractIntersectAndReplaceAfterEmptyWorkTogether",
+      "com.artflow.studio.SelectionGestureDeviceTest#anEmptyActiveLayerSelectsItsTransparencyWithoutSamplingArtworkBelow",
+      "com.artflow.studio.SelectionGestureDeviceTest#automaticSelectionDistinguishesTransparentPixelsFromTheCanvasBackground",
+      "com.artflow.studio.SelectionGestureDeviceTest#automaticSelectionIgnoresCoveringLayersAndFillReferences",
+      "com.artflow.studio.SelectionGestureDeviceTest#bottomSubpixelTapRemainsInsideTheCanvas",
+      "com.artflow.studio.SelectionGestureDeviceTest#featherCannotOverwriteANewerExplicitSelection",
+      "com.artflow.studio.SelectionGestureDeviceTest#negativeSubpixelTapDoesNotSelectPixelZero",
+      "com.artflow.studio.SelectionGestureDeviceTest#newerWandWinsWhenTwoTapsArriveBeforeAWorkerReturns",
+      "com.artflow.studio.SelectionGestureDeviceTest#panelClearCannotBeUndoneByAPendingWand",
+      "com.artflow.studio.SelectionGestureDeviceTest#panelClearSupersedesProvisionalMarquee",
+      "com.artflow.studio.SelectionGestureDeviceTest#panelSelectAllSupersedesAPendingWand",
+      "com.artflow.studio.SelectionGestureDeviceTest#replacementDocumentRejectsOldSelectionDimensions",
+      "com.artflow.studio.SelectionGestureDeviceTest#subpixelTapInTheLastColumnIsNotOutsideTheCanvas",
+      "com.artflow.studio.SelectionGestureDeviceTest#subpixelWandTapUsesTheContainingPixel",
+      "com.artflow.studio.SelectionGestureDeviceTest#switchingActiveLayerRejectsAnEarlierAutomaticSelection",
+      "com.artflow.studio.SelectionGestureDeviceTest#uniformCanvasWandDoesNotCrash",
+      "com.artflow.studio.SelectionGestureDeviceTest#wandReplaceCanLeaveThePreviousSelection",
+      "com.artflow.studio.StudioAdaptiveTest#interfaceScaleIsAppliedOnceAndSystemTextScaleIsPreserved",
+      "com.artflow.studio.StudioAdaptiveTest#studioAdaptsToTheDeviceAndKeepsDraftsAndPracticeAcrossThemeChanges",
+      "com.artflow.studio.StudioControlsTest#cropBarShowsTheNewSizeAndFinishes",
+      "com.artflow.studio.StudioControlsTest#pageStripSelectsAddsAndProtectsTheLastPage",
+      "com.artflow.studio.StudioControlsTest#quickMenuRunsAnActionAndCloses",
+      "com.artflow.studio.StudioControlsTest#slidingAcrossTheCanvasChangesLayerOpacity",
+      "com.artflow.studio.StudioToolDockTest#everydayToolsHaveSelectedSemanticsAndSecondaryToolsRemainReachable",
+      "com.artflow.studio.StudioWorkspaceUiTest#dismissingTextClearsItsPositionAndDoesNotPlaceArtwork",
+      "com.artflow.studio.StudioWorkspaceUiTest#everyEditorToolIsReachableThroughTheRealLargeTextToolOptions",
+      "com.artflow.studio.StudioWorkspaceUiTest#focusHidesTheChromeAndBackRestoresTheEditor",
+      "com.artflow.studio.StudioWorkspaceUiTest#lightWorkspaceKeepsPrimaryControlsReachable",
+      "com.artflow.studio.StudioWorkspaceUiTest#standalonePaletteRemainsReadableAndSelectableAtLargeTextSize",
+      "com.artflow.studio.StudioWorkspaceUiTest#textSettingsChoosesPositionPlacesOnceAndRestoresExactUndo",
+      "com.artflow.studio.StudioWorkspaceUiTest#uiScaleAppliesOnceAndKeepsTheSystemTextPreference",
+      "com.artflow.studio.StudioWorkspaceUiTest#workflowPanelsAreReachableFromTheTopBarActions",
+      "com.artflow.studio.TransformUiRegressionTest#activeSelectionCannotSilentlyTransformTheWholeLayer",
+      "com.artflow.studio.TransformUiRegressionTest#cancelDoesNotApplyAndInvalidNumbersDisableCommit",
+      "com.artflow.studio.TransformUiRegressionTest#draftControlsDoNotMutateUntilApplyAndUseUniformScale",
+      "com.artflow.studio.TransformUiRegressionTest#signedNumbersAndWrappedControlsRemainUsableWithLargeText",
+      "com.artflow.studio.data.BrushImportPersistenceDeviceTest#artbrushCompoundImportRemapsSecondaryImagesAndSurvivesStorageReload",
+      "com.artflow.studio.data.BrushImportPersistenceDeviceTest#importedPressureCurvesUseNativeTablesAndSurviveArtbrushReload",
+      "com.artflow.studio.data.BrushImportPersistenceDeviceTest#nonDivisibleProcreateImagesKeepLastRowAndColumnThroughDiskReload",
+      "com.artflow.studio.data.BrushImportPersistenceDeviceTest#procreateCompoundImportKeepsBothComponentsAndUnstretchedCoverageOnDisk",
+      "com.artflow.studio.data.DocumentMutationDeviceTest#effectParameterUndoAndRedoSurviveRealStorageReload",
+      "com.artflow.studio.data.DocumentMutationDeviceTest#layeredPsdContainsTheVisibleFilteredAppearanceAndHiddenOriginals",
+      "com.artflow.studio.data.DocumentMutationDeviceTest#mergedFilterAndMaskedAlphaSurviveSaveReopen",
+      "com.artflow.studio.data.DocumentMutationDeviceTest#noOpAndInvalidParametersLeaveSavedArtworkCleanAndReadable",
+      "com.artflow.studio.data.DocumentMutationDeviceTest#transformedLegacyInkMasksAndFramesSurviveRealStorageReload",
+      "com.artflow.studio.data.ExportDeviceTest#exportedFilesCanBeReadAndCopiedButEditableDocumentsCannotBeShared",
+      "com.artflow.studio.data.ExportDeviceTest#galleryPublishesPngAsImageAndMp4AsVideo",
+      "com.artflow.studio.data.ExportDeviceTest#invalidVideoSizeReturnsFailureWithoutPublishingAFile",
+      "com.artflow.studio.data.ExportDeviceTest#jpegWebpGifAndPsdAreRealDecodableFiles",
+      "com.artflow.studio.data.ExportDeviceTest#mp4ContainsAllFramesCorrectTimingAndDecodedColours",
+      "com.artflow.studio.data.ExportDeviceTest#pdfUsesMultiplePagesAndPreservesAspectRatio",
+      "com.artflow.studio.data.ExportDeviceTest#pngKeepsAlphaAndFlatteningActuallyRemovesIt",
+      "com.artflow.studio.data.ExportDeviceTest#sequenceContainsEveryFrameWithItsActualPixels",
+      "com.artflow.studio.data.ExportDeviceTest#snapshotContainsMaskedPixelsBeforeTheFirstSaveAndIsIndependentOfLaterEdits",
+      "com.artflow.studio.data.MaskEditingRegressionTest#alphaAndGradientSourcesSurviveSaveReloadWithoutChangingLayerPixels",
+      "com.artflow.studio.data.MaskEditingRegressionTest#cancelledMaskPaintCannotLeakIntoSaveExportOrUndo",
+      "com.artflow.studio.data.MaskEditingRegressionTest#invalidSourcesAndLockedDestinationsDoNotCreateHistoryEntries",
+      "com.artflow.studio.data.MaskEditingRegressionTest#maskPaintRespectsSoftSelectionsAndRemainsOneUndoStep",
+      "com.artflow.studio.data.MaskEditingRegressionTest#maskStrokePreviewCommitUndoAndRedoNeverModifyInk",
+      "com.artflow.studio.data.MaskEditingRegressionTest#revealAndHideRespectInvertedMasksAndIgnoreInkColorDynamics",
+      "com.artflow.studio.data.PersistenceRegressionTest#androidBitmapBridgeIsMutableAndPngPreservesLowAlphaColors",
+      "com.artflow.studio.data.PersistenceRegressionTest#animationSettingsAndFrameDurationAreUndoable",
+      "com.artflow.studio.data.PersistenceRegressionTest#autosaveCannotOverwriteExplicitlySavedArtwork",
+      "com.artflow.studio.data.PersistenceRegressionTest#callerOwnedBuffersCannotMutateCommittedArtwork",
+      "com.artflow.studio.data.PersistenceRegressionTest#cancelledBrushStrokeDoesNotCommitOrAddHistory",
+      "com.artflow.studio.data.PersistenceRegressionTest#corruptDocumentIsNeverReplacedWithABlankCanvas",
+      "com.artflow.studio.data.PersistenceRegressionTest#explicitSaveClearsRecoveryOnlyAfterCommit",
+      "com.artflow.studio.data.PersistenceRegressionTest#failedAtomicWritePreservesOriginalBytesAndRemovesTemporaryFile",
+      "com.artflow.studio.data.PersistenceRegressionTest#failedToolDoesNotChangePixelsOrHistory",
+      "com.artflow.studio.data.PersistenceRegressionTest#firstSaveRetainsRasterPixelsAfterReopen",
+      "com.artflow.studio.data.PersistenceRegressionTest#lockedLayersCannotStartPixelTools",
+      "com.artflow.studio.data.PersistenceRegressionTest#maskPixelsAndSettingsRoundTrip",
+      "com.artflow.studio.data.PersistenceRegressionTest#missingRasterIsAnErrorNotAnEmptyLayer",
+      "com.artflow.studio.data.PersistenceRegressionTest#newerEditsRemainDirtyWhenAnOlderSnapshotFinishesSaving",
+      "com.artflow.studio.data.PersistenceRegressionTest#projectAndExportPathsCannotEscapeTheirDirectory",
+      "com.artflow.studio.data.PersistenceRegressionTest#provisionalPixelSessionIsNotSavedAndCancellationDoesNotRemoveUnrelatedUndo",
+      "com.artflow.studio.data.PersistenceRegressionTest#savesEveryFrameNotJustTheActiveFrame",
+      "com.artflow.studio.data.PersistenceRegressionTest#selectionDoesNotErasePixelsFromTheSavedComposite",
+      "com.artflow.studio.data.PersistenceRegressionTest#staleSessionCannotOverwriteAnInterveningEdit",
+      "com.artflow.studio.data.PreviewBelowCacheDeviceTest#framesMatchAFullRedrawWhilePaintingAMiddleLayer",
+      "com.artflow.studio.data.ProcreateColorProfileDeviceTest#insertionAndFlattenedFallbackConvertIntoTheExistingCanvasProfileExactlyOnce",
+      "com.artflow.studio.data.ProcreateColorProfileDeviceTest#nativeP3DocumentKeepsItsChannelsBackgroundAndProfileThroughDiskReopen",
+      "com.artflow.studio.data.ProcreateHierarchyImportDeviceTest#nativeHierarchyAndHiddenGroupsRemainEditableAfterSaveReopenAndExport",
+      "com.artflow.studio.data.ProcreateLegacyDarkenDeviceTest#nativeDarkenSurvivesImportEditUndoAndReopenWithoutReinterpretingSignedV4",
+      "com.artflow.studio.data.ProcreateMaskImportDeviceTest#nativeMaskCoverageSurvivesImportSaveReopenAndPngExport",
+      "com.artflow.studio.data.ProcreateNativeExportDeviceTest#aHiddenNativeBackgroundReplacesNewCanvasWhiteWhileInsertionKeepsItsBackground",
+      "com.artflow.studio.data.ProcreateNativeExportDeviceTest#p3ExportKeepsNativeChannelsAndHiddenNestedGroupsThroughImportAndDiskReopen",
+      "com.artflow.studio.data.ProjectDuplicationTest#concurrentCreatesNeverReplaceOneAnother",
+      "com.artflow.studio.data.ProjectDuplicationTest#copyRetainsIndependentSavedRecoveryMasksAndFrames",
+      "com.artflow.studio.data.ProjectDuplicationTest#copySkipsOrphanedStorageRatherThanOverwritingIt",
+      "com.artflow.studio.data.ProjectDuplicationTest#deletedProjectIdentifiersAreNeverReused",
+      "com.artflow.studio.data.ProjectDuplicationTest#exhaustedIdentifiersFailWithoutWrappingOrDeletingFiles",
+      "com.artflow.studio.data.ProjectDuplicationTest#explicitUnknownIdCannotClaimOrphanedArtwork",
+      "com.artflow.studio.data.ProjectDuplicationTest#invalidCreationInputsDoNotLeaveGalleryRows",
+      "com.artflow.studio.data.ProjectDuplicationTest#missingRasterRollsBackTheRowAndOwnedDirectory",
+      "com.artflow.studio.data.ProjectDuplicationTest#newProjectsSkipOrphanedStorageEvenWithAnEmptyDatabase",
+      "com.artflow.studio.data.ProjectDuplicationTest#newProjectsSkipOrphansAboveExistingRows",
+      "com.artflow.studio.data.ProjectDuplicationTest#savingKnownIdUpdatesMetadataWithoutReplacingItsIdentity",
+      "com.artflow.studio.data.ProjectDuplicationTest#unknownProjectCannotBeDuplicated",
+      "com.artflow.studio.data.PsdGroupsDeviceTest#groupsRoundTripThroughPsd",
+      "com.artflow.studio.data.PsdGroupsDeviceTest#normalAndPassThroughPsdFoldersRetainPixelsAcrossImportSaveReopenAndExport",
+      "com.artflow.studio.data.PsdGroupsDeviceTest#onlyAnEnabledGroupMaskRequiresProcreateAppearanceFallback",
+      "com.artflow.studio.data.PsdMasksDeviceTest#disabledMaskExportsAndImportsAsEditableCoverageWithoutDestroyingHiddenInk",
+      "com.artflow.studio.data.PsdMasksDeviceTest#folderMaskSurvivesExportAndImport",
+      "com.artflow.studio.data.PsdMasksDeviceTest#selectionExportClipsOriginalAlphaOnceAndKeepsIndependentMaskCrop",
+      "com.artflow.studio.data.ResamplingDeviceTest#affineLayerAndMaskSurviveUndoSaveReloadAndIndependentEditing",
+      "com.artflow.studio.data.ResamplingDeviceTest#displacedEdgesSurviveRealPngEncodingWithoutDarkening",
+      "com.artflow.studio.data.ResamplingDeviceTest#resizeEdgesSurviveUndoStorageAndScaledPngExport",
+      "com.artflow.studio.data.SavedBrushStorageTest#completeBrushesSurviveClosingAndReopeningTheActualRoomDatabase",
+      "com.artflow.studio.data.SavedSelectionWorkflowDeviceTest#savedSoftSelectionReopensConstrainsEditingAndKeepsItsPixelsThroughExport",
+      "com.artflow.studio.data.SavedSelectionWorkflowDeviceTest#switchingArtworkCannotReuseAnotherDocumentsSavedSelection",
+      "com.artflow.studio.data.SecondaryGrainMigrationDeviceTest#signedV3VectorsKeepHistoricalCoverageWhileNewV4StrokesRetainTheirGrainModes",
+      "com.artflow.studio.data.SettingsPersistenceTest#completePreferencesAndPaletteNamesSurviveDatabaseReopen",
+      "com.artflow.studio.data.SettingsPersistenceTest#failurePartwayThroughBatchRollsBackEveryRowAndLeavesCacheUnchanged",
+      "com.artflow.studio.data.SettingsPersistenceTest#unreadablePaletteRowSurvivesUnrelatedEditsAndOnlyResetsAfterBackup",
+      "com.artflow.studio.data.StorageTraversalDeviceTest#atomicWritesRejectLinkedParentsAndPreserveTargets",
+      "com.artflow.studio.data.StorageTraversalDeviceTest#deletingARootLinkDoesNotDeleteAnotherProject",
+      "com.artflow.studio.data.StorageTraversalDeviceTest#exportCleanupCannotDeleteAnotherProjectsArtworkThroughADirectoryLink",
+      "com.artflow.studio.data.StorageTraversalDeviceTest#exportFileLinksAreNotListedOrPruned",
+      "com.artflow.studio.data.StorageTraversalDeviceTest#linkedExportsContainerCannotMakeEditableArtworkShareable",
+      "com.artflow.studio.data.StorageTraversalDeviceTest#linkedProjectContainerCannotRedirectSizeOrDelete",
+      "com.artflow.studio.data.StorageTraversalDeviceTest#linkedProjectRootCannotRedirectReadsOrWrites",
+      "com.artflow.studio.data.StorageTraversalDeviceTest#metadataAndRasterLinksCannotReadOtherProjectPixels",
+      "com.artflow.studio.data.StorageTraversalDeviceTest#pruneSizeAndDeleteStayInsideTheOwnedProject",
+      "com.artflow.studio.data.StorageTraversalDeviceTest#pruningThroughALinkedProjectCannotDeleteAnotherProject",
+      "com.artflow.studio.data.StorageTraversalDeviceTest#repeatedHousekeepingDoesNotAccumulateFilesOrFollowCycles",
+      "com.artflow.studio.data.StrokePreviewRegressionTest#cancelledStrokeCannotLeakIntoExportSaveOrUndo",
+      "com.artflow.studio.data.StrokePreviewRegressionTest#inFlightStrokeIsHiddenByHigherOpaqueLayer",
+      "com.artflow.studio.data.StrokePreviewRegressionTest#legacyVectorStrokesAreBakedBeforeNewPaintInsteadOfCoveringIt",
+      "com.artflow.studio.data.StrokePreviewRegressionTest#liveEraserRevealsUnderlyingLayersInsteadOfPaintingInkOnTop",
+      "com.artflow.studio.data.StrokePreviewRegressionTest#previewEqualsCommitForPressureGrainOpacitySelectionAndLayerBlend",
+      "com.artflow.studio.data.StrokePreviewRegressionTest#previewHonorsAlphaLockAndLayerMask",
+      "com.artflow.studio.data.StrokePreviewRegressionTest#shortFinalSegmentSurvivesPreviewCommitHistoryAndReopen",
+      "com.artflow.studio.data.StrokeTimingDeviceTest#liveStrokeFramesAreTimed"
+    ]
+  },
+  "identityEncoding": "Sorted fully-qualified Class#method UTF-8 lines, final LF",
+  "identitySHA256": "308b1663e5f2711c2279997de1e4a5b34ace31bbf8dd5a440db1aae5342a54c2",
+  "sourceManifestSHA256": "b907ac01d7624a2acefe881f8493e627b487f926232b11ca42ce93ac121d0d81",
+  "expectedFinalExecutions": 1750,
+  "finalExecutions": 1714,
+  "finalTotals": {
+    "passed": 1711,
+    "skipped": 2,
+    "failure": 1
+  },
+  "finalMissing": 36,
+  "preservedFirstAttemptExecutions": 23,
+  "preservedFirstAttemptTotals": {
+    "passed": 21,
+    "failure": 2
+  },
+  "allAttemptsExecutions": 1737,
+  "allAttemptsTotals": {
+    "passed": 1732,
+    "skipped": 2,
+    "failure": 3
+  },
+  "automaticRetries": 2,
+  "manualWorkflowReruns": 0,
+  "visualScope": {
+    "positions": 154,
+    "directOriginalViews": 81,
+    "remainingPositions": "Exact body-pixel comparisons with directly reviewed originals",
+    "reviewReportSHA256": "28dde2c019d1c50ac3407225196a21dac872bea2854bfeb0964fb05fb59d916e",
+    "minorFinding": "Misleading generic Zoom hint; corrected in a later candidate."
+  },
+  "buildAcceptance": {
+    "runId": 40115177921,
+    "revision": "e2aa900b91298fe08eca8529d0345220faa9e2eb",
+    "buildJob": 120934962973,
+    "artifactId": 12568766425,
+    "artifactBytes": 752551,
+    "artifactSha256": "05aac35e09e0cc39f376c2c566c6966eb862d712bc11ab0e2bdb0bfe41b923d1",
+    "jvm": {
+      "suites": 245,
+      "tests": 1485,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "uniqueIdentities": 1485,
+      "taskExecuted": true,
+      "addedClasses": [
+        "app/src/test/java/com/artflow/studio/core/export/ProcreateLayerBlendContractTest.kt",
+        "app/src/test/java/com/artflow/studio/core/export/ProcreateNativeMetadataTest.kt",
+        "app/src/test/java/com/artflow/studio/core/render/NativeLayerBlendTest.kt",
+        "app/src/test/java/com/artflow/studio/data/NativeLayerBlendRepositoryTest.kt",
+        "app/src/test/java/com/artflow/studio/data/local/NativeLayerBlendDocumentTest.kt"
+      ],
+      "addedIdentities": [
+        "com.artflow.studio.core.export.ProcreateLayerBlendContractTest#archiveNineteenOptsInThroughEachSupportedKey",
+        "com.artflow.studio.core.export.ProcreateLayerBlendContractTest#extendedBlendTwoWinsIncludingZeroAndStandardDarken",
+        "com.artflow.studio.core.export.ProcreateLayerBlendContractTest#nativeLayerVariantDoesNotChangeTheBrushBlendMap",
+        "com.artflow.studio.core.export.ProcreateLayerBlendContractTest#nativeWriterUsesTheVerifiedNewAndLegacyDarkenFields",
+        "com.artflow.studio.core.export.ProcreateLayerBlendContractTest#unsupportedPresentHigherKeyDoesNotActivateAConflictingLowerKey",
+        "com.artflow.studio.core.export.ProcreateLayerBlendContractTest#writerRejectsAContradictoryContract",
+        "com.artflow.studio.core.export.ProcreateNativeMetadataTest#anEmptyNativeGroupDoesNotBecomeAPixelIndexEntry",
+        "com.artflow.studio.core.export.ProcreateNativeMetadataTest#displayP3ProfileTagsUnconvertedLayersCompositeAndBackground",
+        "com.artflow.studio.core.export.ProcreateNativeMetadataTest#nativeTreeAndFlatIndexShareEachPixelObjectOnceAndExcludeMasks",
+        "com.artflow.studio.core.export.ProcreateNativeMetadataTest#srgbExportsKeepTheirHistoricalChannelsWithoutAnUnsupportedProfileNotice",
+        "com.artflow.studio.core.render.NativeLayerBlendTest#clippingUsesArtFlowsExistingOpaqueBaseThenRestoredAlphaContract",
+        "com.artflow.studio.core.render.NativeLayerBlendTest#clippingWithMaskAndOpacityDoesNotChangeTheBaseCoverage",
+        "com.artflow.studio.core.render.NativeLayerBlendTest#disablingTheMaskRestoresTheUnmaskedNativeResult",
+        "com.artflow.studio.core.render.NativeLayerBlendTest#independentPartialAndOpaquePixelsDistinguishNativeAndStandardDarken",
+        "com.artflow.studio.core.render.NativeLayerBlendTest#maskCoverageAndLayerOpacityRetainTheExistingByteMaskQuantization",
+        "com.artflow.studio.core.render.NativeLayerBlendTest#nativeArchivePixelsKeepZeroAndVerySmallDestinationAlpha",
+        "com.artflow.studio.core.render.NativeLayerBlendTest#nativeDarkenPreservesEveryDestinationAlphaByte",
+        "com.artflow.studio.core.render.NativeLayerBlendTest#zeroSourceAndZeroOpacityLeaveTheExistingArtworkUntouched",
+        "com.artflow.studio.data.NativeLayerBlendRepositoryTest#anInvalidContractCannotPartiallyChangeTheLayerOrHistory",
+        "com.artflow.studio.data.NativeLayerBlendRepositoryTest#copiedLayersAndBothFrameCopyRoutesRetainTheirNativeRendering",
+        "com.artflow.studio.data.NativeLayerBlendRepositoryTest#explicitlyChoosingTheSameStandardModeClearsNativeContractWithUndoAndRedo",
+        "com.artflow.studio.data.NativeLayerBlendRepositoryTest#flattenedPixelsUseANeutralContractAndUndoRestoresEditableNativeLayers",
+        "com.artflow.studio.data.NativeLayerBlendRepositoryTest#reapplyingTheSameExplicitNativeContractPreservesRedoAndRevision",
+        "com.artflow.studio.data.local.NativeLayerBlendDocumentTest#aCorruptHistoricalChecksumIsRejectedBeforeAnyMigration",
+        "com.artflow.studio.data.local.NativeLayerBlendDocumentTest#domainCopiesPreserveNativeContractUnlessTheirBlendModeChanges",
+        "com.artflow.studio.data.local.NativeLayerBlendDocumentTest#everyOlderVersionKeepsStandardDarkenInBothStoredLayerLists",
+        "com.artflow.studio.data.local.NativeLayerBlendDocumentTest#nativeContractCannotBeWrittenOrHiddenInsideAnOlderDocumentVersion",
+        "com.artflow.studio.data.local.NativeLayerBlendDocumentTest#onlyPixelDarkenLayersCanCarryTheNativeContract",
+        "com.artflow.studio.data.local.NativeLayerBlendDocumentTest#signedPublishedVersionFourStillVerifiesAndRendersItsOriginalPixels",
+        "com.artflow.studio.data.local.NativeLayerBlendDocumentTest#versionFiveRetainsNativeContractsAcrossRootLayersAndAnimationFrames"
+      ]
+    },
+    "python": {
+      "suites": [
+        82,
+        51
+      ],
+      "tests": 133
+    },
+    "ktlintReports": 5,
+    "detektErrors": 0,
+    "detektBaselineUnchanged": true,
+    "lint": {
+      "debug": {
+        "Warning": 153,
+        "Hint": 5
+      },
+      "release": {
+        "Warning": 151,
+        "Hint": 5
+      }
+    },
+    "corpus": {
+      "reference_sha256": "7b1dad3ac95f8aeca3c22b432b5d6fd94182a3bf9f84fb93588adb126368b54e",
+      "brushes": "394",
+      "compound_brushes": "140",
+      "components": "534",
+      "components_with_signed_dynamics": "35",
+      "parsed_channel_curves": "2135",
+      "metadata_import_and_persistence": "PASS",
+      "image_decode_tested": "false",
+      "reference_runtime_executed": "false",
+      "pixel_parity_verified": "false"
+    },
+    "sampleDocuments": {
+      "count": 5,
+      "distinctArchiveByteStreams": 4,
+      "sourceCommit": "0e12deb2ae1ffb152fc4a3d09add230590f52f68",
+      "inputAndIccHashesGated": true,
+      "nativeHierarchyMaskAndDarkenProbesGated": true,
+      "reports": [
+        "Mask_Test_File.procreate: 2048x2048 300 dpi, 1 layers, 0 groups, 1 masks, profile DISPLAY_P3, unsupported profile false, blend modes [NORMAL], calibration error 3.37, composite difference 0.00",
+        "Reference_Blend_File 2.procreate: 2118x1836 300 dpi, 53 layers, 26 groups, 0 masks, profile DISPLAY_P3, unsupported profile false, blend modes [NORMAL, DIVIDE, DARKER_COLOR, LIGHTER_COLOR, PIN_LIGHT, LINEAR_LIGHT, VIVID_LIGHT, HARD_MIX, DARKEN, SOFT_LIGHT, SATURATION, HUE, LUMINOSITY, COLOR, HARD_LIGHT, OVERLAY, COLOR_BURN, COLOR_DODGE, LINEAR_BURN, SUBTRACT, DIFFERENCE, EXCLUSION, LIGHTEN, ADD, SCREEN, MULTIPLY], calibration error 7.69, composite difference 0.36",
+        "Reference_Blend_File 3.procreate: 2118x1836 300 dpi, 55 layers, 27 groups, 0 masks, profile DISPLAY_P3, unsupported profile false, blend modes [NORMAL, DIVIDE, DARKER_COLOR, LIGHTER_COLOR, PIN_LIGHT, LINEAR_LIGHT, VIVID_LIGHT, HARD_MIX, DARKEN, SOFT_LIGHT, SATURATION, HUE, LUMINOSITY, COLOR, HARD_LIGHT, OVERLAY, COLOR_BURN, COLOR_DODGE, LINEAR_BURN, SUBTRACT, DIFFERENCE, EXCLUSION, LIGHTEN, ADD, SCREEN, MULTIPLY], calibration error 8.19, composite difference 0.36",
+        "Reference_Blend_File.procreate: 2118x1836 300 dpi, 53 layers, 26 groups, 0 masks, profile DISPLAY_P3, unsupported profile false, blend modes [NORMAL, DIVIDE, DARKER_COLOR, LIGHTER_COLOR, PIN_LIGHT, LINEAR_LIGHT, VIVID_LIGHT, HARD_MIX, DARKEN, SOFT_LIGHT, SATURATION, HUE, LUMINOSITY, COLOR, HARD_LIGHT, OVERLAY, COLOR_BURN, COLOR_DODGE, LINEAR_BURN, SUBTRACT, DIFFERENCE, EXCLUSION, LIGHTEN, ADD, SCREEN, MULTIPLY], calibration error 7.69, composite difference 0.36",
+        "reference.procreate: 2118x1836 300 dpi, 55 layers, 27 groups, 0 masks, profile DISPLAY_P3, unsupported profile false, blend modes [NORMAL, DIVIDE, DARKER_COLOR, LIGHTER_COLOR, PIN_LIGHT, LINEAR_LIGHT, VIVID_LIGHT, HARD_MIX, DARKEN, SOFT_LIGHT, SATURATION, HUE, LUMINOSITY, COLOR, HARD_LIGHT, OVERLAY, COLOR_BURN, COLOR_DODGE, LINEAR_BURN, SUBTRACT, DIFFERENCE, EXCLUSION, LIGHTEN, ADD, SCREEN, MULTIPLY], calibration error 8.19, composite difference 0.36"
+      ],
+      "thumbnailCalibrationGate": true,
+      "recompositeDifferenceGate": false
+    },
+    "nativeReferenceRuntimeExecuted": false,
+    "nativeSplineFixturesMatched": 13,
+    "nativeLayerFixturesMatched": 9,
+    "nativeReferenceReports": {
+      "archive-contracts.json": "d42f1dc3c978e3bd466eed13d6fc5ed0837b8a233ba3f928a8cbe0ea5509b169",
+      "dual-brush-contracts.json": "019fb6d8e2b9fce58f364a4c02bc1742dc9753beaec5fd731cc9a6a7b6ce819b",
+      "layer-blend-contracts.json": "25b4b0222fe08f30e1456d7ef39949e57734b64dc012dcd255a08eb45ff038de",
+      "native-document-contracts.json": "87b31a6093f8916f728349e7ca33bb578abe2368138487b2de15c0c27e697184",
+      "pressure-spline.json": "bbcd905e0284bb1d4c775d95bea365bee1dfb6cd4af19ae28292a4950d6c8178"
+    },
+    "packageIntegrityAndNativeAlignment": "PASS",
+    "productionSigningNegativeGuard": "PASS"
+  },
+  "sourceAcceptance": {
+    "runId": 40115177921,
+    "revision": "e2aa900b91298fe08eca8529d0345220faa9e2eb",
+    "artifactId": 12568087694,
+    "artifactBytes": 1746641,
+    "artifactSha256": "12c567a90b68500634accf466f0239653c29bb359856f0065bcbd94777f0a2e2",
+    "uncompressedTarSha256": "cf99e504ffc590e19d12ae0bba36f766297e56f30cebd0050c4df7bae1609e9b",
+    "regularFiles": 864,
+    "byteExactGitArchive": true,
+    "rawReferencePayloadsPresent": false,
+    "unchangedExistingLzoFixtures": [
+      "app/src/test/resources/procreate/lzo-original.bin",
+      "app/src/test/resources/procreate/lzo1x_1.bin",
+      "app/src/test/resources/procreate/lzo1x_999.bin"
+    ]
+  },
+  "lanes": [
+    {
+      "lane": "26",
+      "label": "API 26",
+      "artifactId": 12569291224,
+      "artifactURL": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40115177921/artifacts/12569291224",
+      "archiveBytes": 2407482,
+      "artifactSHA256": "4ee354c49b4de689f2a7d6534569cb953e28d46a6ca8a377ee1331173b75a64f",
+      "sourceTests": 250,
+      "actualCases": 250,
+      "counts": {
+        "passed": 248,
+        "skipped": 2
+      },
+      "skips": [
+        "com.artflow.studio.CanvasInputDeviceTest#cancelledPointerFlagsRejectPalmWithoutRejectingPen",
+        "com.artflow.studio.data.ExportDeviceTest#galleryPublishesPngAsImageAndMp4AsVideo"
+      ],
+      "missing": [],
+      "extra": [],
+      "duplicates": [],
+      "failures": [],
+      "runtime": {
+        "sdk": "26",
+        "abis": "x86_64, x86",
+        "pageSize": "4096",
+        "fingerprint": "Android/sdk_gphone_x86_64/generic_x86_64:8.0.0/OSR1.180418.026/6741039:userdebug/dev-keys"
+      },
+      "runtimeConfiguration": "requestedJitMode=default\nro.build.fingerprint=Android/sdk_gphone_x86_64/generic_x86_64:8.0.0/OSR1.180418.026/6741039:userdebug/dev-keys\nro.build.version.sdk=26\nro.product.cpu.abilist=x86_64,x86\nro.kernel.qemu=1\nro.debuggable=1\ndalvik.vm.usejit=true\ndalvik.vm.usejitprofiles=true\n\nverifiedConfiguration:\nro.build.fingerprint=Android/sdk_gphone_x86_64/generic_x86_64:8.0.0/OSR1.180418.026/6741039:userdebug/dev-keys\nro.build.version.sdk=26\nro.product.cpu.abilist=x86_64,x86\nro.kernel.qemu=1\nro.debuggable=1\ndalvik.vm.usejit=true\ndalvik.vm.usejitprofiles=true\nconfigurationStatus=PASS\n",
+      "expectedJit": "default",
+      "minifiedLaunch": true,
+      "instrumentationStarts": [
+        [
+          "2026-10-24T17:33:09.7000736Z",
+          "250",
+          "emulator-5554 - 8.0.0"
+        ]
+      ],
+      "consoleFinishes": [
+        [
+          "2026-10-24T17:35:51.2992687Z",
+          "252",
+          "emulator-5554 - 8.0.0"
+        ]
+      ],
+      "attemptSuiteSeconds": [
+        161.599195
+      ],
+      "emulatorVersions": [
+        "37.2.12.0 (build_id 16428233) (CL:N/A)"
+      ],
+      "problems": [],
+      "job": {
+        "id": 120937884673,
+        "name": "Device tests (API 26)",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40115177921/job/120937884673",
+        "started_at": "2026-10-24T17:27:34Z",
+        "completed_at": "2026-10-24T17:41:04Z"
+      },
+      "automaticRetries": 0
+    },
+    {
+      "lane": "35-standard-4k",
+      "label": "API 35 standard 4 KB",
+      "artifactId": 12569311692,
+      "artifactURL": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40115177921/artifacts/12569311692",
+      "archiveBytes": 8644906,
+      "artifactSHA256": "a6bb164c146c12d93d1704983e86d6231afb73b63648048e18ec7f459989e386",
+      "sourceTests": 250,
+      "actualCases": 250,
+      "counts": {
+        "passed": 250
+      },
+      "skips": [],
+      "missing": [],
+      "extra": [],
+      "duplicates": [],
+      "failures": [],
+      "runtime": {
+        "sdk": "35",
+        "abis": "x86_64, arm64-v8a",
+        "pageSize": "4096",
+        "fingerprint": "google/sdk_gphone64_x86_64/emu64xa:15/AE3A.240806.043/12960925:userdebug/dev-keys"
+      },
+      "runtimeConfiguration": "requestedJitMode=default\nro.build.fingerprint=google/sdk_gphone64_x86_64/emu64xa:15/AE3A.240806.043/12960925:userdebug/dev-keys\nro.build.version.sdk=35\nro.product.cpu.abilist=x86_64,arm64-v8a\nro.kernel.qemu=1\nro.debuggable=1\ndalvik.vm.usejit=true\ndalvik.vm.usejitprofiles=\n\nverifiedConfiguration:\nro.build.fingerprint=google/sdk_gphone64_x86_64/emu64xa:15/AE3A.240806.043/12960925:userdebug/dev-keys\nro.build.version.sdk=35\nro.product.cpu.abilist=x86_64,arm64-v8a\nro.kernel.qemu=1\nro.debuggable=1\ndalvik.vm.usejit=true\ndalvik.vm.usejitprofiles=\nconfigurationStatus=PASS\n",
+      "expectedJit": "default",
+      "minifiedLaunch": true,
+      "instrumentationStarts": [
+        [
+          "2026-10-24T17:33:56.0292860Z",
+          "250",
+          "emulator-5554 - 15"
+        ]
+      ],
+      "consoleFinishes": [
+        [
+          "2026-10-24T17:37:49.6272413Z",
+          "250",
+          "emulator-5554 - 15"
+        ]
+      ],
+      "attemptSuiteSeconds": [
+        233.597955
+      ],
+      "emulatorVersions": [
+        "37.2.12.0 (build_id 16428233) (CL:N/A)"
+      ],
+      "problems": [],
+      "job": {
+        "id": 120937884639,
+        "name": "Device tests (API 35 standard 4 KB)",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40115177921/job/120937884639",
+        "started_at": "2026-10-24T17:27:34Z",
+        "completed_at": "2026-10-24T17:43:52Z"
+      },
+      "automaticRetries": 0
+    },
+    {
+      "lane": "35",
+      "label": "API 35 16 KB",
+      "artifactId": 12569622655,
+      "artifactURL": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40115177921/artifacts/12569622655",
+      "archiveBytes": 11595199,
+      "artifactSHA256": "970bf720597664b3cd1eb498af1e171b3ca81523986461c0802ac25b5bfac98d",
+      "sourceTests": 250,
+      "actualCases": 250,
+      "counts": {
+        "passed": 250
+      },
+      "skips": [],
+      "missing": [],
+      "extra": [],
+      "duplicates": [],
+      "failures": [],
+      "runtime": {
+        "sdk": "35",
+        "abis": "x86_64, arm64-v8a",
+        "pageSize": "16384",
+        "fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys"
+      },
+      "runtimeConfiguration": "requestedJitMode=disabled\nro.build.fingerprint=google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys\nro.build.version.sdk=35\nro.product.cpu.abilist=x86_64,arm64-v8a\nro.kernel.qemu=1\nro.debuggable=1\ndalvik.vm.usejit=true\ndalvik.vm.usejitprofiles=\n\nverifiedConfiguration:\nro.build.fingerprint=google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys\nro.build.version.sdk=35\nro.product.cpu.abilist=x86_64,arm64-v8a\nro.kernel.qemu=1\nro.debuggable=1\ndalvik.vm.usejit=false\ndalvik.vm.usejitprofiles=false\nconfigurationStatus=PASS\n",
+      "expectedJit": "disabled",
+      "minifiedLaunch": true,
+      "instrumentationStarts": [
+        [
+          "2026-10-24T17:34:09.3727729Z",
+          "250",
+          "emulator-5554 - 15"
+        ],
+        [
+          "2026-10-24T17:37:33.6891120Z",
+          "250",
+          "emulator-5554 - 15"
+        ]
+      ],
+      "consoleFinishes": [
+        [
+          "2026-10-24T17:36:17.7668398Z",
+          "16",
+          "emulator-5554 - 15"
+        ],
+        [
+          "2026-10-24T17:47:01.3887281Z",
+          "250",
+          "emulator-5554 - 15"
+        ]
+      ],
+      "attemptSuiteSeconds": [
+        128.394067,
+        567.699616
+      ],
+      "emulatorVersions": [
+        "37.2.12.0 (build_id 16428233) (CL:N/A)"
+      ],
+      "problems": [],
+      "job": {
+        "id": 120937884587,
+        "name": "Device tests (API 35)",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40115177921/job/120937884587",
+        "started_at": "2026-10-24T17:27:34Z",
+        "completed_at": "2026-10-24T17:53:02Z"
+      },
+      "automaticRetries": 1,
+      "preservedFirstAttempt": {
+        "cases": 16,
+        "counts": {
+          "passed": 15,
+          "failure": 1
+        },
+        "extra": [],
+        "duplicates": [],
+        "failures": [
+          {
+            "test": "com.artflow.studio.BrushAttributeUiTest#tiltOpacityCanBeSetApartFromTiltSize",
+            "time": "1.796",
+            "state": "failure",
+            "details": [
+              "<failure />\n  "
+            ]
+          }
+        ],
+        "classifierRetryableSignature": true,
+        "caseResults": [
+          {
+            "test": "com.artflow.studio.AnimationPlaybackUiTest#backgroundCallbackClearsTheVisiblePauseState",
+            "time": "7.634",
+            "state": "passed",
+            "details": []
+          },
+          {
+            "test": "com.artflow.studio.AnimationPlaybackUiTest#realPlayButtonBecomesPauseWhileFramesAdvanceAndReturnsAfterPause",
+            "time": "2.952",
+            "state": "passed",
+            "details": []
+          },
+          {
+            "test": "com.artflow.studio.AnimationPlaybackUiTest#teardownWaitsForAnAtomicWriteAlreadyInFlight",
+            "time": "1.973",
+            "state": "passed",
+            "details": []
+          },
+          {
+            "test": "com.artflow.studio.AnimationPlaybackUiTest#frameRoleAndVisibilityControlsReachTheDocumentAndDisableEmptyPlayback",
+            "time": "3.201",
+            "state": "passed",
+            "details": []
+          },
+          {
+            "test": "com.artflow.studio.AnimationPlaybackUiTest#onionColorPickerAppliesOnlyOnConfirmationAndKeepsTheOtherColor",
+            "time": "4.127",
+            "state": "passed",
+            "details": []
+          },
+          {
+            "test": "com.artflow.studio.AppLaunchTest#activityLaunchesAndReachesResumed",
+            "time": "2.172",
+            "state": "passed",
+            "details": []
+          },
+          {
+            "test": "com.artflow.studio.ArtworkWorkflowTest#createPaintSaveReopenRecreateAndDiscardPreserveTheSavedPixels",
+            "time": "61.749",
+            "state": "passed",
+            "details": []
+          },
+          {
+            "test": "com.artflow.studio.BlendModePreviewDeviceTest#modeChipsShowTheActualBlendOfConsistentSampleColours",
+            "time": "0.961",
+            "state": "passed",
+            "details": []
+          },
+          {
+            "test": "com.artflow.studio.BrushAttributeUiTest#newlyReachableDynamicsUpdateOnlyTheMatchingParameters",
+            "time": "2.145",
+            "state": "passed",
+            "details": []
+          },
+          {
+            "test": "com.artflow.studio.BrushAttributeUiTest#countReachesEveryDabCountTheLibraryStores",
+            "time": "1.218",
+            "state": "passed",
+            "details": []
+          },
+          {
+            "test": "com.artflow.studio.BrushAttributeUiTest#reversedSpeedCanBeSetFromTheDynamicsPanel",
+            "time": "1.509",
+            "state": "passed",
+            "details": []
+          },
+          {
+            "test": "com.artflow.studio.BrushAttributeUiTest#largerTargetsRemainAvailableInTheCompactNavigator",
+            "time": "2.419",
+            "state": "passed",
+            "details": []
+          },
+          {
+            "test": "com.artflow.studio.BrushAttributeUiTest#cancellingAnAttributeEditLeavesThePublishedBrushUntouched",
+            "time": "6.102",
+            "state": "passed",
+            "details": []
+          },
+          {
+            "test": "com.artflow.studio.BrushAttributeUiTest#compactNavigationShowsOnlyTheSelectedGroupAndRetainsEdits",
+            "time": "9.98",
+            "state": "passed",
+            "details": []
+          },
+          {
+            "test": "com.artflow.studio.BrushAttributeUiTest#studioRetainsTheChosenGroupAcrossTabsAndPublishesOnlyOnUse",
+            "time": "6.701",
+            "state": "passed",
+            "details": []
+          },
+          {
+            "test": "com.artflow.studio.BrushAttributeUiTest#tiltOpacityCanBeSetApartFromTiltSize",
+            "time": "1.796",
+            "state": "failure",
+            "details": [
+              "<failure />\n  "
+            ]
+          }
+        ],
+        "missingCount": 234
+      },
+      "recoveryRecord": "recoveryStarted=1\nbootIdBefore=b0259e46-3ab9-475c-8265-b88cc4114d0b\nbootIdAfter=9745edc4-23f7-45ae-a17d-a192f82c6ec4\nrecoveryStatus=PASS\n"
+    },
+    {
+      "lane": "35-16k-repeat",
+      "label": "API 35 independent 16 KB repeat",
+      "artifactId": 12569331702,
+      "artifactURL": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40115177921/artifacts/12569331702",
+      "archiveBytes": 8171122,
+      "artifactSHA256": "290dded5d4c2d2a58a292a55b79bd27be428fc4d1e933cf9be3a67e17a4f2e3a",
+      "sourceTests": 250,
+      "actualCases": 214,
+      "counts": {
+        "passed": 213,
+        "failure": 1
+      },
+      "skips": [],
+      "missing": [
+        "com.artflow.studio.data.ProjectDuplicationTest#exhaustedIdentifiersFailWithoutWrappingOrDeletingFiles",
+        "com.artflow.studio.data.PsdGroupsDeviceTest#groupsRoundTripThroughPsd",
+        "com.artflow.studio.data.PsdGroupsDeviceTest#normalAndPassThroughPsdFoldersRetainPixelsAcrossImportSaveReopenAndExport",
+        "com.artflow.studio.data.PsdGroupsDeviceTest#onlyAnEnabledGroupMaskRequiresProcreateAppearanceFallback",
+        "com.artflow.studio.data.PsdMasksDeviceTest#disabledMaskExportsAndImportsAsEditableCoverageWithoutDestroyingHiddenInk",
+        "com.artflow.studio.data.PsdMasksDeviceTest#folderMaskSurvivesExportAndImport",
+        "com.artflow.studio.data.PsdMasksDeviceTest#selectionExportClipsOriginalAlphaOnceAndKeepsIndependentMaskCrop",
+        "com.artflow.studio.data.ResamplingDeviceTest#affineLayerAndMaskSurviveUndoSaveReloadAndIndependentEditing",
+        "com.artflow.studio.data.ResamplingDeviceTest#displacedEdgesSurviveRealPngEncodingWithoutDarkening",
+        "com.artflow.studio.data.ResamplingDeviceTest#resizeEdgesSurviveUndoStorageAndScaledPngExport",
+        "com.artflow.studio.data.SavedBrushStorageTest#completeBrushesSurviveClosingAndReopeningTheActualRoomDatabase",
+        "com.artflow.studio.data.SavedSelectionWorkflowDeviceTest#savedSoftSelectionReopensConstrainsEditingAndKeepsItsPixelsThroughExport",
+        "com.artflow.studio.data.SavedSelectionWorkflowDeviceTest#switchingArtworkCannotReuseAnotherDocumentsSavedSelection",
+        "com.artflow.studio.data.SecondaryGrainMigrationDeviceTest#signedV3VectorsKeepHistoricalCoverageWhileNewV4StrokesRetainTheirGrainModes",
+        "com.artflow.studio.data.SettingsPersistenceTest#completePreferencesAndPaletteNamesSurviveDatabaseReopen",
+        "com.artflow.studio.data.SettingsPersistenceTest#failurePartwayThroughBatchRollsBackEveryRowAndLeavesCacheUnchanged",
+        "com.artflow.studio.data.SettingsPersistenceTest#unreadablePaletteRowSurvivesUnrelatedEditsAndOnlyResetsAfterBackup",
+        "com.artflow.studio.data.StorageTraversalDeviceTest#atomicWritesRejectLinkedParentsAndPreserveTargets",
+        "com.artflow.studio.data.StorageTraversalDeviceTest#deletingARootLinkDoesNotDeleteAnotherProject",
+        "com.artflow.studio.data.StorageTraversalDeviceTest#exportCleanupCannotDeleteAnotherProjectsArtworkThroughADirectoryLink",
+        "com.artflow.studio.data.StorageTraversalDeviceTest#exportFileLinksAreNotListedOrPruned",
+        "com.artflow.studio.data.StorageTraversalDeviceTest#linkedExportsContainerCannotMakeEditableArtworkShareable",
+        "com.artflow.studio.data.StorageTraversalDeviceTest#linkedProjectContainerCannotRedirectSizeOrDelete",
+        "com.artflow.studio.data.StorageTraversalDeviceTest#linkedProjectRootCannotRedirectReadsOrWrites",
+        "com.artflow.studio.data.StorageTraversalDeviceTest#metadataAndRasterLinksCannotReadOtherProjectPixels",
+        "com.artflow.studio.data.StorageTraversalDeviceTest#pruneSizeAndDeleteStayInsideTheOwnedProject",
+        "com.artflow.studio.data.StorageTraversalDeviceTest#pruningThroughALinkedProjectCannotDeleteAnotherProject",
+        "com.artflow.studio.data.StorageTraversalDeviceTest#repeatedHousekeepingDoesNotAccumulateFilesOrFollowCycles",
+        "com.artflow.studio.data.StrokePreviewRegressionTest#cancelledStrokeCannotLeakIntoExportSaveOrUndo",
+        "com.artflow.studio.data.StrokePreviewRegressionTest#inFlightStrokeIsHiddenByHigherOpaqueLayer",
+        "com.artflow.studio.data.StrokePreviewRegressionTest#legacyVectorStrokesAreBakedBeforeNewPaintInsteadOfCoveringIt",
+        "com.artflow.studio.data.StrokePreviewRegressionTest#liveEraserRevealsUnderlyingLayersInsteadOfPaintingInkOnTop",
+        "com.artflow.studio.data.StrokePreviewRegressionTest#previewEqualsCommitForPressureGrainOpacitySelectionAndLayerBlend",
+        "com.artflow.studio.data.StrokePreviewRegressionTest#previewHonorsAlphaLockAndLayerMask",
+        "com.artflow.studio.data.StrokePreviewRegressionTest#shortFinalSegmentSurvivesPreviewCommitHistoryAndReopen",
+        "com.artflow.studio.data.StrokeTimingDeviceTest#liveStrokeFramesAreTimed"
+      ],
+      "extra": [],
+      "duplicates": [],
+      "failures": [
+        {
+          "test": "com.artflow.studio.data.ProjectDuplicationTest#newProjectsSkipOrphansAboveExistingRows",
+          "time": "0.556",
+          "state": "failure",
+          "details": [
+            "<failure />\n  "
+          ]
+        }
+      ],
+      "runtime": {
+        "sdk": "35",
+        "abis": "x86_64, arm64-v8a",
+        "pageSize": "16384",
+        "fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys"
+      },
+      "runtimeConfiguration": "requestedJitMode=disabled\nro.build.fingerprint=google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys\nro.build.version.sdk=35\nro.product.cpu.abilist=x86_64,arm64-v8a\nro.kernel.qemu=1\nro.debuggable=1\ndalvik.vm.usejit=true\ndalvik.vm.usejitprofiles=\n\nverifiedConfiguration:\nro.build.fingerprint=google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys\nro.build.version.sdk=35\nro.product.cpu.abilist=x86_64,arm64-v8a\nro.kernel.qemu=1\nro.debuggable=1\ndalvik.vm.usejit=false\ndalvik.vm.usejitprofiles=false\nconfigurationStatus=PASS\n",
+      "expectedJit": "disabled",
+      "minifiedLaunch": false,
+      "instrumentationStarts": [
+        [
+          "2026-10-24T17:34:04.6796394Z",
+          "250",
+          "emulator-5554 - 15"
+        ],
+        [
+          "2026-10-24T17:36:18.6632085Z",
+          "250",
+          "emulator-5554 - 15"
+        ]
+      ],
+      "consoleFinishes": [
+        [
+          "2026-10-24T17:34:55.4835605Z",
+          "7",
+          "emulator-5554 - 15"
+        ],
+        [
+          "2026-10-24T17:43:30.9623403Z",
+          "214",
+          "emulator-5554 - 15"
+        ]
+      ],
+      "attemptSuiteSeconds": [
+        50.803921,
+        432.299132
+      ],
+      "emulatorVersions": [
+        "37.2.12.0 (build_id 16428233) (CL:N/A)"
+      ],
+      "problems": [
+        "Missing test: com.artflow.studio.data.ProjectDuplicationTest#exhaustedIdentifiersFailWithoutWrappingOrDeletingFiles",
+        "Missing test: com.artflow.studio.data.PsdGroupsDeviceTest#groupsRoundTripThroughPsd",
+        "Missing test: com.artflow.studio.data.PsdGroupsDeviceTest#normalAndPassThroughPsdFoldersRetainPixelsAcrossImportSaveReopenAndExport",
+        "Missing test: com.artflow.studio.data.PsdGroupsDeviceTest#onlyAnEnabledGroupMaskRequiresProcreateAppearanceFallback",
+        "Missing test: com.artflow.studio.data.PsdMasksDeviceTest#disabledMaskExportsAndImportsAsEditableCoverageWithoutDestroyingHiddenInk",
+        "Missing test: com.artflow.studio.data.PsdMasksDeviceTest#folderMaskSurvivesExportAndImport",
+        "Missing test: com.artflow.studio.data.PsdMasksDeviceTest#selectionExportClipsOriginalAlphaOnceAndKeepsIndependentMaskCrop",
+        "Missing test: com.artflow.studio.data.ResamplingDeviceTest#affineLayerAndMaskSurviveUndoSaveReloadAndIndependentEditing",
+        "Missing test: com.artflow.studio.data.ResamplingDeviceTest#displacedEdgesSurviveRealPngEncodingWithoutDarkening",
+        "Missing test: com.artflow.studio.data.ResamplingDeviceTest#resizeEdgesSurviveUndoStorageAndScaledPngExport",
+        "Missing test: com.artflow.studio.data.SavedBrushStorageTest#completeBrushesSurviveClosingAndReopeningTheActualRoomDatabase",
+        "Missing test: com.artflow.studio.data.SavedSelectionWorkflowDeviceTest#savedSoftSelectionReopensConstrainsEditingAndKeepsItsPixelsThroughExport",
+        "Missing test: com.artflow.studio.data.SavedSelectionWorkflowDeviceTest#switchingArtworkCannotReuseAnotherDocumentsSavedSelection",
+        "Missing test: com.artflow.studio.data.SecondaryGrainMigrationDeviceTest#signedV3VectorsKeepHistoricalCoverageWhileNewV4StrokesRetainTheirGrainModes",
+        "Missing test: com.artflow.studio.data.SettingsPersistenceTest#completePreferencesAndPaletteNamesSurviveDatabaseReopen",
+        "Missing test: com.artflow.studio.data.SettingsPersistenceTest#failurePartwayThroughBatchRollsBackEveryRowAndLeavesCacheUnchanged",
+        "Missing test: com.artflow.studio.data.SettingsPersistenceTest#unreadablePaletteRowSurvivesUnrelatedEditsAndOnlyResetsAfterBackup",
+        "Missing test: com.artflow.studio.data.StorageTraversalDeviceTest#atomicWritesRejectLinkedParentsAndPreserveTargets",
+        "Missing test: com.artflow.studio.data.StorageTraversalDeviceTest#deletingARootLinkDoesNotDeleteAnotherProject",
+        "Missing test: com.artflow.studio.data.StorageTraversalDeviceTest#exportCleanupCannotDeleteAnotherProjectsArtworkThroughADirectoryLink",
+        "Missing test: com.artflow.studio.data.StorageTraversalDeviceTest#exportFileLinksAreNotListedOrPruned",
+        "Missing test: com.artflow.studio.data.StorageTraversalDeviceTest#linkedExportsContainerCannotMakeEditableArtworkShareable",
+        "Missing test: com.artflow.studio.data.StorageTraversalDeviceTest#linkedProjectContainerCannotRedirectSizeOrDelete",
+        "Missing test: com.artflow.studio.data.StorageTraversalDeviceTest#linkedProjectRootCannotRedirectReadsOrWrites",
+        "Missing test: com.artflow.studio.data.StorageTraversalDeviceTest#metadataAndRasterLinksCannotReadOtherProjectPixels",
+        "Missing test: com.artflow.studio.data.StorageTraversalDeviceTest#pruneSizeAndDeleteStayInsideTheOwnedProject",
+        "Missing test: com.artflow.studio.data.StorageTraversalDeviceTest#pruningThroughALinkedProjectCannotDeleteAnotherProject",
+        "Missing test: com.artflow.studio.data.StorageTraversalDeviceTest#repeatedHousekeepingDoesNotAccumulateFilesOrFollowCycles",
+        "Missing test: com.artflow.studio.data.StrokePreviewRegressionTest#cancelledStrokeCannotLeakIntoExportSaveOrUndo",
+        "Missing test: com.artflow.studio.data.StrokePreviewRegressionTest#inFlightStrokeIsHiddenByHigherOpaqueLayer",
+        "Missing test: com.artflow.studio.data.StrokePreviewRegressionTest#legacyVectorStrokesAreBakedBeforeNewPaintInsteadOfCoveringIt",
+        "Missing test: com.artflow.studio.data.StrokePreviewRegressionTest#liveEraserRevealsUnderlyingLayersInsteadOfPaintingInkOnTop",
+        "Missing test: com.artflow.studio.data.StrokePreviewRegressionTest#previewEqualsCommitForPressureGrainOpacitySelectionAndLayerBlend",
+        "Missing test: com.artflow.studio.data.StrokePreviewRegressionTest#previewHonorsAlphaLockAndLayerMask",
+        "Missing test: com.artflow.studio.data.StrokePreviewRegressionTest#shortFinalSegmentSurvivesPreviewCommitHistoryAndReopen",
+        "Missing test: com.artflow.studio.data.StrokeTimingDeviceTest#liveStrokeFramesAreTimed",
+        "FAILURE: com.artflow.studio.data.ProjectDuplicationTest#newProjectsSkipOrphansAboveExistingRows",
+        "Actual JUnit testcase count is 214, expected 250",
+        "Independent minified launch evidence did not pass",
+        "Summary minifiedLaunch mismatch: False",
+        "CI verification reported: ['Missing test: com.artflow.studio.data.ProjectDuplicationTest#exhaustedIdentifiersFailWithoutWrappingOrDeletingFiles', 'Missing test: com.artflow.studio.data.PsdGroupsDeviceTest#groupsRoundTripThroughPsd', 'Missing test: com.artflow.studio.data.PsdGroupsDeviceTest#normalAndPassThroughPsdFoldersRetainPixelsAcrossImportSaveReopenAndExport', 'Missing test: com.artflow.studio.data.PsdGroupsDeviceTest#onlyAnEnabledGroupMaskRequiresProcreateAppearanceFallback', 'Missing test: com.artflow.studio.data.PsdMasksDeviceTest#disabledMaskExportsAndImportsAsEditableCoverageWithoutDestroyingHiddenInk', 'Missing test: com.artflow.studio.data.PsdMasksDeviceTest#folderMaskSurvivesExportAndImport', 'Missing test: com.artflow.studio.data.PsdMasksDeviceTest#selectionExportClipsOriginalAlphaOnceAndKeepsIndependentMaskCrop', 'Missing test: com.artflow.studio.data.ResamplingDeviceTest#affineLayerAndMaskSurviveUndoSaveReloadAndIndependentEditing', 'Missing test: com.artflow.studio.data.ResamplingDeviceTest#displacedEdgesSurviveRealPngEncodingWithoutDarkening', 'Missing test: com.artflow.studio.data.ResamplingDeviceTest#resizeEdgesSurviveUndoStorageAndScaledPngExport', 'Missing test: com.artflow.studio.data.SavedBrushStorageTest#completeBrushesSurviveClosingAndReopeningTheActualRoomDatabase', 'Missing test: com.artflow.studio.data.SavedSelectionWorkflowDeviceTest#savedSoftSelectionReopensConstrainsEditingAndKeepsItsPixelsThroughExport', 'Missing test: com.artflow.studio.data.SavedSelectionWorkflowDeviceTest#switchingArtworkCannotReuseAnotherDocumentsSavedSelection', 'Missing test: com.artflow.studio.data.SecondaryGrainMigrationDeviceTest#signedV3VectorsKeepHistoricalCoverageWhileNewV4StrokesRetainTheirGrainModes', 'Missing test: com.artflow.studio.data.SettingsPersistenceTest#completePreferencesAndPaletteNamesSurviveDatabaseReopen', 'Missing test: com.artflow.studio.data.SettingsPersistenceTest#failurePartwayThroughBatchRollsBackEveryRowAndLeavesCacheUnchanged', 'Missing test: com.artflow.studio.data.SettingsPersistenceTest#unreadablePaletteRowSurvivesUnrelatedEditsAndOnlyResetsAfterBackup', 'Missing test: com.artflow.studio.data.StorageTraversalDeviceTest#atomicWritesRejectLinkedParentsAndPreserveTargets', 'Missing test: com.artflow.studio.data.StorageTraversalDeviceTest#deletingARootLinkDoesNotDeleteAnotherProject', 'Missing test: com.artflow.studio.data.StorageTraversalDeviceTest#exportCleanupCannotDeleteAnotherProjectsArtworkThroughADirectoryLink', 'Missing test: com.artflow.studio.data.StorageTraversalDeviceTest#exportFileLinksAreNotListedOrPruned', 'Missing test: com.artflow.studio.data.StorageTraversalDeviceTest#linkedExportsContainerCannotMakeEditableArtworkShareable', 'Missing test: com.artflow.studio.data.StorageTraversalDeviceTest#linkedProjectContainerCannotRedirectSizeOrDelete', 'Missing test: com.artflow.studio.data.StorageTraversalDeviceTest#linkedProjectRootCannotRedirectReadsOrWrites', 'Missing test: com.artflow.studio.data.StorageTraversalDeviceTest#metadataAndRasterLinksCannotReadOtherProjectPixels', 'Missing test: com.artflow.studio.data.StorageTraversalDeviceTest#pruneSizeAndDeleteStayInsideTheOwnedProject', 'Missing test: com.artflow.studio.data.StorageTraversalDeviceTest#pruningThroughALinkedProjectCannotDeleteAnotherProject', 'Missing test: com.artflow.studio.data.StorageTraversalDeviceTest#repeatedHousekeepingDoesNotAccumulateFilesOrFollowCycles', 'Missing test: com.artflow.studio.data.StrokePreviewRegressionTest#cancelledStrokeCannotLeakIntoExportSaveOrUndo', 'Missing test: com.artflow.studio.data.StrokePreviewRegressionTest#inFlightStrokeIsHiddenByHigherOpaqueLayer', 'Missing test: com.artflow.studio.data.StrokePreviewRegressionTest#legacyVectorStrokesAreBakedBeforeNewPaintInsteadOfCoveringIt', 'Missing test: com.artflow.studio.data.StrokePreviewRegressionTest#liveEraserRevealsUnderlyingLayersInsteadOfPaintingInkOnTop', 'Missing test: com.artflow.studio.data.StrokePreviewRegressionTest#previewEqualsCommitForPressureGrainOpacitySelectionAndLayerBlend', 'Missing test: com.artflow.studio.data.StrokePreviewRegressionTest#previewHonorsAlphaLockAndLayerMask', 'Missing test: com.artflow.studio.data.StrokePreviewRegressionTest#shortFinalSegmentSurvivesPreviewCommitHistoryAndReopen', 'Missing test: com.artflow.studio.data.StrokeTimingDeviceTest#liveStrokeFramesAreTimed', 'FAILURE: com.artflow.studio.data.ProjectDuplicationTest#newProjectsSkipOrphansAboveExistingRows', \"[Errno 2] No such file or directory: '/home/runner/work/_temp/artflow-device/minified-launch.txt'\"]",
+        "migration: required exact-source case is missing",
+        "migration evidence: Missing final evidence: secondary-grain-v3-before-load.artflow",
+        "timing: required exact-source case is missing",
+        "timing evidence: Missing final evidence: stroke-timing.json"
+      ],
+      "job": {
+        "id": 120937884649,
+        "name": "Device tests (API 35 independent 16 KB repeat)",
+        "status": "completed",
+        "conclusion": "failure",
+        "html_url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40115177921/job/120937884649",
+        "started_at": "2026-10-24T17:27:33Z",
+        "completed_at": "2026-10-24T17:43:58Z"
+      },
+      "automaticRetries": 1,
+      "preservedFirstAttempt": {
+        "cases": 7,
+        "counts": {
+          "passed": 6,
+          "failure": 1
+        },
+        "extra": [],
+        "duplicates": [],
+        "failures": [
+          {
+            "test": "com.artflow.studio.ArtworkWorkflowTest#createPaintSaveReopenRecreateAndDiscardPreserveTheSavedPixels",
+            "time": "15.657",
+            "state": "failure",
+            "details": [
+              "<failure />\n  "
+            ]
+          }
+        ],
+        "classifierRetryableSignature": true,
+        "caseResults": [
+          {
+            "test": "com.artflow.studio.AnimationPlaybackUiTest#backgroundCallbackClearsTheVisiblePauseState",
+            "time": "7.409",
+            "state": "passed",
+            "details": []
+          },
+          {
+            "test": "com.artflow.studio.AnimationPlaybackUiTest#realPlayButtonBecomesPauseWhileFramesAdvanceAndReturnsAfterPause",
+            "time": "3.29",
+            "state": "passed",
+            "details": []
+          },
+          {
+            "test": "com.artflow.studio.AnimationPlaybackUiTest#teardownWaitsForAnAtomicWriteAlreadyInFlight",
+            "time": "2.145",
+            "state": "passed",
+            "details": []
+          },
+          {
+            "test": "com.artflow.studio.AnimationPlaybackUiTest#frameRoleAndVisibilityControlsReachTheDocumentAndDisableEmptyPlayback",
+            "time": "4.183",
+            "state": "passed",
+            "details": []
+          },
+          {
+            "test": "com.artflow.studio.AnimationPlaybackUiTest#onionColorPickerAppliesOnlyOnConfirmationAndKeepsTheOtherColor",
+            "time": "3.761",
+            "state": "passed",
+            "details": []
+          },
+          {
+            "test": "com.artflow.studio.AppLaunchTest#activityLaunchesAndReachesResumed",
+            "time": "2.042",
+            "state": "passed",
+            "details": []
+          },
+          {
+            "test": "com.artflow.studio.ArtworkWorkflowTest#createPaintSaveReopenRecreateAndDiscardPreserveTheSavedPixels",
+            "time": "15.657",
+            "state": "failure",
+            "details": [
+              "<failure />\n  "
+            ]
+          }
+        ],
+        "missingCount": 243
+      },
+      "recoveryRecord": "recoveryStarted=1\nbootIdBefore=55471659-beb2-4bb8-b2c6-fd90fb64d08b\nbootIdAfter=6f655f47-4e04-4d2a-aef6-9af730b90993\nrecoveryStatus=PASS\n"
+    },
+    {
+      "lane": "36",
+      "label": "API 36",
+      "artifactId": 12569936243,
+      "artifactURL": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40115177921/artifacts/12569936243",
+      "archiveBytes": 7642666,
+      "artifactSHA256": "a8f2ae27bffd6adc3843faef3b1ac719afff823530b0ab5762bb7932ff9f3dbb",
+      "sourceTests": 250,
+      "actualCases": 250,
+      "counts": {
+        "passed": 250
+      },
+      "skips": [],
+      "missing": [],
+      "extra": [],
+      "duplicates": [],
+      "failures": [],
+      "runtime": {
+        "sdk": "36",
+        "abis": "x86_64, arm64-v8a",
+        "pageSize": "4096",
+        "fingerprint": "google/sdk_gphone64_x86_64/emu64xa:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys"
+      },
+      "runtimeConfiguration": "requestedJitMode=default\nro.build.fingerprint=google/sdk_gphone64_x86_64/emu64xa:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys\nro.build.version.sdk=36\nro.product.cpu.abilist=x86_64,arm64-v8a\nro.kernel.qemu=1\nro.debuggable=1\ndalvik.vm.usejit=true\ndalvik.vm.usejitprofiles=\n\nverifiedConfiguration:\nro.build.fingerprint=google/sdk_gphone64_x86_64/emu64xa:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys\nro.build.version.sdk=36\nro.product.cpu.abilist=x86_64,arm64-v8a\nro.kernel.qemu=1\nro.debuggable=1\ndalvik.vm.usejit=true\ndalvik.vm.usejitprofiles=\nconfigurationStatus=PASS\n",
+      "expectedJit": "default",
+      "minifiedLaunch": true,
+      "instrumentationStarts": [
+        [
+          "2026-10-24T17:32:46.7384480Z",
+          "250",
+          "emulator-5554 - 16"
+        ]
+      ],
+      "consoleFinishes": [
+        [
+          "2026-10-24T17:36:21.5382353Z",
+          "250",
+          "emulator-5554 - 16"
+        ]
+      ],
+      "attemptSuiteSeconds": [
+        214.799787
+      ],
+      "emulatorVersions": [
+        "37.2.12.0 (build_id 16428233) (CL:N/A)"
+      ],
+      "problems": [],
+      "job": {
+        "id": 120937884589,
+        "name": "Device tests (API 36)",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40115177921/job/120937884589",
+        "started_at": "2026-10-24T17:27:33Z",
+        "completed_at": "2026-10-24T17:41:14Z"
+      },
+      "automaticRetries": 0
+    },
+    {
+      "lane": "36-16k",
+      "label": "API 36 16 KB",
+      "artifactId": 12569311814,
+      "artifactURL": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40115177921/artifacts/12569311814",
+      "archiveBytes": 8274063,
+      "artifactSHA256": "cbac69c1f4cce2adff68eb768807c450607cce89c6e94832566d135ded69139a",
+      "sourceTests": 250,
+      "actualCases": 250,
+      "counts": {
+        "passed": 250
+      },
+      "skips": [],
+      "missing": [],
+      "extra": [],
+      "duplicates": [],
+      "failures": [],
+      "runtime": {
+        "sdk": "36",
+        "abis": "x86_64, arm64-v8a",
+        "pageSize": "16384",
+        "fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys"
+      },
+      "runtimeConfiguration": "requestedJitMode=default\nro.build.fingerprint=google/sdk_gphone16k_x86_64/emu64xa16k:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys\nro.build.version.sdk=36\nro.product.cpu.abilist=x86_64,arm64-v8a\nro.kernel.qemu=1\nro.debuggable=1\ndalvik.vm.usejit=true\ndalvik.vm.usejitprofiles=\n\nverifiedConfiguration:\nro.build.fingerprint=google/sdk_gphone16k_x86_64/emu64xa16k:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys\nro.build.version.sdk=36\nro.product.cpu.abilist=x86_64,arm64-v8a\nro.kernel.qemu=1\nro.debuggable=1\ndalvik.vm.usejit=true\ndalvik.vm.usejitprofiles=\nconfigurationStatus=PASS\n",
+      "expectedJit": "default",
+      "minifiedLaunch": true,
+      "instrumentationStarts": [
+        [
+          "2026-10-24T17:34:00.7353319Z",
+          "250",
+          "emulator-5554 - 16"
+        ]
+      ],
+      "consoleFinishes": [
+        [
+          "2026-10-24T17:38:33.6407024Z",
+          "250",
+          "emulator-5554 - 16"
+        ]
+      ],
+      "attemptSuiteSeconds": [
+        272.905371
+      ],
+      "emulatorVersions": [
+        "37.2.12.0 (build_id 16428233) (CL:N/A)"
+      ],
+      "problems": [],
+      "job": {
+        "id": 120937884653,
+        "name": "Device tests (API 36 16 KB)",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40115177921/job/120937884653",
+        "started_at": "2026-10-24T17:27:33Z",
+        "completed_at": "2026-10-24T17:44:44Z"
+      },
+      "automaticRetries": 0
+    },
+    {
+      "lane": "36-tablet",
+      "label": "API 36 tablet",
+      "artifactId": 12569266864,
+      "artifactURL": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40115177921/artifacts/12569266864",
+      "archiveBytes": 10420216,
+      "artifactSHA256": "db69b8efc66fd7158dbb678cf86de846780bde87c8801754252f44b35962b845",
+      "sourceTests": 250,
+      "actualCases": 250,
+      "counts": {
+        "passed": 250
+      },
+      "skips": [],
+      "missing": [],
+      "extra": [],
+      "duplicates": [],
+      "failures": [],
+      "runtime": {
+        "sdk": "36",
+        "abis": "x86_64, arm64-v8a",
+        "pageSize": "4096",
+        "fingerprint": "google/sdk_gphone64_x86_64/emu64xa:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys"
+      },
+      "runtimeConfiguration": "requestedJitMode=default\nro.build.fingerprint=google/sdk_gphone64_x86_64/emu64xa:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys\nro.build.version.sdk=36\nro.product.cpu.abilist=x86_64,arm64-v8a\nro.kernel.qemu=1\nro.debuggable=1\ndalvik.vm.usejit=true\ndalvik.vm.usejitprofiles=\n\nverifiedConfiguration:\nro.build.fingerprint=google/sdk_gphone64_x86_64/emu64xa:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys\nro.build.version.sdk=36\nro.product.cpu.abilist=x86_64,arm64-v8a\nro.kernel.qemu=1\nro.debuggable=1\ndalvik.vm.usejit=true\ndalvik.vm.usejitprofiles=\nconfigurationStatus=PASS\n",
+      "expectedJit": "default",
+      "minifiedLaunch": true,
+      "instrumentationStarts": [
+        [
+          "2026-10-24T17:33:19.3470411Z",
+          "250",
+          "emulator-5554 - 16"
+        ]
+      ],
+      "consoleFinishes": [
+        [
+          "2026-10-24T17:45:06.7465334Z",
+          "250",
+          "emulator-5554 - 16"
+        ]
+      ],
+      "attemptSuiteSeconds": [
+        707.399492
+      ],
+      "emulatorVersions": [
+        "37.2.12.0 (build_id 16428233) (CL:N/A)"
+      ],
+      "problems": [],
+      "job": {
+        "id": 120937884585,
+        "name": "Device tests (API 36 tablet)",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40115177921/job/120937884585",
+        "started_at": "2026-10-24T17:27:33Z",
+        "completed_at": "2026-10-24T17:50:36Z"
+      },
+      "automaticRetries": 0
+    }
+  ],
+  "scope": [
+    "This failed matrix evaluates only e2aa900b91298fe08eca8529d0345220faa9e2eb and its 250 declared identities.",
+    "An accepted scoped fixture or a later passing retry does not retroactively pass a failed or incomplete attempt.",
+    "Original artifacts and their exact hashes remain the source of runtime, pixel, archive and timing evidence.",
+    "The reference application, physical stylus/display latency and full feature/rendering equivalence were not executed or established."
+  ]
+}

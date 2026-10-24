@@ -46,7 +46,11 @@ and all seven emulator configurations, with no test retry. Later changes need th
 [Run 309](docs/CI_RUN_309_2026-10-24.md) passed its build but failed one new P3 checksum assertion
 on every emulator. Its independent Android 15 repeat also preserves a first-attempt ART crash and
 one automatic recovery. The checksum test now verifies saved bytes according to the codec's actual
-contract; the corrected 250-case candidate still needs its own completed emulator matrix.
+contract. [Run 311](docs/CI_RUN_311_2026-10-24.md) passed 1,485 JVM tests, 133 Python checks and
+six complete 250-case emulator lanes (with two allowed API 26 skips). The independent Android 15 /
+16 KB lane crashed twice in ART and ended with 213 passes, one failure and 36 missing identities.
+The main 16 KB lane required one recovery before passing. **Run 311 remains failed**; its native
+document corrections passed where reached, but the required runtime configuration is not stable.
 
 New native-document corrections preserve [one-byte mask coverage](docs/PROCREATE_MASK_IMPORT_2026-10-24.md),
 the actual [layer-group hierarchy](docs/PROCREATE_HIERARCHY_IMPORT_2026-10-24.md), and recognized
@@ -62,8 +66,25 @@ the imported effect before an explicit standard-mode choice replaces it. PSD pre
 appearance with hidden editable sources when its standard blend cannot represent the effect.
 [Native export corrections](docs/PROCREATE_NATIVE_EXPORT_2026-10-24.md) write a separate flat pixel
 index and group tree, native group visibility and supported P3 profiles. Opening a document with a
-hidden background now creates a transparent canvas. These later changes require their own completed
-exact-revision emulator gate; static native contracts do not establish reference-app execution.
+hidden background now creates a transparent canvas. The run 311 record distinguishes those executed
+checks from the incomplete runtime gate; static native contracts do not establish reference-app execution.
+
+The next [preview-performance candidate](docs/PREVIEW_PERFORMANCE_2026-10-24.md) removes redundant
+raster blending/copies and adds exact pixel/undo ownership checks plus a paired Android measurement.
+The [model-editor correction](docs/MODEL_EDITOR_2026-10-24.md) restores modal input precedence,
+keeps UV-seam segments provisional through cancellation, consumes historical/final pointer samples
+and coalesces visible previews. Later wet segments now sample earlier provisional paint consistently
+with commit. [Brush spacing export](docs/NATIVE_SPACING_EXPORT_2026-10-24.md) preserves imported
+spacing-version semantics when components or combine modes change, and follows the native setter
+for deliberate spacing edits. The combined inventory has 253 device identities, with none removed;
+its exact-revision Actions result is required. The [combined local gate](docs/evidence/preview-model-local.json)
+passed all 1,511 JVM tests, 139 Python checks, Android test compilation, formatting and static analysis
+with the existing baseline unchanged. The separate
+[native Count/control-pressure analysis](docs/NATIVE_CONTROL_PRESSURE_2026-10-24.md) documents the
+remaining input/placement contracts before those native graph consumers can be implemented safely.
+The [collector controls](docs/ANDROID15_COLLECTOR_CONTROL_2026-10-24.md) preserve both failed
+diagnostic revisions. The corrected control observed CC and rebuilt boot images, then system-server
+crashes and flag recovery before any reported application case. It established no stability repair.
 
 ### Selection, clipboard and crop corrections (23 October 2026)
 
@@ -266,11 +287,13 @@ Focus mode hides the bars without replacing the drawing surface. A visible exit 
 Back restores the workspace before the unsaved-document prompt. Guides, Animation, Canvas and Text
 have actual menu routes and explicit close controls.
 
-**Reference.** Choose an image through the Android picker, drag its floating window, pan/pinch the
-image, zoom/fit and sample colours by long press or pick mode. A centre-sample accessibility action
-is available. Decoding is limited to a 1024-pixel preview per axis. Only granted content URIs are
-accepted; references never enter layers, history or exports. Source embedding, indefinite grants,
-live canvas references and manual window resizing are not implemented.
+**Reference.** The floating window offers a Canvas overview that refreshes after artwork edits and
+an Image tab for a picker-granted image. Drag the window, pan/pinch, zoom/fit and sample colours by
+long press or pick mode; a centre-sample accessibility action is also available. Imported images
+are decoded to at most 1024 pixels per axis. The content URI is remembered per artwork and persistent
+read access is requested, but the source image remains external and can become unavailable.
+Reference controls do not add layers or artwork history, and imported reference images stay out of
+artwork exports. Source embedding and manual window resizing remain unsupported.
 
 **Layers and text.** Layers display topmost-first with working up/down ordering, visibility,
 opacity, blending, alpha lock, clipping, masks, adjustments and filters. Text uses
@@ -282,18 +305,20 @@ Canvas background state follows the document through edits and undo/redo.
 | Area | Available | Important gaps |
 | --- | --- | --- |
 | Painting | Pressure/dynamics, smoothing, taper, flow, wet mix, jitter, procedural and imported grains, tilt, dual brushes, staged Brush Studio | Curated-library and stylus-feel parity; tilt azimuth sign and curves unvalidated on hardware |
-| Tools | Brush, eraser, smudge, clone, healing, liquify, bucket, gradients, text and shapes | QuickShape recognition and ColorDrop-style interaction |
-| Selections | Automatic, freehand, rectangle, ellipse, combine/invert/feather, save and load | Gesture ergonomics; automatic-selection sampling and Remove without a selection unverified |
+| Tools | Brush, eraser, smudge, clone, healing, liquify, bucket, gradients, text and shapes; QuickShape recognition with hold-to-adjust and Edit Shape; ColorDrop with adjustable threshold and Continue Filling | Artist validation of shape recognition and handle gestures; comparative fill thresholds and anti-aliased edge quality |
+| Selections | Automatic samples the active layer with an adjustable threshold; freehand, rectangle and ellipse; Add/Remove/Intersect, invert/feather and Save & Load; Remove without an existing selection keeps it empty | Gesture ergonomics and artist validation; comparative reference-app thresholds and selection-edge quality |
 | Transform | Freeform, uniform, distort and warp with snapping, cancel and undo | Device validation of large multi-layer moves |
 | Layers | Pixel/mask/effect workflows, nested groups, clipping, alpha lock, reorder | Merge Down bakes opacity and blend mode into pixels and does not carry alpha lock or clipping |
 | Colour | Disc, Classic (HSB), Value (RGB/HSV/CMYK), palettes, harmonies, Display P3 canvases | Classic model parity unverified; print proof not validated against real press output |
-| Animation | Frames, duration/FPS, loop and ping-pong playback, tinted onion skin, timelapse, GIF/MP4/APNG export | Export ignores ping-pong and playback range; no onion colour control or frame hide; preview timing on device unmeasured |
+| Animation | Frames, duration/FPS, loop, one-shot and ping-pong; preview and animation export share playback range, frame visibility and order; background/foreground pins, separate previous/next onion colours, timelapse and GIF/MP4/APNG export | Reference hold-count semantics and artist-tested timing; long-animation playback/encoding performance and physical-device qualification; native `.procreate` animation metadata |
 | Documents | Atomic `.artflow` saves, thumbnails, autosave and recovery | Broader interruption, low-storage and long-session acceptance |
-| Export | PNG/JPEG/WebP/PDF/PSD/TIFF/GIF/APNG/MP4, layer PNG zip and frame-sequence ZIP; picker/gallery/sharing | PSD export bakes masks into pixels; broader external interoperability fixtures |
+| Export | PNG/JPEG/WebP/PDF/PSD/TIFF/GIF/APNG/MP4, layer PNG zip and frame-sequence ZIP; `.procreate` with supported sRGB/Display P3 channels, a generated Display P3 profile, layer hierarchy and the native Darken contract; picker/gallery/sharing | Opening exported files in Procreate and broader external interoperability; native group blend/mask metadata, arbitrary ICC transforms and PSB. PSD retains supported independent masks; post-mask effects use baked masks, while resized enabled masks and native Darken use a rendered appearance layer with hidden editable sources |
 
-The latest parity sweep (one worker per area) is recorded under *Parity sweep candidate* in
-[docs/PROCREATE_PARITY.md](docs/PROCREATE_PARITY.md). It was not compiled with Gradle or run on a device
-in the environment that wrote it; the Android build, JVM tests and device lanes on CI are the first gate.
+The [parity register](docs/PROCREATE_PARITY.md) tracks the current implementation and remaining work.
+Its dated sections, including *Parity sweep candidate*, retain their historical scope. The
+[emulator verification record](docs/EMULATOR_PARITY_2026-10-24.md) records executed builds and device
+results against exact revisions. Acceptance applies to the completed run's source and tested scope;
+later changes require their own gate, and emulator coverage does not establish full Procreate parity.
 
 Cloud collaboration and smart objects are separate roadmap ideas, not asserted Procreate features.
 No internet permission, analytics or crash telemetry is added.

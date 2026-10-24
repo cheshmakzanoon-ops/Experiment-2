@@ -247,7 +247,8 @@ object ProcreateBrushWriter {
 
         retain(params.size == imported.size, "maxSize", "paintSize")
         retain(params.opacity == imported.opacity, "maxOpacity", "paintOpacity")
-        retain(params.spacing == imported.spacing, "plotSpacing")
+        val spacingUnchanged = params.spacing == imported.spacing
+        retain(spacingUnchanged, "plotSpacing", "plotSpacingVersion")
         retain(params.textureScale == imported.textureScale, "textureScale")
         retain(params.count == imported.count, "shapeCount")
         retain(params.countJitter == imported.countJitter, "shapeCountJitter")
@@ -307,7 +308,16 @@ object ProcreateBrushWriter {
             keepOriginal.add("extendedBlend")
         }
 
-        return rewritten.filterKeys { key -> key !in keepOriginal }
+        // Native legacy archives infer the missing version from the presence of dualBlendMode.
+        // Materialize that original meaning before adding/changing a secondary component can
+        // change the key's presence. An explicit source version remains untouched above.
+        val implicitSpacingVersion =
+            if (spacingUnchanged && "plotSpacingVersion" !in raw) {
+                mapOf("plotSpacingVersion" to if ("dualBlendMode" in raw) 0L else 1L)
+            } else {
+                emptyMap()
+            }
+        return rewritten.filterKeys { key -> key !in keepOriginal } + implicitSpacingVersion
     }
 
     /**
@@ -392,6 +402,8 @@ object ProcreateBrushWriter {
             "maxOpacity" to p.opacity.coerceIn(MIN_OPACITY, 1f).toDouble(),
             "paintOpacity" to 1.0,
             "plotSpacing" to p.spacing.coerceIn(MIN_SPACING, 1f).toDouble(),
+            // Native setPlotSpacing: selects version one, including for a compound primary.
+            "plotSpacingVersion" to 1L,
             "plotJitter" to unit(p.scatter),
             "shapeCount" to unit((p.count - 1) / (MAX_COUNT - 1f)),
             "shapeCountJitter" to unit(p.countJitter),

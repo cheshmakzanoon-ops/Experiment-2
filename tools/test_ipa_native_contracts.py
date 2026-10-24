@@ -2,7 +2,7 @@
 import struct
 import unittest
 
-from ipa_native_contracts import NativeImage, find_method, signed, verify_scalar, verify_shape_count
+from ipa_native_contracts import NativeImage, find_method, signed, verify_scalar, verify_shape_count, verify_spacing_version
 
 BASE = 0x100000000
 
@@ -85,6 +85,83 @@ def count_fixture():
          'methods': [{'name': 'shapeCount', 'address': BASE + getter}]},
         {'name': 'ValkyrieStrokePlot', 'kind': 'instance',
          'methods': [{'name': 'plotCurve:previousPlot:initialAngle:', 'address': BASE + plot}]},
+    ]
+    return data, classes
+
+
+def spacing_fixture():
+    """Self-authored metadata/control-flow fixture; no executable is included or run."""
+    data = fixture()
+    data.extend(bytes(0x8000 - len(data)))
+    struct.pack_into('<Q', data, 64, len(data))
+    struct.pack_into('<Q', data, 80, len(data))
+
+    def word(at, value):
+        struct.pack_into('<I', data, at, value)
+
+    def adrp(at, target, register):
+        delta = ((target & ~4095) - (at & ~4095)) // 4096
+        immediate = delta & ((1 << 21) - 1)
+        word(at, 0x90000000 | ((immediate & 3) << 29) | ((immediate >> 2) << 5) | register)
+
+    def address(at, target, register):
+        adrp(at, target, register)
+        word(at + 4, 0x91000000 | ((target & 4095) << 10) | (register << 5) | register)
+
+    def text(at, value):
+        encoded = value.encode() + b'\0'
+        data[at:at + len(encoded)] = encoded
+
+    # Explicit test layout, unrelated to the source executable's virtual addresses.
+    decode, setter, getter, encode, cache, plot = 0x1000, 0x2000, 0x2020, 0x3000, 0x4000, 0x5000
+    instructions = {
+        decode: {0x75C: 0xAA1303E0, 0x764: 0x340000C0, 0x770: 0xAA1303E0,
+                 0x778: 0x14000006, 0x784: 0xAA1303E0, 0x78C: 0x52000000, 0x790: 0xF9024E80},
+        setter: {0x00: 0x52800028, 0x04: 0xF9024C08, 0x08: 0xBD01C000, 0x0C: 0xD65F03C0},
+        getter: {0x00: 0xF9424C00, 0x04: 0xD65F03C0},
+        encode: {0x76C: 0xAA1303E0, 0x774: 0xAA0003E2, 0x780: 0xF94007E0},
+        cache: {0x40: 0xAA0003F4, 0x48: 0xF100001F, 0x4C: 0x1A9F17E8, 0x50: 0x39056268},
+        plot: {0x178: 0x39456289, 0x188: 0x7100013F, 0x194: 0x1E2E1002,
+               0x198: 0xBD0033E1, 0x19C: 0x1E211C41, 0x1A0: 0x1E200821,
+               0x298: 0xBD4033FA, 0x2AC: 0x39456289, 0x2B0: 0x7100013F,
+               0x2B4: 0x1E2E1002, 0x2B8: 0x1E3A1C40},
+    }
+    for start, words in instructions.items():
+        for offset, value in words.items():
+            word(start + offset, value)
+    for cf, string_at, key in [(0x7000, 0x7200, 'plotSpacingVersion'), (0x7040, 0x7240, 'dualBlendMode')]:
+        struct.pack_into('<QQ', data, cf + 16, BASE + string_at, len(key))
+        text(string_at, key)
+    for at, cf, register in [(decode + 0x754, 0x7000, 2), (decode + 0x768, 0x7000, 2),
+                             (decode + 0x77C, 0x7040, 2), (encode + 0x778, 0x7000, 3)]:
+        address(at, cf, register)
+    selectors = ['containsValueForKey:', 'decodeIntegerForKey:', 'plotSpacingVersion', 'encodeInteger:forKey:']
+    stubs = {}
+    for index, selector in enumerate(selectors):
+        stub, pointer, string_at = 0x7400 + index * 0x20, 0x7500 + index * 8, 0x7600 + index * 0x40
+        stubs[selector] = stub
+        adrp(stub, pointer, 1)
+        word(stub + 4, 0xF9400021 | ((pointer & 4095) // 8 << 10))
+        struct.pack_into('<Q', data, pointer, BASE + string_at)
+        text(string_at, selector)
+    for at, selector in [(decode + 0x760, selectors[0]), (decode + 0x774, selectors[1]),
+                         (decode + 0x788, selectors[0]), (encode + 0x770, selectors[2]),
+                         (encode + 0x784, selectors[3]), (cache + 0x44, selectors[2])]:
+        word(at, 0x94000000 | (((stubs[selector] - at) // 4) & 0x03FFFFFF))
+    adrp(plot + 0x18C, 0x7800, 9)
+    word(plot + 0x190, 0xBD400121 | (0x800 // 4 << 10))
+    word(0x7800, 0x3FB504F3)
+    classes = [
+        {'name': 'ValkyrieBrush', 'kind': 'instance', 'methods': [
+            {'name': 'initWithCoder:', 'address': BASE + decode},
+            {'name': 'encodeWithCoder:', 'address': BASE + encode},
+            {'name': 'setPlotSpacing:', 'address': BASE + setter},
+            {'name': 'plotSpacingVersion', 'address': BASE + getter},
+        ]},
+        {'name': 'ValkyrieStrokePlot', 'kind': 'instance', 'methods': [
+            {'name': 'cacheOptions:size:', 'address': BASE + cache},
+            {'name': 'plotCurve:previousPlot:initialAngle:', 'address': BASE + plot},
+        ]},
     ]
     return data, classes
 
@@ -226,6 +303,64 @@ class InstructionContractTest(unittest.TestCase):
         data[0xBA0:0xBAB] = b'wrongCount\0'
         with self.assertRaisesRegex(ValueError, 'Shape Count getter call changed'):
             verify_shape_count(NativeImage(bytes(data)), classes)
+
+
+class SpacingVersionContractTest(unittest.TestCase):
+    def test_explicit_implicit_edit_and_cached_factor_contracts_are_linked(self):
+        data, classes = spacing_fixture()
+        result = verify_spacing_version(NativeImage(bytes(data)), classes)
+        self.assertEqual(1, result['spacing_edit_version'])
+        self.assertEqual('0x498', result['version_ivar_offset'])
+        self.assertEqual(33, result['instruction_anchors'])
+        self.assertEqual(6, result['selector_anchors'])
+        self.assertEqual(4, result['archive_key_anchors'])
+        self.assertEqual('3fb504f3', result['size_factor']['other_versions_float_bits'])
+        self.assertIn('extended-only does not select 0', result['implicit_version'])
+
+    def test_changed_presence_branch_or_inversion_cannot_pass(self):
+        for at, replacement in [(0x1764, 0x350000C0), (0x1778, 0x14000007), (0x178C, 0xD503201F)]:
+            with self.subTest(address=at):
+                data, classes = spacing_fixture()
+                struct.pack_into('<I', data, at, replacement)
+                with self.assertRaisesRegex(ValueError, 'Spacing version instruction differs'):
+                    verify_spacing_version(NativeImage(bytes(data)), classes)
+
+    def test_extended_key_is_not_accepted_as_the_implicit_legacy_selector(self):
+        data, classes = spacing_fixture()
+        key = b'dualBlendModeExtended'
+        data[0x7280:0x7280 + len(key) + 1] = key + b'\0'
+        struct.pack_into('<QQ', data, 0x7050, BASE + 0x7280, len(key))
+        with self.assertRaisesRegex(ValueError, 'Spacing version archive key differs'):
+            verify_spacing_version(NativeImage(bytes(data)), classes)
+
+    def test_setter_version_and_shared_getter_ivar_are_required(self):
+        for at, replacement in [(0x2000, 0x52800008), (0x2004, 0xF9025008), (0x2020, 0xF9425000)]:
+            with self.subTest(address=at):
+                data, classes = spacing_fixture()
+                struct.pack_into('<I', data, at, replacement)
+                with self.assertRaisesRegex(ValueError, 'Spacing version instruction differs'):
+                    verify_spacing_version(NativeImage(bytes(data)), classes)
+
+    def test_integer_archive_selector_is_required(self):
+        data, classes = spacing_fixture()
+        changed = b'encodeFloat:forKey:\0'
+        data[0x76C0:0x76C0 + len(changed)] = changed
+        with self.assertRaisesRegex(ValueError, 'Spacing version selector differs'):
+            verify_spacing_version(NativeImage(bytes(data)), classes)
+
+    def test_cached_zero_predicate_and_both_factor_paths_cannot_drift(self):
+        for at, replacement, message in [
+            (0x404C, 0x1A9F07E8, 'instruction'),
+            (0x519C, 0x1E210C41, 'instruction'),
+            (0x52B8, 0x1E3A0C40, 'instruction'),
+            (0x5190, 0xBD400101, 'factor load'),
+            (0x7800, 0x3F800000, 'sqrt-two constant'),
+        ]:
+            with self.subTest(address=at):
+                data, classes = spacing_fixture()
+                struct.pack_into('<I', data, at, replacement)
+                with self.assertRaisesRegex(ValueError, f'Spacing version {message} differs'):
+                    verify_spacing_version(NativeImage(bytes(data)), classes)
 
 
 if __name__ == '__main__':

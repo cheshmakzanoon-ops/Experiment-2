@@ -26,6 +26,12 @@ interface SurfaceSink {
     )
 
     fun end()
+
+    /** Completes the whole pointer gesture, after its last seam/gap segment has ended. */
+    fun finish() = Unit
+
+    /** Discards the whole pointer gesture, including segments already ended at UV seams. */
+    fun cancel() = Unit
 }
 
 /**
@@ -114,6 +120,7 @@ class SurfaceStroker(
         y: Float,
         pressure: Float,
     ) {
+        cancel()
         down = true
         lastX = x
         lastY = y
@@ -126,7 +133,7 @@ class SurfaceStroker(
         y: Float,
         pressure: Float,
     ) {
-        if (!down) return down(x, y, pressure)
+        if (!down) return
         val steps = ceil(hypot(x - lastX, y - lastY) / stepPx).toInt().coerceIn(1, MAX_STEPS)
         val fromX = lastX
         val fromY = lastY
@@ -138,7 +145,25 @@ class SurfaceStroker(
     }
 
     fun up() {
-        if (stroking) sink.end()
+        if (!down) return
+        try {
+            if (stroking) sink.end()
+            sink.finish()
+        } finally {
+            reset()
+        }
+    }
+
+    fun cancel() {
+        if (!down) return
+        try {
+            sink.cancel()
+        } finally {
+            reset()
+        }
+    }
+
+    private fun reset() {
         stroking = false
         down = false
         last = null

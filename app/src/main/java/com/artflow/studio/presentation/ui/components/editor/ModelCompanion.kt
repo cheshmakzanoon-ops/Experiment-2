@@ -34,6 +34,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -55,6 +56,7 @@ fun ModelCompanion(
     artwork: Bitmap?,
     painter: ModelPainter,
     onClose: () -> Unit,
+    interactive: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     var painting by rememberSaveable { mutableStateOf(false) }
@@ -69,7 +71,7 @@ fun ModelCompanion(
             shape = RoundedCornerShape(16.dp),
             tonalElevation = 6.dp,
             shadowElevation = 8.dp,
-            modifier = Modifier.align(Alignment.TopEnd).size(width = side, height = side + 48.dp),
+            modifier = Modifier.align(Alignment.TopEnd).size(width = side, height = side + 48.dp).testTag("model-window"),
         ) {
             Column {
                 Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -101,6 +103,7 @@ fun ModelCompanion(
                         factory = { context -> ModelView(context) },
                         update = { view ->
                             if (view.mesh !== mesh) view.mesh = mesh
+                            view.gesturesEnabled = interactive
                             view.painting = painting
                             view.painter = painter
                             view.lighting = lighting
@@ -110,7 +113,7 @@ fun ModelCompanion(
                                 view.setTexture(artwork)
                             }
                         },
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxSize().testTag("model-view"),
                     )
                     if (lightingOpen) {
                         LightingPanel(lighting, { lighting = it }, Modifier.align(Alignment.BottomCenter))

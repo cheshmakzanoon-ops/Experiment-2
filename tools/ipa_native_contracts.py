@@ -339,6 +339,70 @@ def verify_shape_count(image: NativeImage, classes: list[dict]) -> dict:
     }
 
 
+def verify_spacing_version(image: NativeImage, classes: list[dict]) -> dict:
+    """Pin spacing-version interchange, without claiming a complete placement model."""
+    decode = find_method(classes, 'ValkyrieBrush', 'initWithCoder:')
+    encode = find_method(classes, 'ValkyrieBrush', 'encodeWithCoder:')
+    setter = find_method(classes, 'ValkyrieBrush', 'setPlotSpacing:')
+    getter = find_method(classes, 'ValkyrieBrush', 'plotSpacingVersion')
+    cache = find_method(classes, 'ValkyrieStrokePlot', 'cacheOptions:size:')
+    plot = find_method(classes, 'ValkyrieStrokePlot', 'plotCurve:previousPlot:initialAngle:')
+    # Decoder: explicit integer wins; otherwise invert presence of the legacy dual key.
+    # Setter: version=1, then store the new spacing. Both use the getter's same ivar.
+    anchors = [
+        (decode, {0x75C: 0xAA1303E0, 0x764: 0x340000C0, 0x770: 0xAA1303E0,
+                  0x778: 0x14000006, 0x784: 0xAA1303E0, 0x78C: 0x52000000,
+                  0x790: 0xF9024E80}),
+        (setter, {0x0: 0x52800028, 0x4: 0xF9024C08, 0x8: 0xBD01C000, 0xC: 0xD65F03C0}),
+        (getter, {0x0: 0xF9424C00, 0x4: 0xD65F03C0}),
+        (encode, {0x76C: 0xAA1303E0, 0x774: 0xAA0003E2, 0x780: 0xF94007E0}),
+        (cache, {0x40: 0xAA0003F4, 0x48: 0xF100001F, 0x4C: 0x1A9F17E8, 0x50: 0x39056268}),
+        # The cached version==0 bit selects 1 rather than the binary32 sqrt(2) constant.
+        # Both the previous-size and candidate-size paths have the same decision.
+        (plot, {0x178: 0x39456289, 0x188: 0x7100013F, 0x194: 0x1E2E1002,
+                0x198: 0xBD0033E1, 0x19C: 0x1E211C41, 0x1A0: 0x1E200821,
+                0x298: 0xBD4033FA, 0x2AC: 0x39456289, 0x2B0: 0x7100013F,
+                0x2B4: 0x1E2E1002, 0x2B8: 0x1E3A1C40}),
+    ]
+    for start, words in anchors:
+        for offset, word in words.items():
+            require(image.word(start + offset) == word,
+                    f'Spacing version instruction differs at {start + offset:#x}')
+    keys = [(decode + 0x754, 2, 'plotSpacingVersion'),
+            (decode + 0x768, 2, 'plotSpacingVersion'),
+            (decode + 0x77C, 2, 'dualBlendMode'),
+            (encode + 0x778, 3, 'plotSpacingVersion')]
+    for address, register, key in keys:
+        require(image.cfstring_pair(address, register) == key, 'Spacing version archive key differs')
+    calls = [(decode + 0x760, 'containsValueForKey:'),
+             (decode + 0x774, 'decodeIntegerForKey:'),
+             (decode + 0x788, 'containsValueForKey:'),
+             (encode + 0x770, 'plotSpacingVersion'),
+             (encode + 0x784, 'encodeInteger:forKey:'),
+             (cache + 0x44, 'plotSpacingVersion')]
+    for address, selector in calls:
+        require(image.called_selector(address) == selector, 'Spacing version selector differs')
+    constant_page = image.adrp(plot + 0x18C, 9)
+    load = image.word(plot + 0x190)
+    require(load & 0xFFC003FF == 0xBD400121, 'Spacing version factor load differs')
+    constant = constant_page + ((load >> 10) & 0xFFF) * 4
+    require(image.word(constant) == 0x3FB504F3, 'Spacing version sqrt-two constant differs')
+    return {
+        'archive_key': 'plotSpacingVersion', 'decode_method': hex(decode),
+        'encode_method': hex(encode), 'spacing_setter': hex(setter), 'version_getter': hex(getter),
+        'cache_method': hex(cache), 'plot_method': hex(plot), 'version_ivar_offset': '0x498',
+        'instruction_anchors': sum(len(words) for _, words in anchors) + 2,
+        'selector_anchors': len(calls), 'archive_key_anchors': len(keys),
+        'explicit_version': 'decodeIntegerForKey: when the key is present',
+        'implicit_version': '0 if legacy dualBlendMode is present, otherwise 1; extended-only does not select 0',
+        'spacing_edit_version': 1,
+        'size_factor': {'version_zero': 1.0, 'other_versions_float_bits': '3fb504f3',
+                        'constant_address': hex(constant)},
+        'scope': 'Archive version selection, setter/encoder linkage and two cached size-factor decisions.',
+        'limitations': ['Native pressure preprocessing, placement, random sequence and rendered pixels are not evaluated.'],
+    }
+
+
 def contracts(image: NativeImage) -> dict:
     classes = image.classes()
     scalars = [verify_scalar(image, classes, row) for row in SCALARS]
@@ -370,13 +434,14 @@ def contracts(image: NativeImage) -> dict:
     require(image.word(image.base + 0xB727F8) == 0x52800024, 'PSD mask is not single-channel')
     require(image.word(image.base + 0xB727FC) == 0x52800005, 'PSD mask inversion argument changed')
     return {
-        'scope': 'Static archive-key/property correspondences, Count conversion and selected PSD/animation declarations',
+        'scope': 'Static archive-key/property correspondences, Count/spacing-version contracts and selected PSD/animation declarations',
         'architecture': 'arm64', 'encrypted': image.encrypted,
         'rebased_pointers': sum(value is not None for value in image.pointers.values()),
         'external_bind_pointers': sum(value is None for value in image.pointers.values()),
         'class_count': len(classes) // 2, 'method_count': sum(len(c['methods']) for c in classes),
         'brush_scalar_contracts': scalars, 'brush_curve_contracts': curves,
         'brush_count_contract': verify_shape_count(image, classes),
+        'brush_spacing_version_contract': verify_spacing_version(image, classes),
         'selected_native_methods': declarations,
         'psd_mask_contract': {'channel_id': -2, 'channel_count_argument': 1, 'invert_argument': False,
                              'calls': {hex(image.base + at): name for at, name in mask_calls.items()}},
@@ -420,6 +485,7 @@ def main() -> None:
                       'curve_contracts': len(report['brush_curve_contracts']),
                       'count_limit': report['brush_count_contract']['maximum_stamps'],
                       'count_rounding': 'toward_zero',
+                      'spacing_edit_version': report['brush_spacing_version_contract']['spacing_edit_version'],
                       'methods': report['method_count']}))
 
 
