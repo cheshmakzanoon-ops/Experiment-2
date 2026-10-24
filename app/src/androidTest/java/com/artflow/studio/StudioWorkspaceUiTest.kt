@@ -169,7 +169,8 @@ class StudioWorkspaceUiTest {
         compose.onNodeWithContentDescription("Erase").performClick()
         compose.onAllNodesWithText("Tool options").onFirst().assertIsDisplayed()
         compose.onNodeWithText("All tools").performScrollTo().performClick()
-        compose.onNodeWithText(ToolType.PAINT_BUCKET.displayName).performScrollTo().performClick()
+        // The strip lists every tool by icon and announces its name, so it stays one row high.
+        compose.onNodeWithContentDescription(ToolType.PAINT_BUCKET.displayName).performScrollTo().performClick()
         compose.runOnIdle { assertEquals(ToolType.PAINT_BUCKET, viewModel.input.value.tool) }
     }
 
@@ -205,8 +206,7 @@ class StudioWorkspaceUiTest {
     @Test
     fun textSettingsChoosesPositionPlacesOnceAndRestoresExactUndo() {
         openEditor()
-        val id = canvas.getActiveLayerId()
-        val before = runBlocking { requireNotNull(canvas.layerPixels(id)).pixels.copyOf() }
+        val layerCount = canvas.getAllLayers().size
         val depth = canvas.undoDepth
         compose.onNodeWithContentDescription("Actions").performClick()
         compose.onNodeWithText("Add").performClick()
@@ -218,11 +218,12 @@ class StudioWorkspaceUiTest {
         compose.waitUntil(10_000) { canvas.undoDepth == depth + 1 }
         compose.runOnIdle { assertNull(viewModel.pendingText.value) }
         compose.onNodeWithText("Place on canvas").assertDoesNotExist()
-        val after = runBlocking { requireNotNull(canvas.layerPixels(id)).pixels }
-        assertFalse(before.contentEquals(after))
+        // Text becomes its own editable layer, as in Procreate, rather than baked pixels.
+        assertEquals(layerCount + 1, canvas.getAllLayers().size)
+        assertNotNull(canvas.getAllLayers().firstOrNull { it.textContent?.text == "Title" })
         compose.onNodeWithContentDescription("Undo").performClick()
-        val undone = runBlocking { requireNotNull(canvas.layerPixels(id)).pixels }
-        assertArrayEquals(before, undone)
+        assertEquals(layerCount, canvas.getAllLayers().size)
+        assertNull(canvas.getAllLayers().firstOrNull { it.textContent?.text == "Title" })
     }
 
     @Test

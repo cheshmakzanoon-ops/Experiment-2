@@ -1,6 +1,8 @@
 package com.artflow.studio
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -62,6 +64,14 @@ class TransformUiRegressionTest {
             }
         }
         compose.onNodeWithText("Width %").performScrollTo().performTextReplacement("0")
+        // The field must actually hold the typed value before the button's state means anything.
+        compose
+            .onNodeWithText("Width %")
+            .assert(
+                SemanticsMatcher("Width field holds 0") { node ->
+                    node.config.getOrNull(SemanticsProperties.EditableText)?.text == "0"
+                },
+            )
         compose.onNodeWithText("Apply transform").performScrollTo().assertIsNotEnabled()
         compose.onNodeWithText("Cancel").performScrollTo().performClick()
         compose.runOnIdle {
