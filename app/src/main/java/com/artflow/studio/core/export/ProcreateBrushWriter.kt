@@ -12,14 +12,16 @@ import java.util.Base64
 import java.util.UUID
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import kotlin.math.roundToInt
 
 /**
  * Writes Procreate brushes, the inverse of [ProcreateBrush]: a `.brush` is a zip holding the brush's
  * settings as a keyed archive ("Brush.archive") with its shape and grain images as PNG ("Shape.png",
  * "Grain.png"), and a `.brushset` is a zip of such folders with "brushset.plist" listing them in order.
  *
- * Each setting is written on the scale [ProcreateBrush.read] maps it back from, so a brush read back has
- * the same value within float rounding wherever the value is in range. Compound brushes retain a
+ * Edited settings use the source scales consumed by [ProcreateBrush.read]. Unchanged imported fields
+ * retain their original raw values, including legacy Count values whose native interpretation differs
+ * from the stored local count; [exportedCount] exposes that conversion before sharing. Compound brushes retain a
  * second settings archive and its own images in Sub01, matching the observed source structure.
  * Original dual blend identifiers survive unchanged. New or edited local combine modes use the
  * existing approximate document blend identifiers; their equivalence to native dual math is unverified.
@@ -44,6 +46,12 @@ object ProcreateBrushWriter {
 
     /** A `.brush` file: the brush's archive and images at the top of the zip. */
     fun brush(brush: Brush): ByteArray = zipOf { out -> brushFolder(out, "", brush) }
+
+    /** Native Count after export, including any unchanged source value retained from an older import. */
+    fun exportedCount(params: BrushParams): Int {
+        val source = params.importedSourceScalars.mapValues { (_, scalar) -> sourceLiteral(scalar) }
+        return ProcreateBrush.parameters(source + sourceAwareSettings(params)).count
+    }
 
     /** A `.brushset` file: [brushes] in order, each in its own folder, listed by name in "brushset.plist". */
     fun brushset(
@@ -312,7 +320,16 @@ object ProcreateBrushWriter {
         params: BrushParams,
         source: Map<String, Any>,
     ): BrushParams {
-        val current = ProcreateBrush.parameters(source)
+        val decoded = ProcreateBrush.parameters(source)
+        // Versions zero and one rounded Count. Keep that historical interpretation only when
+        // deciding whether the artist edited a saved setting; never migrate existing stroke data.
+        val current =
+            if (params.sourceImportVersion < COUNT_TRUNCATION_IMPORT_VERSION) {
+                val normalized = (source["shapeCount"] as? Number)?.toFloat()?.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0f
+                decoded.copy(count = 1 + (normalized * (MAX_COUNT - 1)).roundToInt())
+            } else {
+                decoded
+            }
         if (!isLegacySource(params)) return current
         return current.copy(
             pressureToOpacity = current.pressureToFlow,
@@ -480,5 +497,6 @@ object ProcreateBrushWriter {
     private const val MIN_SPACING = 0.01f
     private const val MIN_ROUNDNESS = 0.05f
     private const val LEGACY_MIN_GRAIN_SCALE = 0.25f
+    private const val COUNT_TRUNCATION_IMPORT_VERSION = 2
     private const val MAX_COUNT = 16
 }

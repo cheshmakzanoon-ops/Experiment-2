@@ -86,6 +86,68 @@ class BrushImportPersistenceDeviceTest {
             assertStoredAndReloaded(fixture, imported)
         }
 
+    @Test fun nonDivisibleProcreateImagesKeepLastRowAndColumnThroughDiskReload() {
+        val sourceSide = 511
+        val source =
+            CustomGrains.Tile(
+                sourceSide,
+                ByteArray(sourceSide * sourceSide) { index ->
+                    if (index / sourceSide == sourceSide - 1 || index % sourceSide == sourceSide - 1) 255.toByte() else 0
+                },
+            )
+        val bytes =
+            ProcreateBrushWriter.brush(
+                ProcreateBrushWriter.Brush("Edge coverage", BrushParams(), shape = source, grain = source),
+            )
+        val imported = requireNotNull(BrushImports.read(context, bytes)).single()
+        val id = requireNotNull(imported.parameters.shapeId)
+        assertEquals("Both PNG images must use the same preserved coverage", id, imported.parameters.textureId)
+        val tile = requireNotNull(CustomGrains.get(id))
+        val side = CustomGrains.TILE
+        assertEquals(256, side)
+        assertEquals(side, tile.size)
+
+        // In units of 1/256 source pixel, each output footprint is 511 units wide and
+        // the white edge occupies 256 units. The corner is the union of those two strips;
+        // its black square is 255 x 255. Integer areas give an independent box-filter oracle.
+        fun coverage(
+            whiteArea: Long,
+            area: Long,
+        ): Int = ((255L * whiteArea + area / 2L) / area).toInt()
+        val cellSide = sourceSide.toLong()
+        val edge = coverage(side.toLong(), cellSide)
+        val blackCornerSide = cellSide - side
+        val corner = coverage(cellSide * cellSide - blackCornerSide * blackCornerSide, cellSide * cellSide)
+        assertEquals(128, edge)
+        assertEquals(191, corner)
+        val expected =
+            ByteArray(side * side) { index ->
+                val finalRow = index / side == side - 1
+                val finalColumn = index % side == side - 1
+                when {
+                    finalRow && finalColumn -> corner.toByte()
+                    finalRow || finalColumn -> edge.toByte()
+                    else -> 0
+                }
+            }
+        assertArrayEquals("Android PNG import must retain the final source row and column", expected, tile.values)
+        assertEquals(CustomGrains.idFor(CustomGrains.Tile(side, expected)), id)
+
+        val grains = GrainStorage.directory(context.filesDir)
+        val file = File(grains, "$id.grain")
+        assertTrue("Reduced coverage must be persisted", file.isFile)
+        assertArrayEquals("Stored 511-to-256 coverage", expected, file.readBytes())
+        CustomGrains.register(id, blackTile())
+        try {
+            val stale = requireNotNull(CustomGrains.get(id))
+            assertTrue("Reload must replace the deliberately stale cache", stale.values.all { it == 0.toByte() })
+            GrainStorage.loadAll(grains)
+            assertArrayEquals("Coverage after disk reload", expected, requireNotNull(CustomGrains.get(id)).values)
+        } finally {
+            CustomGrains.register(id, tile)
+        }
+    }
+
     @Test fun importedPressureCurvesUseNativeTablesAndSurviveArtbrushReload() {
         val constant = PressureMapping(listOf(PressureMapping.Point(0f, 0.5f), PressureMapping.Point(1f, 0.5f)))
         val descending = PressureMapping(listOf(PressureMapping.Point(0f, 1f), PressureMapping.Point(1f, 0f)))

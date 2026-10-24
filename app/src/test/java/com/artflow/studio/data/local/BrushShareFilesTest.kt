@@ -1,5 +1,6 @@
 package com.artflow.studio.data.local
 
+import com.artflow.studio.core.export.ProcreateBrush
 import com.artflow.studio.core.export.TestPng
 import com.artflow.studio.core.render.CustomGrains
 import com.artflow.studio.domain.model.brush.BrushParams
@@ -81,6 +82,76 @@ class BrushShareFilesTest {
             assertEquals(DualBrush.Mode.ADD, dual.mode)
             assertEquals(-0.4f, dual.params.pressureToFlow, 1e-6f)
         }
+    }
+
+    @Test
+    fun countConversionsIdentifyTheAffectedBrushAndComponentInSetOrder() {
+        val source =
+            listOf(
+                SavedBrush("one", "Dense ink", BrushParams(count = 20, dual = DualBrush(BrushParams(count = 32)))),
+                SavedBrush("two", "Fine grain", BrushParams(count = 16, dual = DualBrush(BrushParams(count = 12)))),
+                SavedBrush("three", "Soft wash", BrushParams(count = 1, dual = DualBrush(BrushParams(count = 17)))),
+            )
+        val expected =
+            listOf(
+                BrushShareFiles.CountConversion("Dense ink", false, 20, 16),
+                BrushShareFiles.CountConversion("Dense ink", true, 32, 16),
+                BrushShareFiles.CountConversion("Soft wash", true, 17, 16),
+            )
+        assertEquals(expected, BrushShareFiles.countConversions(source, BrushShareFormat.PROCREATE_SET))
+        assertEquals(emptyList<BrushShareFiles.CountConversion>(), BrushShareFiles.countConversions(source, BrushShareFormat.ARTFLOW))
+        assertEquals(20, source[0].parameters.count)
+        assertEquals(32, requireNotNull(source[0].parameters.dual).params.count)
+    }
+
+    @Test
+    fun disclosedHighCountsMatchTheActualSingleAndSetArchives() {
+        val source = SavedBrush("dense", "Dense ink", BrushParams(count = 20, dual = DualBrush(BrushParams(count = 32))))
+        val expected =
+            listOf(
+                BrushShareFiles.CountConversion("Dense ink", false, 20, 16),
+                BrushShareFiles.CountConversion("Dense ink", true, 32, 16),
+            )
+        for (format in listOf(BrushShareFormat.PROCREATE_BRUSH, BrushShareFormat.PROCREATE_SET)) {
+            assertEquals(expected, BrushShareFiles.countConversions(listOf(source), format))
+            val file = BrushShareFiles.encode("Dense ink", listOf(source), format)
+            val restored = BrushArchives.read(file.bytes, TestPng::decode).single()
+            assertEquals(16, requireNotNull(restored.settings).parameters.count)
+            assertEquals(16, requireNotNull(requireNotNull(restored.secondary).settings).parameters.count)
+        }
+    }
+
+    @Test
+    fun retainedLegacySourceCountsReportTheirRealNativeConversion() {
+        for (version in listOf(0, 1)) {
+            val legacy =
+                ProcreateBrush
+                    .parameters(mapOf("shapeCount" to 0.5))
+                    .copy(sourceImportVersion = version, count = 9)
+            val source = SavedBrush("legacy", "Saved ink", legacy)
+            assertEquals(
+                listOf(BrushShareFiles.CountConversion("Saved ink", false, 9, 8)),
+                BrushShareFiles.countConversions(listOf(source), BrushShareFormat.PROCREATE_BRUSH),
+            )
+            val file = BrushShareFiles.encode("Saved ink", listOf(source), BrushShareFormat.PROCREATE_BRUSH)
+            assertEquals(8, requireNotNull(BrushArchives.read(file.bytes, TestPng::decode).single().settings).parameters.count)
+            assertEquals(9, source.parameters.count)
+            assertEquals(legacy.importedSourceScalars, source.parameters.importedSourceScalars)
+        }
+    }
+
+    @Test
+    fun artflowSharingRetainsHighPrimaryAndSecondaryCountsExactly() {
+        val source = listOf(SavedBrush("dense", "Dense ink", BrushParams(count = 20, dual = DualBrush(BrushParams(count = 32)))))
+        assertEquals(emptyList<BrushShareFiles.CountConversion>(), BrushShareFiles.countConversions(source, BrushShareFormat.ARTFLOW))
+        val file = BrushShareFiles.encode("Dense ink", source, BrushShareFormat.ARTFLOW)
+        assertEquals(source, BrushFiles.decode(file.bytes.decodeToString()).first)
+    }
+
+    @Test
+    fun representableCountsDoNotProduceConversionNotices() {
+        val source = listOf(1, 8, 16).map { count -> SavedBrush("count-$count", "Count $count", BrushParams(count = count)) }
+        assertEquals(emptyList<BrushShareFiles.CountConversion>(), BrushShareFiles.countConversions(source, BrushShareFormat.PROCREATE_SET))
     }
 
     @Test

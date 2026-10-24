@@ -219,12 +219,13 @@ fun StudioBrushLibrary(
             }
             if (shareFailed) Text(stringResource(R.string.brush_share_set_failed), color = MaterialTheme.colorScheme.error)
             if (choosingShareFormat) {
+                val brushes = matches.map { SavedBrush(it.id, it.name, it.parameters) }
                 BrushShareDialog(
                     isSet = true,
+                    brushes = brushes,
                     onDismiss = { choosingShareFormat = false },
                     onShare = { format ->
                         choosingShareFormat = false
-                        val brushes = matches.map { SavedBrush(it.id, it.name, it.parameters) }
                         scope.launch { shareFailed = !shareBrushes(context, category, brushes, format) }
                     },
                 )

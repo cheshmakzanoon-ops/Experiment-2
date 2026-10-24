@@ -49,7 +49,7 @@ data class CanvasActions(
     /** True when the canvas uses the Display P3 profile instead of sRGB. */
     val wideColor: Boolean = false,
     val onWideColor: (Boolean) -> Unit = {},
-    /** On-screen print proof; a view setting that never changes the artwork. */
+    /** Approximate process-ink preview; a view setting that never changes the artwork. */
     val proof: CmykProof.Mode = CmykProof.Mode.OFF,
     val onProof: (CmykProof.Mode) -> Unit = {},
     /** On-screen greyscale or colour-vision check; never changes the artwork. */
@@ -219,11 +219,17 @@ private fun CanvasTab(
     ActionRow("Flip canvas horizontally", onClick = { canvas.onFlip(false) })
     ActionRow("Flip canvas vertically", onClick = { canvas.onFlip(true) })
     PrefSwitch("Display P3 colour profile", canvas.wideColor, canvas.onWideColor)
-    PrefSwitch("CMYK print proof", canvas.proof != CmykProof.Mode.OFF) { on ->
+    PrefSwitch("Simulate CMYK inks", canvas.proof != CmykProof.Mode.OFF) { on ->
         canvas.onProof(if (on) CmykProof.Mode.PROOF else CmykProof.Mode.OFF)
     }
     if (canvas.proof != CmykProof.Mode.OFF) {
-        PrefSwitch("Grey out colours that won't print", canvas.proof == CmykProof.Mode.GAMUT_WARNING) { on ->
+        Text(
+            "Approximate preview; no printer colour profile is applied.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 8.dp),
+        )
+        PrefSwitch("Grey out simulated colour shifts", canvas.proof == CmykProof.Mode.GAMUT_WARNING) { on ->
             canvas.onProof(if (on) CmykProof.Mode.GAMUT_WARNING else CmykProof.Mode.PROOF)
         }
     }

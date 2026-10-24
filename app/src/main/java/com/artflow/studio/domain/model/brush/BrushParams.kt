@@ -406,8 +406,8 @@ data class BrushParams(
 const val MIN_BRUSH_SIZE = 1f
 const val MAX_BRUSH_SIZE = 512f
 
-/** Native getter/serialization contracts that distinguish pressure flow, opacity and wet controls. */
-const val NATIVE_BRUSH_IMPORT_VERSION = 1
+/** Version one corrected channel aliases; version two also matches native Count truncation. */
+const val NATIVE_BRUSH_IMPORT_VERSION = 2
 
 /** The faintest opacity a brush slider offers. */
 const val MIN_BRUSH_OPACITY = 0.01f

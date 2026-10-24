@@ -67,14 +67,16 @@ internal fun BrushFileButtons(
     TextButton(onClick = { choosingFormat = true }, enabled = enabled) { Text(stringResource(R.string.brush_share_confirm)) }
     TextButton(onClick = { runCatching { picker.launch("*/*") } }, enabled = enabled) { Text("Import") }
     if (choosingFormat) {
+        val name = StudioBrushes.presets.firstOrNull { it.parameters == parameters }?.name ?: "Custom brush"
+        val brushes = listOf(SavedBrush("shared", name, parameters))
         BrushShareDialog(
             isSet = false,
+            brushes = brushes,
             onDismiss = { choosingFormat = false },
             onShare = { format ->
                 choosingFormat = false
                 scope.launch {
-                    val name = StudioBrushes.presets.firstOrNull { it.parameters == parameters }?.name ?: "Custom brush"
-                    if (!shareBrushes(context, name, listOf(SavedBrush("shared", name, parameters)), format)) {
+                    if (!shareBrushes(context, name, brushes, format)) {
                         onFailure(context.getString(R.string.brushfilebuttons_could_not_share))
                     }
                 }

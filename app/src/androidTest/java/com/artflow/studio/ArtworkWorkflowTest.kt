@@ -7,6 +7,8 @@ import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.OnBackPressedDispatcher
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -15,11 +17,13 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artflow.studio.data.local.ProjectStorage
+import com.artflow.studio.domain.model.settings.ThemeMode
 import com.artflow.studio.domain.repository.ProjectRepository
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import com.artflow.studio.domain.repository.settings.SettingsRepository
 import com.artflow.studio.presentation.ui.MainActivity
 import com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView
+import com.artflow.studio.presentation.ui.theme.studioColorScheme
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
 import kotlinx.coroutines.Dispatchers
@@ -31,6 +35,9 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import javax.inject.Inject
+import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
 
 /** Real navigation, ViewModels, input, Room and document storage in the unmodified app shell. */
 @HiltAndroidTest
@@ -59,7 +66,7 @@ class ArtworkWorkflowTest {
     fun createPaintSaveReopenRecreateAndDiscardPreserveTheSavedPixels() {
         val originalSettings = runBlocking { settings.settings.first() }
         runBlocking {
-            settings.update { it.copy(seenOnboarding = true, stylusOnly = false, autosaveEnabled = false) }
+            settings.update { it.copy(themeMode = ThemeMode.LIGHT, seenOnboarding = true, stylusOnly = false, autosaveEnabled = false) }
         }
         val name = "Workflow-${System.nanoTime()}"
         val scenario = ActivityScenario.launch(MainActivity::class.java)
@@ -74,7 +81,7 @@ class ArtworkWorkflowTest {
             val painted = pixels()
             assertFalse("Input through the editor must change real artwork", blank.contentEquals(painted))
             inspectReachablePanels(scenario, painted)
-            inspectLayerOrdering(painted)
+            inspectLayerOrdering(blank, painted)
             inspectTextPlacement(scenario, painted)
             inspectBrushStudio(painted)
             inspectFocusMode(scenario, painted)
@@ -178,7 +185,10 @@ class ArtworkWorkflowTest {
         assertEquals(depth, runBlocking(Dispatchers.Main) { canvas.undoDepth })
     }
 
-    private fun inspectLayerOrdering(expectedPixels: IntArray) {
+    private fun inspectLayerOrdering(
+        blankPixels: IntArray,
+        expectedPixels: IntArray,
+    ) {
         val before = runBlocking(Dispatchers.Main) { canvas.getAllLayers().map { it.id } }
         val depth = runBlocking(Dispatchers.Main) { canvas.undoDepth }
         compose.onNodeWithContentDescription("Layers").performClick()
@@ -191,6 +201,7 @@ class ArtworkWorkflowTest {
         compose.onNodeWithContentDescription("Move active layer up").performClick()
         compose.waitUntil(15_000) { runBlocking(Dispatchers.Main) { canvas.getAllLayers().last().id == added } }
         compose.onNodeWithContentDescription("Move active layer up").assertIsNotEnabled()
+        awaitLayerThumbnail(blankPixels, expectedPixels)
         TestEvidence.screenshot("studio-layers.png")
         compose.onNodeWithContentDescription("Close Layers").performClick()
         repeat(3) { compose.onNodeWithContentDescription("Undo").performClick() }
@@ -198,6 +209,70 @@ class ArtworkWorkflowTest {
         assertEquals(before, runBlocking(Dispatchers.Main) { canvas.getAllLayers().map { it.id } })
         assertArrayEquals(expectedPixels, pixels())
     }
+
+    private fun awaitLayerThumbnail(
+        blankPixels: IntArray,
+        expectedPixels: IntArray,
+    ) {
+        // compositeBuffer includes canvas paper. Compare against the original blank so neither
+        // that paper nor the current default brush color is mistaken for the painted mark.
+        val changedColors = mutableMapOf<Int, Int>()
+        expectedPixels.forEachIndexed { index, color ->
+            if (color != blankPixels[index]) changedColors[color] = (changedColors[color] ?: 0) + 1
+        }
+        val stroke = requireNotNull(changedColors.maxByOrNull { it.value }) { "The fixture must contain a painted mark" }.key
+        val preferences = runBlocking { settings.settings.first() }
+        val paper = studioColorScheme(preferences.accent, false, preferences.highContrast).surface.toArgb()
+        val row = compose.onNode(hasText("Background") and hasClickAction())
+        val label = compose.onNodeWithText("Background", useUnmergedTree = true)
+        var geometry = "No captured Background row"
+        var observed = emptyMap<Int, Int>()
+        try {
+            compose.waitUntil(15_000) {
+                val rowBounds = row.assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+                val labelBounds = label.assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+                val pixels = row.captureToImage().toPixelMap()
+                // LayerRow has 6dp inner padding, a 44dp preview and an 8dp gap before its label.
+                // Infer scale from the live semantic bounds; sample only inside that preview,
+                // excluding its border, surrounding row, text and all trailing action icons.
+                val unit = (labelBounds.left - rowBounds.left) / (6f + 44f + 8f)
+                val scaleX = pixels.width / rowBounds.width
+                val scaleY = pixels.height / rowBounds.height
+                val top = (rowBounds.height - 44f * unit) / 2f
+                val left = ceil(8f * unit * scaleX).toInt().coerceIn(0, pixels.width)
+                val right = floor(48f * unit * scaleX).toInt().coerceIn(0, pixels.width)
+                val firstRow = ceil((top + 2f * unit) * scaleY).toInt().coerceIn(0, pixels.height)
+                val lastRow = floor((top + 42f * unit) * scaleY).toInt().coerceIn(0, pixels.height)
+                val counts = mutableMapOf<Int, Int>()
+                for (y in firstRow until lastRow) {
+                    for (x in left until right) {
+                        val color = pixels[x, y].toArgb()
+                        counts[color] = (counts[color] ?: 0) + 1
+                    }
+                }
+                observed = counts
+                val inkPixels = counts.filterKeys { closeColor(it, stroke) }.values.sum()
+                val paperPixels = counts.filterKeys { closeColor(it, paper) }.values.sum()
+                geometry =
+                    "row=$rowBounds, label=$labelBounds, image=${pixels.width}x${pixels.height}, " +
+                    "preview=[$left,$firstRow..$right,$lastRow], strokePixels=$inkPixels, paperPixels=$paperPixels"
+                inkPixels >= 4 && paperPixels >= 12
+            }
+        } catch (timeout: ComposeTimeoutException) {
+            TestEvidence.screenshot("studio-layers-thumbnail-timeout.png")
+            val common = observed.entries.sortedByDescending { it.value }.take(6)
+            throw AssertionError(
+                "Background thumbnail needs rendered stroke ${stroke.toUInt().toString(16)} on paper " +
+                    "${paper.toUInt().toString(16)}; $geometry, colors=$common",
+                timeout,
+            )
+        }
+    }
+
+    private fun closeColor(
+        actual: Int,
+        expected: Int,
+    ): Boolean = (0..3).all { channel -> abs((actual ushr (channel * 8) and 255) - (expected ushr (channel * 8) and 255)) <= 2 }
 
     private fun inspectTextPlacement(
         scenario: ActivityScenario<MainActivity>,

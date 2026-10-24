@@ -8,6 +8,9 @@ builds cannot read new v3 documents. PSD preserves group modes. Unsupported nati
 group metadata uses a rendered appearance layer with hidden editable sources.
 Brush interchange also preserves tilt-opacity settings and authored mask coverage, while Count
 Jitter reaches its documented range. Theme evidence waits for actual repainted dialog pixels.
+New imports follow [native stamp-count truncation](docs/NATIVE_BRUSH_COUNT.md); saved brushes keep
+their existing count. Sharing a Procreate brush or set lists any count conversion for both primary
+and secondary components, while ArtFlow sharing retains the current counts exactly.
 The guide reminder reflects active, visible guides and stays readable over the canvas. Workspace
 evidence waits for rendered artwork, and large-text tool coverage includes the real editor route.
 The tool strip exposes all 20 tools, including functional tap/drag Zoom navigation.

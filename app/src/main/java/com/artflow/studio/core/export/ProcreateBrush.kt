@@ -98,7 +98,8 @@ object ProcreateBrush {
                 opacity = ((number("maxOpacity") ?: 1f) * (number("paintOpacity") ?: 1f)).coerceIn(MIN_OPACITY, 1f),
                 spacing = (number("plotSpacing") ?: DEFAULT_SPACING).coerceIn(MIN_SPACING, 1f),
                 scatter = unit("plotJitter"),
-                count = 1 + (unit("shapeCount") * (MAX_COUNT - 1)).roundToInt(),
+                // Native StrokeOptions truncates 15 * shapeCount before the plot adds one.
+                count = 1 + (unit("shapeCount") * (MAX_COUNT - 1)).toInt(),
                 countJitter = unit("shapeCountJitter"),
                 rotation = normalizedAngle(number("shapeAngle") ?: 0f),
                 taperStart = unit("pencilTaperStartLength"),

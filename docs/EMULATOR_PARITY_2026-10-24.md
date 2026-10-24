@@ -17,11 +17,21 @@ from GitHub Actions. It does not establish complete Procreate feature or renderi
 - **Count Jitter:** the documented Count 10 / 50% setting can now reach every count from 5 to 10.
   The previous exclusive upper bound on the reduction made the minimum 6. The 0% and 100%
   contracts are preserved. See the [reference handbook](https://help.procreate.com/procreate/handbook/5.4/brushes/brush-studio-settings).
+- **Native stamp count:** new imports use the [inspected truncation contract](NATIVE_BRUSH_COUNT.md)
+  for the base count, so `shapeCount=0.5` means eight stamps rather than nine. Source import version 2
+  identifies the corrected interpretation. Previously saved versions 0 and 1 keep their existing
+  count and their historical comparison baseline for unchanged source fields. The brush Share
+  dialog lists any primary or secondary count that will change in a Procreate file, including
+  local counts above the native limit of 16 and preserved legacy values. ArtFlow files keep the
+  current counts exactly; selecting a different export format does not change the brush.
 - **Imported pressure curves:** new imports opt into the [inspected natural spline and 1,024-sample lookup](NATIVE_PRESSURE_SPLINE.md), including its scaling, endpoint and rounding rules. Existing stored curves keep their explicit legacy linear behavior, and the omitted default preserves historical signed-document checksums. The numerical fixtures are derived from static native instructions, not captured reference-app output.
 - **Brush interchange:** export retains independent tilt opacity, including explicit zero and
   edits to imported settings. PNG shape/grain and Photoshop ABR mask imports preserve authored
   coverage instead of stretching contrast; white tips remain visible and subtle grains retain
-  their intensity. Photo-derived grain creation still has its separate normalization behavior.
+  their intensity. Non-divisible image reductions now account for each source pixel's fractional
+  area instead of omitting rows and columns, including the final edges. No-resize, integer-factor
+  reductions and upsampling retain their existing mapping; previously saved tiles are not rewritten.
+  Photo-derived grain creation still has its separate normalization behavior.
   Gallery/external-open and Brush Studio imports share the same path, preserving secondary
   components and remapping both components' image identities when importing `.artbrush` files.
   [Native compound-mode precedence](REA_DUAL_MODE_PRECEDENCE_2026-10-24.md) establishes that the
@@ -41,6 +51,10 @@ from GitHub Actions. It does not establish complete Procreate feature or renderi
   around the starting point, using the existing viewport limits. Navigation does not paint or
   add undo entries. This completes an ArtFlow tool interaction; it is not a claim that Procreate
   uses the same gesture for a dedicated Zoom tool.
+- **Colour preview disclosure:** the Actions control now says "Simulate CMYK inks" and explains
+  that no printer colour profile is applied. Its optional grey overlay identifies simulated colour
+  shifts rather than claiming to identify colours that cannot print. The fixed-ink algorithm is
+  unchanged; profile-managed CMYK remains an implementation gap.
 
 ## Group compositing and file compatibility
 
@@ -69,6 +83,7 @@ the Procreate application.
 | --- | --- |
 | Stroke sampling | Short resampled stroke, visible endpoint, live preview, commit, undo/redo, save and reopen |
 | Brush import | Production import route, Android image decoding, compound settings, authored mask coverage, real image files and storage reload |
+| Brush sharing | Actual draft and saved-set entry points, named primary/secondary count conversions, format changes, live draft updates and exact ArtFlow preservation |
 | Imported pressure | Real `.brushset` import, constant/descending/curved native lookup values on Android, and exact `.artbrush` persistence |
 | Automatic selection | Real MotionEvents, covered active layer, transparent areas, empty layers, obsolete pending work |
 | Groups and interchange | PSD import, distinct scopes, real save/reopen, PSD export, enabled/disabled masks and bounded `.procreate` appearance fallback |
@@ -96,13 +111,19 @@ alone allowed an empty canvas in the earlier dark screenshot. The standalone leg
 fixture now uses the themed Surface supplied by the real activity. Its component coverage is
 separate from the added large-text test that selects every tool through the actual editor's
 All tools strip. The guide reminder is tested through active, hidden and focus-mode transitions.
+The real artwork workflow waits for the painted layer thumbnail before collecting layer-panel
+evidence; repository ordering alone can settle before the existing thumbnail debounce and rendering.
+The guide label's contrast check requires opaque background spans above and below the rendered glyphs and
+measures the actual foreground/background contrast at a minimum of 4.5:1. A central text crop's
+background-area ratio is not an opacity or readability measure. Guide screenshots also wait for
+the white document and contrasting dark GL work area to be visible, including after focus changes.
 
 The JVM gate also fetches the existing user-selected reference archive and verifies its pinned size
 and SHA-256 before running the 394-brush / 534-settings-component corpus check. Gradle tracks the
 configured reference inputs so a previously skipped corpus result cannot substitute for execution.
 This corpus tests import and serialization contracts, not reference-renderer pixels. Reference
 archive bytes and assets are not included in the application or uploaded as CI artifacts.
-The same pinned input also gates the recovered archive/property mappings, native spline anchors
+The same pinned input also gates the recovered archive/property mappings and stamp-count conversion, native spline anchors
 and every committed spline fixture, plus the compound source-mode and shader dataflow contracts.
 These checks inspect reference bytes as data; they do not execute the reference application.
 CI uses Python 3.11, Capstone 5.0.6 and llvmlite 0.44.0 and retains only small derived JSON reports
@@ -121,6 +142,41 @@ for the exact published commit, then inspect each lane's generated verification 
 A queued, skipped, cancelled or failed run is not a completed gate. An artifact from an earlier
 commit does not validate later source changes.
 
+[Run 305](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40067128914), on
+`36c84c223fa8d992e4ddf522574ee694250c30b9`, exposed the earlier guide-test sampling error on API 35
+and both API 36 phone configurations: each reported all 236 cases, with that assertion as the sole failure. The captured
+foreground/background were `#181818` / `#F8F8F8`, approximately 16.7:1 contrast; the test had rejected
+the crop's pixel-area ratio before calculating it. The follow-up changes the spatial evidence check
+and retains the contrast requirement, guide interactions and failure artifacts. API 26 passed all
+234 applicable cases plus the two permitted API skips and completed the minified launch. These
+results explain the correction; they are not acceptance evidence for later Count or test changes.
+
+The completed run retained all six lane outcomes:
+
+| Run 305 configuration | Reported / declared cases | Passed | Failed | Allowed skips | Minified launch |
+| --- | ---: | ---: | ---: | ---: | --- |
+| API 26 / 4 KB | 236 / 236 | 234 | 0 | 2 | Passed |
+| API 35 / 16 KB | 236 / 236 | 235 | 1 | 0 | Not reached |
+| API 36 / 4 KB phone | 236 / 236 | 235 | 1 | 0 | Not reached |
+| API 35 / 16 KB independent repeat | 53 / 236 | 52 | 1 | 0 | Not reached |
+| API 36 / 16 KB phone | 236 / 236 | 235 | 1 | 0 | Not reached |
+| API 36 / 4 KB tablet | 236 / 236 | 236 | 0 | 0 | Passed |
+
+No lane was retried. API and process page size were measured in all five complete suites;
+the truncated repeat did not reach its runtime-measurement test. The tablet passed the full
+guide-state, touch-through and focus workflow as well as the complete-coverage gate.
+
+The independent API 35 / 16 KB repeat in that run stopped after 53 reported cases: 52 passed,
+one failed and 183 were missing. Its main-thread exception came from Android's
+`MessageQueue.removeSyncBarrier` during `ViewRootImpl.doTraversal`. The instrumentation thread was
+still inside `ActivityScenario.launch` for the empty canvas-test activity, before the saved-reload
+test reached repository operations or canvas construction. The prior activity had reached
+`DESTROYED`; these facts narrow the failure phase but do not establish its root cause. The coverage
+gate rejected the incomplete run and no retry exception was added for it. A subsequent successful
+run does not erase this unresolved startup failure or establish normal-runtime Android 15 stability.
+The [bounded startup diagnosis](ANDROID15_STARTUP_FAILURE_2026-10-24.md) records the source, artifact,
+timeline and limits of that finding.
+
 For context, baseline [run 301](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40056947818)
 executed 215 tests on API 26: 213 passed and two API-limited cases skipped, followed by a successful
 minified launch. Its measured CPU preview p95 was 10.3 ms for a 12 px pen, 8.8 ms for an 80 px
@@ -132,7 +188,9 @@ comparisons.
 
 The [comparison register](PROCREATE_PARITY.md) remains open for the native wet-paint and compound-brush
 coverage pipeline, 24 retained-only pressure graphs, continuous grain sampling, broader native document
-metadata, high-depth/colour-management validation and large-canvas performance. Matching the
+metadata and large-canvas performance. The pixel store is 8-bit ARGB; native CMYK documents and
+profile-managed print proof are not implemented. The 3D editor paints a base-colour atlas and uses
+global metallic/roughness controls; separate paintable material channels remain missing. Matching the
 reference application's rendering requires paired, versioned reference outputs for identical
 inputs. Current self-consistency and external-format tests cannot establish that equivalence.
 

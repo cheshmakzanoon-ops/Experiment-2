@@ -4,16 +4,15 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * Print soft-proofing: shows how colours change when printed with four process inks on white
- * paper. A colour is split into cyan, magenta, yellow and black coverage, then rebuilt from the
- * colours real inks actually have. With perfect inks the result would equal the input; real inks
- * dull saturated blues, greens and purples and lift the deepest blacks, which is what the proof
- * shows. The display shader in OpenGLCanvasRenderer does the same sums per pixel.
+ * Approximate preview using four fixed process-ink colours on white paper. A colour is split
+ * into cyan, magenta, yellow and black coverage, then rebuilt from those constants. No printer
+ * ICC profile, rendering intent or measured output gamut is used, so this is not a colour-managed
+ * print proof. The display shader in OpenGLCanvasRenderer does the same sums per pixel.
  */
 object CmykProof {
     enum class Mode { OFF, PROOF, GAMUT_WARNING }
 
-    // Encoded sRGB colours of printed process inks on white paper.
+    // Fixed encoded sRGB ink approximations, not measurements from an output profile.
     private val CYAN = floatArrayOf(0f, 0.682f, 0.937f)
     private val MAGENTA = floatArrayOf(0.925f, 0f, 0.549f)
     private val YELLOW = floatArrayOf(1f, 0.949f, 0f)
@@ -36,7 +35,7 @@ object CmykProof {
         return floatArrayOf((white - r) / white, (white - g) / white, (white - b) / white, k)
     }
 
-    /** The printed appearance of an encoded sRGB colour, as encoded sRGB (r, g, b). */
+    /** The fixed-ink simulated appearance of an encoded sRGB colour, as encoded sRGB (r, g, b). */
     fun proof(
         r: Float,
         g: Float,
@@ -48,7 +47,7 @@ object CmykProof {
         }
     }
 
-    /** True when printing would visibly change the colour. */
+    /** True when the fixed-ink simulation moves a non-grey colour beyond the chosen tolerance. */
     fun outOfGamut(
         r: Float,
         g: Float,

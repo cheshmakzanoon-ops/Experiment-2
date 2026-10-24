@@ -86,19 +86,55 @@ object CustomGrains {
         size: Int = TILE,
         normalizeContrast: Boolean = true,
     ): Tile {
+        require(size > 0) { "A grain tile must have positive size" }
         val side = min(image.width, image.height)
         val left = (image.width - side) / 2
         val top = (image.height - side) / 2
+        val areaSampler = if (side > size && side % size != 0) AreaSampler(image, left, top, side, size) else null
         val levels = FloatArray(size * size)
         for (ty in 0 until size) {
             for (tx in 0 until size) {
-                levels[ty * size + tx] = averageBrightness(image, left + tx * side / size, top + ty * side / size, max(1, side / size))
+                levels[ty * size + tx] =
+                    areaSampler?.sample(tx, ty)
+                        ?: averageBrightness(image, left + tx * side / size, top + ty * side / size, max(1, side / size))
             }
         }
         val low = if (normalizeContrast) levels.minOrNull() ?: 0f else 0f
         val range = if (normalizeContrast) ((levels.maxOrNull() ?: 1f) - low).takeIf { it > 1e-3f } ?: 1f else 1f
         val values = ByteArray(levels.size) { (((levels[it] - low) / range) * 255f + 0.5f).toInt().coerceIn(0, 255).toByte() }
         return Tile(size, values)
+    }
+
+    /** Fractional box boundaries use integer overlap weights, so no source edge is dropped. */
+    private class AreaSampler(
+        private val image: PixelBuffer,
+        private val left: Int,
+        private val top: Int,
+        private val side: Int,
+        private val size: Int,
+    ) {
+        fun sample(
+            tx: Int,
+            ty: Int,
+        ): Float {
+            // Coordinates are in units of 1 / size of a source pixel. Every destination box has
+            // area side² in these units, including boxes crossing a source-pixel boundary.
+            val x0 = tx.toLong() * side
+            val x1 = (tx + 1L) * side
+            val y0 = ty.toLong() * side
+            val y1 = (ty + 1L) * side
+            var total = 0.0
+            for (y in (y0 / size).toInt()..((y1 - 1) / size).toInt()) {
+                val weightY = min(y1, (y + 1L) * size) - max(y0, y.toLong() * size)
+                for (x in (x0 / size).toInt()..((x1 - 1) / size).toInt()) {
+                    val weightX = min(x1, (x + 1L) * size) - max(x0, x.toLong() * size)
+                    val pixel = image.pixels[(top + y) * image.width + left + x]
+                    val brightness = Channels.luminance(pixel) * Channels.alpha(pixel) / 255f
+                    total += brightness.toDouble() * weightX * weightY
+                }
+            }
+            return (total / (side.toDouble() * side)).toFloat()
+        }
     }
 
     private fun averageBrightness(

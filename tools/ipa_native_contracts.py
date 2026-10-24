@@ -254,6 +254,7 @@ SCALARS = [
     ('dynamicsWetAccumulation', 'dynamicsWetPull', 0xA40938, 0xA40944, 0xA40950),
     ('dynamicsBlur', 'dynamicsBlur', 0xA408BC, 0xA408C8, 0xA408CC),
     ('dynamicsBlurJitter', 'dynamicsBlurJitter', 0xA408D0, 0xA408DC, 0xA408E0),
+    ('shapeCount', 'shapeCount', 0xA3F9FC, 0xA3FA08, 0xA3FA0C),
     ('shapeCountJitter', 'shapeCountJitter', 0xA3FA24, 0xA3FA30, 0xA3FA34),
 ]
 
@@ -296,6 +297,48 @@ def verify_curve(image: NativeImage, *, index: int, key: str, bridge: int,
             'bridge': hex(image.base + bridge), 'switch_arm': hex(target)}
 
 
+def verify_shape_count(image: NativeImage, classes: list[dict]) -> dict:
+    """Pin Count conversion and the final bounded stamp loop, not jitter distributions."""
+    getter = find_method(classes, 'ValkyrieStrokeOptions', 'shapeCount')
+    plot = find_method(classes, 'ValkyrieStrokePlot', 'plotCurve:previousPlot:initialAngle:')
+    # Complete arithmetic in the getter: read brush, multiply binary32 by 15,
+    # truncate to an unsigned integer. Its caller later adds the mandatory first stamp.
+    getter_words = {
+        0x00: 0xA9BF7BFD, 0x04: 0x910003FD, 0x08: 0xF9402800,
+        0x10: 0x1E25D001, 0x14: 0x1E210800, 0x18: 0x9E390000,
+        0x1C: 0xA8C17BFD, 0x20: 0xD65F03C0,
+    }
+    # Selected caller anchors establish the integer return type, upper/lower cap,
+    # truncation, +1 and bounded loop. Source hashing pins the surrounding modifier paths.
+    plot_words = {
+        0x898: 0xF9417E80, 0x8A0: 0x9E230000,
+        0x8C0: 0xF9417E80, 0x8E0: 0x1E25D000,
+        0x8E4: 0x1E202020, 0x8E8: 0x54000285,
+        0x8EC: 0xF9417E80, 0x90C: 0x1E2703E0,
+        0x910: 0x1E202028, 0x914: 0x5400012D,
+        0x918: 0xF9417E80, 0x938: 0x1E390009,
+        0x944: 0x5280001B, 0x94C: 0x1100053A,
+        0x9CC: 0x91000508, 0x9D0: 0xF9018A88,
+        0x9D4: 0x1100077B, 0x9D8: 0x6B1B035F, 0x9DC: 0x54FFFBA1,
+    }
+    for start, words in ((getter, getter_words), (plot, plot_words)):
+        for offset, instruction in words.items():
+            require(image.word(start + offset) == instruction,
+                    f'Shape Count instruction differs at {start + offset:#x}')
+    calls = [getter + 0x0C, *(plot + offset for offset in (0x89C, 0x8C4, 0x8F0, 0x91C))]
+    for call in calls:
+        require(image.called_selector(call) == 'shapeCount', 'Shape Count getter call changed')
+    return {
+        'archive_key': 'shapeCount', 'options_getter': hex(getter), 'plot_method': hex(plot),
+        'instruction_anchors': len(getter_words) + len(plot_words), 'selector_anchors': len(calls),
+        'normalized_scale': 15.0, 'arithmetic': 'binary32 multiplication then unsigned truncation toward zero',
+        'minimum_stamps': 1, 'maximum_stamps': 16,
+        'neutral_count_formula': '1 + trunc_to_uint(float32(float32(shapeCount) * 15.0))',
+        'scope': 'Finite normalized controls with neutral count modifiers; plot capacity can reduce output.',
+        'limitations': ['Count jitter distribution, pressure/tilt/roll modifiers and rendered pixels are not evaluated.'],
+    }
+
+
 def contracts(image: NativeImage) -> dict:
     classes = image.classes()
     scalars = [verify_scalar(image, classes, row) for row in SCALARS]
@@ -327,18 +370,19 @@ def contracts(image: NativeImage) -> dict:
     require(image.word(image.base + 0xB727F8) == 0x52800024, 'PSD mask is not single-channel')
     require(image.word(image.base + 0xB727FC) == 0x52800005, 'PSD mask inversion argument changed')
     return {
-        'scope': 'Static native archive-key/property correspondences and selected PSD/animation declarations',
+        'scope': 'Static archive-key/property correspondences, Count conversion and selected PSD/animation declarations',
         'architecture': 'arm64', 'encrypted': image.encrypted,
         'rebased_pointers': sum(value is not None for value in image.pointers.values()),
         'external_bind_pointers': sum(value is None for value in image.pointers.values()),
         'class_count': len(classes) // 2, 'method_count': sum(len(c['methods']) for c in classes),
         'brush_scalar_contracts': scalars, 'brush_curve_contracts': curves,
+        'brush_count_contract': verify_shape_count(image, classes),
         'selected_native_methods': declarations,
         'psd_mask_contract': {'channel_id': -2, 'channel_count_argument': 1, 'invert_argument': False,
                              'calls': {hex(image.base + at): name for at, name in mask_calls.items()}},
         'limitations': [
             'No target code was executed. Declared methods are not runtime observations.',
-            'Native renderer equations, GPU shaders, brush feel and pixel parity remain unverified.',
+            'Complete brush rendering, GPU shading, brush feel and pixel parity are outside this inspector.',
             'Curve bridge/key correspondence does not establish the original curve interpolation algorithm.',
             'PSD independent-mask semantics are verified narrowly; complete PSD interoperability is not established.',
             'Only the pinned ARM64 build and supported metadata encodings are accepted.',
@@ -374,6 +418,8 @@ def main() -> None:
     print(json.dumps({'source_sha256': report['source_sha256'],
                       'scalar_contracts': len(report['brush_scalar_contracts']),
                       'curve_contracts': len(report['brush_curve_contracts']),
+                      'count_limit': report['brush_count_contract']['maximum_stamps'],
+                      'count_rounding': 'toward_zero',
                       'methods': report['method_count']}))
 
 

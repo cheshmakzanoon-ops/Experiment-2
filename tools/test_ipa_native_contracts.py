@@ -2,7 +2,7 @@
 import struct
 import unittest
 
-from ipa_native_contracts import NativeImage, find_method, signed, verify_scalar
+from ipa_native_contracts import NativeImage, find_method, signed, verify_scalar, verify_shape_count
 
 BASE = 0x100000000
 
@@ -51,6 +51,42 @@ def fixture(*, small=True, direct=False, fixups=False):
         struct.pack_into('<IHHQIHH', data, 0x102C, 24, 4096, 6, 0, 0, 1, 0x300)
         struct.pack_into('<Q', data, 0x300, 0x400)
     return data
+
+
+def count_fixture():
+    """Synthetic getter and stamp-loop anchors, using a normal local selector stub."""
+    data = fixture()
+    getter, plot = 0x800, 0x1000
+    # STP; frame setup; LDR brush; FMOV 15; FMUL; FCVTZU; restore; RET.
+    words = {
+        0x00: 0xA9BF7BFD, 0x04: 0x910003FD, 0x08: 0xF9402800,
+        0x10: 0x1E25D001, 0x14: 0x1E210800, 0x18: 0x9E390000,
+        0x1C: 0xA8C17BFD, 0x20: 0xD65F03C0,
+    }
+    for offset, word in words.items():
+        struct.pack_into('<I', data, getter + offset, word)
+    # Independently specified cap/conversion/iteration instructions; these never execute.
+    words = {
+        0x898: 0xF9417E80, 0x8A0: 0x9E230000,
+        0x8C0: 0xF9417E80, 0x8E0: 0x1E25D000, 0x8E4: 0x1E202020, 0x8E8: 0x54000285,
+        0x8EC: 0xF9417E80, 0x90C: 0x1E2703E0, 0x910: 0x1E202028, 0x914: 0x5400012D,
+        0x918: 0xF9417E80, 0x938: 0x1E390009, 0x944: 0x5280001B, 0x94C: 0x1100053A,
+        0x9CC: 0x91000508, 0x9D0: 0xF9018A88, 0x9D4: 0x1100077B,
+        0x9D8: 0x6B1B035F, 0x9DC: 0x54FFFBA1,
+    }
+    for offset, word in words.items():
+        struct.pack_into('<I', data, plot + offset, word)
+    calls = [getter + 0x0C, *(plot + offset for offset in (0x89C, 0x8C4, 0x8F0, 0x91C))]
+    for call in calls:
+        struct.pack_into('<I', data, call, 0x94000000 | (((0xB00 - call) // 4) & 0x03FFFFFF))
+    data[0xBA0:0xBAB] = b'shapeCount\0'
+    classes = [
+        {'name': 'ValkyrieStrokeOptions', 'kind': 'instance',
+         'methods': [{'name': 'shapeCount', 'address': BASE + getter}]},
+        {'name': 'ValkyrieStrokePlot', 'kind': 'instance',
+         'methods': [{'name': 'plotCurve:previousPlot:initialAngle:', 'address': BASE + plot}]},
+    ]
+    return data, classes
 
 
 class NativeMetadataTest(unittest.TestCase):
@@ -159,6 +195,37 @@ class InstructionContractTest(unittest.TestCase):
         self.assertEqual(-1, signed((1 << 21) - 1, 21))
         self.assertEqual(-8, signed((1 << 26) - 8, 26))
         self.assertEqual(17, signed(17, 21))
+
+    def test_shape_count_contract_accepts_the_bounded_native_structure(self):
+        data, classes = count_fixture()
+        result = verify_shape_count(NativeImage(bytes(data)), classes)
+        self.assertEqual(15.0, result['normalized_scale'])
+        self.assertEqual(1, result['minimum_stamps'])
+        self.assertEqual(16, result['maximum_stamps'])
+        self.assertEqual(27, result['instruction_anchors'])
+        self.assertEqual(5, result['selector_anchors'])
+        self.assertIn('unsigned truncation toward zero', result['arithmetic'])
+
+    def test_shape_count_arithmetic_and_loop_changes_are_rejected(self):
+        changes = {
+            'wrong scale': (0x810, 0x1E27F001),  # FMOV S1,#31
+            'round-to-nearest': (0x818, 0x9E210000),  # FCVTNU X0,S0
+            'wrong cap': (0x18E0, 0x1E27F000),  # FMOV S0,#31
+            'wrong mandatory stamp': (0x194C, 0x1100093A),  # ADD W26,W9,#2
+            'missing loop bound': (0x19DC, 0xD503201F),  # NOP
+        }
+        for label, (offset, instruction) in changes.items():
+            with self.subTest(change=label):
+                data, classes = count_fixture()
+                struct.pack_into('<I', data, offset, instruction)
+                with self.assertRaisesRegex(ValueError, 'Shape Count instruction differs'):
+                    verify_shape_count(NativeImage(bytes(data)), classes)
+
+    def test_shape_count_requires_the_named_getter_calls(self):
+        data, classes = count_fixture()
+        data[0xBA0:0xBAB] = b'wrongCount\0'
+        with self.assertRaisesRegex(ValueError, 'Shape Count getter call changed'):
+            verify_shape_count(NativeImage(bytes(data)), classes)
 
 
 if __name__ == '__main__':

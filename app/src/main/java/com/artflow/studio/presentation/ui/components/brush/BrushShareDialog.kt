@@ -7,8 +7,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
@@ -25,12 +27,15 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.artflow.studio.R
+import com.artflow.studio.data.local.BrushShareFiles
 import com.artflow.studio.data.local.BrushShareFormat
+import com.artflow.studio.domain.model.brush.SavedBrush
 
 /** ArtFlow remains selected by default; the artist chooses a Procreate file explicitly. */
 @Composable
 internal fun BrushShareDialog(
     isSet: Boolean,
+    brushes: List<SavedBrush>,
     onDismiss: () -> Unit,
     onShare: (BrushShareFormat) -> Unit,
 ) {
@@ -40,7 +45,10 @@ internal fun BrushShareDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(if (isSet) R.string.brush_share_set_title else R.string.brush_share_title)) },
         text = {
-            Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                Modifier.selectableGroup().verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 listOf(BrushShareFormat.ARTFLOW, procreate).forEach { choice ->
                     val label =
                         when (choice) {
@@ -71,6 +79,28 @@ internal fun BrushShareDialog(
                     ),
                     style = MaterialTheme.typography.bodySmall,
                 )
+                if (format != BrushShareFormat.ARTFLOW) {
+                    val conversions = remember(brushes, format) { BrushShareFiles.countConversions(brushes, format) }
+                    if (conversions.isNotEmpty()) {
+                        Text(stringResource(R.string.brush_share_count_changes), style = MaterialTheme.typography.titleSmall)
+                        conversions.forEach { change ->
+                            Text(
+                                stringResource(
+                                    if (change.secondary) {
+                                        R.string.brush_share_secondary_count_change
+                                    } else {
+                                        R.string.brush_share_count_change
+                                    },
+                                    change.brushName,
+                                    change.original,
+                                    change.exported,
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        Text(stringResource(R.string.brush_share_count_keep_artflow), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
             }
         },
         confirmButton = { TextButton(onClick = { onShare(format) }) { Text(stringResource(R.string.brush_share_confirm)) } },

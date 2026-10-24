@@ -2,6 +2,7 @@ package com.artflow.studio.data.local
 
 import com.artflow.studio.core.export.ProcreateBrushWriter
 import com.artflow.studio.core.render.CustomGrains
+import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.SavedBrush
 
 /** The file the artist explicitly selects in the brush or set Share dialog. */
@@ -22,6 +23,39 @@ object BrushShareFiles {
         val fileName: String,
         val bytes: ByteArray,
     )
+
+    /** A concrete count change in the chosen native archive, including a retained legacy source value. */
+    data class CountConversion(
+        val brushName: String,
+        val secondary: Boolean,
+        val original: Int,
+        val exported: Int,
+    )
+
+    /** Uses the writer's resolved archive settings so the Share dialog describes the actual conversion. */
+    fun countConversions(
+        brushes: List<SavedBrush>,
+        format: BrushShareFormat,
+    ): List<CountConversion> {
+        if (format == BrushShareFormat.ARTFLOW) return emptyList()
+        return brushes.flatMap { brush ->
+            listOfNotNull(
+                countConversion(brush.name, false, brush.parameters),
+                brush.parameters.dual
+                    ?.params
+                    ?.let { countConversion(brush.name, true, it) },
+            )
+        }
+    }
+
+    private fun countConversion(
+        name: String,
+        secondary: Boolean,
+        params: BrushParams,
+    ): CountConversion? {
+        val exported = ProcreateBrushWriter.exportedCount(params)
+        return if (exported == params.count) null else CountConversion(name, secondary, params.count, exported)
+    }
 
     fun encode(
         name: String,

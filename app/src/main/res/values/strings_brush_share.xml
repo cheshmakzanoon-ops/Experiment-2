@@ -7,6 +7,10 @@
     <string name="brush_share_procreate_set">Procreate (.brushset)</string>
     <string name="brush_share_artflow_description">Keeps all ArtFlow brush settings and available source images.</string>
     <string name="brush_share_procreate_description">Procreate format with supported settings and available source images.</string>
+    <string name="brush_share_count_changes">Count changes in Procreate format</string>
+    <string name="brush_share_count_change">%1$s: Count %2$d becomes %3$d.</string>
+    <string name="brush_share_secondary_count_change">Secondary brush in %1$s: Count %2$d becomes %3$d.</string>
+    <string name="brush_share_count_keep_artflow">Choose ArtFlow (.artbrush) to keep the current counts.</string>
     <string name="brush_share_confirm">Share</string>
     <string name="brush_share_cancel">Cancel</string>
     <string name="brush_share_set">Share the set</string>
