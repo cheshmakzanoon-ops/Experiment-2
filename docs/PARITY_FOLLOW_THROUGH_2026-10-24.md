@@ -140,9 +140,36 @@ The debug APK and release AAB also passed the repository's package/native-alignm
 
 The Android inventory contains **264 identities per lane**, retaining all 256 original identities
 and adding eight executable device cases. The required seven-lane Actions run must account for
-1,848 outcomes, allowing only the two existing API 26 compatibility skips. The published revision's
-device results are pending at this commit. Compiled instrumentation alone is not evidence that its
-tests executed; the final run and original artifacts remain the acceptance source.
+1,848 outcomes, allowing only the two existing API 26 compatibility skips. Compiled instrumentation
+alone is not evidence that its tests executed; the final run and original artifacts remain the
+acceptance source.
+
+### Run 316: concurrency-test scheduling failure
+
+[Run 316](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40139301647) tested
+`086ebd82eca5e1d042407a0cf86c4b1ab4a0e43c`. Its JVM gate ran all 1,563 tests: 1,561 passed and
+two clipboard concurrency tests failed. Both failed at their initial assertion that Cut was still
+pending, before the concurrent mutation or the stale-target safety assertion. The eight-pixel
+background preparation could finish before `withContext` suspended; queuing the Main dispatcher
+alone did not establish the intended interleaving. The entire emulator matrix was skipped.
+
+The original report ZIP, artifact `12578830106`, has SHA-256
+`c850cba36ff4d6c5f2121b05bb834367f4508a7fd2a9a067a66f94c94d152ac3` and confirms two failures,
+zero errors and zero skips across 259 suites. The exact Actions source ZIP, artifact `12578034492`,
+has SHA-256 `304119b8f939c01248f213f718f9733452fb5a9cad1dee76547616118d9091e9`; its revision
+and full 264-case inventory were independently verified. Run 316 supplies no device-execution or
+minified-launch evidence.
+
+The follow-up injects the clipboard preparation dispatcher through an internal constructor, while
+the public injected constructor continues to use `Dispatchers.Default`. The two tests queue the
+worker itself, change the source or selection, and then explicitly release preparation. The test
+identities and all stale-target, source-pixel, history and previous-clipboard assertions remain.
+No production validation predicate, workflow gate or skip rule was changed.
+
+The follow-up's complete 1,563-test JVM suite passed locally with `-XX:ActiveProcessorCount=2`,
+with zero failures, errors or skips. Hilt/application compilation, Android-test Kotlin compilation,
+`ktlintCheck` and `detekt` also passed. The corrected source still requires its own published-revision
+Actions result.
 
 ## Remaining requirements for a parity claim
 

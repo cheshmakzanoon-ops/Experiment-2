@@ -7,6 +7,7 @@ import com.artflow.studio.core.three.MaterialChannel
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.repository.canvas.CanvasRepositoryImpl
 import com.artflow.studio.presentation.ui.viewmodel.ClipboardController
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -14,6 +15,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -38,7 +40,12 @@ class ClipboardTransactionTest {
     @Before
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
-        repository = CanvasRepositoryImpl(ProjectStorage(mock(Context::class.java)))
+        installRepository()
+    }
+
+    private fun installRepository(clipboardDispatcher: CoroutineDispatcher = Dispatchers.Default) {
+        if (::repository.isInitialized) repository.dispose()
+        repository = CanvasRepositoryImpl(ProjectStorage(mock(Context::class.java)), clipboardDispatcher)
         clipboard = ClipboardController(repository) { queued.addLast(it) }
     }
 
@@ -284,12 +291,12 @@ class ClipboardTransactionTest {
     @Test
     fun basicCutCannotEraseNewPixelsOrPublishOldPixelsAfterItsWorkerSnapshotBecomesStale() =
         runTest {
+            installRepository(StandardTestDispatcher(testScheduler))
             val source = fixture()
             assertEquals(null, execute { copy() })
             repository.setLayerPixels(source, PixelBuffer.filled(4, 2, blue), "First source")
-            // UNDISPATCHED enters the real snapshot immediately. StandardTestDispatcher queues
-            // the worker's return, so the second edit necessarily lands before Cut can commit.
-            Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+            // The real snapshot runs immediately; its worker is queued on our scheduler and cannot
+            // prepare or commit until runCurrent below explicitly releases it after the newer edit.
             val cut = async(Dispatchers.Main.immediate, start = CoroutineStart.UNDISPATCHED) { execute { copy(cut = true) } }
             assertFalse(cut.isCompleted)
             val green = 0xFF00FF00.toInt()
@@ -301,6 +308,7 @@ class ClipboardTransactionTest {
             assertTrue(edit.await())
             val mark = repository.historyMark
             val depth = repository.undoDepth
+            runCurrent()
             assertEquals("The artwork changed; try the command again", cut.await()?.message)
             assertEquals(mark, repository.historyMark)
             assertEquals(depth, repository.undoDepth)
@@ -312,14 +320,15 @@ class ClipboardTransactionTest {
     @Test
     fun basicCutRejectsASelectionChangedWhilePixelsWereBeingPrepared() =
         runTest {
+            installRepository(StandardTestDispatcher(testScheduler))
             val source = fixture()
             assertEquals(null, execute { copy() })
             repository.setLayerPixels(source, PixelBuffer.filled(4, 2, blue), "New source")
-            Dispatchers.setMain(StandardTestDispatcher(testScheduler))
             val cut = async(Dispatchers.Main.immediate, start = CoroutineStart.UNDISPATCHED) { execute { copy(cut = true) } }
             assertFalse(cut.isCompleted)
             repository.setSelection(SelectionMask(4, 2))
             val mark = repository.historyMark
+            runCurrent()
             assertEquals("The selection changed; copy it again", cut.await()?.message)
             assertEquals(mark, repository.historyMark)
             assertArrayEquals(IntArray(8) { blue }, pixels(source))

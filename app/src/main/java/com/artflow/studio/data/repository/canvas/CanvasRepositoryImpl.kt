@@ -45,6 +45,7 @@ import com.artflow.studio.domain.repository.canvas.CanvasInvalidationEvent
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import com.artflow.studio.domain.repository.canvas.CanvasSize
 import com.artflow.studio.domain.repository.canvas.CanvasState
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -89,10 +90,13 @@ import kotlin.math.roundToInt
  */
 @Singleton
 class CanvasRepositoryImpl
-    @Inject
-    constructor(
+    internal constructor(
         private val storage: ProjectStorage,
+        private val clipboardDispatcher: CoroutineDispatcher,
     ) : CanvasRepository {
+        @Inject
+        constructor(storage: ProjectStorage) : this(storage, Dispatchers.Default)
+
         private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         private val saveMutex = Mutex()
 
@@ -1016,7 +1020,7 @@ class CanvasRepositoryImpl
                 val width = canvasWidth
                 val height = canvasHeight
                 val prepared =
-                    withContext(Dispatchers.Default) {
+                    withContext(clipboardDispatcher) {
                         PixelBuffer(width, height).apply { drawInto(pixels, 0, 0) }
                     }
                 coroutineContext.ensureActive()
@@ -1045,7 +1049,7 @@ class CanvasRepositoryImpl
                 val frozen = layer.snapshotCopy()
                 val selection = selected?.copy()
                 val prepared =
-                    withContext(Dispatchers.Default) {
+                    withContext(clipboardDispatcher) {
                         val source = checkNotNull(rawLayerPixels(frozen, width, height)) { "This layer has no pixels to copy" }
                         val copied = SelectionClipboard.extract(source, selection)
                         val remainder = if (cut) source.copy().also { SelectionClipboard.erase(it, selection) } else null

@@ -39,6 +39,11 @@ on `9b868dc` passed its build checks but both Android 15 / 16 KB lanes crashed i
 incomplete test coverage. The retained runtime failures remain unresolved; neither a feature
 implementation nor a later successful lane establishes an Android runtime repair.
 
+[Run 316](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40139301647) on `086ebd8`
+stopped at two new clipboard concurrency-test preconditions, before the emulator matrix. Its
+follow-up controls worker scheduling explicitly and preserves the full safety assertions; see the
+[verification record](docs/PARITY_FOLLOW_THROUGH_2026-10-24.md) for the original failure evidence.
+
 ## Editor workflows
 
 The workspace has a canvas toolbar, size/opacity sidebar, left/right-handed layouts, hide-interface
