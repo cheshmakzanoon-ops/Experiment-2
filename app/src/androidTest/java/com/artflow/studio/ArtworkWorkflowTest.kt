@@ -383,7 +383,7 @@ class ArtworkWorkflowTest {
             assertSame("Focus must not recreate the GL canvas", originalView, focusedView)
             assertTrue(requireNotNull(focusedView).height > originalHeight)
         }
-        captureWorkspace("studio-focus.png")
+        captureWorkspace("artwork-workflow-focus.png")
         assertArrayEquals(expectedPixels, pixels())
         scenario.onActivity {
             lastTapped = "system Back; callbacks ${backCallbacks(it)}"

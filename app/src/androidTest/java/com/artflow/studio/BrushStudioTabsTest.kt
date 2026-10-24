@@ -70,6 +70,12 @@ class BrushStudioTabsTest {
                 compose.runOnIdle { assertEquals(index, selected) }
             }
         }
-        TestEvidence.screenshot(if (direction == LayoutDirection.Rtl) "studio-tabs-rtl.png" else "studio-tabs-scaled.png")
+        val screenshot =
+            when {
+                direction == LayoutDirection.Rtl -> "studio-tabs-rtl.png"
+                density != 1f -> "studio-tabs-fractional-density.png"
+                else -> "studio-tabs-scaled.png"
+            }
+        TestEvidence.screenshot(screenshot)
     }
 }
