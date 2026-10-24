@@ -16,31 +16,36 @@ The added standard Android 15 / 4 KB lane uses its default runtime; both origina
 lanes remain required. Their unresolved crashes and the unchanged-source comparison are recorded
 in the [runtime diagnosis](ANDROID15_RUNTIME_COMPARISON_2026-10-24.md).
 
-[Run 313](CI_RUN_313_2026-10-24.md), revision `8d8d0e6`, passed the build with 1,518 JVM
-cases and 150 Python checks. All seven device jobs failed, with no minified launch. Five lanes
-passed their prior coverage (including the two allowed API 26 skips), then rejected the new wet
-method's inferred `JSONObject` return type before its body could run. Main Android 15 / 16 KB
-reported six cases with typed setup exceptions and a later ART crash; its independent repeat
-reported 118 cases before a Compose disposal exception during automatic activity teardown.
-Those failures remain unresolved. The earlier [309](CI_RUN_309_2026-10-24.md),
-[311](CI_RUN_311_2026-10-24.md), and [312](CI_RUN_312_2026-10-24.md) failures remain preserved.
+[Run 314](CI_RUN_314_2026-10-24.md), exact revision `47612ae`, passes 1,522 JVM
+tests / 253 suites, 150 Python checks and its build/package gates. All seven final device
+attempts account for all 255 identities: 1,783 passes plus the two existing API 26 skips,
+with no missing or unexpected cases and seven successful minified launches. Scoped visual
+review covers all 203 recorded UI positions and all seven raw Model layers.
 
-The new [wet-preview correction](WET_PREVIEW_HISTORY_2026-10-24.md) preserves full pickup history
-when a wet brush cannot use its live buffer, including symmetry, sealed segments and historical
-vector layers. The [Model viewport clip](MODEL_HEADER_VISIBILITY_2026-10-24.md) adds real screen
-pixel/contrast acceptance for its header. Original run 313 Android 8 captures confirm restored
-controls in all five header-bearing states. The [retry association correction](ANDROID15_RETRY_ATTRIBUTION_2026-10-24.md)
-requires a supported fatal signature from the interrupted case/process, retaining the existing
-one-recovery limit. Its original misclassification is recorded; no past result is rewritten.
-The next source explicitly declares the wet test's `Unit` return without changing its body or
-assertions. An [opaque-layer compositing branch](OPAQUE_SOURCE_OVER_2026-10-24.md) preserves every
-tested prior Float result while removing redundant operations. Four JVM regressions and one
-Android raw-pixel/paired-timing case retain all previous identities. The
-[local gate](evidence/opaque-source-over-local.json) passes 1,522 JVM tests / 253 suites, Android
-compilation, ktlint and detekt; the later Android-only declaration correction also passes scoped
-compilation/static checks and compiled `void` inspection. The inventory is now 255 per lane.
-No fresh local Python execution is claimed for this candidate. A complete exact-source Actions
-result must execute the wet body and new scalar case; local timing is not device/display latency.
+The main Android 15 / 16 KB lane requires one automatic recovery. Its first attempt has one
+pass, one empty ART-crash failure and 253 missing identities; original case/process logs and
+the changed boot ID are retained. The final attempt passes all 255 cases. The independent
+16 KB repeat and the other five lanes pass without recovery. This is a complete final-matrix
+pass with preserved instability, not an established runtime repair. Earlier
+[309](CI_RUN_309_2026-10-24.md), [311](CI_RUN_311_2026-10-24.md),
+[312](CI_RUN_312_2026-10-24.md), and [313](CI_RUN_313_2026-10-24.md) failures remain recorded.
+
+All seven lanes now execute the [wet-preview history test](WET_PREVIEW_HISTORY_2026-10-24.md)
+and retain its exact pixels, cancellation, undo/redo, signed save and fresh reopen. The
+[Model viewport clip](MODEL_HEADER_VISIBILITY_2026-10-24.md) has visible title/control evidence,
+including the formerly defective API 26 states. The narrowed
+[retry attribution](ANDROID15_RETRY_ATTRIBUTION_2026-10-24.md) distinguishes the failing app's
+case from unrelated background events. The [opaque compositing branch](OPAQUE_SOURCE_OVER_2026-10-24.md)
+matches both old raw pixel oracles across the matrix. Its measured opaque scalar medians
+improve modestly; mixed-case timings vary and establish no whole-preview/display speedup.
+
+The next [native curve preservation correction](NATIVE_PRESSURE_CURVE_PRESERVATION_2026-10-24.md)
+retains six omitted graphs and permits the complete 35 auxiliary entries alongside four
+primary mappings. It changes no rendering or stored interpolation contract. The
+[local gate](evidence/native-pressure-curves-local.json) passes 1,528 JVM tests / 254 suites,
+156 Python checks, Android compilation, ktlint, detekt and the complete pinned schema gate.
+One new actual-storage/interchange case retains all prior identities, making 256 per lane;
+its six original artifacts require a fresh exact-source Actions result.
 
 Native `.procreate` group blend/mask metadata remains incomplete: affected exports preserve the
 rendered appearance with editable sources hidden below it. Passing Android tests alone does not
@@ -76,9 +81,10 @@ coalesces growing paint and rejects a cancelled gesture's late result. Full-fram
 later wet segments sample preceding provisional pixels consistently with sequential commit.
 [Native spacing export](NATIVE_SPACING_EXPORT_2026-10-24.md) preserves the original archive version
 when spacing is unchanged and selects version one for deliberate spacing edits, with each component
-handled independently. Those additions were exercised in run 312 wherever reached. Run 313
-verifies the Model header repair within its captured scope, but its wet test body never ran.
-The corrected declaration and new compositing branch require their own 255-case-per-lane result.
+handled independently. Run 314 exercises the full 255-case final matrix, including the
+Model header, wet body and new scalar compositing case. Its one preserved automatic recovery
+and earlier runs' failures remain part of the record. The subsequent native-curve lifecycle
+requires its own 256-case-per-lane result.
 
 The [same-image collector controls](ANDROID15_COLLECTOR_CONTROL_2026-10-24.md) remain failed.
 Although the corrected setup observed CC, compatible boot images and disabled JIT, system-server
@@ -168,7 +174,7 @@ describes external-file fidelity, without assuming a particular Procreate high-b
 | Gestures | Taps for undo/redo, pinch navigation, Copy & Paste swipe, clear scrub [1] | Two/three/four-finger taps, two/three-finger hold for rapid undo/redo, pinch/rotate/pan, quick pinch to fit, three-finger swipe for Copy & Paste, three-finger scrub to clear, touch-and-hold eyedropper, QuickMenu ring from holding the modify button (touch and hold a slot to choose its action), stylus hover outline and side-button eyedropper; scrub, swipe and four-finger tap can be switched off in Prefs | Artist validation on phones and tablets; palm rejection is off by default and needs device testing |
 | Actions | Add, Canvas, Share, Video, Prefs and Help [1] | Tabbed Actions panel with those six tabs (Add includes take a photo, insert a private photo that stays out of the time-lapse, Cut & Paste and Duplicate), including Pressure and Smoothing preferences (pressure curve, stabilization, motion filtering with expression, and pressure smoothing) | Artist review of handbook wording |
 | Brush library | Search, organisation and management [13] | 200 original presets in 18 categories, matching the size of a full professional library (adding touch-ups, retro, luminance, industrial, organic, water and abstract sets); searchable saved copies with rename and deletion; Favourites and your own brush sets; `.artbrush`, `.brush` and `.brushset` sharing, including compound component settings and images; `.artbrush` import carries imported images; Procreate `.brush` and `.brushset` files import as new brushes in the set's order, with their names, shape and grain images (inverted where the brush says so) and their settings read from the brush archive: spacing, jitter, scatter, count, roundness, size and opacity limits, pressure, speed, tilt and colour dynamics, tapers, wet mix, flow, blend mode and grain scale and movement. Photoshop `.abr` brush files (versions 1, 2 and 6 and later) import their sampled tips as brush shapes, named from the presets that use them | A professionally curated, artist-tested collection; native rendering and texture equivalence for imported brushes |
-| Brush Studio | Staged settings, drawing pad, custom shapes/grains and dual brushes [2] | Draft/apply/cancel, exact values, pressure curves, procedural and imported grains with depth, imported shape tips, flat tips, per-brush blend mode, wet edges, burnt edges and wet mix, secondary colour pressure and jitter, stylus tilt to size/opacity and tip angle, dual brushes (Multiply, Subtract, Add), stroke fall off and taper opacity, Smudge that carries the brush's tip and grain | Native wet-paint and compound-mode equations; 24 retained-only pressure graphs; continuous grain and texture sampling; artist-tested tuning and physical tilt/pressure validation |
+| Brush Studio | Staged settings, drawing pad, custom shapes/grains and dual brushes [2] | Draft/apply/cancel, exact values, pressure curves, procedural and imported grains with depth, imported shape tips, flat tips, per-brush blend mode, wet edges, burnt edges and wet mix, secondary colour pressure and jitter, stylus tilt to size/opacity and tip angle, dual brushes (Multiply, Subtract, Add), stroke fall off and taper opacity, Smudge that carries the brush's tip and grain; [all 39 native archive curve channels](NATIVE_PRESSURE_CURVE_PRESERVATION_2026-10-24.md) preserved as four dedicated and 35 auxiliary mappings | Native wet-paint and compound-mode equations; 30 auxiliary pressure graphs retained without live consumers; continuous grain and texture sampling; artist-tested tuning and physical tilt/pressure validation |
 | Adjustments | Live adjustments in Layer and Pencil modes [14] | Hue/Saturation/Brightness, Colour Balance, Curves, Gradient Map, Gaussian, Motion and Perspective Blur, Noise, Sharpen, Bloom, Glitch, Halftone, Chromatic Aberration and Recolor, each with Layer or Pencil mode; Liquify with Push, Twirl Right and Left, Pinch, Bloat, Crystals and Edge, size/distortion sliders and Reset | Device validation of large-canvas responsiveness |
 | Transform | Freeform, Uniform, Distort and Warp with snapping [3] | On-canvas box with corner, edge and rotation handles; Freeform, Uniform, Distort and Warp (4 × 4 Bézier mesh); Magnetics (45° moves, 15° rotation, proportional corners) and Snapping to canvas edges and centre with guides; flip, rotate, fit, reset and interpolation choice | Device validation of large multi-layer moves; Move with a selection lifts only the selected pixels |
 | Layer organisation | Thumbnails, options, swipe actions, groups [4] | Thumbnails, tap-the-selected-layer options, swipe left for Lock/Duplicate/Delete, swipe right to multi-select then Group, Merge, Delete or Transform together, touch-and-hold drag reordering, two-finger swipe for Alpha Lock, two-finger tap then slide for opacity, two-finger hold to select contents, Background colour row with a visibility checkbox, all 26 standard blend modes in five families (darken, lighten, contrast, inversion, component; Linear Burn, Darker Color, Add, Lighter Color, Vivid, Linear and Pin Light, Hard Mix, Subtract and Divide included and kept through PSD), blend-mode codes, groups that nest (group groups; drag a layer or a whole group into or out of a group), whose blend mode and opacity apply to the merged group, editable text layers | Artist validation of deep group stacks; Merge Down bakes opacity and blend mode into pixels and does not carry alpha lock or clipping |

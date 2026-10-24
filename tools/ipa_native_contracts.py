@@ -297,6 +297,73 @@ def verify_curve(image: NativeImage, *, index: int, key: str, bridge: int,
             'bridge': hex(image.base + bridge), 'switch_arm': hex(target)}
 
 
+CURVE_CHANNEL_KEYS = (
+    'dynamicsPressurePlotJitterCurve', 'dynamicsPressureStampCountCurve', 'dynamicsPressureStampCountJitterCurve',
+    'dynamicsPressureOpacityCurve', 'dynamicsPressureOpacityJitterCurve', 'dynamicsPressureSizeCurve',
+    'dynamicsPressureSizeJitterCurve', 'dynamicsPressureShapeRoundnessCurve', 'dynamicsPressureBleedCurve',
+    'dynamicsPressureCharge', 'dynamicsPressureTransferModulationCurve', 'dynamicsPressureShapeScatterCurve',
+    'dynamicsPressureGrainMovementCurve', 'dynamicsPressureGrainScaleCurve', 'dynamicsPressureGrainZoomCurve',
+    'dynamicsPressureGrainDepthCurve', 'dynamicsPressureGrainDepthJitterCurve', 'dynamicsPressureDilutionCurve',
+    'dynamicsPressureAttackCurve', 'dynamicsPressureWetPullCurve', 'dynamicsPressureSmudgePullCurve',
+    'dynamicsPressureGradeCurve', 'dynamicsPressureBlurCurve', 'dynamicsPressureBlurJitterCurve',
+    'dynamicsPressureWetnessCurve', 'dynamicsPressureHueCurve', 'dynamicsPressureSaturationCurve',
+    'dynamicsPressureBrightnessCurve', 'dynamicsPressureSecondaryColorCurve', 'dynamicsPressureHueJitterCurve',
+    'dynamicsPressureSaturationJitterCurve', 'dynamicsPressureLightnessJitterCurve', 'dynamicsPressureDarknessJitterCurve',
+    'dynamicsPressureSecondaryColorJitterCurve', 'dynamicsPressureShapeRoundessVerticalJitterCurve',
+    'dynamicsPressureShapeRoundessHorizontalJitterCurve', 'dynamicsPressurePlotSpacingJitter',
+    'dynamicsPressurePlotJitterLongitudinalCurve', 'dynamicsPressureOverall',
+)
+
+
+def verify_curve_schema(image: NativeImage, classes: list[dict]) -> dict:
+    """Link all explicit curve keys to bounded decoding/encoding, not live consumers."""
+    keys = find_method(classes, 'ValkyrieBrush', 'serializedKeyForCurve:', kind='class')
+    decode = find_method(classes, 'ValkyrieBrush', 'initWithCoder:')
+    encode = find_method(classes, 'ValkyrieBrush', 'encodeWithCoder:')
+    # The key method indexes a byte jump table. The decoder visits channels0..38;
+    # the encoder visits slots3..41 and subtracts3 to recover those same indices.
+    anchors = [
+        (keys, {0x0: 0xD1000448, 0x4: 0xF100991F, 0x8: 0x54000F28,
+                0x14: 0x1000008A, 0x18: 0x3868692B, 0x1C: 0x8B0B094A, 0x20: 0xD61F0140}),
+        (decode, {0xB60: 0xD2800015, 0xB7C: 0xAA1503E2, 0xB90: 0xAA1603E2,
+                  0xB94: 0xAA1703E3, 0xBA0: 0x8B150E96, 0xBA8: 0xF9000EC0,
+                  0xBE4: 0x910006B5, 0xBE8: 0xF1009EBF, 0xBEC: 0x54FFFC01}),
+        (encode, {0xC28: 0x52800076, 0xC30: 0xF8767A74, 0xC34: 0xB4000174,
+                  0xC38: 0xD1000EC2, 0xC50: 0xAA1403E2, 0xC54: 0xAA1503E3,
+                  0xC60: 0x910006D6, 0xC64: 0xF100AADF, 0xC68: 0x54FFFE41}),
+    ]
+    for start, words in anchors:
+        for offset, word in words.items():
+            require(image.word(start + offset) == word,
+                    f'Curve schema instruction differs at {start + offset:#x}')
+    calls = [(decode + 0xB80, 'serializedKeyForCurve:'),
+             (decode + 0xB98, 'decodeObjectOfClass:forKey:'),
+             (encode + 0xC40, 'serializedKeyForCurve:'),
+             (encode + 0xC58, 'encodeObject:forKey:')]
+    for address, selector in calls:
+        require(image.called_selector(address) == selector, 'Curve schema selector differs')
+    table = image.address_pair(keys + 0xC, 9)
+    rows = []
+    for index, expected in enumerate(CURVE_CHANNEL_KEYS):
+        # Index0 takes the default arm; 1..38 use the verified jump-table path.
+        target = keys + 0x1EC if index == 0 else keys + 0x24 + image.read('<B', table + index - 1)[0] * 4
+        require(image.cfstring_pair(target, 0) == expected, 'Curve schema archive key differs')
+        require(image.word(target + 8) == 0xD65F03C0, 'Curve schema key arm does not return')
+        rows.append({'index': index, 'archive_key': expected, 'key_arm': hex(target)})
+    return {
+        'key_method': hex(keys), 'decode_method': hex(decode), 'encode_method': hex(encode),
+        'jump_table': hex(table), 'channel_count': len(rows), 'channels': rows,
+        'curve_slot_offset': '0x18', 'curve_slot_stride': 8,
+        'decode_channel_range': [0, 38], 'encode_slot_range': [3, 41],
+        'instruction_anchors': sum(len(words) for _, words in anchors),
+        'key_return_anchors': len(rows), 'selector_anchors': len(calls),
+        'archive_key_anchors': len(rows), 'artflow_primary_channels': [3, 5, 10, 38],
+        'artflow_auxiliary_channel_count': len(rows) - 4,
+        'scope': 'Explicit curve archive keys and shared decoder/encoder slots; null encoder slots are omitted.',
+        'limitations': ['No live pressure inputs, curve consumers, brush rendering or reference runtime are evaluated.'],
+    }
+
+
 def verify_shape_count(image: NativeImage, classes: list[dict]) -> dict:
     """Pin Count conversion and the final bounded stamp loop, not jitter distributions."""
     getter = find_method(classes, 'ValkyrieStrokeOptions', 'shapeCount')
@@ -434,12 +501,13 @@ def contracts(image: NativeImage) -> dict:
     require(image.word(image.base + 0xB727F8) == 0x52800024, 'PSD mask is not single-channel')
     require(image.word(image.base + 0xB727FC) == 0x52800005, 'PSD mask inversion argument changed')
     return {
-        'scope': 'Static archive-key/property correspondences, Count/spacing-version contracts and selected PSD/animation declarations',
+        'scope': 'Static archive-key/property and curve-schema correspondences, Count/spacing-version contracts and selected PSD/animation declarations',
         'architecture': 'arm64', 'encrypted': image.encrypted,
         'rebased_pointers': sum(value is not None for value in image.pointers.values()),
         'external_bind_pointers': sum(value is None for value in image.pointers.values()),
         'class_count': len(classes) // 2, 'method_count': sum(len(c['methods']) for c in classes),
         'brush_scalar_contracts': scalars, 'brush_curve_contracts': curves,
+        'brush_curve_schema_contract': verify_curve_schema(image, classes),
         'brush_count_contract': verify_shape_count(image, classes),
         'brush_spacing_version_contract': verify_spacing_version(image, classes),
         'selected_native_methods': declarations,
@@ -483,6 +551,7 @@ def main() -> None:
     print(json.dumps({'source_sha256': report['source_sha256'],
                       'scalar_contracts': len(report['brush_scalar_contracts']),
                       'curve_contracts': len(report['brush_curve_contracts']),
+                      'curve_schema_channels': report['brush_curve_schema_contract']['channel_count'],
                       'count_limit': report['brush_count_contract']['maximum_stamps'],
                       'count_rounding': 'toward_zero',
                       'spacing_edit_version': report['brush_spacing_version_contract']['spacing_edit_version'],

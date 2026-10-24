@@ -1,0 +1,186 @@
+{
+  "schemaVersion": 1,
+  "baseRevision": "47612ae4ad7a082ae09558b4c43bfacfc3adadd1",
+  "conclusion": "PASS_LOCAL_ONLY",
+  "scope": "Local JVM, Android compilation, static analysis and pinned static native-input inspection. No emulator, package/lint/signing, native-app runtime or rendered parity is inferred.",
+  "command": "CI=true ./gradlew testDebugUnitTest compileDebugAndroidTestKotlin ktlintCheck detekt --continue --no-build-cache --stacktrace",
+  "buildCacheDisabled": true,
+  "jvmTaskExecuted": true,
+  "duration": "4m31s",
+  "log": {
+    "path": "native-curves-local-gate.log",
+    "bytes": 14809,
+    "sha256": "aea3a780c873ca3e05e9505f9d55319062756dcd8d930ed2a8cabd47e6f67780"
+  },
+  "jvm": {
+    "suites": 254,
+    "tests": 1528,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "uniqueIdentities": 1528,
+    "identityEncoding": "Lexicographically sorted UTF-8 identities, one LF-terminated identity per line",
+    "identitySHA256": "bce7985f809f1df3469f5c1d673797962822eb29d0b20b1540432a7c2b8b430d",
+    "retainedPriorIdentities": 1522,
+    "addedIdentities": [
+      "com.artflow.studio.data.local.NativeBrushCurvePreservationTest#allThirtyNineNativeChannelsSurviveCompoundImportAndReexport",
+      "com.artflow.studio.data.local.NativeBrushCurvePreservationTest#auxiliaryCapacityAcceptsThirtyFiveAndRejectsThirtySixInEitherComponent",
+      "com.artflow.studio.data.local.NativeBrushCurvePreservationTest#completeImportedCurvesSurviveLibraryAndArtbrushPersistence",
+      "com.artflow.studio.data.local.NativeBrushCurvePreservationTest#signedCurveDocumentsRetainPublishedBytesAndRejectTampering",
+      "com.artflow.studio.data.local.NativeBrushCurvePreservationTest#unknownKeysAndMalformedNewGraphsDoNotBypassExistingCurveValidation",
+      "com.artflow.studio.data.local.NativeBrushCurvePreservationTest#writerPreservesCompleteStoredAuxiliaryMapsWithoutDependingOnImport"
+    ],
+    "removedIdentities": [],
+    "xmlManifestSHA256": "3874c5abccd32e54d7d3489700dc163db5e8cd1ee48652ce71b358f232ddf196",
+    "xmlFiles": 254
+  },
+  "android": {
+    "compilation": "PASS",
+    "compilationTaskExecuted": true,
+    "declared": 256,
+    "identitySHA256": "f7e93c60e553f16759921aba26dc6697599587dbd2618d1f9a494134f2a75e9e",
+    "retainedPriorIdentities": 255,
+    "addedIdentities": [
+      "com.artflow.studio.data.NativeCurvePersistenceDeviceTest#allNativeAuxiliaryCurvesSurviveCompoundStorageAndBrushInterchange"
+    ],
+    "removedIdentities": [],
+    "compiledDeclarationRecord": {
+      "path": "native-curves-device-declarations.txt",
+      "bytes": 2067,
+      "sha256": "44b2ea7b5cc1f951e81d9d0e932f05ba872a3895960ec85cb3b0de309f7e6ab4"
+    },
+    "compiledDeclarations": [
+      "public final void setUp();",
+      "public final void tearDown();",
+      "public final void allNativeAuxiliaryCurvesSurviveCompoundStorageAndBrushInterchange();"
+    ],
+    "execution": "Not executed in this local gate"
+  },
+  "ktlint": {
+    "emptyReports": 5,
+    "reports": [
+      {
+        "path": "app/build/reports/ktlint/ktlintAndroidTestSourceSetCheck/ktlintAndroidTestSourceSetCheck.txt",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "app/build/reports/ktlint/ktlintDebugSourceSetCheck/ktlintDebugSourceSetCheck.txt",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "app/build/reports/ktlint/ktlintKotlinScriptCheck/ktlintKotlinScriptCheck.txt",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "app/build/reports/ktlint/ktlintMainSourceSetCheck/ktlintMainSourceSetCheck.txt",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "app/build/reports/ktlint/ktlintTestSourceSetCheck/ktlintTestSourceSetCheck.txt",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "detekt": {
+    "errors": 0,
+    "report": {
+      "path": "app/build/reports/detekt/detekt.xml",
+      "bytes": 79,
+      "sha256": "f491e274f0d208f81c3edbc7c1097c30db590a3822fcf579468ac814d9ccc62b"
+    },
+    "baselineUnchanged": true,
+    "baselineSHA256": "dcb67ce1082602a311c05c7f0110065bc64db97d0c83aa80872055a38f8e9279"
+  },
+  "python": {
+    "conclusion": "PASS",
+    "tests": 156,
+    "suites": [
+      {
+        "name": "ci",
+        "command": [
+          "/workspace/scratch/35343fa96783/native-reference-env/bin/python",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          ".github/scripts",
+          "-p",
+          "test_*.py",
+          "-v"
+        ],
+        "returnCode": 0,
+        "expectedTests": 93,
+        "actualTests": 93,
+        "unqualifiedOK": true,
+        "bytes": 15838,
+        "sha256": "d8368d6d7947f5e76cdb2070abc0bcd42acc2cdae9d2d89d1cd0a0e572a784d6",
+        "outputName": "ci.log"
+      },
+      {
+        "name": "tools",
+        "command": [
+          "/workspace/scratch/35343fa96783/native-reference-env/bin/python",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "tools",
+          "-p",
+          "test_*.py",
+          "-v"
+        ],
+        "returnCode": 0,
+        "expectedTests": 63,
+        "actualTests": 63,
+        "unqualifiedOK": true,
+        "bytes": 9704,
+        "sha256": "5a46e866ee03f9b9edb739e1333392abff0998d5a5e43851ae4f099e314eb947",
+        "outputName": "tools.log"
+      }
+    ],
+    "referenceRuntimeExecuted": false
+  },
+  "nativeSchema": {
+    "command": "python tools/ipa_native_contracts.py REFERENCE_IPA --out native-curves-native-contracts.json",
+    "report": {
+      "path": "native-curves-native-contracts.json",
+      "bytes": 13950,
+      "sha256": "694f56dcca77e1cd0ce0b0f2a6d7679a75e5ca07a60067f0ec21df7b3fdd7b12"
+    },
+    "wholeReferenceHashVerified": true,
+    "channels": 39,
+    "auxiliaryChannels": 35,
+    "methods": 3,
+    "instructionAnchors": 25,
+    "returnAnchors": 39,
+    "selectorCalls": 4,
+    "archiveKeys": 39,
+    "referenceRuntimeExecuted": false
+  },
+  "compatibility": {
+    "capacityRejectionAssertionRetained": true,
+    "overflowFixtureChange": "31 entries to 36 entries; all other bytes of the existing test file unchanged",
+    "signedFixtureScope": "Primary sourceImportVersion 0, 1 and 2; secondary fixed at 0; all 35 auxiliary mappings in both components",
+    "oldReaderLimit": "Older library readers retain their 30-curve capacity limit"
+  },
+  "changedCodeFiles": {
+    "app/src/androidTest/java/com/artflow/studio/data/NativeCurvePersistenceDeviceTest.kt": "41be14f7a92fc37cdf397692debec284c34d174f4042f0c91de26848fcede143",
+    "app/src/main/java/com/artflow/studio/core/export/ProcreateBrush.kt": "8f7ae85d62b6c03b8f3e633979e7ba9f41150ff5d1c3e3ca8cd28ae76520ddd9",
+    "app/src/main/java/com/artflow/studio/domain/model/brush/BrushLibraryCodec.kt": "b3ae6a2e618a02c03a70aed6d37724971f372bc878a4a97e2b4704e998b36443",
+    "app/src/test/java/com/artflow/studio/data/local/ImportedBrushPersistenceTest.kt": "2c12c5d029721b83830798c00fea11b16dd07518a0b9aa818142e2abe6783f0e",
+    "app/src/test/java/com/artflow/studio/data/local/NativeBrushCurvePreservationTest.kt": "4ef9eba0f9855a9d0a60e8fdf3076e12fd404d77e2d3abed0feb598f85b1c983",
+    "tools/ipa_native_contracts.py": "9eae8717813f312fe422403f675ebf1c59ffaca8bd7eee02c89fc25c725b8e80",
+    "tools/test_native_curve_schema.py": "508a0364159c3e679de31605bba9ae97e8eff41583d975007e31f3c2f33f49a0"
+  },
+  "reviewLimits": [
+    "Six newly retained graph fields still have no new live rendering consumers.",
+    "The authored 39-channel fixture is independent data, not captured native-app brush output.",
+    "The Android close/reopen and interchange lifecycle requires the exact published device case and six original evidence files.",
+    "Native input/placement/Count/RNG, wet equations, physical stylus quality and display latency remain separate requirements."
+  ]
+}

@@ -331,7 +331,7 @@ compatible boot images, then system-server crashes and native flag recovery befo
 case. All four diagnostic lanes remain failed, with zero completed and 1,000 missing lane-identities.
 They establish no stability repair and leave the ordinary seven-lane contract intact.
 
-### Completed run 313 and the next compositing/declaration correction
+### Completed run 313 and the compositing/declaration correction
 
 [Run 313](CI_RUN_313_2026-10-24.md), exact revision `8d8d0e6885349a427b5ac26bea549b1b2e6868a2`,
 passes its build, 1,518 JVM cases and 150 Python checks. All seven device jobs fail, with no
@@ -352,8 +352,37 @@ that keeps the prior Float result. Four new JVM cases and one Android raw-pixel/
 case retain all existing identities. The [local record](evidence/opaque-source-over-local.json)
 passes 1,522 JVM cases / 253 suites and compilation/static gates; the later Android-only return
 fix also compiles with verified public zero-argument `void` declarations. The new inventory is
-255 device identities. Actual wet and scalar device execution, complete matrix acceptance and
-physical/native-app quality remain pending; no local speedup is promoted to a display claim.
+255 device identities. Their subsequent execution is recorded below. No local speedup
+is promoted to a display claim; physical/native-app quality remains separate.
+
+### Completed run 314 and native curve preservation
+
+[Run 314](CI_RUN_314_2026-10-24.md), exact revision `47612ae4ad7a082ae09558b4c43bfacfc3adadd1`,
+passes 1,522 JVM tests / 253 suites, 150 Python checks and the build/package gates. The seven
+final device attempts account for all 1,785 identities: 1,783 passes, two permitted API 26 skips,
+zero missing/extra/duplicate cases and seven minified launches. The 203 recorded UI positions,
+seven raw Model layers and all seven wet-image sets have scoped visual/pixel acceptance.
+
+The main Android 15 / 16 KB lane requires one automatic recovery. Its original one pass,
+empty ART-crash failure and 253 missing identities remain recorded. The failing case/process
+qualifies under the existing narrowed rule; the reboot changes the boot ID and restores the
+required runtime. The independent repeat and the other five lanes pass without recovery.
+Recorded unrelated background events do not independently authorize retry. A complete final
+pass does not establish a repair for this runtime instability or erase earlier failed runs.
+
+All seven wet bodies execute with exact preview, cancellation, undo/redo, signed storage and
+fresh-reopen evidence. The opaque source-over case retains both exact prior raw outputs and
+104 validated calls per lane. Opaque scalar medians improve modestly; mixed timings vary.
+These elapsed scalar calls include waits and establish no full-preview or display-speed claim.
+
+The next [curve preservation correction](NATIVE_PRESSURE_CURVE_PRESERVATION_2026-10-24.md)
+retains six native graphs omitted by the shared import/export allowlist. All 39 schema channels
+now fit as four primary and 35 auxiliary mappings. No renderer, interpolation, source-import
+version or document version changes. The [local gate](evidence/native-pressure-curves-local.json)
+passes 1,528 JVM tests / 254 suites, all 156 Python checks, Android compilation and static gates.
+The required native inspector verifies the full 39-key schema while retaining its old contracts.
+One new Android import/Room/interchange lifecycle adds to all previous identities, making 256.
+Its actual execution and six original files still require a fresh exact-publication Actions run.
 
 ### Local validation of the combined v5 candidate
 

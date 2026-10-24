@@ -20,14 +20,16 @@ import kotlin.math.roundToInt
  * dynamics, tapers, wet mix, flow, blend mode, grain scale and orientation) as a close start.
  */
 object ProcreateBrush {
-    /** REA-observed curve dictionaries with real control points, beyond overall / size / opacity / flow. */
+    /** Native serialized curve keys beyond the four primary overall / size / opacity / flow channels. */
     internal val AUXILIARY_CURVE_KEYS: Set<String> =
         setOf(
             "dynamicsPressureAttackCurve",
             "dynamicsPressureBleedCurve",
             "dynamicsPressureBlurCurve",
+            "dynamicsPressureBlurJitterCurve",
             "dynamicsPressureBrightnessCurve",
             "dynamicsPressureCharge",
+            "dynamicsPressureDarknessJitterCurve",
             "dynamicsPressureDilutionCurve",
             "dynamicsPressureGradeCurve",
             "dynamicsPressureGrainDepthCurve",
@@ -37,12 +39,15 @@ object ProcreateBrush {
             "dynamicsPressureGrainZoomCurve",
             "dynamicsPressureHueCurve",
             "dynamicsPressureHueJitterCurve",
+            "dynamicsPressureLightnessJitterCurve",
             "dynamicsPressureOpacityJitterCurve",
             "dynamicsPressurePlotJitterCurve",
             "dynamicsPressurePlotJitterLongitudinalCurve",
             "dynamicsPressurePlotSpacingJitter",
             "dynamicsPressureSaturationCurve",
+            "dynamicsPressureSaturationJitterCurve",
             "dynamicsPressureSecondaryColorCurve",
+            "dynamicsPressureSecondaryColorJitterCurve",
             "dynamicsPressureShapeRoundessHorizontalJitterCurve",
             "dynamicsPressureShapeRoundessVerticalJitterCurve",
             "dynamicsPressureShapeRoundnessCurve",
@@ -51,6 +56,7 @@ object ProcreateBrush {
             "dynamicsPressureSmudgePullCurve",
             "dynamicsPressureStampCountCurve",
             "dynamicsPressureStampCountJitterCurve",
+            "dynamicsPressureWetnessCurve",
             "dynamicsPressureWetPullCurve",
         )
 

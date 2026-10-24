@@ -1,0 +1,156 @@
+{
+  "scope": "Authored data through unchanged compiled ArtFlow code; static native archive schema. No reference runtime or rendered-output validation.",
+  "pre_fix_application_revision": "8d8d0e6885349a427b5ac26bea549b1b2e6868a2",
+  "implementation_base_revision": "47612ae4ad7a082ae09558b4c43bfacfc3adadd1",
+  "native_ipa_sha256": "7b1dad3ac95f8aeca3c22b432b5d6fd94182a3bf9f84fb93588adb126368b54e",
+  "native_executable_sha256": "76d3ff1249a987b8f03ac3ecc64c54e48f618bac467e9fbb1f238b91fab1487b",
+  "native_executable_bytes": 19119424,
+  "reference_runtime_executed": false,
+  "native_channel_count": 39,
+  "dedicated_primary_channels": [
+    3,
+    5,
+    10,
+    38
+  ],
+  "auxiliary_channel_count": 35,
+  "missing_before": [
+    {
+      "index": 23,
+      "key": "dynamicsPressureBlurJitterCurve",
+      "return_address": "0x100a3f418"
+    },
+    {
+      "index": 24,
+      "key": "dynamicsPressureWetnessCurve",
+      "return_address": "0x100a3f430"
+    },
+    {
+      "index": 30,
+      "key": "dynamicsPressureSaturationJitterCurve",
+      "return_address": "0x100a3f448"
+    },
+    {
+      "index": 31,
+      "key": "dynamicsPressureLightnessJitterCurve",
+      "return_address": "0x100a3f400"
+    },
+    {
+      "index": 32,
+      "key": "dynamicsPressureDarknessJitterCurve",
+      "return_address": "0x100a3f388"
+    },
+    {
+      "index": 33,
+      "key": "dynamicsPressureSecondaryColorJitterCurve",
+      "return_address": "0x100a3f40c"
+    }
+  ],
+  "authored_points": "For native channel i in0..38: (0,(i+1)/64),(.375,1−(i+1)/64),(1,(i+1)/128). Secondary outputs are1−primary; all values are exact dyadic binary32.",
+  "original_probe_stdout": "input-native-curves|39\ninput-auxiliary-curves|35\nimported-primary-auxiliary|29\nimported-secondary-auxiliary|29\nlost-on-import|dynamicsPressureBlurJitterCurve\nlost-on-import|dynamicsPressureWetnessCurve\nlost-on-import|dynamicsPressureSaturationJitterCurve\nlost-on-import|dynamicsPressureLightnessJitterCurve\nlost-on-import|dynamicsPressureDarknessJitterCurve\nlost-on-import|dynamicsPressureSecondaryColorJitterCurve\nnative-reexport-count|Brush.archive|33\nlost-on-reexport|Brush.archive|dynamicsPressureBlurJitterCurve\nlost-on-reexport|Brush.archive|dynamicsPressureWetnessCurve\nlost-on-reexport|Brush.archive|dynamicsPressureSaturationJitterCurve\nlost-on-reexport|Brush.archive|dynamicsPressureLightnessJitterCurve\nlost-on-reexport|Brush.archive|dynamicsPressureDarknessJitterCurve\nlost-on-reexport|Brush.archive|dynamicsPressureSecondaryColorJitterCurve\nnative-reexport-count|Sub01/Brush.archive|33\nlost-on-reexport|Sub01/Brush.archive|dynamicsPressureBlurJitterCurve\nlost-on-reexport|Sub01/Brush.archive|dynamicsPressureWetnessCurve\nlost-on-reexport|Sub01/Brush.archive|dynamicsPressureSaturationJitterCurve\nlost-on-reexport|Sub01/Brush.archive|dynamicsPressureLightnessJitterCurve\nlost-on-reexport|Sub01/Brush.archive|dynamicsPressureDarknessJitterCurve\nlost-on-reexport|Sub01/Brush.archive|dynamicsPressureSecondaryColorJitterCurve\nmanual-native-export-auxiliary-count|29\nlibrary-and-artbrush|6|retained\nlibrary-and-artbrush|30|retained\nlibrary-and-artbrush|35|Too many source pressure curve components\nsigned-document|0|35-per-component|byte-exact|tamper-rejected|b7be93fd45cfedc154a8e02ab6dc9d8421adf366fb448bc1c480820abf703020\nsigned-document|1|35-per-component|byte-exact|tamper-rejected|f50c9d5b294d6e933cb164d20811c87d1ecab6e94353d1ae96d10fd923fcc984\nsigned-document|2|35-per-component|byte-exact|tamper-rejected|8a8816eeee9f33ff7d25753656baea9b04ab45972caf818dfb44a22582da78d0\n",
+  "probe_inputs_and_sources": {
+    "NativeCurvePreservationProbe.kt": {
+      "sha256": "51f751b8763fd3bdd94f86f89358af9c51dfeb25aea587ea5b47b20893782aa6",
+      "bytes": 7574
+    },
+    "run_probe.py": {
+      "sha256": "26b6e46027f8c775c04d9410d3cdf21795399a1a79f5bac985e174900eabb139",
+      "bytes": 2821
+    },
+    "native-curve-keys.txt": {
+      "sha256": "c5b2f7a08d877abbd5c9e484f96890254b18a2c94545e74b48b09fdbf2bd5f33",
+      "bytes": 1296
+    },
+    "curve-preservation-before.txt": {
+      "sha256": "473dfbcebb8ed2657ab1df0bd036c08b650cd608e37c08aa1309138b060f6d92",
+      "bytes": 1887
+    }
+  },
+  "native_channel_keys": [
+    "dynamicsPressurePlotJitterCurve",
+    "dynamicsPressureStampCountCurve",
+    "dynamicsPressureStampCountJitterCurve",
+    "dynamicsPressureOpacityCurve",
+    "dynamicsPressureOpacityJitterCurve",
+    "dynamicsPressureSizeCurve",
+    "dynamicsPressureSizeJitterCurve",
+    "dynamicsPressureShapeRoundnessCurve",
+    "dynamicsPressureBleedCurve",
+    "dynamicsPressureCharge",
+    "dynamicsPressureTransferModulationCurve",
+    "dynamicsPressureShapeScatterCurve",
+    "dynamicsPressureGrainMovementCurve",
+    "dynamicsPressureGrainScaleCurve",
+    "dynamicsPressureGrainZoomCurve",
+    "dynamicsPressureGrainDepthCurve",
+    "dynamicsPressureGrainDepthJitterCurve",
+    "dynamicsPressureDilutionCurve",
+    "dynamicsPressureAttackCurve",
+    "dynamicsPressureWetPullCurve",
+    "dynamicsPressureSmudgePullCurve",
+    "dynamicsPressureGradeCurve",
+    "dynamicsPressureBlurCurve",
+    "dynamicsPressureBlurJitterCurve",
+    "dynamicsPressureWetnessCurve",
+    "dynamicsPressureHueCurve",
+    "dynamicsPressureSaturationCurve",
+    "dynamicsPressureBrightnessCurve",
+    "dynamicsPressureSecondaryColorCurve",
+    "dynamicsPressureHueJitterCurve",
+    "dynamicsPressureSaturationJitterCurve",
+    "dynamicsPressureLightnessJitterCurve",
+    "dynamicsPressureDarknessJitterCurve",
+    "dynamicsPressureSecondaryColorJitterCurve",
+    "dynamicsPressureShapeRoundessVerticalJitterCurve",
+    "dynamicsPressureShapeRoundessHorizontalJitterCurve",
+    "dynamicsPressurePlotSpacingJitter",
+    "dynamicsPressurePlotJitterLongitudinalCurve",
+    "dynamicsPressureOverall"
+  ],
+  "compiled_code_provenance": {
+    "core/export/ProcreateBrush": {
+      "source_sha256": "34a7491cabf6855bea11f8d503371492cfe5794f004e05544d01af5de0432f36",
+      "compiled_sha256": "05f1956955351ea91c550b090d8036a5ba53793564eb0dccf3ef27dee990e107"
+    },
+    "core/export/ProcreateBrushWriter": {
+      "source_sha256": "9ca099a9282d5507e26b2bd0832ae4eeba10131fe9b684dab7817f0c9b572489",
+      "compiled_sha256": "3f62634f0690b703091876619e40f6bdb2e16af86f6921c24e6d9c8cf0e3620d"
+    },
+    "domain/model/brush/BrushLibraryCodec": {
+      "source_sha256": "4bc44bd351a7eadd03d33146aa45aa17621a8ca6e2350d674696aeb0a959ba81",
+      "compiled_sha256": "ef31deb6cf72bc3fd196ff329bb1af29fc0238b2a1c2c466321a203988ac99e1"
+    },
+    "domain/model/brush/BrushParams": {
+      "source_sha256": "19e848f18e21a7767b6772cc00b0e3c641f36feaa6f84f963e84e84531e67cec",
+      "compiled_sha256": "e13c876dfb84e6d95024a67ee65937d55f57e482f334b2474deee872ffcfb539"
+    },
+    "data/local/CanvasDocumentCodec": {
+      "source_sha256": "20187616c2864eaf872cc331ddd6e02eae9a89e7e334d4e1a1b4dba3d60e1d05",
+      "compiled_sha256": "ce4d60756804241930a7678ba28f6b0d5571e45742723dd240f79befe942d9cd"
+    }
+  },
+  "unchanged_source_proof": {
+    "app/src/main/java/com/artflow/studio/core/export/ProcreateBrush.kt": {
+      "unchanged_from": "8d8d0e6885349a427b5ac26bea549b1b2e6868a2",
+      "sha256": "34a7491cabf6855bea11f8d503371492cfe5794f004e05544d01af5de0432f36"
+    },
+    "app/src/main/java/com/artflow/studio/core/export/ProcreateBrushWriter.kt": {
+      "unchanged_from": "8d8d0e6885349a427b5ac26bea549b1b2e6868a2",
+      "sha256": "9ca099a9282d5507e26b2bd0832ae4eeba10131fe9b684dab7817f0c9b572489"
+    },
+    "app/src/main/java/com/artflow/studio/domain/model/brush/BrushLibraryCodec.kt": {
+      "unchanged_from": "8d8d0e6885349a427b5ac26bea549b1b2e6868a2",
+      "sha256": "4bc44bd351a7eadd03d33146aa45aa17621a8ca6e2350d674696aeb0a959ba81"
+    },
+    "app/src/main/java/com/artflow/studio/domain/model/brush/BrushParams.kt": {
+      "unchanged_from": "8d8d0e6885349a427b5ac26bea549b1b2e6868a2",
+      "sha256": "19e848f18e21a7767b6772cc00b0e3c641f36feaa6f84f963e84e84531e67cec"
+    },
+    "app/src/main/java/com/artflow/studio/data/local/CanvasDocumentCodec.kt": {
+      "unchanged_from": "8d8d0e6885349a427b5ac26bea549b1b2e6868a2",
+      "sha256": "20187616c2864eaf872cc331ddd6e02eae9a89e7e334d4e1a1b4dba3d60e1d05"
+    }
+  },
+  "signed_hash_scope": "Current-v5 documents authored and signed by the unchanged published codec; primary sourceImportVersion0/1/2, secondary0. These are not historical-v1/v2 document fixtures.",
+  "compatibility": "No serialized field/default, interpolation or rendering changes. Existing signed bytes remain stable. Earlier brush-library readers retain their30-auxiliary-curve capacity limit."
+}

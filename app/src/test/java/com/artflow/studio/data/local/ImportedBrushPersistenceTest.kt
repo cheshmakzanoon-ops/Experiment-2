@@ -57,7 +57,7 @@ class ImportedBrushPersistenceTest {
         assertThrows(IllegalArgumentException::class.java) {
             BrushLibraryCodec.encode(listOf(SavedBrush("bad-key", "Bad key", malformed)))
         }
-        val tooMany = (0..30).associate { index -> "dynamicsPressureSynthetic$index" to response }
+        val tooMany = (0..35).associate { index -> "dynamicsPressureSynthetic$index" to response }
         assertThrows(IllegalArgumentException::class.java) {
             BrushLibraryCodec.encode(listOf(SavedBrush("too-many", "Too many", good.copy(importedAuxiliaryCurves = tooMany))))
         }

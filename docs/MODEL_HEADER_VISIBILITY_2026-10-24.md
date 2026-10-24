@@ -78,3 +78,17 @@ This accepts the repaired header within those captured emulator states. It does
 not accept the whole run: the wet test fails initialization in five lanes, two
 Android 15 lanes terminate earlier, and no minified launch executes. The full
 seven-lane and physical-device quality requirements remain unchanged.
+
+## Subsequent complete matrix
+
+[Run 314](CI_RUN_314_2026-10-24.md), source `47612ae`, passes the Model cases in all seven
+final attempts. Original Model captures are directly inspected across every lane, including
+the corrected minimum-API header and the tablet's larger controls, modal precedence, focus,
+painting, cancellation and navigation. Seven raw Model layers independently retain the
+expected painted islands and untouched gap. All 203 recorded UI positions have scoped
+acceptance: 60 original-resolution direct views and 143 exact prior app-body comparisons.
+
+Main Android 15 / 16 KB passes after one preserved earlier ART crash and verified reboot;
+the independent repeat and other five lanes pass without recovery. The complete final matrix
+and seven minified launches are accepted with that qualification. This is emulator evidence,
+not physical stylus/display or unrestricted artist acceptance.

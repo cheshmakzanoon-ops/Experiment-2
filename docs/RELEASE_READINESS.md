@@ -75,17 +75,31 @@ automatic activity teardown. No lane reached minified launch. The narrower class
 no recovery for these typed failures; no manual rerun was made. Original Android 8 screenshots
 confirm the Model header repair, but that scoped visual result does not accept the failed matrix.
 
-The next source adds only an explicit `Unit` return to the wet case and a small
-[opaque-backdrop compositing optimization](OPAQUE_SOURCE_OVER_2026-10-24.md). Four JVM tests and
-one Android pixel/timing case retain every existing identity. The
-[local acceptance record](evidence/opaque-source-over-local.json) preserves the initial gate's
-single test-helper nesting finding and the correction without suppression or baseline changes.
-The complete corrected gate passes 1,522 JVM tests / 253 suites, Android compilation, formatting
-and detekt. The later Android-only return-type fix passes its scoped compile/static gate; `javap`
-confirms both new device methods compile as public zero-argument `void`. Their bodies still require
-execution. The inventory is 255 per lane, with no local Python rerun claimed for this candidate.
-A fresh seven-lane run and original raw wet/compositing evidence are required. Native-app parity,
-display latency and the two Android 15 runtime repairs remain unestablished.
+[Run 314](CI_RUN_314_2026-10-24.md), exact revision `47612ae4ad7a082ae09558b4c43bfacfc3adadd1`,
+passes 1,522 JVM tests / 253 suites, all 150 Python checks and the build/static/package gates.
+All seven final device attempts account for 255 identities each: 1,783 passes and two permitted
+API 26 skips, no missing/extra/duplicate cases and seven successful minified launches. All
+203 retained UI positions and seven raw Model layers have scoped visual acceptance. Every lane
+retains all nine verified wet-preview files and both exact raw source-over outputs plus timings.
+
+Main Android 15 / 16 KB needs one automatic recovery. The first attempt's one pass, empty
+ART-crash failure and 253 missing identities remain preserved. The original case/process log
+qualifies under the narrow published rule, and recovery proves a boot-ID change and restores
+the required runtime before the full passing attempt. The independent repeat and other five
+lanes pass without recovery. Background-process crashes are also retained separately. This
+accepts this exact revision's final matrix; it establishes no cure for the runtime instability.
+
+The next [native curve correction](NATIVE_PRESSURE_CURVE_PRESERVATION_2026-10-24.md) preserves
+six omitted pressure graphs through both compound brush components and expands the bounded
+auxiliary capacity from 30 to 35. Its [local gate](evidence/native-pressure-curves-local.json)
+passes 1,528 JVM tests / 254 suites, 156 Python checks, Android compilation, ktlint, detekt and
+the full pinned schema inspector. All existing identities remain. The new Room and interchange
+device case makes 256 per lane; its compiled public `void` declaration is verified, but its body
+and six original outputs still require the published source's fresh seven-lane run.
+
+No workflow, assertion, skip, recovery allowance or baseline is relaxed. Curve preservation
+adds no new native rendering consumers; no production signing, native-app interoperability,
+physical-device qualification or full Procreate parity is inferred.
 
 The [collector diagnostics](ANDROID15_COLLECTOR_CONTROL_2026-10-24.md) also remain failed.
 The corrected control recorded CC and compatible boot artifacts, but the selected system servers

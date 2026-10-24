@@ -18,7 +18,9 @@ object BrushLibraryCodec {
     /** Grains imported from photos; their tiles live beside the library. */
     private val IMPORTED_GRAIN = Regex("custom-[0-9a-f]{1,32}")
     private val AUXILIARY_CURVE_KEY = Regex("dynamicsPressure[A-Za-z0-9]{1,60}")
-    private const val MAX_AUXILIARY_CURVES = 30
+
+    // Native archives have 39 channels; four use ImportedPressure's dedicated fields.
+    private const val MAX_AUXILIARY_CURVES = 35
     private val json = Json { encodeDefaults = true }
 
     @Serializable

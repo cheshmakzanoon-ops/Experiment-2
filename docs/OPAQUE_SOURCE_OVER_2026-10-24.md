@@ -104,3 +104,31 @@ fresh local Python execution is claimed. A fresh Actions run must exercise both 
 Four JVM identities and one Android identity are added, with no removals; the device inventory is 255.
 No workflow, recovery rule, test skip, baseline or native reference contract changes. Physical stylus
 feel, display latency, native wet/compound equations and full Procreate parity remain unestablished.
+
+## Executed run 314 results
+
+[Run 314](CI_RUN_314_2026-10-24.md), source `47612ae`, passes all 1,522 JVM tests and all
+seven final 255-case device attempts. Every lane retains both exact 262,144-byte raw outputs
+and its full alternating-pair report; the passing case verifies all 104 calls and input ownership.
+Main Android 15 / 16 KB requires one preserved earlier ART failure and verified reboot before
+this final execution. The other six lanes pass without recovery.
+
+The following are the medians of twenty measured calls per path, in milliseconds. Warmups
+are excluded. Each value covers 65,536 scalar calls and destination writes, including waits.
+
+| Emulator lane | Opaque prior | Opaque current | Mixed prior | Mixed current |
+| --- | ---: | ---: | ---: | ---: |
+| Android 8 | 3.244 | 3.086 | 3.262 | 3.286 |
+| Android 15 / 16 KB | 232.645 | 223.751 | 232.025 | 231.005 |
+| Android 15 / 4 KB | 7.432 | 7.375 | 7.201 | 7.222 |
+| Android 15 / 16 KB repeat | 236.985 | 228.593 | 236.665 | 234.660 |
+| Android 16 / 4 KB | 8.949 | 8.806 | 9.154 | 8.991 |
+| Android 16 / 16 KB | 5.463 | 5.334 | 5.480 | 5.477 |
+| Android 16 tablet | 5.427 | 5.290 | 5.435 | 5.449 |
+
+Both Android 15 / 16 KB lanes use the workflow's measured disabled-JIT runtime; the others
+use their default runtime. Compare paired paths within a lane, not timings across runtimes
+or runners. The opaque medians improve modestly in every lane; the mixed case is slightly
+slower on three configurations. The local 1.51× opaque scalar ratio is not reproduced as a
+device-wide performance claim. No speed threshold was introduced, and these results establish
+neither complete-preview nor physical input-to-display latency nor native Procreate equivalence.

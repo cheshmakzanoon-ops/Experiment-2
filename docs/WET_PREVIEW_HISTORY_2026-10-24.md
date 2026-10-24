@@ -94,8 +94,16 @@ The follow-up adds an explicit `: Unit` return type. Every other byte in the pub
 including fixtures, exact pixels, cancellation, undo/redo and disk assertions, remains unchanged.
 The [local follow-up](evidence/opaque-source-over-local.json) passes Android compilation, ktlint
 and detekt, and inspection of the compiled class confirms a public zero-argument `void` method.
-This declaration check does not execute its body. A fresh Actions run must retain and verify all
-nine files. The same candidate adds a separate scalar compositing case, making 255 device identities.
+This declaration check does not execute its body. The same publication adds a separate
+scalar compositing case, making 255 device identities.
+
+[Run 314](CI_RUN_314_2026-10-24.md), source `47612ae`, now executes the wet body successfully
+on all seven final device attempts. Each lane retains all nine files. Independent checks decode
+all seven PNGs, compare the original fixed first/final all-pixel hashes and colour probes,
+verify the raw saved v5 checksum, and require the passing case's cancellation, independent
+commit, undo/redo and fresh-repository reopen assertions. Main Android 15 / 16 KB reaches this
+result after one preserved earlier ART failure and verified reboot; the other six lanes need
+no recovery. No wet assertion, expected pixel, tolerance or lifecycle is weakened.
 
 The compound fixture's complete final pixels, encoded as big-endian ARGB, have SHA-256
 `27acdb833c4464b0cec7703c2b52d8443dd5bd3da6746add63cd0719119f12da`.
@@ -106,7 +114,7 @@ The incorrect old tail frame is
 The regressions retain exact all-pixel checks and selected fixed colour probes; no tolerance is
 introduced to hide this discrepancy.
 
-The executed JVM evidence establishes consistency between ArtFlow preview, cancellation and
-committed pixels for the covered paths; the Android storage lifecycle remains pending execution.
+The executed JVM and run 314 Android evidence establishes consistency between ArtFlow
+preview, cancellation and committed/saved/reopened pixels for the covered paths.
 Native Procreate wet equations, compound rendering, physical stylus feel and display latency remain
 separate requirements in the [parity register](PROCREATE_PARITY.md).
