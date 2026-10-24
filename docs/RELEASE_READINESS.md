@@ -3,11 +3,13 @@
 ## Current emulator acceptance contract — 24 October 2026
 
 [Emulator acceptance and parity corrections](EMULATOR_PARITY_2026-10-24.md) records the current
-changes and their compatibility boundaries. Each of the six device jobs must account for every
+changes and their compatibility boundaries. Each of the seven device jobs must account for every
 declared instrumentation case, pass its permitted API-specific skip rules, measure its requested
 runtime and complete the minified launch. Its artifact includes `verification.json` and
 `verification.md`. These generated results and the exact commit's Actions conclusion supersede
 historical status statements below; code or workflow presence does not constitute an executed pass.
+The standard Android 15 / 4 KB default-runtime lane is additional coverage. It does not replace
+either existing Android 15 / 16 KB lane or erase their preserved failures.
 
 The app now writes `.artflow` v3 so new Normal-group semantics cannot be misread by old builds.
 Existing v1/v2 documents migrate after checksum verification. Native `.procreate` group metadata

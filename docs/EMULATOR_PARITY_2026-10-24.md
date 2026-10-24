@@ -55,6 +55,11 @@ from GitHub Actions. It does not establish complete Procreate feature or renderi
   that no printer colour profile is applied. Its optional grey overlay identifies simulated colour
   shifts rather than claiming to identify colours that cannot print. The fixed-ink algorithm is
   unchanged; profile-managed CMYK remains an implementation gap.
+- **Reference companion:** the floating window now draws immediately after either brush sidebar,
+  keeping its title, Canvas/Image tabs and close control reachable when they overlap. Bottom
+  toolbars, page controls and later modal panels retain their previous precedence. In focus mode,
+  a top inset derived from the same 48/56 dp exit-button size keeps both controls accessible.
+  Reference's stable callsite and saved fractional placement remain intact.
 
 ## Group compositing and file compatibility
 
@@ -89,12 +94,16 @@ the Procreate application.
 | Groups and interchange | PSD import, distinct scopes, real save/reopen, PSD export, enabled/disabled masks and bounded `.procreate` appearance fallback |
 | Saved selections | Real file storage, fresh repository/controller, fractional mask coverage, constrained Fill Layer, undo/redo, independent Android PNG decoding, slot deletion and document switching |
 | Blend picker | Group-only Pass Through navigation and independently expected pixels captured from the actual Compose previews |
+| Floating Reference | Real editor coordinate taps/drags inside verified left/right sidebar intersections, modal precedence, outside-window sidebar and Zoom input, both focus target sizes, restored position and unchanged brush/artwork/history |
 | Existing editor | Full declared instrumentation suite, including GL restoration, pressure/palm input, Zoom pointer behavior, all 20 tools through the actual large-text editor route, active guide status, fills, transforms, recovery, animation, platform export codecs and adaptive controls |
 | Packaged application | Native library loading, measured process page size and sustained launch of the R8-minified benchmark build |
 
-The six existing lanes remain: API 26/4 KB, API 35/16 KB, an independent API 35/16 KB repeat,
-API 36/4 KB, API 36/16 KB and API 36 tablet. The Android 15 lanes retain the existing verified
-JIT-disabled emulator mitigation; they do not certify normal-runtime Android 15 performance.
+The six original lanes remain: API 26/4 KB, API 35/16 KB, an independent API 35/16 KB repeat,
+API 36/4 KB, API 36/16 KB and API 36 tablet. The added standard API 35/4 KB lane uses the default
+runtime, bringing the gate to seven independent hosted VMs/AVDs that can run in parallel.
+Only the Android 15 / 16 KB lanes retain the existing verified JIT-disabled emulator mitigation;
+their timings do not certify normal-runtime Android 15 performance. The standard-image control
+adds coverage without replacing the failed 16 KB requirement.
 
 Each lane now publishes `verification.json` and `verification.md` in its device artifact and
 a table in the Actions job summary. The gate compares **every declared device test** against
@@ -141,6 +150,55 @@ Use the [Android CI workflow](https://github.com/cheshmakzanoon-ops/Experiment-2
 for the exact published commit, then inspect each lane's generated verification summary.
 A queued, skipped, cancelled or failed run is not a completed gate. An artifact from an earlier
 commit does not validate later source changes.
+
+### Completed run 306
+
+[Run 306](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40071698959) tested
+`e0470f0861681d2a84f1383f6724e427a1eaf67c`. All six jobs finished and their original artifacts were
+independently checked against the frozen 239-case source inventory. The overall run **failed**:
+five lanes completed their required final suites and minified launch, while the independent
+Android 15 / 16 KB repeat remained incomplete after its one existing automatic retry.
+
+| Configuration | Final reported / declared | Passed | Failed | Allowed skips | Automatic retries | Minified launch |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| API 26 / 4 KB | 239 / 239 | 237 | 0 | 2 | 0 | Passed |
+| API 35 / 16 KB | 239 / 239 | 239 | 0 | 0 | 1 | Passed |
+| API 36 / 4 KB phone | 239 / 239 | 239 | 0 | 0 | 0 | Passed |
+| API 35 / 16 KB independent repeat | 1 / 239 | 0 | 1 | 0 | 1 | Not reached |
+| API 36 / 16 KB phone | 239 / 239 | 239 | 0 | 0 | 0 | Passed |
+| API 36 / 4 KB tablet | 239 / 239 | 239 | 0 | 0 | 0 | Passed |
+
+All five complete suites measured their expected SDK and process page size and completed the
+minified smoke test. The API 35 modes were verified JIT-disabled; the other modes were default.
+The successful API 35 lane's first attempt reported two passes and a native crash. The independent
+repeat's first attempt reported 169 passes and a native crash; its retry reported one failed case
+and 238 missing cases. Those original attempts remain separate and are not combined into an
+accepted suite. No manual workflow or job reruns occurred.
+
+The build job executed **1,417 JVM tests in 234 suites**, with no failures, errors or skips, and
+**126 Python checks**. The pinned corpus exercised 394 brushes / 534 settings components, and all
+five genuine `.procreate` sample documents ran. The corpus verifies metadata import/persistence;
+the native contract reports are static/derived checks and do not execute the reference renderer.
+Ktlint and detekt passed. Android lint had no errors or fatal findings, with 153 debug and
+151 release warnings retained. Debug APK / release AAB integrity and bundled native alignment
+passed, and the production-signing negative guard rejected missing signing inputs as required.
+
+Original screenshots verified the Count disclosures, presented GL canvas, guide contrast/focus
+behavior, painted layer thumbnails, large-text tool access and Brush Studio themes. A subsequent
+review also identified a preexisting compact Reference-panel/sidebar overlap, which requires a
+separate editor correction and fresh device acceptance. The follow-up reorder and focus clearance
+above address that finding; their two new cases raise the next declared inventory to 241.
+
+The [Android 15 runtime comparison](ANDROID15_RUNTIME_COMPARISON_2026-10-24.md) preserves the
+native/system crash chronology and the separate unchanged-application diagnostics. Both fresh
+16 KB default-runtime comparison lanes failed, so reverting the JIT setting is not an established
+repair. The prior startup failure below also remains unresolved.
+
+These results apply to the named application revision. Later Reference-panel changes must be
+validated by their own complete workflow; neither this run nor the diagnostic branch accepts
+unexecuted changes.
+
+### Completed run 305
 
 [Run 305](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40067128914), on
 `36c84c223fa8d992e4ddf522574ee694250c30b9`, exposed the earlier guide-test sampling error on API 35
@@ -193,6 +251,9 @@ profile-managed print proof are not implemented. The 3D editor paints a base-col
 global metallic/roughness controls; separate paintable material channels remain missing. Matching the
 reference application's rendering requires paired, versioned reference outputs for identical
 inputs. Current self-consistency and external-format tests cannot establish that equivalence.
+Production consumers currently use nine of the 33 observed pressure graph keys when their
+corresponding dynamics are active. The other 24 remain available for persistence and export.
+Correct spline interpolation does not supply the missing channel/scalar composition rules.
 
 [Compound scalar equations and source-to-shader mode translation](REA_DUAL_BLEND_CONTRACT_2026-10-24.md)
 have now been reconstructed. They are not substituted into the current three-mode renderer: native

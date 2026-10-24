@@ -1040,6 +1040,7 @@ fun CanvasScreen(
         Spacer(Modifier.height(24.dp))
     }
 
+    val focusExitSize = if (settings.largeTouchTargets) 56.dp else 48.dp
     Scaffold(
         topBar = {
             if (!focusMode) {
@@ -1284,16 +1285,6 @@ fun CanvasScreen(
                     modifier = Modifier.zIndex(4f),
                 )
             }
-            if (showReference && ready != null) {
-                ReferenceCompanion(
-                    projectId = projectId,
-                    uri = referenceUri,
-                    onImport = importReference,
-                    onClose = { showReference = false },
-                    onColorPicked = viewModel::onColorPicked,
-                    canvas = CanvasReference(referenceCanvas, canvasPreviewBitmap) { referenceCanvas = it },
-                )
-            }
             if (ready != null && !focusMode) {
                 StudioSidebar(
                     state =
@@ -1342,6 +1333,21 @@ fun CanvasScreen(
                             Modifier.align(Alignment.CenterStart).padding(start = 8.dp)
                         },
                 )
+            }
+            if (showReference && ready != null) {
+                // Draw after either sidebar, but before bottom toolbars and modal panels.
+                ReferenceCompanion(
+                    projectId = projectId,
+                    uri = referenceUri,
+                    onImport = importReference,
+                    onClose = { showReference = false },
+                    onColorPicked = viewModel::onColorPicked,
+                    // Keep the floating window below the actual focus-exit target.
+                    modifier = Modifier.padding(top = if (focusMode) focusExitSize + 8.dp else 0.dp),
+                    canvas = CanvasReference(referenceCanvas, canvasPreviewBitmap) { referenceCanvas = it },
+                )
+            }
+            if (ready != null && !focusMode) {
                 val toolbarLift = if (pageAssist) PAGE_ASSIST_HEIGHT else 0.dp
                 ContextToolbar(viewModel, input, canvasView, Modifier.align(Alignment.BottomCenter).padding(bottom = toolbarLift)) {
                     panel = it
@@ -1597,7 +1603,7 @@ fun CanvasScreen(
                         Modifier
                             .align(Alignment.TopStart)
                             .padding(8.dp)
-                            .size(if (settings.largeTouchTargets) 56.dp else 48.dp),
+                            .size(focusExitSize),
                 ) {
                     Icon(Icons.Default.FullscreenExit, contentDescription = stringResource(R.string.canvasscreen_exit_focus_mode))
                 }

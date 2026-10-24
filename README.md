@@ -14,17 +14,24 @@ and secondary components, while ArtFlow sharing retains the current counts exact
 The guide reminder reflects active, visible guides and stays readable over the canvas. Workspace
 evidence waits for rendered artwork, and large-text tool coverage includes the real editor route.
 The tool strip exposes all 20 tools, including functional tap/drag Zoom navigation.
+The floating Reference window now stays above either brush sidebar while preserving toolbar and
+modal-panel precedence. Focus mode keeps its header clear of the normal or enlarged exit target.
+Real-coordinate device regressions cover overlap, dragging, dismissal and input outside the window.
 New Procreate imports use the inspected native pressure spline and sampled lookup; existing saved
 curves keep their prior behavior. [Numerical contracts and boundaries](docs/NATIVE_PRESSURE_SPLINE.md)
 distinguish reconstructed expectations from a live reference-app comparison.
 
-The full six-lane GitHub Actions emulator matrix now requires every declared device test to appear
+The seven-lane GitHub Actions emulator matrix retains all six original configurations and adds
+standard Android 15 / 4 KB with the default runtime. It requires every declared device test to appear
 in its results, permits only documented API-specific skips, verifies the actual API/page size and
 minified launch, and publishes `verification.json` / `verification.md` plus a job-summary table.
 New device cases cover saved-selection persistence, pixel-exact PNG export, selection source,
 group interchange, brush endpoints and the blend picker. The narrow Android-runtime retry rule
 cannot discard failures encoded in JUnit attributes. Read the **exact commit's completed workflow**
 for execution results; **complete Procreate quality and feature parity remains unestablished**.
+The completed [Android 15 runtime comparison](docs/ANDROID15_RUNTIME_COMPARISON_2026-10-24.md)
+preserves the failed 16 KB attempts and the separate standard-image control; changing JIT mode
+did not establish a repair for the 16 KB crashes.
 The JVM gate requires the hash-pinned reference brush corpus in addition to genuine sample documents.
 Native archive mappings, pressure-spline fixtures and compound-brush contracts are checked against
 that same input, with derived reports retained in the build artifact.

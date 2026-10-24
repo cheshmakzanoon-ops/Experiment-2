@@ -235,7 +235,9 @@ jobs:
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      max-parallel: 2
+      # Each matrix job has its own hosted VM and AVD. Run the original six lanes
+      # and the standard Android 15 control without serial preparation batches.
+      max-parallel: 7
       matrix:
         include:
           - api: 26
@@ -248,6 +250,11 @@ jobs:
             artifact: '35'
             target: google_apis_ps16k
             page_size: 16384
+          - api: 35
+            label: API 35 standard 4 KB
+            artifact: 35-standard-4k
+            target: google_apis
+            page_size: 4096
           - api: 36
             label: API 36
             artifact: '36'
@@ -302,7 +309,7 @@ jobs:
       - name: Run instrumentation tests
         env:
           EXPECTED_PAGE_SIZE: ${{ matrix.page_size }}
-          ART_JIT_MODE: ${{ matrix.api == 35 && 'disabled' || 'default' }}
+          ART_JIT_MODE: ${{ matrix.api == 35 && matrix.page_size == 16384 && 'disabled' || 'default' }}
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api }}

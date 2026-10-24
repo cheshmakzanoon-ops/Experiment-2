@@ -8,10 +8,13 @@ group scopes, PSD interchange, v1/v2 document migration and accurate blend-picke
 It also covers shared compound-brush importing, authored mask coverage, source mode precedence,
 and the inspected native spline used by newly imported pressure graphs. Existing graphs retain
 their stored algorithm and signed-document checksums.
-The six emulator lanes now compare actual results with every declared device test and publish
+The seven emulator lanes now compare actual results with every declared device test and publish
 exact-revision summaries. Saved selections are tested through real storage, reopening, constrained
 edits and independently decoded PNG exports. Consult the completed Actions run for the published
 revision; older dated execution statements below describe only their respective revisions.
+The added standard Android 15 / 4 KB lane uses its default runtime; both original Android 15 / 16 KB
+lanes remain required. Their unresolved crashes and the unchanged-source comparison are recorded
+in the [runtime diagnosis](ANDROID15_RUNTIME_COMPARISON_2026-10-24.md).
 
 Native `.procreate` group blend/mask metadata remains incomplete: affected exports preserve the
 rendered appearance with editable sources hidden below it. Passing Android tests alone does not
