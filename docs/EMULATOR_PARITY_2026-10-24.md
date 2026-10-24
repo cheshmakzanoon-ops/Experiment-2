@@ -14,6 +14,18 @@ from GitHub Actions. It does not establish complete Procreate feature or renderi
   use a shortcut that omits those controls.
 - **Pen orientation:** flat and imported tips interpolate their orientation between samples,
   using the shortest angular turn across the minus-pi/plus-pi boundary. This follows [Android's stylus orientation representation](https://developer.android.com/reference/android/view/MotionEvent#AXIS_ORIENTATION); it is not recovered Procreate filtering.
+- **Count Jitter:** the documented Count 10 / 50% setting can now reach every count from 5 to 10.
+  The previous exclusive upper bound on the reduction made the minimum 6. The 0% and 100%
+  contracts are preserved. See the [reference handbook](https://help.procreate.com/procreate/handbook/5.4/brushes/brush-studio-settings).
+- **Brush interchange:** export retains independent tilt opacity, including explicit zero and
+  edits to imported settings. PNG shape/grain and Photoshop ABR mask imports preserve authored
+  coverage instead of stretching contrast; white tips remain visible and subtle grains retain
+  their intensity. Photo-derived grain creation still has its separate normalization behavior.
+  Gallery/external-open and Brush Studio imports share the same path, preserving secondary
+  components and remapping both components' image identities when importing `.artbrush` files.
+  [Native compound-mode precedence](REA_DUAL_MODE_PRECEDENCE_2026-10-24.md) establishes that the
+  extended mode field wins over the legacy field. Import follows that precedence, while unchanged
+  export retains both original fields and an edited mode removes the stale override.
 - **Automatic selection:** the colour source is the active layer, including transparency.
   Covering artwork, the canvas background and a fill-reference layer do not substitute their
   pixels. The existing transaction rejects work made obsolete by a layer/document change.
@@ -46,6 +58,7 @@ the Procreate application.
 | Acceptance area | Production path and evidence |
 | --- | --- |
 | Stroke sampling | Short resampled stroke, visible endpoint, live preview, commit, undo/redo, save and reopen |
+| Brush import | Production import route, Android image decoding, compound settings, authored mask coverage, real image files and storage reload |
 | Automatic selection | Real MotionEvents, covered active layer, transparent areas, empty layers, obsolete pending work |
 | Groups and interchange | PSD import, distinct scopes, real save/reopen, PSD export, enabled/disabled masks and bounded `.procreate` appearance fallback |
 | Saved selections | Real file storage, fresh repository/controller, fractional mask coverage, constrained Fill Layer, undo/redo, independent Android PNG decoding, slot deletion and document switching |
@@ -65,6 +78,14 @@ Android 13 cancelled-pointer contract below API 33 and scoped MediaStore publica
 Unsupported test-declaration syntax requires an explicit parser update rather than reducing coverage.
 Dark, light and large-text workspace screenshots now use the runner-collected output directory;
 the previous app-owned directory was removed during uninstall before the workflow could collect it.
+Brush Studio theme captures additionally wait for actual dialog pixels to reach the expected light
+or dark surface. An already visible practice stroke alone cannot satisfy the theme assertion.
+
+The JVM gate also fetches the existing user-selected reference archive and verifies its pinned size
+and SHA-256 before running the 394-brush / 534-settings-component corpus check. Gradle tracks the
+configured reference inputs so a previously skipped corpus result cannot substitute for execution.
+This corpus tests import and serialization contracts, not reference-renderer pixels. Reference
+archive bytes and assets are not included in the application or uploaded as CI artifacts.
 
 The narrow Android 15 runtime-crash classifier now examines JUnit failure attributes as well as
 stack text and rejects test errors or application assertions. Its new regressions reproduced seven

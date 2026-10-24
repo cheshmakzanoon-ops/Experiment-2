@@ -167,7 +167,7 @@ object ProcreateBrushWriter {
         val root =
             preservedScalars + preservedStructures + originalColor +
                 mapOf("\$class" to keyed.classOf(BRUSH_CLASS), "name" to keyed.add(brush.name)) +
-                sourceAwareSettings(brush.parameters) + keyedCurves + imageSettings + dualSettings(brush.parameters.dual)
+                sourceAwareSettings(brush.parameters) + keyedCurves + imageSettings + dualSettings(brush.parameters)
         return keyed.encode(root)
     }
 
@@ -183,10 +183,13 @@ object ProcreateBrushWriter {
             else -> true
         }
 
-    private fun dualSettings(dual: DualBrush?): Map<String, Any> {
-        if (dual == null) return emptyMap()
+    private fun dualSettings(parameters: BrushParams): Map<String, Any> {
+        val dual = parameters.dual ?: return emptyMap()
+        val retained = retainedDualMode(dual)
+        // The unchanged extended field is authoritative; preserve its distinct legacy fallback too.
+        if (retained != null && "dualBlendModeExtended" in parameters.importedSourceScalars) return emptyMap()
         val mode =
-            retainedDualMode(dual) ?: when (dual.mode) {
+            retained ?: when (dual.mode) {
                 DualBrush.Mode.MULTIPLY -> 1
                 DualBrush.Mode.ADD -> 3
                 DualBrush.Mode.SUBTRACT -> 7
@@ -401,6 +404,7 @@ object ProcreateBrushWriter {
             "dynamicsGlazedFlow" to p.flow.coerceIn(MIN_OPACITY, 1f).toDouble(),
             "textureScale" to p.textureScale.coerceIn(MIN_SCALE, MAX_SCALE).toDouble(),
             "dynamicsTiltSize" to unit(p.tiltInfluence),
+            "dynamicsTiltOpacity" to unit(p.tiltOpacityInfluence ?: p.tiltInfluence),
             "shapeAzimuth" to p.tiltToRotation,
             "dynamicsSpeedSize" to p.velocityToSize.coerceIn(-1f, 1f).toDouble(),
             "dynamicsSpeedOpacity" to p.velocityToOpacity.coerceIn(-1f, 1f).toDouble(),

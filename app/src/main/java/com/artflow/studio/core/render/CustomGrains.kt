@@ -78,11 +78,13 @@ object CustomGrains {
 
     /**
      * Makes a grain tile from any image: the centred square is box-filtered down to [size], read as
-     * brightness (transparent reads as black) and stretched to use the full range.
+     * brightness (transparent reads as black). Photos stretch to the full range by default;
+     * authored brush masks disable [normalizeContrast] to preserve their coverage values.
      */
     fun tileFrom(
         image: PixelBuffer,
         size: Int = TILE,
+        normalizeContrast: Boolean = true,
     ): Tile {
         val side = min(image.width, image.height)
         val left = (image.width - side) / 2
@@ -93,8 +95,8 @@ object CustomGrains {
                 levels[ty * size + tx] = averageBrightness(image, left + tx * side / size, top + ty * side / size, max(1, side / size))
             }
         }
-        val low = levels.minOrNull() ?: 0f
-        val range = ((levels.maxOrNull() ?: 1f) - low).takeIf { it > 1e-3f } ?: 1f
+        val low = if (normalizeContrast) levels.minOrNull() ?: 0f else 0f
+        val range = if (normalizeContrast) ((levels.maxOrNull() ?: 1f) - low).takeIf { it > 1e-3f } ?: 1f else 1f
         val values = ByteArray(levels.size) { (((levels[it] - low) / range) * 255f + 0.5f).toInt().coerceIn(0, 255).toByte() }
         return Tile(size, values)
     }

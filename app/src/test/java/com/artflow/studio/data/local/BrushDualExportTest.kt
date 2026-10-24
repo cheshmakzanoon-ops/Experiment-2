@@ -45,7 +45,7 @@ class BrushDualExportTest {
                 .copy(
                     shapeId = store(primaryShape),
                     textureId = store(primaryGrain),
-                    dual = DualBrush(second, DualBrush.Mode.MULTIPLY, sourceBlendMode = 28),
+                    dual = DualBrush(second, DualBrush.Mode.MULTIPLY, sourceBlendMode = 34),
                 )
         val bytes = BrushArchives.procreateBrush(SavedBrush("dual", "Compound", primary))
         assertEquals(
@@ -69,8 +69,9 @@ class BrushDualExportTest {
         val restored = imported.parameters(::store)
         assertEquals(4, restored.imageIds.toSet().size)
         val dual = requireNotNull(restored.dual)
-        assertEquals(28, dual.sourceBlendMode)
+        assertEquals(34, dual.sourceBlendMode)
         assertEquals(DualBrush.Mode.MULTIPLY, dual.mode)
+        assertEquals("28", restored.importedSourceScalars.getValue("dualBlendMode").value)
         assertEquals("34", restored.importedSourceScalars.getValue("dualBlendModeExtended").value)
         assertEquals(-0.5f, dual.params.pressureToFlow, 0f)
         assertEquals(0.25f, dual.params.wetDilution, 0f)
@@ -120,7 +121,7 @@ class BrushDualExportTest {
     @Test
     fun changingAnImportedCombineModeDoesNotLeaveAnExtendedIdentifierThatCouldOverrideIt() {
         val source = ProcreateBrush.parameters(mapOf("dualBlendMode" to 28, "dualBlendModeExtended" to 34))
-        for (sourceMode in listOf(null, 28)) {
+        for (sourceMode in listOf(null, 28, 34)) {
             val changed = source.copy(dual = DualBrush(BrushParams(), DualBrush.Mode.ADD, sourceBlendMode = sourceMode))
             val bytes = ProcreateBrushWriter.brush(ProcreateBrushWriter.Brush("Changed", changed))
             val restored = BrushArchives.read(bytes, TestPng::decode).single().parameters(::store)

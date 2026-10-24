@@ -6,6 +6,7 @@ import com.artflow.studio.domain.model.brush.RenderingMode
 import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.model.brush.StrokePoint
 import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Random
@@ -116,6 +117,35 @@ class WetPaintTest {
         val jittered = stamps(many.copy(countJitter = 1f))
         assertTrue("Jitter leaves out some copies ($jittered of $full)", jittered < full)
         assertTrue("Every dab keeps at least one copy ($jittered of $full)", jittered >= full / 4)
+    }
+
+    @Test
+    fun halfCountJitterReachesFiveThroughTenCopies() {
+        assertEquals((5..10).toSet(), observedStampCounts(jitter = 0.5f))
+    }
+
+    @Test
+    fun fullCountJitterReachesOneThroughTenCopies() {
+        assertEquals((1..10).toSet(), observedStampCounts(jitter = 1f))
+    }
+
+    @Test
+    fun zeroCountJitterAlwaysKeepsTenCopies() {
+        assertEquals(setOf(10), observedStampCounts(jitter = 0f))
+    }
+
+    private fun observedStampCounts(jitter: Float): Set<Int> {
+        val params = BrushParams(size = 8f, spacing = 0.3f, pressureToSize = 0f, pressureToOpacity = 0f, count = 10, countJitter = jitter)
+        val tap = strokeOf(params).copy(points = listOf(StrokePoint(x = 16.5f, y = 16.5f, pressure = 1f, timestamp = 0L)))
+        val seeds = Random(430L)
+        val rasterizer = StrokeRasterizer()
+        val canvas = PixelBuffer(32, 32)
+        return (0 until 256)
+            .map {
+                canvas.pixels.fill(0)
+                rasterizer.draw(canvas, tap.copy(id = seeds.nextLong()))
+                rasterizer.lastDabCount
+            }.toSet()
     }
 
     @Test

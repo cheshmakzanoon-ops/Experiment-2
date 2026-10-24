@@ -62,7 +62,7 @@ object BrushArchives {
                     square.pixels[(top + y) * side + left + x] = OPAQUE_BLACK or (value shl 16) or (value shl 8) or value
                 }
             }
-            Imported(CustomGrains.tileFrom(square), null, name = tip.name)
+            Imported(CustomGrains.tileFrom(square, normalizeContrast = false), null, name = tip.name)
         }
 
     /**
@@ -189,7 +189,7 @@ object BrushArchives {
         image: PixelBuffer,
         inverted: Boolean,
     ): CustomGrains.Tile {
-        val tile = CustomGrains.tileFrom(image)
+        val tile = CustomGrains.tileFrom(image, normalizeContrast = false)
         if (!inverted) return tile
         return CustomGrains.Tile(tile.size, ByteArray(tile.values.size) { (255 - (tile.values[it].toInt() and 0xFF)).toByte() })
     }

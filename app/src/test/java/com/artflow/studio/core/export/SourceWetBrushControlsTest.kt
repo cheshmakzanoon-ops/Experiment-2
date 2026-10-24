@@ -148,4 +148,47 @@ class SourceWetBrushControlsTest {
             assertEquals(name, imported.importedSourceScalars[name], exported.importedSourceScalars[name])
         }
     }
+
+    @Test
+    fun localBrushExportRetainsIndependentTiltOpacity() {
+        val local = BrushParams(tiltInfluence = 0.25f, tiltOpacityInfluence = 0.75f)
+        val restored = roundTrip(local)
+        assertEquals(local.tiltInfluence, restored.tiltInfluence, 0f)
+        assertEquals(local.tiltOpacityInfluence!!, restored.tiltOpacityInfluence!!, 0f)
+    }
+
+    @Test
+    fun localBrushExportMaterializesTheInheritedTiltOpacity() {
+        // An unset local opacity amount follows tilt size in the renderer. The interchange
+        // reader uses a distinct scalar, so export must write that effective value explicitly.
+        val local = BrushParams(tiltInfluence = 0.65f)
+        assertEquals(local.tiltInfluence, roundTrip(local).tiltOpacityInfluence!!, 0f)
+    }
+
+    @Test
+    fun editedTiltOpacityReplacesTheRawSourceValueIncludingExplicitZero() {
+        val imported =
+            ProcreateBrush.parameters(
+                mapOf(
+                    "dynamicsTiltOpacity" to 0.35,
+                    "dynamicsTiltSize" to 0.6,
+                    "dynamicsMixSoftening" to -0.37,
+                ),
+            )
+        for (opacity in listOf(0.8f, 0f)) {
+            val restored = roundTrip(imported.copy(tiltOpacityInfluence = opacity))
+            assertEquals(opacity, restored.tiltOpacityInfluence!!, 0f)
+            for (name in listOf("dynamicsTiltSize", "dynamicsMixSoftening")) {
+                assertEquals(name, imported.importedSourceScalars[name], restored.importedSourceScalars[name])
+            }
+        }
+    }
+
+    @Test
+    fun uneditedTiltOpacityKeepsTheUnclampedSourceScalar() {
+        val imported = ProcreateBrush.parameters(mapOf("dynamicsTiltOpacity" to 1.75))
+        assertEquals(1f, imported.tiltOpacityInfluence!!, 0f)
+        val restored = roundTrip(imported)
+        assertEquals(imported.importedSourceScalars["dynamicsTiltOpacity"], restored.importedSourceScalars["dynamicsTiltOpacity"])
+    }
 }

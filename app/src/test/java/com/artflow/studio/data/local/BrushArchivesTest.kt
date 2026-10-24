@@ -1,6 +1,8 @@
 package com.artflow.studio.data.local
 
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.render.CustomGrains
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -9,6 +11,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayOutputStream
+import java.io.DataOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
@@ -72,5 +75,36 @@ class BrushArchivesTest {
         val brushes = BrushArchives.readAbr(abr)
         assertEquals(listOf("Ring Tip", "Smooth Ramp"), brushes.map { it.name })
         assertTrue(brushes.all { it.shape != null && it.grain == null })
+    }
+
+    @Test fun photoshopMasksKeepUniformAndLowContrastCoverage() {
+        for (values in listOf(ByteArray(4) { -1 }, ByteArray(4) { 128.toByte() }, byteArrayOf(100, 105, 115, 120))) {
+            val out = ByteArrayOutputStream()
+            DataOutputStream(out).use { data ->
+                data.writeShort(1) // Version 1, one uncompressed 2 x 2 sampled tip.
+                data.writeShort(1)
+                data.writeShort(2)
+                data.writeInt(15 + 16 + 2 + 1 + values.size)
+                data.write(ByteArray(15))
+                data.writeInt(0)
+                data.writeInt(0)
+                data.writeInt(2)
+                data.writeInt(2)
+                data.writeShort(8)
+                data.writeByte(0)
+                data.write(values)
+            }
+
+            val shape = requireNotNull(BrushArchives.readAbr(out.toByteArray()).single().shape)
+
+            assertEquals(CustomGrains.TILE, shape.size)
+            val expected =
+                ByteArray(shape.size * shape.size) { index ->
+                    val x = (index % shape.size) * 2 / shape.size
+                    val y = (index / shape.size) * 2 / shape.size
+                    values[y * 2 + x]
+                }
+            assertArrayEquals(values.contentToString(), expected, shape.values)
+        }
     }
 }

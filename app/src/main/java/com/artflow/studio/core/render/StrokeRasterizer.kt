@@ -548,7 +548,9 @@ class StrokeRasterizer(
         // Scatter offsets each dab; count repeats it along a random perpendicular offset.
         val most = params.count.coerceIn(1, 32)
         val jitter = params.countJitter.coerceIn(0f, 1f)
-        val dabs = if (jitter > 0f && most > 1) most - (random.nextFloat() * jitter * most).toInt().coerceAtMost(most - 1) else most
+        // Include both endpoints: a count of 10 at 50% jitter can stamp 5 through 10 times.
+        val removable = (jitter * most).toInt().coerceAtMost(most - 1)
+        val dabs = if (jitter > 0f && most > 1) most - (random.nextFloat() * (removable + 1)).toInt() else most
         val azimuth = if (params.tiltToRotation) interpolatedAzimuth(previous.tiltY, current.tiltY, t) else 0f
         repeat(dabs) { index ->
             val scatter = params.scatter.coerceIn(0f, 4f) * params.size

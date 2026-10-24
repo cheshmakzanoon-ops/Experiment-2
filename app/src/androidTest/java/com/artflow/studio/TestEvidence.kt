@@ -44,6 +44,25 @@ object TestEvidence {
         }
     }
 
+    /**
+     * Samples actual pixels just outside a node's horizontal edges, halfway down the node.
+     * Callers must know these strips sit inside unpainted parent padding, not another control.
+     */
+    fun sideColors(description: String): List<Int>? {
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val bounds = findBounds(automation.rootInActiveWindow, description) ?: return null
+        if (bounds.isEmpty) return null
+        val image = automation.takeScreenshot() ?: return null
+        try {
+            val columns = (bounds.left - 4..bounds.left - 2) + (bounds.right + 1..bounds.right + 3)
+            val rows = bounds.centerY() - 1..bounds.centerY() + 1
+            if (columns.any { it !in 0 until image.width } || rows.any { it !in 0 until image.height }) return null
+            return rows.flatMap { y -> columns.map { x -> image.getPixel(x, y) } }
+        } finally {
+            image.recycle()
+        }
+    }
+
     private fun findBounds(
         node: AccessibilityNodeInfo?,
         description: String,

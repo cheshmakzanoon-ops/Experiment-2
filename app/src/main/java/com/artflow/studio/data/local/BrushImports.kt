@@ -3,6 +3,7 @@ package com.artflow.studio.data.local
 import android.content.Context
 import com.artflow.studio.core.export.AbrReader
 import com.artflow.studio.data.renderer.BitmapPixelBridge
+import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.SavedBrush
 
 /**
@@ -18,6 +19,7 @@ object BrushImports {
         bytes: ByteArray,
     ): List<SavedBrush>? =
         runCatching {
+            require(bytes.size <= MAX_BYTES) { "This brush file is too large" }
             when {
                 BrushArchives.isArchive(bytes) -> archive(context, bytes)
                 AbrReader.isAbr(bytes) -> abr(context, bytes)
@@ -33,9 +35,7 @@ object BrushImports {
     ): List<SavedBrush> {
         val directory = GrainStorage.directory(context.filesDir)
         return BrushArchives.read(bytes, BitmapPixelBridge::fromEncodedBytes).mapIndexed { index, brush ->
-            val shape = brush.shape?.let { GrainStorage.save(directory, it) }
-            val grain = brush.grain?.let { GrainStorage.save(directory, it) }
-            val parameters = BrushArchives.parameters(shape, grain, brush.settings)
+            val parameters = brush.parameters { GrainStorage.save(directory, it) }
             SavedBrush("imported-$index", brush.name ?: "Imported brush ${index + 1}", parameters)
         }
     }
@@ -61,14 +61,17 @@ object BrushImports {
         val directory = GrainStorage.directory(context.filesDir)
         val renamed = images.mapValues { (_, tile) -> GrainStorage.save(directory, tile) }
         return brushes.map { brush ->
-            val params = brush.parameters
-            brush.copy(
-                parameters =
-                    params.copy(
-                        textureId = params.textureId?.let { renamed[it] ?: it },
-                        shapeId = params.shapeId?.let { renamed[it] ?: it },
-                    ),
-            )
+            brush.copy(parameters = remapImages(brush.parameters, renamed))
         }
     }
+
+    private fun remapImages(
+        params: BrushParams,
+        renamed: Map<String, String>,
+    ): BrushParams =
+        params.copy(
+            textureId = params.textureId?.let { renamed[it] ?: it },
+            shapeId = params.shapeId?.let { renamed[it] ?: it },
+            dual = params.dual?.let { it.copy(params = remapImages(it.params, renamed)) },
+        )
 }

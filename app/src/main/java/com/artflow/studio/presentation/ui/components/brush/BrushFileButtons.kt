@@ -19,13 +19,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.FileProvider
 import com.artflow.studio.R
-import com.artflow.studio.core.export.AbrReader
 import com.artflow.studio.data.local.BrushArchives
-import com.artflow.studio.data.local.BrushFiles
+import com.artflow.studio.data.local.BrushImports
 import com.artflow.studio.data.local.BrushShareFiles
 import com.artflow.studio.data.local.BrushShareFormat
-import com.artflow.studio.data.local.GrainStorage
-import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.SavedBrush
 import com.artflow.studio.domain.model.brush.StudioBrushes
@@ -56,15 +53,8 @@ internal fun BrushFileButtons(
                     withContext(Dispatchers.IO) {
                         runCatching {
                             val bytes = context.contentResolver.openInputStream(uri)?.use { BrushArchives.readInput(it) }
-                            require(bytes != null && bytes.size <= MAX_ARCHIVE_BYTES) { "Unreadable brush file" }
-                            if (BrushArchives.isArchive(bytes)) {
-                                importArchive(context, bytes)
-                            } else if (AbrReader.isAbr(bytes)) {
-                                importAbr(context, bytes)
-                            } else {
-                                require(bytes.size <= BrushFiles.MAX_BYTES) { "Unreadable brush file" }
-                                importBrushes(context, bytes.toString(Charsets.UTF_8))
-                            }
+                            requireNotNull(bytes) { "Unreadable brush file" }
+                            BrushImports.read(context, bytes)
                         }.getOrNull()
                     }
                 if (brushes == null) {
@@ -125,55 +115,6 @@ internal suspend fun shareBrushes(
         false
     }
 }
-
-/** Procreate `.brush` and `.brushset` files: each brush comes in with its name, settings, shape and grain. */
-private fun importArchive(
-    context: Context,
-    bytes: ByteArray,
-): List<SavedBrush> {
-    val directory = GrainStorage.directory(context.filesDir)
-    return BrushArchives.read(bytes, BitmapPixelBridge::fromEncodedBytes).mapIndexed { index, brush ->
-        val parameters = brush.parameters { GrainStorage.save(directory, it) }
-        SavedBrush("imported-$index", brush.name ?: "Imported brush ${index + 1}", parameters)
-    }
-}
-
-/** Photoshop `.abr` files: each sampled tip comes in as a brush shape. */
-private fun importAbr(
-    context: Context,
-    bytes: ByteArray,
-): List<SavedBrush> {
-    val directory = GrainStorage.directory(context.filesDir)
-    return BrushArchives.readAbr(bytes).mapIndexed { index, brush ->
-        val shape = brush.shape?.let { GrainStorage.save(directory, it) }
-        SavedBrush("imported-abr-$index", brush.name ?: "Photoshop brush ${index + 1}", BrushArchives.parameters(shape, null))
-    }
-}
-
-private const val MAX_ARCHIVE_BYTES = 64 * 1024 * 1024
-
-/** Stores the file's images under their content identities and points the brushes at them. */
-private fun importBrushes(
-    context: Context,
-    text: String,
-): List<SavedBrush> {
-    val (brushes, images) = BrushFiles.decode(text)
-    val directory = GrainStorage.directory(context.filesDir)
-    val renamed = images.mapValues { (_, tile) -> GrainStorage.save(directory, tile) }
-    return brushes.map { brush ->
-        brush.copy(parameters = remapImages(brush.parameters, renamed))
-    }
-}
-
-private fun remapImages(
-    params: BrushParams,
-    renamed: Map<String, String>,
-): BrushParams =
-    params.copy(
-        textureId = params.textureId?.let { renamed[it] ?: it },
-        shapeId = params.shapeId?.let { renamed[it] ?: it },
-        dual = params.dual?.let { it.copy(params = remapImages(it.params, renamed)) },
-    )
 
 private fun share(
     context: Context,

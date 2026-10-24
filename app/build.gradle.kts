@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.PathSensitivity
+import org.gradle.api.tasks.testing.Test
 import java.util.Properties
 
 plugins {
@@ -203,6 +205,24 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
     if (name.endsWith("UnitTestKotlin")) {
         compilerOptions.noJdk.set(false)
     }
+}
+
+// Optional local corpora change the assertions that execute. Fingerprint configured inputs so a
+// previous skipped result cannot satisfy a run with a corpus, and let Gradle reject missing paths.
+// Only input fingerprints enter the task cache; reference archives are never task outputs.
+tasks.withType<Test>().configureEach {
+    val referenceIpa = providers.environmentVariable("ARTFLOW_REFERENCE_IPA").orNull?.takeIf { it.isNotBlank() }
+    inputs.property("referenceIpaConfigured", referenceIpa != null)
+    referenceIpa?.let {
+        inputs.file(it).withPropertyName("referenceIpa").withPathSensitivity(PathSensitivity.NONE)
+    }
+
+    val procreateSamples = providers.environmentVariable("PROCREATE_SAMPLES").orNull?.takeIf { it.isNotBlank() }
+    inputs.property("procreateSamplesConfigured", procreateSamples != null)
+    procreateSamples?.let {
+        inputs.dir(it).withPropertyName("procreateSamples").withPathSensitivity(PathSensitivity.RELATIVE)
+    }
+    inputs.property("requireProcreateSamples", providers.environmentVariable("CI").map { it == "true" }.orElse(false))
 }
 
 // ---------------------------------------------------------------------------------------------

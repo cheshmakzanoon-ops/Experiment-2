@@ -68,7 +68,7 @@ object ProcreateBrush {
         /** The brush uses one of Procreate's own bundled shapes or grains, which files do not carry. */
         val bundledShape: Boolean,
         val bundledGrain: Boolean,
-        /** Raw combine-mode identifier; retained even when no equivalent is available yet. */
+        /** Effective source identifier: the extended field wins, then legacy, then native default zero. */
         val dualBlendMode: Int? = null,
     )
 
@@ -176,9 +176,14 @@ object ProcreateBrush {
             grainInverted = flag("textureInverted"),
             bundledShape = keyed.string(brush["bundledShapePath"]) != null,
             bundledGrain = keyed.string(brush["bundledGrainPath"]) != null,
-            dualBlendMode = number("dualBlendMode")?.roundToInt(),
+            dualBlendMode = effectiveDualMode(number("dualBlendModeExtended"), number("dualBlendMode")),
         )
     }
+
+    private fun effectiveDualMode(
+        extended: Float?,
+        legacy: Float?,
+    ): Int = (extended ?: legacy ?: 0f).roundToInt()
 
     /**
      * Inspect a synthetic, decoded settings dictionary using the same importer as real

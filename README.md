@@ -6,6 +6,8 @@ Automatic selection, explicit Normal/Pass Through group compositing, and accurat
 previews. `.artflow` v3 migrates older group behavior without changing existing artwork; older app
 builds cannot read new v3 documents. PSD preserves group modes. Unsupported native `.procreate`
 group metadata uses a rendered appearance layer with hidden editable sources.
+Brush interchange also preserves tilt-opacity settings and authored mask coverage, while Count
+Jitter reaches its documented range. Theme evidence waits for actual repainted dialog pixels.
 
 The full six-lane GitHub Actions emulator matrix now requires every declared device test to appear
 in its results, permits only documented API-specific skips, verifies the actual API/page size and
@@ -14,6 +16,7 @@ New device cases cover saved-selection persistence, pixel-exact PNG export, sele
 group interchange, brush endpoints and the blend picker. The narrow Android-runtime retry rule
 cannot discard failures encoded in JUnit attributes. Read the **exact commit's completed workflow**
 for execution results; **complete Procreate quality and feature parity remains unestablished**.
+The JVM gate requires the hash-pinned reference brush corpus in addition to genuine sample documents.
 
 ### Selection, clipboard and crop corrections (23 October 2026)
 

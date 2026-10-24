@@ -74,10 +74,7 @@ class BrushExportRoundTripTest {
             secondaryJitter = 0.12f,
         )
 
-    /**
-     * A tile whose values run from 0 to 255 (x * 31 covers every byte along a row), so the import's stretch to
-     * the full range leaves them unchanged.
-     */
+    /** A varied full-range tile makes flips and per-pixel image round trips observable. */
     private fun shapeTile(seed: Int) =
         CustomGrains.Tile(
             CustomGrains.TILE,
@@ -137,6 +134,34 @@ class BrushExportRoundTripTest {
         assertEquals("tipRandomized", expected.tipRandomized, actual.tipRandomized)
         assertEquals("buildUp", expected.buildUp, actual.buildUp)
         assertEquals("grainMoving", expected.grainMoving, actual.grainMoving)
+    }
+
+    @Test
+    fun uniformWhiteAndGrayMasksKeepTheirCoverageThroughPngRoundTrip() {
+        for (coverage in listOf(255, 128)) {
+            val tile = CustomGrains.Tile(CustomGrains.TILE, ByteArray(CustomGrains.TILE * CustomGrains.TILE) { coverage.toByte() })
+            val bytes = ProcreateBrushWriter.brush(ProcreateBrushWriter.Brush("Uniform", BrushParams(), shape = tile, grain = tile))
+
+            val imported = BrushArchives.read(bytes, decode).single()
+
+            assertArrayEquals("Shape coverage $coverage", tile.values, requireNotNull(imported.shape).values)
+            assertArrayEquals("Grain coverage $coverage", tile.values, requireNotNull(imported.grain).values)
+        }
+    }
+
+    @Test
+    fun lowContrastMasksKeepTheirCoverageThroughPngRoundTrip() {
+        val tile =
+            CustomGrains.Tile(
+                CustomGrains.TILE,
+                ByteArray(CustomGrains.TILE * CustomGrains.TILE) { (100 + it % 21).toByte() },
+            )
+        val bytes = ProcreateBrushWriter.brush(ProcreateBrushWriter.Brush("Subtle", BrushParams(), shape = tile, grain = tile))
+
+        val imported = BrushArchives.read(bytes, decode).single()
+
+        assertArrayEquals(tile.values, requireNotNull(imported.shape).values)
+        assertArrayEquals(tile.values, requireNotNull(imported.grain).values)
     }
 
     @Test

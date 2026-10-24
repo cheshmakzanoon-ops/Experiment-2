@@ -92,6 +92,47 @@ jobs:
           ls -l "$dest/demo_files"
           echo "PROCREATE_SAMPLES=$dest/demo_files" >> "$GITHUB_ENV"
 
+      # This existing user-selected corpus is an input only: it stays outside the checkout,
+      # source archives, Gradle caches and uploaded artifacts.
+      - name: Fetch and verify the reference brush corpus
+        timeout-minutes: 18
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --no-cache-dir gdown==5.2.0
+          export ARTFLOW_REFERENCE_IPA="${RUNNER_TEMP}/artflow-reference/reference.ipa"
+          mkdir -p "$(dirname "$ARTFLOW_REFERENCE_IPA")"
+          for attempt in 1 2 3; do
+            echo "Reference corpus fetch attempt ${attempt}/3"
+            rm -f "$ARTFLOW_REFERENCE_IPA"
+            if timeout --kill-after=15s 300s python - <<'PY'
+          import hashlib
+          import os
+          from pathlib import Path
+          import gdown
+
+          target = Path(os.environ['ARTFLOW_REFERENCE_IPA'])
+          if not gdown.download(id='1xPr6e53L76Cq8exGFWOSvq96wt-NlLVC', output=str(target), quiet=True):
+              raise RuntimeError('Reference corpus download failed')
+          if not target.is_file() or target.stat().st_size != 777430382:
+              raise RuntimeError('Unexpected reference corpus size')
+          with target.open('rb') as stream:
+              digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+          if digest != '7b1dad3ac95f8aeca3c22b432b5d6fd94182a3bf9f84fb93588adb126368b54e':
+              raise RuntimeError('Reference corpus identity changed')
+          print(f'Reference corpus verified: {target.stat().st_size} bytes, sha256={digest}')
+          PY
+            then
+              echo "ARTFLOW_REFERENCE_IPA=$ARTFLOW_REFERENCE_IPA" >> "$GITHUB_ENV"
+              break
+            fi
+            rm -f "$ARTFLOW_REFERENCE_IPA"
+            if (( attempt == 3 )); then
+              echo "No verified reference corpus after ${attempt} attempts"
+              exit 1
+            fi
+            sleep $((attempt * 10))
+          done
+
       - name: Run JVM unit tests
         run: |
           set -o pipefail

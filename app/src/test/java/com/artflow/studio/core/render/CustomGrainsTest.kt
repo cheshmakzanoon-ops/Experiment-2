@@ -25,6 +25,14 @@ class CustomGrainsTest {
         assertEquals(tile.at(0, 0), tile.at(8, 16), 0f)
     }
 
+    @Test fun photoImportStillStretchesLowContrastToTheFullRange() {
+        val image = PixelBuffer(2, 2, intArrayOf(0xFF646464.toInt(), 0xFF787878.toInt(), 0xFF646464.toInt(), 0xFF787878.toInt()))
+
+        val tile = CustomGrains.tileFrom(image, size = 2)
+
+        assertEquals(listOf(0, 255, 0, 255), tile.values.map { it.toInt() and 0xFF })
+    }
+
     @Test fun importedGrainDrivesBrushTexture() {
         val tile = CustomGrains.tileFrom(stripes(), size = 8)
         val id = CustomGrains.idFor(tile)

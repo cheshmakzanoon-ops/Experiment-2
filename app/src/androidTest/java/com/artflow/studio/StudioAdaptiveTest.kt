@@ -2,9 +2,11 @@ package com.artflow.studio
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
@@ -20,10 +22,12 @@ import com.artflow.studio.domain.model.settings.AppSettings
 import com.artflow.studio.domain.model.settings.ThemeMode
 import com.artflow.studio.presentation.ui.components.brush.BrushStudioContent
 import com.artflow.studio.presentation.ui.theme.ArtFlowTheme
+import com.artflow.studio.presentation.ui.theme.studioColorScheme
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlin.math.abs
 
 @RunWith(AndroidJUnit4::class)
 class StudioAdaptiveTest {
@@ -95,10 +99,13 @@ class StudioAdaptiveTest {
         assertRetainedStroke()
         awaitVisibleStroke()
         val suffix = if (tablet) "tablet" else "compact"
+        val lightSurface = awaitRenderedSurface(dark = false)
         TestEvidence.screenshot("studio-$suffix-light.png")
         compose.runOnIdle { dark = true }
         assertRetainedStroke()
         awaitVisibleStroke()
+        val darkSurface = awaitRenderedSurface(dark = true)
+        assertNotEquals("The dialog surface must visibly change with its theme", lightSurface, darkSurface)
         TestEvidence.screenshot("studio-$suffix-dark.png")
         compose.onNodeWithText("Use brush").performClick()
         compose.runOnIdle { assertEquals(0.32f, requireNotNull(applied).spacing, 0.001f) }
@@ -108,6 +115,32 @@ class StudioAdaptiveTest {
         compose.waitUntil(10_000) {
             TestEvidence.centreRowColors("Brush practice pad")?.any { it != BrushPractice.PAPER } == true
         }
+    }
+
+    private fun awaitRenderedSurface(dark: Boolean): Int {
+        // BrushStudioContent uses a Surface with 2dp tonal elevation. Its practice pad has
+        // 16dp parent padding, so both outside strips sample that Surface, never the fixed paper.
+        val expected = studioColorScheme(AppSettings().accent, dark, false).surfaceColorAtElevation(2.dp).toArgb()
+        var observed: List<Int>? = null
+        try {
+            compose.waitUntil(10_000) {
+                observed = TestEvidence.sideColors("Brush practice pad")
+                observed?.all { actual ->
+                    listOf(0, 8, 16, 24).all { shift ->
+                        abs(((actual ushr shift) and 255) - ((expected ushr shift) and 255)) <= 2
+                    }
+                } == true
+            }
+        } catch (failure: ComposeTimeoutException) {
+            val mode = if (dark) "dark" else "light"
+            TestEvidence.screenshot("studio-$mode-surface-timeout.png")
+            throw AssertionError(
+                "The $mode dialog never rendered surface ${expected.toUInt().toString(16)}; " +
+                    "observed ${observed?.map { it.toUInt().toString(16) }}",
+                failure,
+            )
+        }
+        return requireNotNull(observed).first()
     }
 
     private fun assertRetainedStroke() {
