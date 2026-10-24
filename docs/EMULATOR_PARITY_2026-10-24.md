@@ -17,6 +17,7 @@ from GitHub Actions. It does not establish complete Procreate feature or renderi
 - **Count Jitter:** the documented Count 10 / 50% setting can now reach every count from 5 to 10.
   The previous exclusive upper bound on the reduction made the minimum 6. The 0% and 100%
   contracts are preserved. See the [reference handbook](https://help.procreate.com/procreate/handbook/5.4/brushes/brush-studio-settings).
+- **Imported pressure curves:** new imports opt into the [inspected natural spline and 1,024-sample lookup](NATIVE_PRESSURE_SPLINE.md), including its scaling, endpoint and rounding rules. Existing stored curves keep their explicit legacy linear behavior, and the omitted default preserves historical signed-document checksums. The numerical fixtures are derived from static native instructions, not captured reference-app output.
 - **Brush interchange:** export retains independent tilt opacity, including explicit zero and
   edits to imported settings. PNG shape/grain and Photoshop ABR mask imports preserve authored
   coverage instead of stretching contrast; white tips remain visible and subtle grains retain
@@ -31,6 +32,15 @@ from GitHub Actions. It does not establish complete Procreate feature or renderi
   pixels. The existing transaction rejects work made obsolete by a layer/document change.
 - **Blend picker:** every mode demonstrates the same two colours using the production blend
   equations. The previous arbitrary per-mode tints and development-phase badge are removed.
+- **Guide status:** the canvas reminder uses the same active-guide and visibility conditions as
+  the drawing overlay. It no longer announces guides when both guide types are off. An opaque
+  themed background keeps it readable over artwork and the dark work area, opposite the brush
+  sidebar, and focus mode hides it with the other controls.
+- **Zoom tool:** the actual tool strip now includes the previously omitted Zoom entry. Its
+  dedicated pointer path supports tapping to zoom in and dragging vertically to zoom in or out
+  around the starting point, using the existing viewport limits. Navigation does not paint or
+  add undo entries. This completes an ArtFlow tool interaction; it is not a claim that Procreate
+  uses the same gesture for a dedicated Zoom tool.
 
 ## Group compositing and file compatibility
 
@@ -59,11 +69,12 @@ the Procreate application.
 | --- | --- |
 | Stroke sampling | Short resampled stroke, visible endpoint, live preview, commit, undo/redo, save and reopen |
 | Brush import | Production import route, Android image decoding, compound settings, authored mask coverage, real image files and storage reload |
+| Imported pressure | Real `.brushset` import, constant/descending/curved native lookup values on Android, and exact `.artbrush` persistence |
 | Automatic selection | Real MotionEvents, covered active layer, transparent areas, empty layers, obsolete pending work |
 | Groups and interchange | PSD import, distinct scopes, real save/reopen, PSD export, enabled/disabled masks and bounded `.procreate` appearance fallback |
 | Saved selections | Real file storage, fresh repository/controller, fractional mask coverage, constrained Fill Layer, undo/redo, independent Android PNG decoding, slot deletion and document switching |
 | Blend picker | Group-only Pass Through navigation and independently expected pixels captured from the actual Compose previews |
-| Existing editor | Full declared instrumentation suite, including GL restoration, pressure/palm input, fills, transforms, recovery, animation, platform export codecs and adaptive controls |
+| Existing editor | Full declared instrumentation suite, including GL restoration, pressure/palm input, Zoom pointer behavior, all 20 tools through the actual large-text editor route, active guide status, fills, transforms, recovery, animation, platform export codecs and adaptive controls |
 | Packaged application | Native library loading, measured process page size and sustained launch of the R8-minified benchmark build |
 
 The six existing lanes remain: API 26/4 KB, API 35/16 KB, an independent API 35/16 KB repeat,
@@ -80,12 +91,23 @@ Dark, light and large-text workspace screenshots now use the runner-collected ou
 the previous app-owned directory was removed during uninstall before the workflow could collect it.
 Brush Studio theme captures additionally wait for actual dialog pixels to reach the expected light
 or dark surface. An already visible practice stroke alone cannot satisfy the theme assertion.
+Workspace captures also require known artwork pixels from the real GL surface; Compose idleness
+alone allowed an empty canvas in the earlier dark screenshot. The standalone legacy tool-palette
+fixture now uses the themed Surface supplied by the real activity. Its component coverage is
+separate from the added large-text test that selects every tool through the actual editor's
+All tools strip. The guide reminder is tested through active, hidden and focus-mode transitions.
 
 The JVM gate also fetches the existing user-selected reference archive and verifies its pinned size
 and SHA-256 before running the 394-brush / 534-settings-component corpus check. Gradle tracks the
 configured reference inputs so a previously skipped corpus result cannot substitute for execution.
 This corpus tests import and serialization contracts, not reference-renderer pixels. Reference
 archive bytes and assets are not included in the application or uploaded as CI artifacts.
+The same pinned input also gates the recovered archive/property mappings, native spline anchors
+and every committed spline fixture, plus the compound source-mode and shader dataflow contracts.
+These checks inspect reference bytes as data; they do not execute the reference application.
+CI uses Python 3.11, Capstone 5.0.6 and llvmlite 0.44.0 and retains only small derived JSON reports
+inside `verification-reports`. Fixture checking is read-only and cannot silently regenerate the
+expected results to match changed implementation.
 
 The narrow Android 15 runtime-crash classifier now examines JUnit failure attributes as well as
 stack text and rejects test errors or application assertions. Its new regressions reproduced seven
@@ -108,11 +130,17 @@ comparisons.
 
 ## What still prevents a full-parity claim
 
-The [comparison register](PROCREATE_PARITY.md) remains open for native wet-paint and compound-brush
-equations, 24 retained-only pressure graphs, continuous grain sampling, broader native document
+The [comparison register](PROCREATE_PARITY.md) remains open for the native wet-paint and compound-brush
+coverage pipeline, 24 retained-only pressure graphs, continuous grain sampling, broader native document
 metadata, high-depth/colour-management validation and large-canvas performance. Matching the
 reference application's rendering requires paired, versioned reference outputs for identical
 inputs. Current self-consistency and external-format tests cannot establish that equivalence.
+
+[Compound scalar equations and source-to-shader mode translation](REA_DUAL_BLEND_CONTRACT_2026-10-24.md)
+have now been reconstructed. They are not substituted into the current three-mode renderer: native
+synthesis uses separate amount/transfer data, different accumulation, primary edge/grain processing
+before combination, a secondary threshold and a primary-edge safeguard. Connecting a scalar helper
+to the current buffer without that surrounding pipeline would not reproduce the inspected behavior.
 
 Physical stylus pressure/tilt, palm rejection, input-to-display latency, sustained memory/thermal
 behavior and artist acceptance also need physical devices. The CPU timing test reports evidence;

@@ -1254,16 +1254,22 @@ fun CanvasScreen(
                         )
                     }
 
-                    if (!focusMode && (settings.showSymmetryGuides || settings.showPerspectiveGuides)) {
-                        // Guides are always available from the quick menu; the chip is a reminder.
+                    val hasVisibleGuides =
+                        (settings.showSymmetryGuides && input.symmetry.isActive()) ||
+                            (settings.showPerspectiveGuides && input.perspective.isActive())
+                    if (!focusMode && hasVisibleGuides) {
+                        // Match the actual overlay conditions. Paint an opaque background without
+                        // a Surface's touch interception, so navigation still reaches the canvas.
                         Text(
                             text = stringResource(R.string.canvasscreen_guides_on),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = MaterialTheme.colorScheme.onSurface,
                             modifier =
                                 Modifier
-                                    .align(Alignment.TopStart)
-                                    .padding(8.dp),
+                                    .align(if (settings.rightHandedInterface) Alignment.TopStart else Alignment.TopEnd)
+                                    .padding(8.dp)
+                                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(6.dp))
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
                         )
                     }
                 }
@@ -1954,6 +1960,10 @@ private fun toolHint(tool: ToolType): String =
 
         ToolType.TRANSFORM -> {
             "Drag to move, scale or rotate the active layer — or only the selection when one is active."
+        }
+
+        ToolType.ZOOM -> {
+            "Tap to zoom in; drag up to zoom in or down to zoom out."
         }
 
         else -> {

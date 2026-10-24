@@ -15,6 +15,8 @@ import com.artflow.studio.data.local.database.ArtFlowDatabase
 import com.artflow.studio.data.repository.BrushLibraryStore
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.DualBrush
+import com.artflow.studio.domain.model.brush.ImportedPressure
+import com.artflow.studio.domain.model.brush.PressureMapping
 import com.artflow.studio.domain.model.brush.SavedBrush
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -83,6 +85,65 @@ class BrushImportPersistenceDeviceTest {
             assertFalse(imported.parameters.imageIds.any { it in fixture.parameters.imageIds })
             assertStoredAndReloaded(fixture, imported)
         }
+
+    @Test fun importedPressureCurvesUseNativeTablesAndSurviveArtbrushReload() {
+        val constant = PressureMapping(listOf(PressureMapping.Point(0f, 0.5f), PressureMapping.Point(1f, 0.5f)))
+        val descending = PressureMapping(listOf(PressureMapping.Point(0f, 1f), PressureMapping.Point(1f, 0f)))
+        val bent =
+            PressureMapping(
+                listOf(PressureMapping.Point(0f, 0f), PressureMapping.Point(0.5f, 0.25f), PressureMapping.Point(1f, 1f)),
+            )
+        val bytes =
+            ProcreateBrushWriter.brushset(
+                "Pressure fixture",
+                listOf(
+                    ProcreateBrushWriter.Brush("Constant", BrushParams(importedPressure = ImportedPressure(overall = constant))),
+                    ProcreateBrushWriter.Brush("Descending", BrushParams(importedPressure = ImportedPressure(overall = descending))),
+                    ProcreateBrushWriter.Brush("Bent", BrushParams(importedPressure = ImportedPressure(overall = bent))),
+                ),
+            )
+        val imported = requireNotNull(BrushImports.read(context, bytes))
+        assertEquals(listOf("Constant", "Descending", "Bent"), imported.map { it.name })
+        val reopened = requireNotNull(BrushImports.read(context, BrushFiles.encode(imported).toByteArray()))
+        assertEquals(imported, reopened)
+
+        // The recovered native table scales coordinates by 1024 and divides sampled Y by 1023.
+        // These affine cases have closed-form expectations, independent of the spline solver.
+        // Running through the shared importer on API 26 also detects unsupported platform math calls.
+        val pressures = listOf(0f, 0.25f, 0.5f, 0.75f, 1f)
+        val descendingOutputs = listOf(1f, 0.7509775f, 0.5009775f, 0.2509775f, 0.0009775171f)
+        // Independently derived native fixture values exercise nonzero second derivatives and FMA.
+        val bentSamples = listOf(0.25f to 0.0780946314f, 0.5f to 0.2497563362f, 1f to 0.9992668629f)
+        for (brushes in listOf(imported, reopened)) {
+            val constantParams = brushes[0].parameters
+            val descendingParams = brushes[1].parameters
+            val bentParams = brushes[2].parameters
+            assertEquals(
+                constant.copy(interpolation = PressureMapping.Interpolation.NATIVE_SPLINE_1024),
+                constantParams.importedPressure?.overall,
+            )
+            assertEquals(
+                descending.copy(interpolation = PressureMapping.Interpolation.NATIVE_SPLINE_1024),
+                descendingParams.importedPressure?.overall,
+            )
+            assertEquals(
+                bent.copy(interpolation = PressureMapping.Interpolation.NATIVE_SPLINE_1024),
+                bentParams.importedPressure?.overall,
+            )
+            pressures.forEachIndexed { index, pressure ->
+                assertEquals("Constant response at $pressure", 0.50048876f, constantParams.pressureResponse(pressure), 0.000002f)
+                assertEquals(
+                    "Descending response at $pressure",
+                    descendingOutputs[index],
+                    descendingParams.pressureResponse(pressure),
+                    0.000002f,
+                )
+            }
+            bentSamples.forEach { (pressure, expected) ->
+                assertEquals("Bent response at $pressure", expected, bentParams.pressureResponse(pressure), 0.000002f)
+            }
+        }
+    }
 
     private suspend fun assertStoredAndReloaded(
         fixture: Fixture,

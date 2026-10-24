@@ -24,8 +24,9 @@ import java.util.zip.ZipOutputStream
  * Original dual blend identifiers survive unchanged. New or edited local combine modes use the
  * existing approximate document blend identifiers; their equivalence to native dual math is unverified.
  * Renderer texture rotation has no verified source setting and is not reconstructed.
- * Known pressure curve graphs are serialized as ValkyrieMagnitudinalCurve archives; source interpolation
- * and pixel parity are not verified. Signed pressure/tilt scalar values survive in the archive.
+ * Known pressure graphs are serialized as ValkyrieMagnitudinalCurve archives. The importer uses the
+ * statically recovered spline; live reference-app pixel parity remains unverified. Signed pressure/tilt
+ * scalar values survive in the archive.
  * Fixed tip flips are baked into an available shape image; the imported flags normalize to false,
  * while per-dab mirror jitter stays independent. A missing shape image cannot be reconstructed.
  */
@@ -96,7 +97,8 @@ object ProcreateBrushWriter {
         val keyed = KeyedArchiveBuilder()
         // REA's reference archive identifies these as ValkyrieMagnitudinalCurve objects
         // containing NSArrays of point strings. Preserve the class and all four primary
-        // curves as well as the supported auxiliary keys (no native interpolation inferred).
+        // curves as well as supported auxiliary keys. Only controls belong in this native archive;
+        // ArtFlow's explicit interpolation marker is restored by the importer, not emitted here.
         val primary = primaryCurves(brush.parameters).filterValues { it != null }
         val curves =
             primary + brush.parameters.importedAuxiliaryCurves.filterKeys { it in ProcreateBrush.AUXILIARY_CURVE_KEYS }

@@ -178,6 +178,137 @@ class CanvasInputDeviceTest {
         }
 
     @Test
+    fun zoomToolTapKeepsItsInitialAnchorWithFingerPaintingDisabled() =
+        withCanvas(27) { canvas ->
+            repository.setLayerPixels(repository.getActiveLayerId(), PixelBuffer.filled(64, 64, Color.BLUE), "Zoom fixture")
+            val before = image().pixels.copyOf()
+            val depth = repository.undoDepth
+            canvas.setEditorInput(brush.copy(tool = ToolType.ZOOM, fingerPainting = false))
+            // Navigation must not continue a pending fill, either.
+            canvas.continueFilling = true
+            canvas.resetView()
+            canvas.rotateView(37f)
+            canvas.panBy(23f, -17f)
+            val point = 20f to 43f
+            val anchor = canvas.canvasToView(point.first, point.second)
+            val finger = Touch(1, anchor.first, anchor.second)
+            send(canvas, MotionEvent.ACTION_DOWN, finger, viewCoordinates = true)
+            val jitter = finger.copy(x = finger.x + 3f, y = finger.y + 4f)
+            send(canvas, MotionEvent.ACTION_MOVE, jitter, viewCoordinates = true)
+            assertEquals("Movement inside touch slop must not zoom", 1f, canvas.currentScale(), 0f)
+            send(canvas, MotionEvent.ACTION_UP, jitter, viewCoordinates = true)
+            assertEquals(1.25f, canvas.currentScale(), 0.00001f)
+            assertZoomAnchor(canvas, point, anchor)
+            assertEquals(37f, canvas.currentRotation(), 0f)
+            assertArrayEquals(before, image().pixels)
+            assertEquals(depth, repository.undoDepth)
+        }
+
+    @Test
+    fun zoomToolDragUsesStartScaleAndAnchorAcrossReversalsAndClamps() =
+        withCanvas(28) { canvas ->
+            val before = image().pixels.copyOf()
+            val depth = repository.undoDepth
+            canvas.setEditorInput(brush.copy(tool = ToolType.ZOOM))
+            canvas.resetView()
+            canvas.rotateView(-23f)
+            canvas.panBy(-31f, 19f)
+            val point = 18f to 45f
+            val anchor = canvas.canvasToView(point.first, point.second)
+            val pen = Touch(7, anchor.first, anchor.second, MotionEvent.TOOL_TYPE_STYLUS)
+            val distance = 200f * canvas.resources.displayMetrics.density
+            send(canvas, MotionEvent.ACTION_DOWN, pen, viewCoordinates = true)
+            // ArtFlow's documented sensitivity doubles scale over 200 dp. The same gesture
+            // reverses through both bounds and back to its origin without accumulating drift.
+            val steps =
+                listOf(
+                    -distance / 2f to 1.4142135f,
+                    -distance to 2f,
+                    distance to 0.5f,
+                    -distance * 100f to 32f,
+                    distance * 100f to 0.05f,
+                    0f to 1f,
+                )
+            for ((vertical, expected) in steps) {
+                send(canvas, MotionEvent.ACTION_MOVE, pen.copy(y = pen.y + vertical), viewCoordinates = true)
+                assertEquals("Zoom at vertical displacement $vertical", expected, canvas.currentScale(), 0.00001f)
+                assertZoomAnchor(canvas, point, anchor)
+            }
+            send(canvas, MotionEvent.ACTION_UP, pen, viewCoordinates = true)
+            assertEquals("A completed drag must not also apply tap zoom", 1f, canvas.currentScale(), 0.00001f)
+            assertArrayEquals(before, image().pixels)
+            assertEquals(depth, repository.undoDepth)
+        }
+
+    @Test
+    fun zoomToolCancellationAndPinchTakeoverNeverApplyAnExtraTapOrPaint() =
+        withCanvas(29) { canvas ->
+            val before = image().pixels.copyOf()
+            val depth = repository.undoDepth
+            var undo = 0
+            canvas.onUndoRequested = { undo++ }
+            canvas.setEditorInput(brush.copy(tool = ToolType.ZOOM))
+            canvas.resetView()
+            val center = canvas.canvasToView(32f, 32f)
+            val a = Touch(1, center.first - 50f, center.second)
+            val b = Touch(2, center.first + 50f, center.second)
+            val distance = 200f * canvas.resources.displayMetrics.density
+            send(canvas, MotionEvent.ACTION_DOWN, a, viewCoordinates = true)
+            send(canvas, MotionEvent.ACTION_CANCEL, a, viewCoordinates = true)
+            send(canvas, MotionEvent.ACTION_UP, a, viewCoordinates = true)
+            assertEquals("A cancelled tap must not zoom", 1f, canvas.currentScale(), 0f)
+
+            send(canvas, MotionEvent.ACTION_DOWN, a, viewCoordinates = true)
+            val dragged = a.copy(y = a.y - distance)
+            send(canvas, MotionEvent.ACTION_MOVE, dragged, viewCoordinates = true)
+            assertEquals(2f, canvas.currentScale(), 0.00001f)
+            send(canvas, MotionEvent.ACTION_CANCEL, dragged, viewCoordinates = true)
+            send(canvas, MotionEvent.ACTION_UP, dragged, viewCoordinates = true)
+            assertEquals("Cancellation keeps completed view navigation, like pan/pinch", 2f, canvas.currentScale(), 0.00001f)
+
+            send(canvas, MotionEvent.ACTION_DOWN, a, viewCoordinates = true)
+            send(canvas, MotionEvent.ACTION_POINTER_DOWN, a, b, changed = 1, viewCoordinates = true)
+            val spreadA = a.copy(x = a.x - 50f)
+            val spreadB = b.copy(x = b.x + 50f)
+            send(canvas, MotionEvent.ACTION_MOVE, spreadA, spreadB, viewCoordinates = true)
+            assertEquals(4f, canvas.currentScale(), 0.00001f)
+            send(canvas, MotionEvent.ACTION_POINTER_UP, spreadA, spreadB, changed = 1, viewCoordinates = true)
+            val trailing = spreadA.copy(y = spreadA.y + distance)
+            send(canvas, MotionEvent.ACTION_MOVE, trailing, viewCoordinates = true)
+            send(canvas, MotionEvent.ACTION_UP, trailing, viewCoordinates = true)
+            assertEquals("A trailing navigation finger must not become a Zoom-tool drag", 4f, canvas.currentScale(), 0.00001f)
+            assertEquals(0, undo)
+            assertArrayEquals(before, image().pixels)
+            assertEquals(depth, repository.undoDepth)
+        }
+
+    @Test
+    fun zoomToolUsesFinalUpMovementAndIgnoresHorizontalOnlyDrags() =
+        withCanvas(30) { canvas ->
+            val before = image().pixels.copyOf()
+            val depth = repository.undoDepth
+            canvas.setEditorInput(brush.copy(tool = ToolType.ZOOM))
+            canvas.resetView()
+            val point = 26f to 39f
+            val anchor = canvas.canvasToView(point.first, point.second)
+            val finger = Touch(1, anchor.first, anchor.second)
+            val distance = 200f * canvas.resources.displayMetrics.density
+            send(canvas, MotionEvent.ACTION_DOWN, finger, viewCoordinates = true)
+            send(canvas, MotionEvent.ACTION_UP, finger.copy(y = finger.y - distance), viewCoordinates = true)
+            assertEquals("Pointer-up can supply the complete drag", 2f, canvas.currentScale(), 0.00001f)
+            assertZoomAnchor(canvas, point, anchor)
+
+            send(canvas, MotionEvent.ACTION_DOWN, finger, viewCoordinates = true)
+            val horizontal = finger.copy(x = finger.x + distance)
+            send(canvas, MotionEvent.ACTION_MOVE, horizontal, viewCoordinates = true)
+            send(canvas, MotionEvent.ACTION_UP, horizontal, viewCoordinates = true)
+            assertEquals("Horizontal movement neither zooms nor counts as a tap", 2f, canvas.currentScale(), 0.00001f)
+            assertZoomAnchor(canvas, point, anchor)
+            assertArrayEquals(before, image().pixels)
+            assertEquals(depth, repository.undoDepth)
+        }
+
+    @Test
     fun physicalEraserRemovesPixelsWithoutChangingTheSelectedBrush() =
         withCanvas(6) { canvas ->
             repository.setLayerPixels(repository.getActiveLayerId(), PixelBuffer.filled(64, 64, Color.BLUE), "Fixture")
@@ -725,6 +856,16 @@ class CanvasInputDeviceTest {
                 delay(10)
             }
         }
+    }
+
+    private fun assertZoomAnchor(
+        canvas: ArtFlowCanvasView,
+        point: Pair<Float, Float>,
+        anchor: Pair<Float, Float>,
+    ) {
+        val actual = canvas.canvasToView(point.first, point.second)
+        assertEquals("Zoom must keep its initial canvas point under the pointer", anchor.first, actual.first, 0.02f)
+        assertEquals("Zoom must keep its initial canvas point under the pointer", anchor.second, actual.second, 0.02f)
     }
 
     private fun liquifyDrag(canvas: ArtFlowCanvasView) {

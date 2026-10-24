@@ -26,6 +26,18 @@ object TestEvidence {
         }
     }
 
+    /** Reads the presented frame, including GL SurfaceViews, at caller-supplied screen coordinates. */
+    fun colorsAtScreenPoints(points: List<Pair<Int, Int>>): List<Int>? {
+        require(points.isNotEmpty())
+        val image = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot() ?: return null
+        try {
+            if (points.any { (x, y) -> x !in 0 until image.width || y !in 0 until image.height }) return null
+            return points.map { (x, y) -> image.getPixel(x, y) }
+        } finally {
+            image.recycle()
+        }
+    }
+
     /** Whole-screen capture works for dialogs on API 26 too; node bounds use the same screen coordinates. */
     fun centreRowColors(description: String): List<Int>? {
         val automation = InstrumentationRegistry.getInstrumentation().uiAutomation

@@ -1,11 +1,21 @@
 package com.artflow.studio
 
+import android.view.View
+import android.view.ViewGroup
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.unit.sp
+import androidx.core.graphics.ColorUtils
 import androidx.lifecycle.viewModelScope
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -21,10 +31,12 @@ import com.artflow.studio.domain.repository.ProjectRepository
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import com.artflow.studio.domain.repository.settings.SettingsRepository
 import com.artflow.studio.presentation.ui.MainActivity
+import com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView
 import com.artflow.studio.presentation.ui.components.editor.StudioAction
 import com.artflow.studio.presentation.ui.components.editor.StudioToolPalette
 import com.artflow.studio.presentation.ui.screens.canvas.CanvasScreen
 import com.artflow.studio.presentation.ui.theme.ArtFlowTheme
+import com.artflow.studio.presentation.ui.theme.studioColorScheme
 import com.artflow.studio.presentation.ui.viewmodel.CanvasUiState
 import com.artflow.studio.presentation.ui.viewmodel.CanvasViewModel
 import dagger.hilt.android.testing.HiltAndroidRule
@@ -39,8 +51,10 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import javax.inject.Inject
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
-/** Real editor plus actual tool palette; screenshots are execution evidence, not design mockups. */
+/** Real editor navigation and separately labelled legacy palette component coverage. */
 @HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
 class StudioWorkspaceUiTest {
@@ -77,6 +91,18 @@ class StudioWorkspaceUiTest {
         compose.runOnUiThread { compose.activity.setContent(content = content) }
     }
 
+    private fun setThemedContent(
+        preferences: AppSettings,
+        content: @Composable () -> Unit,
+    ) {
+        setEditorContent {
+            ArtFlowTheme(preferences) {
+                // Match MainActivity: MaterialTheme alone does not paint the window background.
+                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background, content = content)
+            }
+        }
+    }
+
     @After fun cleanup() {
         // Detach GL and lifecycle observers before disposing their repository.
         setEditorContent {}
@@ -94,10 +120,8 @@ class StudioWorkspaceUiTest {
     }
 
     private fun openEditor(preferences: AppSettings = AppSettings(themeMode = ThemeMode.DARK)) {
-        setEditorContent {
-            ArtFlowTheme(preferences) {
-                CanvasScreen(projectId, { navigations++ }, viewModel = viewModel)
-            }
+        setThemedContent(preferences) {
+            CanvasScreen(projectId, { navigations++ }, viewModel = viewModel)
         }
         compose.waitUntil(15_000) { viewModel.uiState.value is CanvasUiState.Ready }
         // A real raster on the GL surface makes missing-canvas screenshots unmistakable.
@@ -119,6 +143,7 @@ class StudioWorkspaceUiTest {
             assertTrue(canvas.setLayerPixels(canvas.getActiveLayerId(), image, "Workspace UI evidence"))
         }
         compose.waitForIdle()
+        awaitRenderedArtwork()
     }
 
     /** Full screen lives in Actions > Prefs, and the on-screen exit button must stay reachable. */
@@ -132,10 +157,10 @@ class StudioWorkspaceUiTest {
     @Test fun focusHidesTheChromeAndBackRestoresTheEditor() {
         openEditor()
         compose.onNodeWithContentDescription("Paint").assertIsOn()
-        screenshot("studio-dark.png")
+        workspaceScreenshot("studio-dark.png")
         enterFocusMode()
         compose.onNodeWithContentDescription("Actions").assertDoesNotExist()
-        screenshot("studio-focus.png")
+        workspaceScreenshot("studio-focus.png")
         Espresso.pressBack()
         compose.onNodeWithContentDescription("Actions").assertIsDisplayed()
         compose.runOnIdle { assertEquals(0, navigations) }
@@ -171,13 +196,13 @@ class StudioWorkspaceUiTest {
         compose.runOnIdle { assertEquals(ToolType.PAINT_BUCKET, viewModel.input.value.tool) }
     }
 
-    @Test fun allNineteenToolsRemainSelectableAtLargeTextSize() {
+    /** Isolated legacy component coverage; the production editor route is exercised separately below. */
+    @Test fun standalonePaletteRemainsReadableAndSelectableAtLargeTextSize() {
         var chosen by mutableStateOf(ToolType.BRUSH)
         val actions = mutableListOf<StudioAction>()
-        setEditorContent {
-            ArtFlowTheme(AppSettings(themeMode = ThemeMode.LIGHT, uiScale = 1.6f, largeTouchTargets = true, reduceMotion = true)) {
-                StudioToolPalette(chosen, { chosen = it }, { actions += it })
-            }
+        val preferences = AppSettings(themeMode = ThemeMode.LIGHT, uiScale = 1.6f, largeTouchTargets = true, reduceMotion = true)
+        setThemedContent(preferences) {
+            StudioToolPalette(chosen, { chosen = it }, { actions += it })
         }
         for (tool in ToolType.entries) {
             compose.onNodeWithText(tool.displayName).performScrollTo().performClick()
@@ -185,11 +210,36 @@ class StudioWorkspaceUiTest {
             compose.onNodeWithText(tool.displayName).assertIsSelected()
         }
         for (action in StudioAction.entries) {
-            compose.onNodeWithText(action.label).performScrollTo().performClick()
+            compose.onNodeWithText(action.label).performScrollTo().assertIsDisplayed()
+            awaitPaletteContrast(action.label, preferences)
+            compose.onNodeWithText(action.label).performClick()
             compose.runOnIdle { assertEquals(action, actions.last()) }
         }
-        screenshot("studio-palette-large-text.png")
+        awaitPaletteContrast(StudioAction.EXPORT.label, preferences)
+        TestEvidence.screenshot("studio-palette-large-text.png")
     }
+
+    @Test fun everyEditorToolIsReachableThroughTheRealLargeTextToolOptions() {
+        openEditor(AppSettings(themeMode = ThemeMode.LIGHT, uiScale = 1.6f, largeTouchTargets = true, reduceMotion = true))
+        compose.onNodeWithContentDescription("Erase").performClick()
+        compose.onNodeWithContentDescription("Erase").performClick()
+        compose.onAllNodesWithText("Tool options").onFirst().assertIsDisplayed()
+        for (tool in ToolType.entries) {
+            // Choosing from the full strip deliberately collapses it, while leaving Tool options open.
+            compose.onNodeWithText("All tools").performScrollTo().performClick()
+            stripTool(tool).performScrollTo().assertIsDisplayed().performClick()
+            compose.runOnIdle { assertEquals("The actual editor must activate ${tool.displayName}", tool, viewModel.input.value.tool) }
+        }
+        compose.onNodeWithText("All tools").performScrollTo().performClick()
+        stripTool(ToolType.ZOOM).performScrollTo().assertIsDisplayed().assertIsSelected()
+        compose.waitForIdle()
+        TestEvidence.screenshot("studio-tools-strip-large-text.png")
+        compose.onNodeWithContentDescription("Close Tool options").performClick()
+        workspaceScreenshot("studio-tools-large-text.png")
+    }
+
+    private fun stripTool(tool: ToolType): SemanticsNodeInteraction =
+        compose.onNode(hasContentDescription(tool.displayName) and SemanticsMatcher.keyIsDefined(SemanticsProperties.Selected))
 
     @Test fun lightWorkspaceKeepsPrimaryControlsReachable() {
         openEditor(AppSettings(themeMode = ThemeMode.LIGHT, largeTouchTargets = true, reduceMotion = true))
@@ -197,7 +247,7 @@ class StudioWorkspaceUiTest {
         compose.onNodeWithContentDescription("Erase").assertIsOn()
         compose.onNodeWithContentDescription("Actions").assertIsDisplayed()
         compose.onNodeWithContentDescription("Layers").assertIsDisplayed()
-        screenshot("studio-light.png")
+        workspaceScreenshot("studio-light.png")
     }
 
     @Test
@@ -271,5 +321,97 @@ class StudioWorkspaceUiTest {
         }
     }
 
-    private fun screenshot(name: String) = TestEvidence.screenshot(name)
+    private fun workspaceScreenshot(name: String) {
+        compose.waitForIdle()
+        awaitRenderedArtwork()
+        TestEvidence.screenshot(name)
+    }
+
+    /** Compose idle does not imply that the separate GL renderer has presented the fixture. */
+    private fun awaitRenderedArtwork() {
+        val anchors =
+            listOf(
+                Triple(150f, 92f, 0xFFFFD9A0.toInt()),
+                Triple(90f, 90f, 0xFF586D80.toInt()),
+                Triple(180f, 180f, 0xFF395761.toInt()),
+                Triple(180f, 240f, 0xFF182B38.toInt()),
+            )
+        val expected = anchors.flatMap { anchor -> List(9) { anchor.third } }
+        var observed: List<Int>? = null
+        try {
+            compose.waitUntil(20_000) {
+                var points: List<Pair<Int, Int>>? = null
+                compose.runOnUiThread {
+                    val view = findCanvas(compose.activity.findViewById(android.R.id.content)) ?: return@runOnUiThread
+                    if (!view.isShown || view.width <= 0 || view.height <= 0) return@runOnUiThread
+                    val origin = IntArray(2).also(view::getLocationOnScreen)
+                    points =
+                        anchors.flatMap { (x, y) ->
+                            val position = view.canvasToView(x, y)
+                            (-1..1).flatMap { dy ->
+                                (-1..1).map { dx ->
+                                    origin[0] + position.first.roundToInt() + dx to origin[1] + position.second.roundToInt() + dy
+                                }
+                            }
+                        }
+                }
+                observed = points?.let(TestEvidence::colorsAtScreenPoints)
+                observed?.zip(expected)?.all { (actual, wanted) -> closeColor(actual, wanted) } == true
+            }
+        } catch (timeout: ComposeTimeoutException) {
+            TestEvidence.screenshot("studio-workspace-render-timeout.png")
+            throw AssertionError("The presented GL frame must contain all four artwork regions; observed=$observed", timeout)
+        }
+    }
+
+    private fun findCanvas(view: View): ArtFlowCanvasView? {
+        if (view is ArtFlowCanvasView) return view
+        if (view is ViewGroup) {
+            for (index in 0 until view.childCount) findCanvas(view.getChildAt(index))?.let { return it }
+        }
+        return null
+    }
+
+    /** Check the rendered button, including the actual parent background, rather than theme state alone. */
+    private fun awaitPaletteContrast(
+        label: String,
+        preferences: AppSettings,
+    ) {
+        val colors = studioColorScheme(preferences.accent, dark = false, highContrast = preferences.highContrast)
+        val background = colors.background.toArgb()
+        val foreground = colors.primary.toArgb()
+        var observed = emptyMap<Int, Int>()
+        var contrast = 0.0
+        try {
+            compose.waitUntil(10_000) {
+                val pixels = compose.onNodeWithText(label).captureToImage().toPixelMap()
+                val counts = mutableMapOf<Int, Int>()
+                for (y in 0 until pixels.height) {
+                    for (x in 0 until pixels.width) {
+                        val color = pixels[x, y].toArgb()
+                        counts[color] = (counts[color] ?: 0) + 1
+                    }
+                }
+                observed = counts
+                val paper = counts.filterKeys { closeColor(it, background) }.maxByOrNull { it.value }
+                val ink = counts.filterKeys { closeColor(it, foreground) }.maxByOrNull { it.value }
+                if (paper == null || ink == null || paper.value < 12 || ink.value < 12) {
+                    false
+                } else {
+                    contrast = ColorUtils.calculateContrast(ink.key, paper.key)
+                    contrast >= 4.5
+                }
+            }
+        } catch (timeout: ComposeTimeoutException) {
+            TestEvidence.screenshot("studio-palette-contrast-timeout.png")
+            val common = observed.entries.sortedByDescending { it.value }.take(6)
+            throw AssertionError("$label must show readable text on its themed surface; contrast=$contrast, common pixels=$common", timeout)
+        }
+        assertTrue("$label rendered contrast must be at least 4.5:1", contrast >= 4.5)
+    }
+
+    private fun closeColor(
+        actual: Int,
+        expected: Int,
+    ): Boolean = (0..3).all { channel -> abs((actual ushr (channel * 8) and 255) - (expected ushr (channel * 8) and 255)) <= 2 }
 }

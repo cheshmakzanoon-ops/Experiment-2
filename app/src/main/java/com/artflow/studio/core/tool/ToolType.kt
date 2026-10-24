@@ -34,7 +34,7 @@ enum class ToolType(
     TRANSFORM("Transform", ToolGroup.TRANSFORM),
     EYEDROPPER("Eyedropper", ToolGroup.UTILITY, requiresDrag = false),
     MOVE("Move", ToolGroup.UTILITY),
-    ZOOM("Zoom", ToolGroup.UTILITY),
+    ZOOM("Zoom", ToolGroup.UTILITY, requiresDrag = false),
     ;
 
     /** Tools that are destructive to pixels and therefore always snapshot before they run. */

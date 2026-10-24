@@ -12,6 +12,7 @@ import com.artflow.studio.domain.model.brush.SourceBrushStructuredField
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ImportedBrushPersistenceTest {
@@ -60,6 +61,51 @@ class ImportedBrushPersistenceTest {
         assertThrows(IllegalArgumentException::class.java) {
             BrushLibraryCodec.encode(listOf(SavedBrush("too-many", "Too many", good.copy(importedAuxiliaryCurves = tooMany))))
         }
+    }
+
+    @Test fun nativeAndLinearPressureAlgorithmsSurviveLibraryAndArtbrushRoundTrips() {
+        val points = listOf(PressureMapping.Point(0f, 0.25f), PressureMapping.Point(0.3f, 0.8f), PressureMapping.Point(1f, 0.5f))
+        val linear = PressureMapping(points)
+        val native = PressureMapping(points, interpolation = PressureMapping.Interpolation.NATIVE_SPLINE_1024)
+        val primary =
+            BrushParams(
+                sourceImportVersion = 1,
+                importedPressure = ImportedPressure(overall = native, size = linear, opacity = native, flow = native),
+                importedAuxiliaryCurves = mapOf("dynamicsPressureBleedCurve" to native),
+                dual =
+                    DualBrush(
+                        BrushParams(
+                            sourceImportVersion = 1,
+                            importedPressure = ImportedPressure(size = native, flow = native),
+                            importedAuxiliaryCurves = mapOf("dynamicsPressureHueCurve" to linear),
+                        ),
+                    ),
+            )
+        val saved = listOf(SavedBrush("pressure-algorithms", "Pressure algorithms", primary))
+        val library = BrushLibraryCodec.encode(saved)
+        assertTrue("\"version\":1" in library)
+        assertTrue("\"interpolation\":\"NATIVE_SPLINE_1024\"" in library)
+        assertEquals(saved, BrushLibraryCodec.decode(library))
+
+        val (reopened, images) = BrushFiles.decode(BrushFiles.encode(saved))
+        assertEquals(saved, reopened)
+        assertTrue(images.isEmpty())
+        val pressure = requireNotNull(reopened.single().parameters.importedPressure)
+        assertEquals(PressureMapping.Interpolation.NATIVE_SPLINE_1024, requireNotNull(pressure.overall).interpolation)
+        assertEquals(PressureMapping.Interpolation.LINEAR, requireNotNull(pressure.size).interpolation)
+    }
+
+    @Test fun anUnknownSavedPressureAlgorithmIsRejected() {
+        val native =
+            PressureMapping(
+                listOf(PressureMapping.Point(0f, 0f), PressureMapping.Point(1f, 1f)),
+                interpolation = PressureMapping.Interpolation.NATIVE_SPLINE_1024,
+            )
+        val params = BrushParams(importedPressure = ImportedPressure(overall = native))
+        val encoded = BrushLibraryCodec.encode(listOf(SavedBrush("native-curve", "Native curve", params)))
+        assertTrue("NATIVE_SPLINE_1024" in encoded)
+        val unknown = encoded.replace("NATIVE_SPLINE_1024", "UNSUPPORTED_FUTURE_CURVE")
+        assertThrows(IllegalArgumentException::class.java) { BrushLibraryCodec.decode(unknown) }
     }
 
     @Test fun sourceScalarMetadataIsValidatedAndVersionOneLibrariesRemainCompatible() {

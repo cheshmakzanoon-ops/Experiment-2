@@ -5,6 +5,9 @@
 The [current implementation and acceptance record](EMULATOR_PARITY_2026-10-24.md) covers brush
 sampling/rendering corrections, active-layer Automatic selection, distinct Normal/Pass Through
 group scopes, PSD interchange, v1/v2 document migration and accurate blend-picker examples.
+It also covers shared compound-brush importing, authored mask coverage, source mode precedence,
+and the inspected native spline used by newly imported pressure graphs. Existing graphs retain
+their stored algorithm and signed-document checksums.
 The six emulator lanes now compare actual results with every declared device test and publish
 exact-revision summaries. Saved selections are tested through real storage, reopening, constrained
 edits and independently decoded PNG exports. Consult the completed Actions run for the published

@@ -275,7 +275,7 @@ object ProcreateBrush {
                     PressureMapping.Point(input, output)
                 }.sortedBy { it.input }
         return try {
-            PressureMapping(points)
+            PressureMapping(points, PressureMapping.Interpolation.NATIVE_SPLINE_1024)
         } catch (invalid: IllegalArgumentException) {
             null
         }

@@ -3,6 +3,7 @@ package com.artflow.studio.data.local
 import com.artflow.studio.core.export.ProcreateBrush
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.render.CustomGrains
+import com.artflow.studio.domain.model.brush.PressureMapping
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -76,9 +77,17 @@ class BrushArchiveCompatibilityTest {
         assertFalse(params.tipFlipX || params.tipFlipY)
         val response = requireNotNull(params.importedPressure)
         assertEquals(listOf(0f, 0.2f, 1f), response.overall?.points?.map { it.input })
-        assertEquals(0.7f, requireNotNull(response.overall).map(0.2f), 0.00001f)
-        assertEquals(0.8f, requireNotNull(response.size).map(0.2f), 0.00001f)
-        assertEquals(0.48f, requireNotNull(response.flow).map(0.2f), 0.00001f)
+        val overall = requireNotNull(response.overall)
+        val size = requireNotNull(response.size)
+        val flow = requireNotNull(response.flow)
+        for (mapping in listOf(overall, size, flow)) {
+            assertEquals(PressureMapping.Interpolation.NATIVE_SPLINE_1024, mapping.interpolation)
+        }
+        // Independent rational model in tools/native_pressure_spline.py, using the decoded
+        // fixture points: overall[(0,.2),(.2,.7),(1,.9)], size[(0,1),(1,0)], flow[(0,.4),(1,.8)].
+        assertEquals(Float.fromBits(0x3f3345b8), overall.map(0.2f), 0.00001f)
+        assertEquals(Float.fromBits(0x3f4d0cdd), size.map(0.2f), 0.00001f)
+        assertEquals(Float.fromBits(0x3ef5f5d0), flow.map(0.2f), 0.00001f)
     }
 
     @Test fun malformedCurvesDoNotBecomeNonFiniteDynamics() {

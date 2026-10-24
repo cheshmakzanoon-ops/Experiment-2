@@ -95,6 +95,7 @@ import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -364,6 +365,8 @@ class ArtFlowCanvasView
         private var gestureStartTime = 0L
         private var gestureMoved = 0f
         private var gestureStartView = 0f to 0f
+        private var zoomStartScale = 1f
+        private var zoomDragging = false
 
         /** Reports a new Automatic-selection threshold chosen by sliding (0-255). */
         var onFillToleranceChanged: ((Int) -> Unit)? = null
@@ -627,6 +630,7 @@ class ArtFlowCanvasView
         private fun cancelToolInteraction() {
             stylusMapper.end()
             mousePanning = false
+            zoomDragging = false
             // A node drag keeps the shape it has reached rather than losing the stroke.
             if (draggedNode >= 0) dropShapeNode()
             gestureTool = null
@@ -1606,6 +1610,25 @@ class ArtFlowCanvasView
                 )
             }
 
+        private fun resumePendingEdit(
+            tool: ToolType,
+            x: Float,
+            y: Float,
+        ): Boolean {
+            if (tool == ToolType.ZOOM) return false
+            if (shapeEdit != null && grabShapeNode(x, y)) {
+                gestureTool = null
+                return true
+            }
+            if (continueFilling) {
+                // Fills on release, so a pinch or pan that starts with one finger never fills.
+                fillingTap = true
+                gestureTool = null
+                return true
+            }
+            return false
+        }
+
         private fun beginGesture(
             event: MotionEvent,
             index: Int,
@@ -1620,18 +1643,10 @@ class ArtFlowCanvasView
             gestureStartView = x to y
             // The stylus buttons and eraser end choose this touch's tool, read as the touch starts.
             val choice = stylusMapper.down(event.buttonState, pointerKind(event.getToolType(index)), input.tool, previousTool)
+            val tool = (choice as? StylusDecision.Use)?.tool ?: input.tool
 
             onBrushCursorChanged?.invoke(null)
-            if (shapeEdit != null && grabShapeNode(x, y)) {
-                gestureTool = null
-                return true
-            }
-            if (continueFilling) {
-                // Fills on release, so a pinch or pan that starts with one finger never fills.
-                fillingTap = true
-                gestureTool = null
-                return true
-            }
+            if (resumePendingEdit(tool, x, y)) return true
             // A mouse's middle button pans and its right button samples; its left button draws like a finger.
             if (event.getToolType(index) == MotionEvent.TOOL_TYPE_MOUSE) {
                 when (MouseInput.press(event.buttonState)) {
@@ -1666,7 +1681,16 @@ class ArtFlowCanvasView
 
                 is StylusDecision.Use, StylusDecision.Ignore -> Unit
             }
-            val tool = (choice as? StylusDecision.Use)?.tool ?: input.tool
+            if (tool == ToolType.ZOOM) {
+                // Navigation remains available when finger painting is off. It cannot edit a
+                // shape, continue a fill or arm the touch-hold eyedropper.
+                removeCallbacks(holdEyedropper)
+                viewAnimator?.cancel()
+                zoomStartScale = scale
+                zoomDragging = false
+                gestureTool = tool
+                return true
+            }
             armHoldEyedropper(isStylus, x, y)
             // Palm rejection: a stylus always paints, fingers only when finger painting is on.
             if (!isStylus && !input.fingerPainting) {
@@ -1739,7 +1763,7 @@ class ArtFlowCanvasView
 
                 else -> {
                     Unit
-                } // Paint bucket, magic wand, text, eyedropper and zoom act on release.
+                } // Paint bucket, magic wand and text act on release.
             }
             return true
         }
@@ -1784,6 +1808,10 @@ class ArtFlowCanvasView
             }
             if (gestureMoved > TAP_SLOP) removeCallbacks(holdEyedropper)
             val tool = gestureTool ?: return true
+            if (tool == ToolType.ZOOM) {
+                continueZoom(y)
+                return true
+            }
             val (canvasX, canvasY) = snapped(event, x, y, index)
             val pressure = pressureOf(event, index, history)
 
@@ -1976,7 +2004,10 @@ class ArtFlowCanvasView
                 }
 
                 ToolType.ZOOM -> {
-                    Unit
+                    if (!cancelled && wasTap && !zoomDragging) {
+                        zoomAboutPoint(ZOOM_TAP_FACTOR, gestureStartView.first, gestureStartView.second)
+                    }
+                    zoomDragging = false
                 }
 
                 else -> {
@@ -2076,6 +2107,18 @@ class ArtFlowCanvasView
                     stamp = SystemClock.uptimeMillis(),
                 ),
             )
+        }
+
+        /** ArtFlow's Zoom tool: a 200 dp upward drag doubles scale about the initial touch. */
+        private fun continueZoom(y: Float) {
+            val distance = gestureStartView.second - y
+            if (!zoomDragging && abs(distance) <= TAP_SLOP) return
+            zoomDragging = true
+            // Refer to the original scale so event batching and a reversal at either clamp do
+            // not change the sensitivity. Clamping before division also keeps the factor finite.
+            val exponent = distance / (ZOOM_DRAG_DISTANCE_DP * resources.displayMetrics.density)
+            val target = (zoomStartScale * 2f.pow(exponent)).coerceIn(MIN_SCALE, MAX_SCALE)
+            if (target != scale) zoomAboutPoint(target / scale, gestureStartView.first, gestureStartView.second)
         }
 
         /** Zooms by [factor] so the canvas point under ([x], [y]) stays under the pointer. */
@@ -3445,6 +3488,8 @@ class ArtFlowCanvasView
             private const val FIT_ANIMATION_MS = 260L
             private const val MAX_SCALE = 32f
             private const val TAP_SLOP = 24f
+            private const val ZOOM_TAP_FACTOR = 1.25f
+            private const val ZOOM_DRAG_DISTANCE_DP = 200f
             private const val QUICKSHAPE_HOLD_SLOP = 10f
             private const val NODE_REACH_DP = 28f
             private const val HANDLE_TOUCH_PX = 36f

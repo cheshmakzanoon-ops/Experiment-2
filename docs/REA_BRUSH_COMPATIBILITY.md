@@ -1,5 +1,11 @@
 # REA-derived brush compatibility
 
+**24 October follow-through:** [the current acceptance record](EMULATOR_PARITY_2026-10-24.md)
+covers shared Android import routes, authored image coverage, tilt-opacity export and extended
+mode precedence. [New pressure-curve imports](NATIVE_PRESSURE_SPLINE.md) now select a statically
+reconstructed native spline; existing saved graphs retain their linear algorithm. The sections
+below describe the earlier implementation and its evidence boundaries.
+
 This is an incremental compatibility implementation, **not a declaration of 1:1 Procreate parity**.
 The source inspected before this change was `f312926474a68278f9b03b17fc2999124f0cb0b1`.
 

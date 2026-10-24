@@ -70,8 +70,33 @@ class BrushSourceContractCompatibilityTest {
         assertEquals(0.375f, reimported.pressureToOpacity, 0f)
         assertEquals(0.625f, reimported.wetDilution, 0f)
         assertEquals(0f, reimported.wetMix, 0f)
-        assertEquals(flowCurve, reimported.importedPressure?.flow)
-        assertEquals(opacityCurve, reimported.importedPressure?.opacity)
+        assertEquals(flowCurve.copy(interpolation = PressureMapping.Interpolation.NATIVE_SPLINE_1024), reimported.importedPressure?.flow)
+        assertEquals(
+            opacityCurve.copy(interpolation = PressureMapping.Interpolation.NATIVE_SPLINE_1024),
+            reimported.importedPressure?.opacity,
+        )
+    }
+
+    @Test
+    fun aSavedVersionOneImportWithoutAnAlgorithmMarkerKeepsLinearGraphs() {
+        val previous =
+            legacy.copy(
+                sourceImportVersion = 1,
+                pressureToFlow = -0.625f,
+                pressureToOpacity = 0.375f,
+                importedPressure = ImportedPressure(flow = flowCurve, opacity = opacityCurve),
+                importedAuxiliaryCurves = mapOf("dynamicsPressureBleedCurve" to flowCurve),
+            )
+        val saved = listOf(SavedBrush("previous-contract", "Previous import", previous))
+        val encoded = BrushLibraryCodec.encode(saved)
+        assertTrue("\"sourceImportVersion\":1" in encoded)
+        assertFalse("interpolation" in encoded)
+        val reopened = BrushLibraryCodec.decode(encoded)
+        assertEquals(saved, reopened)
+        val mappings = requireNotNull(reopened.single().parameters.importedPressure)
+        assertEquals(PressureMapping.Interpolation.LINEAR, requireNotNull(mappings.flow).interpolation)
+        assertEquals(0.375f, requireNotNull(mappings.flow).map(0.25f), 0f)
+        assertEquals(0.6875f, requireNotNull(mappings.opacity).map(0.25f), 0f)
     }
 
     @Test

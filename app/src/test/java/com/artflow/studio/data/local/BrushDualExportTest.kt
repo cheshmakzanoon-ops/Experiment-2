@@ -75,7 +75,7 @@ class BrushDualExportTest {
         assertEquals("34", restored.importedSourceScalars.getValue("dualBlendModeExtended").value)
         assertEquals(-0.5f, dual.params.pressureToFlow, 0f)
         assertEquals(0.25f, dual.params.wetDilution, 0f)
-        assertEquals(curve, dual.params.importedPressure?.flow)
+        assertEquals(curve.copy(interpolation = PressureMapping.Interpolation.NATIVE_SPLINE_1024), dual.params.importedPressure?.flow)
         assertTrue(dual.params.tipFlipYJitter)
         assertFalse(dual.params.tipFlipX)
         assertNull(dual.params.dual)

@@ -1,0 +1,1926 @@
+{
+  "provenance": {
+    "binary_sha256": "76d3ff1249a987b8f03ac3ecc64c54e48f618bac467e9fbb1f238b91fab1487b",
+    "static_verification_capstone_version": "5.0.6",
+    "reference_code_executed": false,
+    "channel_count": 39,
+    "resolution": 1024,
+    "interleaved_stride_floats": 40,
+    "evidence": "Mathematical reconstruction from static native instructions; not measured reference-app outputs.",
+    "arithmetic": "binary32 round-to-nearest-even with exact fused multiply-add; finite in-range controls only",
+    "derivation": "docs/NATIVE_PRESSURE_SPLINE.md",
+    "methods": [
+      {
+        "class": "ValkyrieMagnitudinalCurve",
+        "kind": "class",
+        "selector": "getPreparedSplineCurve:count:stride:buffer:",
+        "address": "0x100b8000c"
+      },
+      {
+        "class": "ValkyrieMagnitudinalCurve",
+        "kind": "class",
+        "selector": "sortPoints:",
+        "address": "0x100b802cc"
+      },
+      {
+        "class": "ValkyrieMagnitudinalCurve",
+        "kind": "class",
+        "selector": "splineCurve:pointsCount:count:buffer:",
+        "address": "0x100b80504"
+      },
+      {
+        "class": "ValkyrieMagnitudinalCurve",
+        "kind": "class",
+        "selector": "secondDerivative:numberOfPoints:outputBuffer:",
+        "address": "0x100b806a0"
+      },
+      {
+        "class": "ValkyrieMagnitudinalCurveInterleavedTable",
+        "kind": "class",
+        "selector": "tableForCurves:curveCount:resolution:",
+        "address": "0x100b80934"
+      },
+      {
+        "class": "ValkyrieMagnitudinalCurveInterleavedTable",
+        "kind": "instance",
+        "selector": "lookup:atIndex:",
+        "address": "0x100b80aec"
+      }
+    ],
+    "anchor_count": 12
+  },
+  "model_checks": {
+    "identity_all_1024": true,
+    "constant_half_all_1024": true,
+    "descending_boundaries": true,
+    "analytic_natural_spline_sample": true,
+    "binary32_ties_and_fma": true
+  },
+  "fixtures": [
+    {
+      "name": "nil_channel",
+      "points": null,
+      "resolution": 1024,
+      "table_sha256_le_float32": "e9bac255f4adc7cb4ada9298e193a5ff66b434d15afabd458505325f29c398c7",
+      "table_samples": [
+        {
+          "index": 0,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "index": 1,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "index": 127,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "index": 255,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "index": 256,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "index": 341,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "index": 511,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "index": 512,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "index": 767,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "index": 1022,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "index": 1023,
+          "value": 1.0,
+          "binary32": "3f800000"
+        }
+      ],
+      "lookup_samples": [
+        {
+          "pressure": -0.1,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "pressure": 0.0,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "pressure": 0.0009775171065493646,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "pressure": 0.1,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "pressure": 0.2,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "pressure": 0.25,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "pressure": 0.333,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "pressure": 0.5,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "pressure": 0.666,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "pressure": 0.75,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "pressure": 0.9,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "pressure": 1.0,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "pressure": 1.1,
+          "value": 1.0,
+          "binary32": "3f800000"
+        }
+      ]
+    },
+    {
+      "name": "empty_curve_fallback",
+      "points": [],
+      "resolution": 1024,
+      "table_sha256_le_float32": "295076dc52028ea20310ff2b68797b511b2e5b8305ce8efac2b4a3c2f641014b",
+      "table_samples": [
+        {
+          "index": 0,
+          "value": 0.0,
+          "binary32": "00000000"
+        },
+        {
+          "index": 1,
+          "value": 0.0009775171056389809,
+          "binary32": "3a802008"
+        },
+        {
+          "index": 127,
+          "value": 0.12414467334747314,
+          "binary32": "3dfe3f90"
+        },
+        {
+          "index": 255,
+          "value": 0.2492668628692627,
+          "binary32": "3e7f3fd0"
+        },
+        {
+          "index": 256,
+          "value": 0.2502443790435791,
+          "binary32": "3e802008"
+        },
+        {
+          "index": 341,
+          "value": 0.3333333432674408,
+          "binary32": "3eaaaaab"
+        },
+        {
+          "index": 511,
+          "value": 0.4995112419128418,
+          "binary32": "3effbff0"
+        },
+        {
+          "index": 512,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        },
+        {
+          "index": 767,
+          "value": 0.7497556209564209,
+          "binary32": "3f3feffc"
+        },
+        {
+          "index": 1022,
+          "value": 0.9990224838256836,
+          "binary32": "3f7fbff0"
+        },
+        {
+          "index": 1023,
+          "value": 1.0,
+          "binary32": "3f800000"
+        }
+      ],
+      "lookup_samples": [
+        {
+          "pressure": -0.1,
+          "value": 0.0,
+          "binary32": "00000000"
+        },
+        {
+          "pressure": 0.0,
+          "value": 0.0,
+          "binary32": "00000000"
+        },
+        {
+          "pressure": 0.0009775171065493646,
+          "value": 0.0009775171056389809,
+          "binary32": "3a802008"
+        },
+        {
+          "pressure": 0.1,
+          "value": 0.10000000894069672,
+          "binary32": "3dccccce"
+        },
+        {
+          "pressure": 0.2,
+          "value": 0.20000001788139343,
+          "binary32": "3e4cccce"
+        },
+        {
+          "pressure": 0.25,
+          "value": 0.25,
+          "binary32": "3e800000"
+        },
+        {
+          "pressure": 0.333,
+          "value": 0.3330000042915344,
+          "binary32": "3eaa7efa"
+        },
+        {
+          "pressure": 0.5,
+          "value": 0.5,
+          "binary32": "3f000000"
+        },
+        {
+          "pressure": 0.666,
+          "value": 0.6660000085830688,
+          "binary32": "3f2a7efa"
+        },
+        {
+          "pressure": 0.75,
+          "value": 0.75,
+          "binary32": "3f400000"
+        },
+        {
+          "pressure": 0.9,
+          "value": 0.8999999165534973,
+          "binary32": "3f666665"
+        },
+        {
+          "pressure": 1.0,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "pressure": 1.1,
+          "value": 1.0,
+          "binary32": "3f800000"
+        }
+      ]
+    },
+    {
+      "name": "single_point_fallback",
+      "points": [
+        [
+          0.3,
+          0.7
+        ]
+      ],
+      "resolution": 1024,
+      "table_sha256_le_float32": "295076dc52028ea20310ff2b68797b511b2e5b8305ce8efac2b4a3c2f641014b",
+      "table_samples": [
+        {
+          "index": 0,
+          "value": 0.0,
+          "binary32": "00000000"
+        },
+        {
+          "index": 1,
+          "value": 0.0009775171056389809,
+          "binary32": "3a802008"
+        },
+        {
+          "index": 127,
+          "value": 0.12414467334747314,
+          "binary32": "3dfe3f90"
+        },
+        {
+          "index": 255,
+          "value": 0.2492668628692627,
+          "binary32": "3e7f3fd0"
+        },
+        {
+          "index": 256,
+          "value": 0.2502443790435791,
+          "binary32": "3e802008"
+        },
+        {
+          "index": 341,
+          "value": 0.3333333432674408,
+          "binary32": "3eaaaaab"
+        },
+        {
+          "index": 511,
+          "value": 0.4995112419128418,
+          "binary32": "3effbff0"
+        },
+        {
+          "index": 512,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        },
+        {
+          "index": 767,
+          "value": 0.7497556209564209,
+          "binary32": "3f3feffc"
+        },
+        {
+          "index": 1022,
+          "value": 0.9990224838256836,
+          "binary32": "3f7fbff0"
+        },
+        {
+          "index": 1023,
+          "value": 1.0,
+          "binary32": "3f800000"
+        }
+      ],
+      "lookup_samples": [
+        {
+          "pressure": -0.1,
+          "value": 0.0,
+          "binary32": "00000000"
+        },
+        {
+          "pressure": 0.0,
+          "value": 0.0,
+          "binary32": "00000000"
+        },
+        {
+          "pressure": 0.0009775171065493646,
+          "value": 0.0009775171056389809,
+          "binary32": "3a802008"
+        },
+        {
+          "pressure": 0.1,
+          "value": 0.10000000894069672,
+          "binary32": "3dccccce"
+        },
+        {
+          "pressure": 0.2,
+          "value": 0.20000001788139343,
+          "binary32": "3e4cccce"
+        },
+        {
+          "pressure": 0.25,
+          "value": 0.25,
+          "binary32": "3e800000"
+        },
+        {
+          "pressure": 0.333,
+          "value": 0.3330000042915344,
+          "binary32": "3eaa7efa"
+        },
+        {
+          "pressure": 0.5,
+          "value": 0.5,
+          "binary32": "3f000000"
+        },
+        {
+          "pressure": 0.666,
+          "value": 0.6660000085830688,
+          "binary32": "3f2a7efa"
+        },
+        {
+          "pressure": 0.75,
+          "value": 0.75,
+          "binary32": "3f400000"
+        },
+        {
+          "pressure": 0.9,
+          "value": 0.8999999165534973,
+          "binary32": "3f666665"
+        },
+        {
+          "pressure": 1.0,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "pressure": 1.1,
+          "value": 1.0,
+          "binary32": "3f800000"
+        }
+      ]
+    },
+    {
+      "name": "identity",
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ]
+      ],
+      "resolution": 1024,
+      "table_sha256_le_float32": "295076dc52028ea20310ff2b68797b511b2e5b8305ce8efac2b4a3c2f641014b",
+      "table_samples": [
+        {
+          "index": 0,
+          "value": 0.0,
+          "binary32": "00000000"
+        },
+        {
+          "index": 1,
+          "value": 0.0009775171056389809,
+          "binary32": "3a802008"
+        },
+        {
+          "index": 127,
+          "value": 0.12414467334747314,
+          "binary32": "3dfe3f90"
+        },
+        {
+          "index": 255,
+          "value": 0.2492668628692627,
+          "binary32": "3e7f3fd0"
+        },
+        {
+          "index": 256,
+          "value": 0.2502443790435791,
+          "binary32": "3e802008"
+        },
+        {
+          "index": 341,
+          "value": 0.3333333432674408,
+          "binary32": "3eaaaaab"
+        },
+        {
+          "index": 511,
+          "value": 0.4995112419128418,
+          "binary32": "3effbff0"
+        },
+        {
+          "index": 512,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        },
+        {
+          "index": 767,
+          "value": 0.7497556209564209,
+          "binary32": "3f3feffc"
+        },
+        {
+          "index": 1022,
+          "value": 0.9990224838256836,
+          "binary32": "3f7fbff0"
+        },
+        {
+          "index": 1023,
+          "value": 1.0,
+          "binary32": "3f800000"
+        }
+      ],
+      "lookup_samples": [
+        {
+          "pressure": -0.1,
+          "value": 0.0,
+          "binary32": "00000000"
+        },
+        {
+          "pressure": 0.0,
+          "value": 0.0,
+          "binary32": "00000000"
+        },
+        {
+          "pressure": 0.0009775171065493646,
+          "value": 0.0009775171056389809,
+          "binary32": "3a802008"
+        },
+        {
+          "pressure": 0.1,
+          "value": 0.10000000894069672,
+          "binary32": "3dccccce"
+        },
+        {
+          "pressure": 0.2,
+          "value": 0.20000001788139343,
+          "binary32": "3e4cccce"
+        },
+        {
+          "pressure": 0.25,
+          "value": 0.25,
+          "binary32": "3e800000"
+        },
+        {
+          "pressure": 0.333,
+          "value": 0.3330000042915344,
+          "binary32": "3eaa7efa"
+        },
+        {
+          "pressure": 0.5,
+          "value": 0.5,
+          "binary32": "3f000000"
+        },
+        {
+          "pressure": 0.666,
+          "value": 0.6660000085830688,
+          "binary32": "3f2a7efa"
+        },
+        {
+          "pressure": 0.75,
+          "value": 0.75,
+          "binary32": "3f400000"
+        },
+        {
+          "pressure": 0.9,
+          "value": 0.8999999165534973,
+          "binary32": "3f666665"
+        },
+        {
+          "pressure": 1.0,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "pressure": 1.1,
+          "value": 1.0,
+          "binary32": "3f800000"
+        }
+      ],
+      "max_difference_from_linear_4097_probes": {
+        "difference": 5.960464477539063e-08,
+        "pressure": 0.99462890625
+      }
+    },
+    {
+      "name": "descending",
+      "points": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          0
+        ]
+      ],
+      "resolution": 1024,
+      "table_sha256_le_float32": "db8f2d6eadaf86d59eb2b232a6e253c02ca054c7727d129f9538592d8ccd4d4b",
+      "table_samples": [
+        {
+          "index": 0,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "index": 1,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "index": 127,
+          "value": 0.8768328428268433,
+          "binary32": "3f60781e"
+        },
+        {
+          "index": 255,
+          "value": 0.7517106533050537,
+          "binary32": "3f40701c"
+        },
+        {
+          "index": 256,
+          "value": 0.7507331371307373,
+          "binary32": "3f40300c"
+        },
+        {
+          "index": 341,
+          "value": 0.667644202709198,
+          "binary32": "3f2aeabb"
+        },
+        {
+          "index": 511,
+          "value": 0.5014662742614746,
+          "binary32": "3f006018"
+        },
+        {
+          "index": 512,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        },
+        {
+          "index": 767,
+          "value": 0.2512218952178955,
+          "binary32": "3e80a028"
+        },
+        {
+          "index": 1022,
+          "value": 0.0019550342112779617,
+          "binary32": "3b002008"
+        },
+        {
+          "index": 1023,
+          "value": 0.0009775171056389809,
+          "binary32": "3a802008"
+        }
+      ],
+      "lookup_samples": [
+        {
+          "pressure": -0.1,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "pressure": 0.0,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "pressure": 0.0009775171065493646,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "pressure": 0.1,
+          "value": 0.9009774923324585,
+          "binary32": "3f66a676"
+        },
+        {
+          "pressure": 0.2,
+          "value": 0.8009775280952454,
+          "binary32": "3f4d0cdd"
+        },
+        {
+          "pressure": 0.25,
+          "value": 0.7509775161743164,
+          "binary32": "3f404010"
+        },
+        {
+          "pressure": 0.333,
+          "value": 0.6679775714874268,
+          "binary32": "3f2b0094"
+        },
+        {
+          "pressure": 0.5,
+          "value": 0.5009775161743164,
+          "binary32": "3f004010"
+        },
+        {
+          "pressure": 0.666,
+          "value": 0.33497753739356995,
+          "binary32": "3eab822d"
+        },
+        {
+          "pressure": 0.75,
+          "value": 0.2509775161743164,
+          "binary32": "3e808020"
+        },
+        {
+          "pressure": 0.9,
+          "value": 0.10097756236791611,
+          "binary32": "3dcecd53"
+        },
+        {
+          "pressure": 1.0,
+          "value": 0.0009775171056389809,
+          "binary32": "3a802008"
+        },
+        {
+          "pressure": 1.1,
+          "value": 0.0009775171056389809,
+          "binary32": "3a802008"
+        }
+      ],
+      "max_difference_from_linear_4097_probes": {
+        "difference": 0.0009775757789611816,
+        "pressure": 0.468994140625
+      }
+    },
+    {
+      "name": "constant_half",
+      "points": [
+        [
+          0,
+          0.5
+        ],
+        [
+          1,
+          0.5
+        ]
+      ],
+      "resolution": 1024,
+      "table_sha256_le_float32": "5816b278901b10d821fb41a5db86763e88892bef314808514ac15bfe42315c5a",
+      "table_samples": [
+        {
+          "index": 0,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        },
+        {
+          "index": 1,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        },
+        {
+          "index": 127,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        },
+        {
+          "index": 255,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        },
+        {
+          "index": 256,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        },
+        {
+          "index": 341,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        },
+        {
+          "index": 511,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        },
+        {
+          "index": 512,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        },
+        {
+          "index": 767,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        },
+        {
+          "index": 1022,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        },
+        {
+          "index": 1023,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        }
+      ],
+      "lookup_samples": [
+        {
+          "pressure": -0.1,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        },
+        {
+          "pressure": 0.0,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        },
+        {
+          "pressure": 0.0009775171065493646,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        },
+        {
+          "pressure": 0.1,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        },
+        {
+          "pressure": 0.2,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        },
+        {
+          "pressure": 0.25,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        },
+        {
+          "pressure": 0.333,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        },
+        {
+          "pressure": 0.5,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        },
+        {
+          "pressure": 0.666,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        },
+        {
+          "pressure": 0.75,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        },
+        {
+          "pressure": 0.9,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        },
+        {
+          "pressure": 1.0,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        },
+        {
+          "pressure": 1.1,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        }
+      ],
+      "max_difference_from_linear_4097_probes": {
+        "difference": 0.0004887580871582031,
+        "pressure": 1.0
+      }
+    },
+    {
+      "name": "natural_bend",
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0.5,
+          0.25
+        ],
+        [
+          1,
+          1
+        ]
+      ],
+      "resolution": 1024,
+      "table_sha256_le_float32": "c41160b745a0717df1b947a0aedacc074ac43027103b9c4528129b8f219d2024",
+      "table_samples": [
+        {
+          "index": 0,
+          "value": 0.0,
+          "binary32": "00000000"
+        },
+        {
+          "index": 1,
+          "value": 0.00024438020773231983,
+          "binary32": "39802028"
+        },
+        {
+          "index": 127,
+          "value": 0.03294574096798897,
+          "binary32": "3d06f21d"
+        },
+        {
+          "index": 255,
+          "value": 0.07777442038059235,
+          "binary32": "3d9f4832"
+        },
+        {
+          "index": 256,
+          "value": 0.07820136845111847,
+          "binary32": "3da0280a"
+        },
+        {
+          "index": 341,
+          "value": 0.12029806524515152,
+          "binary32": "3df65ed5"
+        },
+        {
+          "index": 511,
+          "value": 0.2492682933807373,
+          "binary32": "3e7f4030"
+        },
+        {
+          "index": 512,
+          "value": 0.2502443790435791,
+          "binary32": "3e802008"
+        },
+        {
+          "index": 767,
+          "value": 0.5771634578704834,
+          "binary32": "3f13c0fc"
+        },
+        {
+          "index": 1022,
+          "value": 0.997556209564209,
+          "binary32": "3f7f5fd8"
+        },
+        {
+          "index": 1023,
+          "value": 0.9992668628692627,
+          "binary32": "3f7fcff4"
+        }
+      ],
+      "lookup_samples": [
+        {
+          "pressure": -0.1,
+          "value": 0.0,
+          "binary32": "00000000"
+        },
+        {
+          "pressure": 0.0,
+          "value": 0.0,
+          "binary32": "00000000"
+        },
+        {
+          "pressure": 0.0009775171065493646,
+          "value": 0.00024438020773231983,
+          "binary32": "39802028"
+        },
+        {
+          "pressure": 0.1,
+          "value": 0.025998108088970184,
+          "binary32": "3cd4f9fc"
+        },
+        {
+          "pressure": 0.2,
+          "value": 0.057984523475170135,
+          "binary32": "3d6d812e"
+        },
+        {
+          "pressure": 0.25,
+          "value": 0.07809463143348694,
+          "binary32": "3d9ff014"
+        },
+        {
+          "pressure": 0.333,
+          "value": 0.12010415643453598,
+          "binary32": "3df5f92b"
+        },
+        {
+          "pressure": 0.5,
+          "value": 0.2497563362121582,
+          "binary32": "3e7fc020"
+        },
+        {
+          "pressure": 0.666,
+          "value": 0.45228150486946106,
+          "binary32": "3ee79171"
+        },
+        {
+          "pressure": 0.75,
+          "value": 0.5775451064109802,
+          "binary32": "3f13d9ff"
+        },
+        {
+          "pressure": 0.9,
+          "value": 0.8252944350242615,
+          "binary32": "3f53467f"
+        },
+        {
+          "pressure": 1.0,
+          "value": 0.9992668628692627,
+          "binary32": "3f7fcff4"
+        },
+        {
+          "pressure": 1.1,
+          "value": 0.9992668628692627,
+          "binary32": "3f7fcff4"
+        }
+      ],
+      "max_difference_from_linear_4097_probes": {
+        "difference": 0.048648178577423096,
+        "pressure": 0.711669921875
+      }
+    },
+    {
+      "name": "hump",
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0.5,
+          1
+        ],
+        [
+          1,
+          0
+        ]
+      ],
+      "resolution": 1024,
+      "table_sha256_le_float32": "f2f3555417166c871287952f7975c5e29d214584e8f573b176a04e05b4d4bbc9",
+      "table_samples": [
+        {
+          "index": 0,
+          "value": 0.0,
+          "binary32": "00000000"
+        },
+        {
+          "index": 1,
+          "value": 0.002932547591626644,
+          "binary32": "3b402ffc"
+        },
+        {
+          "index": 127,
+          "value": 0.3647957444190979,
+          "binary32": "3ebac682"
+        },
+        {
+          "index": 255,
+          "value": 0.6859697699546814,
+          "binary32": "3f2f9bb7"
+        },
+        {
+          "index": 256,
+          "value": 0.6881720423698425,
+          "binary32": "3f302c0b"
+        },
+        {
+          "index": 341,
+          "value": 0.8521410226821899,
+          "binary32": "3f5a25ea"
+        },
+        {
+          "index": 511,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "index": 512,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "index": 767,
+          "value": 0.6903685927391052,
+          "binary32": "3f30bbff"
+        },
+        {
+          "index": 1022,
+          "value": 0.0058650728315114975,
+          "binary32": "3bc02fcc"
+        },
+        {
+          "index": 1023,
+          "value": 0.002932547591626644,
+          "binary32": "3b402ffc"
+        }
+      ],
+      "lookup_samples": [
+        {
+          "pressure": -0.1,
+          "value": 0.0,
+          "binary32": "00000000"
+        },
+        {
+          "pressure": 0.0,
+          "value": 0.0,
+          "binary32": "00000000"
+        },
+        {
+          "pressure": 0.0009775171065493646,
+          "value": 0.002932547591626644,
+          "binary32": "3b402ffc"
+        },
+        {
+          "pressure": 0.1,
+          "value": 0.29600757360458374,
+          "binary32": "3e978e4e"
+        },
+        {
+          "pressure": 0.2,
+          "value": 0.5680619478225708,
+          "binary32": "3f116c82"
+        },
+        {
+          "pressure": 0.25,
+          "value": 0.6876214742660522,
+          "binary32": "3f3007f6"
+        },
+        {
+          "pressure": 0.333,
+          "value": 0.8515833020210266,
+          "binary32": "3f5a015d"
+        },
+        {
+          "pressure": 0.5,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "pressure": 0.666,
+          "value": 0.8548740148544312,
+          "binary32": "3f5ad906"
+        },
+        {
+          "pressure": 0.75,
+          "value": 0.6898194551467896,
+          "binary32": "3f309802"
+        },
+        {
+          "pressure": 0.9,
+          "value": 0.2988220453262329,
+          "binary32": "3e98ff34"
+        },
+        {
+          "pressure": 1.0,
+          "value": 0.002932547591626644,
+          "binary32": "3b402ffc"
+        },
+        {
+          "pressure": 1.1,
+          "value": 0.002932547591626644,
+          "binary32": "3b402ffc"
+        }
+      ],
+      "max_difference_from_linear_4097_probes": {
+        "difference": 0.1945926547050476,
+        "pressure": 0.711669921875
+      }
+    },
+    {
+      "name": "nonuniform",
+      "points": [
+        [
+          0,
+          0.05
+        ],
+        [
+          0.2,
+          0.9
+        ],
+        [
+          1,
+          0.4
+        ]
+      ],
+      "resolution": 1024,
+      "table_sha256_le_float32": "769f1b49d3dd65ab3ff061d7955be217af88b24cfb50dbcc117d6773c8329f29",
+      "table_samples": [
+        {
+          "index": 0,
+          "value": 0.05004887655377388,
+          "binary32": "3d4d000d"
+        },
+        {
+          "index": 1,
+          "value": 0.05467985197901726,
+          "binary32": "3d5ff7fb"
+        },
+        {
+          "index": 127,
+          "value": 0.6149113774299622,
+          "binary32": "3f1d6ad5"
+        },
+        {
+          "index": 255,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "index": 256,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "index": 341,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "index": 511,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "index": 512,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "index": 767,
+          "value": 0.999072790145874,
+          "binary32": "3f7fc33c"
+        },
+        {
+          "index": 1022,
+          "value": 0.40542519092559814,
+          "binary32": "3ecf93e4"
+        },
+        {
+          "index": 1023,
+          "value": 0.4029080867767334,
+          "binary32": "3ece49f8"
+        }
+      ],
+      "lookup_samples": [
+        {
+          "pressure": -0.1,
+          "value": 0.05004887655377388,
+          "binary32": "3d4d000d"
+        },
+        {
+          "pressure": 0.0,
+          "value": 0.05004887655377388,
+          "binary32": "3d4d000d"
+        },
+        {
+          "pressure": 0.0009775171065493646,
+          "value": 0.05467985197901726,
+          "binary32": "3d5ff7fb"
+        },
+        {
+          "pressure": 0.1,
+          "value": 0.5116344690322876,
+          "binary32": "3f02fa7a"
+        },
+        {
+          "pressure": 0.2,
+          "value": 0.900237500667572,
+          "binary32": "3f6675f7"
+        },
+        {
+          "pressure": 0.25,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "pressure": 0.333,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "pressure": 0.5,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "pressure": 0.666,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "pressure": 0.75,
+          "value": 0.9985836744308472,
+          "binary32": "3f7fa32e"
+        },
+        {
+          "pressure": 0.9,
+          "value": 0.6572771072387695,
+          "binary32": "3f284350"
+        },
+        {
+          "pressure": 1.0,
+          "value": 0.4029080867767334,
+          "binary32": "3ece49f8"
+        },
+        {
+          "pressure": 1.1,
+          "value": 0.4029080867767334,
+          "binary32": "3ece49f8"
+        }
+      ],
+      "max_difference_from_linear_4097_probes": {
+        "difference": 0.4429859308719415,
+        "pressure": 0.748779296875
+      }
+    },
+    {
+      "name": "plateau_clipping",
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0.3,
+          1
+        ],
+        [
+          0.6,
+          1
+        ],
+        [
+          1,
+          0
+        ]
+      ],
+      "resolution": 1024,
+      "table_sha256_le_float32": "95ac7e795c6a6897a7ea96b53ed19d2720f9cddc5d60eda752766df624fae10f",
+      "table_samples": [
+        {
+          "index": 0,
+          "value": 0.0,
+          "binary32": "00000000"
+        },
+        {
+          "index": 1,
+          "value": 0.003980761393904686,
+          "binary32": "3b82710c"
+        },
+        {
+          "index": 127,
+          "value": 0.4898781180381775,
+          "binary32": "3efad14e"
+        },
+        {
+          "index": 255,
+          "value": 0.8881722688674927,
+          "binary32": "3f635f42"
+        },
+        {
+          "index": 256,
+          "value": 0.8906539678573608,
+          "binary32": "3f6401e6"
+        },
+        {
+          "index": 341,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "index": 511,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "index": 512,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "index": 767,
+          "value": 0.7046938538551331,
+          "binary32": "3f3466d1"
+        },
+        {
+          "index": 1022,
+          "value": 0.005871227011084557,
+          "binary32": "3bc0636c"
+        },
+        {
+          "index": 1023,
+          "value": 0.002935622353106737,
+          "binary32": "3b406392"
+        }
+      ],
+      "lookup_samples": [
+        {
+          "pressure": -0.1,
+          "value": 0.0,
+          "binary32": "00000000"
+        },
+        {
+          "pressure": 0.0,
+          "value": 0.0,
+          "binary32": "00000000"
+        },
+        {
+          "pressure": 0.0009775171065493646,
+          "value": 0.003980761393904686,
+          "binary32": "3b82710c"
+        },
+        {
+          "pressure": 0.1,
+          "value": 0.3990371823310852,
+          "binary32": "3ecc4e9a"
+        },
+        {
+          "pressure": 0.2,
+          "value": 0.7489041686058044,
+          "binary32": "3f3fb82f"
+        },
+        {
+          "pressure": 0.25,
+          "value": 0.890033483505249,
+          "binary32": "3f63d93c"
+        },
+        {
+          "pressure": 0.333,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "pressure": 0.5,
+          "value": 1.0,
+          "binary32": "3f800000"
+        },
+        {
+          "pressure": 0.666,
+          "value": 0.8880154490470886,
+          "binary32": "3f6354fb"
+        },
+        {
+          "pressure": 0.75,
+          "value": 0.7041046023368835,
+          "binary32": "3f344033"
+        },
+        {
+          "pressure": 0.9,
+          "value": 0.3000185787677765,
+          "binary32": "3e999c09"
+        },
+        {
+          "pressure": 1.0,
+          "value": 0.002935622353106737,
+          "binary32": "3b406392"
+        },
+        {
+          "pressure": 1.1,
+          "value": 0.002935622353106737,
+          "binary32": "3b406392"
+        }
+      ],
+      "max_difference_from_linear_4097_probes": {
+        "difference": 0.085414472301231,
+        "pressure": 0.173095703125
+      }
+    },
+    {
+      "name": "interior_endpoints",
+      "points": [
+        [
+          0.2,
+          0.3
+        ],
+        [
+          0.8,
+          0.7
+        ]
+      ],
+      "resolution": 1024,
+      "table_sha256_le_float32": "36eeb8d5c6727dde5d93392efc205aa6b49893dd32c5fa6edae6110538017c06",
+      "table_samples": [
+        {
+          "index": 0,
+          "value": 0.3002932667732239,
+          "binary32": "3e99c00a"
+        },
+        {
+          "index": 1,
+          "value": 0.3002932667732239,
+          "binary32": "3e99c00a"
+        },
+        {
+          "index": 127,
+          "value": 0.3002932667732239,
+          "binary32": "3e99c00a"
+        },
+        {
+          "index": 255,
+          "value": 0.3330075144767761,
+          "binary32": "3eaa7ff6"
+        },
+        {
+          "index": 256,
+          "value": 0.33365917205810547,
+          "binary32": "3eaad560"
+        },
+        {
+          "index": 341,
+          "value": 0.38905179500579834,
+          "binary32": "3ec731cc"
+        },
+        {
+          "index": 511,
+          "value": 0.49983710050582886,
+          "binary32": "3effeaa6"
+        },
+        {
+          "index": 512,
+          "value": 0.5004887580871582,
+          "binary32": "3f002008"
+        },
+        {
+          "index": 767,
+          "value": 0.6666666269302368,
+          "binary32": "3f2aaaaa"
+        },
+        {
+          "index": 1022,
+          "value": 0.7006842494010925,
+          "binary32": "3f33600b"
+        },
+        {
+          "index": 1023,
+          "value": 0.7006842494010925,
+          "binary32": "3f33600b"
+        }
+      ],
+      "lookup_samples": [
+        {
+          "pressure": -0.1,
+          "value": 0.3002932667732239,
+          "binary32": "3e99c00a"
+        },
+        {
+          "pressure": 0.0,
+          "value": 0.3002932667732239,
+          "binary32": "3e99c00a"
+        },
+        {
+          "pressure": 0.0009775171065493646,
+          "value": 0.3002932667732239,
+          "binary32": "3e99c00a"
+        },
+        {
+          "pressure": 0.1,
+          "value": 0.3002932667732239,
+          "binary32": "3e99c00a"
+        },
+        {
+          "pressure": 0.2,
+          "value": 0.3003714680671692,
+          "binary32": "3e99ca4a"
+        },
+        {
+          "pressure": 0.25,
+          "value": 0.3334962725639343,
+          "binary32": "3eaac006"
+        },
+        {
+          "pressure": 0.333,
+          "value": 0.3888295888900757,
+          "binary32": "3ec714ac"
+        },
+        {
+          "pressure": 0.5,
+          "value": 0.5001629590988159,
+          "binary32": "3f000aae"
+        },
+        {
+          "pressure": 0.666,
+          "value": 0.6108295917510986,
+          "binary32": "3f1c5f54"
+        },
+        {
+          "pressure": 0.75,
+          "value": 0.6668295860290527,
+          "binary32": "3f2ab558"
+        },
+        {
+          "pressure": 0.9,
+          "value": 0.7006842494010925,
+          "binary32": "3f33600b"
+        },
+        {
+          "pressure": 1.0,
+          "value": 0.7006842494010925,
+          "binary32": "3f33600b"
+        },
+        {
+          "pressure": 1.1,
+          "value": 0.7006842494010925,
+          "binary32": "3f33600b"
+        }
+      ],
+      "max_difference_from_linear_4097_probes": {
+        "difference": 0.0006842613220214844,
+        "pressure": 1.0
+      }
+    },
+    {
+      "name": "noninteger_knots",
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0.333,
+          0.8
+        ],
+        [
+          0.669,
+          0.2
+        ],
+        [
+          1,
+          1
+        ]
+      ],
+      "resolution": 1024,
+      "table_sha256_le_float32": "cbf07a4ca910a9ecdcad211d14c980f0ca48386fad4a6077d5d56d19cd712f08",
+      "table_samples": [
+        {
+          "index": 0,
+          "value": 0.0,
+          "binary32": "00000000"
+        },
+        {
+          "index": 1,
+          "value": 0.0037109870463609695,
+          "binary32": "3b733408"
+        },
+        {
+          "index": 127,
+          "value": 0.4472922682762146,
+          "binary32": "3ee5037e"
+        },
+        {
+          "index": 255,
+          "value": 0.7519909739494324,
+          "binary32": "3f40827b"
+        },
+        {
+          "index": 256,
+          "value": 0.7534069418907166,
+          "binary32": "3f40df47"
+        },
+        {
+          "index": 341,
+          "value": 0.8007790446281433,
+          "binary32": "3f4cffdb"
+        },
+        {
+          "index": 511,
+          "value": 0.5046229958534241,
+          "binary32": "3f012ef9"
+        },
+        {
+          "index": 512,
+          "value": 0.502188503742218,
+          "binary32": "3f008f6d"
+        },
+        {
+          "index": 767,
+          "value": 0.24516938626766205,
+          "binary32": "3e7b0daf"
+        },
+        {
+          "index": 1022,
+          "value": 0.9935314655303955,
+          "binary32": "3f7e5814"
+        },
+        {
+          "index": 1023,
+          "value": 0.9972545504570007,
+          "binary32": "3f7f4c13"
+        }
+      ],
+      "lookup_samples": [
+        {
+          "pressure": -0.1,
+          "value": 0.0,
+          "binary32": "00000000"
+        },
+        {
+          "pressure": 0.0,
+          "value": 0.0,
+          "binary32": "00000000"
+        },
+        {
+          "pressure": 0.0009775171065493646,
+          "value": 0.0037109870463609695,
+          "binary32": "3b733408"
+        },
+        {
+          "pressure": 0.1,
+          "value": 0.36708828806877136,
+          "binary32": "3ebbf2ff"
+        },
+        {
+          "pressure": 0.2,
+          "value": 0.6588995456695557,
+          "binary32": "3f28ada4"
+        },
+        {
+          "pressure": 0.25,
+          "value": 0.7530529499053955,
+          "binary32": "3f40c814"
+        },
+        {
+          "pressure": 0.333,
+          "value": 0.8009034991264343,
+          "binary32": "3f4d0803"
+        },
+        {
+          "pressure": 0.5,
+          "value": 0.503405749797821,
+          "binary32": "3f00df33"
+        },
+        {
+          "pressure": 0.666,
+          "value": 0.20170478522777557,
+          "binary32": "3e4e8bb3"
+        },
+        {
+          "pressure": 0.75,
+          "value": 0.24551580846309662,
+          "binary32": "3e7b687f"
+        },
+        {
+          "pressure": 0.9,
+          "value": 0.6294397115707397,
+          "binary32": "3f2122f6"
+        },
+        {
+          "pressure": 1.0,
+          "value": 0.9972545504570007,
+          "binary32": "3f7f4c13"
+        },
+        {
+          "pressure": 1.1,
+          "value": 0.9972545504570007,
+          "binary32": "3f7f4c13"
+        }
+      ],
+      "max_difference_from_linear_4097_probes": {
+        "difference": 0.1788718693630873,
+        "pressure": 0.8095703125
+      }
+    },
+    {
+      "name": "duplicate_endpoints_sorted",
+      "points": [
+        [
+          1,
+          0.8
+        ],
+        [
+          0,
+          0.6
+        ],
+        [
+          0.5,
+          0.4
+        ],
+        [
+          0,
+          0.2
+        ],
+        [
+          1,
+          0.7
+        ]
+      ],
+      "resolution": 1024,
+      "table_sha256_le_float32": "d6e737d929f542280afae69b3c121d04debe0857c14f2095fd905089ef58ef01",
+      "table_samples": [
+        {
+          "index": 0,
+          "value": 0.20019550621509552,
+          "binary32": "3e4d000d"
+        },
+        {
+          "index": 1,
+          "value": 0.20053762197494507,
+          "binary32": "3e4d59bc"
+        },
+        {
+          "index": 127,
+          "value": 0.24402806162834167,
+          "binary32": "3e79e27e"
+        },
+        {
+          "index": 255,
+          "value": 0.2905304431915283,
+          "binary32": "3e94c068"
+        },
+        {
+          "index": 256,
+          "value": 0.2909091114997864,
+          "binary32": "3e94f20a"
+        },
+        {
+          "index": 341,
+          "value": 0.3242551386356354,
+          "binary32": "3ea604c5"
+        },
+        {
+          "index": 511,
+          "value": 0.3999025523662567,
+          "binary32": "3eccc007"
+        },
+        {
+          "index": 512,
+          "value": 0.40039101243019104,
+          "binary32": "3ecd000d"
+        },
+        {
+          "index": 767,
+          "value": 0.5405548214912415,
+          "binary32": "3f0a61cd"
+        },
+        {
+          "index": 1022,
+          "value": 0.6994134783744812,
+          "binary32": "3f330cc3"
+        },
+        {
+          "index": 1023,
+          "value": 0.7000488638877869,
+          "binary32": "3f333667"
+        }
+      ],
+      "lookup_samples": [
+        {
+          "pressure": -0.1,
+          "value": 0.20019550621509552,
+          "binary32": "3e4d000d"
+        },
+        {
+          "pressure": 0.0,
+          "value": 0.20019550621509552,
+          "binary32": "3e4d000d"
+        },
+        {
+          "pressure": 0.0009775171065493646,
+          "value": 0.20053762197494507,
+          "binary32": "3e4d59bc"
+        },
+        {
+          "pressure": 0.1,
+          "value": 0.2353951334953308,
+          "binary32": "3e710b6c"
+        },
+        {
+          "pressure": 0.2,
+          "value": 0.2717924118041992,
+          "binary32": "3e8b2860"
+        },
+        {
+          "pressure": 0.25,
+          "value": 0.29081445932388306,
+          "binary32": "3e94e5a2"
+        },
+        {
+          "pressure": 0.333,
+          "value": 0.3241163492202759,
+          "binary32": "3ea5f294"
+        },
+        {
+          "pressure": 0.5,
+          "value": 0.4001467823982239,
+          "binary32": "3ecce00a"
+        },
+        {
+          "pressure": 0.666,
+          "value": 0.4904518127441406,
+          "binary32": "3efb1c80"
+        },
+        {
+          "pressure": 0.75,
+          "value": 0.5407044887542725,
+          "binary32": "3f0a6b9c"
+        },
+        {
+          "pressure": 0.9,
+          "value": 0.6352543830871582,
+          "binary32": "3f22a008"
+        },
+        {
+          "pressure": 1.0,
+          "value": 0.7000488638877869,
+          "binary32": "3f333667"
+        },
+        {
+          "pressure": 1.1,
+          "value": 0.7000488638877869,
+          "binary32": "3f333667"
+        }
+      ],
+      "max_difference_from_linear_4097_probes": {
+        "difference": 0.009534142765915021,
+        "pressure": 0.71240234375
+      }
+    }
+  ]
+}

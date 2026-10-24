@@ -8,6 +8,12 @@ builds cannot read new v3 documents. PSD preserves group modes. Unsupported nati
 group metadata uses a rendered appearance layer with hidden editable sources.
 Brush interchange also preserves tilt-opacity settings and authored mask coverage, while Count
 Jitter reaches its documented range. Theme evidence waits for actual repainted dialog pixels.
+The guide reminder reflects active, visible guides and stays readable over the canvas. Workspace
+evidence waits for rendered artwork, and large-text tool coverage includes the real editor route.
+The tool strip exposes all 20 tools, including functional tap/drag Zoom navigation.
+New Procreate imports use the inspected native pressure spline and sampled lookup; existing saved
+curves keep their prior behavior. [Numerical contracts and boundaries](docs/NATIVE_PRESSURE_SPLINE.md)
+distinguish reconstructed expectations from a live reference-app comparison.
 
 The full six-lane GitHub Actions emulator matrix now requires every declared device test to appear
 in its results, permits only documented API-specific skips, verifies the actual API/page size and
@@ -17,6 +23,8 @@ group interchange, brush endpoints and the blend picker. The narrow Android-runt
 cannot discard failures encoded in JUnit attributes. Read the **exact commit's completed workflow**
 for execution results; **complete Procreate quality and feature parity remains unestablished**.
 The JVM gate requires the hash-pinned reference brush corpus in addition to genuine sample documents.
+Native archive mappings, pressure-spline fixtures and compound-brush contracts are checked against
+that same input, with derived reports retained in the build artifact.
 
 ### Selection, clipboard and crop corrections (23 October 2026)
 

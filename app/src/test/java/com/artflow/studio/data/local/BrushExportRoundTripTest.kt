@@ -293,7 +293,8 @@ class BrushExportRoundTripTest {
         val source = BrushParams(importedAuxiliaryCurves = curves)
         val brushFile = ProcreateBrushWriter.brush(ProcreateBrushWriter.Brush("Auxiliary curves", source))
         val imported = requireNotNull(BrushArchives.read(brushFile, decode).single().settings).parameters
-        assertEquals(curves, imported.importedAuxiliaryCurves)
+        val nativeCurves = curves.mapValues { (_, curve) -> curve.copy(interpolation = PressureMapping.Interpolation.NATIVE_SPLINE_1024) }
+        assertEquals(nativeCurves, imported.importedAuxiliaryCurves)
         val saved =
             com.artflow.studio.domain.model.brush.BrushLibraryCodec.encode(
                 listOf(SavedBrush("curves", "Curves", imported)),
@@ -303,7 +304,7 @@ class BrushExportRoundTripTest {
                 .decode(saved)
                 .single()
                 .parameters
-        assertEquals(curves, restored.importedAuxiliaryCurves)
+        assertEquals(imported, restored)
     }
 
     @Test
@@ -492,7 +493,12 @@ class BrushExportRoundTripTest {
             assertTrue(keyed.array(curve["points"]).size >= 2)
         }
         val imported = requireNotNull(BrushArchives.read(exported, decode).single().settings).parameters
-        assertEquals(channels, imported.importedPressure)
+        val nativeOverall = overall.copy(interpolation = PressureMapping.Interpolation.NATIVE_SPLINE_1024)
+        val nativeFalling = falling.copy(interpolation = PressureMapping.Interpolation.NATIVE_SPLINE_1024)
+        assertEquals(
+            ImportedPressure(overall = nativeOverall, size = nativeFalling, opacity = nativeOverall, flow = nativeFalling),
+            imported.importedPressure,
+        )
     }
 
     @Test

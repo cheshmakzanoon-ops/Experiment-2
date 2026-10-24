@@ -57,8 +57,12 @@ class SourceWetBrushControlsTest {
                         ),
                     ),
                 ).parameters
-        assertEquals(0.25f, params.flowAt(0.5f), 0f)
-        assertEquals(0.75f, params.calculateEffectiveOpacity(0.5f), 0f)
+        val response = requireNotNull(params.importedPressure)
+        assertEquals(PressureMapping.Interpolation.NATIVE_SPLINE_1024, requireNotNull(response.flow).interpolation)
+        assertEquals(PressureMapping.Interpolation.NATIVE_SPLINE_1024, requireNotNull(response.opacity).interpolation)
+        // The recovered native table scales constant ordinates by 1024, then divides by 1023.
+        assertEquals(256f / 1023f, params.flowAt(0.5f), 0f)
+        assertEquals(768f / 1023f, params.calculateEffectiveOpacity(0.5f), 0f)
         assertEquals(params.importedPressure, roundTrip(params).importedPressure)
         assertEquals(emptyMap<String, PressureMapping>(), params.importedAuxiliaryCurves)
     }

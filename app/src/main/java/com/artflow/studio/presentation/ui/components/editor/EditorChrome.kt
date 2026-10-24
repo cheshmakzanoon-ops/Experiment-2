@@ -89,7 +89,7 @@ private val TOOL_GROUPS: List<Pair<String, List<ToolType>>> =
                 ToolType.SELECT_LASSO,
                 ToolType.SELECT_MAGIC_WAND,
             ),
-        "Edit" to listOf(ToolType.TRANSFORM, ToolType.MOVE, ToolType.EYEDROPPER),
+        "Edit" to listOf(ToolType.TRANSFORM, ToolType.MOVE, ToolType.EYEDROPPER, ToolType.ZOOM),
     )
 
 /**
