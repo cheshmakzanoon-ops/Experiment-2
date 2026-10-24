@@ -66,7 +66,7 @@ class WetCompoundPreviewDeviceTest {
         }
 
     @Test
-    fun croppedWetTailMatchesFullCommitAndSurvivesCancellationHistoryAndDiskReopen() =
+    fun croppedWetTailMatchesFullCommitAndSurvivesCancellationHistoryAndDiskReopen(): Unit =
         runBlocking(Dispatchers.Main) {
             try {
                 val source = PixelBuffer.filled(WIDTH, HEIGHT, RED)

@@ -1,0 +1,181 @@
+{
+  "schemaVersion": 1,
+  "baseRevision": "8d8d0e6885349a427b5ac26bea549b1b2e6868a2",
+  "conclusion": "PASS_LOCAL_ONLY",
+  "scope": "Local JVM and compilation/static gates; no emulator, packaging/lint/signing, displayed-frame performance, or native reference-app execution is inferred.",
+  "correctedFullGate": {
+    "command": "CI=true ./gradlew testDebugUnitTest compileDebugAndroidTestKotlin ktlintCheck detekt --continue --no-build-cache --stacktrace",
+    "buildCacheDisabled": true,
+    "jvmTaskExecuted": true,
+    "duration": "1m49s",
+    "log": {
+      "path": "opaque-source-over-final-local-gate.log",
+      "bytes": 5721,
+      "sha256": "b564480ebadd68579f9e1670b3ad517a93aab495610a9374d5324a15b358bf6e"
+    },
+    "changedSourceFilesAtGate": {
+      "app/src/main/java/com/artflow/studio/core/pixels/BlendModes.kt": "aae50c63b3365aacd8beb978c1abc4d404f1bbf1a34e3daeb5dd494244c6a945",
+      "app/src/test/java/com/artflow/studio/core/pixels/OpaqueSourceOverTest.kt": "de80b3a9d3aff1c9d6ac9e993fd8df16ac282da75bc5c7177a1d09fcb69fafeb",
+      "app/src/androidTest/java/com/artflow/studio/data/OpaqueSourceOverDeviceTest.kt": "7024f22daf48a3562ff0e21033dad1b501f8042e5992ad065726ade0efea690b"
+    },
+    "wetTestSourceAtGate": {
+      "sha256": "282e4701eee3378ccf53e698e7307ddf540eeedd2e302dbf67f760aa15b96f32",
+      "declaration": "public final org.json.JSONObject croppedWetTailMatchesFullCommitAndSurvivesCancellationHistoryAndDiskReopen();",
+      "bodyNotExecutedByLocalCompilation": true
+    },
+    "jvm": {
+      "suites": 253,
+      "tests": 1522,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "uniqueIdentities": 1522,
+      "identityEncoding": "Lexicographically sorted UTF-8 identities, one LF-terminated identity per line",
+      "identitySHA256": "e7c751f3044808cc8013722481850e9ca2b68222a47c4a348d4a8ed03d5f764a",
+      "retainedPriorIdentities": 1518,
+      "addedIdentities": [
+        "com.artflow.studio.core.pixels.OpaqueSourceOverTest#allAlphaPairsAndMixedChannelsRetainGeneralAndSourceAtopResults",
+        "com.artflow.studio.core.pixels.OpaqueSourceOverTest#clippedCompositeRetainsEveryBackdropAlphaAndSourceOwnership",
+        "com.artflow.studio.core.pixels.OpaqueSourceOverTest#everyOpaqueAlphaAndChannelCombinationMatchesThePublishedFloatEvaluation",
+        "com.artflow.studio.core.pixels.OpaqueSourceOverTest#normalAndPassThroughCompositeKeepTheSourceAndPublishedDestinationPixels"
+      ],
+      "removedIdentities": [],
+      "xmlManifestSHA256": "d204deab1f9c9a4875f042744c5df293f74517a8875432368635d91ff880af91",
+      "xmlFiles": 253
+    },
+    "androidCompilation": "PASS",
+    "ktlint": "PASS",
+    "detekt": "PASS"
+  },
+  "androidDeclarationFollowup": {
+    "reason": "Run 313 exposed a JSONObject-inferred wet test method return type rejected by JUnit before its body ran.",
+    "change": "Only an explicit : Unit return type is added. Every other byte of the published wet test file is unchanged.",
+    "command": "CI=true ./gradlew compileDebugAndroidTestKotlin ktlintCheck detekt --continue --no-build-cache --stacktrace",
+    "result": "PASS",
+    "duration": "53s",
+    "log": {
+      "path": "wet-signature-local-gate.log",
+      "bytes": 4127,
+      "sha256": "f8645892e17ca473235f01de964fc189b4f8204ac88d6653616645ea750a88b8"
+    },
+    "androidCompilationTaskExecuted": true,
+    "jvmRerun": false,
+    "reasonNoJvmRerun": "The follow-up changes only an Android test method return declaration; production and JVM test source match the successful complete gate.",
+    "before": {
+      "record": {
+        "path": "wet-device-declaration-before.txt",
+        "bytes": 6874,
+        "sha256": "0cac9ef442c4f0e8d3485531d7b932ebae51ad209b3c33ae74ee90d9d322d735"
+      },
+      "declaration": "public final org.json.JSONObject croppedWetTailMatchesFullCommitAndSurvivesCancellationHistoryAndDiskReopen();"
+    },
+    "after": {
+      "record": {
+        "path": "wet-device-declaration-after.txt",
+        "bytes": 5237,
+        "sha256": "8285b1bd53c823ba83f0134cc4b0526e8c08f7af0837aca137c318d9848eb061"
+      },
+      "declarations": [
+        "public final void croppedWetTailMatchesFullCommitAndSurvivesCancellationHistoryAndDiskReopen();",
+        "public final void actualSourceOverKeepsEveryPixelAndRecordsPairedElapsedCalls();"
+      ]
+    },
+    "compiledDeclarationScope": "javap confirms public zero-argument void methods in the newly compiled Android test classes; it does not execute an Android runner or either test body."
+  },
+  "android": {
+    "declared": 255,
+    "identitySHA256": "ae5c0ec8d4adb5f35f3ee8713dfc0e4453c899d5e92357c213291010946ed517",
+    "retainedPriorIdentities": 254,
+    "addedIdentities": [
+      "com.artflow.studio.data.OpaqueSourceOverDeviceTest#actualSourceOverKeepsEveryPixelAndRecordsPairedElapsedCalls"
+    ],
+    "removedIdentities": [],
+    "execution": "Not executed in these local gates"
+  },
+  "ktlint": {
+    "emptyReports": 5,
+    "reports": [
+      {
+        "path": "app/build/reports/ktlint/ktlintAndroidTestSourceSetCheck/ktlintAndroidTestSourceSetCheck.txt",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "app/build/reports/ktlint/ktlintDebugSourceSetCheck/ktlintDebugSourceSetCheck.txt",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "app/build/reports/ktlint/ktlintKotlinScriptCheck/ktlintKotlinScriptCheck.txt",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "app/build/reports/ktlint/ktlintMainSourceSetCheck/ktlintMainSourceSetCheck.txt",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "app/build/reports/ktlint/ktlintTestSourceSetCheck/ktlintTestSourceSetCheck.txt",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "detekt": {
+    "errors": 0,
+    "report": {
+      "path": "app/build/reports/detekt/detekt.xml",
+      "bytes": 79,
+      "sha256": "f491e274f0d208f81c3edbc7c1097c30db590a3822fcf579468ac814d9ccc62b"
+    },
+    "baselineUnchanged": true,
+    "baselineSHA256": "dcb67ce1082602a311c05c7f0110065bc64db97d0c83aa80872055a38f8e9279"
+  },
+  "python": {
+    "executedLocallyForThisCandidate": false,
+    "note": "CI and Python tooling are unchanged. The prior run 313 passed 150 checks; a fresh candidate Actions run must execute them again."
+  },
+  "earlierLocalGate": {
+    "status": "FAILED_STATIC",
+    "jvm": {
+      "tests": 1522,
+      "suites": 253,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "androidCompilation": "PASS",
+    "ktlint": "PASS",
+    "detekt": [
+      {
+        "rule": "NestedBlockDepth",
+        "file": "OpaqueSourceOverTest.kt",
+        "method": "allAlphaPairsAndMixedChannelsRetainGeneralAndSourceAtopResults",
+        "line": 27,
+        "reason": "A conditional inside three exhaustive loops reaches the existing depth limit."
+      }
+    ],
+    "baselineChanged": false,
+    "logSha256": "edbbcca63855c4dff48375b06e47b5088b42b10d39ad84fa5c093a31fd80cfe1",
+    "duration": "4m11s",
+    "sourceHashes": {
+      "app/src/main/java/com/artflow/studio/core/pixels/BlendModes.kt": "aae50c63b3365aacd8beb978c1abc4d404f1bbf1a34e3daeb5dd494244c6a945",
+      "app/src/test/java/com/artflow/studio/core/pixels/OpaqueSourceOverTest.kt": "3e8189f2f4dada40f0250a947c84607aa02effdc20679fc766076975cc725dbe",
+      "app/src/androidTest/java/com/artflow/studio/data/OpaqueSourceOverDeviceTest.kt": "7024f22daf48a3562ff0e21033dad1b501f8042e5992ad065726ade0efea690b"
+    }
+  },
+  "earlierGateResolution": "Extract the unchanged alpha-lock oracle into legacySourceAtop. Exhaustive loops, inputs and assertions remain; no suppression, threshold or baseline changes.",
+  "finalChangedCodeFiles": {
+    "app/src/main/java/com/artflow/studio/core/pixels/BlendModes.kt": "aae50c63b3365aacd8beb978c1abc4d404f1bbf1a34e3daeb5dd494244c6a945",
+    "app/src/test/java/com/artflow/studio/core/pixels/OpaqueSourceOverTest.kt": "de80b3a9d3aff1c9d6ac9e993fd8df16ac282da75bc5c7177a1d09fcb69fafeb",
+    "app/src/androidTest/java/com/artflow/studio/data/OpaqueSourceOverDeviceTest.kt": "7024f22daf48a3562ff0e21033dad1b501f8042e5992ad065726ade0efea690b",
+    "app/src/androidTest/java/com/artflow/studio/data/WetCompoundPreviewDeviceTest.kt": "06a6232f287c578755f7a042fd1e983bce2fd10585d0ad138daeec55cdb42746"
+  },
+  "reviewLimits": [
+    "The old general Float formula is a compatibility oracle, not proof of Procreate native rendering parity.",
+    "Local paired scalar measurements do not establish Android or complete preview speedups.",
+    "Wet device cancellation/history/storage assertions still require actual emulator execution.",
+    "Native wet equations, physical stylus feel and display latency remain unestablished."
+  ]
+}

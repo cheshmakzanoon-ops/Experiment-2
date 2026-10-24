@@ -158,6 +158,16 @@ object BlendModes {
         if (asource >= 1f) return source
         if (asource <= 0f) return backdrop
 
+        // With an opaque backdrop and 8-bit source alpha, output alpha and its reciprocal
+        // are exactly one. Keep the remaining Float operations and channel rounding unchanged.
+        if ((backdrop ushr 24) == 255) {
+            val inverseSource = 1f - asource
+            val r = Channels.red(source) * asource + Channels.red(backdrop) * inverseSource
+            val g = Channels.green(source) * asource + Channels.green(backdrop) * inverseSource
+            val b = Channels.blue(source) * asource + Channels.blue(backdrop) * inverseSource
+            return Channels.fromFloats(255f, r, g, b)
+        }
+
         val abackdrop = Channels.alpha(backdrop) / 255f
         val outAlpha = asource + abackdrop * (1f - asource)
         if (outAlpha <= 1e-6f) return 0

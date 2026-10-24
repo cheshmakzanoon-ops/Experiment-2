@@ -319,7 +319,7 @@ zero failures, errors or skips, **150 Python checks**, Android test compilation,
 reports and detekt against the unchanged baseline. Seven JVM cases and one Android identity are
 added without removal, giving **254 declared Android cases**. An initial one-condition detekt
 finding was refactored and the complete gate then passed. This verifies local source behavior;
-the correction still requires its own exact-revision Actions matrix and original-image review.
+the following run 313 records its own exact-revision Actions matrix and original-image review.
 
 The preceding [run 311](CI_RUN_311_2026-10-24.md) also remains failed: its independent Android 15 /
 16 KB lane ended with 213 passes, one failure and 36 missing cases after two ART interruptions.
@@ -330,6 +330,30 @@ diagnostic revisions with unchanged application/tests. The corrected revision ob
 compatible boot images, then system-server crashes and native flag recovery before any reported
 case. All four diagnostic lanes remain failed, with zero completed and 1,000 missing lane-identities.
 They establish no stability repair and leave the ordinary seven-lane contract intact.
+
+### Completed run 313 and the next compositing/declaration correction
+
+[Run 313](CI_RUN_313_2026-10-24.md), exact revision `8d8d0e6885349a427b5ac26bea549b1b2e6868a2`,
+passes its build, 1,518 JVM cases and 150 Python checks. All seven device jobs fail, with no
+minified launch. Five lanes retain all preceding device outcomes but report the wet class as
+`initializationError`: Kotlin inferred a `JSONObject` return where JUnit requires `void`.
+The wet test body and its nine evidence files are absent. Main Android 15 / 16 KB terminates
+after six cases; the independent repeat terminates after 118. Their distinct setup/runtime and
+automatic Compose teardown failures remain unresolved, and the classifier permits no retry.
+
+The original API 26 images now show the Model title and all four controls in all five
+header-bearing captures, with passing real-screen pixel/contrast assertions. Across available
+lanes, 166 scoped UI positions and six raw Model layers are reviewed; 37 missing positions remain
+explicitly unverified. This establishes the bounded header repair while preserving the failed run.
+
+The next source explicitly declares the wet method's `Unit` return, preserving every other byte
+of the test. It also adds an [opaque-backdrop compositing branch](OPAQUE_SOURCE_OVER_2026-10-24.md)
+that keeps the prior Float result. Four new JVM cases and one Android raw-pixel/paired-timing
+case retain all existing identities. The [local record](evidence/opaque-source-over-local.json)
+passes 1,522 JVM cases / 253 suites and compilation/static gates; the later Android-only return
+fix also compiles with verified public zero-argument `void` declarations. The new inventory is
+255 device identities. Actual wet and scalar device execution, complete matrix acceptance and
+physical/native-app quality remain pending; no local speedup is promoted to a display claim.
 
 ### Local validation of the combined v5 candidate
 

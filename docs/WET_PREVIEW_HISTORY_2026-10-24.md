@@ -80,9 +80,22 @@ it without suppression or a baseline change; the complete follow-up gate passed.
 
 The separate Android case retains exact first/final hashes and colour probes, cancellation,
 independent no-preview commits, undo/redo, raw signed storage, saved pixels and a fresh repository
-reopen. Its nine retained files must be checked after actual execution. It adds one identity for a
-total of 254, retaining every previous device test. Run 312 belongs to the preceding revision and
-cannot validate this correction; the new published source needs its own complete Actions matrix.
+reopen. Its nine retained files must be checked after actual execution. It added one identity for a
+total of 254, retaining every previous device test.
+
+[Run 313](CI_RUN_313_2026-10-24.md) passed the full build and 1,518 JVM cases, but exposed a defect
+in this new Android declaration. The expression-bodied coroutine inferred `JSONObject` from its
+last report update. JUnit requires a `void` method and rejected the class before running the body;
+five lanes report `initializationError` instead of the declared method. Its nine files are absent.
+The other two Android 15 lanes terminate earlier. This is a test-initialization failure, not an
+executed result for the wet assertions. All seven jobs and the run remain failed.
+
+The follow-up adds an explicit `: Unit` return type. Every other byte in the published test file,
+including fixtures, exact pixels, cancellation, undo/redo and disk assertions, remains unchanged.
+The [local follow-up](evidence/opaque-source-over-local.json) passes Android compilation, ktlint
+and detekt, and inspection of the compiled class confirms a public zero-argument `void` method.
+This declaration check does not execute its body. A fresh Actions run must retain and verify all
+nine files. The same candidate adds a separate scalar compositing case, making 255 device identities.
 
 The compound fixture's complete final pixels, encoded as big-endian ARGB, have SHA-256
 `27acdb833c4464b0cec7703c2b52d8443dd5bd3da6746add63cd0719119f12da`.
@@ -93,6 +106,7 @@ The incorrect old tail frame is
 The regressions retain exact all-pixel checks and selected fixed colour probes; no tolerance is
 introduced to hide this discrepancy.
 
-This repair establishes consistency between ArtFlow preview, cancellation and saved pixels.
+The executed JVM evidence establishes consistency between ArtFlow preview, cancellation and
+committed pixels for the covered paths; the Android storage lifecycle remains pending execution.
 Native Procreate wet equations, compound rendering, physical stylus feel and display latency remain
 separate requirements in the [parity register](PROCREATE_PARITY.md).

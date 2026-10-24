@@ -62,16 +62,30 @@ passing test's earlier GMS crash. Both original attempts and that decision remai
 Original API 26 screenshots independently establish invisible Model header controls. Thus both
 device-artifact and visual acceptance are **FAIL**, despite the other five lanes' scoped visual passes.
 
-The next source corrects [wet preview history](WET_PREVIEW_HISTORY_2026-10-24.md),
+[Run 313](CI_RUN_313_2026-10-24.md), revision `8d8d0e6885349a427b5ac26bea549b1b2e6868a2`,
+contains the [wet preview history](WET_PREVIEW_HISTORY_2026-10-24.md),
 [Model header visibility](MODEL_HEADER_VISIBILITY_2026-10-24.md), and
-[retry evidence association](ANDROID15_RETRY_ATTRIBUTION_2026-10-24.md). Its
-[combined local gate](evidence/wet-model-local.json) passes 1,518 JVM tests / 252 suites,
-150 Python checks, Android compilation, formatting and detekt. The initial wet gate's one
-complex-condition finding was refactored without suppression or baseline changes, then the full
-gate passed. All 1,511 previous JVM and 253 Android identities remain; seven JVM cases and one
-Android case are added. The 254-case device inventory is declared, not yet accepted by execution.
-A fresh seven-lane run, original-image review and retained wet storage/pixel evidence are required.
-The narrower retry classifier does not repair the unresolved Android runtime crashes.
+[retry evidence association](ANDROID15_RETRY_ATTRIBUTION_2026-10-24.md) corrections. Its build
+passes 1,518 JVM tests / 252 suites, 150 Python checks and the package/static gates.
+All seven device jobs failed. Five reached the wet class but JUnit rejected its inferred
+`JSONObject` method return type, so its pixel/history/storage body did not execute. The main
+Android 15 / 16 KB lane reported six cases; four typed setup exceptions precede a later ART
+crash. The independent repeat reported 118 cases before a Compose disposal exception during
+automatic activity teardown. No lane reached minified launch. The narrower classifier permitted
+no recovery for these typed failures; no manual rerun was made. Original Android 8 screenshots
+confirm the Model header repair, but that scoped visual result does not accept the failed matrix.
+
+The next source adds only an explicit `Unit` return to the wet case and a small
+[opaque-backdrop compositing optimization](OPAQUE_SOURCE_OVER_2026-10-24.md). Four JVM tests and
+one Android pixel/timing case retain every existing identity. The
+[local acceptance record](evidence/opaque-source-over-local.json) preserves the initial gate's
+single test-helper nesting finding and the correction without suppression or baseline changes.
+The complete corrected gate passes 1,522 JVM tests / 253 suites, Android compilation, formatting
+and detekt. The later Android-only return-type fix passes its scoped compile/static gate; `javap`
+confirms both new device methods compile as public zero-argument `void`. Their bodies still require
+execution. The inventory is 255 per lane, with no local Python rerun claimed for this candidate.
+A fresh seven-lane run and original raw wet/compositing evidence are required. Native-app parity,
+display latency and the two Android 15 runtime repairs remain unestablished.
 
 The [collector diagnostics](ANDROID15_COLLECTOR_CONTROL_2026-10-24.md) also remain failed.
 The corrected control recorded CC and compatible boot artifacts, but the selected system servers

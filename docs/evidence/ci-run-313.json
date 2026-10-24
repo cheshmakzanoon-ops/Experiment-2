@@ -1,0 +1,4155 @@
+{
+ "schemaVersion": 1,
+ "recordType": "android-ci-exact-revision-audit",
+ "run": {
+  "id": 40126826694,
+  "run_number": 313,
+  "run_attempt": 1,
+  "html_url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40126826694",
+  "head_sha": "8d8d0e6885349a427b5ac26bea549b1b2e6868a2",
+  "status": "completed",
+  "conclusion": "failure",
+  "created_at": "2026-10-24T19:46:39Z",
+  "updated_at": "2026-10-24T20:19:59Z"
+ },
+ "tree": "2a7ccdb032b2dfd51c87e3125930ec126e67f69d",
+ "acceptance": {
+  "deviceMatrix": "FAIL",
+  "fullParityEstablished": false,
+  "reviewComplete": true,
+  "wetBodyAcceptance": false,
+  "minifiedLaunchAcceptance": false,
+  "api26HeaderVisualRepairConfirmed": true
+ },
+ "inventory": {
+  "count": 254,
+  "documentVersion": 5,
+  "identitySHA256": "cc6ddb5cf0a6e8f3d98bd254a5c69736e5c77c829b2e7cf764f299bb67638104",
+  "identityEncoding": "Sorted Class#method UTF-8 lines, final LF",
+  "revisionPlusTestsManifestSHA256": "23011a9746dcb0af5a9401858f3c021deaff11c3a8cafdc6c782232e8d052434",
+  "indexEncoding": "Zero-based indexes into this one sorted identity array; missing/skipped/failure references use these indexes.",
+  "identities": [
+   "com.artflow.studio.AnimationPlaybackUiTest#backgroundCallbackClearsTheVisiblePauseState",
+   "com.artflow.studio.AnimationPlaybackUiTest#frameRoleAndVisibilityControlsReachTheDocumentAndDisableEmptyPlayback",
+   "com.artflow.studio.AnimationPlaybackUiTest#onionColorPickerAppliesOnlyOnConfirmationAndKeepsTheOtherColor",
+   "com.artflow.studio.AnimationPlaybackUiTest#realPlayButtonBecomesPauseWhileFramesAdvanceAndReturnsAfterPause",
+   "com.artflow.studio.AnimationPlaybackUiTest#teardownWaitsForAnAtomicWriteAlreadyInFlight",
+   "com.artflow.studio.AppLaunchTest#activityLaunchesAndReachesResumed",
+   "com.artflow.studio.ArtworkWorkflowTest#createPaintSaveReopenRecreateAndDiscardPreserveTheSavedPixels",
+   "com.artflow.studio.BlendModePreviewDeviceTest#modeChipsShowTheActualBlendOfConsistentSampleColours",
+   "com.artflow.studio.BrushAttributeUiTest#cancellingAnAttributeEditLeavesThePublishedBrushUntouched",
+   "com.artflow.studio.BrushAttributeUiTest#compactNavigationShowsOnlyTheSelectedGroupAndRetainsEdits",
+   "com.artflow.studio.BrushAttributeUiTest#countReachesEveryDabCountTheLibraryStores",
+   "com.artflow.studio.BrushAttributeUiTest#largerTargetsRemainAvailableInTheCompactNavigator",
+   "com.artflow.studio.BrushAttributeUiTest#newlyReachableDynamicsUpdateOnlyTheMatchingParameters",
+   "com.artflow.studio.BrushAttributeUiTest#reversedSpeedCanBeSetFromTheDynamicsPanel",
+   "com.artflow.studio.BrushAttributeUiTest#studioRetainsTheChosenGroupAcrossTabsAndPublishesOnlyOnUse",
+   "com.artflow.studio.BrushAttributeUiTest#tiltOpacityCanBeSetApartFromTiltSize",
+   "com.artflow.studio.BrushSettingsAccessibilityTest#collapsingASectionPreservesEditedParametersAndScrollAccess",
+   "com.artflow.studio.BrushSettingsAccessibilityTest#settingsAcrossTheWholeBrushPanelRemainReachableInABoundedViewport",
+   "com.artflow.studio.BrushShareFormatUiTest#cancelDoesNotShareOrCommitAFormat",
+   "com.artflow.studio.BrushShareFormatUiTest#setChoiceUsesTheBrushsetFormat",
+   "com.artflow.studio.BrushShareFormatUiTest#singleBrushDefaultsToArtflowAndCanExplicitlySelectProcreate",
+   "com.artflow.studio.BrushShareFormatUiTest#theDraftShareButtonShowsCurrentPrimaryAndSecondaryCounts",
+   "com.artflow.studio.BrushShareFormatUiTest#theSavedSetShareButtonRefreshesTheNamedComponentConversions",
+   "com.artflow.studio.BrushStudioTabsTest#labelsAndSelectionSurviveRightToLeftAndFontChanges",
+   "com.artflow.studio.BrushStudioTabsTest#labelsFitAtDefaultAndLargeFontScales",
+   "com.artflow.studio.BrushStudioTabsTest#labelsFitAtFractionalDisplayDensity",
+   "com.artflow.studio.BrushStudioUiTest#cancelledPracticeGesturesDoNotBecomeStrokesAndHistoryIsBounded",
+   "com.artflow.studio.BrushStudioUiTest#categorySearchAndEmptyResultsCanBeRecovered",
+   "com.artflow.studio.BrushStudioUiTest#exactPercentageEntryRejectsOutOfRangeAndCancelDoesNotCommit",
+   "com.artflow.studio.BrushStudioUiTest#integerValuesCannotBeFractionalAndSliderValuesSnapToIntegers",
+   "com.artflow.studio.BrushStudioUiTest#practiceStrokesSurviveTabChangesButNeverApplyBrushSettingsByThemselves",
+   "com.artflow.studio.BrushStudioUiTest#restoringTheDraftAndApplyingUseTheCorrectSnapshot",
+   "com.artflow.studio.BrushStudioUiTest#searchingAndSelectingAPresetDoesNotApplyUntilConfirmed",
+   "com.artflow.studio.BrushStudioUiTest#selectingAndUsingAPresetPublishesExactlyOnce",
+   "com.artflow.studio.CanvasInputDeviceTest#aTapWithFreehandKeepsTheSelectionInsteadOfReplacingItWithNothing",
+   "com.artflow.studio.CanvasInputDeviceTest#actionCancelWithMultiplePointersDiscardsAllProvisionalInk",
+   "com.artflow.studio.CanvasInputDeviceTest#asynchronousShapeStaysBoundToItsOriginalLayer",
+   "com.artflow.studio.CanvasInputDeviceTest#batchedStylusSamplesRetainTheActualPath",
+   "com.artflow.studio.CanvasInputDeviceTest#canceledCloneTapCannotSetSourceAndPauseCancelsPainting",
+   "com.artflow.studio.CanvasInputDeviceTest#canceledSelectionsAndClearedPendingSelectionsStayCleared",
+   "com.artflow.studio.CanvasInputDeviceTest#cancelledPointerFlagsRejectPalmWithoutRejectingPen",
+   "com.artflow.studio.CanvasInputDeviceTest#cancellingReconstructKeepsTheLastSuccessfulReference",
+   "com.artflow.studio.CanvasInputDeviceTest#centeredPinchChangesViewWithoutUndoOrPainting",
+   "com.artflow.studio.CanvasInputDeviceTest#changingAlphaLockDuringAnOpenToolDiscardsTheStaleEdit",
+   "com.artflow.studio.CanvasInputDeviceTest#cloneSampleAllLayersSwitchControlsTheCapturedSourceEvenForImmediateRelease",
+   "com.artflow.studio.CanvasInputDeviceTest#emptyOverlaySelectionDoesNotChangePixelsOrHistory",
+   "com.artflow.studio.CanvasInputDeviceTest#frozenAndZeroPressureLiquifyGesturesCreateNoUndoEntries",
+   "com.artflow.studio.CanvasInputDeviceTest#layerChangeCancelsShapeAndDisablingFingerPaintingCancelsFingerStroke",
+   "com.artflow.studio.CanvasInputDeviceTest#liquifyCommitsTheCompleteMapEvenWhenItsLastPreviewWasThrottled",
+   "com.artflow.studio.CanvasInputDeviceTest#liquifyReconstructRestoresEarlierArtworkAndRemainsUndoable",
+   "com.artflow.studio.CanvasInputDeviceTest#moveToolUsesTheDragDirectionAndCommitsTheFinalPosition",
+   "com.artflow.studio.CanvasInputDeviceTest#outlinedShapesHaveVisibleBordersAndPolygonStaysWithinDragBounds",
+   "com.artflow.studio.CanvasInputDeviceTest#penKeepsDrawingWithPalmAndDoesNotAdoptTheRemainingFinger",
+   "com.artflow.studio.CanvasInputDeviceTest#physicalEraserRemovesPixelsWithoutChangingTheSelectedBrush",
+   "com.artflow.studio.CanvasInputDeviceTest#reconstructNeverOverwritesAnInterveningEditOrAnotherDocument",
+   "com.artflow.studio.CanvasInputDeviceTest#retouchToolsHonorLayerAlphaLockFromTheActualDocument",
+   "com.artflow.studio.CanvasInputDeviceTest#savedReloadChangesRevisionEvenWhenProjectAndLayerIdsAreReused",
+   "com.artflow.studio.CanvasInputDeviceTest#selectionsKeepTheirGeometryAndIncludePointerUpPosition",
+   "com.artflow.studio.CanvasInputDeviceTest#shapeSelectionFeatheringPreservesBackdropAndAlphaLock",
+   "com.artflow.studio.CanvasInputDeviceTest#shapesAndTextPreserveExistingArtworkAndUndoExactly",
+   "com.artflow.studio.CanvasInputDeviceTest#twoFingerNavigationCancelsFingerInkAndHistoryWaitsForFinalUp",
+   "com.artflow.studio.CanvasInputDeviceTest#zoomToolCancellationAndPinchTakeoverNeverApplyAnExtraTapOrPaint",
+   "com.artflow.studio.CanvasInputDeviceTest#zoomToolDragUsesStartScaleAndAnchorAcrossReversalsAndClamps",
+   "com.artflow.studio.CanvasInputDeviceTest#zoomToolTapKeepsItsInitialAnchorWithFingerPaintingDisabled",
+   "com.artflow.studio.CanvasInputDeviceTest#zoomToolUsesFinalUpMovementAndIgnoresHorizontalOnlyDrags",
+   "com.artflow.studio.ColorWheelGestureTest#blankSpaceDoesNotChooseAColour",
+   "com.artflow.studio.ColorWheelGestureTest#callbackReplacementDuringTheDragIsObservedWithoutRestartingIt",
+   "com.artflow.studio.ColorWheelGestureTest#ringCanChooseHueWhileBlackAndBrightnessRestoresIt",
+   "com.artflow.studio.ColorWheelGestureTest#squareCornerTapDoesNotChangeHueOrAlpha",
+   "com.artflow.studio.ColorWheelGestureTest#squareDragContinuesAcrossMultipleRecompositions",
+   "com.artflow.studio.ColorWheelGestureTest#squareDragKeepsItsRegionOutsideTheSquare",
+   "com.artflow.studio.EditorRenderingTest#editorRetainsArtworkAcrossRedrawContextLossAndReattachment",
+   "com.artflow.studio.EditorRenderingTest#realPointerMaskStrokePreviewsAndUndoesOnTheGlSurface",
+   "com.artflow.studio.EditorRenderingTest#redrawsCompleteWhileNewInvalidationsKeepArriving",
+   "com.artflow.studio.ExportUiRegressionTest#jpegDoesNotOfferAnUnsupportedMultiFrameFile",
+   "com.artflow.studio.ExportUiRegressionTest#printPresetSubmitsItsResolutionAndOversampling",
+   "com.artflow.studio.ExportUiRegressionTest#privacyPolicyIsAvailableOfflineAndCanBeDismissed",
+   "com.artflow.studio.FillGestureDeviceTest#bucketCannotCommitUnderAnObsoleteAlphaLock",
+   "com.artflow.studio.FillGestureDeviceTest#bucketKeepsItsCapturedColourAfterRelease",
+   "com.artflow.studio.FillGestureDeviceTest#bucketPreservesLayerAlphaAndUndo",
+   "com.artflow.studio.FillGestureDeviceTest#completedBucketRemainsValidWhenAlphaLockChangesLater",
+   "com.artflow.studio.FillGestureDeviceTest#completedGradientRemainsValidWhenAlphaLockChangesLater",
+   "com.artflow.studio.FillGestureDeviceTest#emptySelectionBucketIsNotAnUndoStep",
+   "com.artflow.studio.FillGestureDeviceTest#emptySelectionGradientIsNotAnUndoStep",
+   "com.artflow.studio.FillGestureDeviceTest#gradientCannotCommitUnderAnObsoleteAlphaLock",
+   "com.artflow.studio.FillGestureDeviceTest#gradientKeepsItsCapturedStopsAfterRelease",
+   "com.artflow.studio.FillGestureDeviceTest#gradientPreservesLayerAlphaAndUndo",
+   "com.artflow.studio.FillGestureDeviceTest#identicalBucketIsNotAnUndoStep",
+   "com.artflow.studio.FillGestureDeviceTest#identicalGradientIsNotAnUndoStep",
+   "com.artflow.studio.GroupBlendUiTest#groupCanReturnFromNormalToPassThrough",
+   "com.artflow.studio.GroupBlendUiTest#pixelLayersDoNotOfferTheFolderOnlyPassThroughMode",
+   "com.artflow.studio.GuideStatusUiTest#statusRequiresAnActiveVisibleGuideAndHidesInFocusMode",
+   "com.artflow.studio.HardwareKeyboardTest#aKeyPressResolvesToItsAction",
+   "com.artflow.studio.HardwareKeyboardTest#ctrlAndMetaBothCountAsThePrimaryModifier",
+   "com.artflow.studio.HardwareKeyboardTest#keyCodesMapToTheTokensTheTableUses",
+   "com.artflow.studio.HardwareKeyboardTest#theSystemShortcutListCoversEveryBinding",
+   "com.artflow.studio.IncomingFilesTest#openWithAndEditWithCarryTheDataUri",
+   "com.artflow.studio.IncomingFilesTest#otherIntentsCarryNothing",
+   "com.artflow.studio.IncomingFilesTest#shareCarriesTheStreamExtra",
+   "com.artflow.studio.LayerEffectsUiTest#eachEffectChangeIsAppliedAsItIsMade",
+   "com.artflow.studio.ModelEditorUiTest#cancelledModelPaintDiscardsEverySeamSegmentAndSuccessfulUpKeepsUndoablePixels",
+   "com.artflow.studio.ModelEditorUiTest#modalControlsAboveTheRealModelRemainReachableAndFocusRestoresTheView",
+   "com.artflow.studio.NativeLibraryCompatibilityTest#packagedGraphicsLibraryLoadsAndIteratesPaths",
+   "com.artflow.studio.PaletteRecoveryUiTest#aRunningBackupCannotBeStartedTwice",
+   "com.artflow.studio.PaletteRecoveryUiTest#cancellingConfirmationDoesNotStartBackupOrReset",
+   "com.artflow.studio.PaletteRecoveryUiTest#confirmingRequestsAUserSelectedBackupInsteadOfResettingImmediately",
+   "com.artflow.studio.ProcreateImportedBlendUiTest#layersDialogExplainsImportedDarkenAndOnlyAnExplicitModeChoiceReplacesIt",
+   "com.artflow.studio.ReferenceCompanionTest#contentProviderImagesAreDownsampledAndCanBeSampled",
+   "com.artflow.studio.ReferenceCompanionTest#draggingAndChangingAvailableSpaceKeepTheWindowAndCloseControlOnScreen",
+   "com.artflow.studio.ReferenceCompanionTest#letterboxTapsDoNotSampleAndCentreSamplingIsAccessible",
+   "com.artflow.studio.ReferenceCompanionTest#pickingZoomFitAndCallbackReplacementUseTheVisibleImageWithoutPaintingBehindIt",
+   "com.artflow.studio.ReferenceCompanionTest#unsupportedAndUnreadableSourcesOfferRecoveryWithoutAStaleImage",
+   "com.artflow.studio.ReferenceEditorUiTest#referenceAndFocusExitRemainReachableWithEitherTouchTargetSize",
+   "com.artflow.studio.ReferenceEditorUiTest#referenceControlsStayAboveEitherSidebarWithoutBlockingTheRestOfTheEditor",
+   "com.artflow.studio.RuntimeEnvironmentTest#processPageSizeMatchesRequestedTestEnvironment",
+   "com.artflow.studio.SavedBrushUiTest#failedSaveRetainsTheNameAndDoesNotPretendItWasSaved",
+   "com.artflow.studio.SavedBrushUiTest#savedRowsCanBeRenamedAndDeleteRequiresConfirmation",
+   "com.artflow.studio.SavedBrushUiTest#savingUsesAnExplicitSnapshotAndDoesNotApplyTheBrush",
+   "com.artflow.studio.SelectionGestureDeviceTest#addSubtractIntersectAndReplaceAfterEmptyWorkTogether",
+   "com.artflow.studio.SelectionGestureDeviceTest#anEmptyActiveLayerSelectsItsTransparencyWithoutSamplingArtworkBelow",
+   "com.artflow.studio.SelectionGestureDeviceTest#automaticSelectionDistinguishesTransparentPixelsFromTheCanvasBackground",
+   "com.artflow.studio.SelectionGestureDeviceTest#automaticSelectionIgnoresCoveringLayersAndFillReferences",
+   "com.artflow.studio.SelectionGestureDeviceTest#bottomSubpixelTapRemainsInsideTheCanvas",
+   "com.artflow.studio.SelectionGestureDeviceTest#featherCannotOverwriteANewerExplicitSelection",
+   "com.artflow.studio.SelectionGestureDeviceTest#negativeSubpixelTapDoesNotSelectPixelZero",
+   "com.artflow.studio.SelectionGestureDeviceTest#newerWandWinsWhenTwoTapsArriveBeforeAWorkerReturns",
+   "com.artflow.studio.SelectionGestureDeviceTest#panelClearCannotBeUndoneByAPendingWand",
+   "com.artflow.studio.SelectionGestureDeviceTest#panelClearSupersedesProvisionalMarquee",
+   "com.artflow.studio.SelectionGestureDeviceTest#panelSelectAllSupersedesAPendingWand",
+   "com.artflow.studio.SelectionGestureDeviceTest#replacementDocumentRejectsOldSelectionDimensions",
+   "com.artflow.studio.SelectionGestureDeviceTest#subpixelTapInTheLastColumnIsNotOutsideTheCanvas",
+   "com.artflow.studio.SelectionGestureDeviceTest#subpixelWandTapUsesTheContainingPixel",
+   "com.artflow.studio.SelectionGestureDeviceTest#switchingActiveLayerRejectsAnEarlierAutomaticSelection",
+   "com.artflow.studio.SelectionGestureDeviceTest#uniformCanvasWandDoesNotCrash",
+   "com.artflow.studio.SelectionGestureDeviceTest#wandReplaceCanLeaveThePreviousSelection",
+   "com.artflow.studio.StudioAdaptiveTest#interfaceScaleIsAppliedOnceAndSystemTextScaleIsPreserved",
+   "com.artflow.studio.StudioAdaptiveTest#studioAdaptsToTheDeviceAndKeepsDraftsAndPracticeAcrossThemeChanges",
+   "com.artflow.studio.StudioControlsTest#cropBarShowsTheNewSizeAndFinishes",
+   "com.artflow.studio.StudioControlsTest#pageStripSelectsAddsAndProtectsTheLastPage",
+   "com.artflow.studio.StudioControlsTest#quickMenuRunsAnActionAndCloses",
+   "com.artflow.studio.StudioControlsTest#slidingAcrossTheCanvasChangesLayerOpacity",
+   "com.artflow.studio.StudioToolDockTest#everydayToolsHaveSelectedSemanticsAndSecondaryToolsRemainReachable",
+   "com.artflow.studio.StudioWorkspaceUiTest#dismissingTextClearsItsPositionAndDoesNotPlaceArtwork",
+   "com.artflow.studio.StudioWorkspaceUiTest#everyEditorToolIsReachableThroughTheRealLargeTextToolOptions",
+   "com.artflow.studio.StudioWorkspaceUiTest#focusHidesTheChromeAndBackRestoresTheEditor",
+   "com.artflow.studio.StudioWorkspaceUiTest#lightWorkspaceKeepsPrimaryControlsReachable",
+   "com.artflow.studio.StudioWorkspaceUiTest#standalonePaletteRemainsReadableAndSelectableAtLargeTextSize",
+   "com.artflow.studio.StudioWorkspaceUiTest#textSettingsChoosesPositionPlacesOnceAndRestoresExactUndo",
+   "com.artflow.studio.StudioWorkspaceUiTest#uiScaleAppliesOnceAndKeepsTheSystemTextPreference",
+   "com.artflow.studio.StudioWorkspaceUiTest#workflowPanelsAreReachableFromTheTopBarActions",
+   "com.artflow.studio.TransformUiRegressionTest#activeSelectionCannotSilentlyTransformTheWholeLayer",
+   "com.artflow.studio.TransformUiRegressionTest#cancelDoesNotApplyAndInvalidNumbersDisableCommit",
+   "com.artflow.studio.TransformUiRegressionTest#draftControlsDoNotMutateUntilApplyAndUseUniformScale",
+   "com.artflow.studio.TransformUiRegressionTest#signedNumbersAndWrappedControlsRemainUsableWithLargeText",
+   "com.artflow.studio.data.BrushImportPersistenceDeviceTest#artbrushCompoundImportRemapsSecondaryImagesAndSurvivesStorageReload",
+   "com.artflow.studio.data.BrushImportPersistenceDeviceTest#importedPressureCurvesUseNativeTablesAndSurviveArtbrushReload",
+   "com.artflow.studio.data.BrushImportPersistenceDeviceTest#nonDivisibleProcreateImagesKeepLastRowAndColumnThroughDiskReload",
+   "com.artflow.studio.data.BrushImportPersistenceDeviceTest#procreateCompoundImportKeepsBothComponentsAndUnstretchedCoverageOnDisk",
+   "com.artflow.studio.data.CompositorRasterTransferDeviceTest#pooledRasterTransferKeepsEveryByteAndRecordsPairedElapsedCalls",
+   "com.artflow.studio.data.DocumentMutationDeviceTest#effectParameterUndoAndRedoSurviveRealStorageReload",
+   "com.artflow.studio.data.DocumentMutationDeviceTest#layeredPsdContainsTheVisibleFilteredAppearanceAndHiddenOriginals",
+   "com.artflow.studio.data.DocumentMutationDeviceTest#mergedFilterAndMaskedAlphaSurviveSaveReopen",
+   "com.artflow.studio.data.DocumentMutationDeviceTest#noOpAndInvalidParametersLeaveSavedArtworkCleanAndReadable",
+   "com.artflow.studio.data.DocumentMutationDeviceTest#transformedLegacyInkMasksAndFramesSurviveRealStorageReload",
+   "com.artflow.studio.data.ExportDeviceTest#exportedFilesCanBeReadAndCopiedButEditableDocumentsCannotBeShared",
+   "com.artflow.studio.data.ExportDeviceTest#galleryPublishesPngAsImageAndMp4AsVideo",
+   "com.artflow.studio.data.ExportDeviceTest#invalidVideoSizeReturnsFailureWithoutPublishingAFile",
+   "com.artflow.studio.data.ExportDeviceTest#jpegWebpGifAndPsdAreRealDecodableFiles",
+   "com.artflow.studio.data.ExportDeviceTest#mp4ContainsAllFramesCorrectTimingAndDecodedColours",
+   "com.artflow.studio.data.ExportDeviceTest#pdfUsesMultiplePagesAndPreservesAspectRatio",
+   "com.artflow.studio.data.ExportDeviceTest#pngKeepsAlphaAndFlatteningActuallyRemovesIt",
+   "com.artflow.studio.data.ExportDeviceTest#sequenceContainsEveryFrameWithItsActualPixels",
+   "com.artflow.studio.data.ExportDeviceTest#snapshotContainsMaskedPixelsBeforeTheFirstSaveAndIsIndependentOfLaterEdits",
+   "com.artflow.studio.data.MaskEditingRegressionTest#alphaAndGradientSourcesSurviveSaveReloadWithoutChangingLayerPixels",
+   "com.artflow.studio.data.MaskEditingRegressionTest#cancelledMaskPaintCannotLeakIntoSaveExportOrUndo",
+   "com.artflow.studio.data.MaskEditingRegressionTest#invalidSourcesAndLockedDestinationsDoNotCreateHistoryEntries",
+   "com.artflow.studio.data.MaskEditingRegressionTest#maskPaintRespectsSoftSelectionsAndRemainsOneUndoStep",
+   "com.artflow.studio.data.MaskEditingRegressionTest#maskStrokePreviewCommitUndoAndRedoNeverModifyInk",
+   "com.artflow.studio.data.MaskEditingRegressionTest#revealAndHideRespectInvertedMasksAndIgnoreInkColorDynamics",
+   "com.artflow.studio.data.PersistenceRegressionTest#androidBitmapBridgeIsMutableAndPngPreservesLowAlphaColors",
+   "com.artflow.studio.data.PersistenceRegressionTest#animationSettingsAndFrameDurationAreUndoable",
+   "com.artflow.studio.data.PersistenceRegressionTest#autosaveCannotOverwriteExplicitlySavedArtwork",
+   "com.artflow.studio.data.PersistenceRegressionTest#callerOwnedBuffersCannotMutateCommittedArtwork",
+   "com.artflow.studio.data.PersistenceRegressionTest#cancelledBrushStrokeDoesNotCommitOrAddHistory",
+   "com.artflow.studio.data.PersistenceRegressionTest#corruptDocumentIsNeverReplacedWithABlankCanvas",
+   "com.artflow.studio.data.PersistenceRegressionTest#explicitSaveClearsRecoveryOnlyAfterCommit",
+   "com.artflow.studio.data.PersistenceRegressionTest#failedAtomicWritePreservesOriginalBytesAndRemovesTemporaryFile",
+   "com.artflow.studio.data.PersistenceRegressionTest#failedToolDoesNotChangePixelsOrHistory",
+   "com.artflow.studio.data.PersistenceRegressionTest#firstSaveRetainsRasterPixelsAfterReopen",
+   "com.artflow.studio.data.PersistenceRegressionTest#lockedLayersCannotStartPixelTools",
+   "com.artflow.studio.data.PersistenceRegressionTest#maskPixelsAndSettingsRoundTrip",
+   "com.artflow.studio.data.PersistenceRegressionTest#missingRasterIsAnErrorNotAnEmptyLayer",
+   "com.artflow.studio.data.PersistenceRegressionTest#newerEditsRemainDirtyWhenAnOlderSnapshotFinishesSaving",
+   "com.artflow.studio.data.PersistenceRegressionTest#projectAndExportPathsCannotEscapeTheirDirectory",
+   "com.artflow.studio.data.PersistenceRegressionTest#provisionalPixelSessionIsNotSavedAndCancellationDoesNotRemoveUnrelatedUndo",
+   "com.artflow.studio.data.PersistenceRegressionTest#savesEveryFrameNotJustTheActiveFrame",
+   "com.artflow.studio.data.PersistenceRegressionTest#selectionDoesNotErasePixelsFromTheSavedComposite",
+   "com.artflow.studio.data.PersistenceRegressionTest#staleSessionCannotOverwriteAnInterveningEdit",
+   "com.artflow.studio.data.PreviewBelowCacheDeviceTest#framesMatchAFullRedrawWhilePaintingAMiddleLayer",
+   "com.artflow.studio.data.ProcreateColorProfileDeviceTest#insertionAndFlattenedFallbackConvertIntoTheExistingCanvasProfileExactlyOnce",
+   "com.artflow.studio.data.ProcreateColorProfileDeviceTest#nativeP3DocumentKeepsItsChannelsBackgroundAndProfileThroughDiskReopen",
+   "com.artflow.studio.data.ProcreateHierarchyImportDeviceTest#nativeHierarchyAndHiddenGroupsRemainEditableAfterSaveReopenAndExport",
+   "com.artflow.studio.data.ProcreateLegacyDarkenDeviceTest#nativeDarkenSurvivesImportEditUndoAndReopenWithoutReinterpretingSignedV4",
+   "com.artflow.studio.data.ProcreateMaskImportDeviceTest#nativeMaskCoverageSurvivesImportSaveReopenAndPngExport",
+   "com.artflow.studio.data.ProcreateNativeExportDeviceTest#aHiddenNativeBackgroundReplacesNewCanvasWhiteWhileInsertionKeepsItsBackground",
+   "com.artflow.studio.data.ProcreateNativeExportDeviceTest#p3ExportKeepsNativeChannelsAndHiddenNestedGroupsThroughImportAndDiskReopen",
+   "com.artflow.studio.data.ProjectDuplicationTest#concurrentCreatesNeverReplaceOneAnother",
+   "com.artflow.studio.data.ProjectDuplicationTest#copyRetainsIndependentSavedRecoveryMasksAndFrames",
+   "com.artflow.studio.data.ProjectDuplicationTest#copySkipsOrphanedStorageRatherThanOverwritingIt",
+   "com.artflow.studio.data.ProjectDuplicationTest#deletedProjectIdentifiersAreNeverReused",
+   "com.artflow.studio.data.ProjectDuplicationTest#exhaustedIdentifiersFailWithoutWrappingOrDeletingFiles",
+   "com.artflow.studio.data.ProjectDuplicationTest#explicitUnknownIdCannotClaimOrphanedArtwork",
+   "com.artflow.studio.data.ProjectDuplicationTest#invalidCreationInputsDoNotLeaveGalleryRows",
+   "com.artflow.studio.data.ProjectDuplicationTest#missingRasterRollsBackTheRowAndOwnedDirectory",
+   "com.artflow.studio.data.ProjectDuplicationTest#newProjectsSkipOrphanedStorageEvenWithAnEmptyDatabase",
+   "com.artflow.studio.data.ProjectDuplicationTest#newProjectsSkipOrphansAboveExistingRows",
+   "com.artflow.studio.data.ProjectDuplicationTest#savingKnownIdUpdatesMetadataWithoutReplacingItsIdentity",
+   "com.artflow.studio.data.ProjectDuplicationTest#unknownProjectCannotBeDuplicated",
+   "com.artflow.studio.data.PsdGroupsDeviceTest#groupsRoundTripThroughPsd",
+   "com.artflow.studio.data.PsdGroupsDeviceTest#normalAndPassThroughPsdFoldersRetainPixelsAcrossImportSaveReopenAndExport",
+   "com.artflow.studio.data.PsdGroupsDeviceTest#onlyAnEnabledGroupMaskRequiresProcreateAppearanceFallback",
+   "com.artflow.studio.data.PsdMasksDeviceTest#disabledMaskExportsAndImportsAsEditableCoverageWithoutDestroyingHiddenInk",
+   "com.artflow.studio.data.PsdMasksDeviceTest#folderMaskSurvivesExportAndImport",
+   "com.artflow.studio.data.PsdMasksDeviceTest#selectionExportClipsOriginalAlphaOnceAndKeepsIndependentMaskCrop",
+   "com.artflow.studio.data.ResamplingDeviceTest#affineLayerAndMaskSurviveUndoSaveReloadAndIndependentEditing",
+   "com.artflow.studio.data.ResamplingDeviceTest#displacedEdgesSurviveRealPngEncodingWithoutDarkening",
+   "com.artflow.studio.data.ResamplingDeviceTest#resizeEdgesSurviveUndoStorageAndScaledPngExport",
+   "com.artflow.studio.data.SavedBrushStorageTest#completeBrushesSurviveClosingAndReopeningTheActualRoomDatabase",
+   "com.artflow.studio.data.SavedSelectionWorkflowDeviceTest#savedSoftSelectionReopensConstrainsEditingAndKeepsItsPixelsThroughExport",
+   "com.artflow.studio.data.SavedSelectionWorkflowDeviceTest#switchingArtworkCannotReuseAnotherDocumentsSavedSelection",
+   "com.artflow.studio.data.SecondaryGrainMigrationDeviceTest#signedV3VectorsKeepHistoricalCoverageWhileNewV4StrokesRetainTheirGrainModes",
+   "com.artflow.studio.data.SettingsPersistenceTest#completePreferencesAndPaletteNamesSurviveDatabaseReopen",
+   "com.artflow.studio.data.SettingsPersistenceTest#failurePartwayThroughBatchRollsBackEveryRowAndLeavesCacheUnchanged",
+   "com.artflow.studio.data.SettingsPersistenceTest#unreadablePaletteRowSurvivesUnrelatedEditsAndOnlyResetsAfterBackup",
+   "com.artflow.studio.data.StorageTraversalDeviceTest#atomicWritesRejectLinkedParentsAndPreserveTargets",
+   "com.artflow.studio.data.StorageTraversalDeviceTest#deletingARootLinkDoesNotDeleteAnotherProject",
+   "com.artflow.studio.data.StorageTraversalDeviceTest#exportCleanupCannotDeleteAnotherProjectsArtworkThroughADirectoryLink",
+   "com.artflow.studio.data.StorageTraversalDeviceTest#exportFileLinksAreNotListedOrPruned",
+   "com.artflow.studio.data.StorageTraversalDeviceTest#linkedExportsContainerCannotMakeEditableArtworkShareable",
+   "com.artflow.studio.data.StorageTraversalDeviceTest#linkedProjectContainerCannotRedirectSizeOrDelete",
+   "com.artflow.studio.data.StorageTraversalDeviceTest#linkedProjectRootCannotRedirectReadsOrWrites",
+   "com.artflow.studio.data.StorageTraversalDeviceTest#metadataAndRasterLinksCannotReadOtherProjectPixels",
+   "com.artflow.studio.data.StorageTraversalDeviceTest#pruneSizeAndDeleteStayInsideTheOwnedProject",
+   "com.artflow.studio.data.StorageTraversalDeviceTest#pruningThroughALinkedProjectCannotDeleteAnotherProject",
+   "com.artflow.studio.data.StorageTraversalDeviceTest#repeatedHousekeepingDoesNotAccumulateFilesOrFollowCycles",
+   "com.artflow.studio.data.StrokePreviewRegressionTest#cancelledStrokeCannotLeakIntoExportSaveOrUndo",
+   "com.artflow.studio.data.StrokePreviewRegressionTest#inFlightStrokeIsHiddenByHigherOpaqueLayer",
+   "com.artflow.studio.data.StrokePreviewRegressionTest#legacyVectorStrokesAreBakedBeforeNewPaintInsteadOfCoveringIt",
+   "com.artflow.studio.data.StrokePreviewRegressionTest#liveEraserRevealsUnderlyingLayersInsteadOfPaintingInkOnTop",
+   "com.artflow.studio.data.StrokePreviewRegressionTest#previewEqualsCommitForPressureGrainOpacitySelectionAndLayerBlend",
+   "com.artflow.studio.data.StrokePreviewRegressionTest#previewHonorsAlphaLockAndLayerMask",
+   "com.artflow.studio.data.StrokePreviewRegressionTest#shortFinalSegmentSurvivesPreviewCommitHistoryAndReopen",
+   "com.artflow.studio.data.StrokeTimingDeviceTest#liveStrokeFramesAreTimed",
+   "com.artflow.studio.data.WetCompoundPreviewDeviceTest#croppedWetTailMatchesFullCommitAndSurvivesCancellationHistoryAndDiskReopen"
+  ]
+ },
+ "executionTotals": {
+  "expectedMatrixExecutions": 1778,
+  "reportedCases": 1394,
+  "reportedOutcomes": {
+   "passed": 1381,
+   "skipped": 2,
+   "failure": 11
+  },
+  "declaredCasesReported": 1389,
+  "missingDeclaredExecutions": 389,
+  "unexpectedSyntheticExecutions": 5,
+  "duplicateExecutions": 0,
+  "automaticRetries": 0,
+  "manualReruns": 0,
+  "minifiedLaunchesPassed": 0,
+  "wetBodyExecutions": 0,
+  "wetEvidenceFiles": 0
+ },
+ "countQualifications": [
+  "The 1,394 reported outcomes include five synthetic initializationError cases. There are 1,389 declared results, 389 missing declared executions and five unexpected results.",
+  "The five synthetic initialization failures do not execute the declared wet method or its finally block. All nine outputs are absent in every lane.",
+  "API26 printed 256 finishes; XML contains 254 unique reported identities, including two permitted skips and one synthetic initialization failure.",
+  "No lane passes the complete 254-identity gate. Five lanes completed the prior 253 identities, with two permitted skips only on API26."
+ ],
+ "wetInitializationFailure": {
+  "intendedIdentityIndex": 253,
+  "reportedIdentity": "com.artflow.studio.data.WetCompoundPreviewDeviceTest#initializationError",
+  "affectedLanes": [
+   "26",
+   "35-standard-4k",
+   "36",
+   "36-16k",
+   "36-tablet"
+  ],
+  "cause": "InvalidTestClassError: Method croppedWetTailMatchesFullCommitAndSurvivesCancellationHistoryAndDiskReopen() should be void",
+  "sourceExplanation": "The expression-bodied runBlocking method ends its try expression with JSONObject.put; the finally write does not change that return type.",
+  "sourcePath": "app/src/androidTest/java/com/artflow/studio/data/WetCompoundPreviewDeviceTest.kt",
+  "sourceSHA256": "282e4701eee3378ccf53e698e7307ddf540eeedd2e302dbf67f760aa15b96f32",
+  "laterCorrectionScope": "An explicit Unit declaration is a separate revision; no body/evidence assertion is accepted from run313."
+ },
+ "build": {
+  "runId": 40126826694,
+  "revision": "8d8d0e6885349a427b5ac26bea549b1b2e6868a2",
+  "tree": "2a7ccdb032b2dfd51c87e3125930ec126e67f69d",
+  "buildJob": 120969951089,
+  "artifacts": {
+   "verification-reports": {
+    "id": 12573264584,
+    "size_in_bytes": 769535,
+    "digest": "sha256:f8983eb3f212e08b5b81c227412273cd6cc713aea00a122941296f23b041e415"
+   },
+   "artflow-source": {
+    "id": 12573602650,
+    "size_in_bytes": 1918429,
+    "digest": "sha256:eed31b937ca9ffb231a468935b38c346d4dd0823729f51c716918bf27ae758de"
+   }
+  },
+  "publicationBinding": {
+   "runId": 40126826694,
+   "revision": "8d8d0e6885349a427b5ac26bea549b1b2e6868a2",
+   "tree": "2a7ccdb032b2dfd51c87e3125930ec126e67f69d",
+   "buildJob": 120969951089,
+   "sourceFiles": 894,
+   "sourceTarSha256": "3c2d61a5c42403ecc08aa57a8e35e89f6034f58d740795166218e1ac5f95464d",
+   "compressedSourceTarSha256": "12d0399e70e9054ccb05fc3a253e53bcf6b7de8cc0909f7520d4ecf2c50f34b9",
+   "compressedSourceTarBytes": 1918068
+  },
+  "source": {
+   "tree": "2a7ccdb032b2dfd51c87e3125930ec126e67f69d",
+   "uncompressedTarSha256": "3c2d61a5c42403ecc08aa57a8e35e89f6034f58d740795166218e1ac5f95464d",
+   "uncompressedTarBytes": 8366080,
+   "compressedTarSha256": "12d0399e70e9054ccb05fc3a253e53bcf6b7de8cc0909f7520d4ecf2c50f34b9",
+   "compressedTarBytes": 1918068,
+   "regularFiles": 894,
+   "byteExactGitArchive": true,
+   "rawReferencePayloadsPresent": false,
+   "unchangedExistingLzoFixtures": [
+    "app/src/test/resources/procreate/lzo-original.bin",
+    "app/src/test/resources/procreate/lzo1x_1.bin",
+    "app/src/test/resources/procreate/lzo1x_999.bin"
+   ],
+   "changeScope": {
+    "productionFiles": [
+     "app/src/main/java/com/artflow/studio/core/render/WetBrushPickup.kt",
+     "app/src/main/java/com/artflow/studio/data/repository/canvas/CanvasRepositoryImpl.kt",
+     "app/src/main/java/com/artflow/studio/presentation/ui/components/editor/ModelCompanion.kt"
+    ],
+    "addedAndroidTest": [
+     "app/src/androidTest/java/com/artflow/studio/data/WetCompoundPreviewDeviceTest.kt"
+    ],
+    "changedAndroidTests": [
+     "app/src/androidTest/java/com/artflow/studio/ModelEditorUiTest.kt",
+     "app/src/androidTest/java/com/artflow/studio/data/WetCompoundPreviewDeviceTest.kt"
+    ],
+    "classifier": {
+     "sourceSha256": {
+      ".github/scripts/classify_android15_reference_queue_crash.py": "c65649891591fe3d0f75b6069541e1b0156a899546206d62ed0c5543dcc3c39b",
+      ".github/scripts/test_classify_android15_reference_queue_crash.py": "74c2257598decb4574ddeecb630c60118296da91d216a3941fd8946bd86bb91d"
+     },
+     "identityVerification": "Python AST; no removed identities",
+     "priorIdentities": [
+      "Android15RuntimeClassifierTest#test_android15_16k_libart_sigsegv_with_empty_process_failure_is_retryable",
+      "Android15RuntimeClassifierTest#test_app_assertion_is_never_retryable_even_with_matching_art_tombstone",
+      "Android15RuntimeClassifierTest#test_app_assertion_is_never_retryable_even_with_reference_queue_crash",
+      "Android15RuntimeClassifierTest#test_error_alongside_empty_native_failure_is_never_retryable",
+      "Android15RuntimeClassifierTest#test_failure_in_another_report_cannot_be_ignored",
+      "Android15RuntimeClassifierTest#test_failure_type_cannot_hide_an_assertion",
+      "Android15RuntimeClassifierTest#test_message_only_assertion_is_not_an_empty_native_failure",
+      "Android15RuntimeClassifierTest#test_missing_or_malformed_evidence_fails_closed",
+      "Android15RuntimeClassifierTest#test_non_art_top_frame_is_not_retryable",
+      "Android15RuntimeClassifierTest#test_reference_queue_cause_does_not_hide_an_application_failure",
+      "Android15RuntimeClassifierTest#test_reference_queue_exception_attributes_are_kept_as_evidence",
+      "Android15RuntimeClassifierTest#test_reference_queue_framework_crash_is_retryable",
+      "Android15RuntimeClassifierTest#test_reference_queue_system_crash_with_empty_process_failure_is_retryable",
+      "Android15RuntimeClassifierTest#test_reference_queue_text_cannot_override_an_assertion_attribute",
+      "Android15RuntimeClassifierTest#test_suite_error_count_cannot_be_hidden_by_an_empty_native_failure",
+      "Android15RuntimeClassifierTest#test_unrelated_runtime_crash_is_not_retryable",
+      "Android15RuntimeClassifierTest#test_wrong_runtime_or_page_size_is_not_retryable"
+     ],
+     "addedIdentities": [
+      "Android15RuntimeClassifierTest#test_an_earlier_nonmatching_app_or_system_fatal_blocks_a_later_match",
+      "Android15RuntimeClassifierTest#test_crashes_outside_the_interrupted_case_window_are_rejected",
+      "Android15RuntimeClassifierTest#test_declared_case_counts_cannot_hide_missing_failure_evidence",
+      "Android15RuntimeClassifierTest#test_foreign_reference_queue_in_the_failed_case_window_cannot_allow_retry",
+      "Android15RuntimeClassifierTest#test_missing_conflicting_or_duplicate_runner_start_fails_closed",
+      "Android15RuntimeClassifierTest#test_native_fields_cannot_be_borrowed_from_other_or_duplicate_dumps",
+      "Android15RuntimeClassifierTest#test_native_signal_and_tombstone_must_match_the_interrupted_app_pid",
+      "Android15RuntimeClassifierTest#test_one_failed_identity_and_one_exact_per_case_log_are_required",
+      "Android15RuntimeClassifierTest#test_reference_queue_in_an_earlier_passing_case_cannot_allow_retry",
+      "Android15RuntimeClassifierTest#test_reference_queue_markers_must_share_a_process_thread_and_fatal_block",
+      "Android15RuntimeClassifierTest#test_reference_queue_needs_consistent_process_identity"
+     ],
+     "removedIdentities": [],
+     "totalIdentities": 28,
+     "retainedPriorIdentities": 17,
+     "addedIdentityCount": 11
+    },
+    "modelHeaderVisibilitySource": {
+     "sourceSha256": "b10034dee329471553ad626b10d86d5a49cda85da5ef5b7bab9b3c797b1d1bde",
+     "retainedIdentities": [
+      "com.artflow.studio.ModelEditorUiTest#cancelledModelPaintDiscardsEverySeamSegmentAndSuccessfulUpKeepsUndoablePixels",
+      "com.artflow.studio.ModelEditorUiTest#modalControlsAboveTheRealModelRemainReachableAndFocusRestoresTheView"
+     ],
+     "removedIdentities": [],
+     "expectedOpaquePaperAndInk": true,
+     "minimumPaperAndInkPixelsEach": 4,
+     "minimumContrast": 4.5,
+     "actualScreenPixelsRequired": true,
+     "deviceExecutionEstablishedByThisSourceCheck": false
+    },
+    "unchangedWorkflowsRunnerNativeToolsConfigurationAndTestResources": true
+   }
+  },
+  "jvm": {
+   "suites": 252,
+   "tests": 1518,
+   "failures": 0,
+   "errors": 0,
+   "skipped": 0,
+   "uniqueIdentities": 1518,
+   "retainedPriorIdentities": 1511,
+   "addedClasses": [
+    "app/src/test/java/com/artflow/studio/data/WetPreviewFallbackTest.kt"
+   ],
+   "changedTestFiles": [
+    "app/src/test/java/com/artflow/studio/data/WetPreviewFallbackTest.kt"
+   ],
+   "addedIdentities": [
+    "com.artflow.studio.data.WetPreviewFallbackTest#aDryEditCannotCropAwayThePickupOfAnEarlierSealedWetSegment",
+    "com.artflow.studio.data.WetPreviewFallbackTest#historicalWetVectorsBelowTheEditedLayerSurvivePreviewAndCancellation",
+    "com.artflow.studio.data.WetPreviewFallbackTest#historicalWetVectorsOnTheEditedLayerSurvivePreviewAndCancellation",
+    "com.artflow.studio.data.WetPreviewFallbackTest#soloLiveWetAndDryCompoundControlsKeepExactRegionalPreviews",
+    "com.artflow.studio.data.WetPreviewFallbackTest#wetCompoundTailMatchesCommitAndCancelPreservesTheOriginalDocument",
+    "com.artflow.studio.data.WetPreviewFallbackTest#wetMirrorsRetainEarlierPickupWhenOnlyTheTailMoves",
+    "com.artflow.studio.data.WetPreviewFallbackTest#wetStrokeOverDryVectorHistoryUsesTheCompletePickupPath"
+   ],
+   "removedIdentities": [],
+   "wetPreviewIdentities": [
+    "com.artflow.studio.data.WetPreviewFallbackTest#aDryEditCannotCropAwayThePickupOfAnEarlierSealedWetSegment",
+    "com.artflow.studio.data.WetPreviewFallbackTest#historicalWetVectorsBelowTheEditedLayerSurvivePreviewAndCancellation",
+    "com.artflow.studio.data.WetPreviewFallbackTest#historicalWetVectorsOnTheEditedLayerSurvivePreviewAndCancellation",
+    "com.artflow.studio.data.WetPreviewFallbackTest#soloLiveWetAndDryCompoundControlsKeepExactRegionalPreviews",
+    "com.artflow.studio.data.WetPreviewFallbackTest#wetCompoundTailMatchesCommitAndCancelPreservesTheOriginalDocument",
+    "com.artflow.studio.data.WetPreviewFallbackTest#wetMirrorsRetainEarlierPickupWhenOnlyTheTailMoves",
+    "com.artflow.studio.data.WetPreviewFallbackTest#wetStrokeOverDryVectorHistoryUsesTheCompletePickupPath"
+   ],
+   "retainedSpacingIdentities": [
+    "com.artflow.studio.data.local.BrushSpacingExportTest#addingASecondaryCannotChangeAnImplicitVersionOneSourceToVersionZero",
+    "com.artflow.studio.data.local.BrushSpacingExportTest#deliberateSpacingEditsUseVersionOneIndependentlyForEachComponent",
+    "com.artflow.studio.data.local.BrushSpacingExportTest#extendedOnlySourceKeepsVersionOneWhenAnEditedCombineModeAddsTheLegacyKey",
+    "com.artflow.studio.data.local.BrushSpacingExportTest#legacyCombineKeyPresenceKeepsVersionZeroAcrossCombineChangesAndRemoval",
+    "com.artflow.studio.data.local.BrushSpacingExportTest#libraryArtbrushAndBrushsetKeepIndependentComponentHistories",
+    "com.artflow.studio.data.local.BrushSpacingExportTest#localSingleAndCompoundComponentsAllUseVersionOne",
+    "com.artflow.studio.data.local.BrushSpacingExportTest#omittedSourceSpacingIsNotSynthesizedByAnUnrelatedEdit",
+    "com.artflow.studio.data.local.BrushSpacingExportTest#unchangedClampedSourceSpacingStaysExactUntilEdited",
+    "com.artflow.studio.data.local.BrushSpacingExportTest#untouchedExplicitVersionsSurviveEveryStoredImportVersion"
+   ],
+   "taskExecuted": true
+  },
+  "python": {
+   "suites": [
+    93,
+    57
+   ],
+   "tests": 150
+  },
+  "ktlintReports": 5,
+  "detektErrors": 0,
+  "detektBaselineUnchanged": true,
+  "lint": {
+   "debug": {
+    "Warning": 153,
+    "Hint": 5
+   },
+   "release": {
+    "Warning": 151,
+    "Hint": 5
+   }
+  },
+  "corpus": {
+   "reference_sha256": "7b1dad3ac95f8aeca3c22b432b5d6fd94182a3bf9f84fb93588adb126368b54e",
+   "brushes": "394",
+   "compound_brushes": "140",
+   "components": "534",
+   "components_with_signed_dynamics": "35",
+   "parsed_channel_curves": "2135",
+   "metadata_import_and_persistence": "PASS",
+   "image_decode_tested": "false",
+   "reference_runtime_executed": "false",
+   "pixel_parity_verified": "false"
+  },
+  "sampleDocuments": {
+   "count": 5,
+   "distinctArchiveByteStreams": 4,
+   "sourceCommit": "0e12deb2ae1ffb152fc4a3d09add230590f52f68",
+   "inputAndIccHashesGated": true,
+   "nativeHierarchyMaskAndDarkenProbesGated": true,
+   "reports": [
+    "Mask_Test_File.procreate: 2048x2048 300 dpi, 1 layers, 0 groups, 1 masks, profile DISPLAY_P3, unsupported profile false, blend modes [NORMAL], calibration error 3.37, composite difference 0.00",
+    "Reference_Blend_File 2.procreate: 2118x1836 300 dpi, 53 layers, 26 groups, 0 masks, profile DISPLAY_P3, unsupported profile false, blend modes [NORMAL, DIVIDE, DARKER_COLOR, LIGHTER_COLOR, PIN_LIGHT, LINEAR_LIGHT, VIVID_LIGHT, HARD_MIX, DARKEN, SOFT_LIGHT, SATURATION, HUE, LUMINOSITY, COLOR, HARD_LIGHT, OVERLAY, COLOR_BURN, COLOR_DODGE, LINEAR_BURN, SUBTRACT, DIFFERENCE, EXCLUSION, LIGHTEN, ADD, SCREEN, MULTIPLY], calibration error 7.69, composite difference 0.36",
+    "Reference_Blend_File 3.procreate: 2118x1836 300 dpi, 55 layers, 27 groups, 0 masks, profile DISPLAY_P3, unsupported profile false, blend modes [NORMAL, DIVIDE, DARKER_COLOR, LIGHTER_COLOR, PIN_LIGHT, LINEAR_LIGHT, VIVID_LIGHT, HARD_MIX, DARKEN, SOFT_LIGHT, SATURATION, HUE, LUMINOSITY, COLOR, HARD_LIGHT, OVERLAY, COLOR_BURN, COLOR_DODGE, LINEAR_BURN, SUBTRACT, DIFFERENCE, EXCLUSION, LIGHTEN, ADD, SCREEN, MULTIPLY], calibration error 8.19, composite difference 0.36",
+    "Reference_Blend_File.procreate: 2118x1836 300 dpi, 53 layers, 26 groups, 0 masks, profile DISPLAY_P3, unsupported profile false, blend modes [NORMAL, DIVIDE, DARKER_COLOR, LIGHTER_COLOR, PIN_LIGHT, LINEAR_LIGHT, VIVID_LIGHT, HARD_MIX, DARKEN, SOFT_LIGHT, SATURATION, HUE, LUMINOSITY, COLOR, HARD_LIGHT, OVERLAY, COLOR_BURN, COLOR_DODGE, LINEAR_BURN, SUBTRACT, DIFFERENCE, EXCLUSION, LIGHTEN, ADD, SCREEN, MULTIPLY], calibration error 7.69, composite difference 0.36",
+    "reference.procreate: 2118x1836 300 dpi, 55 layers, 27 groups, 0 masks, profile DISPLAY_P3, unsupported profile false, blend modes [NORMAL, DIVIDE, DARKER_COLOR, LIGHTER_COLOR, PIN_LIGHT, LINEAR_LIGHT, VIVID_LIGHT, HARD_MIX, DARKEN, SOFT_LIGHT, SATURATION, HUE, LUMINOSITY, COLOR, HARD_LIGHT, OVERLAY, COLOR_BURN, COLOR_DODGE, LINEAR_BURN, SUBTRACT, DIFFERENCE, EXCLUSION, LIGHTEN, ADD, SCREEN, MULTIPLY], calibration error 8.19, composite difference 0.36"
+   ],
+   "thumbnailCalibrationGate": true,
+   "recompositeDifferenceGate": false
+  },
+  "nativeSpacing": {
+   "namedMethods": 6,
+   "instructionAnchors": 33,
+   "selectorAnchors": 6,
+   "archiveKeyAnchors": 4,
+   "archive_key": "plotSpacingVersion",
+   "archive_key_anchors": 4,
+   "cache_method": "0x100ad1a88",
+   "decode_method": "0x100a3f508",
+   "encode_method": "0x100a416e0",
+   "explicit_version": "decodeIntegerForKey: when the key is present",
+   "implicit_version": "0 if legacy dualBlendMode is present, otherwise 1; extended-only does not select 0",
+   "instruction_anchors": 33,
+   "limitations": [
+    "Native pressure preprocessing, placement, random sequence and rendered pixels are not evaluated."
+   ],
+   "plot_method": "0x100ad20b8",
+   "scope": "Archive version selection, setter/encoder linkage and two cached size-factor decisions.",
+   "selector_anchors": 6,
+   "size_factor": {
+    "constant_address": "0x100c3c9f8",
+    "other_versions_float_bits": "3fb504f3",
+    "version_zero": 1.0
+   },
+   "spacing_edit_version": 1,
+   "spacing_setter": "0x100a3e2d8",
+   "version_getter": "0x100a46054",
+   "version_ivar_offset": "0x498"
+  },
+  "nativeReferenceRuntimeExecuted": false,
+  "nativeSplineFixturesMatched": 13,
+  "nativeLayerFixturesMatched": 9,
+  "nativeReferenceReports": {
+   "archive-contracts.json": "2a7fecb393b27c9ff39acc7d43499b3e47366a38c0e2c512522895e13e091639",
+   "dual-brush-contracts.json": "019fb6d8e2b9fce58f364a4c02bc1742dc9753beaec5fd731cc9a6a7b6ce819b",
+   "layer-blend-contracts.json": "25b4b0222fe08f30e1456d7ef39949e57734b64dc012dcd255a08eb45ff038de",
+   "native-document-contracts.json": "87b31a6093f8916f728349e7ca33bb578abe2368138487b2de15c0c27e697184",
+   "pressure-spline.json": "bbcd905e0284bb1d4c775d95bea365bee1dfb6cd4af19ae28292a4950d6c8178"
+  },
+  "nativeReportsByteExactPriorRun": true,
+  "packageIntegrityAndNativeAlignment": "PASS",
+  "productionSigningNegativeGuard": "PASS",
+  "productionReleaseSigningEstablished": false,
+  "emulatorAcceptanceEvaluated": false,
+  "nativeRenderedPixelParityEstablished": false,
+  "jobLogSha256": "264fb66423c411e53662f8600a8339c0a36ada46ab60c005d22ae01e42f63991",
+  "auditorSha256": "8e825243c18e836d6656b264fe2aa646d62d4bd30390fed2624b083aa759f034"
+ },
+ "source": {
+  "runId": 40126826694,
+  "revision": "8d8d0e6885349a427b5ac26bea549b1b2e6868a2",
+  "tree": "2a7ccdb032b2dfd51c87e3125930ec126e67f69d",
+  "artifactId": 12573602650,
+  "artifactBytes": 1918429,
+  "artifactSHA256": "eed31b937ca9ffb231a468935b38c346d4dd0823729f51c716918bf27ae758de",
+  "zipEntries": [
+   "artflow-source.tar.gz",
+   "REVISION.txt"
+  ],
+  "sourceTarSHA256": "12d0399e70e9054ccb05fc3a253e53bcf6b7de8cc0909f7520d4ecf2c50f34b9",
+  "sourceTarBytes": 1918068,
+  "fileCount": 894,
+  "byteExactGitArchive": true,
+  "allBlobHashesAndExecuteBitsMatch": true,
+  "archiveModeVerification": "Byte-exact independently generated git archive, plus each Git blob and executable distinction.",
+  "sourceTarEncoding": "gzip",
+  "uncompressedTarSHA256": "3c2d61a5c42403ecc08aa57a8e35e89f6034f58d740795166218e1ac5f95464d",
+  "uncompressedTarBytes": 8366080
+ },
+ "independentAuditAnchors": {
+  "run313-metadata.json": {
+   "file": "run313-metadata.json",
+   "bytes": 73310,
+   "sha256": "264f0c7beab76db35f7709c6619bff2efed005dc137f19a8784ed4cb2d68ef70"
+  },
+  "run313-visual-acceptance.json": {
+   "file": "run313-visual-acceptance.json",
+   "bytes": 215559,
+   "sha256": "50f80ef4de142abc1dc125ae934c200e1d12a466a25601d9745fdc29e749da38"
+  },
+  "run313-build-acceptance.json": {
+   "file": "run313-build-acceptance.json",
+   "bytes": 15330,
+   "sha256": "b72911ceea291bdf0601f3a0c095d6d9b56b62463e7385084cbc5a50c5c4ec00"
+  },
+  "run313-source-proof.json": {
+   "file": "run313-source-proof.json",
+   "bytes": 283449,
+   "sha256": "d6c559128a2bb47c9483e86efde5183bd4009e2f1ba327c665a9616b41afe9d6"
+  },
+  "run313-genuine-sample-report-proof.json": {
+   "file": "run313-genuine-sample-report-proof.json",
+   "bytes": 5307,
+   "sha256": "bdc30e5cbdfa40d18d6a2bb442c8f1a46660b5375b33016c5c7760009e6af1ab"
+  },
+  "run313_expected_device_tests.json": {
+   "file": "run313_expected_device_tests.json",
+   "bytes": 25075,
+   "sha256": "23011a9746dcb0af5a9401858f3c021deaff11c3a8cafdc6c782232e8d052434"
+  },
+  "run313_device_test_identities.txt": {
+   "file": "run313_device_test_identities.txt",
+   "bytes": 24501,
+   "sha256": "cc6ddb5cf0a6e8f3d98bd254a5c69736e5c77c829b2e7cf764f299bb67638104"
+  },
+  "run313-source-inventory-proof.json": {
+   "file": "run313-source-inventory-proof.json",
+   "bytes": 1867,
+   "sha256": "17d9403cb4d8bfa9e3fa7266b507f6d39b747648c6a488314747ef06b725973f"
+  },
+  "run313_device_artifact_inspector.py": {
+   "file": "run313_device_artifact_inspector.py",
+   "bytes": 13591,
+   "sha256": "ca8f4acaa0a7cf869ed22407d85b48972eb8e8ba643ef40724dc5e84ace637be"
+  },
+  "run313_attempt_inspector.py": {
+   "file": "run313_attempt_inspector.py",
+   "bytes": 7296,
+   "sha256": "b2f2e663c22cf6394d88d93f67ac063d1611a0c23fbf9c33dd4fa1ef51f8b8fa"
+  },
+  "run313_inspect_lane.py": {
+   "file": "run313_inspect_lane.py",
+   "bytes": 2961,
+   "sha256": "31c0672c283a7a00f7ef6414c506b6eeffbf5f7e706cb0cc3d9fc9d7c96d0f7d"
+  },
+  "run313-device-acceptance.json": {
+   "file": "run313-device-acceptance.json",
+   "bytes": 1806587,
+   "sha256": "d3dc67f1489806c26e7144c0a906c4c4d71e2a48fc18fba8f7d85139655756ac"
+  },
+  "run313-timing-summary.json": {
+   "file": "run313-timing-summary.json",
+   "bytes": 38606,
+   "sha256": "90d9aa6b8dedfae0a803c187f902daea569483725ca41c514d753fb773b6a8bd"
+  },
+  "run313-timing-table.md": {
+   "file": "run313-timing-table.md",
+   "bytes": 773,
+   "sha256": "23181d45ab8d64b39aa674ae7a00f28fa7d12098a69592a05eb2e22974dc9fc4"
+  }
+ },
+ "objectDigestEncoding": "SHA-256 of Python json.dumps(value,sort_keys=True,separators=(comma,colon),ensure_ascii=True), no newline; full-object digests refer to the unmodified full audit values.",
+ "visualScope": {
+  "expectedUiPositions": 203,
+  "retainedUiPositions": 166,
+  "directOriginalViews": 60,
+  "exactBodyPixelComparisons": 106,
+  "directRawModelLayers": 6,
+  "missingUiPositions": 37,
+  "wetImagesViewed": 0,
+  "scope": "Fresh original-resolution inspection of seven real-editor Model UI states and its raw layer on each completed lane, including actual header pixels after the AndroidView clipping correction. Prior22 editor/Reference positions are directly inspected or compared exactly in body pixels to already reviewed originals, with every differing image directly viewed. Retained wet preview/full/commit/cancellation/storage PNGs are independently checked against fixed ArtFlow pixels and visually inspected, separately from lifecycle assertions.",
+  "limits": [
+   "No screenshot existence check substitutes for missing or failed test identities.",
+   "Real model readiness/gesture history/modal coordinates require passing exact device identities; images separately show retained states.",
+   "Model raw layer positions are derived from actual view geometry, so cross-lane raw hash equality is not an oracle.",
+   "No native Procreate 3D or physical stylus latency/material/performance comparison.",
+   "All published source and artifact metadata must be independently frozen by the artifact auditor before this review.",
+   "Header correction needs actual screen-pixel evidence from this exact revision; prior passing semantic assertions did not establish visibility.",
+   "Wet source/history/cancel/undo/reopen lifecycle assertions require the exact passed device case. Retained image/hash/signature checks are separate and cannot replace that result."
+  ]
+ },
+ "timingScope": {
+  "clock": "System.nanoTime",
+  "unit": "nanoseconds",
+  "elapsedIncludes": "Called work plus scheduling, lock and GC waits",
+  "excludes": [
+   "CPU time",
+   "device input delivery",
+   "GL upload/draw",
+   "display presentation",
+   "native Procreate performance"
+  ],
+  "repositoryFixture": "2048x2048 at264dpi; Paper +four striped layers +Ink;80 ordered samples per brush; earlier committed strokes retained",
+  "rasterFixture": "256x256 fixed alpha/channel formula; same dirty capacity-one pool;6 warmup+20 measured alternating pairs;52 calls",
+  "additionalPerformanceThreshold": null,
+  "lanesWithCompleteTiming": [
+   "26",
+   "35-standard-4k",
+   "36",
+   "36-16k",
+   "36-tablet"
+  ],
+  "bothDisabledJitLanesReachedTiming": false,
+  "comparisonLimit": "The raster comparison is paired within each lane. Different images and hosted VMs are not a controlled device ranking."
+ },
+ "lanes": [
+  {
+   "lane": "26",
+   "label": "API 26",
+   "jobId": 120973056041,
+   "jobConclusion": "failure",
+   "startedAt": "2026-10-24T20:00:47Z",
+   "completedAt": "2026-10-24T20:10:58Z",
+   "jobSeconds": 611.0,
+   "artifact": {
+    "id": 12574715655,
+    "url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40126826694/artifacts/12574715655",
+    "bytes": 2314624,
+    "sha256": "9ada8520aaffa2d3f33feeb0be7375eb062c58cf02173ff6ef920c3f7d6e5b7f"
+   },
+   "inspectionAnchor": {
+    "file": "run313-api26/inspection.json",
+    "bytes": 132637,
+    "sha256": "297f14ef6180b4d3baa559028a3913640944198fd3088804b3ebe7bb0be59752"
+   },
+   "attemptInspectionAnchor": {
+    "file": "run313-api26/attempts-inspection.json",
+    "bytes": 58682,
+    "sha256": "4781af86c0dcc61c3f4aef3aaa56b77170036bc6aa28d234bd8658450b85510e"
+   },
+   "jobLogAnchor": {
+    "file": "run313-api26/job.log",
+    "bytes": 132865,
+    "sha256": "38cd4d0b24cdb2dc6e9ab3dd4d71965a31bc830e6c508bec9397beb13a2403ac"
+   },
+   "reportedCases": 254,
+   "declaredCasesReported": 253,
+   "reportedOutcomes": {
+    "passed": 251,
+    "skipped": 2,
+    "failure": 1
+   },
+   "missingIdentityIndexes": [
+    253
+   ],
+   "unexpectedIdentities": [
+    "com.artflow.studio.data.WetCompoundPreviewDeviceTest#initializationError"
+   ],
+   "duplicateIdentities": [],
+   "skippedIdentityIndexes": [
+    40,
+    165
+   ],
+   "failures": [
+    {
+     "identityIndex": null,
+     "unexpectedIdentity": "com.artflow.studio.data.WetCompoundPreviewDeviceTest#initializationError",
+     "timeSeconds": "0.001",
+     "outcome": "failure",
+     "failureTextFirstLines": [
+      [
+       "<failure>java.lang.RuntimeException: Failed to instantiate test runner class androidx.test.internal.runner.junit4.AndroidJUnit4ClassRunner",
+       "",
+       "",
+       "at androidx.test.ext.junit.runners.AndroidJUnit4.throwInitializationError(AndroidJUnit4.java:129)",
+       "at androidx.test.ext.junit.runners.AndroidJUnit4.loadRunner(AndroidJUnit4.java:121)",
+       "at androidx.test.ext.junit.runners.AndroidJUnit4.loadRunner(AndroidJUnit4.java:82)",
+       "at androidx.test.ext.junit.runners.AndroidJUnit4.&lt;init&gt;(AndroidJUnit4.java:56)",
+       "... 13 trimmed",
+       "Caused by: java.lang.reflect.InvocationTargetException",
+       "at java.lang.reflect.Constructor.newInstance0(Native Method)",
+       "at java.lang.reflect.Constructor.newInstance(Constructor.java:334)",
+       "at androidx.test.ext.junit.runners.AndroidJUnit4.loadRunner(AndroidJUnit4.java:112)"
+      ]
+     ],
+     "failureTextSHA256": [
+      "6d7f42b872ac37e9e385390073b946d3bb7a6897128f3fb09013a3c280386b7b"
+     ]
+    }
+   ],
+   "complete254IdentityGate": false,
+   "runtimeAssertion": {
+    "sdk": "26",
+    "abis": "x86_64, x86",
+    "pageSize": "4096",
+    "fingerprint": "Android/sdk_gphone_x86_64/generic_x86_64:8.0.0/OSR1.180418.026/6741039:userdebug/dev-keys"
+   },
+   "requestedRuntime": {
+    "api": 26,
+    "pageSize": 4096,
+    "jit": "default"
+   },
+   "verifiedRuntimeProperties": {
+    "ro.build.fingerprint": "Android/sdk_gphone_x86_64/generic_x86_64:8.0.0/OSR1.180418.026/6741039:userdebug/dev-keys",
+    "ro.build.version.sdk": "26",
+    "ro.product.cpu.abilist": "x86_64,x86",
+    "ro.kernel.qemu": "1",
+    "ro.debuggable": "1",
+    "dalvik.vm.usejit": "true",
+    "dalvik.vm.usejitprofiles": "true",
+    "configurationStatus": "PASS"
+   },
+   "profileEvidence": {
+    "requestedProfile": null,
+    "creationCommandLines": [
+     "2026-10-24T20:05:56.3736953Z [command]/usr/bin/sh -c \\echo no | avdmanager create avd --force -n test --package 'system-images;android-26;google_apis;x86_64'"
+    ]
+   },
+   "emulatorVersions": [
+    "Android emulator version 37.2.12.0 (build_id 16428233) (CL:N/A)"
+   ],
+   "minifiedLaunchPassed": false,
+   "automaticRetries": 0,
+   "manualReruns": 0,
+   "frozenClassifierDecisionInReadOnlyAudit": false,
+   "classifierSHA256": "c65649891591fe3d0f75b6069541e1b0156a899546206d62ed0c5543dcc3c39b",
+   "classifierScope": "Read-only evaluation of the published classifier on original retained results. No retry is requested and no failed attempt is relabeled passed.",
+   "instrumentationStarts": [
+    [
+     "2026-10-24T20:07:23.2072257Z",
+     "254",
+     "emulator-5554 - 8.0.0"
+    ]
+   ],
+   "consoleFinishes": [
+    [
+     "2026-10-24T20:10:28.8078568Z",
+     "256",
+     "emulator-5554 - 8.0.0"
+    ]
+   ],
+   "suiteSeconds": 185.600631,
+   "evidenceGroups": {
+    "extendedEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "e953a3ad30f8acd36452a6c5eff15fbe92e59b953dba7214e89f20079df719cd"
+    },
+    "nativeImportEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "e6aba0ffcf45ac32a67faf6eab8870ea1c5253f9ef1ea56c0fd2e190c21903b8"
+    },
+    "nativeExportEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "491676120da4c1af5f9d16ee08968e1f60834194405af093edbb27d039677811"
+    },
+    "nativeDarkenEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "2467b600a59aee67eaaaaa20e499c8bd18297b3240ecdd2aa26f2e1ebc2f081e"
+    },
+    "rasterTransferEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "62a55a88871b4c625efce320f5e5894408db7ee1975dac0f0025691f20fb515a",
+     "passed": true
+    },
+    "modelEditorEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "598bd614db6835a03d394b24ccda492fe5c30e48b1ff3920ec7a5db964df9f2d",
+     "passed": true
+    },
+    "wetPreviewEvidence": {
+     "problemCount": 10,
+     "fullObjectSHA256": "2498f2a08078475b80ac2fb470ce3089be19e3b8abaa404954838573aac5a286"
+    }
+   },
+   "wetBodyExecuted": false,
+   "wetOutputCount": 0,
+   "fatalSignatureScan": {
+    "firstAttempt": {
+     "filesSearched": 0,
+     "matchingLines": [],
+     "scope": "Search matches are not process attribution or a count of distinct crashes; repeated events can occur in multiple logs."
+    },
+    "finalPerTest": {
+     "filesSearched": 254,
+     "matchingLines": [],
+     "scope": "Search matches are not process attribution or a count of distinct crashes; repeated events can occur in multiple logs."
+    },
+    "finalInstrumentation": {
+     "filesSearched": 0,
+     "matchingLines": [],
+     "scope": "Search matches are not process attribution or a count of distinct crashes; repeated events can occur in multiple logs."
+    },
+    "completeDeviceCapture": {
+     "filesSearched": 1,
+     "matchingLines": [],
+     "scope": "Search matches are not process attribution or a count of distinct crashes; repeated events can occur in multiple logs."
+    }
+   },
+   "visual": {
+    "status": "All 29 scoped UI states reviewed with no visual blocker; wet case and lane acceptance FAILED",
+    "reviewCompleteForAvailableEvidence": true,
+    "expectedUiPositions": 29,
+    "retainedUiPositions": 29,
+    "directOriginalViews": 12,
+    "missingImages": [],
+    "independentOutputChecks": {
+     "modelRawLayer": {
+      "path": "run313-api26/model-editor-layer.png",
+      "bytes": 698,
+      "sha256": "07bad81c7b122ec4d6453150429679a4aae95f29c23498532320c6bd9135cbc8",
+      "dimensions": [
+       96,
+       64
+      ],
+      "directlyViewed": true,
+      "allOpaque": true,
+      "exactRedGapPixels": 512,
+      "expectedRedGapPixels": 512,
+      "changedLeftIslandPixels": 158,
+      "changedRightIslandPixels": 156,
+      "scope": "Independent retained layer pixels. Actual input/lifecycle behavior is established only by the exact passing Model device identities."
+     },
+     "headerInspection": {
+      "model-editor-restored.png": {
+       "inspectionCrop": [
+        10,
+        136,
+        310,
+        172
+       ],
+       "totalPixels": 10800,
+       "underlyingWorkAreaPixels": 0
+      },
+      "model-editor-provisional.png": {
+       "inspectionCrop": [
+        10,
+        136,
+        310,
+        172
+       ],
+       "totalPixels": 10800,
+       "underlyingWorkAreaPixels": 0
+      },
+      "model-editor-cancelled.png": {
+       "inspectionCrop": [
+        10,
+        136,
+        310,
+        172
+       ],
+       "totalPixels": 10800,
+       "underlyingWorkAreaPixels": 0
+      },
+      "model-editor-committed.png": {
+       "inspectionCrop": [
+        10,
+        136,
+        310,
+        172
+       ],
+       "totalPixels": 10800,
+       "underlyingWorkAreaPixels": 0
+      },
+      "model-editor-navigation.png": {
+       "inspectionCrop": [
+        10,
+        136,
+        310,
+        172
+       ],
+       "totalPixels": 10800,
+       "underlyingWorkAreaPixels": 0
+      }
+     }
+    },
+    "findings": [
+     "The published API26 header defect is visibly corrected in all five header-bearing Model states. The same 10,800-pixel inspection region contains zero underlying work-area pixels now, versus all 10,800 in run312; title and control glyphs/paper are present. This is appearance evidence for the fixed header, not acceptance of the failed lane.",
+     "All seven retained Model UI states were directly inspected at original resolution: the 3D title, Turn/Paint/Light controls and Close are visible; modal content covers the panel; focus hides it; provisional paint clears after cancellation, returns in the committed state, and appears enlarged in the navigation state.",
+     "The raw 96x64 layer was directly viewed and independently checked: all pixels opaque, all 512 red gap pixels exact, painted pixels present in both separated islands. Geometry-dependent positions are not a cross-lane hash oracle.",
+     "Every differing available prior editor image was directly viewed; remaining available prior images match already reviewed run312 body pixels exactly, excluding only the operating-system status bar. No additional clipping, contrast, missing artwork or stale-frame issue was found in this bounded scope."
+    ]
+   },
+   "elapsedRepositoryTiming": {
+    "device": {
+     "sdkInt": 26,
+     "manufacturer": "unknown",
+     "model": "Android SDK built for x86_64",
+     "hardware": "ranchu",
+     "fingerprint": "Android/sdk_gphone_x86_64/generic_x86_64:8.0.0/OSR1.180418.026/6741039:userdebug/dev-keys"
+    },
+    "fixture": {
+     "width": 2048,
+     "height": 2048,
+     "dpi": 264,
+     "paperLayers": 1,
+     "stripedLayers": 4,
+     "inkLayers": 1,
+     "totalLayers": 6,
+     "samplesPerBrush": 80,
+     "priorCommittedStrokesRetained": true,
+     "startX": 240,
+     "step": 12,
+     "centreY": 1024,
+     "waveDivisor": 9,
+     "amplitude": 260
+    },
+    "brushes": [
+     {
+      "name": "pen 12 px",
+      "sampleCount": 80,
+      "summaries": {
+       "continueStrokeSummary": {
+        "p50Nanos": 30230,
+        "p95Nanos": 54610,
+        "maxNanos": 146530
+       },
+       "compositePreviewFrameSummary": {
+        "p50Nanos": 1386110,
+        "p95Nanos": 9104880,
+        "maxNanos": 14780750
+       },
+       "combinedSampleSummary": {
+        "p50Nanos": 1415810,
+        "p95Nanos": 9159490,
+        "maxNanos": 14866100
+       }
+      },
+      "phases": {
+       "preStrokePreviewNanos": 471723330,
+       "beginStrokeNanos": 154840,
+       "endStrokeNanos": 33843510,
+       "finalPreviewNanos": 127420640,
+       "endAndFinalPreviewNanos": 161264150
+      }
+     },
+     {
+      "name": "textured 80 px",
+      "sampleCount": 80,
+      "summaries": {
+       "continueStrokeSummary": {
+        "p50Nanos": 28830,
+        "p95Nanos": 43230,
+        "maxNanos": 90330
+       },
+       "compositePreviewFrameSummary": {
+        "p50Nanos": 3289880,
+        "p95Nanos": 5782830,
+        "maxNanos": 16843910
+       },
+       "combinedSampleSummary": {
+        "p50Nanos": 3327870,
+        "p95Nanos": 5809970,
+        "maxNanos": 16871580
+       }
+      },
+      "phases": {
+       "preStrokePreviewNanos": 528810,
+       "beginStrokeNanos": 151320,
+       "endStrokeNanos": 51562740,
+       "finalPreviewNanos": 18953800,
+       "endAndFinalPreviewNanos": 70516540
+      }
+     },
+     {
+      "name": "soft airbrush 300 px",
+      "sampleCount": 80,
+      "summaries": {
+       "continueStrokeSummary": {
+        "p50Nanos": 28640,
+        "p95Nanos": 40870,
+        "maxNanos": 123610
+       },
+       "compositePreviewFrameSummary": {
+        "p50Nanos": 26514480,
+        "p95Nanos": 41318350,
+        "maxNanos": 45083290
+       },
+       "combinedSampleSummary": {
+        "p50Nanos": 26541680,
+        "p95Nanos": 41346870,
+        "maxNanos": 45110630
+       }
+      },
+      "phases": {
+       "preStrokePreviewNanos": 1956190,
+       "beginStrokeNanos": 147780,
+       "endStrokeNanos": 81448130,
+       "finalPreviewNanos": 203230090,
+       "endAndFinalPreviewNanos": 284678220
+      }
+     }
+    ],
+    "sampleOrderAndArithmeticVerified": true,
+    "independentPercentilesVerified": true,
+    "readableTextAgreesToThreeDecimals": true,
+    "additionalPerformanceThreshold": null,
+    "scope": "Elapsed repository calls, including dispatch/scheduling/lock waits; no input delivery, GL or display latency.",
+    "artifactChecksPassed": true,
+    "caseIdentity": "com.artflow.studio.data.StrokeTimingDeviceTest#liveStrokeFramesAreTimed",
+    "caseState": "passed",
+    "files": {
+     "stroke-timing.json": {
+      "copies": 1,
+      "bytes": 43852,
+      "sha256": "d8e802156b5540fe0523b3b80dea7a44c10b38effa36d95fde1aa89d34387838"
+     },
+     "stroke-timing.txt": {
+      "copies": 1,
+      "bytes": 1666,
+      "sha256": "6954d7308ff1177a855224d0c20f4827f4482873eb9b7b133f4e47d35a4e1984"
+     }
+    }
+   },
+   "pairedRasterTransfer": {
+    "deviceCasePassed": true,
+    "files": {
+     "compositor-raster-transfer.argb": {
+      "bytes": 262144,
+      "sha256": "d0c182f79088483e024627e0df21c0f696823c416d33b208fa4be21531af409e"
+     },
+     "compositor-raster-transfer-timing.json": {
+      "bytes": 7144,
+      "sha256": "f7b689e91175731e818f5f487c220a17b623ce9708ab1defbf89ed57b1048a61"
+     }
+    },
+    "recomputedSummary": {
+     "currentMedianNanos": 102225.0,
+     "referenceMedianNanos": 3385630.0
+    },
+    "validatedPairCount": 26,
+    "validatedCallCount": 52,
+    "allRetainedPixelsVerified": 65536,
+    "independentCheckScope": [
+     "Every retained final-current ARGB byte against the alpha/channel formula",
+     "Raw pair counts, order, signed-Long timing values and median arithmetic",
+     "Runtime SDK/fingerprint and pinned previous-source provenance fields"
+    ],
+    "assertedByPassingDeviceCase": [
+     "All 52 current/reference transfers returned exact expected pixels",
+     "Source remained byte-for-byte unchanged after every call",
+     "The same dirty capacity-one pool accepted every returned buffer",
+     "Validation, dirtying and release occurred outside the timed boundaries"
+    ],
+    "performanceThreshold": null,
+    "nativeProcreateComparison": false
+   }
+  },
+  {
+   "lane": "35-standard-4k",
+   "label": "API 35 standard 4 KB",
+   "jobId": 120973056079,
+   "jobConclusion": "failure",
+   "startedAt": "2026-10-24T20:00:49Z",
+   "completedAt": "2026-10-24T20:10:27Z",
+   "jobSeconds": 578.0,
+   "artifact": {
+    "id": 12573955451,
+    "url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40126826694/artifacts/12573955451",
+    "bytes": 7069827,
+    "sha256": "4de301e97ab6de279e5329b6d1797287b6ed9c1cd8a4cbea86b382020524eafc"
+   },
+   "inspectionAnchor": {
+    "file": "run313-api35-standard-4k/inspection.json",
+    "bytes": 133113,
+    "sha256": "470063d76d6c11acbecdece58271d1ea4be0d322deed293d808b8048fbbeb4bf"
+   },
+   "attemptInspectionAnchor": {
+    "file": "run313-api35-standard-4k/attempts-inspection.json",
+    "bytes": 58651,
+    "sha256": "5c49d209de051ddf33da3f4ddc31da4a88403cd169c23b77a73766339d8a74b8"
+   },
+   "jobLogAnchor": {
+    "file": "run313-api35-standard-4k/job.log",
+    "bytes": 136136,
+    "sha256": "9f89ea168edc52b374129a6b0c2566cb018769281fe8355684504a7c73ef1dd9"
+   },
+   "reportedCases": 254,
+   "declaredCasesReported": 253,
+   "reportedOutcomes": {
+    "passed": 253,
+    "failure": 1
+   },
+   "missingIdentityIndexes": [
+    253
+   ],
+   "unexpectedIdentities": [
+    "com.artflow.studio.data.WetCompoundPreviewDeviceTest#initializationError"
+   ],
+   "duplicateIdentities": [],
+   "skippedIdentityIndexes": [],
+   "failures": [
+    {
+     "identityIndex": null,
+     "unexpectedIdentity": "com.artflow.studio.data.WetCompoundPreviewDeviceTest#initializationError",
+     "timeSeconds": "0.003",
+     "outcome": "failure",
+     "failureTextFirstLines": [
+      [
+       "<failure>java.lang.RuntimeException: Failed to instantiate test runner class androidx.test.internal.runner.junit4.AndroidJUnit4ClassRunner",
+       "",
+       "",
+       "at androidx.test.ext.junit.runners.AndroidJUnit4.throwInitializationError(AndroidJUnit4.java:129)",
+       "at androidx.test.ext.junit.runners.AndroidJUnit4.loadRunner(AndroidJUnit4.java:121)",
+       "at androidx.test.ext.junit.runners.AndroidJUnit4.loadRunner(AndroidJUnit4.java:82)",
+       "at androidx.test.ext.junit.runners.AndroidJUnit4.&lt;init&gt;(AndroidJUnit4.java:56)",
+       "... 13 trimmed",
+       "Caused by: java.lang.reflect.InvocationTargetException",
+       "at java.lang.reflect.Constructor.newInstance0(Native Method)",
+       "at java.lang.reflect.Constructor.newInstance(Constructor.java:343)",
+       "at androidx.test.ext.junit.runners.AndroidJUnit4.loadRunner(AndroidJUnit4.java:112)"
+      ]
+     ],
+     "failureTextSHA256": [
+      "dee6f36444c550e6f72ba6b6fe6659071cf341df53408e5337339d05793a1d79"
+     ]
+    }
+   ],
+   "complete254IdentityGate": false,
+   "runtimeAssertion": {
+    "sdk": "35",
+    "abis": "x86_64, arm64-v8a",
+    "pageSize": "4096",
+    "fingerprint": "google/sdk_gphone64_x86_64/emu64xa:15/AE3A.240806.043/12960925:userdebug/dev-keys"
+   },
+   "requestedRuntime": {
+    "api": 35,
+    "pageSize": 4096,
+    "jit": "default"
+   },
+   "verifiedRuntimeProperties": {
+    "ro.build.fingerprint": "google/sdk_gphone64_x86_64/emu64xa:15/AE3A.240806.043/12960925:userdebug/dev-keys",
+    "ro.build.version.sdk": "35",
+    "ro.product.cpu.abilist": "x86_64,arm64-v8a",
+    "ro.kernel.qemu": "1",
+    "ro.debuggable": "1",
+    "dalvik.vm.usejit": "true",
+    "dalvik.vm.usejitprofiles": "",
+    "configurationStatus": "PASS"
+   },
+   "profileEvidence": {
+    "requestedProfile": null,
+    "creationCommandLines": [
+     "2026-10-24T20:04:48.1579095Z [command]/usr/bin/sh -c \\echo no | avdmanager create avd --force -n test --package 'system-images;android-35;google_apis;x86_64'"
+    ]
+   },
+   "emulatorVersions": [
+    "Android emulator version 37.2.12.0 (build_id 16428233) (CL:N/A)"
+   ],
+   "minifiedLaunchPassed": false,
+   "automaticRetries": 0,
+   "manualReruns": 0,
+   "frozenClassifierDecisionInReadOnlyAudit": false,
+   "classifierSHA256": "c65649891591fe3d0f75b6069541e1b0156a899546206d62ed0c5543dcc3c39b",
+   "classifierScope": "Read-only evaluation of the published classifier on original retained results. No retry is requested and no failed attempt is relabeled passed.",
+   "instrumentationStarts": [
+    [
+     "2026-10-24T20:05:51.8840382Z",
+     "254",
+     "emulator-5554 - 15"
+    ]
+   ],
+   "consoleFinishes": [
+    [
+     "2026-10-24T20:09:47.2865940Z",
+     "254",
+     "emulator-5554 - 15"
+    ]
+   ],
+   "suiteSeconds": 235.402556,
+   "evidenceGroups": {
+    "extendedEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "1787a0c81955714b0d8115cefb5ed9b48f17bd5b753076adb5ed786b30454e4c"
+    },
+    "nativeImportEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "06b9906b7f1df04f1ec59b97625bebcfb9d4f116e8d43149fc2e158dbb36b925"
+    },
+    "nativeExportEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "64acf8c9c41580b674529990433e131a4c042b5a34f63a8e403c8fdc4b2af6c2"
+    },
+    "nativeDarkenEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "9697f4d8199027ec1188e45b4413f1a13db83a73d858293b9e8cbbde9ae670f5"
+    },
+    "rasterTransferEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "f44aefebe80b98bb1e21e9f730ed3dded11e8a6209aab7a36adc04062751b06b",
+     "passed": true
+    },
+    "modelEditorEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "4d5423d7a73e6e0610ef16e26593862c3a010c7efa69a15a2658034a05ee9fab",
+     "passed": true
+    },
+    "wetPreviewEvidence": {
+     "problemCount": 10,
+     "fullObjectSHA256": "2cbb430747e365fff49d1f01b565fcefd3d81fec4bd19e7717c835c46916cbba"
+    }
+   },
+   "wetBodyExecuted": false,
+   "wetOutputCount": 0,
+   "fatalSignatureScan": {
+    "firstAttempt": {
+     "filesSearched": 0,
+     "matchingLines": [],
+     "scope": "Search matches are not process attribution or a count of distinct crashes; repeated events can occur in multiple logs."
+    },
+    "finalPerTest": {
+     "filesSearched": 254,
+     "matchingLines": [],
+     "scope": "Search matches are not process attribution or a count of distinct crashes; repeated events can occur in multiple logs."
+    },
+    "finalInstrumentation": {
+     "filesSearched": 0,
+     "matchingLines": [],
+     "scope": "Search matches are not process attribution or a count of distinct crashes; repeated events can occur in multiple logs."
+    },
+    "completeDeviceCapture": {
+     "filesSearched": 1,
+     "matchingLines": [],
+     "scope": "Search matches are not process attribution or a count of distinct crashes; repeated events can occur in multiple logs."
+    }
+   },
+   "visual": {
+    "status": "All 29 scoped UI states reviewed with no visual blocker; wet case and lane acceptance FAILED",
+    "reviewCompleteForAvailableEvidence": true,
+    "expectedUiPositions": 29,
+    "retainedUiPositions": 29,
+    "directOriginalViews": 13,
+    "missingImages": [],
+    "independentOutputChecks": {
+     "modelRawLayer": {
+      "path": "run313-api35-standard-4k/model-editor-layer.png",
+      "bytes": 698,
+      "sha256": "07bad81c7b122ec4d6453150429679a4aae95f29c23498532320c6bd9135cbc8",
+      "dimensions": [
+       96,
+       64
+      ],
+      "directlyViewed": true,
+      "allOpaque": true,
+      "exactRedGapPixels": 512,
+      "expectedRedGapPixels": 512,
+      "changedLeftIslandPixels": 158,
+      "changedRightIslandPixels": 156,
+      "scope": "Independent retained layer pixels. Actual input/lifecycle behavior is established only by the exact passing Model device identities."
+     },
+     "headerInspection": {
+      "model-editor-restored.png": {
+       "inspectionCrop": [
+        10,
+        136,
+        310,
+        172
+       ],
+       "totalPixels": 10800,
+       "underlyingWorkAreaPixels": 0
+      },
+      "model-editor-provisional.png": {
+       "inspectionCrop": [
+        10,
+        136,
+        310,
+        172
+       ],
+       "totalPixels": 10800,
+       "underlyingWorkAreaPixels": 0
+      },
+      "model-editor-cancelled.png": {
+       "inspectionCrop": [
+        10,
+        136,
+        310,
+        172
+       ],
+       "totalPixels": 10800,
+       "underlyingWorkAreaPixels": 0
+      },
+      "model-editor-committed.png": {
+       "inspectionCrop": [
+        10,
+        136,
+        310,
+        172
+       ],
+       "totalPixels": 10800,
+       "underlyingWorkAreaPixels": 0
+      },
+      "model-editor-navigation.png": {
+       "inspectionCrop": [
+        10,
+        136,
+        310,
+        172
+       ],
+       "totalPixels": 10800,
+       "underlyingWorkAreaPixels": 0
+      }
+     }
+    },
+    "findings": [
+     "All seven retained Model UI states were directly inspected at original resolution: the 3D title, Turn/Paint/Light controls and Close are visible; modal content covers the panel; focus hides it; provisional paint clears after cancellation, returns in the committed state, and appears enlarged in the navigation state.",
+     "The raw 96x64 layer was directly viewed and independently checked: all pixels opaque, all 512 red gap pixels exact, painted pixels present in both separated islands. Geometry-dependent positions are not a cross-lane hash oracle.",
+     "Every differing available prior editor image was directly viewed; remaining available prior images match already reviewed run312 body pixels exactly, excluding only the operating-system status bar. No additional clipping, contrast, missing artwork or stale-frame issue was found in this bounded scope."
+    ]
+   },
+   "elapsedRepositoryTiming": {
+    "device": {
+     "sdkInt": 35,
+     "manufacturer": "Google",
+     "model": "sdk_gphone64_x86_64",
+     "hardware": "ranchu",
+     "fingerprint": "google/sdk_gphone64_x86_64/emu64xa:15/AE3A.240806.043/12960925:userdebug/dev-keys"
+    },
+    "fixture": {
+     "width": 2048,
+     "height": 2048,
+     "dpi": 264,
+     "paperLayers": 1,
+     "stripedLayers": 4,
+     "inkLayers": 1,
+     "totalLayers": 6,
+     "samplesPerBrush": 80,
+     "priorCommittedStrokesRetained": true,
+     "startX": 240,
+     "step": 12,
+     "centreY": 1024,
+     "waveDivisor": 9,
+     "amplitude": 260
+    },
+    "brushes": [
+     {
+      "name": "pen 12 px",
+      "sampleCount": 80,
+      "summaries": {
+       "continueStrokeSummary": {
+        "p50Nanos": 2435,
+        "p95Nanos": 9344,
+        "maxNanos": 60636
+       },
+       "compositePreviewFrameSummary": {
+        "p50Nanos": 750199,
+        "p95Nanos": 11306065,
+        "maxNanos": 15439076
+       },
+       "combinedSampleSummary": {
+        "p50Nanos": 757718,
+        "p95Nanos": 11316457,
+        "maxNanos": 15442460
+       }
+      },
+      "phases": {
+       "preStrokePreviewNanos": 499220904,
+       "beginStrokeNanos": 68938,
+       "endStrokeNanos": 24750448,
+       "finalPreviewNanos": 157734981,
+       "endAndFinalPreviewNanos": 182485429
+      }
+     },
+     {
+      "name": "textured 80 px",
+      "sampleCount": 80,
+      "summaries": {
+       "continueStrokeSummary": {
+        "p50Nanos": 3709,
+        "p95Nanos": 23921,
+        "maxNanos": 85914
+       },
+       "compositePreviewFrameSummary": {
+        "p50Nanos": 3276912,
+        "p95Nanos": 5803452,
+        "maxNanos": 16158167
+       },
+       "combinedSampleSummary": {
+        "p50Nanos": 3279971,
+        "p95Nanos": 5809086,
+        "maxNanos": 16162082
+       }
+      },
+      "phases": {
+       "preStrokePreviewNanos": 547872,
+       "beginStrokeNanos": 50315,
+       "endStrokeNanos": 44157288,
+       "finalPreviewNanos": 27862353,
+       "endAndFinalPreviewNanos": 72019641
+      }
+     },
+     {
+      "name": "soft airbrush 300 px",
+      "sampleCount": 80,
+      "summaries": {
+       "continueStrokeSummary": {
+        "p50Nanos": 14398,
+        "p95Nanos": 37685,
+        "maxNanos": 47239
+       },
+       "compositePreviewFrameSummary": {
+        "p50Nanos": 45162800,
+        "p95Nanos": 59493149,
+        "maxNanos": 64266150
+       },
+       "combinedSampleSummary": {
+        "p50Nanos": 45185801,
+        "p95Nanos": 59505124,
+        "maxNanos": 64288346
+       }
+      },
+      "phases": {
+       "preStrokePreviewNanos": 325894,
+       "beginStrokeNanos": 748319,
+       "endStrokeNanos": 94463882,
+       "finalPreviewNanos": 319500828,
+       "endAndFinalPreviewNanos": 413964710
+      }
+     }
+    ],
+    "sampleOrderAndArithmeticVerified": true,
+    "independentPercentilesVerified": true,
+    "readableTextAgreesToThreeDecimals": true,
+    "additionalPerformanceThreshold": null,
+    "scope": "Elapsed repository calls, including dispatch/scheduling/lock waits; no input delivery, GL or display latency.",
+    "artifactChecksPassed": true,
+    "caseIdentity": "com.artflow.studio.data.StrokeTimingDeviceTest#liveStrokeFramesAreTimed",
+    "caseState": "passed",
+    "files": {
+     "stroke-timing.json": {
+      "copies": 1,
+      "bytes": 43606,
+      "sha256": "3dca5f9c03cc500b034ae6f47deaee44c72874da9a286c2bfe182e918a465958"
+     },
+     "stroke-timing.txt": {
+      "copies": 1,
+      "bytes": 1658,
+      "sha256": "f38419b144592f04d43aee0209b6ec8e2f48702a3460103b76e0d8ef61dfd97a"
+     }
+    }
+   },
+   "pairedRasterTransfer": {
+    "deviceCasePassed": true,
+    "files": {
+     "compositor-raster-transfer.argb": {
+      "bytes": 262144,
+      "sha256": "d0c182f79088483e024627e0df21c0f696823c416d33b208fa4be21531af409e"
+     },
+     "compositor-raster-transfer-timing.json": {
+      "bytes": 7110,
+      "sha256": "5cf8f772d13f6f140f7f2351ec4cef55569a4e6af826506f2e404204944f8805"
+     }
+    },
+    "recomputedSummary": {
+     "currentMedianNanos": 67208.5,
+     "referenceMedianNanos": 6387977.0
+    },
+    "validatedPairCount": 26,
+    "validatedCallCount": 52,
+    "allRetainedPixelsVerified": 65536,
+    "independentCheckScope": [
+     "Every retained final-current ARGB byte against the alpha/channel formula",
+     "Raw pair counts, order, signed-Long timing values and median arithmetic",
+     "Runtime SDK/fingerprint and pinned previous-source provenance fields"
+    ],
+    "assertedByPassingDeviceCase": [
+     "All 52 current/reference transfers returned exact expected pixels",
+     "Source remained byte-for-byte unchanged after every call",
+     "The same dirty capacity-one pool accepted every returned buffer",
+     "Validation, dirtying and release occurred outside the timed boundaries"
+    ],
+    "performanceThreshold": null,
+    "nativeProcreateComparison": false
+   }
+  },
+  {
+   "lane": "35",
+   "label": "API 35",
+   "jobId": 120973056018,
+   "jobConclusion": "failure",
+   "startedAt": "2026-10-24T20:00:48Z",
+   "completedAt": "2026-10-24T20:08:05Z",
+   "jobSeconds": 437.0,
+   "artifact": {
+    "id": 12574005651,
+    "url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40126826694/artifacts/12574005651",
+    "bytes": 2022823,
+    "sha256": "5a94215c533639fe700c9a296d204cd3d270036fcc3538b05d4bbb863769c04b"
+   },
+   "inspectionAnchor": {
+    "file": "run313-api35/inspection.json",
+    "bytes": 135101,
+    "sha256": "2530c39133adff6e9d87611d12441e26ae831aab214791ce07574966eaa37013"
+   },
+   "attemptInspectionAnchor": {
+    "file": "run313-api35/attempts-inspection.json",
+    "bytes": 153457,
+    "sha256": "ac9847e5ad0c1d70105c31cb586197f6aca9c549114af6d474841d08380566ea"
+   },
+   "jobLogAnchor": {
+    "file": "run313-api35/job.log",
+    "bytes": 186383,
+    "sha256": "8d6d4d9f4582df1c897f8f9ac82fc0d0c00232a15d72b64519f5474877e13f78"
+   },
+   "reportedCases": 6,
+   "declaredCasesReported": 6,
+   "reportedOutcomes": {
+    "passed": 1,
+    "failure": 5
+   },
+   "missingIdentityIndexes": [
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59,
+    60,
+    61,
+    62,
+    63,
+    64,
+    65,
+    66,
+    67,
+    68,
+    69,
+    70,
+    71,
+    72,
+    73,
+    74,
+    75,
+    76,
+    77,
+    78,
+    79,
+    80,
+    81,
+    82,
+    83,
+    84,
+    85,
+    86,
+    87,
+    88,
+    89,
+    90,
+    91,
+    92,
+    93,
+    94,
+    95,
+    96,
+    97,
+    98,
+    99,
+    100,
+    101,
+    102,
+    103,
+    104,
+    105,
+    106,
+    107,
+    108,
+    109,
+    110,
+    111,
+    112,
+    113,
+    114,
+    115,
+    116,
+    117,
+    118,
+    119,
+    120,
+    121,
+    122,
+    123,
+    124,
+    125,
+    126,
+    127,
+    128,
+    129,
+    130,
+    131,
+    132,
+    133,
+    134,
+    135,
+    136,
+    137,
+    138,
+    139,
+    140,
+    141,
+    142,
+    143,
+    144,
+    145,
+    146,
+    147,
+    148,
+    149,
+    150,
+    151,
+    152,
+    153,
+    154,
+    155,
+    156,
+    157,
+    158,
+    159,
+    160,
+    161,
+    162,
+    163,
+    164,
+    165,
+    166,
+    167,
+    168,
+    169,
+    170,
+    171,
+    172,
+    173,
+    174,
+    175,
+    176,
+    177,
+    178,
+    179,
+    180,
+    181,
+    182,
+    183,
+    184,
+    185,
+    186,
+    187,
+    188,
+    189,
+    190,
+    191,
+    192,
+    193,
+    194,
+    195,
+    196,
+    197,
+    198,
+    199,
+    200,
+    201,
+    202,
+    203,
+    204,
+    205,
+    206,
+    207,
+    208,
+    209,
+    210,
+    211,
+    212,
+    213,
+    214,
+    215,
+    216,
+    217,
+    218,
+    219,
+    220,
+    221,
+    222,
+    223,
+    224,
+    225,
+    226,
+    227,
+    228,
+    229,
+    230,
+    231,
+    232,
+    233,
+    234,
+    235,
+    236,
+    237,
+    238,
+    239,
+    240,
+    241,
+    242,
+    243,
+    244,
+    245,
+    246,
+    247,
+    248,
+    249,
+    250,
+    251,
+    252,
+    253
+   ],
+   "unexpectedIdentities": [],
+   "duplicateIdentities": [],
+   "skippedIdentityIndexes": [],
+   "failures": [
+    {
+     "identityIndex": 3,
+     "timeSeconds": "1.208",
+     "outcome": "failure",
+     "failureTextFirstLines": [
+      [
+       "<failure>java.lang.CloneNotSupportedException: Class androidx.compose.foundation.lazy.LazyListState$Companion doesn't implement Cloneable",
+       "at java.lang.Object.clone(Object.java:276)",
+       "at androidx.compose.foundation.lazy.LazyListStateKt.rememberLazyListState(LazyListState.kt:79)",
+       "at androidx.compose.foundation.lazy.LazyDslKt.LazyRow(LazyDsl.kt:330)",
+       "at com.artflow.studio.presentation.ui.components.editor.EditorSheetsKt.FrameStrip(EditorSheets.kt:1307)",
+       "at com.artflow.studio.presentation.ui.components.editor.EditorSheetsKt.AnimationSheet(EditorSheets.kt:948)",
+       "at com.artflow.studio.AnimationPlaybackUiTest$setup$5$1.invoke(AnimationPlaybackUiTest.kt:89)",
+       "at com.artflow.studio.AnimationPlaybackUiTest$setup$5$1.invoke(AnimationPlaybackUiTest.kt:88)",
+       "at androidx.compose.runtime.internal.ComposableLambdaImpl.invoke(ComposableLambda.kt:121)",
+       "at androidx.compose.runtime.internal.ComposableLambdaImpl.invoke(ComposableLambda.kt:51)",
+       "at androidx.compose.runtime.CompositionLocalKt.CompositionLocalProvider(CompositionLocal.kt:390)",
+       "at androidx.compose.material3.TextKt.ProvideTextStyle(Text.kt:349)"
+      ]
+     ],
+     "failureTextSHA256": [
+      "e940691415a2befc98fa9536cb33c7b877b55c969f66590614836f128044b9db"
+     ]
+    },
+    {
+     "identityIndex": 4,
+     "timeSeconds": "1.349",
+     "outcome": "failure",
+     "failureTextFirstLines": [
+      [
+       "<failure>java.lang.CloneNotSupportedException: Class androidx.compose.foundation.lazy.LazyListState$Companion doesn't implement Cloneable",
+       "at java.lang.Object.clone(Object.java:276)",
+       "at androidx.compose.foundation.lazy.LazyListStateKt.rememberLazyListState(LazyListState.kt:79)",
+       "at androidx.compose.foundation.lazy.LazyDslKt.LazyRow(LazyDsl.kt:330)",
+       "at com.artflow.studio.presentation.ui.components.editor.EditorSheetsKt.FrameStrip(EditorSheets.kt:1307)",
+       "at com.artflow.studio.presentation.ui.components.editor.EditorSheetsKt.AnimationSheet(EditorSheets.kt:948)",
+       "at com.artflow.studio.AnimationPlaybackUiTest$setup$5$1.invoke(AnimationPlaybackUiTest.kt:89)",
+       "at com.artflow.studio.AnimationPlaybackUiTest$setup$5$1.invoke(AnimationPlaybackUiTest.kt:88)",
+       "at androidx.compose.runtime.internal.ComposableLambdaImpl.invoke(ComposableLambda.kt:121)",
+       "at androidx.compose.runtime.internal.ComposableLambdaImpl.invoke(ComposableLambda.kt:51)",
+       "at androidx.compose.runtime.CompositionLocalKt.CompositionLocalProvider(CompositionLocal.kt:390)",
+       "at androidx.compose.material3.TextKt.ProvideTextStyle(Text.kt:349)"
+      ]
+     ],
+     "failureTextSHA256": [
+      "e940691415a2befc98fa9536cb33c7b877b55c969f66590614836f128044b9db"
+     ]
+    },
+    {
+     "identityIndex": 1,
+     "timeSeconds": "0.967",
+     "outcome": "failure",
+     "failureTextFirstLines": [
+      [
+       "<failure>java.lang.CloneNotSupportedException: Class androidx.compose.foundation.lazy.LazyListState$Companion doesn't implement Cloneable",
+       "at java.lang.Object.clone(Object.java:276)",
+       "at androidx.compose.foundation.lazy.LazyListStateKt.rememberLazyListState(LazyListState.kt:79)",
+       "at androidx.compose.foundation.lazy.LazyDslKt.LazyRow(LazyDsl.kt:330)",
+       "at com.artflow.studio.presentation.ui.components.editor.EditorSheetsKt.FrameStrip(EditorSheets.kt:1307)",
+       "at com.artflow.studio.presentation.ui.components.editor.EditorSheetsKt.AnimationSheet(EditorSheets.kt:948)",
+       "at com.artflow.studio.AnimationPlaybackUiTest$setup$5$1.invoke(AnimationPlaybackUiTest.kt:89)",
+       "at com.artflow.studio.AnimationPlaybackUiTest$setup$5$1.invoke(AnimationPlaybackUiTest.kt:88)",
+       "at androidx.compose.runtime.internal.ComposableLambdaImpl.invoke(ComposableLambda.kt:121)",
+       "at androidx.compose.runtime.internal.ComposableLambdaImpl.invoke(ComposableLambda.kt:51)",
+       "at androidx.compose.runtime.CompositionLocalKt.CompositionLocalProvider(CompositionLocal.kt:390)",
+       "at androidx.compose.material3.TextKt.ProvideTextStyle(Text.kt:349)"
+      ]
+     ],
+     "failureTextSHA256": [
+      "e940691415a2befc98fa9536cb33c7b877b55c969f66590614836f128044b9db"
+     ]
+    },
+    {
+     "identityIndex": 2,
+     "timeSeconds": "1.098",
+     "outcome": "failure",
+     "failureTextFirstLines": [
+      [
+       "<failure>java.lang.CloneNotSupportedException: Class androidx.compose.foundation.lazy.LazyListState$Companion doesn't implement Cloneable",
+       "at java.lang.Object.clone(Object.java:276)",
+       "at androidx.compose.foundation.lazy.LazyListStateKt.rememberLazyListState(LazyListState.kt:79)",
+       "at androidx.compose.foundation.lazy.LazyDslKt.LazyRow(LazyDsl.kt:330)",
+       "at com.artflow.studio.presentation.ui.components.editor.EditorSheetsKt.FrameStrip(EditorSheets.kt:1307)",
+       "at com.artflow.studio.presentation.ui.components.editor.EditorSheetsKt.AnimationSheet(EditorSheets.kt:948)",
+       "at com.artflow.studio.AnimationPlaybackUiTest$setup$5$1.invoke(AnimationPlaybackUiTest.kt:89)",
+       "at com.artflow.studio.AnimationPlaybackUiTest$setup$5$1.invoke(AnimationPlaybackUiTest.kt:88)",
+       "at androidx.compose.runtime.internal.ComposableLambdaImpl.invoke(ComposableLambda.kt:121)",
+       "at androidx.compose.runtime.internal.ComposableLambdaImpl.invoke(ComposableLambda.kt:51)",
+       "at androidx.compose.runtime.CompositionLocalKt.CompositionLocalProvider(CompositionLocal.kt:390)",
+       "at androidx.compose.material3.TextKt.ProvideTextStyle(Text.kt:349)"
+      ]
+     ],
+     "failureTextSHA256": [
+      "e940691415a2befc98fa9536cb33c7b877b55c969f66590614836f128044b9db"
+     ]
+    },
+    {
+     "identityIndex": 5,
+     "timeSeconds": "1.179",
+     "outcome": "failure",
+     "failureTextFirstLines": [
+      [
+       "<failure />",
+       "  "
+      ]
+     ],
+     "failureTextSHA256": [
+      "4687ecd097d6ebc5cd55fa1b5d4e2bea6f58a813e8cbd4e8a7ce38c9cf44963a"
+     ]
+    }
+   ],
+   "complete254IdentityGate": false,
+   "runtimeAssertion": {},
+   "requestedRuntime": {
+    "api": 35,
+    "pageSize": 16384,
+    "jit": "disabled"
+   },
+   "verifiedRuntimeProperties": {
+    "ro.build.fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys",
+    "ro.build.version.sdk": "35",
+    "ro.product.cpu.abilist": "x86_64,arm64-v8a",
+    "ro.kernel.qemu": "1",
+    "ro.debuggable": "1",
+    "dalvik.vm.usejit": "false",
+    "dalvik.vm.usejitprofiles": "false",
+    "configurationStatus": "PASS"
+   },
+   "profileEvidence": {
+    "requestedProfile": null,
+    "creationCommandLines": [
+     "2026-10-24T20:05:45.5254264Z [command]/usr/bin/sh -c \\echo no | avdmanager create avd --force -n test --package 'system-images;android-35;google_apis_ps16k;x86_64'"
+    ]
+   },
+   "emulatorVersions": [
+    "Android emulator version 37.2.12.0 (build_id 16428233) (CL:N/A)"
+   ],
+   "minifiedLaunchPassed": false,
+   "automaticRetries": 0,
+   "manualReruns": 0,
+   "frozenClassifierDecisionInReadOnlyAudit": false,
+   "classifierSHA256": "c65649891591fe3d0f75b6069541e1b0156a899546206d62ed0c5543dcc3c39b",
+   "classifierScope": "Read-only evaluation of the published classifier on original retained results. No retry is requested and no failed attempt is relabeled passed.",
+   "instrumentationStarts": [
+    [
+     "2026-10-24T20:07:19.4806534Z",
+     "254",
+     "emulator-5554 - 15"
+    ]
+   ],
+   "consoleFinishes": [
+    [
+     "2026-10-24T20:07:40.6774655Z",
+     "6",
+     "emulator-5554 - 15"
+    ]
+   ],
+   "suiteSeconds": 21.196812,
+   "evidenceGroups": {
+    "extendedEvidence": {
+     "problemCount": 4,
+     "fullObjectSHA256": "160dda90a41992aef595a120409fd0969f9d97a944f66ab8d983e4a3921bb52c"
+    },
+    "nativeImportEvidence": {
+     "problemCount": 7,
+     "fullObjectSHA256": "2a27b8f6db0388854ade04a172d111d137b4ddf96ae5954fa23c10d2e8b19fd2"
+    },
+    "nativeExportEvidence": {
+     "problemCount": 4,
+     "fullObjectSHA256": "5c620b3cf78551990c1fce810d809c3fa4ab7377c152d527ef8efd818c9f0605"
+    },
+    "nativeDarkenEvidence": {
+     "problemCount": 4,
+     "fullObjectSHA256": "5037f51516fa251ab284fe51f6507bfcad1f8e26b4d41f370a2765305f540533"
+    },
+    "rasterTransferEvidence": {
+     "problemCount": 2,
+     "fullObjectSHA256": "5aeb166fbe82fff9239fd5aecff79cbc4df1c2a9500348a1367af6083658c0ea",
+     "passed": false
+    },
+    "modelEditorEvidence": {
+     "problemCount": 3,
+     "fullObjectSHA256": "3bbc115d102c3b813bd88cb628732f2366a5c4c423d77815d0babfc437273750",
+     "passed": false
+    },
+    "wetPreviewEvidence": {
+     "problemCount": 10,
+     "fullObjectSHA256": "a598c0d0f3264d9bad5a72e45fdcd5477b8e35a5841dd1ca34c8e1a11ffa9e99"
+    }
+   },
+   "wetBodyExecuted": false,
+   "wetOutputCount": 0,
+   "fatalSignatureScan": {
+    "firstAttempt": {
+     "filesSearched": 0,
+     "matchingLines": [],
+     "scope": "Search matches are not process attribution or a count of distinct crashes; repeated events can occur in multiple logs."
+    },
+    "finalPerTest": {
+     "filesSearched": 6,
+     "matchingLines": [
+      {
+       "line": "10-24 20:07:28.537  4836  4836 F libc    : Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0 in tid 4836 (.artflow.studio), pid 4836 (.artflow.studio)",
+       "occurrences": [
+        {
+         "path": "Experiment-2/Experiment-2/app/build/outputs/androidTest-results/connected/debug/emulator-5554 - 15/logcat-com.artflow.studio.AppLaunchTest-activityLaunchesAndReachesResumed.txt",
+         "line": 106
+        }
+       ]
+      }
+     ],
+     "scope": "Search matches are not process attribution or a count of distinct crashes; repeated events can occur in multiple logs."
+    },
+    "finalInstrumentation": {
+     "filesSearched": 0,
+     "matchingLines": [],
+     "scope": "Search matches are not process attribution or a count of distinct crashes; repeated events can occur in multiple logs."
+    },
+    "completeDeviceCapture": {
+     "filesSearched": 1,
+     "matchingLines": [
+      {
+       "line": "10-24 20:07:28.537  4836  4836 F libc    : Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0 in tid 4836 (.artflow.studio), pid 4836 (.artflow.studio)",
+       "occurrences": [
+        {
+         "path": "_temp/artflow-device/device-logcat.txt",
+         "line": 83227
+        }
+       ]
+      }
+     ],
+     "scope": "Search matches are not process attribution or a count of distinct crashes; repeated events can occur in multiple logs."
+    }
+   },
+   "visual": {
+    "status": "UNVERIFIED: all 29 scoped UI images, Model raw layer and wet outputs absent",
+    "reviewCompleteForAvailableEvidence": true,
+    "expectedUiPositions": 29,
+    "retainedUiPositions": 0,
+    "directOriginalViews": 0,
+    "missingImages": [
+     "reference-editor-left.png",
+     "reference-editor-right.png",
+     "reference-editor-modal.png",
+     "reference-editor-focus.png",
+     "reference-editor-focus-large-targets.png",
+     "brush-share-count-single.png",
+     "brush-share-count-set.png",
+     "guide-status-light.png",
+     "guide-status-focus.png",
+     "studio-layers.png",
+     "studio-light.png",
+     "studio-dark.png",
+     "studio-focus.png",
+     "studio-tools-large-text.png",
+     "studio-tools-strip-large-text.png",
+     "studio-palette-large-text.png",
+     "studio-tabs-scaled.png",
+     "studio-tabs-rtl.png",
+     "studio-tabs-fractional-density.png",
+     "layers-imported-darken.png",
+     "studio-compact-light.png",
+     "studio-compact-dark.png",
+     "model-editor-layers.png",
+     "model-editor-focus.png",
+     "model-editor-restored.png",
+     "model-editor-provisional.png",
+     "model-editor-cancelled.png",
+     "model-editor-committed.png",
+     "model-editor-navigation.png"
+    ],
+    "independentOutputChecks": {},
+    "findings": [
+     "No visual acceptance is possible for this lane. All planned Model, Reference and workspace states are absent after early setup/launch failures."
+    ]
+   },
+   "runtimeTriageAnchor": {
+    "file": "run313-api35/runtime-triage.json",
+    "bytes": 19899,
+    "sha256": "ed2dba3f502d7a9db58d3d55ed3ccc7bbfb026df72855f02a40c3ac5e5a6d3a4"
+   },
+   "runtimeTriage": {
+    "earliestFailure": {
+     "kind": "caught setup exception",
+     "reportedAt": "2026-10-24T20:07:24.524Z",
+     "appPid": 4836,
+     "reportingTid": 5247,
+     "exception": "java.lang.CloneNotSupportedException",
+     "message": "Class androidx.compose.foundation.lazy.LazyListState$Companion doesn't implement Cloneable",
+     "phase": "AnimationPlaybackUiTest @Before setup -> compose.setContent -> AnimationSheet -> FrameStrip -> LazyRow -> rememberLazyListState",
+     "beforeNamedTestBody": true,
+     "priorCasePassedInSameProcess": "backgroundCallbackClearsTheVisiblePauseState"
+    },
+    "earliestRetainedFatal": {
+     "signalAt": "2026-10-24T20:07:28.537Z",
+     "pid": 4836,
+     "tid": 4836,
+     "process": "com.artflow.studio",
+     "signal": "SIGSEGV",
+     "signalCode": "SEGV_MAPERR",
+     "faultAddress": "0x0",
+     "tombstoneEventAt": "2026-10-24T20:07:28.686225300Z",
+     "tombstonePrintedAt": "2026-10-24T20:07:29.163Z",
+     "frame0": "art::ClassLinker::LinkMethodsHelper<(art::PointerSize)8>::LinkMethods +22973",
+     "frame0RelativePc": "0x5a4dad",
+     "module": "/apex/com.android.art/lib64/libart.so",
+     "artBuildId": "e4a3c6c284a8b17d09fd84d661cf181b",
+     "pageBytes": 16384,
+     "activityResumedAt": "2026-10-24T20:07:28.366Z",
+     "phase": "MainActivity had reached RESUMED; class verification/linking was reached during GalleryScreen composition",
+     "firstNamedAppFrame": "GalleryScreenKt.GalleryScreen +0, frame 31",
+     "causalLimit": "Detection in ART and nearby application frames do not identify the origin of the invalid state."
+    },
+    "runtime": {
+     "setupVerifiedJitMode": "disabled",
+     "setupVerifiedUseJit": "false",
+     "setupVerifiedUseJitProfiles": "false",
+     "actualAppCollectorLog": "10-24 20:07:11.441  4836  4836 I .artflow.studio: Using CollectorTypeCMC GC.",
+     "runtimeAssertionTestExecuted": false,
+     "minifiedLaunchExecuted": false,
+     "fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys",
+     "kernel": "6.6.50-android15-8-g8adecb593e9b-ab12525588; Fri Oct 18 23:59:20 UTC 2024",
+     "emulator": "37.2.12.0 / build16428233",
+     "sameConfigurationCorrelationIsCauseProof": false
+    },
+    "retry": {
+     "classifierSha256": "c65649891591fe3d0f75b6069541e1b0156a899546206d62ed0c5543dcc3c39b",
+     "independentlyObservedExitCode": 1,
+     "independentlyObservedStderr": "not a retryable framework-only crash",
+     "eligible": false,
+     "retries": 0,
+     "recoveryAttempted": false,
+     "explanation": "Five failed identities, four with typed exception text, do not meet the unique interrupted-case guard. The later empty native failure does not erase them."
+    },
+    "conclusion": {
+     "confirmedApplicationDefect": false,
+     "establishedRuntimeRootCause": false,
+     "supportedRepairEstablished": false,
+     "result": "Failed lane retained; no retry/signature/configuration change is justified by this analysis.",
+     "measurements": "Published Model and wet-preview cases were not reached; the opaque candidate is separate and was not run here."
+    },
+    "cachedDependencyInspection": {
+     "inspected": [
+      {
+       "version": "1.7.3",
+       "aar": "gradle-home-current/caches/modules-2/files-2.1/androidx.compose.foundation/foundation-android/1.7.3/2d32f84d52939645470069c44e46aa24b1bbb0f6/foundation-release.aar",
+       "aarSha256": "f9204174704ee5825f2ac6a66e47412aa7d674bd4c79dc8617b3b1698681c040",
+       "classesJarSha256": "30ad4cfbb0cd76c75210223803d6d290eb80ee1183aa2608561be0614bab73e9",
+       "javapSha256": "1d353551627ea43db2402d2962eb524dc8eaa5de02b0a1d5bad43b63ce24651d"
+      },
+      {
+       "version": "1.9.0",
+       "aar": "gradle-home-current/caches/modules-2/files-2.1/androidx.compose.foundation/foundation-android/1.9.0/b3222bb204d8e41afa22b25df0f22a3ac1c7212/foundation-release.aar",
+       "aarSha256": "691ba463d1e0a5b32d94f0448d692572faadf7a10a9c7460af41b2c430b36782",
+       "classesJarSha256": "0992ffd5b2a60855e9d59d70186159b7a9327f4749c411acc6fc6c1fbc9e8f30",
+       "javapSha256": "ca966a45b1bf53e45aba0e6e7871f757ed5298d1262d579278fc5a0abc89cafa"
+      }
+     ],
+     "relevantLocalRuntimeClassSha256": "c4cf294e3b2bc4fc1acd4f2b94c59da09027b0f0bb389d5a2a1c0ae4ebeff6c9",
+     "localRuntimeClassMatches": "foundation-android 1.9.0 LazyListStateKt",
+     "version190Line79": {
+      "bytecodeOffset": 45,
+      "getstatic": "LazyListState.Companion",
+      "subsequentInvokevirtualOffset": 48,
+      "target": "LazyListState$Companion.getSaver"
+     },
+     "explicitCloneCallsInInspectedLazyListStateKtAndCompanion": 0,
+     "meaning": "Cached expected code obtains the Saver; it does not directly clone the companion.",
+     "limits": [
+      "This is inspection of cached published dependency bytes, not a dump of the installed CI DEX or heap.",
+      "Both cached versions exist legitimately as cached artifacts; their presence alone does not prove a dependency conflict.",
+      "The unexpected clone frame and later class-linker crash are temporally associated; no shared causal mechanism is established."
+     ]
+    },
+    "originalEvidenceSha256": {
+     "Experiment-2/Experiment-2/app/build/outputs/androidTest-results/connected/debug/TEST-emulator-5554 - 15-_app-.xml": "bdf0507724d31d106eb7815a538e757789288d33f802d7dc3e7c3db2073a7e26",
+     "_temp/artflow-device/device-logcat.txt": "e769431d8612dc15016a611460764152d8582c4e86919bfee3a9c3db6348179e",
+     "job.log": "8d6d4d9f4582df1c897f8f9ac82fc0d0c00232a15d72b64519f5474877e13f78",
+     "runtime-configuration.txt": "492263dacd1f68d995ebe8919b628c610156fda02a1f483e98e4d9daa78843d1"
+    }
+   }
+  },
+  {
+   "lane": "35-16k-repeat",
+   "label": "API 35 independent 16 KB repeat",
+   "jobId": 120973055998,
+   "jobConclusion": "failure",
+   "startedAt": "2026-10-24T20:00:49Z",
+   "completedAt": "2026-10-24T20:12:46Z",
+   "jobSeconds": 717.0,
+   "artifact": {
+    "id": 12574171207,
+    "url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40126826694/artifacts/12574171207",
+    "bytes": 5514213,
+    "sha256": "77ac23435326953f4989682ec7a08ccb9e57398b6714bae78e9af0dcf7a6bf31"
+   },
+   "inspectionAnchor": {
+    "file": "run313-api35-16k-repeat/inspection.json",
+    "bytes": 85977,
+    "sha256": "5adb1e8562f6476edf820b7f4ca28cb554232ff5c1d75c62a49a9738cbbf87b4"
+   },
+   "attemptInspectionAnchor": {
+    "file": "run313-api35-16k-repeat/attempts-inspection.json",
+    "bytes": 49391,
+    "sha256": "a5bed6ab99255445a111f2e9333cadf7ed45e6300d5d98dc159082cbd94813e6"
+   },
+   "jobLogAnchor": {
+    "file": "run313-api35-16k-repeat/job.log",
+    "bytes": 164431,
+    "sha256": "eb6b51a23a6d75e9da079c4f6307321548a19e984e86452ba9adc0d7aa83e71b"
+   },
+   "reportedCases": 118,
+   "declaredCasesReported": 118,
+   "reportedOutcomes": {
+    "passed": 117,
+    "failure": 1
+   },
+   "missingIdentityIndexes": [
+    118,
+    119,
+    120,
+    121,
+    122,
+    123,
+    124,
+    125,
+    126,
+    127,
+    128,
+    129,
+    130,
+    131,
+    132,
+    133,
+    134,
+    135,
+    136,
+    137,
+    138,
+    139,
+    140,
+    141,
+    142,
+    143,
+    144,
+    145,
+    146,
+    147,
+    148,
+    149,
+    150,
+    151,
+    152,
+    153,
+    154,
+    155,
+    156,
+    157,
+    158,
+    159,
+    160,
+    161,
+    162,
+    163,
+    164,
+    165,
+    166,
+    167,
+    168,
+    169,
+    170,
+    171,
+    172,
+    173,
+    174,
+    175,
+    176,
+    177,
+    178,
+    179,
+    180,
+    181,
+    182,
+    183,
+    184,
+    185,
+    186,
+    187,
+    188,
+    189,
+    190,
+    191,
+    192,
+    193,
+    194,
+    195,
+    196,
+    197,
+    198,
+    199,
+    200,
+    201,
+    202,
+    203,
+    204,
+    205,
+    206,
+    207,
+    208,
+    209,
+    210,
+    211,
+    212,
+    213,
+    214,
+    215,
+    216,
+    217,
+    218,
+    219,
+    220,
+    221,
+    222,
+    223,
+    224,
+    225,
+    226,
+    227,
+    228,
+    229,
+    230,
+    231,
+    232,
+    233,
+    234,
+    235,
+    236,
+    237,
+    238,
+    239,
+    240,
+    241,
+    242,
+    243,
+    244,
+    245,
+    246,
+    247,
+    248,
+    249,
+    250,
+    251,
+    252,
+    253
+   ],
+   "unexpectedIdentities": [],
+   "duplicateIdentities": [],
+   "skippedIdentityIndexes": [],
+   "failures": [
+    {
+     "identityIndex": 115,
+     "timeSeconds": "2.147",
+     "outcome": "failure",
+     "failureTextFirstLines": [
+      [
+       "<failure>java.lang.ArrayIndexOutOfBoundsException: length=0; index=2",
+       "at androidx.compose.runtime.SlotWriter.parent(SlotTable.kt:4361)",
+       "at androidx.compose.runtime.SlotWriter.parent(SlotTable.kt:1419)",
+       "at androidx.compose.runtime.SlotWriter.forAllDataInRememberOrder(SlotTable.kt:4179)",
+       "at androidx.compose.runtime.ComposerKt.removeCurrentGroup(Composer.kt:4473)",
+       "at androidx.compose.runtime.CompositionImpl.dispose(Composition.kt:879)",
+       "at androidx.compose.ui.platform.WrappedComposition.dispose(Wrapper.android.kt:154)",
+       "at androidx.compose.ui.platform.WrappedComposition.onStateChanged(Wrapper.android.kt:165)",
+       "at androidx.lifecycle.LifecycleRegistry$ObserverWithState.dispatchEvent(LifecycleRegistry.jvm.kt:313)",
+       "at androidx.lifecycle.LifecycleRegistry.backwardPass(LifecycleRegistry.jvm.kt:266)",
+       "at androidx.lifecycle.LifecycleRegistry.sync(LifecycleRegistry.jvm.kt:284)",
+       "at androidx.lifecycle.LifecycleRegistry.moveToState(LifecycleRegistry.jvm.kt:135)"
+      ]
+     ],
+     "failureTextSHA256": [
+      "2c469bff603809abf1276ca15a02320d21353ff1ab60c2335eee7502be780222"
+     ]
+    }
+   ],
+   "complete254IdentityGate": false,
+   "runtimeAssertion": {
+    "sdk": "35",
+    "abis": "x86_64, arm64-v8a",
+    "pageSize": "16384",
+    "fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys"
+   },
+   "requestedRuntime": {
+    "api": 35,
+    "pageSize": 16384,
+    "jit": "disabled"
+   },
+   "verifiedRuntimeProperties": {
+    "ro.build.fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys",
+    "ro.build.version.sdk": "35",
+    "ro.product.cpu.abilist": "x86_64,arm64-v8a",
+    "ro.kernel.qemu": "1",
+    "ro.debuggable": "1",
+    "dalvik.vm.usejit": "false",
+    "dalvik.vm.usejitprofiles": "false",
+    "configurationStatus": "PASS"
+   },
+   "profileEvidence": {
+    "requestedProfile": null,
+    "creationCommandLines": [
+     "2026-10-24T20:06:00.1673955Z [command]/usr/bin/sh -c \\echo no | avdmanager create avd --force -n test --package 'system-images;android-35;google_apis_ps16k;x86_64'"
+    ]
+   },
+   "emulatorVersions": [
+    "Android emulator version 37.2.12.0 (build_id 16428233) (CL:N/A)"
+   ],
+   "minifiedLaunchPassed": false,
+   "automaticRetries": 0,
+   "manualReruns": 0,
+   "frozenClassifierDecisionInReadOnlyAudit": false,
+   "classifierSHA256": "c65649891591fe3d0f75b6069541e1b0156a899546206d62ed0c5543dcc3c39b",
+   "classifierScope": "Read-only evaluation of the published classifier on original retained results. No retry is requested and no failed attempt is relabeled passed.",
+   "instrumentationStarts": [
+    [
+     "2026-10-24T20:07:25.8013533Z",
+     "254",
+     "emulator-5554 - 15"
+    ]
+   ],
+   "consoleFinishes": [
+    [
+     "2026-10-24T20:12:20.3982727Z",
+     "118",
+     "emulator-5554 - 15"
+    ]
+   ],
+   "suiteSeconds": 294.596919,
+   "evidenceGroups": {
+    "extendedEvidence": {
+     "problemCount": 4,
+     "fullObjectSHA256": "1e211e2fbf9b22383dab7a49a51ba3c9a090d4df5331911a97ee1d5f1c340825"
+    },
+    "nativeImportEvidence": {
+     "problemCount": 7,
+     "fullObjectSHA256": "9ce6b3faac4570a7770f74c11ebcc78bf69c79d3f925a0226370fade64c0ffe9"
+    },
+    "nativeExportEvidence": {
+     "problemCount": 4,
+     "fullObjectSHA256": "16f98417ed71fb688a1ca010125ce01fc452f1fb1ecd831c3eeb3af4949d66e8"
+    },
+    "nativeDarkenEvidence": {
+     "problemCount": 2,
+     "fullObjectSHA256": "692adfc1d43388455a64df7fc9275eb38e6fd4db3851f0528b380b37affb106c"
+    },
+    "rasterTransferEvidence": {
+     "problemCount": 2,
+     "fullObjectSHA256": "b824e8ce045645f33739a61f5c2b45b4a83d726a57fd7821ef32bd21812c76df",
+     "passed": false
+    },
+    "modelEditorEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "29f8384824e0d5f2df8174aaca8830098ae624f7afc11cee2b334fb27772d01c",
+     "passed": true
+    },
+    "wetPreviewEvidence": {
+     "problemCount": 10,
+     "fullObjectSHA256": "06dd1ed9a5684671657f4828ae402813892a45b540dc0ae88c22b46baa2f4dfb"
+    }
+   },
+   "wetBodyExecuted": false,
+   "wetOutputCount": 0,
+   "fatalSignatureScan": {
+    "firstAttempt": {
+     "filesSearched": 0,
+     "matchingLines": [],
+     "scope": "Search matches are not process attribution or a count of distinct crashes; repeated events can occur in multiple logs."
+    },
+    "finalPerTest": {
+     "filesSearched": 119,
+     "matchingLines": [
+      {
+       "line": "10-24 20:12:06.205  4032  4032 E AndroidRuntime: FATAL EXCEPTION: main",
+       "occurrences": [
+        {
+         "path": "Experiment-2/Experiment-2/app/build/outputs/androidTest-results/connected/debug/emulator-5554 - 15/logcat-com.artflow.studio.SavedBrushUiTest-failedSaveRetainsTheNameAndDoesNotPretendItWasSaved.txt",
+         "line": 560
+        }
+       ]
+      }
+     ],
+     "scope": "Search matches are not process attribution or a count of distinct crashes; repeated events can occur in multiple logs."
+    },
+    "finalInstrumentation": {
+     "filesSearched": 0,
+     "matchingLines": [],
+     "scope": "Search matches are not process attribution or a count of distinct crashes; repeated events can occur in multiple logs."
+    },
+    "completeDeviceCapture": {
+     "filesSearched": 1,
+     "matchingLines": [
+      {
+       "line": "10-24 20:07:14.021  2364  3481 F libc    : Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x40 in tid 3481 (binder:2364_D), pid 2364 (.gms.persistent)",
+       "occurrences": [
+        {
+         "path": "_temp/artflow-device/device-logcat.txt",
+         "line": 52731
+        }
+       ]
+      },
+      {
+       "line": "10-24 20:07:14.533  2364  3006 E AndroidRuntime: FATAL EXCEPTION: GoogleLocationService",
+       "occurrences": [
+        {
+         "path": "_temp/artflow-device/device-logcat.txt",
+         "line": 53175
+        }
+       ]
+      },
+      {
+       "line": "10-24 20:07:14.533  2364  3006 E AndroidRuntime: java.lang.NoSuchFieldError: No static field f of type Lehdd; in class Lehdd; or its superclasses (declaration of 'ehdd' appears in /product/priv-app/PrebuiltGmsCore/PrebuiltGmsCore.apk!classes8.dex)",
+       "occurrences": [
+        {
+         "path": "_temp/artflow-device/device-logcat.txt",
+         "line": 53177
+        }
+       ]
+      },
+      {
+       "line": "10-24 20:12:06.205  4032  4032 E AndroidRuntime: FATAL EXCEPTION: main",
+       "occurrences": [
+        {
+         "path": "_temp/artflow-device/device-logcat.txt",
+         "line": 127303
+        }
+       ]
+      }
+     ],
+     "scope": "Search matches are not process attribution or a count of distinct crashes; repeated events can occur in multiple logs."
+    }
+   },
+   "visual": {
+    "status": "Retained 21/29 scoped UI states reviewed with no visual blocker; eight missing states remain unverified; lane FAILED",
+    "reviewCompleteForAvailableEvidence": true,
+    "expectedUiPositions": 29,
+    "retainedUiPositions": 21,
+    "directOriginalViews": 7,
+    "missingImages": [
+     "studio-light.png",
+     "studio-dark.png",
+     "studio-focus.png",
+     "studio-tools-large-text.png",
+     "studio-tools-strip-large-text.png",
+     "studio-palette-large-text.png",
+     "studio-compact-light.png",
+     "studio-compact-dark.png"
+    ],
+    "independentOutputChecks": {
+     "modelRawLayer": {
+      "path": "run313-api35-16k-repeat/model-editor-layer.png",
+      "bytes": 698,
+      "sha256": "07bad81c7b122ec4d6453150429679a4aae95f29c23498532320c6bd9135cbc8",
+      "dimensions": [
+       96,
+       64
+      ],
+      "directlyViewed": true,
+      "allOpaque": true,
+      "exactRedGapPixels": 512,
+      "expectedRedGapPixels": 512,
+      "changedLeftIslandPixels": 158,
+      "changedRightIslandPixels": 156,
+      "scope": "Independent retained layer pixels. Actual input/lifecycle behavior is established only by the exact passing Model device identities."
+     },
+     "headerInspection": {
+      "model-editor-restored.png": {
+       "inspectionCrop": [
+        10,
+        136,
+        310,
+        172
+       ],
+       "totalPixels": 10800,
+       "underlyingWorkAreaPixels": 0
+      },
+      "model-editor-provisional.png": {
+       "inspectionCrop": [
+        10,
+        136,
+        310,
+        172
+       ],
+       "totalPixels": 10800,
+       "underlyingWorkAreaPixels": 0
+      },
+      "model-editor-cancelled.png": {
+       "inspectionCrop": [
+        10,
+        136,
+        310,
+        172
+       ],
+       "totalPixels": 10800,
+       "underlyingWorkAreaPixels": 0
+      },
+      "model-editor-committed.png": {
+       "inspectionCrop": [
+        10,
+        136,
+        310,
+        172
+       ],
+       "totalPixels": 10800,
+       "underlyingWorkAreaPixels": 0
+      },
+      "model-editor-navigation.png": {
+       "inspectionCrop": [
+        10,
+        136,
+        310,
+        172
+       ],
+       "totalPixels": 10800,
+       "underlyingWorkAreaPixels": 0
+      }
+     }
+    },
+    "findings": [
+     "All seven retained Model UI states were directly inspected at original resolution: the 3D title, Turn/Paint/Light controls and Close are visible; modal content covers the panel; focus hides it; provisional paint clears after cancellation, returns in the committed state, and appears enlarged in the navigation state.",
+     "The raw 96x64 layer was directly viewed and independently checked: all pixels opaque, all 512 red gap pixels exact, painted pixels present in both separated islands. Geometry-dependent positions are not a cross-lane hash oracle.",
+     "Every differing available prior editor image was directly viewed; remaining available prior images match already reviewed run312 body pixels exactly, excluding only the operating-system status bar. No additional clipping, contrast, missing artwork or stale-frame issue was found in this bounded scope.",
+     "Eight planned workspace/palette/Brush Studio theme images are absent after execution stopped. Their prior-run images are not substituted for current evidence; native/storage/timing cases not reached remain unverified."
+    ]
+   },
+   "runtimeTriageAnchor": {
+    "file": "run313-api35-16k-repeat/runtime-triage.json",
+    "bytes": 12864,
+    "sha256": "dc4410189f0badc1b5670cd95f597174ce8bfa8360d67ce2a1993f25a7b44844"
+   },
+   "runtimeTriage": {
+    "failure": {
+     "identity": "com.artflow.studio.SavedBrushUiTest#failedSaveRetainsTheNameAndDoesNotPretendItWasSaved",
+     "seconds": 2.147,
+     "type": "java.lang.ArrayIndexOutOfBoundsException",
+     "message": "length=0; index=2",
+     "stack": [
+      "java.lang.ArrayIndexOutOfBoundsException: length=0; index=2",
+      "at androidx.compose.runtime.SlotWriter.parent(SlotTable.kt:4361)",
+      "at androidx.compose.runtime.SlotWriter.parent(SlotTable.kt:1419)",
+      "at androidx.compose.runtime.SlotWriter.forAllDataInRememberOrder(SlotTable.kt:4179)",
+      "at androidx.compose.runtime.ComposerKt.removeCurrentGroup(Composer.kt:4473)",
+      "at androidx.compose.runtime.CompositionImpl.dispose(Composition.kt:879)",
+      "at androidx.compose.ui.platform.WrappedComposition.dispose(Wrapper.android.kt:154)",
+      "at androidx.compose.ui.platform.WrappedComposition.onStateChanged(Wrapper.android.kt:165)",
+      "at androidx.lifecycle.LifecycleRegistry$ObserverWithState.dispatchEvent(LifecycleRegistry.jvm.kt:313)",
+      "at androidx.lifecycle.LifecycleRegistry.backwardPass(LifecycleRegistry.jvm.kt:266)",
+      "at androidx.lifecycle.LifecycleRegistry.sync(LifecycleRegistry.jvm.kt:284)",
+      "at androidx.lifecycle.LifecycleRegistry.moveToState(LifecycleRegistry.jvm.kt:135)",
+      "at androidx.lifecycle.LifecycleRegistry.handleLifecycleEvent(LifecycleRegistry.jvm.kt:119)",
+      "at androidx.lifecycle.ReportFragment$Companion.dispatch$lifecycle_runtime_release(ReportFragment.android.kt:181)",
+      "at androidx.lifecycle.ReportFragment$LifecycleCallbacks.onActivityPreDestroyed(ReportFragment.android.kt:137)",
+      "at android.app.Activity.dispatchActivityPreDestroyed(Activity.java:1721)",
+      "at android.app.Activity.performDestroy(Activity.java:9288)",
+      "at android.app.Instrumentation.callActivityOnDestroy(Instrumentation.java:1561)",
+      "at androidx.test.runner.MonitoringInstrumentation.callActivityOnDestroy(MonitoringInstrumentation.java:753)",
+      "at android.app.ActivityThread.performDestroyActivity(ActivityThread.java:5950)",
+      "at android.app.ActivityThread.handleDestroyActivity(ActivityThread.java:5995)",
+      "at android.app.servertransaction.DestroyActivityItem.execute(DestroyActivityItem.java:46)",
+      "at android.app.servertransaction.ActivityTransactionItem.execute(ActivityTransactionItem.java:60)",
+      "at android.app.servertransaction.TransactionExecutor.executeLifecycleItem(TransactionExecutor.java:225)",
+      "at android.app.servertransaction.TransactionExecutor.executeTransactionItems(TransactionExecutor.java:107)",
+      "at android.app.servertransaction.TransactionExecutor.execute(TransactionExecutor.java:81)",
+      "at android.app.ActivityThread$H.handleMessage(ActivityThread.java:2636)",
+      "at android.os.Handler.dispatchMessage(Handler.java:107)",
+      "at android.os.Looper.loopOnce(Looper.java:232)",
+      "at android.os.Looper.loop(Looper.java:317)",
+      "at android.app.ActivityThread.main(ActivityThread.java:8705)",
+      "at java.lang.reflect.Method.invoke(Native Method)",
+      "at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:580)",
+      "at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:886)"
+     ],
+     "phase": "Automatic ActivityScenarioRule.after teardown -> ActivityScenario.close -> activity destruction -> lifecycle-driven Compose disposal",
+     "testStartedAt": "2026-10-24T20:12:04.023Z",
+     "activityPausedAt": "2026-10-24T20:12:06.066Z",
+     "activityStoppedAt": "2026-10-24T20:12:06.126Z",
+     "firstUnhandledExceptionAt": "2026-10-24T20:12:06.134Z",
+     "fatalAt": "2026-10-24T20:12:06.205Z",
+     "pid": 4032,
+     "tid": 4032,
+     "process": "com.artflow.studio",
+     "instrumentationTid": 4611,
+     "wrapper": "RuntimeException: Unable to destroy activity {com.artflow.studio/androidx.activity.ComponentActivity}",
+     "appNativeSignalObserved": false,
+     "appNativeFrame0": null,
+     "appNativeArtBuildId": null,
+     "bodyAssertionFailureReported": false,
+     "successfulCompletionOfEveryBodyAssertionEstablished": false,
+     "ruleAfterThreadEvidence": [
+      {
+       "line": 276,
+       "text": "10-24 20:12:06.196  4032  4032 E THREAD_STATE:   Thread[Instr: com.artflow.studio.HiltTestRunner,5,main]"
+      },
+      {
+       "line": 284,
+       "text": "10-24 20:12:06.196  4032  4032 E THREAD_STATE:     androidx.test.core.app.ActivityScenario.close(ActivityScenario.java:421)"
+      },
+      {
+       "line": 285,
+       "text": "10-24 20:12:06.196  4032  4032 E THREAD_STATE:     androidx.test.ext.junit.rules.ActivityScenarioRule.after(ActivityScenarioRule.java:117)"
+      }
+     ]
+    },
+    "runtime": {
+     "measuredSdk": 35,
+     "measuredPageBytes": 16384,
+     "runtimeAssertionCasePassed": true,
+     "runtimeEvidence": [
+      "10-24 20:11:57.273  4032  4611 I ArtFlowRuntime: sdk=35",
+      "10-24 20:11:57.273  4032  4611 I ArtFlowRuntime: abis=x86_64, arm64-v8a",
+      "10-24 20:11:57.273  4032  4611 I ArtFlowRuntime: pageSize=16384",
+      "10-24 20:11:57.273  4032  4611 I ArtFlowRuntime: fingerprint=google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys"
+     ],
+     "setupVerifiedUseJit": "false",
+     "setupVerifiedUseJitProfiles": "false",
+     "minifiedLaunchExecuted": false
+    },
+    "retry": {
+     "classifierSha256": "c65649891591fe3d0f75b6069541e1b0156a899546206d62ed0c5543dcc3c39b",
+     "exitCode": 1,
+     "stderr": "not a retryable framework-only crash",
+     "eligible": false,
+     "retries": 0,
+     "recoveryAttempted": false,
+     "reason": "Typed SlotWriter exception is outside the unchanged eligible signatures; earlier GMS failures cannot permit retry."
+    },
+    "conclusion": {
+     "confirmedAppOrTestLifecycleDefect": false,
+     "confirmedPlatformCause": false,
+     "provedRepair": false,
+     "result": "Preserve the managed teardown failure and missing cases; no wait, retry, source or configuration workaround added."
+    },
+    "sameSourceComparisons": [
+     {
+      "lane": "26",
+      "status": "pass",
+      "seconds": 1.36,
+      "xmlPath": "run313-api26/Experiment-2/Experiment-2/app/build/outputs/androidTest-results/connected/debug/TEST-emulator-5554 - 8.0.0-_app-.xml",
+      "xmlSha256": "6728db9e25e67205d69d04aa35a4747f7bc5bf8f893b3af7dfda13f57c609a02",
+      "inspectionSha256": "297f14ef6180b4d3baa559028a3913640944198fd3088804b3ebe7bb0be59752",
+      "scope": "Same published source; passing this identity does not waive the failed lane."
+     },
+     {
+      "lane": "35-standard-4k",
+      "status": "pass",
+      "seconds": 1.359,
+      "xmlPath": "run313-api35-standard-4k/Experiment-2/Experiment-2/app/build/outputs/androidTest-results/connected/debug/TEST-emulator-5554 - 15-_app-.xml",
+      "xmlSha256": "fe0a7b9ea2fdce5c733baf8eb931226110ae49f6c49af772a83f09ca7ee8a00a",
+      "inspectionSha256": "470063d76d6c11acbecdece58271d1ea4be0d322deed293d808b8048fbbeb4bf",
+      "scope": "Same published source; passing this identity does not waive the failed lane."
+     },
+     {
+      "lane": "36",
+      "status": "pass",
+      "seconds": 1.896,
+      "xmlPath": "run313-api36/Experiment-2/Experiment-2/app/build/outputs/androidTest-results/connected/debug/TEST-emulator-5554 - 16-_app-.xml",
+      "xmlSha256": "c9d6cdfd4554c784dd420461c9d50bc4e0c1d88d6436a85ac458371c26082f5b",
+      "inspectionSha256": "ec2597546b7d463a001736b569f295addfb12c8201e8968ed2a3b54d3df80066",
+      "scope": "Same published source; passing this identity does not waive the failed lane."
+     },
+     {
+      "lane": "36-16k",
+      "status": "pass",
+      "seconds": 1.133,
+      "xmlPath": "run313-api36-16k/Experiment-2/Experiment-2/app/build/outputs/androidTest-results/connected/debug/TEST-emulator-5554 - 16-_app-.xml",
+      "xmlSha256": "81a8d5b3d06f0373acc6e620266218f6b337f3c5cbcc3b3cd7e4191a84cb5fae",
+      "inspectionSha256": "4937e191a5fd9c44476e81d21d94c281b7266ee5487ad7b41fde986d99777337",
+      "scope": "Same published source; passing this identity does not waive the failed lane."
+     }
+    ],
+    "sourceReview": {
+     "explicitManualActivityCloseOrCompositionDispose": false,
+     "testUses": "One createComposeRule and one setContent call; no custom setup/teardown or asynchronous storage writer",
+     "saveCallback": "state = state.copy(error = \"Storage unavailable\") from the UI save callback",
+     "dialogDismissal": "Cancel updates local naming state; AlertDialog is removed conditionally. Activity lifecycle remains owned by the Compose test rule.",
+     "revisionEffect": "The dialog revision effect does not dismiss on the error callback because that callback does not change revision.",
+     "concreteAppLifecycleMisuseFound": false,
+     "boundary": "Review covers this test and its immediate Brush Studio/saved-name controls. It does not prove absence of earlier invalid state or a Compose/library/runtime defect.",
+     "files": {
+      "app/src/androidTest/java/com/artflow/studio/SavedBrushUiTest.kt": "cedc6c731d7709b68a4f5b266614315aa9b208745ff1d837b5cfa7734ccacd2f",
+      "app/src/main/java/com/artflow/studio/presentation/ui/components/brush/SavedBrushControls.kt": "92ffc27306709168e08228d70216370bd689ef62862a636acec37e148419db0c",
+      "app/src/main/java/com/artflow/studio/presentation/ui/components/brush/BrushStudioDialog.kt": "dd5670b5696de58097edb7b65d86df98ef966b26d464b21f639b687365fa5a65",
+      "app/src/androidTest/java/com/artflow/studio/RuntimeEnvironmentTest.kt": "f1d524e8ceb3dd44fac3a9a6b161c0212119a57be009116a5232340d2408fd18"
+     }
+    },
+    "originalEvidenceSha256": {
+     "Experiment-2/Experiment-2/app/build/outputs/androidTest-results/connected/debug/TEST-emulator-5554 - 15-_app-.xml": "17661966ad89475adbe1a6b34f611effbb6ce0530b9ce6968af53560f5709dc6",
+     "Experiment-2/Experiment-2/app/build/outputs/androidTest-results/connected/debug/emulator-5554 - 15/logcat-com.artflow.studio.SavedBrushUiTest-failedSaveRetainsTheNameAndDoesNotPretendItWasSaved.txt": "f52427a3979f4a05b10d377b81fa3621a925aac624f07128fa8642c591931b7f",
+     "_temp/artflow-device/device-logcat.txt": "b3b5e26234039e085b1fc671af534fc9876135b4c1b37b6bc5288f7e6d82410b",
+     "job.log": "eb6b51a23a6d75e9da079c4f6307321548a19e984e86452ba9adc0d7aa83e71b",
+     "runtime-configuration.txt": "492263dacd1f68d995ebe8919b628c610156fda02a1f483e98e4d9daa78843d1"
+    }
+   }
+  },
+  {
+   "lane": "36",
+   "label": "API 36",
+   "jobId": 120973056055,
+   "jobConclusion": "failure",
+   "startedAt": "2026-10-24T20:00:49Z",
+   "completedAt": "2026-10-24T20:13:03Z",
+   "jobSeconds": 734.0,
+   "artifact": {
+    "id": 12574765946,
+    "url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40126826694/artifacts/12574765946",
+    "bytes": 5725609,
+    "sha256": "e8a91cbe5cba67b7a0950073a2340652e03bcc4bd7a90d1ff53a527bf98b3cbd"
+   },
+   "inspectionAnchor": {
+    "file": "run313-api36/inspection.json",
+    "bytes": 132277,
+    "sha256": "ec2597546b7d463a001736b569f295addfb12c8201e8968ed2a3b54d3df80066"
+   },
+   "attemptInspectionAnchor": {
+    "file": "run313-api36/attempts-inspection.json",
+    "bytes": 58646,
+    "sha256": "5e9d532a8e54dc0552f1fc924f5fb43ae17123e88c6e2d4ad856dc0ffa617cb9"
+   },
+   "jobLogAnchor": {
+    "file": "run313-api36/job.log",
+    "bytes": 140125,
+    "sha256": "102017fb7e6e2edcdb64dabbbd5496e0b4a0c1fea4fcb4112b188948bf81bbbc"
+   },
+   "reportedCases": 254,
+   "declaredCasesReported": 253,
+   "reportedOutcomes": {
+    "passed": 253,
+    "failure": 1
+   },
+   "missingIdentityIndexes": [
+    253
+   ],
+   "unexpectedIdentities": [
+    "com.artflow.studio.data.WetCompoundPreviewDeviceTest#initializationError"
+   ],
+   "duplicateIdentities": [],
+   "skippedIdentityIndexes": [],
+   "failures": [
+    {
+     "identityIndex": null,
+     "unexpectedIdentity": "com.artflow.studio.data.WetCompoundPreviewDeviceTest#initializationError",
+     "timeSeconds": "0.003",
+     "outcome": "failure",
+     "failureTextFirstLines": [
+      [
+       "<failure>java.lang.RuntimeException: Failed to instantiate test runner class androidx.test.internal.runner.junit4.AndroidJUnit4ClassRunner",
+       "",
+       "",
+       "at androidx.test.ext.junit.runners.AndroidJUnit4.throwInitializationError(AndroidJUnit4.java:129)",
+       "at androidx.test.ext.junit.runners.AndroidJUnit4.loadRunner(AndroidJUnit4.java:121)",
+       "at androidx.test.ext.junit.runners.AndroidJUnit4.loadRunner(AndroidJUnit4.java:82)",
+       "at androidx.test.ext.junit.runners.AndroidJUnit4.&lt;init&gt;(AndroidJUnit4.java:56)",
+       "... 13 trimmed",
+       "Caused by: java.lang.reflect.InvocationTargetException",
+       "at java.lang.reflect.Constructor.newInstance0(Native Method)",
+       "at java.lang.reflect.Constructor.newInstance(Constructor.java:343)",
+       "at androidx.test.ext.junit.runners.AndroidJUnit4.loadRunner(AndroidJUnit4.java:112)"
+      ]
+     ],
+     "failureTextSHA256": [
+      "dee6f36444c550e6f72ba6b6fe6659071cf341df53408e5337339d05793a1d79"
+     ]
+    }
+   ],
+   "complete254IdentityGate": false,
+   "runtimeAssertion": {
+    "sdk": "36",
+    "abis": "x86_64, arm64-v8a",
+    "pageSize": "4096",
+    "fingerprint": "google/sdk_gphone64_x86_64/emu64xa:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys"
+   },
+   "requestedRuntime": {
+    "api": 36,
+    "pageSize": 4096,
+    "jit": "default"
+   },
+   "verifiedRuntimeProperties": {
+    "ro.build.fingerprint": "google/sdk_gphone64_x86_64/emu64xa:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys",
+    "ro.build.version.sdk": "36",
+    "ro.product.cpu.abilist": "x86_64,arm64-v8a",
+    "ro.kernel.qemu": "1",
+    "ro.debuggable": "1",
+    "dalvik.vm.usejit": "true",
+    "dalvik.vm.usejitprofiles": "",
+    "configurationStatus": "PASS"
+   },
+   "profileEvidence": {
+    "requestedProfile": null,
+    "creationCommandLines": [
+     "2026-10-24T20:05:36.5969020Z [command]/usr/bin/sh -c \\echo no | avdmanager create avd --force -n test --package 'system-images;android-36;google_apis;x86_64'"
+    ]
+   },
+   "emulatorVersions": [
+    "Android emulator version 37.2.12.0 (build_id 16428233) (CL:N/A)"
+   ],
+   "minifiedLaunchPassed": false,
+   "automaticRetries": 0,
+   "manualReruns": 0,
+   "frozenClassifierDecisionInReadOnlyAudit": false,
+   "classifierSHA256": "c65649891591fe3d0f75b6069541e1b0156a899546206d62ed0c5543dcc3c39b",
+   "classifierScope": "Read-only evaluation of the published classifier on original retained results. No retry is requested and no failed attempt is relabeled passed.",
+   "instrumentationStarts": [
+    [
+     "2026-10-24T20:07:20.6971203Z",
+     "254",
+     "emulator-5554 - 16"
+    ]
+   ],
+   "consoleFinishes": [
+    [
+     "2026-10-24T20:12:39.8973865Z",
+     "254",
+     "emulator-5554 - 16"
+    ]
+   ],
+   "suiteSeconds": 319.200266,
+   "evidenceGroups": {
+    "extendedEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "7b7352fa8c3ef6c4bf57e03ae397c25c4ff80492180376741225dcc1d6cefce5"
+    },
+    "nativeImportEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "32e35e0500f1f5a25e1ee177680b54a204ee8a4046d710405428b9fe53601147"
+    },
+    "nativeExportEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "072362531ba10b0d75ef72403e733ebcdb9c4a2a219640e338e96a71d1184a3e"
+    },
+    "nativeDarkenEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "03cd89f3d476cfa3679fa021c42a287118495da21dfe29bd943c6aee25622095"
+    },
+    "rasterTransferEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "d6d4467709049a918232944d23d239c074172817d5273866ac9c5363cc138e73",
+     "passed": true
+    },
+    "modelEditorEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "6bc8f6b5d0022f902605d9f7115cf287b9452b2e53cb1980646e4224c8273c17",
+     "passed": true
+    },
+    "wetPreviewEvidence": {
+     "problemCount": 10,
+     "fullObjectSHA256": "a9ba76a2ba0de7d76da60f7ec97727c85c8ce60adf16150e02e0bcb6aa37e723"
+    }
+   },
+   "wetBodyExecuted": false,
+   "wetOutputCount": 0,
+   "fatalSignatureScan": {
+    "firstAttempt": {
+     "filesSearched": 0,
+     "matchingLines": [],
+     "scope": "Search matches are not process attribution or a count of distinct crashes; repeated events can occur in multiple logs."
+    },
+    "finalPerTest": {
+     "filesSearched": 254,
+     "matchingLines": [],
+     "scope": "Search matches are not process attribution or a count of distinct crashes; repeated events can occur in multiple logs."
+    },
+    "finalInstrumentation": {
+     "filesSearched": 0,
+     "matchingLines": [],
+     "scope": "Search matches are not process attribution or a count of distinct crashes; repeated events can occur in multiple logs."
+    },
+    "completeDeviceCapture": {
+     "filesSearched": 1,
+     "matchingLines": [],
+     "scope": "Search matches are not process attribution or a count of distinct crashes; repeated events can occur in multiple logs."
+    }
+   },
+   "visual": {
+    "status": "All 29 scoped UI states reviewed with no visual blocker; wet case and lane acceptance FAILED",
+    "reviewCompleteForAvailableEvidence": true,
+    "expectedUiPositions": 29,
+    "retainedUiPositions": 29,
+    "directOriginalViews": 12,
+    "missingImages": [],
+    "independentOutputChecks": {
+     "modelRawLayer": {
+      "path": "run313-api36/model-editor-layer.png",
+      "bytes": 698,
+      "sha256": "07bad81c7b122ec4d6453150429679a4aae95f29c23498532320c6bd9135cbc8",
+      "dimensions": [
+       96,
+       64
+      ],
+      "directlyViewed": true,
+      "allOpaque": true,
+      "exactRedGapPixels": 512,
+      "expectedRedGapPixels": 512,
+      "changedLeftIslandPixels": 158,
+      "changedRightIslandPixels": 156,
+      "scope": "Independent retained layer pixels. Actual input/lifecycle behavior is established only by the exact passing Model device identities."
+     },
+     "headerInspection": {
+      "model-editor-restored.png": {
+       "inspectionCrop": [
+        10,
+        136,
+        310,
+        172
+       ],
+       "totalPixels": 10800,
+       "underlyingWorkAreaPixels": 0
+      },
+      "model-editor-provisional.png": {
+       "inspectionCrop": [
+        10,
+        136,
+        310,
+        172
+       ],
+       "totalPixels": 10800,
+       "underlyingWorkAreaPixels": 0
+      },
+      "model-editor-cancelled.png": {
+       "inspectionCrop": [
+        10,
+        136,
+        310,
+        172
+       ],
+       "totalPixels": 10800,
+       "underlyingWorkAreaPixels": 0
+      },
+      "model-editor-committed.png": {
+       "inspectionCrop": [
+        10,
+        136,
+        310,
+        172
+       ],
+       "totalPixels": 10800,
+       "underlyingWorkAreaPixels": 0
+      },
+      "model-editor-navigation.png": {
+       "inspectionCrop": [
+        10,
+        136,
+        310,
+        172
+       ],
+       "totalPixels": 10800,
+       "underlyingWorkAreaPixels": 0
+      }
+     }
+    },
+    "findings": [
+     "All seven retained Model UI states were directly inspected at original resolution: the 3D title, Turn/Paint/Light controls and Close are visible; modal content covers the panel; focus hides it; provisional paint clears after cancellation, returns in the committed state, and appears enlarged in the navigation state.",
+     "The raw 96x64 layer was directly viewed and independently checked: all pixels opaque, all 512 red gap pixels exact, painted pixels present in both separated islands. Geometry-dependent positions are not a cross-lane hash oracle.",
+     "Every differing available prior editor image was directly viewed; remaining available prior images match already reviewed run312 body pixels exactly, excluding only the operating-system status bar. No additional clipping, contrast, missing artwork or stale-frame issue was found in this bounded scope."
+    ]
+   },
+   "elapsedRepositoryTiming": {
+    "device": {
+     "sdkInt": 36,
+     "manufacturer": "Google",
+     "model": "sdk_gphone64_x86_64",
+     "hardware": "ranchu",
+     "fingerprint": "google/sdk_gphone64_x86_64/emu64xa:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys"
+    },
+    "fixture": {
+     "width": 2048,
+     "height": 2048,
+     "dpi": 264,
+     "paperLayers": 1,
+     "stripedLayers": 4,
+     "inkLayers": 1,
+     "totalLayers": 6,
+     "samplesPerBrush": 80,
+     "priorCommittedStrokesRetained": true,
+     "startX": 240,
+     "step": 12,
+     "centreY": 1024,
+     "waveDivisor": 9,
+     "amplitude": 260
+    },
+    "brushes": [
+     {
+      "name": "pen 12 px",
+      "sampleCount": 80,
+      "summaries": {
+       "continueStrokeSummary": {
+        "p50Nanos": 10562,
+        "p95Nanos": 24238,
+        "maxNanos": 114833
+       },
+       "compositePreviewFrameSummary": {
+        "p50Nanos": 2396881,
+        "p95Nanos": 20954436,
+        "maxNanos": 23865916
+       },
+       "combinedSampleSummary": {
+        "p50Nanos": 2405979,
+        "p95Nanos": 20994985,
+        "maxNanos": 23890154
+       }
+      },
+      "phases": {
+       "preStrokePreviewNanos": 703979574,
+       "beginStrokeNanos": 131227,
+       "endStrokeNanos": 39051172,
+       "finalPreviewNanos": 212917373,
+       "endAndFinalPreviewNanos": 251968545
+      }
+     },
+     {
+      "name": "textured 80 px",
+      "sampleCount": 80,
+      "summaries": {
+       "continueStrokeSummary": {
+        "p50Nanos": 11195,
+        "p95Nanos": 20077,
+        "maxNanos": 142272
+       },
+       "compositePreviewFrameSummary": {
+        "p50Nanos": 6717023,
+        "p95Nanos": 18989822,
+        "maxNanos": 24655282
+       },
+       "combinedSampleSummary": {
+        "p50Nanos": 6729662,
+        "p95Nanos": 19132094,
+        "maxNanos": 24672709
+       }
+      },
+      "phases": {
+       "preStrokePreviewNanos": 987943,
+       "beginStrokeNanos": 206471,
+       "endStrokeNanos": 113520867,
+       "finalPreviewNanos": 32444343,
+       "endAndFinalPreviewNanos": 145965210
+      }
+     },
+     {
+      "name": "soft airbrush 300 px",
+      "sampleCount": 80,
+      "summaries": {
+       "continueStrokeSummary": {
+        "p50Nanos": 26115,
+        "p95Nanos": 89245,
+        "maxNanos": 210807
+       },
+       "compositePreviewFrameSummary": {
+        "p50Nanos": 87796053,
+        "p95Nanos": 113957542,
+        "maxNanos": 123441275
+       },
+       "combinedSampleSummary": {
+        "p50Nanos": 87885298,
+        "p95Nanos": 114013197,
+        "maxNanos": 123465201
+       }
+      },
+      "phases": {
+       "preStrokePreviewNanos": 504439,
+       "beginStrokeNanos": 109307,
+       "endStrokeNanos": 137370296,
+       "finalPreviewNanos": 417544928,
+       "endAndFinalPreviewNanos": 554915224
+      }
+     }
+    ],
+    "sampleOrderAndArithmeticVerified": true,
+    "independentPercentilesVerified": true,
+    "readableTextAgreesToThreeDecimals": true,
+    "additionalPerformanceThreshold": null,
+    "scope": "Elapsed repository calls, including dispatch/scheduling/lock waits; no input delivery, GL or display latency.",
+    "artifactChecksPassed": true,
+    "caseIdentity": "com.artflow.studio.data.StrokeTimingDeviceTest#liveStrokeFramesAreTimed",
+    "caseState": "passed",
+    "files": {
+     "stroke-timing.json": {
+      "copies": 1,
+      "bytes": 43931,
+      "sha256": "4dcccd0d0bf38e461e3f615064d3575a4e8860da02fd86c33ce62cba58153cc0"
+     },
+     "stroke-timing.txt": {
+      "copies": 1,
+      "bytes": 1667,
+      "sha256": "42f248b39e26885e516e3a83db0266974261a27898f934af4c9d7bd620c9e7ac"
+     }
+    }
+   },
+   "pairedRasterTransfer": {
+    "deviceCasePassed": true,
+    "files": {
+     "compositor-raster-transfer.argb": {
+      "bytes": 262144,
+      "sha256": "d0c182f79088483e024627e0df21c0f696823c416d33b208fa4be21531af409e"
+     },
+     "compositor-raster-transfer-timing.json": {
+      "bytes": 7131,
+      "sha256": "71acba143d84fd725acec9a7b542afc970422e059826ce1407a2ebf0dfc95151"
+     }
+    },
+    "recomputedSummary": {
+     "currentMedianNanos": 81041.5,
+     "referenceMedianNanos": 11746516.0
+    },
+    "validatedPairCount": 26,
+    "validatedCallCount": 52,
+    "allRetainedPixelsVerified": 65536,
+    "independentCheckScope": [
+     "Every retained final-current ARGB byte against the alpha/channel formula",
+     "Raw pair counts, order, signed-Long timing values and median arithmetic",
+     "Runtime SDK/fingerprint and pinned previous-source provenance fields"
+    ],
+    "assertedByPassingDeviceCase": [
+     "All 52 current/reference transfers returned exact expected pixels",
+     "Source remained byte-for-byte unchanged after every call",
+     "The same dirty capacity-one pool accepted every returned buffer",
+     "Validation, dirtying and release occurred outside the timed boundaries"
+    ],
+    "performanceThreshold": null,
+    "nativeProcreateComparison": false
+   }
+  },
+  {
+   "lane": "36-16k",
+   "label": "API 36 16 KB",
+   "jobId": 120973056006,
+   "jobConclusion": "failure",
+   "startedAt": "2026-10-24T20:00:49Z",
+   "completedAt": "2026-10-24T20:09:28Z",
+   "jobSeconds": 519.0,
+   "artifact": {
+    "id": 12573925936,
+    "url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40126826694/artifacts/12573925936",
+    "bytes": 5527343,
+    "sha256": "2c92848112b053afb1976bbac442f275641cd01bc338354f20a3fbfb40acf527"
+   },
+   "inspectionAnchor": {
+    "file": "run313-api36-16k/inspection.json",
+    "bytes": 132515,
+    "sha256": "4937e191a5fd9c44476e81d21d94c281b7266ee5487ad7b41fde986d99777337"
+   },
+   "attemptInspectionAnchor": {
+    "file": "run313-api36-16k/attempts-inspection.json",
+    "bytes": 58613,
+    "sha256": "341db4e33bcbf5e812a53d0cb452ced8fdef23c7178abc0936ee23ccdee6a020"
+   },
+   "jobLogAnchor": {
+    "file": "run313-api36-16k/job.log",
+    "bytes": 138081,
+    "sha256": "177dd213fb4df923b9151355fcd4bc88173559ec7ce2d8ff736862c650b92abf"
+   },
+   "reportedCases": 254,
+   "declaredCasesReported": 253,
+   "reportedOutcomes": {
+    "passed": 253,
+    "failure": 1
+   },
+   "missingIdentityIndexes": [
+    253
+   ],
+   "unexpectedIdentities": [
+    "com.artflow.studio.data.WetCompoundPreviewDeviceTest#initializationError"
+   ],
+   "duplicateIdentities": [],
+   "skippedIdentityIndexes": [],
+   "failures": [
+    {
+     "identityIndex": null,
+     "unexpectedIdentity": "com.artflow.studio.data.WetCompoundPreviewDeviceTest#initializationError",
+     "timeSeconds": "0.004",
+     "outcome": "failure",
+     "failureTextFirstLines": [
+      [
+       "<failure>java.lang.RuntimeException: Failed to instantiate test runner class androidx.test.internal.runner.junit4.AndroidJUnit4ClassRunner",
+       "",
+       "",
+       "at androidx.test.ext.junit.runners.AndroidJUnit4.throwInitializationError(AndroidJUnit4.java:129)",
+       "at androidx.test.ext.junit.runners.AndroidJUnit4.loadRunner(AndroidJUnit4.java:121)",
+       "at androidx.test.ext.junit.runners.AndroidJUnit4.loadRunner(AndroidJUnit4.java:82)",
+       "at androidx.test.ext.junit.runners.AndroidJUnit4.&lt;init&gt;(AndroidJUnit4.java:56)",
+       "... 13 trimmed",
+       "Caused by: java.lang.reflect.InvocationTargetException",
+       "at java.lang.reflect.Constructor.newInstance0(Native Method)",
+       "at java.lang.reflect.Constructor.newInstance(Constructor.java:343)",
+       "at androidx.test.ext.junit.runners.AndroidJUnit4.loadRunner(AndroidJUnit4.java:112)"
+      ]
+     ],
+     "failureTextSHA256": [
+      "dee6f36444c550e6f72ba6b6fe6659071cf341df53408e5337339d05793a1d79"
+     ]
+    }
+   ],
+   "complete254IdentityGate": false,
+   "runtimeAssertion": {
+    "sdk": "36",
+    "abis": "x86_64, arm64-v8a",
+    "pageSize": "16384",
+    "fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys"
+   },
+   "requestedRuntime": {
+    "api": 36,
+    "pageSize": 16384,
+    "jit": "default"
+   },
+   "verifiedRuntimeProperties": {
+    "ro.build.fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys",
+    "ro.build.version.sdk": "36",
+    "ro.product.cpu.abilist": "x86_64,arm64-v8a",
+    "ro.kernel.qemu": "1",
+    "ro.debuggable": "1",
+    "dalvik.vm.usejit": "true",
+    "dalvik.vm.usejitprofiles": "",
+    "configurationStatus": "PASS"
+   },
+   "profileEvidence": {
+    "requestedProfile": null,
+    "creationCommandLines": [
+     "2026-10-24T20:04:24.4700715Z [command]/usr/bin/sh -c \\echo no | avdmanager create avd --force -n test --package 'system-images;android-36;google_apis_ps16k;x86_64'"
+    ]
+   },
+   "emulatorVersions": [
+    "Android emulator version 37.2.12.0 (build_id 16428233) (CL:N/A)"
+   ],
+   "minifiedLaunchPassed": false,
+   "automaticRetries": 0,
+   "manualReruns": 0,
+   "frozenClassifierDecisionInReadOnlyAudit": false,
+   "classifierSHA256": "c65649891591fe3d0f75b6069541e1b0156a899546206d62ed0c5543dcc3c39b",
+   "classifierScope": "Read-only evaluation of the published classifier on original retained results. No retry is requested and no failed attempt is relabeled passed.",
+   "instrumentationStarts": [
+    [
+     "2026-10-24T20:05:31.9947167Z",
+     "254",
+     "emulator-5554 - 16"
+    ]
+   ],
+   "consoleFinishes": [
+    [
+     "2026-10-24T20:08:52.0885347Z",
+     "254",
+     "emulator-5554 - 16"
+    ]
+   ],
+   "suiteSeconds": 200.093818,
+   "evidenceGroups": {
+    "extendedEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "fbb0fb7b164920f99fd12bf5a677aabf0482a77273a506478da45d9958b8a259"
+    },
+    "nativeImportEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "999c6b07290cf4af65cedb144d9dea7234787d40a3e6fe098fa36fc39467d3a8"
+    },
+    "nativeExportEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "333488fc28618a6eca24182107c2790383c64696e5455a73ce3a9d34aedc296f"
+    },
+    "nativeDarkenEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "0e636a5e0446b1a15d84f56692a32ed93c545671c153f84dc6fbb26d7bd14c7a"
+    },
+    "rasterTransferEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "3bc5b053ae18e50a32f933239e48fafca9dd38280c464339fb400367d934ed8a",
+     "passed": true
+    },
+    "modelEditorEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "110af861f79e8312925283204745e180f9812415ae62b2cd26f18d8c4723e200",
+     "passed": true
+    },
+    "wetPreviewEvidence": {
+     "problemCount": 10,
+     "fullObjectSHA256": "4aaa460a3367cc1ea33f6bc85be24a967b472c4711d036f2934cd560f0796872"
+    }
+   },
+   "wetBodyExecuted": false,
+   "wetOutputCount": 0,
+   "fatalSignatureScan": {
+    "firstAttempt": {
+     "filesSearched": 0,
+     "matchingLines": [],
+     "scope": "Search matches are not process attribution or a count of distinct crashes; repeated events can occur in multiple logs."
+    },
+    "finalPerTest": {
+     "filesSearched": 254,
+     "matchingLines": [],
+     "scope": "Search matches are not process attribution or a count of distinct crashes; repeated events can occur in multiple logs."
+    },
+    "finalInstrumentation": {
+     "filesSearched": 0,
+     "matchingLines": [],
+     "scope": "Search matches are not process attribution or a count of distinct crashes; repeated events can occur in multiple logs."
+    },
+    "completeDeviceCapture": {
+     "filesSearched": 1,
+     "matchingLines": [],
+     "scope": "Search matches are not process attribution or a count of distinct crashes; repeated events can occur in multiple logs."
+    }
+   },
+   "visual": {
+    "status": "All 29 scoped UI states reviewed with no visual blocker; wet case and lane acceptance FAILED",
+    "reviewCompleteForAvailableEvidence": true,
+    "expectedUiPositions": 29,
+    "retainedUiPositions": 29,
+    "directOriginalViews": 7,
+    "missingImages": [],
+    "independentOutputChecks": {
+     "modelRawLayer": {
+      "path": "run313-api36-16k/model-editor-layer.png",
+      "bytes": 698,
+      "sha256": "07bad81c7b122ec4d6453150429679a4aae95f29c23498532320c6bd9135cbc8",
+      "dimensions": [
+       96,
+       64
+      ],
+      "directlyViewed": true,
+      "allOpaque": true,
+      "exactRedGapPixels": 512,
+      "expectedRedGapPixels": 512,
+      "changedLeftIslandPixels": 158,
+      "changedRightIslandPixels": 156,
+      "scope": "Independent retained layer pixels. Actual input/lifecycle behavior is established only by the exact passing Model device identities."
+     },
+     "headerInspection": {
+      "model-editor-restored.png": {
+       "inspectionCrop": [
+        10,
+        136,
+        310,
+        172
+       ],
+       "totalPixels": 10800,
+       "underlyingWorkAreaPixels": 0
+      },
+      "model-editor-provisional.png": {
+       "inspectionCrop": [
+        10,
+        136,
+        310,
+        172
+       ],
+       "totalPixels": 10800,
+       "underlyingWorkAreaPixels": 0
+      },
+      "model-editor-cancelled.png": {
+       "inspectionCrop": [
+        10,
+        136,
+        310,
+        172
+       ],
+       "totalPixels": 10800,
+       "underlyingWorkAreaPixels": 0
+      },
+      "model-editor-committed.png": {
+       "inspectionCrop": [
+        10,
+        136,
+        310,
+        172
+       ],
+       "totalPixels": 10800,
+       "underlyingWorkAreaPixels": 0
+      },
+      "model-editor-navigation.png": {
+       "inspectionCrop": [
+        10,
+        136,
+        310,
+        172
+       ],
+       "totalPixels": 10800,
+       "underlyingWorkAreaPixels": 0
+      }
+     }
+    },
+    "findings": [
+     "All seven retained Model UI states were directly inspected at original resolution: the 3D title, Turn/Paint/Light controls and Close are visible; modal content covers the panel; focus hides it; provisional paint clears after cancellation, returns in the committed state, and appears enlarged in the navigation state.",
+     "The raw 96x64 layer was directly viewed and independently checked: all pixels opaque, all 512 red gap pixels exact, painted pixels present in both separated islands. Geometry-dependent positions are not a cross-lane hash oracle.",
+     "Every differing available prior editor image was directly viewed; remaining available prior images match already reviewed run312 body pixels exactly, excluding only the operating-system status bar. No additional clipping, contrast, missing artwork or stale-frame issue was found in this bounded scope."
+    ]
+   },
+   "elapsedRepositoryTiming": {
+    "device": {
+     "sdkInt": 36,
+     "manufacturer": "Google",
+     "model": "sdk_gphone16k_x86_64",
+     "hardware": "ranchu",
+     "fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys"
+    },
+    "fixture": {
+     "width": 2048,
+     "height": 2048,
+     "dpi": 264,
+     "paperLayers": 1,
+     "stripedLayers": 4,
+     "inkLayers": 1,
+     "totalLayers": 6,
+     "samplesPerBrush": 80,
+     "priorCommittedStrokesRetained": true,
+     "startX": 240,
+     "step": 12,
+     "centreY": 1024,
+     "waveDivisor": 9,
+     "amplitude": 260
+    },
+    "brushes": [
+     {
+      "name": "pen 12 px",
+      "sampleCount": 80,
+      "summaries": {
+       "continueStrokeSummary": {
+        "p50Nanos": 4176,
+        "p95Nanos": 7912,
+        "maxNanos": 10886
+       },
+       "compositePreviewFrameSummary": {
+        "p50Nanos": 885621,
+        "p95Nanos": 10066797,
+        "maxNanos": 13285275
+       },
+       "combinedSampleSummary": {
+        "p50Nanos": 889657,
+        "p95Nanos": 10071324,
+        "maxNanos": 13294629
+       }
+      },
+      "phases": {
+       "preStrokePreviewNanos": 370733548,
+       "beginStrokeNanos": 84717,
+       "endStrokeNanos": 26585934,
+       "finalPreviewNanos": 134155745,
+       "endAndFinalPreviewNanos": 160741679
+      }
+     },
+     {
+      "name": "textured 80 px",
+      "sampleCount": 80,
+      "summaries": {
+       "continueStrokeSummary": {
+        "p50Nanos": 5047,
+        "p95Nanos": 8463,
+        "maxNanos": 11768
+       },
+       "compositePreviewFrameSummary": {
+        "p50Nanos": 4308913,
+        "p95Nanos": 9006005,
+        "maxNanos": 12050588
+       },
+       "combinedSampleSummary": {
+        "p50Nanos": 4314161,
+        "p95Nanos": 9012605,
+        "maxNanos": 12062356
+       }
+      },
+      "phases": {
+       "preStrokePreviewNanos": 279537,
+       "beginStrokeNanos": 3034443,
+       "endStrokeNanos": 49423269,
+       "finalPreviewNanos": 19348524,
+       "endAndFinalPreviewNanos": 68771793
+      }
+     },
+     {
+      "name": "soft airbrush 300 px",
+      "sampleCount": 80,
+      "summaries": {
+       "continueStrokeSummary": {
+        "p50Nanos": 7542,
+        "p95Nanos": 14091,
+        "maxNanos": 26950
+       },
+       "compositePreviewFrameSummary": {
+        "p50Nanos": 45886165,
+        "p95Nanos": 60655483,
+        "maxNanos": 73383728
+       },
+       "combinedSampleSummary": {
+        "p50Nanos": 45895950,
+        "p95Nanos": 60662454,
+        "maxNanos": 73390499
+       }
+      },
+      "phases": {
+       "preStrokePreviewNanos": 138406,
+       "beginStrokeNanos": 62613,
+       "endStrokeNanos": 86072114,
+       "finalPreviewNanos": 221964614,
+       "endAndFinalPreviewNanos": 308036728
+      }
+     }
+    ],
+    "sampleOrderAndArithmeticVerified": true,
+    "independentPercentilesVerified": true,
+    "readableTextAgreesToThreeDecimals": true,
+    "additionalPerformanceThreshold": null,
+    "scope": "Elapsed repository calls, including dispatch/scheduling/lock waits; no input delivery, GL or display latency.",
+    "artifactChecksPassed": true,
+    "caseIdentity": "com.artflow.studio.data.StrokeTimingDeviceTest#liveStrokeFramesAreTimed",
+    "caseState": "passed",
+    "files": {
+     "stroke-timing.json": {
+      "copies": 1,
+      "bytes": 43555,
+      "sha256": "fc81085b8906e5ebfa4723bdfaaeea80bfc24318cfc1e9e3c77b2eb4df0c097a"
+     },
+     "stroke-timing.txt": {
+      "copies": 1,
+      "bytes": 1659,
+      "sha256": "d4ee60a50cf5345ef53b4d07ed68ff11319def9fb840a25a3bb9d9661d09e1f7"
+     }
+    }
+   },
+   "pairedRasterTransfer": {
+    "deviceCasePassed": true,
+    "files": {
+     "compositor-raster-transfer.argb": {
+      "bytes": 262144,
+      "sha256": "d0c182f79088483e024627e0df21c0f696823c416d33b208fa4be21531af409e"
+     },
+     "compositor-raster-transfer-timing.json": {
+      "bytes": 7114,
+      "sha256": "d0ffb0852cb05ee66313be1a8bfca1ea5469515ae447b6222966f91472ea0c47"
+     }
+    },
+    "recomputedSummary": {
+     "currentMedianNanos": 47105.0,
+     "referenceMedianNanos": 5628185.0
+    },
+    "validatedPairCount": 26,
+    "validatedCallCount": 52,
+    "allRetainedPixelsVerified": 65536,
+    "independentCheckScope": [
+     "Every retained final-current ARGB byte against the alpha/channel formula",
+     "Raw pair counts, order, signed-Long timing values and median arithmetic",
+     "Runtime SDK/fingerprint and pinned previous-source provenance fields"
+    ],
+    "assertedByPassingDeviceCase": [
+     "All 52 current/reference transfers returned exact expected pixels",
+     "Source remained byte-for-byte unchanged after every call",
+     "The same dirty capacity-one pool accepted every returned buffer",
+     "Validation, dirtying and release occurred outside the timed boundaries"
+    ],
+    "performanceThreshold": null,
+    "nativeProcreateComparison": false
+   }
+  },
+  {
+   "lane": "36-tablet",
+   "label": "API 36 tablet",
+   "jobId": 120973056172,
+   "jobConclusion": "failure",
+   "startedAt": "2026-10-24T20:00:49Z",
+   "completedAt": "2026-10-24T20:19:59Z",
+   "jobSeconds": 1150.0,
+   "artifact": {
+    "id": 12574317072,
+    "url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40126826694/artifacts/12574317072",
+    "bytes": 8329990,
+    "sha256": "745d5561443d2fbb6eb4a610ea1a9eaabdc3b5581927839fb8fbdf44d492383a"
+   },
+   "inspectionAnchor": {
+    "file": "run313-api36-tablet/inspection.json",
+    "bytes": 132778,
+    "sha256": "bded3130dc6f97b509bb254a6c8ca6b55ab076083935bd6f2f8a7a95e3e94c4f"
+   },
+   "attemptInspectionAnchor": {
+    "file": "run313-api36-tablet/attempts-inspection.json",
+    "bytes": 58642,
+    "sha256": "2abff678350b196cbf14c732e6daac8e89541957ef1221963fd001c0a32581fd"
+   },
+   "jobLogAnchor": {
+    "file": "run313-api36-tablet/job.log",
+    "bytes": 141748,
+    "sha256": "e37a2f88c4c690a8597071deec226127d82fadcf26f2cf5c00024c5dcd8f0b9f"
+   },
+   "reportedCases": 254,
+   "declaredCasesReported": 253,
+   "reportedOutcomes": {
+    "passed": 253,
+    "failure": 1
+   },
+   "missingIdentityIndexes": [
+    253
+   ],
+   "unexpectedIdentities": [
+    "com.artflow.studio.data.WetCompoundPreviewDeviceTest#initializationError"
+   ],
+   "duplicateIdentities": [],
+   "skippedIdentityIndexes": [],
+   "failures": [
+    {
+     "identityIndex": null,
+     "unexpectedIdentity": "com.artflow.studio.data.WetCompoundPreviewDeviceTest#initializationError",
+     "timeSeconds": "0.002",
+     "outcome": "failure",
+     "failureTextFirstLines": [
+      [
+       "<failure>java.lang.RuntimeException: Failed to instantiate test runner class androidx.test.internal.runner.junit4.AndroidJUnit4ClassRunner",
+       "",
+       "",
+       "at androidx.test.ext.junit.runners.AndroidJUnit4.throwInitializationError(AndroidJUnit4.java:129)",
+       "at androidx.test.ext.junit.runners.AndroidJUnit4.loadRunner(AndroidJUnit4.java:121)",
+       "at androidx.test.ext.junit.runners.AndroidJUnit4.loadRunner(AndroidJUnit4.java:82)",
+       "at androidx.test.ext.junit.runners.AndroidJUnit4.&lt;init&gt;(AndroidJUnit4.java:56)",
+       "... 13 trimmed",
+       "Caused by: java.lang.reflect.InvocationTargetException",
+       "at java.lang.reflect.Constructor.newInstance0(Native Method)",
+       "at java.lang.reflect.Constructor.newInstance(Constructor.java:343)",
+       "at androidx.test.ext.junit.runners.AndroidJUnit4.loadRunner(AndroidJUnit4.java:112)"
+      ]
+     ],
+     "failureTextSHA256": [
+      "dee6f36444c550e6f72ba6b6fe6659071cf341df53408e5337339d05793a1d79"
+     ]
+    }
+   ],
+   "complete254IdentityGate": false,
+   "runtimeAssertion": {
+    "sdk": "36",
+    "abis": "x86_64, arm64-v8a",
+    "pageSize": "4096",
+    "fingerprint": "google/sdk_gphone64_x86_64/emu64xa:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys"
+   },
+   "requestedRuntime": {
+    "api": 36,
+    "pageSize": 4096,
+    "jit": "default"
+   },
+   "verifiedRuntimeProperties": {
+    "ro.build.fingerprint": "google/sdk_gphone64_x86_64/emu64xa:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys",
+    "ro.build.version.sdk": "36",
+    "ro.product.cpu.abilist": "x86_64,arm64-v8a",
+    "ro.kernel.qemu": "1",
+    "ro.debuggable": "1",
+    "dalvik.vm.usejit": "true",
+    "dalvik.vm.usejitprofiles": "",
+    "configurationStatus": "PASS"
+   },
+   "profileEvidence": {
+    "requestedProfile": "pixel_c",
+    "creationCommandLines": [
+     "2026-10-24T20:05:24.8578384Z [command]/usr/bin/sh -c \\echo no | avdmanager create avd --force -n test --package 'system-images;android-36;google_apis;x86_64' --device 'pixel_c'"
+    ]
+   },
+   "emulatorVersions": [
+    "Android emulator version 37.2.12.0 (build_id 16428233) (CL:N/A)"
+   ],
+   "minifiedLaunchPassed": false,
+   "automaticRetries": 0,
+   "manualReruns": 0,
+   "frozenClassifierDecisionInReadOnlyAudit": false,
+   "classifierSHA256": "c65649891591fe3d0f75b6069541e1b0156a899546206d62ed0c5543dcc3c39b",
+   "classifierScope": "Read-only evaluation of the published classifier on original retained results. No retry is requested and no failed attempt is relabeled passed.",
+   "instrumentationStarts": [
+    [
+     "2026-10-24T20:07:03.1080712Z",
+     "254",
+     "emulator-5554 - 16"
+    ]
+   ],
+   "consoleFinishes": [
+    [
+     "2026-10-24T20:19:19.6070059Z",
+     "254",
+     "emulator-5554 - 16"
+    ]
+   ],
+   "suiteSeconds": 736.498934,
+   "evidenceGroups": {
+    "extendedEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "a2dab2543c31174e0383d35cf72dc39aa4e33204df4e292820f4e73cf59cc23f"
+    },
+    "nativeImportEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "1694b2cafd96e67a648847117df85466cd9ebd2a86ddaa8b66a16ae8a0876efd"
+    },
+    "nativeExportEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "ff7e237ec06651d9c2469139b67dbd8c4382c4605587f5290e5ba2b64c707648"
+    },
+    "nativeDarkenEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "59f7a724965749636f247b52839c65ab024a595310379089a9225fdb1b0443a3"
+    },
+    "rasterTransferEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "073b43b810d71e140e293f647ca8d024e8fa7528c5270430498ed45b1ba9c351",
+     "passed": true
+    },
+    "modelEditorEvidence": {
+     "problemCount": 0,
+     "fullObjectSHA256": "a6b24a2b03243017c8cdd9ebce4884b2c782fd45999ebf2a2228558d16e95f84",
+     "passed": true
+    },
+    "wetPreviewEvidence": {
+     "problemCount": 10,
+     "fullObjectSHA256": "53353bca08c2aeab4a7b5beb286fe4c606d9bf0bce36a23ae533f14aae717ee1"
+    }
+   },
+   "wetBodyExecuted": false,
+   "wetOutputCount": 0,
+   "fatalSignatureScan": {
+    "firstAttempt": {
+     "filesSearched": 0,
+     "matchingLines": [],
+     "scope": "Search matches are not process attribution or a count of distinct crashes; repeated events can occur in multiple logs."
+    },
+    "finalPerTest": {
+     "filesSearched": 254,
+     "matchingLines": [],
+     "scope": "Search matches are not process attribution or a count of distinct crashes; repeated events can occur in multiple logs."
+    },
+    "finalInstrumentation": {
+     "filesSearched": 0,
+     "matchingLines": [],
+     "scope": "Search matches are not process attribution or a count of distinct crashes; repeated events can occur in multiple logs."
+    },
+    "completeDeviceCapture": {
+     "filesSearched": 1,
+     "matchingLines": [],
+     "scope": "Search matches are not process attribution or a count of distinct crashes; repeated events can occur in multiple logs."
+    }
+   },
+   "visual": {
+    "status": "All29 scoped UI states reviewed with no visual blocker; wet case and lane acceptance FAILED",
+    "reviewCompleteForAvailableEvidence": true,
+    "expectedUiPositions": 29,
+    "retainedUiPositions": 29,
+    "directOriginalViews": 9,
+    "missingImages": [],
+    "independentOutputChecks": {
+     "modelRawLayer": {
+      "path": "run313-api36-tablet/model-editor-layer.png",
+      "bytes": 697,
+      "sha256": "183c3fa14c4b3bbb2206a5e67811206101779fb2e824a413ec33b97ef68a2c6b",
+      "dimensions": [
+       96,
+       64
+      ],
+      "directlyViewed": true,
+      "allOpaque": true,
+      "exactRedGapPixels": 512,
+      "expectedRedGapPixels": 512,
+      "changedLeftIslandPixels": 164,
+      "changedRightIslandPixels": 156,
+      "scope": "Independent retained layer pixels. Actual input/lifecycle behavior is established only by the exact passing Model device identities."
+     },
+     "headerInspection": {
+      "model-editor-restored.png": {
+       "inspectionCrop": [
+        1840,
+        184,
+        2530,
+        248
+       ],
+       "totalPixels": 44160,
+       "underlyingWorkAreaPixels": 0
+      },
+      "model-editor-provisional.png": {
+       "inspectionCrop": [
+        1840,
+        184,
+        2530,
+        248
+       ],
+       "totalPixels": 44160,
+       "underlyingWorkAreaPixels": 0
+      },
+      "model-editor-cancelled.png": {
+       "inspectionCrop": [
+        1840,
+        184,
+        2530,
+        248
+       ],
+       "totalPixels": 44160,
+       "underlyingWorkAreaPixels": 0
+      },
+      "model-editor-committed.png": {
+       "inspectionCrop": [
+        1840,
+        184,
+        2530,
+        248
+       ],
+       "totalPixels": 44160,
+       "underlyingWorkAreaPixels": 0
+      },
+      "model-editor-navigation.png": {
+       "inspectionCrop": [
+        1840,
+        184,
+        2530,
+        248
+       ],
+       "totalPixels": 44160,
+       "underlyingWorkAreaPixels": 0
+      }
+     }
+    },
+    "findings": [
+     "All seven retained tablet Model UI states were directly inspected at original2560x1800 resolution: title, Turn/Paint/Light, Mesh and Close are visible; Layers modal covers the panel; focus hides Model; provisional paint clears after cancellation and returns in committed state, while navigation enlarges the displayed model and mark.",
+     "The actual canvas behind the Model shows the corresponding separate painted islands in provisional/committed/navigation states and clears them in cancelled/restored states. No missing GL artwork or stale cancelled mark is visible.",
+     "Both differing prior UI images were directly viewed: large-text tool strip remains a readable horizontal scroll viewport with Zoom instructions, and the component-hosted Imported Darken notice is readable with no standard-mode current selection and Done visible. The other20 prior editor/Reference/theme captures match reviewed run312 body pixels exactly, excluding only the48px operating-system status bar.",
+     "Raw96x64 layer directly viewed: all pixels opaque, all512 red gap pixels exact,164 changed pixels in left island and156 in right. Geometry-dependent positions are not a cross-lane fixed-hash requirement.",
+     "No additional clipping, contrast, missing-artwork or stale-frame problem found within this bounded scope. The wet test never executed and all nine wet outputs are absent; this appearance review cannot accept the failed lane."
+    ]
+   },
+   "elapsedRepositoryTiming": {
+    "device": {
+     "sdkInt": 36,
+     "manufacturer": "Google",
+     "model": "sdk_gphone64_x86_64",
+     "hardware": "ranchu",
+     "fingerprint": "google/sdk_gphone64_x86_64/emu64xa:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys"
+    },
+    "fixture": {
+     "width": 2048,
+     "height": 2048,
+     "dpi": 264,
+     "paperLayers": 1,
+     "stripedLayers": 4,
+     "inkLayers": 1,
+     "totalLayers": 6,
+     "samplesPerBrush": 80,
+     "priorCommittedStrokesRetained": true,
+     "startX": 240,
+     "step": 12,
+     "centreY": 1024,
+     "waveDivisor": 9,
+     "amplitude": 260
+    },
+    "brushes": [
+     {
+      "name": "pen 12 px",
+      "sampleCount": 80,
+      "summaries": {
+       "continueStrokeSummary": {
+        "p50Nanos": 6370,
+        "p95Nanos": 19388,
+        "maxNanos": 38447
+       },
+       "compositePreviewFrameSummary": {
+        "p50Nanos": 1238033,
+        "p95Nanos": 12494958,
+        "maxNanos": 16726707
+       },
+       "combinedSampleSummary": {
+        "p50Nanos": 1244853,
+        "p95Nanos": 12503380,
+        "maxNanos": 16741419
+       }
+      },
+      "phases": {
+       "preStrokePreviewNanos": 545157591,
+       "beginStrokeNanos": 155943,
+       "endStrokeNanos": 22057061,
+       "finalPreviewNanos": 180272599,
+       "endAndFinalPreviewNanos": 202329660
+      }
+     },
+     {
+      "name": "textured 80 px",
+      "sampleCount": 80,
+      "summaries": {
+       "continueStrokeSummary": {
+        "p50Nanos": 8372,
+        "p95Nanos": 12328,
+        "maxNanos": 43435
+       },
+       "compositePreviewFrameSummary": {
+        "p50Nanos": 5183426,
+        "p95Nanos": 8175189,
+        "maxNanos": 9254144
+       },
+       "combinedSampleSummary": {
+        "p50Nanos": 5191137,
+        "p95Nanos": 8184363,
+        "maxNanos": 9261735
+       }
+      },
+      "phases": {
+       "preStrokePreviewNanos": 398574,
+       "beginStrokeNanos": 88511,
+       "endStrokeNanos": 93720745,
+       "finalPreviewNanos": 47434859,
+       "endAndFinalPreviewNanos": 141155604
+      }
+     },
+     {
+      "name": "soft airbrush 300 px",
+      "sampleCount": 80,
+      "summaries": {
+       "continueStrokeSummary": {
+        "p50Nanos": 17797,
+        "p95Nanos": 56785,
+        "maxNanos": 203132
+       },
+       "compositePreviewFrameSummary": {
+        "p50Nanos": 52878417,
+        "p95Nanos": 86979345,
+        "maxNanos": 95321302
+       },
+       "combinedSampleSummary": {
+        "p50Nanos": 52892809,
+        "p95Nanos": 87000486,
+        "maxNanos": 95347582
+       }
+      },
+      "phases": {
+       "preStrokePreviewNanos": 592292,
+       "beginStrokeNanos": 115001,
+       "endStrokeNanos": 107196168,
+       "finalPreviewNanos": 283717222,
+       "endAndFinalPreviewNanos": 390913390
+      }
+     }
+    ],
+    "sampleOrderAndArithmeticVerified": true,
+    "independentPercentilesVerified": true,
+    "readableTextAgreesToThreeDecimals": true,
+    "additionalPerformanceThreshold": null,
+    "scope": "Elapsed repository calls, including dispatch/scheduling/lock waits; no input delivery, GL or display latency.",
+    "artifactChecksPassed": true,
+    "caseIdentity": "com.artflow.studio.data.StrokeTimingDeviceTest#liveStrokeFramesAreTimed",
+    "caseState": "passed",
+    "files": {
+     "stroke-timing.json": {
+      "copies": 1,
+      "bytes": 43671,
+      "sha256": "aade7017dc3d60a417795131add6b74266396073799bae6f395831fa01f3e179"
+     },
+     "stroke-timing.txt": {
+      "copies": 1,
+      "bytes": 1658,
+      "sha256": "6fb6a1835d3f5c74d2257cdb61648b323ebc6d9ab1c96e355e68307c8abbc358"
+     }
+    }
+   },
+   "pairedRasterTransfer": {
+    "deviceCasePassed": true,
+    "files": {
+     "compositor-raster-transfer.argb": {
+      "bytes": 262144,
+      "sha256": "d0c182f79088483e024627e0df21c0f696823c416d33b208fa4be21531af409e"
+     },
+     "compositor-raster-transfer-timing.json": {
+      "bytes": 7113,
+      "sha256": "af7ac6149390ce7a90888f17305eb5ed5d3565f0f3dda0e5fc8b357076812c13"
+     }
+    },
+    "recomputedSummary": {
+     "currentMedianNanos": 62698.0,
+     "referenceMedianNanos": 6016470.5
+    },
+    "validatedPairCount": 26,
+    "validatedCallCount": 52,
+    "allRetainedPixelsVerified": 65536,
+    "independentCheckScope": [
+     "Every retained final-current ARGB byte against the alpha/channel formula",
+     "Raw pair counts, order, signed-Long timing values and median arithmetic",
+     "Runtime SDK/fingerprint and pinned previous-source provenance fields"
+    ],
+    "assertedByPassingDeviceCase": [
+     "All 52 current/reference transfers returned exact expected pixels",
+     "Source remained byte-for-byte unchanged after every call",
+     "The same dirty capacity-one pool accepted every returned buffer",
+     "Validation, dirtying and release occurred outside the timed boundaries"
+    ],
+    "performanceThreshold": null,
+    "nativeProcreateComparison": false
+   }
+  }
+ ],
+ "scope": [
+  "Original artifact ZIPs, identities and exact published source are preserved; local download permission errors are not CI attempts.",
+  "API26 header visibility is independently repaired in actual pixels, while full lane acceptance remains failed.",
+  "No reference-app/GPU execution, native Procreate parity or physical stylus latency is established.",
+  "No historical run312 decision is reclassified. The future Unit/source-over corrections require their own exact-revision run."
+ ]
+}

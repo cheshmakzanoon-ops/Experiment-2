@@ -1,0 +1,836 @@
+{
+  "schemaVersion": 1,
+  "baseRevision": "8d8d0e6885349a427b5ac26bea549b1b2e6868a2",
+  "scope": "Local pre-patch HotSpot profiling, scalar equivalence and paired timing; no Android or native reference application execution.",
+  "profile": {
+    "fixture": "Same2048x2048,six layers,three brushes in order,80samples each; prior commits retained.",
+    "adaptations": "createCanvas instead of loadOrCreate; mocked unused Android storage context; Unconfined Main dispatcher; explicit16ms timestamps; JFR sampling overhead.",
+    "maxHeapBytes": 805306368,
+    "brushes": [
+      {
+        "name": "pen",
+        "parameters": {
+          "size": 12.0,
+          "opacity": 1.0,
+          "spacing": 0.08,
+          "scatter": 0.0,
+          "count": 1,
+          "rotation": 0.0,
+          "taperStart": 0.0,
+          "taperEnd": 0.0,
+          "pressureToSize": 0.5,
+          "pressureToOpacity": 0.3,
+          "pressureCurve": "LINEAR",
+          "customPressure": {
+            "low": 0.25,
+            "middle": 0.5,
+            "high": 0.75
+          },
+          "importedPressure": null,
+          "importedAuxiliaryCurves": {},
+          "importedSourceScalars": {},
+          "importedSourceStructures": {},
+          "importedSourceColorData": null,
+          "hueJitter": 0.0,
+          "saturationJitter": 0.0,
+          "brightnessJitter": 0.0,
+          "colorPressure": false,
+          "sizeJitter": 0.0,
+          "opacityJitter": 0.0,
+          "smoothing": 0.5,
+          "wetMix": 0.0,
+          "flow": 1.0,
+          "textureId": null,
+          "textureScale": 1.0,
+          "textureRotation": 0.0,
+          "blendTexture": false,
+          "tiltInfluence": 0.0,
+          "tiltToRotation": false,
+          "velocityToSize": 0.0,
+          "velocityToOpacity": 0.0,
+          "velocityToHue": 0.0,
+          "roundness": 1.0,
+          "shapeId": null,
+          "blendMode": "NORMAL",
+          "wetEdges": 0.0,
+          "dual": null,
+          "taperOpacity": 0.0,
+          "falloff": 0.0,
+          "tipFlipX": false,
+          "tipFlipY": false,
+          "tipFlipXJitter": false,
+          "tipFlipYJitter": false,
+          "tipRandomized": false,
+          "buildUp": false,
+          "grainMoving": false,
+          "secondaryPressure": 0.0,
+          "secondaryJitter": 0.0,
+          "burntEdges": 0.0,
+          "grainDepth": 1.0,
+          "tiltOpacityInfluence": null,
+          "pressureToFlow": 0.0,
+          "touchTaperStart": null,
+          "touchTaperEnd": null,
+          "tipSharpness": 0.0,
+          "minSize": 1.0,
+          "maxSize": 512.0,
+          "minOpacity": 0.01,
+          "maxOpacity": 1.0,
+          "bleed": 0.0,
+          "grainBrightness": 0.0,
+          "grainContrast": 0.0,
+          "grainBlend": "MULTIPLY",
+          "countJitter": 0.0,
+          "colorJitterPerStroke": false,
+          "colorDynamics": {
+            "pressureHue": 0.0,
+            "pressureSaturation": 0.0,
+            "pressureBrightness": 0.0,
+            "tiltHue": 0.0,
+            "tiltSaturation": 0.0,
+            "tiltBrightness": 0.0
+          },
+          "dilution": 0.0,
+          "wetBlur": 0.0,
+          "pull": 0.0,
+          "wetPull": 0.0,
+          "wetBlurJitter": 0.0,
+          "wetCharge": 1.0,
+          "wetDilution": 0.0,
+          "renderingMode": null
+        },
+        "samples": 80,
+        "finalArgbSha256": "ff6db1a05aa886236cc66e21cfcff2a2dabae88ef4096ec0b7bb13c511a4560c",
+        "preparationNanos": 170060098,
+        "beginNanos": 2743925,
+        "endNanos": 21404945,
+        "finalPreviewNanos": 40179421
+      },
+      {
+        "name": "textured",
+        "parameters": {
+          "size": 80.0,
+          "opacity": 0.8,
+          "spacing": 0.1,
+          "scatter": 0.0,
+          "count": 1,
+          "rotation": 0.0,
+          "taperStart": 0.0,
+          "taperEnd": 0.0,
+          "pressureToSize": 0.5,
+          "pressureToOpacity": 0.3,
+          "pressureCurve": "LINEAR",
+          "customPressure": {
+            "low": 0.25,
+            "middle": 0.5,
+            "high": 0.75
+          },
+          "importedPressure": null,
+          "importedAuxiliaryCurves": {},
+          "importedSourceScalars": {},
+          "importedSourceStructures": {},
+          "importedSourceColorData": null,
+          "hueJitter": 0.0,
+          "saturationJitter": 0.0,
+          "brightnessJitter": 0.0,
+          "colorPressure": false,
+          "sizeJitter": 0.0,
+          "opacityJitter": 0.0,
+          "smoothing": 0.5,
+          "wetMix": 0.0,
+          "flow": 1.0,
+          "textureId": "paper",
+          "textureScale": 1.0,
+          "textureRotation": 0.0,
+          "blendTexture": true,
+          "tiltInfluence": 0.0,
+          "tiltToRotation": false,
+          "velocityToSize": 0.0,
+          "velocityToOpacity": 0.0,
+          "velocityToHue": 0.0,
+          "roundness": 1.0,
+          "shapeId": null,
+          "blendMode": "NORMAL",
+          "wetEdges": 0.0,
+          "dual": null,
+          "taperOpacity": 0.0,
+          "falloff": 0.0,
+          "tipFlipX": false,
+          "tipFlipY": false,
+          "tipFlipXJitter": false,
+          "tipFlipYJitter": false,
+          "tipRandomized": false,
+          "buildUp": false,
+          "grainMoving": false,
+          "secondaryPressure": 0.0,
+          "secondaryJitter": 0.0,
+          "burntEdges": 0.0,
+          "grainDepth": 1.0,
+          "tiltOpacityInfluence": null,
+          "pressureToFlow": 0.0,
+          "touchTaperStart": null,
+          "touchTaperEnd": null,
+          "tipSharpness": 0.0,
+          "minSize": 1.0,
+          "maxSize": 512.0,
+          "minOpacity": 0.01,
+          "maxOpacity": 1.0,
+          "bleed": 0.0,
+          "grainBrightness": 0.0,
+          "grainContrast": 0.0,
+          "grainBlend": "MULTIPLY",
+          "countJitter": 0.0,
+          "colorJitterPerStroke": false,
+          "colorDynamics": {
+            "pressureHue": 0.0,
+            "pressureSaturation": 0.0,
+            "pressureBrightness": 0.0,
+            "tiltHue": 0.0,
+            "tiltSaturation": 0.0,
+            "tiltBrightness": 0.0
+          },
+          "dilution": 0.0,
+          "wetBlur": 0.0,
+          "pull": 0.0,
+          "wetPull": 0.0,
+          "wetBlurJitter": 0.0,
+          "wetCharge": 1.0,
+          "wetDilution": 0.0,
+          "renderingMode": null
+        },
+        "samples": 80,
+        "finalArgbSha256": "b7450d5e1d6c6128f9ac5f21e4fba7138ae256c83c65520842c737cdf0c03916",
+        "preparationNanos": 486387,
+        "beginNanos": 555779,
+        "endNanos": 22800593,
+        "finalPreviewNanos": 14765046
+      },
+      {
+        "name": "airbrush",
+        "parameters": {
+          "size": 300.0,
+          "opacity": 0.4,
+          "spacing": 0.05,
+          "scatter": 0.0,
+          "count": 1,
+          "rotation": 0.0,
+          "taperStart": 0.0,
+          "taperEnd": 0.0,
+          "pressureToSize": 0.5,
+          "pressureToOpacity": 0.3,
+          "pressureCurve": "LINEAR",
+          "customPressure": {
+            "low": 0.25,
+            "middle": 0.5,
+            "high": 0.75
+          },
+          "importedPressure": null,
+          "importedAuxiliaryCurves": {},
+          "importedSourceScalars": {},
+          "importedSourceStructures": {},
+          "importedSourceColorData": null,
+          "hueJitter": 0.0,
+          "saturationJitter": 0.0,
+          "brightnessJitter": 0.0,
+          "colorPressure": false,
+          "sizeJitter": 0.0,
+          "opacityJitter": 0.0,
+          "smoothing": 0.5,
+          "wetMix": 0.0,
+          "flow": 0.4,
+          "textureId": null,
+          "textureScale": 1.0,
+          "textureRotation": 0.0,
+          "blendTexture": false,
+          "tiltInfluence": 0.0,
+          "tiltToRotation": false,
+          "velocityToSize": 0.0,
+          "velocityToOpacity": 0.0,
+          "velocityToHue": 0.0,
+          "roundness": 1.0,
+          "shapeId": null,
+          "blendMode": "NORMAL",
+          "wetEdges": 0.0,
+          "dual": null,
+          "taperOpacity": 0.0,
+          "falloff": 0.0,
+          "tipFlipX": false,
+          "tipFlipY": false,
+          "tipFlipXJitter": false,
+          "tipFlipYJitter": false,
+          "tipRandomized": false,
+          "buildUp": true,
+          "grainMoving": false,
+          "secondaryPressure": 0.0,
+          "secondaryJitter": 0.0,
+          "burntEdges": 0.0,
+          "grainDepth": 1.0,
+          "tiltOpacityInfluence": null,
+          "pressureToFlow": 0.0,
+          "touchTaperStart": null,
+          "touchTaperEnd": null,
+          "tipSharpness": 0.0,
+          "minSize": 1.0,
+          "maxSize": 512.0,
+          "minOpacity": 0.01,
+          "maxOpacity": 1.0,
+          "bleed": 0.0,
+          "grainBrightness": 0.0,
+          "grainContrast": 0.0,
+          "grainBlend": "MULTIPLY",
+          "countJitter": 0.0,
+          "colorJitterPerStroke": false,
+          "colorDynamics": {
+            "pressureHue": 0.0,
+            "pressureSaturation": 0.0,
+            "pressureBrightness": 0.0,
+            "tiltHue": 0.0,
+            "tiltSaturation": 0.0,
+            "tiltBrightness": 0.0
+          },
+          "dilution": 0.0,
+          "wetBlur": 0.0,
+          "pull": 0.0,
+          "wetPull": 0.0,
+          "wetBlurJitter": 0.0,
+          "wetCharge": 1.0,
+          "wetDilution": 0.0,
+          "renderingMode": null
+        },
+        "samples": 80,
+        "finalArgbSha256": "e344fe77e3ac3a38eed0fc5a3bc54915c77810d39b0c87b39b1d54c0d43e4198",
+        "preparationNanos": 460108,
+        "beginNanos": 95812,
+        "endNanos": 22837656,
+        "finalPreviewNanos": 67397936
+      }
+    ],
+    "airbrushExecutionSamples": 106,
+    "airbrushTopMethodSamples": [
+      [
+        "com.artflow.studio.core.pixels.Stamping$RoundDab.paintRows",
+        48
+      ],
+      [
+        "com.artflow.studio.core.pixels.BlendModes.composite",
+        24
+      ],
+      [
+        "com.artflow.studio.core.render.StrokeRasterizer.depositCoverage",
+        23
+      ],
+      [
+        "kotlin.ranges.RangesKt___RangesKt.coerceIn",
+        2
+      ],
+      [
+        "com.artflow.studio.core.pixels.Stamping.access$directPixel",
+        1
+      ],
+      [
+        "java.util.Collections$SingletonList.iterator",
+        1
+      ],
+      [
+        "java.lang.Integer.toString",
+        1
+      ],
+      [
+        "com.artflow.studio.core.render.ReplayableRandom.copy",
+        1
+      ],
+      [
+        "java.lang.invoke.LambdaForm$MH+0x00007fa05c21d800.1557087636.invoke",
+        1
+      ],
+      [
+        "java.util.concurrent.ForkJoinWorkerThread.run",
+        1
+      ],
+      [
+        "kotlinx.coroutines.DispatchedCoroutine.trySuspend",
+        1
+      ],
+      [
+        "com.artflow.studio.data.repository.canvas.CanvasRepositoryImpl.paintLive",
+        1
+      ],
+      [
+        "java.util.concurrent.atomic.AtomicReferenceFieldUpdater$AtomicReferenceFieldUpdaterImpl.accessCheck",
+        1
+      ]
+    ],
+    "limits": "One sampled run including preparation/end, affected by JIT/scheduling/GC/JFR overhead; sampled stacks do not establish exact time fractions or production budgets."
+  },
+  "sourceAttribution": {
+    "scope": "Local readonly profile and scalar proposal; no production patch, device speedup or native-runtime evidence.",
+    "publishedSourceRevision": "8d8d0e6885349a427b5ac26bea549b1b2e6868a2",
+    "recordedMainKotlinSourcesMatchPublishedRevision": true,
+    "recordedMainKotlinFileCount": 284,
+    "compiledClassesVerifiedUnchangedByRunner": true,
+    "compiledClassCount": 2675
+  },
+  "independentEquivalence": {
+    "scope": "Local Java17 scalar equivalence only; no production patch or Android performance result",
+    "binary32OpaqueAlphaIdentities": 256,
+    "exhaustivePerChannelComparisons": 16777216,
+    "seededMixedColourChecks": 100000,
+    "mismatches": 0,
+    "elapsedNanos": 394538173
+  },
+  "pairedLocalBenchmark": {
+    "scope": "Paired local HotSpot scalar timings only; no Android or full-frame speedup claim",
+    "size": 65536,
+    "passes": 32,
+    "warmupPairs": 6,
+    "measuredPairs": 12,
+    "datasets": [
+      {
+        "name": "opaque",
+        "opaqueBackdrops": 65536,
+        "backdropSha256": "5b78c0ef1fabe385d90b19a09ba8f4fcfd8357ebd421969f092d02c7894ccbd3",
+        "sourceSha256": "c7f61c447888b9438f3b9a235acc8078ccf5933197b07589a9d845d99bcc266b",
+        "pairs": [
+          {
+            "index": 0,
+            "first": "original",
+            "originalNanos": 33555149,
+            "candidateNanos": 22053098,
+            "allPassesChecksum": 8989665358523481,
+            "exactPixels": true
+          },
+          {
+            "index": 1,
+            "first": "candidate",
+            "originalNanos": 33827550,
+            "candidateNanos": 22318100,
+            "allPassesChecksum": 8989665358523481,
+            "exactPixels": true
+          },
+          {
+            "index": 2,
+            "first": "original",
+            "originalNanos": 33601528,
+            "candidateNanos": 23053054,
+            "allPassesChecksum": 8989665358523481,
+            "exactPixels": true
+          },
+          {
+            "index": 3,
+            "first": "candidate",
+            "originalNanos": 33877695,
+            "candidateNanos": 22514489,
+            "allPassesChecksum": 8989665358523481,
+            "exactPixels": true
+          },
+          {
+            "index": 4,
+            "first": "original",
+            "originalNanos": 33313552,
+            "candidateNanos": 22580006,
+            "allPassesChecksum": 8989665358523481,
+            "exactPixels": true
+          },
+          {
+            "index": 5,
+            "first": "candidate",
+            "originalNanos": 33835993,
+            "candidateNanos": 22661986,
+            "allPassesChecksum": 8989665358523481,
+            "exactPixels": true
+          },
+          {
+            "index": 6,
+            "first": "original",
+            "originalNanos": 34084119,
+            "candidateNanos": 23693609,
+            "allPassesChecksum": 8989665358523481,
+            "exactPixels": true
+          },
+          {
+            "index": 7,
+            "first": "candidate",
+            "originalNanos": 34427576,
+            "candidateNanos": 22191672,
+            "allPassesChecksum": 8989665358523481,
+            "exactPixels": true
+          },
+          {
+            "index": 8,
+            "first": "original",
+            "originalNanos": 34399104,
+            "candidateNanos": 22161477,
+            "allPassesChecksum": 8989665358523481,
+            "exactPixels": true
+          },
+          {
+            "index": 9,
+            "first": "candidate",
+            "originalNanos": 33863203,
+            "candidateNanos": 22588289,
+            "allPassesChecksum": 8989665358523481,
+            "exactPixels": true
+          },
+          {
+            "index": 10,
+            "first": "original",
+            "originalNanos": 35546949,
+            "candidateNanos": 22617370,
+            "allPassesChecksum": 8989665358523481,
+            "exactPixels": true
+          },
+          {
+            "index": 11,
+            "first": "candidate",
+            "originalNanos": 34909207,
+            "candidateNanos": 21995893,
+            "allPassesChecksum": 8989665358523481,
+            "exactPixels": true
+          }
+        ],
+        "finalArgbSha256": "d4ae3aec20b74e7f707c94a7ccc0041a22d2c93bf1df52037f7671253bd78f8b",
+        "summary": {
+          "originalMedianNanos": 33870449.0,
+          "candidateMedianNanos": 22547247.5,
+          "medianPairedOriginalOverCandidate": 1.5102033152651457,
+          "candidateFasterPairs": 12
+        }
+      },
+      {
+        "name": "mixed",
+        "opaqueBackdrops": 32831,
+        "backdropSha256": "de3cd33bd58dbce53bf3303a1f79134b9a6ddf44d10590242ba6a0e3242f4ee8",
+        "sourceSha256": "c7f61c447888b9438f3b9a235acc8078ccf5933197b07589a9d845d99bcc266b",
+        "pairs": [
+          {
+            "index": 0,
+            "first": "original",
+            "originalNanos": 34250324,
+            "candidateNanos": 28201910,
+            "allPassesChecksum": 7869770805120808,
+            "exactPixels": true
+          },
+          {
+            "index": 1,
+            "first": "candidate",
+            "originalNanos": 34199050,
+            "candidateNanos": 27619952,
+            "allPassesChecksum": 7869770805120808,
+            "exactPixels": true
+          },
+          {
+            "index": 2,
+            "first": "original",
+            "originalNanos": 35629980,
+            "candidateNanos": 27096940,
+            "allPassesChecksum": 7869770805120808,
+            "exactPixels": true
+          },
+          {
+            "index": 3,
+            "first": "candidate",
+            "originalNanos": 35725581,
+            "candidateNanos": 27355616,
+            "allPassesChecksum": 7869770805120808,
+            "exactPixels": true
+          },
+          {
+            "index": 4,
+            "first": "original",
+            "originalNanos": 33364567,
+            "candidateNanos": 26552077,
+            "allPassesChecksum": 7869770805120808,
+            "exactPixels": true
+          },
+          {
+            "index": 5,
+            "first": "candidate",
+            "originalNanos": 34070440,
+            "candidateNanos": 26280365,
+            "allPassesChecksum": 7869770805120808,
+            "exactPixels": true
+          },
+          {
+            "index": 6,
+            "first": "original",
+            "originalNanos": 34660059,
+            "candidateNanos": 26057336,
+            "allPassesChecksum": 7869770805120808,
+            "exactPixels": true
+          },
+          {
+            "index": 7,
+            "first": "candidate",
+            "originalNanos": 34243123,
+            "candidateNanos": 26251053,
+            "allPassesChecksum": 7869770805120808,
+            "exactPixels": true
+          },
+          {
+            "index": 8,
+            "first": "original",
+            "originalNanos": 38457222,
+            "candidateNanos": 27047267,
+            "allPassesChecksum": 7869770805120808,
+            "exactPixels": true
+          },
+          {
+            "index": 9,
+            "first": "candidate",
+            "originalNanos": 33645882,
+            "candidateNanos": 26834954,
+            "allPassesChecksum": 7869770805120808,
+            "exactPixels": true
+          },
+          {
+            "index": 10,
+            "first": "original",
+            "originalNanos": 35781263,
+            "candidateNanos": 29777646,
+            "allPassesChecksum": 7869770805120808,
+            "exactPixels": true
+          },
+          {
+            "index": 11,
+            "first": "candidate",
+            "originalNanos": 34685165,
+            "candidateNanos": 30239387,
+            "allPassesChecksum": 7869770805120808,
+            "exactPixels": true
+          }
+        ],
+        "finalArgbSha256": "d55b0bd211f091d360f36afb00a97f359e1e02a87d93e9c9a933c6206eae0d42",
+        "summary": {
+          "originalMedianNanos": 34455191.5,
+          "candidateMedianNanos": 27072103.5,
+          "medianPairedOriginalOverCandidate": 1.2764963806746037,
+          "candidateFasterPairs": 12
+        }
+      }
+    ]
+  },
+  "frozenAndroidFixtures": {
+    "revision": "8d8d0e6885349a427b5ac26bea549b1b2e6868a2",
+    "scope": "Unchanged compiled original sourceOver, authored256x256fixture, no candidate code",
+    "encoding": "row-major big-endian ARGB int bytes",
+    "datasets": [
+      {
+        "name": "opaque",
+        "sourceArgbSha256": "63d992573d13a9fbd417ab87118f5440c0968e364ee871a7f9518e68b86235da",
+        "backdropArgbSha256": "43b711f7b3ddcfe38a4cf84c98f887cd2ad6072ddd34b0f3305493f0922045b7",
+        "outputArgbSha256": "30171c2b9b346e14fe571dc5f8db1dc63e78327dd8db4336963542a5fc349321",
+        "probes": [
+          {
+            "index": 0,
+            "source": "00000000",
+            "backdrop": "ffffffff",
+            "output": "ffffffff"
+          },
+          {
+            "index": 1,
+            "source": "01000149",
+            "backdrop": "fffffeb6",
+            "output": "fffefdb6"
+          },
+          {
+            "index": 255,
+            "source": "ff00ffb7",
+            "backdrop": "ffff0048",
+            "output": "ff00ffb7"
+          },
+          {
+            "index": 256,
+            "source": "00010197",
+            "backdrop": "fffefe68",
+            "output": "fffefe68"
+          },
+          {
+            "index": 257,
+            "source": "010100e0",
+            "backdrop": "fffeff1f",
+            "output": "fffdfe20"
+          },
+          {
+            "index": 32768,
+            "source": "00808080",
+            "backdrop": "ff7f7f7f",
+            "output": "ff7f7f7f"
+          },
+          {
+            "index": 32896,
+            "source": "80800000",
+            "backdrop": "ff7fffff",
+            "output": "ff807f7f"
+          },
+          {
+            "index": 65280,
+            "source": "00ffff69",
+            "backdrop": "ff000096",
+            "output": "ff000096"
+          },
+          {
+            "index": 65535,
+            "source": "ffff0020",
+            "backdrop": "ff00ffdf",
+            "output": "ffff0020"
+          }
+        ]
+      },
+      {
+        "name": "varied-alpha",
+        "sourceArgbSha256": "63d992573d13a9fbd417ab87118f5440c0968e364ee871a7f9518e68b86235da",
+        "backdropArgbSha256": "19fed44971def69329bf0ad9b481edc957b6caeda91812abefde64c0ec5a0977",
+        "outputArgbSha256": "7ddcf8882882064a4968f500a4895c3277b7cf083c40b4a2bd71e3c1e7bf9d06",
+        "probes": [
+          {
+            "index": 0,
+            "source": "00000000",
+            "backdrop": "00ffffff",
+            "output": "00ffffff"
+          },
+          {
+            "index": 1,
+            "source": "01000149",
+            "backdrop": "00fffeb6",
+            "output": "01000149"
+          },
+          {
+            "index": 255,
+            "source": "ff00ffb7",
+            "backdrop": "00ff0048",
+            "output": "ff00ffb7"
+          },
+          {
+            "index": 256,
+            "source": "00010197",
+            "backdrop": "01fefe68",
+            "output": "01fefe68"
+          },
+          {
+            "index": 257,
+            "source": "010100e0",
+            "backdrop": "01feff1f",
+            "output": "027f7f80"
+          },
+          {
+            "index": 32768,
+            "source": "00808080",
+            "backdrop": "807f7f7f",
+            "output": "807f7f7f"
+          },
+          {
+            "index": 32896,
+            "source": "80800000",
+            "backdrop": "807fffff",
+            "output": "c0805555"
+          },
+          {
+            "index": 65280,
+            "source": "00ffff69",
+            "backdrop": "ff000096",
+            "output": "ff000096"
+          },
+          {
+            "index": 65535,
+            "source": "ffff0020",
+            "backdrop": "ff00ffdf",
+            "output": "ffff0020"
+          }
+        ]
+      }
+    ],
+    "originalClassSha256": "4418fdcc72f8cb3de8137ea8388d3094964dcced9cbc7699aa68e8cb23fcb2f7",
+    "originalKotlinSourceSha256": "75a7501cca8788cac6b043b7a6df53750c070e0dc709160b10a2a8a8f47d0aa0"
+  },
+  "deviceFixtureNaming": {
+    "opaque": "opaque",
+    "varied-alpha": "mixed"
+  },
+  "comparisonLimits": [
+    "The local mixed benchmark has about half opaque backdrops; the Android mixed fixture has all source/backdrop alpha pairs and only1/256 opaque rows.",
+    "No prediction of Android or full-preview speedup follows from local scalar medians.",
+    "Exact current output on an emulator and lifecycle correctness require fresh published device evidence."
+  ],
+  "retainedAnalystFileAnchors": [
+    {
+      "name": "LargeBrushProfile.kt",
+      "bytes": 6683,
+      "sha256": "a99e05fd253aa8cc9413e10f7bcf87ae4bbef8ad14f13b99896707d796006617"
+    },
+    {
+      "name": "run_profile.py",
+      "bytes": 3778,
+      "sha256": "74247a99c19a0a434d65ad6e811db447d654bedb21098993982fe693ea5d69e6"
+    },
+    {
+      "name": "results.json",
+      "bytes": 31694,
+      "sha256": "866b0ed5687fcd419e04e2c343805c1344da56350eb156025a0741e2b413d2e1"
+    },
+    {
+      "name": "source-manifest.json",
+      "bytes": 471773,
+      "sha256": "82d78f43bd8ca54722354993a30904f7cc943ecd82ec570eaf20c4a711d3c216"
+    },
+    {
+      "name": "profile-summary.json",
+      "bytes": 16315,
+      "sha256": "1eefc774dbe3820e2dd5756edeff2d26c39fc73ee3a41c177de844b89d15cac5"
+    },
+    {
+      "name": "pen.jfr",
+      "bytes": 356728,
+      "sha256": "558f232579ccfe490d9f1a85e30e806d6bf57c2cf68fab6b569c96a8dcd07b3a"
+    },
+    {
+      "name": "textured.jfr",
+      "bytes": 282849,
+      "sha256": "6d0de1a4459ab338c121378c587d768d4e053e7b570b5d201add84f40358e42d"
+    },
+    {
+      "name": "airbrush.jfr",
+      "bytes": 345971,
+      "sha256": "ce2a053ee8b50c66da8c5455c9da11a0a61b194e7d86b55eeec44ccef21f551f"
+    },
+    {
+      "name": "OpaqueSourceOverProof.java",
+      "bytes": 3221,
+      "sha256": "2665bf002abc78d8ae82bf7965c108d116909ddcf768df61aeacc9850583df08"
+    },
+    {
+      "name": "opaque-proof.json",
+      "bytes": 252,
+      "sha256": "bf350aaf50a34c73d13f70e528b22254a597d5d5d2c51c0833812b7b3016faca"
+    },
+    {
+      "name": "OpaqueSourceOverBenchmark.java",
+      "bytes": 6557,
+      "sha256": "d92c9a9991a84d55542e9b782998f602f2d7793210f68956aba3e22c24573603"
+    },
+    {
+      "name": "opaque-benchmark.json",
+      "bytes": 4099,
+      "sha256": "adc74f9ee07f1b16933ed75115c73c4c6741e513801f8884ef090e6f43e98911"
+    },
+    {
+      "name": "DeviceOpaqueFixtureCapture.java",
+      "bytes": 2661,
+      "sha256": "c0df818d4fda648b9167907378d813e6e556435b978670a4213147487f501a9f"
+    },
+    {
+      "name": "device-original-fixtures.json",
+      "bytes": 3685,
+      "sha256": "a17e9731ca29711793e631bfd4115005cb39b2b756fe762450eb57d76cac4475"
+    },
+    {
+      "name": "device-opaque-original.argb",
+      "bytes": 262144,
+      "sha256": "30171c2b9b346e14fe571dc5f8db1dc63e78327dd8db4336963542a5fc349321"
+    },
+    {
+      "name": "device-varied-alpha-original.argb",
+      "bytes": 262144,
+      "sha256": "7ddcf8882882064a4968f500a4895c3277b7cf083c40b4a2bd71e3c1e7bf9d06"
+    }
+  ]
+}

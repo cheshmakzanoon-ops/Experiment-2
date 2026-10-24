@@ -1,14 +1,15 @@
 ### Emulator acceptance and parity corrections (24 October 2026)
 
 **Complete Procreate feature and quality parity remains unestablished.**
-The latest completed [run 312](docs/CI_RUN_312_2026-10-24.md), revision `8050121a`, passed
-1,511 JVM tests, 139 Python checks and its build/package gates. Six emulator configurations
-completed all 253 declared cases and minified launch; API 26 retained two documented skips.
-The main Android 15 / 16 KB lane failed twice and ended with 56 passes, one failure and
-196 missing identities. Original screenshots also reveal invisible Model header controls
-on Android 8, despite passing coordinate interactions. **Run 312 is failed.**
+The latest completed [run 313](docs/CI_RUN_313_2026-10-24.md), revision `8d8d0e6`, passed
+1,518 JVM tests, 150 Python checks and its build/package gates. **All seven device jobs failed.**
+Five lanes passed their preceding device coverage, retaining the two documented API 26 skips,
+but rejected the new wet-preview test before its body ran: its inferred return type was
+`JSONObject`, while JUnit requires `void`. Main Android 15 / 16 KB reported six cases before
+termination; its independent repeat reported 118. Neither runtime failure has an established
+repair. No minified launch or wet storage/pixel acceptance is claimed for this run.
 
-The new correction batch addresses three demonstrated defects:
+The preceding correction batch addresses three demonstrated defects:
 
 - [Wet preview pickup history](docs/WET_PREVIEW_HISTORY_2026-10-24.md): replaying only a cropped
   tail lost earlier wet-paint pickup and displayed the wrong colour. Wet fallback paths now
@@ -16,16 +17,25 @@ The new correction batch addresses three demonstrated defects:
   and dry previews retain regional updates. The smallest old fixture had 3,835 wrong pixels.
 - [Model header visibility](docs/MODEL_HEADER_VISIBILITY_2026-10-24.md): the AndroidView clips
   its SurfaceView to the model viewport. Device assertions inspect actual title/control
-  pixels and contrast, in addition to semantics and taps.
+  pixels and contrast, in addition to semantics and taps. Run 313's original Android 8 images
+  now show the title, Turn, Paint, Light and Close controls in all five header-bearing states.
 - [Retry attribution](docs/ANDROID15_RETRY_ATTRIBUTION_2026-10-24.md): a crash signature must
   belong to the interrupted case and process. An unrelated earlier GMS crash can no longer
   authorize recovery. Supported signatures and the one-recovery limit are unchanged.
 
-The [combined local gate](docs/evidence/wet-model-local.json) passes **1,518 JVM tests**, all
-150 Python checks, Android test compilation, formatting and static analysis with the baseline
-unchanged. All prior identities remain; the next device inventory is **254 per lane**.
-These corrections require their own exact-revision GitHub Actions result. The wet full-frame
-fallback has a performance cost; local correctness checks do not measure physical pen latency.
+The next source explicitly declares the wet test's `Unit` return, preserving every other byte
+of its assertions and evidence capture. It also adds an [exact opaque-layer compositing
+optimization](docs/OPAQUE_SOURCE_OVER_2026-10-24.md): a small branch removes redundant alpha
+operations while preserving the prior Float result. Exhaustive local comparisons find no pixel
+changes; paired local scalar measurements improve, but Android and full-preview speedups remain
+unestablished. A new Android case records exact raw pixels and alternating paired timings.
+
+The [local gate](docs/evidence/opaque-source-over-local.json) passes **1,522 JVM tests / 253 suites**,
+Android compilation, formatting and static analysis. The subsequent Android-only declaration fix
+also passes compilation/static checks, with compiled public zero-argument `void` methods verified.
+All prior identities remain; the next device inventory is **255 per lane**. Its fresh Actions run
+must execute the wet body and compositing case. No baseline, assertion, skip or recovery allowance
+changes. Wet full-frame fallback still has a performance cost; physical pen latency is unmeasured.
 
 [The implementation record](docs/EMULATOR_PARITY_2026-10-24.md) covers stroke endpoints,
 zero-spacing modes, interpolated pen orientation, active-layer Automatic selection, accurate
@@ -56,7 +66,8 @@ unimplemented input and placement consumers without treating static arithmetic a
 Every Actions device job must account for all declared cases, allowed API-specific skips,
 actual API/page size and minified launch. [Run 308](docs/CI_RUN_308_2026-10-24.md) remains the
 last fully accepted earlier revision; [309](docs/CI_RUN_309_2026-10-24.md),
-[311](docs/CI_RUN_311_2026-10-24.md), and [312](docs/CI_RUN_312_2026-10-24.md) retain their failures.
+[311](docs/CI_RUN_311_2026-10-24.md), [312](docs/CI_RUN_312_2026-10-24.md), and
+[313](docs/CI_RUN_313_2026-10-24.md) retain their failures.
 The [runtime comparison](docs/ANDROID15_RUNTIME_COMPARISON_2026-10-24.md),
 [collector controls](docs/ANDROID15_COLLECTOR_CONTROL_2026-10-24.md), and
 [official repair review](docs/ANDROID15_OFFICIAL_REPAIR_REVIEW_2026-10-24.md) establish no

@@ -37,8 +37,8 @@ The platform source explains the observed difference:
 
 `ModelCompanion` draws its Compose header before the `ModelView` AndroidView
 inside one rounded Surface. The unbounded older clear can therefore erase the
-header within that shared clip. This is a mechanism inference grounded in those
-sources and the exact screenshots; fresh runtime verification remains required.
+header within that shared clip. This mechanism is inferred from those sources and
+the exact screenshots; the scoped runtime outcome is recorded below.
 
 The correction adds `clipToBounds()` only to the model's AndroidView modifier:
 
@@ -64,5 +64,17 @@ to infer visibility of a SurfaceView sibling.
 
 The original API 26 screenshots fail that pixel rule; the inspected API 36
 regions pass it. No device identity is added or removed. Run 312 remains the
-unfixed evidence. The corrected source needs fresh CI execution and original
-screenshot review before the Model header can be marked visually accepted.
+unfixed evidence.
+
+[Run 313](CI_RUN_313_2026-10-24.md), source `8d8d0e6`, passes the Model cases on
+API 26 and retains the original restored, provisional, cancelled, committed and
+navigation screenshots. Direct inspection shows the title, Turn, Paint, Light
+and Close controls in all five header-bearing states. In the same 10,800-pixel
+interior region, the old all-work-area count is now zero. The actual device
+pixel/contrast assertions also pass. Model paint, cancellation, modal ordering
+and navigation remain visible in the retained originals.
+
+This accepts the repaired header within those captured emulator states. It does
+not accept the whole run: the wet test fails initialization in five lanes, two
+Android 15 lanes terminate earlier, and no minified launch executes. The full
+seven-lane and physical-device quality requirements remain unchanged.
