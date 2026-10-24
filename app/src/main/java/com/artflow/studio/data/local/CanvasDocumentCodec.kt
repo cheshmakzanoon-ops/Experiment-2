@@ -4,6 +4,7 @@ import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.domain.model.animation.AnimationFrame
 import com.artflow.studio.domain.model.animation.AnimationSettings
 import com.artflow.studio.domain.model.animation.TimelapseRecording
+import com.artflow.studio.domain.model.brush.GrainBlend
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.Layer
 import kotlinx.serialization.Serializable
@@ -20,6 +21,8 @@ import java.security.MessageDigest
  *   single layer list becomes frame 0.
  * - **v3** distinguishes isolated Normal groups from Pass Through groups. Older opaque,
  *   unmasked Normal groups are migrated to Pass Through to preserve their rendered appearance.
+ * - **v4** applies the second brush's selected grain blend when replaying a compound stroke.
+ *   Earlier vector strokes retain their historical Multiply grain behavior when loaded.
  *
  * Kept in the data layer because it is purely a storage concern.
  */
@@ -75,8 +78,8 @@ data class CanvasDocument(
     fun resolvedActiveFrameIndex(): Int = activeFrameIndex.coerceIn(0, (resolvedFrames().size - 1).coerceAtLeast(0))
 
     companion object {
-        /** Bump when the JSON shape changes in a way that needs migration code. */
-        const val CURRENT_VERSION = 3
+        /** Bump when storage or replay semantics require migration code. */
+        const val CURRENT_VERSION = 4
     }
 }
 
@@ -84,7 +87,7 @@ data class CanvasDocument(
  * Android-free encoding and validation of `canvas.artflow` documents.
  *
  * [ProjectStorage] adds the file-size limit and the project-path checks around these calls. Parsing
- * ignores unknown fields (a newer app's additions are dropped on load, never rejected), and every
+ * ignores unknown fields; [requireValidHeader] still rejects unsupported future versions. Every
  * rejection is an [IllegalArgumentException]: `require` failures and kotlinx' `SerializationException`
  * both are, so callers can treat any bad document the same way.
  */
@@ -118,25 +121,43 @@ object CanvasDocumentCodec {
         val document = json.decodeFromString(CanvasDocument.serializer(), text)
         val unsigned = document.copy(checksum = null)
         document.checksum?.let { stored ->
-            // Verify the original representation before changing its version or group semantics.
+            // Verify the original representation before changing its version or replay semantics.
             require(checksumOf(unsigned) == stored) { "The project data does not match its checksum" }
         }
-        return migrateGroups(unsigned)
+        return migrate(unsigned)
     }
 
-    private fun migrateGroups(document: CanvasDocument): CanvasDocument {
-        if (document.version !in 1..2) return document
+    private fun migrate(document: CanvasDocument): CanvasDocument {
+        if (document.version !in 1..3) return document
+        val migrateGroups = document.version < 3
 
-        fun migrate(layer: Layer): Layer {
-            if (!layer.isGroup || layer.blendMode != BlendMode.NORMAL) return layer
-            if (layer.opacity != 1f || layer.hasActiveMask()) return layer
-            return layer.copy(blendMode = BlendMode.PASS_THROUGH)
+        fun migrateLayer(layer: Layer): Layer {
+            val legacyNormalGroup = migrateGroups && layer.isGroup && layer.blendMode == BlendMode.NORMAL
+            val blendMode =
+                if (legacyNormalGroup && layer.opacity == 1f && !layer.hasActiveMask()) {
+                    BlendMode.PASS_THROUGH
+                } else {
+                    layer.blendMode
+                }
+            val strokes =
+                layer.strokes.map { stroke ->
+                    val params = stroke.brushParams
+                    val dual = params.dual
+                    if (dual == null || dual.params.grainBlend == GrainBlend.MULTIPLY) {
+                        stroke
+                    } else {
+                        stroke.copy(
+                            brushParams = params.copy(dual = dual.copy(params = dual.params.copy(grainBlend = GrainBlend.MULTIPLY))),
+                        )
+                    }
+                }
+            return layer.copy(blendMode = blendMode, strokes = strokes)
         }
 
         return document.copy(
             version = CanvasDocument.CURRENT_VERSION,
-            layers = document.layers.map(::migrate),
-            frames = document.frames.map { frame -> frame.copy(layers = frame.layers.map(::migrate)) },
+            layers = document.layers.map(::migrateLayer),
+            frames = document.frames.map { frame -> frame.copy(layers = frame.layers.map(::migrateLayer)) },
         )
     }
 

@@ -102,7 +102,7 @@ but contains only PC zero (`<unknown>`), with no named ART function. APK install
 failed during `install-commit` with a broken package-service pipe. The captured logs contain no
 `TestRunner` event or application-process start. There is no interrupted test identity in this lane.
 
-Neither default-runtime lane reached `RuntimeEnvironmentTest`, CPU stroke timing, or the
+Neither default-runtime lane reached `RuntimeEnvironmentTest`, elapsed repository stroke timing, or the
 minified launch. Lane A's application tombstone and lane B's system-server tombstone report
 16 KB pages; these must be distinguished from a completed application runtime-measurement test.
 
@@ -193,7 +193,7 @@ the artwork workflow. The RTL, Count-set and guide-light originals were also ope
 inspection. This establishes agreement between those Android captures, not agreement with
 Procreate or the absence of other UI defects.
 
-The CPU preview timing diagnostic recorded:
+The elapsed repository preview timing diagnostic recorded:
 
 | Brush | Preview p50 | Preview p95 | Preview maximum | Commit and preview |
 | --- | ---: | ---: | ---: | ---: |
@@ -241,3 +241,74 @@ Neither stock JIT, a passing retry, nor another Android version establishes a re
 original failures. The evidence supports continued runtime/image investigation while preserving
 the failed application compatibility requirement. It does not justify changing unrelated painting
 or UI code, increasing retry counts, or claiming full Procreate feature or rendering equivalence.
+
+## Repeated failure in run 307
+
+The later [seven-lane run 307](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40078354945)
+tested `2d57dbd2ae476aeaf66fd9c2fda5b259cf1fb572` with 241 cases. Its main Android 15 / 16 KB lane
+and standard Android 15 / 4 KB lane both passed all 241 cases and minified launch without retry.
+The independent 16 KB repeat remained failed: 86 passes and one empty failure in the first attempt,
+then three passes, one substantive failure and 237 missing identities in its single automatic retry.
+
+The first attempt's ART `MarkCompact::ScanObject<true>+36` SIGSEGV at 08:58:16.277 preceded the
+associated fill test's `MainActivity` PRE_ON_CREATE transition by 50 ms. Its named bucket/alpha-lock
+operation had not begun. The retry's `RememberEventDispatcher` constructor threw `NoSuchFieldError`
+for its own `remembering: MutableVector` field after three earlier Compose setups succeeded in
+that same process. The exact failing test had passed in the first attempt. The locally resolved
+Compose runtime 1.9.0 AAR declares and initializes that field; the failed installed APK was not
+contained in this device artifact, so that local inspection is supporting evidence only.
+A mark-compact completion 15 ms before the exception is correlation, not a demonstrated cause.
+
+The failed repeat artifact is `12554982246`, 5,460,489 bytes, SHA-256
+`47801af5de7a5fe358c94be6d138e6601ee3938edf69c946f57e96f16cb3553a`.
+Both attempts remain preserved. No concrete application/dependency repair or broader retry rule
+is justified by the bounded diagnosis. All six successful configurations passed the Reference
+interaction and original-image review; those successes do not waive the independent failure.
+
+## Completed previous-stable-emulator diagnostic
+
+[Run 40102735631](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40102735631)
+used workflow commit `f51dbfe9b93bfa08061b4b262720fe11bd002e13` with unchanged application/test
+source from `e0470f0`. Both fresh API 35 / 16 KB default-runtime lanes failed. Each ran instrumentation
+once; neither reached the runtime-measurement test, stroke timing or minified-launch acceptance.
+
+| Previous-emulator lane | Job | Reported / declared | Passed | Failed | Missing | Minified launch |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| A | `120898046686` | 57 / 239 | 56 | 1 | 182 | Not reached |
+| B | `120898046432` | 7 / 239 | 6 | 1 | 232 | Not reached |
+
+The complete 334,378,080-byte emulator distribution passed its size and SHA-256 verification:
+`95771e0ae431897b2a4bd2d97fa095f29a8b0624a7b216baf529f9306161c266`.
+Actual launch logs identify **37.1.11.0 / build 15917651** in both lanes. However, both prelaunch
+hooks exited 127 before writing `emulator-version.txt` or `emulator-source.properties`; the action
+continued to launch afterward. Script order suggests the version-capture command failed, but its
+redirected error text was lost. That remains a separate setup defect and prevents treating the
+full intended diagnostic setup contract as passed. The subsequent launch messages still establish
+the observed emulator version. No downgrade is adopted in the main matrix.
+
+Lane A's associated canvas-input case began at 14:37:43.843 UTC. The application main thread
+received SIGSEGV at address zero 135 ms later. The tombstone measured 16,384-byte pages and showed
+PC zero / unknown at frame zero, with JIT-compiled `ActivityThread.performLaunchActivity` and
+`handleLaunchActivity` frames. Guest-state-header extraction errors further limit its stack.
+This is a native application-process crash during launch, not a proven named ART or ArtFlow cause.
+
+Lane B lost `system_server` at 14:36:28.308: its `ReferenceQueueDaemon` threw `NullPointerException`
+reading `Reference.queue` in `ReferenceQueue.enqueuePending`. Instrumentation then reported that
+the system crashed. There is no ArtFlow method in that failure stack and no captured actual
+page-size measurement in this lane; a requested 16 KB target is not substituted for that evidence.
+
+Both jobs read SDK 35 and JIT enabled, with application-method compilation activity. Their target
+and runtime fingerprint match the earlier 16 KB default-runtime control, but the newly installed
+system-image package revision/hash was not preserved. Ubuntu 24.04.5, runner image 20261012.334.1
+and runner 2.338.0 match. A used provisioner 20261021.618 in eastus2; B used 20261012.601 in
+westcentralus. These independently allocated hosts are not an identical-machine experiment.
+
+| Preserved artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| A: `12564190004` | 3,537,360 | `ff2cb154a0201e3d3b96eb06aea28caf10303587717a9df357046d58b7620f92` |
+| B: `12564100263` | 2,289,138 | `6f5a163d0cba3e37637ebab2e4a8afceb7b30b35f54cbf2818ba032246c4d555` |
+
+The frozen diagnostic revision-plus-239-identities JSON SHA-256 is
+`0bd5a09e242644fb6ef43056d0d3e6abb3fe13b2257d62d84c252285a91bdce2`.
+Original archives, job logs, JUnit failures and native/system evidence remain preserved. The older
+emulator did not demonstrate a repair; these failures do not accept later application revisions.

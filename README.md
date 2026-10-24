@@ -3,8 +3,9 @@
 [The implementation and acceptance record](docs/EMULATOR_PARITY_2026-10-24.md) covers corrected
 stroke endpoints, zero-spacing rendering modes, interpolated pen orientation, active-layer
 Automatic selection, explicit Normal/Pass Through group compositing, and accurate blend-mode
-previews. `.artflow` v3 migrates older group behavior without changing existing artwork; older app
-builds cannot read new v3 documents. PSD preserves group modes. Unsupported native `.procreate`
+previews. `.artflow` v4 migrates older group behavior and stored secondary-grain strokes after
+verifying their original checksums when present, preserving existing artwork; older app builds cannot read new
+v4 documents. PSD preserves group modes. Unsupported native `.procreate`
 group metadata uses a rendered appearance layer with hidden editable sources.
 Brush interchange also preserves tilt-opacity settings and authored mask coverage, while Count
 Jitter reaches its documented range. Theme evidence waits for actual repainted dialog pixels.
@@ -17,6 +18,11 @@ The tool strip exposes all 20 tools, including functional tap/drag Zoom navigati
 The floating Reference window now stays above either brush sidebar while preserving toolbar and
 modal-panel precedence. Focus mode keeps its header clear of the normal or enlarged exit target.
 Real-coordinate device regressions cover overlap, dragging, dismissal and input outside the window.
+Secondary compound-brush grain now honors Subtract and Hard Mix, using the same local coverage
+rules as a single brush. Existing Multiply pixels stay unchanged. Legacy vector strokes migrate
+to their actual historical Multiply behavior; saved brush-library definitions keep their settings.
+Stroke timing evidence records ordered raw nanoseconds for repository continuation, preview and
+commit phases, including waits. It does not measure physical input or display presentation latency.
 New Procreate imports use the inspected native pressure spline and sampled lookup; existing saved
 curves keep their prior behavior. [Numerical contracts and boundaries](docs/NATIVE_PRESSURE_SPLINE.md)
 distinguish reconstructed expectations from a live reference-app comparison.

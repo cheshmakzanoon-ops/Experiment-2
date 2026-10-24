@@ -862,7 +862,14 @@ class StrokeRasterizer(
         // [reach] already covers the second brush; marks are read only inside it.
         clear(marks, reach)
         drawStrokeInto(marks, stroke, params, stroke.points, alphaLock = false, mask = null, random = Random(stroke.id + DUAL_SEED))
-        return DualMarks(dual.mode, marks, BrushTexture.from(params), dual.params.opacity, grainOrigin(params, stroke.points))
+        return DualMarks(
+            dual.mode,
+            marks,
+            BrushTexture.from(params),
+            dual.params.opacity,
+            grainOrigin(params, stroke.points),
+            params.grainBlend,
+        )
     }
 
     /** The second brush's marks, combined with the main brush's coverage pixel by pixel. */
@@ -872,6 +879,7 @@ class StrokeRasterizer(
         val texture: BrushTexture?,
         val opacity: Float,
         val grain: Pair<Int, Int>,
+        val grainBlend: GrainBlend,
     ) {
         fun combine(
             primary: Int,
@@ -881,9 +889,16 @@ class StrokeRasterizer(
         ): Int {
             val second = marks.pixels[index]
             val own = (primary ushr 24) / 255f
+            val coverage = (second ushr 24) / 255f
+            val grainCoverage = texture?.coverage(x - grain.first, y - grain.second) ?: 1f
             val other =
-                (second ushr 24) / 255f * opacity.coerceIn(0f, 1f) *
-                    (texture?.coverage(x - grain.first, y - grain.second) ?: 1f)
+                if (grainBlend == GrainBlend.MULTIPLY || grainCoverage >= 1f) {
+                    // Preserve the historical floating-point order for the default blend.
+                    coverage * opacity.coerceIn(0f, 1f) * grainCoverage
+                } else {
+                    // The grain changes shape coverage before the second brush's global opacity.
+                    grainBlend.combine(coverage, grainCoverage) * opacity.coerceIn(0f, 1f)
+                }
             val alpha =
                 when (mode) {
                     DualBrush.Mode.MULTIPLY -> own * other

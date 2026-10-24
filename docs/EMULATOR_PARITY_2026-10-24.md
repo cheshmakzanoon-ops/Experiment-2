@@ -61,6 +61,27 @@ from GitHub Actions. It does not establish complete Procreate feature or renderi
   a top inset derived from the same 48/56 dp exit-button size keeps both controls accessible.
   Reference's stable callsite and saved fractional placement remain intact.
 
+## Secondary Grain Blend and stored drawings
+
+The secondary component of a compound brush previously ignored its Grain Blend selection and
+always multiplied texture coverage. Subtract and Hard Mix now use the same local coverage rule
+as a solo brush, before secondary opacity. For raw coverage 153/255, grain 128/255 and opacity 0.5,
+the center alpha is 13 for Subtract and 128 for Hard Mix; both incorrectly produced 38 before the
+repair. Multiply still produces 38, and its original floating-point multiplication order is retained.
+Primary grain processing, the three existing dual-combine modes and final primary opacity keep
+their existing order. This fixes an ArtFlow setting; it does not implement the distinct native
+amount/transfer and wet-paint pipeline.
+
+Eight renderer regressions cover independent solo/compound values, the strict Hard Mix threshold,
+all three dual modes, primary/secondary opacity, erasing, neutral or missing grain, cropped origins
+and six whole-buffer historical Multiply hashes captured with the unchanged published renderer.
+Seven document regressions cover signed historical fixtures, original-checksum rejection, all
+legacy versions and frame stacks, new v4 behavior, group isolation, raster/metadata preservation
+and independent saved-brush definitions. The added Android storage case checks historical pixels,
+checksum rejection, poisoned texture-cache disk reload, v4 save/reopen, new Subtract/Hard Mix
+pixels and the exact saved PNG composite. These declarations require fresh exact-revision CI;
+results from another source revision are not reused as acceptance evidence.
+
 ## Group compositing and file compatibility
 
 Explicit **Normal** groups now composite their members against transparency before blending
@@ -69,11 +90,18 @@ with outside layers. Pass Through is available in the group picker and excluded 
 New organizational groups default to Pass Through so grouping alone does not alter the picture.
 PSD import/export preserves the distinction.
 
-The `.artflow` format is now **v3**. Version 1 and 2 documents are read, their original checksum
-is verified, then previously passing Normal groups are converted to explicit Pass Through in
-every animation frame. Previously isolated faded/masked groups retain their behavior. Existing
-artwork is migrated in memory and written in v3 on the next save. Older application builds reject
-new v3 files instead of silently rendering their Normal groups incorrectly.
+The `.artflow` format is now **v4**. The original checksum, when present, is verified before any migration.
+Historical unsigned documents retain their existing unverified acceptance.
+Using the original document version, v1/v2 opaque, unmasked Normal groups become explicit Pass
+Through in every animation frame; previously isolated faded/masked groups and v3 Normal groups
+keep their existing scope. Stored vector strokes from v1/v2/v3 also retain their actual historical
+secondary-grain behavior by migrating that immediate secondary setting to Multiply. Both the
+main layer list and every frame are covered. New v4 strokes retain corrected Subtract and Hard Mix.
+
+Existing raster pixels, primary grain, nested source settings and imported metadata are not
+rewritten. Brush-library and `.artbrush` definitions remain outside document migration. Opening
+migrates the in-memory model; the next save writes a checksummed v4 file. Older application builds
+reject new v4 files instead of silently replaying their corrected stroke or group semantics.
 
 Native `.procreate` group blend/mask metadata remains unverified. Exporting an isolated or
 actively masked group therefore uses the existing rendered-appearance fallback, with editable
@@ -92,6 +120,7 @@ the Procreate application.
 | Imported pressure | Real `.brushset` import, constant/descending/curved native lookup values on Android, and exact `.artbrush` persistence |
 | Automatic selection | Real MotionEvents, covered active layer, transparent areas, empty layers, obsolete pending work |
 | Groups and interchange | PSD import, distinct scopes, real save/reopen, PSD export, enabled/disabled masks and bounded `.procreate` appearance fallback |
+| Historical vector grain | Signed v3 fixture from the published renderer, raw checksum rejection before migration, real grain-file reload, exact historical layer pixels, v4 save/reopen, corrected new strokes and Android PNG decoding |
 | Saved selections | Real file storage, fresh repository/controller, fractional mask coverage, constrained Fill Layer, undo/redo, independent Android PNG decoding, slot deletion and document switching |
 | Blend picker | Group-only Pass Through navigation and independently expected pixels captured from the actual Compose previews |
 | Floating Reference | Real editor coordinate taps/drags inside verified left/right sidebar intersections, modal precedence, outside-window sidebar and Zoom input, both focus target sizes, restored position and unchanged brush/artwork/history |
@@ -144,12 +173,75 @@ stack text and rejects test errors or application assertions. Its new regression
 incorrect retry decisions before the repair. Original failure artifacts and the single-retry limit
 remain intact. Suite-level error counters also fail closed when detail is missing or invalid.
 
+## Timing evidence scope
+
+`StrokeTimingDeviceTest` retains the existing 2048-square fixture: a filled Paper layer, four
+striped painted layers and an Ink layer, with 80 samples for each of three brushes in a fixed order.
+Earlier committed strokes remain on Ink. `stroke-timing.json` now records ordered nanoseconds for
+pre-stroke preview, begin, each continuation and preview, end, final preview and adjacent combined
+intervals. The readable report includes phase p50/p95/max with the original percentile indices.
+
+`System.nanoTime` measures elapsed wall intervals, including called raster/compositing work,
+allocations, dispatcher scheduling and mutex waits. Sample preparation, fixture construction and
+report writing are outside the timed calls. Device input delivery, GL upload/draw and display
+presentation are not measured. This is not CPU time, physical pen latency or a Procreate benchmark.
+There is no speed acceptance threshold; the existing positive preview-p50 sanity check remains.
+Runs 306 and 307 contain the earlier narrower preview-only samples and a combined end/final-preview
+value, and must not be presented as if they captured the new phase breakdown.
+
 ## Execution evidence
 
 Use the [Android CI workflow](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/workflows/android-ci.yml)
 for the exact published commit, then inspect each lane's generated verification summary.
 A queued, skipped, cancelled or failed run is not a completed gate. An artifact from an earlier
 commit does not validate later source changes.
+
+### Completed run 307
+
+[Run 307](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40078354945) tested
+`2d57dbd2ae476aeaf66fd9c2fda5b259cf1fb572`, including the Reference correction and the added
+standard Android 15 lane. All seven device jobs finished. The overall run **failed**: six lanes
+passed their complete suites and minified launches on the first instrumentation attempt, while
+the independent Android 15 / 16 KB repeat failed after its existing single automatic retry.
+
+| Configuration | Final reported / declared | Passed | Failed | Allowed skips | Automatic retries | Minified launch |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| API 26 / 4 KB | 241 / 241 | 239 | 0 | 2 | 0 | Passed |
+| API 35 / 16 KB | 241 / 241 | 241 | 0 | 0 | 0 | Passed |
+| API 35 / 4 KB standard | 241 / 241 | 241 | 0 | 0 | 0 | Passed |
+| API 36 / 4 KB phone | 241 / 241 | 241 | 0 | 0 | 0 | Passed |
+| API 35 / 16 KB independent repeat | 4 / 241 | 3 | 1 | 0 | 1 | Not reached |
+| API 36 / 16 KB phone | 241 / 241 | 241 | 0 | 0 | 0 | Passed |
+| API 36 / 4 KB tablet | 241 / 241 | 241 | 0 | 0 | 0 | Passed |
+
+The failed repeat's first attempt reported 86 passes and one empty failure, with an application
+`HeapTaskDaemon` SIGSEGV in ART `MarkCompact::ScanObject<true>+36`. Its final retry reported three
+passes and a `NoSuchFieldError` for `RememberEventDispatcher.remembering` during Compose setup;
+237 cases remained missing. The exact eventual failure passed in the first attempt and all six
+successful configurations. That narrows the evidence but does not establish an application,
+runtime or emulator cause. Neither attempt is combined with another to fill missing coverage.
+
+The build job executed **1,417 JVM tests in 234 suites** with zero failures, errors or skips,
+plus **126 Python checks**. Ktlint, detekt, APK/AAB integrity, native alignment and the signing
+negative guard passed. Lint retained 153 debug / 151 release warnings and no errors or fatal
+findings. The pinned metadata corpus, five genuine documents and static native contracts passed
+within the same bounded scope described for run 306. The uploaded source archive was independently
+compared byte-for-byte with `git archive` of the named commit.
+
+All seven original device archives were checked against their byte lengths and SHA-256 digests,
+the exact revision and a frozen 241-identity manifest. Both Reference interaction cases passed in
+all six successful lanes. Original screenshots confirmed title/tab/close visibility above actual
+sidebar intersections, modal precedence, focus exit clearance and live canvas/Reference pixels.
+The tablet retained 16 physical pixels of focus clearance and 7,871 practice-stroke pixels in
+each theme. The reviewed Count, guides, thumbnails, workspace and large-text fixtures had no new
+concrete visual defect. This is bounded fixture acceptance, not complete product equivalence.
+
+The frozen revision-plus-identities JSON SHA-256 was
+`8a8ef04b1f6df1040595a26a8b61a53e85b3053f48b184ebf2fe26688368a9bd`.
+The build report archive was artifact `12554318521`, SHA-256
+`faeac3f5c54efd628d7a68a70d1ae197d4932db8efa6c6d0c037d28e7321ff67`.
+Later secondary-grain, document-v4 and timing changes require their own exact-revision run;
+run 307 does not accept them.
 
 ### Completed run 306
 
@@ -237,8 +329,8 @@ timeline and limits of that finding.
 
 For context, baseline [run 301](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40056947818)
 executed 215 tests on API 26: 213 passed and two API-limited cases skipped, followed by a successful
-minified launch. Its measured CPU preview p95 was 10.3 ms for a 12 px pen, 8.8 ms for an 80 px
-textured brush and 39.3 ms for a 300 px soft airbrush on a 2048-square, five-layer document.
+minified launch. Its measured elapsed repository-preview p95 was 10.3 ms for a 12 px pen, 8.8 ms for an 80 px
+textured brush and 39.3 ms for a 300 px soft airbrush on a 2048-square document with paper, four painted layers and an Ink layer.
 Those are baseline emulator measurements, not physical input-to-display latency or Procreate
 comparisons.
 
@@ -262,5 +354,5 @@ before combination, a secondary threshold and a primary-edge safeguard. Connecti
 to the current buffer without that surrounding pipeline would not reproduce the inspected behavior.
 
 Physical stylus pressure/tilt, palm rejection, input-to-display latency, sustained memory/thermal
-behavior and artist acceptance also need physical devices. The CPU timing test reports evidence;
+behavior and artist acceptance also need physical devices. The elapsed repository-call timing test reports evidence;
 it does not turn an emulator timing into a production quality guarantee.

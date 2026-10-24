@@ -11,8 +11,10 @@ historical status statements below; code or workflow presence does not constitut
 The standard Android 15 / 4 KB default-runtime lane is additional coverage. It does not replace
 either existing Android 15 / 16 KB lane or erase their preserved failures.
 
-The app now writes `.artflow` v3 so new Normal-group semantics cannot be misread by old builds.
-Existing v1/v2 documents migrate after checksum verification. Native `.procreate` group metadata
+The app now writes `.artflow` v4 so isolated Normal groups and corrected secondary Grain Blend
+cannot be silently replayed with older semantics. Existing v1/v2/v3 documents migrate after
+verification of the original checksum when present; historical unsigned documents retain their
+existing unverified acceptance. Old vector strokes preserve their historical Multiply coverage. Native `.procreate` group metadata
 still uses a bounded appearance fallback where necessary. No production signing, store publication,
 physical-device qualification or complete Procreate equivalence is asserted by these changes.
 
