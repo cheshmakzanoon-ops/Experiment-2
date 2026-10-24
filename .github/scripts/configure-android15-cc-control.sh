@@ -89,8 +89,47 @@ old_boot="$(tr -d '\r\n' < "$root/before/boot-id.txt")"
 # This documented testing switch prevents a remote DeviceConfig sync changing the experiment.
 run_adb shell device_config set_sync_disabled_for_tests persistent > "$root/device-config-sync.txt"
 run_adb shell device_config put runtime_native_boot force_disable_uffd_gc true
-[[ "$(run_adb shell device_config get runtime_native_boot force_disable_uffd_gc | tr -d '\r')" == true ]] || fail 'DeviceConfig write was not retained'
-[[ "$(property persist.device_config.runtime_native_boot.force_disable_uffd_gc)" == true ]] || fail 'DeviceConfig property was not propagated'
+# SettingsToPropertiesMapper propagates DeviceConfig asynchronously. Preserve every
+# observation, and require both values within one monotonic 60-second budget.
+python3 - "$root/propagation.txt" <<'PY'
+import datetime
+import json
+import subprocess
+import sys
+import time
+
+started = time.monotonic()
+deadline = started + 60.0
+commands = {
+    'device_config': ['adb', 'shell', 'device_config', 'get', 'runtime_native_boot', 'force_disable_uffd_gc'],
+    'persistent_property': ['adb', 'shell', 'getprop', 'persist.device_config.runtime_native_boot.force_disable_uffd_gc'],
+}
+with open(sys.argv[1], 'w', encoding='utf-8') as output:
+    attempt = 0
+    while True:
+        attempt += 1
+        values = {}
+        for name, command in commands.items():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                values[name] = {'status': 'deadline', 'value': None}
+                continue
+            try:
+                result = subprocess.run(command, capture_output=True, text=True, timeout=min(20.0, remaining))
+                values[name] = {'status': result.returncode, 'value': result.stdout.strip(), 'stderr': result.stderr.strip()}
+            except subprocess.TimeoutExpired:
+                values[name] = {'status': 'timeout', 'value': None}
+        elapsed = time.monotonic() - started
+        output.write(json.dumps({'attempt': attempt, 'utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                                 'elapsed_seconds': elapsed, 'values': values}, sort_keys=True) + '\n')
+        output.flush()
+        if elapsed <= 60.0 and all(item['status'] == 0 and item['value'] == 'true' for item in values.values()):
+            break
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise SystemExit('DeviceConfig and its persistent property did not both become true within 60 seconds')
+        time.sleep(min(1.0, remaining))
+PY
 deadline=$((SECONDS + boot_timeout))
 run_adb reboot > "$root/reboot-command.txt" 2>&1 || true
 # An offline transition can finish before a late wait-for-disconnect is attached.

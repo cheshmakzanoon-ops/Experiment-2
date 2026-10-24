@@ -34,6 +34,10 @@ jobs:
         run: |
           set -euo pipefail
           candidate=e2aa900b91298fe08eca8529d0345220faa9e2eb
+          # Diagnostic corrections may put the immutable application base beyond checkout's depth.
+          if ! git cat-file -e "$candidate^{commit}" 2>/dev/null; then
+            git fetch --no-tags --depth 1 origin "$candidate"
+          fi
           git cat-file -e "$candidate^{commit}"
           mkdir -p "${RUNNER_TEMP}/artflow-device/cc-control"
           python - <<'PY'
@@ -112,7 +116,11 @@ jobs:
           cat /etc/os-release > "$control/host-os-release.txt"
           printf 'ImageOS=%s\nImageVersion=%s\n' "${ImageOS:-unknown}" "${ImageVersion:-unknown}" > "$control/host-image.txt"
           sdk="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
-          "$sdk/emulator/emulator" -version > "$control/emulator-version.txt" 2>&1
+          version_status=0
+          # Use the same headless frontend as the successful emulator launch. The GUI QEMU
+          # executable requires libpulse.so.0, which is absent on this hosted runner image.
+          "$sdk/emulator/emulator" -no-window -noaudio -version > "$control/emulator-version.txt" 2>&1 || version_status=$?
+          printf 'exitCode=%s\n' "$version_status" > "$control/emulator-version-status.txt"
           cp "$sdk/emulator/source.properties" "$control/emulator-source.properties"
           image="$sdk/system-images/android-35/google_apis_ps16k/x86_64"
           cp "$image/source.properties" "$control/system-image-source.properties"
@@ -132,6 +140,7 @@ jobs:
               manifest[name] = {'bytes': path.stat().st_size, 'sha256': digest}
           output.write_text(json.dumps(manifest, indent=2) + '\n')
           PY
+          exit "$version_status"
       - name: Verify every frozen identity and minified launch
         if: always()
         run: |
