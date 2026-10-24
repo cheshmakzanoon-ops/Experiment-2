@@ -34,11 +34,8 @@ class TransformUiRegressionTest {
         compose.onNodeWithText("Rotation °").performScrollTo().performTextReplacement("25")
         compose.onNodeWithText("Flip horizontal").performScrollTo().performClick()
         compose.runOnIdle { assertNull(result) }
-        compose
-            .onNodeWithText("Apply transform")
-            .performScrollTo()
-            .assertIsEnabled()
-            .performClick()
+        awaitEnabled("Apply transform")
+        compose.onNodeWithText("Apply transform").performScrollTo().performClick()
         // Apply settles in a coroutine; wait for it to reach the callback instead of assuming
         // the draft has already been applied by the next idle frame.
         compose.waitUntil(5_000) { result != null }
@@ -65,13 +62,16 @@ class TransformUiRegressionTest {
         }
         compose.onNodeWithText("Width %").performScrollTo().performTextReplacement("0")
         // The field must actually hold the typed value before the button's state means anything.
-        compose
-            .onNodeWithText("Width %")
-            .assert(
-                SemanticsMatcher("Width field holds 0") { node ->
-                    node.config.getOrNull(SemanticsProperties.EditableText)?.text == "0"
-                },
-            )
+        // A loaded emulator delivers the replacement after the frame that triggered it, so wait
+        // for the text rather than reading the node the moment the action returns.
+        compose.waitUntil(5_000) {
+            compose
+                .onNodeWithText("Width %")
+                .fetchSemanticsNode()
+                .config
+                .getOrNull(SemanticsProperties.EditableText)
+                ?.text == "0"
+        }
         compose.onNodeWithText("Apply transform").performScrollTo().assertIsNotEnabled()
         compose.onNodeWithText("Cancel").performScrollTo().performClick()
         compose.runOnIdle {
@@ -86,6 +86,13 @@ class TransformUiRegressionTest {
         }
         compose.onNodeWithText("Deselect before transforming the entire layer.").assertIsDisplayed()
         compose.onNodeWithText("Apply transform").performScrollTo().assertIsNotEnabled()
+    }
+
+    /** A slow emulator finishes a text edit a frame or two later; the button follows that state. */
+    private fun awaitEnabled(text: String) {
+        compose.waitUntil(5_000) {
+            runCatching { compose.onNodeWithText(text).assertIsEnabled() }.isSuccess
+        }
     }
 
     @Test
@@ -111,6 +118,7 @@ class TransformUiRegressionTest {
             .performScrollTo()
             .assertIsDisplayed()
             .performClick()
+        awaitEnabled("Apply transform")
         compose
             .onNodeWithText("Apply transform")
             .performScrollTo()

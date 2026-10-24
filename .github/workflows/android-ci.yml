@@ -293,9 +293,11 @@ jobs:
           for path in glob.glob("app/build/outputs/androidTest-results/**/*.xml", recursive=True):
               for case in ET.parse(path).getroot().iter("testcase"):
                   for problem in list(case.findall("failure")) + list(case.findall("error")):
-                      text = (problem.get("message") or problem.text or "").strip().splitlines()
+                      # Some failures carry only a stack trace, so keep both parts and drop blanks.
+                      raw = "\n".join(filter(None, [(problem.get("message") or "").strip(), (problem.text or "").strip()]))
+                      text = [line for line in raw.splitlines() if line.strip()]
                       name = f"{case.get('classname')}.{case.get('name')}"
-                      print(f"FAILED {name}: {' | '.join(text[:4])[:600]}")
+                      print(f"FAILED {name}: {' | '.join(text[:6])[:900]}")
                       note(f"FAILED {name}: {' | '.join(text[:4])[:300]}")
                       # The frames that say who did it: the app's own, the test's and any cause.
                       trace = (problem.text or "").splitlines()
