@@ -11,6 +11,7 @@ import org.mockito.Mockito.mock
 
 class SavedSelectionsTest {
     private var current: SelectionMask? = null
+    private var stored: List<SelectionMask> = emptyList()
     private val repository =
         mock(CanvasRepository::class.java) { call ->
             when (call.method.name) {
@@ -20,6 +21,14 @@ class SavedSelectionsTest {
                     current = call.arguments[0] as SelectionMask?
                     null
                 }
+
+                "savedSelections" -> stored
+                "setSavedSelections" -> {
+                    @Suppress("UNCHECKED_CAST")
+                    stored = (call.arguments[0] as List<SelectionMask>).map { it.copy() }
+                    null
+                }
+
                 else -> null
             }
         }
@@ -36,5 +45,28 @@ class SavedSelectionsTest {
         assertEquals(1, restored)
         saved.delete(0)
         assertTrue(saved.saved.value.isEmpty())
+    }
+
+    @Test fun savedSelectionsStayWithTheArtworkWhenItIsReopened() {
+        val saved = SavedSelections(repository) {}
+        current = SelectionMask(4, 4).apply { selectAll() }
+        assertTrue(saved.save())
+        assertEquals(1, stored.size)
+
+        // Reopening the document builds a new controller over the same repository.
+        val reopened = SavedSelections(repository) {}
+        assertEquals(1, reopened.saved.value.size)
+        reopened.load(0)
+        assertTrue(requireNotNull(current).isFull())
+
+        reopened.delete(0)
+        assertTrue("Deleting must reach the document, not only the visible list", stored.isEmpty())
+    }
+
+    @Test fun loadingAnOlderMaskForAnotherCanvasIsIgnored() {
+        stored = listOf(SelectionMask(8, 8).apply { selectAll() })
+        val saved = SavedSelections(repository) {}
+        saved.load(0)
+        assertEquals(null, current)
     }
 }

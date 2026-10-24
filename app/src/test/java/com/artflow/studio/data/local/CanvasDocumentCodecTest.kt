@@ -1,11 +1,16 @@
 package com.artflow.studio.data.local
 
+import com.artflow.studio.core.pixels.SelectionMaskCodec
 import com.artflow.studio.core.text.TextLayout
 import com.artflow.studio.domain.model.animation.AnimationFrame
 import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.FilterType
 import com.artflow.studio.domain.model.layer.Layer
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -222,5 +227,30 @@ class CanvasDocumentCodecTest {
         val point = stroke.points.single()
         assertEquals(1f, point.pressure)
         assertEquals(0, document.timelapse.entries.size)
+    }
+
+    @Test
+    fun savedSelectionSlotsSurviveWithTheirCoverage() {
+        val decoded = roundTrip(CanvasDocumentFixtures.richDocument()).second
+
+        assertEquals(2, decoded.savedSelections.size)
+        val full = requireNotNull(SelectionMaskCodec.decode(decoded.savedSelections[0], 640, 480))
+        assertTrue(full.isFull())
+        val half = requireNotNull(SelectionMaskCodec.decode(decoded.savedSelections[1], 640, 480))
+        assertEquals(255, half.coverageAt(319, 479))
+        assertEquals(0, half.coverageAt(320, 0))
+    }
+
+    /** Documents saved before selections lived with the artwork must keep loading. */
+    @Test
+    fun aDocumentWithoutSavedSelectionsStillLoads() {
+        val text = CanvasDocumentCodec.encode(CanvasDocumentFixtures.richDocument()).decodeToString()
+        val root = Json.parseToJsonElement(text).jsonObject
+        val legacy = JsonObject(root - "savedSelections" + ("checksum" to JsonNull))
+
+        val document = CanvasDocumentCodec.decode(legacy.toString())
+
+        assertEquals(0, document.savedSelections.size)
+        assertEquals(CanvasDocumentFixtures.richDocument().layers.size, document.layers.size)
     }
 }

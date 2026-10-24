@@ -13,6 +13,7 @@ import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.LayerTransform
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
+import com.artflow.studio.core.pixels.SelectionMaskCodec
 import com.artflow.studio.core.render.Compositor
 import com.artflow.studio.core.render.LayerStrokeRenderer
 import com.artflow.studio.core.render.StrokeRasterizer
@@ -131,6 +132,9 @@ class CanvasRepositoryImpl
         private var symmetrySettings = SymmetryEngine.Settings()
         private var activeSelection: SelectionMask? = null
 
+        /** Save & Load slots owned by this document; encoded into every save. */
+        private val savedSelectionSlots = mutableListOf<SelectionMask>()
+
         private data class PendingSelection(
             val session: CanvasRepository.SelectionEditSession,
             val revision: Long,
@@ -248,6 +252,7 @@ class CanvasRepositoryImpl
             activeFrame = 0
             pendingSelection = null
             activeSelection = null
+            savedSelectionSlots.clear()
             activeStrokes.clear()
             synchronized(liveLock) { liveStrokes.clear() }
             strokeBrushParams.clear()
@@ -378,6 +383,12 @@ class CanvasRepositoryImpl
             } ?: frameList[activeFrame].layers.firstOrNull()?.id ?: 0L
             pendingSelection = null
             activeSelection = null
+            // Save & Load selections travel with the document; unreadable slots are dropped rather
+            // than shown as slots that cannot be loaded.
+            savedSelectionSlots.clear()
+            document.savedSelections.forEach { encoded ->
+                SelectionMaskCodec.decode(encoded, canvasWidth, canvasHeight)?.let { savedSelectionSlots += it }
+            }
             activeStrokes.clear()
             synchronized(liveLock) { liveStrokes.clear() }
             strokeBrushParams.clear()
@@ -1064,6 +1075,21 @@ class CanvasRepositoryImpl
         }
 
         override fun clearSelection() = setSelection(null)
+
+        override fun savedSelections(): List<SelectionMask> = savedSelectionSlots.map { it.copy() }
+
+        override fun setSavedSelections(masks: List<SelectionMask>) {
+            val usable = masks.filter { it.width == canvasWidth && it.height == canvasHeight }
+            if (usable.size == savedSelectionSlots.size &&
+                usable.indices.all { usable[it].coverage.contentEquals(savedSelectionSlots[it].coverage) }
+            ) {
+                return
+            }
+            savedSelectionSlots.clear()
+            savedSelectionSlots += usable.map { it.copy() }
+            // Saving, loading or deleting a slot changes the document, so it must be written.
+            dirty = true
+        }
 
         override fun beginSelectionEdit(): CanvasRepository.SelectionEditSession {
             val session = CanvasRepository.SelectionEditSession(canvasWidth, canvasHeight, activeSelection?.copy())
@@ -3445,6 +3471,7 @@ class CanvasRepositoryImpl
                 frames = frames(),
                 activeFrameIndex = activeFrame,
                 animation = animationSettings,
+                savedSelections = savedSelectionSlots.map(SelectionMaskCodec::encode),
             )
 
         private fun emit(event: CanvasInvalidationEvent) {

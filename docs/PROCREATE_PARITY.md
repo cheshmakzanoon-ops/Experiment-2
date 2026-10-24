@@ -1,5 +1,25 @@
 # ArtFlow / Procreate workflow comparison
 
+## Saved selections, device lane diagnosis — 24 October 2026
+
+Run 293's six emulator lanes had no readable cause in the repository. The workflow now publishes every
+failed instrumentation test as a check-run annotation, which stays readable on the public run page
+without repository credentials; that is how the failures in this round were identified.
+
+The API 26 lane reported seven failing tests. Five drove chrome that the editor no longer has — a
+`Workspace menu`, `Brush`, `Eraser` and `Tools` dock, and a density contract that moved to font-scale
+preservation — so they could not pass on any device and now exercise the live top bar and Actions
+panel instead. The transform sheet's Apply settles in a coroutine and the test read its callback
+before it ran; the test now waits for it and asserts the button is enabled first. Brush Studio's Count
+stopped at 16 while Procreate's slider reaches 20 and imported brushes may store up to 32; the slider
+now spans both.
+
+**Saved selections are no longer memory-only.** Save & Load slots are encoded by
+`SelectionMaskCodec`, stored in the document, rejected when they belong to another canvas size, and
+restored when the artwork is opened again. Covered on the JVM by `SelectionMaskCodecTest`,
+`SavedSelectionsTest` (including reopening) and `CanvasDocumentCodecTest` (round trip plus a document
+written before the field existed). None of this is device-verified yet.
+
 ## Selection and crop corrections — 23 October 2026
 
 Three items from the 19 September sweep are closed by source changes with JVM regressions:
@@ -64,8 +84,8 @@ by artists is still outstanding for every row.
 | Transform | Freeform, Uniform, Distort and Warp with snapping [3] | On-canvas box with corner, edge and rotation handles; Freeform, Uniform, Distort and Warp (4 × 4 Bézier mesh); Magnetics (45° moves, 15° rotation, proportional corners) and Snapping to canvas edges and centre with guides; flip, rotate, fit, reset and interpolation choice | Device validation of large multi-layer moves; Move with a selection lifts only the selected pixels |
 | Layer organisation | Thumbnails, options, swipe actions, groups [4] | Thumbnails, tap-the-selected-layer options, swipe left for Lock/Duplicate/Delete, swipe right to multi-select then Group, Merge, Delete or Transform together, touch-and-hold drag reordering, two-finger swipe for Alpha Lock, two-finger tap then slide for opacity, two-finger hold to select contents, Background colour row with a visibility checkbox, all 26 blend modes in five families (darken, lighten, contrast, inversion, component; Linear Burn, Darker Color, Add, Lighter Color, Vivid, Linear and Pin Light, Hard Mix, Subtract and Divide included and kept through PSD), blend-mode codes, groups that nest (group groups; drag a layer or a whole group into or out of a group), whose blend mode and opacity apply to the merged group, editable text layers | Artist validation of deep group stacks; Merge Down bakes opacity and blend mode into pixels and does not carry alpha lock or clipping |
 | Reference companion | Floating canvas/image reference [5] | Movable window with a live Canvas view or an imported image, pan/zoom/fit and colour sampling | Artist validation of window placement on phones |
-| Selections and fill | Automatic/freehand/rectangle/ellipse, Save & Load, ColorDrop [6] | Automatic with slide-to-set threshold, freehand, rectangle, ellipse; Add/Remove; invert, feather, Save & Load, Colour Fill, Copy & Paste; ColorDrop with slide-to-set threshold and Continue Filling (each further tap fills another area at the same threshold), Reference layers that bound ColorDrop | Artist validation of fills over anti-aliased line art; automatic-selection sampling and Remove without a selection unverified |
-| Drawing assistance | QuickShape, grids, perspective and symmetry [7] | QuickShape lines, polylines, ellipses, triangles, rectangles and polygons, adjustable while held with 45° line snapping, and Edit Shape afterwards (drag line ends, corners or ellipse axis ends; the stroke is redrawn as one undo step); symmetry, perspective, isometric and grid guides that assist only layers with Drawing Assist; stabilization | Vanishing points cannot be moved on the canvas; device validation |
+| Selections and fill | Automatic/freehand/rectangle/ellipse, Save & Load, ColorDrop [6] | Automatic with slide-to-set threshold, freehand, rectangle, ellipse; Add/Remove; invert, feather, Save & Load, Colour Fill, Copy & Paste; ColorDrop with slide-to-set threshold and Continue Filling (each further tap fills another area at the same threshold), Reference layers that bound ColorDrop | Artist validation of fills over anti-aliased line art; automatic selection still samples every visible layer rather than the layer being edited |
+| Drawing assistance | QuickShape, grids, perspective and symmetry [7] | QuickShape lines, polylines, ellipses, triangles, rectangles and polygons, adjustable while held with 45° line snapping, and Edit Shape afterwards (drag line ends, corners or ellipse axis ends; the stroke is redrawn as one undo step); symmetry, perspective, isometric and grid guides that assist only layers with Drawing Assist; stabilization | Device validation of guide dragging and of the on-canvas handles on phones; artist review of guide defaults |
 | Colour | Disc, Classic, Harmony, Value, Palettes; ICC profiles [8] | Disc, Classic, Harmony, Value and Palettes tabs with history, a previous-colour swatch and a secondary colour swatch (tap to swap; brushes can blend toward it by pressure or per dab); palette import (ASE, GIMP, hex) and New from photo; sRGB or Display P3 canvas profile (New artwork or Actions > Canvas) shown correctly on screen, embedded as ICC in PNG and JPEG exports and converted to sRGB for other formats CMYK print proof on screen (process-ink simulation) with an option to grey out colours that won't print. | Artist validation of the print proof against real press output; Classic picker is HSB only, with RGB, CMYK and Hex in the Value tab |
 | Animation | Animation Assist timeline and onion skin [9] | Frame editing, duration/FPS, loop, one-shot and ping-pong; stable multiple background/foreground pins; hidden frames and previous/next onion colour controls; shared preview/export range and frame ordering; exact GIF colours when the palette fits | Artist-tested navigation and timing; reference hold-count semantics; `.procreate` animation metadata; long-animation performance and device MP4/APNG validation |
 | Drawing timelapse | Recording, replay and export [10] | Automatic capture, in-app replay with scrubbing, full-length or 30-second MP4 export, 720p, 1080p or 1440p recording | Device validation of 1440p encoding |
@@ -257,9 +277,13 @@ device lanes. CI on the pushed commit is the first real gate.
 **Open after the historical sweep** (subsequent changes are identified in the latest record above):
 - Liquify Freeze Mask has no UI; editing text drops its transform; word spacing and text on a curve have
   no UI.
-- Copy or Cut on an empty selection pastes a blank layer; a guard belongs in `ClipboardController`.
-- Remove without an existing selection acts as Add; automatic selection samples every visible layer;
-  saved selections are memory-only.
+- Automatic selection samples every visible layer rather than the layer being edited.
+
+Closed since that sweep: Copy or Cut on an empty selection no longer pastes a blank layer, Remove
+without an existing selection no longer acts as Add, saved selections are stored with the document,
+vanishing points and the symmetry axis are dragged on the canvas ("Edit vanishing points" /
+"Move axis on the canvas", covered by `VanishingPointDragTest`), and Crop & Resize has an aspect
+lock.
 - Merge Down bakes opacity and blend mode into pixels and drops alpha lock and clipping.
 - Procreate group blend modes on `.procreate` import are not read; this needs a real Procreate file.
 - At the time of the sweep, PSD export baked masks into pixels. Independent masks are now

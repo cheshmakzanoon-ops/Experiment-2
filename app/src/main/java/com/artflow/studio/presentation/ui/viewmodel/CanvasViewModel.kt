@@ -287,6 +287,7 @@ class CanvasViewModel
                         refreshLayers()
                         refreshHistory()
                         refreshSelection()
+                        savedSelections.refresh()
                         _timelapseRecording.value = timelapse.isRecording(projectId)
                         startObserving()
                         startAutosave()

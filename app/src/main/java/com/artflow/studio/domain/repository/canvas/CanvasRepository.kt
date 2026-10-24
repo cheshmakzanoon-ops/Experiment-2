@@ -274,6 +274,15 @@ interface CanvasRepository {
     /** Clears the selection and supersedes pending selection computations. */
     fun clearSelection()
 
+    /**
+     * Selections kept by Save & Load, oldest first. They belong to the artwork, so they are written
+     * with the document and restored when it is opened again.
+     */
+    fun savedSelections(): List<SelectionMask> = emptyList()
+
+    /** Replaces the saved-selection slots; the next document save stores them with the artwork. */
+    fun setSavedSelections(masks: List<SelectionMask>) = Unit
+
     /** Caller-owned input for a selection computation. All lifecycle methods run on the UI thread. */
     class SelectionEditSession internal constructor(
         val width: Int,

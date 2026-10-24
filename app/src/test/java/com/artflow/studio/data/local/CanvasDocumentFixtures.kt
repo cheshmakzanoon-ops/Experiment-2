@@ -1,5 +1,7 @@
 package com.artflow.studio.data.local
 
+import com.artflow.studio.core.pixels.SelectionMask
+import com.artflow.studio.core.pixels.SelectionMaskCodec
 import com.artflow.studio.core.text.TextLayerContent
 import com.artflow.studio.core.text.TextLayout
 import com.artflow.studio.domain.model.animation.AnimationFrame
@@ -191,7 +193,20 @@ internal object CanvasDocumentFixtures {
                     includeWatermark = true,
                     watermarkText = "Made with ArtFlow ✓",
                 ),
+            savedSelections = listOf(SelectionMaskCodec.encode(fullSelection()), SelectionMaskCodec.encode(halfSelection())),
             savedAt = 1_700_000_123_456L,
         )
+    }
+
+    /** A select-all mask for the fixture canvas. */
+    internal fun fullSelection(): SelectionMask = SelectionMask(640, 480).apply { selectAll() }
+
+    /** Half the fixture canvas, so a saved slot is not just an all-or-nothing flag. */
+    internal fun halfSelection(): SelectionMask {
+        val mask = SelectionMask(640, 480)
+        for (y in 0 until 480) {
+            for (x in 0 until 320) mask.coverage[y * 640 + x] = 255.toByte()
+        }
+        return mask
     }
 }

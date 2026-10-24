@@ -39,6 +39,12 @@ data class CanvasDocument(
     val activeFrameIndex: Int = 0,
     val animation: AnimationSettings = AnimationSettings(),
     val timelapse: TimelapseRecording = TimelapseRecording(),
+    /**
+     * Selection Save & Load slots, in saved order, encoded by
+     * [com.artflow.studio.core.pixels.SelectionMaskCodec]. Empty in documents written before
+     * selections were stored with the artwork, which therefore still load unchanged.
+     */
+    val savedSelections: List<String> = emptyList(),
     val savedAt: Long = System.currentTimeMillis(),
     /**
      * SHA-256 (lowercase hex) of the encoded document with this field null. [CanvasDocumentCodec.encode]
