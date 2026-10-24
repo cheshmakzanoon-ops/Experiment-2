@@ -1,0 +1,16 @@
+{
+  "width": 64,
+  "height": 48,
+  "backgroundARGB": "fff01e5a",
+  "dpi": 144,
+  "artwork": "synthetic",
+  "storedLayout": "quarter-turn, mirror, BGRA, premultiplied",
+  "profileName": "ColorspaceDerived",
+  "profilePayloads": "self-authored; numeric matrix/TRCs from inspected profiles",
+  "nativeProfileSha256": {
+    "apple": "0ff6958f98684c61f6bbdce1368ddeaf3873baf84545baba482e920d92a914c0",
+    "derived": "20789fdbea9835251a4f0796c8bf45cbd964896044886540da21ffc7457af0ab"
+  },
+  "documentSha256": "a2f83b7e72ce522af2b96ea49b4429b82a2141f36a5a486fac892faa6d86a07a",
+  "nativeArgbSha256": "5f8f8945ff14e2f8b4b7eb5960f06c1b9d7579d09af286c639c547a3f0951ff9"
+}

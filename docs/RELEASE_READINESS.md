@@ -18,6 +18,19 @@ existing unverified acceptance. Old vector strokes preserve their historical Mul
 still uses a bounded appearance fallback where necessary. No production signing, store publication,
 physical-device qualification or complete Procreate equivalence is asserted by these changes.
 
+The next native-import corrections preserve one-byte mask coverage, the native group hierarchy
+and recognized sRGB/Display P3 source profiles. Their actual import, persistence and export
+regressions add four device identities. The fixed genuine-file inputs and independent synthetic
+colour fixtures are documented in the [hierarchy](PROCREATE_HIERARCHY_IMPORT_2026-10-24.md),
+[mask](PROCREATE_MASK_IMPORT_2026-10-24.md) and [colour](PROCREATE_COLOR_IMPORT_2026-10-24.md) audits.
+Their acceptance belongs to their exact completed publication run, not the preceding v4 run.
+
+The preceding v4 revision `c5cf20d7e6ca075d1a49be76026d401dafeada1e` passed the build and all seven
+emulator lanes in [run 308](CI_RUN_308_2026-10-24.md), with 1,432 JVM tests, 126 Python checks and
+1,692 passed device executions plus two permitted API 26 skips. All minified launches and scoped
+visual reviews passed with no test retry. The evidence record preserves performance and runtime
+qualifications; it does not validate the later import changes or certify production release.
+
 This is a verification record, not a certification that an app has no bugs. `agent.md` preserves
 all 50 original development phases. The currently implemented offline editor is narrower than
 that roadmap; the missing features listed below have **not** been silently removed from the goals.

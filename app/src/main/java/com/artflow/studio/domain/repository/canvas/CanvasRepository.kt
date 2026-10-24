@@ -571,7 +571,11 @@ interface CanvasRepository {
         undoable: Boolean = true,
     ): Boolean = false
 
-    suspend fun setCanvasBackgroundColor(color: Int): Boolean
+    /** Stores a background expressed in [sourceProfile]; interface callers supply sRGB by default. */
+    suspend fun setCanvasBackgroundColor(
+        color: Int,
+        sourceProfile: ColorProfile = ColorProfile.SRGB,
+    ): Boolean
 
     suspend fun clearCanvas(color: Int = -1)
 

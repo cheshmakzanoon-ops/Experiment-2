@@ -1,12 +1,45 @@
 package com.artflow.studio.core.export
 
+import com.artflow.studio.core.color.ColorProfile
+import com.artflow.studio.core.color.ColorProfiles
+import com.artflow.studio.core.color.KnownIccProfiles
 import com.artflow.studio.core.pixels.PixelBuffer
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.util.zip.Inflater
+import java.util.zip.InflaterInputStream
 
 /** A small PNG decoder for tests (Android unit tests have no javax.imageio): 8-bit, not interlaced. */
 internal object TestPng {
+    /**
+     * Matches the Android import callback for these fixtures' recognised ICC profiles only.
+     * Unknown ICC transforms are not implemented here; [decode] retains raw channels for codec tests.
+     */
+    fun decodeSrgb(bytes: ByteArray): PixelBuffer? {
+        val pixels = decode(bytes) ?: return null
+        val profile = embeddedProfile(bytes)?.let(KnownIccProfiles::recognize) ?: ColorProfile.SRGB
+        return ColorProfiles.convert(pixels, profile, ColorProfile.SRGB)
+    }
+
+    private fun embeddedProfile(bytes: ByteArray): ByteArray? {
+        val data = ByteBuffer.wrap(bytes)
+        if (bytes.size < SIGNATURE) return null
+        data.position(SIGNATURE)
+        while (data.remaining() >= CHUNK_OVERHEAD) {
+            val length = data.int
+            val kind = String(ByteArray(4).also { data.get(it) }, Charsets.ISO_8859_1)
+            if (length < 0 || length > data.remaining() - 4) return null
+            val body = ByteArray(length).also { data.get(it) }
+            data.int
+            if (kind == "iCCP") {
+                val separator = body.indexOf(0)
+                if (separator < 0 || separator + 2 >= body.size || body[separator + 1].toInt() != 0) return null
+                return InflaterInputStream(body.copyOfRange(separator + 2, body.size).inputStream()).use { it.readBytes() }
+            }
+        }
+        return null
+    }
+
     fun decode(bytes: ByteArray): PixelBuffer? {
         val data = ByteBuffer.wrap(bytes)
         if (bytes.size < SIGNATURE) return null

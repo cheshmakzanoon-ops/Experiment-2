@@ -82,6 +82,31 @@ checksum rejection, poisoned texture-cache disk reload, v4 save/reopen, new Subt
 pixels and the exact saved PNG composite. These declarations require fresh exact-revision CI;
 results from another source revision are not reused as acceptance evidence.
 
+## Native document import corrections
+
+The genuine-file audit found three concrete import defects:
+
+- [One-byte layer masks](PROCREATE_MASK_IMPORT_2026-10-24.md) were discarded by the RGBA-only tile
+  decoder. Coverage now survives, including zero, intermediate values, missing tiles and calibrated
+  orientation. Existing four-byte masks keep their interpretation; ambiguous edge-only byte lengths
+  remain documented. The actual decoder reproduces all 4,194,304 coverage bytes in the genuine mask
+  file. Its composite still differs at 270 pixels by one RGB unit, so this is not pixel equality.
+- [Native groups](PROCREATE_HIERARCHY_IMPORT_2026-10-24.md) live in `unwrappedLayers`, separately
+  from the flat pixel-layer index. Import preserves their hierarchy and native visibility field,
+  retaining the existing legacy representation. All original leaves remain present once and in
+  order. This does not establish native group blend/mask semantics.
+- [Recognized RGB profiles](PROCREATE_COLOR_IMPORT_2026-10-24.md) now accompany raw layer,
+  composite and background channels. New P3 artworks keep their native encoding; existing-canvas
+  insertion and flattened fallback convert once into the destination profile. Android thumbnail
+  calibration explicitly compares sRGB on both sides. Unsupported profiles keep the historical
+  sRGB fallback with a visible notice.
+
+Four new Android identities cover masks, hierarchy and two profile workflows through actual
+import/storage/fresh-repository paths. These imported files do not require another stored-document
+version change. Existing artworks and standard blend equations remain unchanged. The genuine
+sample fetch is pinned to an exact repository revision and all five complete file hashes are
+checked; one file is a duplicate, giving four distinct archive inputs.
+
 ## Group compositing and file compatibility
 
 Explicit **Normal** groups now composite their members against transparency before blending
@@ -195,6 +220,22 @@ Use the [Android CI workflow](https://github.com/cheshmakzanoon-ops/Experiment-2
 for the exact published commit, then inspect each lane's generated verification summary.
 A queued, skipped, cancelled or failed run is not a completed gate. An artifact from an earlier
 commit does not validate later source changes.
+
+### Completed run 308
+
+[Run 308](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40104512305) completed
+successfully on `c5cf20d7e6ca075d1a49be76026d401dafeada1e`: the build and all seven emulator jobs
+passed on their first instrumentation attempts. The executed build contained 1,432 JVM tests,
+126 Python checks, static analysis and APK/AAB/native/signing checks. Every lane accounted for
+all 242 declared identities, measured its required runtime and passed the minified launch.
+Totals were 1,692 passes and two permitted API 26 skips, with no retries, missing or extra cases.
+
+The [complete evidence record](CI_RUN_308_2026-10-24.md) includes artifact hashes, source/archive
+identity, exact v3/v4 migration files, independently checked raw timing and scoped original-image
+review for all seven configurations. It retains the separate Search-process SIGILL in the passing
+main API 35 lane and the slow JIT-disabled timings. This successful pair does not erase the earlier
+runtime failures or establish Procreate responsiveness. The subsequent native-import changes add
+four device identities and require their own exact-revision run.
 
 ### Completed run 307
 

@@ -2307,9 +2307,12 @@ class CanvasRepositoryImpl
                 true
             }
 
-        override suspend fun setCanvasBackgroundColor(color: Int): Boolean =
+        override suspend fun setCanvasBackgroundColor(
+            color: Int,
+            sourceProfile: ColorProfile,
+        ): Boolean =
             withState {
-                val stored = documentColor(color)
+                val stored = ColorProfiles.convert(color, sourceProfile, colorProfile)
                 if (stored == backgroundColor) return@withState true
                 pushUndo()
                 backgroundColor = stored

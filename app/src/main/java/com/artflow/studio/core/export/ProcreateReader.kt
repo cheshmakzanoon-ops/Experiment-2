@@ -1,6 +1,9 @@
 package com.artflow.studio.core.export
 
 import com.artflow.studio.core.canvas.CanvasOperations
+import com.artflow.studio.core.color.ColorProfile
+import com.artflow.studio.core.color.ColorProfiles
+import com.artflow.studio.core.color.KnownIccProfiles
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.domain.model.layer.BlendMode
@@ -58,7 +61,11 @@ object ProcreateReader {
         val height: Int,
         val dpi: Int,
         val name: String?,
-        /** The background colour (opaque ARGB), or null when the background is hidden. */
+        /** Encoding of the native layer, composite and background channels. */
+        val colorProfile: ColorProfile,
+        /** An embedded profile was present but could not be recognised; channels use the historical sRGB fallback. */
+        val hasUnsupportedColorProfile: Boolean,
+        /** The background colour (opaque ARGB in [colorProfile]), or null when the background is hidden. */
         val background: Int?,
         /** Top first, as Procreate lists them. */
         val nodes: List<Node>,
@@ -71,13 +78,13 @@ object ProcreateReader {
          */
         val calibrationError: Double get() = tiles.calibrationError
 
-        /** A layer's pixels (straight ARGB), upright; empty when it has no tiles. */
+        /** A layer's pixels (straight ARGB in [colorProfile]), upright; empty when it has no tiles. */
         fun pixels(layer: Layer): PixelBuffer = tiles.layer(layer.uuid)
 
         /** The layer's mask as coverage (white reveals; areas with no stored pixels reveal too), or null when it has none. */
         fun mask(layer: Layer): SelectionMask? {
             val uuid = layer.maskUuid ?: return null
-            val pixels = tiles.layer(uuid)
+            val pixels = tiles.layer(uuid, mask = true)
             val coverage =
                 ByteArray(pixels.pixels.size) { index ->
                     val pixel = pixels.pixels[index]
@@ -88,7 +95,7 @@ object ProcreateReader {
             return SelectionMask(pixels.width, pixels.height, coverage)
         }
 
-        /** The flattened image as Procreate saved it, or null when the file has none. */
+        /** The flattened image in [colorProfile] as Procreate saved it, or null when the file has none. */
         fun composite(): PixelBuffer? = compositeUuid?.takeIf { tiles.has(it) }?.let { tiles.layer(it) }
 
         /** Every pixel layer, top first, groups opened. */
@@ -105,13 +112,18 @@ object ProcreateReader {
 
     fun isProcreate(files: Files): Boolean = ARCHIVE in files.names
 
-    /** Opens the document; [decodeImage] decodes the PNG thumbnail used to calibrate the tiles. */
+    /** Opens the document; [decodeImage] must return the thumbnail as straight sRGB, as Android Bitmap.getPixels does. */
     fun open(
         files: Files,
         decodeImage: (ByteArray) -> PixelBuffer?,
     ): Document {
         val archive = KeyedArchive(BinaryPlist.read(requireNotNull(files.read(ARCHIVE)) { "This is not a Procreate document" }))
         val document = requireNotNull(archive.root) { "The Procreate document has no description" }
+        val descriptorValue = document["colorProfile"]
+        val hasProfile = descriptorValue != null && descriptorValue != BinaryPlist.Uid(0) && descriptorValue != "\$null"
+        val descriptor = archive.map(descriptorValue)
+        val recognisedProfile = archive.data(descriptor?.get("SiColorProfileArchiveICCDataKey"))?.let(KnownIccProfiles::recognize)
+        val profile = recognisedProfile ?: ColorProfile.SRGB
         val (width, height) = size(archive.string(document["size"]))
         val tileSize = number(document["tileSize"])?.toInt() ?: DEFAULT_TILE
         require(tileSize in MIN_TILE..MAX_TILE) { "The Procreate document's tiles are an unexpected size" }
@@ -119,7 +131,11 @@ object ProcreateReader {
         // Refuse oversized canvases before calibration allocates a full-size raster.
         require(CanvasOperations.isSizeSafe(width, height)) { "This Procreate document is too large to open on this device" }
         val tiles = Tiles(files, width, height, tileSize)
-        val nodes = archive.array(document["layers"]).mapNotNull { node(archive, it, 0) }
+        // Native archives keep the tree in unwrappedLayers and a separate flattened layer list.
+        // Older ArtFlow exports and independently authored fixtures place their tree in layers.
+        val hierarchy = document["unwrappedLayers"]
+        val roots = if (archive.map(hierarchy)?.get("NS.objects") is List<*>) hierarchy else document["layers"]
+        val nodes = archive.array(roots).mapNotNull { node(archive, it, 0) }
         val background =
             archive
                 .data(document["backgroundColor"])
@@ -127,13 +143,15 @@ object ProcreateReader {
                 ?.let(::colour)
         val thumbnail = files.read(THUMBNAIL)?.let(decodeImage)
         val sample = composite?.takeIf { tiles.has(it) } ?: tiles.largest()
-        if (thumbnail != null && sample != null) tiles.calibrate(sample, thumbnail, background ?: WHITE)
+        if (thumbnail != null && sample != null) tiles.calibrate(sample, thumbnail, background ?: WHITE, profile)
         val dpi = number(document["SilicaDocumentArchiveDPIKey"])?.roundToInt()?.takeIf { it in 1..MAX_DPI } ?: DEFAULT_DPI
         return Document(
             tiles.width,
             tiles.height,
             dpi,
             archive.string(document["name"]),
+            profile,
+            hasProfile && recognisedProfile == null,
             background,
             nodes,
             tiles,
@@ -149,10 +167,10 @@ object ProcreateReader {
         val item = archive.map(value) ?: return null
         val name = archive.string(item["name"]).orEmpty()
         val opacity = (number(item["opacity"]) ?: 1.0).toFloat().coerceIn(0f, 1f)
-        val visible = item["hidden"] != true
         if (archive.className(item) == "SilicaGroup" || "children" in item) {
             require(depth < MAX_NESTING) { "The Procreate document's groups are nested too deeply" }
             val children = archive.array(item["children"]).mapNotNull { node(archive, it, depth + 1) }
+            val visible = (item["isHidden"] as? Boolean ?: item["hidden"] as? Boolean) != true
             return Group(name, opacity, visible, children)
         }
         val mode =
@@ -161,7 +179,7 @@ object ProcreateReader {
         return Layer(
             name = name,
             opacity = opacity,
-            visible = visible,
+            visible = item["hidden"] != true,
             blendMode = mode ?: BlendMode.NORMAL,
             clipped = item["clipped"] == true,
             alphaLocked = item["preserve"] == true,
@@ -228,9 +246,12 @@ object ProcreateReader {
 
         fun largest(): String? = byLayer.maxByOrNull { it.value.size }?.key
 
-        /** The layer's pixels, straight ARGB, in the calibrated layout. */
-        fun layer(uuid: String?): PixelBuffer {
-            val stored = uuid?.let(::stored)
+        /** The layer's pixels, straight ARGB, in the calibrated layout; [mask] also permits one-byte coverage tiles. */
+        fun layer(
+            uuid: String?,
+            mask: Boolean = false,
+        ): PixelBuffer {
+            val stored = uuid?.let { stored(it, mask) }
             val out = PixelBuffer(width, height)
             stored ?: return out
             val swap = bgra
@@ -249,22 +270,33 @@ object ProcreateReader {
             uuid: String,
             thumbnail: PixelBuffer,
             background: Int,
+            profile: ColorProfile,
         ) {
             val stored = stored(uuid) ?: return
-            val grid = Grid.of(stored, storedWidth, storedHeight, background, premultiplied = true)
-            val target = Grid.of(thumbnail.pixels, thumbnail.width, thumbnail.height, background, premultiplied = false)
+            val srgbBackground = ColorProfiles.convert(background, profile, ColorProfile.SRGB)
+            val sourceIsSrgb = profile == ColorProfile.SRGB
+            // Swap file channels before interpreting colour, and convert before averaging: both
+            // channel order and the non-linear transfer curve matter to this comparison.
+            val grids =
+                listOf(false, true).map { swap ->
+                    Grid.of(stored, storedWidth, storedHeight, srgbBackground, premultiplied = sourceIsSrgb) { raw ->
+                        val pixel = if (swap) swapRedBlue(raw) else raw
+                        if (sourceIsSrgb) pixel else ColorProfiles.convert(straight(pixel), profile, ColorProfile.SRGB)
+                    }
+                }
+            val target = Grid.of(thumbnail.pixels, thumbnail.width, thumbnail.height, srgbBackground, premultiplied = false)
             val aspect = thumbnail.width.toFloat() / thumbnail.height
             var best = Double.MAX_VALUE
             for (candidate in ORIENTATIONS.indices) {
                 val turned = ORIENTATIONS[candidate].first % 2 == 1
                 val ratio = if (turned) storedHeight.toFloat() / storedWidth else storedWidth.toFloat() / storedHeight
                 if (abs(ratio - aspect) / aspect > ASPECT_TOLERANCE) continue
-                for (swap in listOf(false, true)) {
-                    val error = grid.distance(target, candidate, swap)
+                for ((index, grid) in grids.withIndex()) {
+                    val error = grid.distance(target, candidate)
                     if (error < best) {
                         best = error
                         orientation = candidate
-                        bgra = swap
+                        bgra = index == 1
                         calibrationError = error / (CELLS * CELLS * 3)
                     }
                 }
@@ -279,10 +311,13 @@ object ProcreateReader {
         ): Int = orientedIndex(x, y, storedWidth, storedHeight, orientation)
 
         /** The layer's tiles as stored: premultiplied, channels packed in file order behind alpha. */
-        private fun stored(uuid: String): IntArray? {
+        private fun stored(
+            uuid: String,
+            mask: Boolean = false,
+        ): IntArray? {
             val tiles = byLayer[uuid] ?: return null
             val pixels = IntArray(storedWidth * storedHeight)
-            tiles.forEach { tile -> files.read(tile.path)?.let { place(pixels, tile, it) } }
+            tiles.forEach { tile -> files.read(tile.path)?.let { place(pixels, tile, it, mask) } }
             return pixels
         }
 
@@ -290,6 +325,7 @@ object ProcreateReader {
             pixels: IntArray,
             tile: Tile,
             data: ByteArray,
+            mask: Boolean,
         ) {
             // Long arithmetic: a corrupt tile index must not wrap around into a valid-looking position.
             val leftL = tile.column.toLong() * size
@@ -300,24 +336,43 @@ object ProcreateReader {
             val visibleWidth = minOf(size, storedWidth - left)
             val visibleHeight = minOf(size, storedHeight - top)
             val bytes = decode(tile.path, data, size * size * 4) ?: return
-            // Edge tiles are stored either whole or cut to the canvas.
-            val stride =
-                when (bytes.size) {
-                    size * size * 4 -> size
-                    visibleWidth * visibleHeight * 4 -> visibleWidth
-                    else -> return
-                }
+            val layout = tileLayout(bytes.size, visibleWidth, visibleHeight, mask) ?: return
             for (y in 0 until visibleHeight) {
-                var at = y * stride * 4
+                var at = y * layout.stride * layout.channels
                 val row = (top + y) * storedWidth + left
                 for (x in 0 until visibleWidth) {
                     pixels[row + x] =
-                        ((bytes[at + 3].toInt() and 0xFF) shl 24) or ((bytes[at].toInt() and 0xFF) shl 16) or
-                        ((bytes[at + 1].toInt() and 0xFF) shl 8) or (bytes[at + 2].toInt() and 0xFF)
-                    at += 4
+                        if (layout.channels == 1) {
+                            // A native mask stores coverage directly, including zero (conceal).
+                            (0xFF shl 24) or ((bytes[at].toInt() and 0xFF) * 0x010101)
+                        } else {
+                            ((bytes[at + 3].toInt() and 0xFF) shl 24) or ((bytes[at].toInt() and 0xFF) shl 16) or
+                                ((bytes[at + 1].toInt() and 0xFF) shl 8) or (bytes[at + 2].toInt() and 0xFF)
+                        }
+                    at += layout.channels
                 }
             }
         }
+
+        private class TileLayout(
+            val stride: Int,
+            val channels: Int,
+        )
+
+        /** Whole/cut RGBA tiles retain precedence when their byte length also fits a one-channel mask. */
+        private fun tileLayout(
+            bytes: Int,
+            visibleWidth: Int,
+            visibleHeight: Int,
+            mask: Boolean,
+        ): TileLayout? =
+            when {
+                bytes == size * size * 4 -> TileLayout(size, 4)
+                bytes == visibleWidth * visibleHeight * 4 -> TileLayout(visibleWidth, 4)
+                mask && bytes == size * size -> TileLayout(size, 1)
+                mask && bytes == visibleWidth * visibleHeight -> TileLayout(visibleWidth, 1)
+                else -> null
+            }
 
         /** A tile's bytes, or null when they cannot be decoded (the tile is then left empty). */
         private fun decode(
@@ -376,11 +431,10 @@ object ProcreateReader {
     private class Grid(
         val values: DoubleArray,
     ) {
-        /** How far this (stored) grid, laid out as [orientation] and optionally channel-swapped, is from [target]. */
+        /** How far this stored grid, laid out as [orientation], is from the sRGB [target]. */
         fun distance(
             target: Grid,
             orientation: Int,
-            swap: Boolean,
         ): Double {
             var total = 0.0
             val mirrored = ORIENTATIONS[orientation].second
@@ -388,7 +442,7 @@ object ProcreateReader {
                 for (x in 0 until CELLS) {
                     val (sx, sy) = locate(x, y, CELLS, CELLS, orientation)
                     val source = (sy * CELLS + if (mirrored) CELLS - 1 - sx else sx) * 3
-                    total += cell(source, target, (y * CELLS + x) * 3, swap)
+                    total += cell(source, target, (y * CELLS + x) * 3)
                 }
             }
             return total
@@ -398,10 +452,9 @@ object ProcreateReader {
             source: Int,
             target: Grid,
             goal: Int,
-            swap: Boolean,
         ): Double =
             (0 until 3).sumOf { channel ->
-                abs(values[source + if (swap) 2 - channel else channel] - target.values[goal + channel])
+                abs(values[source + channel] - target.values[goal + channel])
             }
 
         companion object {
@@ -411,6 +464,7 @@ object ProcreateReader {
                 height: Int,
                 background: Int,
                 premultiplied: Boolean,
+                prepare: (Int) -> Int = { it },
             ): Grid {
                 val sums = DoubleArray(CELLS * CELLS * 3)
                 val counts = IntArray(CELLS * CELLS)
@@ -419,7 +473,7 @@ object ProcreateReader {
                     val cy = y * CELLS / height
                     for (x in 0 until width step step) {
                         val cell = cy * CELLS + x * CELLS / width
-                        val over = over(pixels[y * width + x], background, premultiplied)
+                        val over = over(prepare(pixels[y * width + x]), background, premultiplied)
                         for (channel in 0 until 3) sums[cell * 3 + channel] += over[channel]
                         counts[cell]++
                     }

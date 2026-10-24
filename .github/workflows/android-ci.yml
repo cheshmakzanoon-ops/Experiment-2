@@ -74,16 +74,22 @@ jobs:
           grep -F "Production signing is required" "${RUNNER_TEMP}/signing-negative.log"
 
       # Documents saved by Procreate itself, from Avarel/silicate, fetched rather than committed. The job
-      # fails if they are still missing after three attempts, so RealProcreateFilesTest cannot skip in CI.
+      # pins the source revision; RealProcreateFilesTest verifies every complete archive's SHA-256.
+      # A failed fetch after three attempts fails the job, so the genuine-file gate cannot skip in CI.
       - name: Fetch Procreate sample documents
         run: |
           set -euo pipefail
           git lfs install --skip-repo
           dest="${RUNNER_TEMP}/silicate"
+          sample_revision="0e12deb2ae1ffb152fc4a3d09add230590f52f68"
           for attempt in 1 2 3; do
             echo "Procreate sample fetch attempt ${attempt}/3"
             rm -rf "$dest"
-            if GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 https://github.com/Avarel/silicate "$dest" \
+            if git init "$dest" \
+              && git -C "$dest" remote add origin https://github.com/Avarel/silicate \
+              && GIT_LFS_SKIP_SMUDGE=1 git -C "$dest" fetch --depth 1 origin "$sample_revision" \
+              && GIT_LFS_SKIP_SMUDGE=1 git -C "$dest" checkout --detach FETCH_HEAD \
+              && test "$(git -C "$dest" rev-parse HEAD)" = "$sample_revision" \
               && git -C "$dest" lfs pull --include "demo_files/*" \
               && ls "$dest"/demo_files/*.procreate >/dev/null 2>&1; then
               break

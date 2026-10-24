@@ -41,6 +41,16 @@ did not establish a repair for the 16 KB crashes.
 The JVM gate requires the hash-pinned reference brush corpus in addition to genuine sample documents.
 Native archive mappings, pressure-spline fixtures and compound-brush contracts are checked against
 that same input, with derived reports retained in the build artifact.
+Completed [run 308](docs/CI_RUN_308_2026-10-24.md) accepted revision `c5cf20d7` across the build
+and all seven emulator configurations, with no test retry. Later changes need their own run.
+
+New native-document corrections preserve [one-byte mask coverage](docs/PROCREATE_MASK_IMPORT_2026-10-24.md),
+the actual [layer-group hierarchy](docs/PROCREATE_HIERARCHY_IMPORT_2026-10-24.md), and recognized
+[sRGB/Display P3 profiles](docs/PROCREATE_COLOR_IMPORT_2026-10-24.md). New P3 documents retain their
+native channels; insertion into an existing canvas converts once into its profile. Thumbnail
+calibration compares both images in sRGB, and unsupported profiles receive an explicit notice.
+The genuine corpus is pinned to a source revision and complete-file hashes: five files represent
+four distinct archives. Existing saved artworks are not reinterpreted by these import changes.
 
 ### Selection, clipboard and crop corrections (23 October 2026)
 

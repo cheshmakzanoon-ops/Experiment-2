@@ -77,6 +77,21 @@ class DocumentColorTest {
         }
 
     @Test
+    fun anImportedNativeP3BackgroundIsStoredWithoutAnSrgbRoundTrip() =
+        runTest {
+            val native = 0xFFF01E5A.toInt()
+            repository.createCanvas(8, 6, 72)
+            assertTrue(repository.setColorProfile(ColorProfile.DISPLAY_P3, undoable = false))
+            assertTrue(repository.setCanvasBackgroundColor(native, ColorProfile.DISPLAY_P3))
+            assertEquals(native, repository.getBackgroundColor())
+            // Independent relative-colorimetric ICC conversion gives (255, 0, 86) in sRGB.
+            assertWithinOneCode(0xFFFF0056.toInt(), repository.displayColor(native))
+            assertTrue(repository.setColorProfile(ColorProfile.SRGB, undoable = false))
+            assertTrue(repository.setCanvasBackgroundColor(native, ColorProfile.DISPLAY_P3))
+            assertWithinOneCode(0xFFFF0056.toInt(), repository.getBackgroundColor())
+        }
+
+    @Test
     fun clearingACanvasOnDisplayP3ConvertsTheClearColour() =
         runTest {
             repository.createCanvas(8, 6, 72)

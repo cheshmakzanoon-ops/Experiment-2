@@ -100,30 +100,39 @@ object LayerImports {
         val layers: Int,
         /** True when the layers would not fit in memory and the flattened image came in instead. */
         val flattened: Boolean,
+        /** The file's unrecognised ICC profile used the historical sRGB interpretation. */
+        val hasUnsupportedColorProfile: Boolean,
     )
 
     /**
      * Rebuilds a Procreate document's layers in the open canvas (made at the document's size):
      * nested groups, opacity, blend modes, visibility, clipping, alpha lock, masks and the
      * background colour. Layers are decoded one at a time; when they would not all fit in memory,
-     * the flattened image comes in as a single layer instead.
+     * the flattened image comes in as a single layer instead. A new document can preserve its
+     * recognised native profile; insertion into an existing canvas converts into that canvas's profile.
      */
     suspend fun importProcreate(
         repository: CanvasRepository,
         document: ProcreateReader.Document,
+        preserveDocumentProfile: Boolean = false,
+        rasterBudgetBytes: Long = Runtime.getRuntime().maxMemory() / 2,
     ): ProcreateResult {
+        require(rasterBudgetBytes >= 0) { "The import memory budget cannot be negative" }
+        if (preserveDocumentProfile && repository.getColorProfile() != document.colorProfile) {
+            check(repository.setColorProfile(document.colorProfile, undoable = false)) { "The document's colour profile could not be set" }
+        }
         val profile = repository.getColorProfile()
         // The new canvas's own empty layer goes once the document's layers are in.
         val starting = repository.getAllLayers().filter { !it.isGroup }.map { it.id }
-        document.background?.let { repository.setCanvasBackgroundColor(it) }
+        document.background?.let { repository.setCanvasBackgroundColor(it, document.colorProfile) }
         val layers = document.layers()
         val bytes = document.width.toLong() * document.height * BYTES_PER_PIXEL
-        val flattened = (layers.size + WORKING_COPIES) * bytes > Runtime.getRuntime().maxMemory() / 2
+        val flattened = (layers.size + WORKING_COPIES) * bytes > rasterBudgetBytes
         var added = 0
         if (flattened) {
             val composite = withContext(Dispatchers.Default) { document.composite() }
             if (composite != null) {
-                addPixels(repository, "Flattened", composite, profile)
+                addPixels(repository, "Flattened", composite, document.colorProfile, profile)
                 added = 1
             }
         } else {
@@ -139,7 +148,7 @@ object LayerImports {
                     repository.layerPixels(id)?.pixels?.all { it == 0 } != false
                 }.forEach { repository.removeLayer(it) }
         }
-        return ProcreateResult(added, flattened)
+        return ProcreateResult(added, flattened, document.hasUnsupportedColorProfile)
     }
 
     /** A Procreate node as added: a pixel layer, or a group still to be made from its members. */
@@ -168,7 +177,7 @@ object LayerImports {
 
             is ProcreateReader.Layer -> {
                 val pixels = withContext(Dispatchers.Default) { document.pixels(node) }
-                val id = addPixels(repository, node.name.ifBlank { "Layer" }, pixels, profile)
+                val id = addPixels(repository, node.name.ifBlank { "Layer" }, pixels, document.colorProfile, profile)
                 if (node.opacity < 1f) repository.setLayerOpacity(id, node.opacity)
                 if (node.blendMode != BlendMode.NORMAL) repository.setLayerBlendMode(id, node.blendMode)
                 if (!node.visible) repository.setLayerVisibility(id, false)
@@ -183,10 +192,11 @@ object LayerImports {
         repository: CanvasRepository,
         name: String,
         pixels: PixelBuffer,
+        sourceProfile: ColorProfile,
         profile: ColorProfile,
     ): Long {
         val layer = repository.addLayer(name = name)
-        val placed = withContext(Dispatchers.Default) { ColorProfiles.convert(pixels, ColorProfile.SRGB, profile) }
+        val placed = withContext(Dispatchers.Default) { ColorProfiles.convert(pixels, sourceProfile, profile) }
         check(repository.applyRasterEdit(layer.id, "Import Procreate layer") { target -> target.drawInto(placed, 0, 0) }) {
             "The layer \"$name\" could not be imported"
         }

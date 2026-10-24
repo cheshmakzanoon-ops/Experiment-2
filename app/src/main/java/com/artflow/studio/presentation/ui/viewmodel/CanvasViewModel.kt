@@ -917,14 +917,20 @@ class CanvasViewModel
         private fun importProcreate(document: ProcreateImport) =
             layerOp {
                 document.use {
-                    val result = LayerImports.importProcreate(canvasRepository, it.document)
+                    val result = LayerImports.importProcreate(canvasRepository, it.document, preserveDocumentProfile = true)
                     // The document's background colour is part of the canvas state.
                     refreshUiStateFrames()
-                    notify(
+                    val summary =
                         if (result.flattened) {
                             "This Procreate document has too many layers for this device's memory, so it came in flattened"
                         } else {
                             "Imported ${result.layers} layer(s) from Procreate"
+                        }
+                    notify(
+                        if (result.hasUnsupportedColorProfile) {
+                            "$summary. The embedded colour profile is unsupported, so its colours were interpreted as sRGB"
+                        } else {
+                            summary
                         },
                     )
                 }
