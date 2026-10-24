@@ -1,10 +1,12 @@
 package com.artflow.studio
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.text.AnnotatedString
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artflow.studio.core.canvas.LayerTransform
 import com.artflow.studio.domain.model.settings.AppSettings
@@ -30,8 +32,8 @@ class TransformUiRegressionTest {
                 }, { closed++ })
             }
         }
-        compose.onNodeWithText("Width %").performScrollTo().performTextReplacement("75")
-        compose.onNodeWithText("Rotation °").performScrollTo().performTextReplacement("25")
+        setText("Width %", "75")
+        setText("Rotation °", "25")
         compose.onNodeWithText("Flip horizontal").performScrollTo().performClick()
         compose.runOnIdle { assertNull(result) }
         awaitEnabled("Apply transform")
@@ -60,18 +62,9 @@ class TransformUiRegressionTest {
                 }, { closed = true })
             }
         }
-        compose.onNodeWithText("Width %").performScrollTo().performTextReplacement("0")
+        setText("Width %", "0")
         // The field must actually hold the typed value before the button's state means anything.
-        // A loaded emulator delivers the replacement after the frame that triggered it, so wait
-        // for the text rather than reading the node the moment the action returns.
-        compose.waitUntil(5_000) {
-            compose
-                .onNodeWithText("Width %")
-                .fetchSemanticsNode()
-                .config
-                .getOrNull(SemanticsProperties.EditableText)
-                ?.text == "0"
-        }
+        awaitFieldText("Width %", "0")
         compose.onNodeWithText("Apply transform").performScrollTo().assertIsNotEnabled()
         compose.onNodeWithText("Cancel").performScrollTo().performClick()
         compose.runOnIdle {
@@ -88,12 +81,53 @@ class TransformUiRegressionTest {
         compose.onNodeWithText("Apply transform").performScrollTo().assertIsNotEnabled()
     }
 
+    /**
+     * Writes a field through its SetText action instead of [performTextReplacement]. Replacing text
+     * focuses the field first, which opens the IME; on a slow emulator the IME's stale echo then
+     * overwrites the replacement and the test reads a field the user never saw.
+     */
+    private fun setText(
+        label: String,
+        text: String,
+    ) {
+        compose.onNodeWithText(label).performSemanticsAction(SemanticsActions.SetText) { set -> set(AnnotatedString(text)) }
+    }
+
     /** A slow emulator finishes a text edit a frame or two later; the button follows that state. */
     private fun awaitEnabled(text: String) {
-        compose.waitUntil(5_000) {
-            runCatching { compose.onNodeWithText(text).assertIsEnabled() }.isSuccess
+        try {
+            compose.waitUntil(5_000) {
+                runCatching { compose.onNodeWithText(text).assertIsEnabled() }.isSuccess
+            }
+        } catch (_: ComposeTimeoutException) {
+            throw AssertionError("$text stayed disabled: ${fieldsSummary()}")
         }
     }
+
+    private fun awaitFieldText(
+        label: String,
+        expected: String,
+    ) {
+        try {
+            compose.waitUntil(5_000) { fieldText(label) == expected }
+        } catch (_: ComposeTimeoutException) {
+            throw AssertionError("$label never held '$expected': ${fieldsSummary()}")
+        }
+    }
+
+    private fun fieldText(label: String): String? =
+        runCatching {
+            compose
+                .onNodeWithText(label)
+                .fetchSemanticsNode()
+                .config
+                .getOrNull(SemanticsProperties.EditableText)
+                ?.text
+        }.getOrNull()
+
+    private fun fieldsSummary(): String =
+        listOf("Width %", "Height %", "Rotation °", "Horizontal skew °", "Move X (px)", "Move Y (px)")
+            .joinToString { label -> "$label='${fieldText(label) ?: "<missing>"}'" }
 
     @Test
     fun signedNumbersAndWrappedControlsRemainUsableWithLargeText() {
@@ -106,8 +140,8 @@ class TransformUiRegressionTest {
                 }, {})
             }
         }
-        compose.onNodeWithText("Move X (px)").performScrollTo().performTextReplacement("-12.5")
-        compose.onNodeWithText("Horizontal skew °").performScrollTo().performTextReplacement("-20")
+        setText("Move X (px)", "-12.5")
+        setText("Horizontal skew °", "-20")
         compose
             .onNodeWithText("Flip vertical")
             .performScrollTo()
