@@ -1,0 +1,84 @@
+[
+  {
+    "url": "https://dl.google.com/android/repository/sys-img/google_apis/sys-img2-3.xml",
+    "retrievedUtc": "2026-10-24T18:55:23.442128+00:00",
+    "bytes": 237654,
+    "sha256": "858c1f39632fa98235f13ebfcf2f362d5a19eeaed6c5f9c991425f257809e518",
+    "headers": {
+      "lastModified": "Thu, 22 Oct 2026 20:34:36 GMT",
+      "date": "Sat, 24 Oct 2026 18:55:23 GMT"
+    },
+    "records": [
+      {
+        "path": "system-images;android-35;google_apis_ps16k;x86_64",
+        "revision": {
+          "major": "5"
+        },
+        "channelRef": "channel-0",
+        "obsolete": null,
+        "displayName": "16 KB Page Size Google APIs Intel x86_64 Atom System Image",
+        "archives": [
+          {
+            "host": null,
+            "bytes": "1696342085",
+            "checksum": "d709cf26b375abecfbbf5803afd20749ddfa2865",
+            "checksumType": "sha1",
+            "url": "x86_64-ps16k-35_r05.zip"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "url": "https://dl.google.com/android/repository/repository2-3.xml",
+    "retrievedUtc": "2026-10-24T18:55:23.545805+00:00",
+    "bytes": 423137,
+    "sha256": "f2bc624c8e1dc14c320fdf17e49a5501c35934948e46a444df8b36a138a03e1e",
+    "headers": {
+      "lastModified": "Thu, 22 Oct 2026 20:34:36 GMT",
+      "date": "Sat, 24 Oct 2026 18:55:23 GMT"
+    },
+    "records": [
+      {
+        "path": "emulator",
+        "revision": {
+          "major": "37",
+          "minor": "3",
+          "micro": "5"
+        },
+        "channelRef": "channel-2",
+        "obsolete": null,
+        "displayName": "Android Emulator",
+        "archives": [
+          {
+            "host": "linux",
+            "bytes": "353538566",
+            "checksum": "a7e7c486f392cbf1a7502441b079b3f35493f134",
+            "checksumType": "sha1",
+            "url": "emulator-linux_x64-16632760.zip"
+          }
+        ]
+      },
+      {
+        "path": "emulator",
+        "revision": {
+          "major": "37",
+          "minor": "2",
+          "micro": "12"
+        },
+        "channelRef": "channel-0",
+        "obsolete": null,
+        "displayName": "Android Emulator",
+        "archives": [
+          {
+            "host": "linux",
+            "bytes": "349654171",
+            "checksum": "cd7362ea55dfb86a418958138dc396e74165dd01",
+            "checksumType": "sha1",
+            "url": "emulator-linux_x64-16428233.zip"
+          }
+        ]
+      }
+    ]
+  }
+]

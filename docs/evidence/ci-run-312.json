@@ -1,0 +1,3322 @@
+{
+  "schemaVersion": 1,
+  "recordType": "android-ci-exact-revision-audit",
+  "run": {
+    "id": 40122287040,
+    "number": 312,
+    "attempt": 1,
+    "url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40122287040",
+    "repository": "cheshmakzanoon-ops/Experiment-2",
+    "revision": "8050121a7a6e3a1d52854d3c398ad1d29a33bcfe",
+    "tree": "50babbad74a5198da9051448acfd6180153b1496",
+    "status": "completed",
+    "conclusion": "failure",
+    "startedAt": "2026-10-24T18:47:03Z",
+    "observedTerminalUpdatedAt": "2026-10-24T19:31:04Z"
+  },
+  "acceptance": {
+    "deviceArtifacts": "FAIL",
+    "scopedVisuals": "FAIL",
+    "visualReviewComplete": true,
+    "fullParityEstablished": false,
+    "reasons": [
+      "Main API35/16KB failed in its original and automatic retry attempts;196 final identities are missing.",
+      "API26 Model header is invisible in actual captured pixels despite passing its gesture/assertion cases."
+    ]
+  },
+  "inventory": {
+    "count": 253,
+    "documentVersion": 5,
+    "identitySHA256": "4e76353b9c571de94d348176485f7205ebf6648c0d6ce76641acd8a8c80b5b66",
+    "identityEncoding": "Sorted Class#method UTF-8 lines, final LF",
+    "revisionPlusTestsManifestSHA256": "3060aed343ea6847ded70d5be13726d5592669873d2857a4bee2b9a73b5cb689",
+    "indexEncoding": "Zero-based indexes into this sorted identities array; used by all missing/skipped/failure references.",
+    "identities": [
+      "com.artflow.studio.AnimationPlaybackUiTest#backgroundCallbackClearsTheVisiblePauseState",
+      "com.artflow.studio.AnimationPlaybackUiTest#frameRoleAndVisibilityControlsReachTheDocumentAndDisableEmptyPlayback",
+      "com.artflow.studio.AnimationPlaybackUiTest#onionColorPickerAppliesOnlyOnConfirmationAndKeepsTheOtherColor",
+      "com.artflow.studio.AnimationPlaybackUiTest#realPlayButtonBecomesPauseWhileFramesAdvanceAndReturnsAfterPause",
+      "com.artflow.studio.AnimationPlaybackUiTest#teardownWaitsForAnAtomicWriteAlreadyInFlight",
+      "com.artflow.studio.AppLaunchTest#activityLaunchesAndReachesResumed",
+      "com.artflow.studio.ArtworkWorkflowTest#createPaintSaveReopenRecreateAndDiscardPreserveTheSavedPixels",
+      "com.artflow.studio.BlendModePreviewDeviceTest#modeChipsShowTheActualBlendOfConsistentSampleColours",
+      "com.artflow.studio.BrushAttributeUiTest#cancellingAnAttributeEditLeavesThePublishedBrushUntouched",
+      "com.artflow.studio.BrushAttributeUiTest#compactNavigationShowsOnlyTheSelectedGroupAndRetainsEdits",
+      "com.artflow.studio.BrushAttributeUiTest#countReachesEveryDabCountTheLibraryStores",
+      "com.artflow.studio.BrushAttributeUiTest#largerTargetsRemainAvailableInTheCompactNavigator",
+      "com.artflow.studio.BrushAttributeUiTest#newlyReachableDynamicsUpdateOnlyTheMatchingParameters",
+      "com.artflow.studio.BrushAttributeUiTest#reversedSpeedCanBeSetFromTheDynamicsPanel",
+      "com.artflow.studio.BrushAttributeUiTest#studioRetainsTheChosenGroupAcrossTabsAndPublishesOnlyOnUse",
+      "com.artflow.studio.BrushAttributeUiTest#tiltOpacityCanBeSetApartFromTiltSize",
+      "com.artflow.studio.BrushSettingsAccessibilityTest#collapsingASectionPreservesEditedParametersAndScrollAccess",
+      "com.artflow.studio.BrushSettingsAccessibilityTest#settingsAcrossTheWholeBrushPanelRemainReachableInABoundedViewport",
+      "com.artflow.studio.BrushShareFormatUiTest#cancelDoesNotShareOrCommitAFormat",
+      "com.artflow.studio.BrushShareFormatUiTest#setChoiceUsesTheBrushsetFormat",
+      "com.artflow.studio.BrushShareFormatUiTest#singleBrushDefaultsToArtflowAndCanExplicitlySelectProcreate",
+      "com.artflow.studio.BrushShareFormatUiTest#theDraftShareButtonShowsCurrentPrimaryAndSecondaryCounts",
+      "com.artflow.studio.BrushShareFormatUiTest#theSavedSetShareButtonRefreshesTheNamedComponentConversions",
+      "com.artflow.studio.BrushStudioTabsTest#labelsAndSelectionSurviveRightToLeftAndFontChanges",
+      "com.artflow.studio.BrushStudioTabsTest#labelsFitAtDefaultAndLargeFontScales",
+      "com.artflow.studio.BrushStudioTabsTest#labelsFitAtFractionalDisplayDensity",
+      "com.artflow.studio.BrushStudioUiTest#cancelledPracticeGesturesDoNotBecomeStrokesAndHistoryIsBounded",
+      "com.artflow.studio.BrushStudioUiTest#categorySearchAndEmptyResultsCanBeRecovered",
+      "com.artflow.studio.BrushStudioUiTest#exactPercentageEntryRejectsOutOfRangeAndCancelDoesNotCommit",
+      "com.artflow.studio.BrushStudioUiTest#integerValuesCannotBeFractionalAndSliderValuesSnapToIntegers",
+      "com.artflow.studio.BrushStudioUiTest#practiceStrokesSurviveTabChangesButNeverApplyBrushSettingsByThemselves",
+      "com.artflow.studio.BrushStudioUiTest#restoringTheDraftAndApplyingUseTheCorrectSnapshot",
+      "com.artflow.studio.BrushStudioUiTest#searchingAndSelectingAPresetDoesNotApplyUntilConfirmed",
+      "com.artflow.studio.BrushStudioUiTest#selectingAndUsingAPresetPublishesExactlyOnce",
+      "com.artflow.studio.CanvasInputDeviceTest#aTapWithFreehandKeepsTheSelectionInsteadOfReplacingItWithNothing",
+      "com.artflow.studio.CanvasInputDeviceTest#actionCancelWithMultiplePointersDiscardsAllProvisionalInk",
+      "com.artflow.studio.CanvasInputDeviceTest#asynchronousShapeStaysBoundToItsOriginalLayer",
+      "com.artflow.studio.CanvasInputDeviceTest#batchedStylusSamplesRetainTheActualPath",
+      "com.artflow.studio.CanvasInputDeviceTest#canceledCloneTapCannotSetSourceAndPauseCancelsPainting",
+      "com.artflow.studio.CanvasInputDeviceTest#canceledSelectionsAndClearedPendingSelectionsStayCleared",
+      "com.artflow.studio.CanvasInputDeviceTest#cancelledPointerFlagsRejectPalmWithoutRejectingPen",
+      "com.artflow.studio.CanvasInputDeviceTest#cancellingReconstructKeepsTheLastSuccessfulReference",
+      "com.artflow.studio.CanvasInputDeviceTest#centeredPinchChangesViewWithoutUndoOrPainting",
+      "com.artflow.studio.CanvasInputDeviceTest#changingAlphaLockDuringAnOpenToolDiscardsTheStaleEdit",
+      "com.artflow.studio.CanvasInputDeviceTest#cloneSampleAllLayersSwitchControlsTheCapturedSourceEvenForImmediateRelease",
+      "com.artflow.studio.CanvasInputDeviceTest#emptyOverlaySelectionDoesNotChangePixelsOrHistory",
+      "com.artflow.studio.CanvasInputDeviceTest#frozenAndZeroPressureLiquifyGesturesCreateNoUndoEntries",
+      "com.artflow.studio.CanvasInputDeviceTest#layerChangeCancelsShapeAndDisablingFingerPaintingCancelsFingerStroke",
+      "com.artflow.studio.CanvasInputDeviceTest#liquifyCommitsTheCompleteMapEvenWhenItsLastPreviewWasThrottled",
+      "com.artflow.studio.CanvasInputDeviceTest#liquifyReconstructRestoresEarlierArtworkAndRemainsUndoable",
+      "com.artflow.studio.CanvasInputDeviceTest#moveToolUsesTheDragDirectionAndCommitsTheFinalPosition",
+      "com.artflow.studio.CanvasInputDeviceTest#outlinedShapesHaveVisibleBordersAndPolygonStaysWithinDragBounds",
+      "com.artflow.studio.CanvasInputDeviceTest#penKeepsDrawingWithPalmAndDoesNotAdoptTheRemainingFinger",
+      "com.artflow.studio.CanvasInputDeviceTest#physicalEraserRemovesPixelsWithoutChangingTheSelectedBrush",
+      "com.artflow.studio.CanvasInputDeviceTest#reconstructNeverOverwritesAnInterveningEditOrAnotherDocument",
+      "com.artflow.studio.CanvasInputDeviceTest#retouchToolsHonorLayerAlphaLockFromTheActualDocument",
+      "com.artflow.studio.CanvasInputDeviceTest#savedReloadChangesRevisionEvenWhenProjectAndLayerIdsAreReused",
+      "com.artflow.studio.CanvasInputDeviceTest#selectionsKeepTheirGeometryAndIncludePointerUpPosition",
+      "com.artflow.studio.CanvasInputDeviceTest#shapeSelectionFeatheringPreservesBackdropAndAlphaLock",
+      "com.artflow.studio.CanvasInputDeviceTest#shapesAndTextPreserveExistingArtworkAndUndoExactly",
+      "com.artflow.studio.CanvasInputDeviceTest#twoFingerNavigationCancelsFingerInkAndHistoryWaitsForFinalUp",
+      "com.artflow.studio.CanvasInputDeviceTest#zoomToolCancellationAndPinchTakeoverNeverApplyAnExtraTapOrPaint",
+      "com.artflow.studio.CanvasInputDeviceTest#zoomToolDragUsesStartScaleAndAnchorAcrossReversalsAndClamps",
+      "com.artflow.studio.CanvasInputDeviceTest#zoomToolTapKeepsItsInitialAnchorWithFingerPaintingDisabled",
+      "com.artflow.studio.CanvasInputDeviceTest#zoomToolUsesFinalUpMovementAndIgnoresHorizontalOnlyDrags",
+      "com.artflow.studio.ColorWheelGestureTest#blankSpaceDoesNotChooseAColour",
+      "com.artflow.studio.ColorWheelGestureTest#callbackReplacementDuringTheDragIsObservedWithoutRestartingIt",
+      "com.artflow.studio.ColorWheelGestureTest#ringCanChooseHueWhileBlackAndBrightnessRestoresIt",
+      "com.artflow.studio.ColorWheelGestureTest#squareCornerTapDoesNotChangeHueOrAlpha",
+      "com.artflow.studio.ColorWheelGestureTest#squareDragContinuesAcrossMultipleRecompositions",
+      "com.artflow.studio.ColorWheelGestureTest#squareDragKeepsItsRegionOutsideTheSquare",
+      "com.artflow.studio.EditorRenderingTest#editorRetainsArtworkAcrossRedrawContextLossAndReattachment",
+      "com.artflow.studio.EditorRenderingTest#realPointerMaskStrokePreviewsAndUndoesOnTheGlSurface",
+      "com.artflow.studio.EditorRenderingTest#redrawsCompleteWhileNewInvalidationsKeepArriving",
+      "com.artflow.studio.ExportUiRegressionTest#jpegDoesNotOfferAnUnsupportedMultiFrameFile",
+      "com.artflow.studio.ExportUiRegressionTest#printPresetSubmitsItsResolutionAndOversampling",
+      "com.artflow.studio.ExportUiRegressionTest#privacyPolicyIsAvailableOfflineAndCanBeDismissed",
+      "com.artflow.studio.FillGestureDeviceTest#bucketCannotCommitUnderAnObsoleteAlphaLock",
+      "com.artflow.studio.FillGestureDeviceTest#bucketKeepsItsCapturedColourAfterRelease",
+      "com.artflow.studio.FillGestureDeviceTest#bucketPreservesLayerAlphaAndUndo",
+      "com.artflow.studio.FillGestureDeviceTest#completedBucketRemainsValidWhenAlphaLockChangesLater",
+      "com.artflow.studio.FillGestureDeviceTest#completedGradientRemainsValidWhenAlphaLockChangesLater",
+      "com.artflow.studio.FillGestureDeviceTest#emptySelectionBucketIsNotAnUndoStep",
+      "com.artflow.studio.FillGestureDeviceTest#emptySelectionGradientIsNotAnUndoStep",
+      "com.artflow.studio.FillGestureDeviceTest#gradientCannotCommitUnderAnObsoleteAlphaLock",
+      "com.artflow.studio.FillGestureDeviceTest#gradientKeepsItsCapturedStopsAfterRelease",
+      "com.artflow.studio.FillGestureDeviceTest#gradientPreservesLayerAlphaAndUndo",
+      "com.artflow.studio.FillGestureDeviceTest#identicalBucketIsNotAnUndoStep",
+      "com.artflow.studio.FillGestureDeviceTest#identicalGradientIsNotAnUndoStep",
+      "com.artflow.studio.GroupBlendUiTest#groupCanReturnFromNormalToPassThrough",
+      "com.artflow.studio.GroupBlendUiTest#pixelLayersDoNotOfferTheFolderOnlyPassThroughMode",
+      "com.artflow.studio.GuideStatusUiTest#statusRequiresAnActiveVisibleGuideAndHidesInFocusMode",
+      "com.artflow.studio.HardwareKeyboardTest#aKeyPressResolvesToItsAction",
+      "com.artflow.studio.HardwareKeyboardTest#ctrlAndMetaBothCountAsThePrimaryModifier",
+      "com.artflow.studio.HardwareKeyboardTest#keyCodesMapToTheTokensTheTableUses",
+      "com.artflow.studio.HardwareKeyboardTest#theSystemShortcutListCoversEveryBinding",
+      "com.artflow.studio.IncomingFilesTest#openWithAndEditWithCarryTheDataUri",
+      "com.artflow.studio.IncomingFilesTest#otherIntentsCarryNothing",
+      "com.artflow.studio.IncomingFilesTest#shareCarriesTheStreamExtra",
+      "com.artflow.studio.LayerEffectsUiTest#eachEffectChangeIsAppliedAsItIsMade",
+      "com.artflow.studio.ModelEditorUiTest#cancelledModelPaintDiscardsEverySeamSegmentAndSuccessfulUpKeepsUndoablePixels",
+      "com.artflow.studio.ModelEditorUiTest#modalControlsAboveTheRealModelRemainReachableAndFocusRestoresTheView",
+      "com.artflow.studio.NativeLibraryCompatibilityTest#packagedGraphicsLibraryLoadsAndIteratesPaths",
+      "com.artflow.studio.PaletteRecoveryUiTest#aRunningBackupCannotBeStartedTwice",
+      "com.artflow.studio.PaletteRecoveryUiTest#cancellingConfirmationDoesNotStartBackupOrReset",
+      "com.artflow.studio.PaletteRecoveryUiTest#confirmingRequestsAUserSelectedBackupInsteadOfResettingImmediately",
+      "com.artflow.studio.ProcreateImportedBlendUiTest#layersDialogExplainsImportedDarkenAndOnlyAnExplicitModeChoiceReplacesIt",
+      "com.artflow.studio.ReferenceCompanionTest#contentProviderImagesAreDownsampledAndCanBeSampled",
+      "com.artflow.studio.ReferenceCompanionTest#draggingAndChangingAvailableSpaceKeepTheWindowAndCloseControlOnScreen",
+      "com.artflow.studio.ReferenceCompanionTest#letterboxTapsDoNotSampleAndCentreSamplingIsAccessible",
+      "com.artflow.studio.ReferenceCompanionTest#pickingZoomFitAndCallbackReplacementUseTheVisibleImageWithoutPaintingBehindIt",
+      "com.artflow.studio.ReferenceCompanionTest#unsupportedAndUnreadableSourcesOfferRecoveryWithoutAStaleImage",
+      "com.artflow.studio.ReferenceEditorUiTest#referenceAndFocusExitRemainReachableWithEitherTouchTargetSize",
+      "com.artflow.studio.ReferenceEditorUiTest#referenceControlsStayAboveEitherSidebarWithoutBlockingTheRestOfTheEditor",
+      "com.artflow.studio.RuntimeEnvironmentTest#processPageSizeMatchesRequestedTestEnvironment",
+      "com.artflow.studio.SavedBrushUiTest#failedSaveRetainsTheNameAndDoesNotPretendItWasSaved",
+      "com.artflow.studio.SavedBrushUiTest#savedRowsCanBeRenamedAndDeleteRequiresConfirmation",
+      "com.artflow.studio.SavedBrushUiTest#savingUsesAnExplicitSnapshotAndDoesNotApplyTheBrush",
+      "com.artflow.studio.SelectionGestureDeviceTest#addSubtractIntersectAndReplaceAfterEmptyWorkTogether",
+      "com.artflow.studio.SelectionGestureDeviceTest#anEmptyActiveLayerSelectsItsTransparencyWithoutSamplingArtworkBelow",
+      "com.artflow.studio.SelectionGestureDeviceTest#automaticSelectionDistinguishesTransparentPixelsFromTheCanvasBackground",
+      "com.artflow.studio.SelectionGestureDeviceTest#automaticSelectionIgnoresCoveringLayersAndFillReferences",
+      "com.artflow.studio.SelectionGestureDeviceTest#bottomSubpixelTapRemainsInsideTheCanvas",
+      "com.artflow.studio.SelectionGestureDeviceTest#featherCannotOverwriteANewerExplicitSelection",
+      "com.artflow.studio.SelectionGestureDeviceTest#negativeSubpixelTapDoesNotSelectPixelZero",
+      "com.artflow.studio.SelectionGestureDeviceTest#newerWandWinsWhenTwoTapsArriveBeforeAWorkerReturns",
+      "com.artflow.studio.SelectionGestureDeviceTest#panelClearCannotBeUndoneByAPendingWand",
+      "com.artflow.studio.SelectionGestureDeviceTest#panelClearSupersedesProvisionalMarquee",
+      "com.artflow.studio.SelectionGestureDeviceTest#panelSelectAllSupersedesAPendingWand",
+      "com.artflow.studio.SelectionGestureDeviceTest#replacementDocumentRejectsOldSelectionDimensions",
+      "com.artflow.studio.SelectionGestureDeviceTest#subpixelTapInTheLastColumnIsNotOutsideTheCanvas",
+      "com.artflow.studio.SelectionGestureDeviceTest#subpixelWandTapUsesTheContainingPixel",
+      "com.artflow.studio.SelectionGestureDeviceTest#switchingActiveLayerRejectsAnEarlierAutomaticSelection",
+      "com.artflow.studio.SelectionGestureDeviceTest#uniformCanvasWandDoesNotCrash",
+      "com.artflow.studio.SelectionGestureDeviceTest#wandReplaceCanLeaveThePreviousSelection",
+      "com.artflow.studio.StudioAdaptiveTest#interfaceScaleIsAppliedOnceAndSystemTextScaleIsPreserved",
+      "com.artflow.studio.StudioAdaptiveTest#studioAdaptsToTheDeviceAndKeepsDraftsAndPracticeAcrossThemeChanges",
+      "com.artflow.studio.StudioControlsTest#cropBarShowsTheNewSizeAndFinishes",
+      "com.artflow.studio.StudioControlsTest#pageStripSelectsAddsAndProtectsTheLastPage",
+      "com.artflow.studio.StudioControlsTest#quickMenuRunsAnActionAndCloses",
+      "com.artflow.studio.StudioControlsTest#slidingAcrossTheCanvasChangesLayerOpacity",
+      "com.artflow.studio.StudioToolDockTest#everydayToolsHaveSelectedSemanticsAndSecondaryToolsRemainReachable",
+      "com.artflow.studio.StudioWorkspaceUiTest#dismissingTextClearsItsPositionAndDoesNotPlaceArtwork",
+      "com.artflow.studio.StudioWorkspaceUiTest#everyEditorToolIsReachableThroughTheRealLargeTextToolOptions",
+      "com.artflow.studio.StudioWorkspaceUiTest#focusHidesTheChromeAndBackRestoresTheEditor",
+      "com.artflow.studio.StudioWorkspaceUiTest#lightWorkspaceKeepsPrimaryControlsReachable",
+      "com.artflow.studio.StudioWorkspaceUiTest#standalonePaletteRemainsReadableAndSelectableAtLargeTextSize",
+      "com.artflow.studio.StudioWorkspaceUiTest#textSettingsChoosesPositionPlacesOnceAndRestoresExactUndo",
+      "com.artflow.studio.StudioWorkspaceUiTest#uiScaleAppliesOnceAndKeepsTheSystemTextPreference",
+      "com.artflow.studio.StudioWorkspaceUiTest#workflowPanelsAreReachableFromTheTopBarActions",
+      "com.artflow.studio.TransformUiRegressionTest#activeSelectionCannotSilentlyTransformTheWholeLayer",
+      "com.artflow.studio.TransformUiRegressionTest#cancelDoesNotApplyAndInvalidNumbersDisableCommit",
+      "com.artflow.studio.TransformUiRegressionTest#draftControlsDoNotMutateUntilApplyAndUseUniformScale",
+      "com.artflow.studio.TransformUiRegressionTest#signedNumbersAndWrappedControlsRemainUsableWithLargeText",
+      "com.artflow.studio.data.BrushImportPersistenceDeviceTest#artbrushCompoundImportRemapsSecondaryImagesAndSurvivesStorageReload",
+      "com.artflow.studio.data.BrushImportPersistenceDeviceTest#importedPressureCurvesUseNativeTablesAndSurviveArtbrushReload",
+      "com.artflow.studio.data.BrushImportPersistenceDeviceTest#nonDivisibleProcreateImagesKeepLastRowAndColumnThroughDiskReload",
+      "com.artflow.studio.data.BrushImportPersistenceDeviceTest#procreateCompoundImportKeepsBothComponentsAndUnstretchedCoverageOnDisk",
+      "com.artflow.studio.data.CompositorRasterTransferDeviceTest#pooledRasterTransferKeepsEveryByteAndRecordsPairedElapsedCalls",
+      "com.artflow.studio.data.DocumentMutationDeviceTest#effectParameterUndoAndRedoSurviveRealStorageReload",
+      "com.artflow.studio.data.DocumentMutationDeviceTest#layeredPsdContainsTheVisibleFilteredAppearanceAndHiddenOriginals",
+      "com.artflow.studio.data.DocumentMutationDeviceTest#mergedFilterAndMaskedAlphaSurviveSaveReopen",
+      "com.artflow.studio.data.DocumentMutationDeviceTest#noOpAndInvalidParametersLeaveSavedArtworkCleanAndReadable",
+      "com.artflow.studio.data.DocumentMutationDeviceTest#transformedLegacyInkMasksAndFramesSurviveRealStorageReload",
+      "com.artflow.studio.data.ExportDeviceTest#exportedFilesCanBeReadAndCopiedButEditableDocumentsCannotBeShared",
+      "com.artflow.studio.data.ExportDeviceTest#galleryPublishesPngAsImageAndMp4AsVideo",
+      "com.artflow.studio.data.ExportDeviceTest#invalidVideoSizeReturnsFailureWithoutPublishingAFile",
+      "com.artflow.studio.data.ExportDeviceTest#jpegWebpGifAndPsdAreRealDecodableFiles",
+      "com.artflow.studio.data.ExportDeviceTest#mp4ContainsAllFramesCorrectTimingAndDecodedColours",
+      "com.artflow.studio.data.ExportDeviceTest#pdfUsesMultiplePagesAndPreservesAspectRatio",
+      "com.artflow.studio.data.ExportDeviceTest#pngKeepsAlphaAndFlatteningActuallyRemovesIt",
+      "com.artflow.studio.data.ExportDeviceTest#sequenceContainsEveryFrameWithItsActualPixels",
+      "com.artflow.studio.data.ExportDeviceTest#snapshotContainsMaskedPixelsBeforeTheFirstSaveAndIsIndependentOfLaterEdits",
+      "com.artflow.studio.data.MaskEditingRegressionTest#alphaAndGradientSourcesSurviveSaveReloadWithoutChangingLayerPixels",
+      "com.artflow.studio.data.MaskEditingRegressionTest#cancelledMaskPaintCannotLeakIntoSaveExportOrUndo",
+      "com.artflow.studio.data.MaskEditingRegressionTest#invalidSourcesAndLockedDestinationsDoNotCreateHistoryEntries",
+      "com.artflow.studio.data.MaskEditingRegressionTest#maskPaintRespectsSoftSelectionsAndRemainsOneUndoStep",
+      "com.artflow.studio.data.MaskEditingRegressionTest#maskStrokePreviewCommitUndoAndRedoNeverModifyInk",
+      "com.artflow.studio.data.MaskEditingRegressionTest#revealAndHideRespectInvertedMasksAndIgnoreInkColorDynamics",
+      "com.artflow.studio.data.PersistenceRegressionTest#androidBitmapBridgeIsMutableAndPngPreservesLowAlphaColors",
+      "com.artflow.studio.data.PersistenceRegressionTest#animationSettingsAndFrameDurationAreUndoable",
+      "com.artflow.studio.data.PersistenceRegressionTest#autosaveCannotOverwriteExplicitlySavedArtwork",
+      "com.artflow.studio.data.PersistenceRegressionTest#callerOwnedBuffersCannotMutateCommittedArtwork",
+      "com.artflow.studio.data.PersistenceRegressionTest#cancelledBrushStrokeDoesNotCommitOrAddHistory",
+      "com.artflow.studio.data.PersistenceRegressionTest#corruptDocumentIsNeverReplacedWithABlankCanvas",
+      "com.artflow.studio.data.PersistenceRegressionTest#explicitSaveClearsRecoveryOnlyAfterCommit",
+      "com.artflow.studio.data.PersistenceRegressionTest#failedAtomicWritePreservesOriginalBytesAndRemovesTemporaryFile",
+      "com.artflow.studio.data.PersistenceRegressionTest#failedToolDoesNotChangePixelsOrHistory",
+      "com.artflow.studio.data.PersistenceRegressionTest#firstSaveRetainsRasterPixelsAfterReopen",
+      "com.artflow.studio.data.PersistenceRegressionTest#lockedLayersCannotStartPixelTools",
+      "com.artflow.studio.data.PersistenceRegressionTest#maskPixelsAndSettingsRoundTrip",
+      "com.artflow.studio.data.PersistenceRegressionTest#missingRasterIsAnErrorNotAnEmptyLayer",
+      "com.artflow.studio.data.PersistenceRegressionTest#newerEditsRemainDirtyWhenAnOlderSnapshotFinishesSaving",
+      "com.artflow.studio.data.PersistenceRegressionTest#projectAndExportPathsCannotEscapeTheirDirectory",
+      "com.artflow.studio.data.PersistenceRegressionTest#provisionalPixelSessionIsNotSavedAndCancellationDoesNotRemoveUnrelatedUndo",
+      "com.artflow.studio.data.PersistenceRegressionTest#savesEveryFrameNotJustTheActiveFrame",
+      "com.artflow.studio.data.PersistenceRegressionTest#selectionDoesNotErasePixelsFromTheSavedComposite",
+      "com.artflow.studio.data.PersistenceRegressionTest#staleSessionCannotOverwriteAnInterveningEdit",
+      "com.artflow.studio.data.PreviewBelowCacheDeviceTest#framesMatchAFullRedrawWhilePaintingAMiddleLayer",
+      "com.artflow.studio.data.ProcreateColorProfileDeviceTest#insertionAndFlattenedFallbackConvertIntoTheExistingCanvasProfileExactlyOnce",
+      "com.artflow.studio.data.ProcreateColorProfileDeviceTest#nativeP3DocumentKeepsItsChannelsBackgroundAndProfileThroughDiskReopen",
+      "com.artflow.studio.data.ProcreateHierarchyImportDeviceTest#nativeHierarchyAndHiddenGroupsRemainEditableAfterSaveReopenAndExport",
+      "com.artflow.studio.data.ProcreateLegacyDarkenDeviceTest#nativeDarkenSurvivesImportEditUndoAndReopenWithoutReinterpretingSignedV4",
+      "com.artflow.studio.data.ProcreateMaskImportDeviceTest#nativeMaskCoverageSurvivesImportSaveReopenAndPngExport",
+      "com.artflow.studio.data.ProcreateNativeExportDeviceTest#aHiddenNativeBackgroundReplacesNewCanvasWhiteWhileInsertionKeepsItsBackground",
+      "com.artflow.studio.data.ProcreateNativeExportDeviceTest#p3ExportKeepsNativeChannelsAndHiddenNestedGroupsThroughImportAndDiskReopen",
+      "com.artflow.studio.data.ProjectDuplicationTest#concurrentCreatesNeverReplaceOneAnother",
+      "com.artflow.studio.data.ProjectDuplicationTest#copyRetainsIndependentSavedRecoveryMasksAndFrames",
+      "com.artflow.studio.data.ProjectDuplicationTest#copySkipsOrphanedStorageRatherThanOverwritingIt",
+      "com.artflow.studio.data.ProjectDuplicationTest#deletedProjectIdentifiersAreNeverReused",
+      "com.artflow.studio.data.ProjectDuplicationTest#exhaustedIdentifiersFailWithoutWrappingOrDeletingFiles",
+      "com.artflow.studio.data.ProjectDuplicationTest#explicitUnknownIdCannotClaimOrphanedArtwork",
+      "com.artflow.studio.data.ProjectDuplicationTest#invalidCreationInputsDoNotLeaveGalleryRows",
+      "com.artflow.studio.data.ProjectDuplicationTest#missingRasterRollsBackTheRowAndOwnedDirectory",
+      "com.artflow.studio.data.ProjectDuplicationTest#newProjectsSkipOrphanedStorageEvenWithAnEmptyDatabase",
+      "com.artflow.studio.data.ProjectDuplicationTest#newProjectsSkipOrphansAboveExistingRows",
+      "com.artflow.studio.data.ProjectDuplicationTest#savingKnownIdUpdatesMetadataWithoutReplacingItsIdentity",
+      "com.artflow.studio.data.ProjectDuplicationTest#unknownProjectCannotBeDuplicated",
+      "com.artflow.studio.data.PsdGroupsDeviceTest#groupsRoundTripThroughPsd",
+      "com.artflow.studio.data.PsdGroupsDeviceTest#normalAndPassThroughPsdFoldersRetainPixelsAcrossImportSaveReopenAndExport",
+      "com.artflow.studio.data.PsdGroupsDeviceTest#onlyAnEnabledGroupMaskRequiresProcreateAppearanceFallback",
+      "com.artflow.studio.data.PsdMasksDeviceTest#disabledMaskExportsAndImportsAsEditableCoverageWithoutDestroyingHiddenInk",
+      "com.artflow.studio.data.PsdMasksDeviceTest#folderMaskSurvivesExportAndImport",
+      "com.artflow.studio.data.PsdMasksDeviceTest#selectionExportClipsOriginalAlphaOnceAndKeepsIndependentMaskCrop",
+      "com.artflow.studio.data.ResamplingDeviceTest#affineLayerAndMaskSurviveUndoSaveReloadAndIndependentEditing",
+      "com.artflow.studio.data.ResamplingDeviceTest#displacedEdgesSurviveRealPngEncodingWithoutDarkening",
+      "com.artflow.studio.data.ResamplingDeviceTest#resizeEdgesSurviveUndoStorageAndScaledPngExport",
+      "com.artflow.studio.data.SavedBrushStorageTest#completeBrushesSurviveClosingAndReopeningTheActualRoomDatabase",
+      "com.artflow.studio.data.SavedSelectionWorkflowDeviceTest#savedSoftSelectionReopensConstrainsEditingAndKeepsItsPixelsThroughExport",
+      "com.artflow.studio.data.SavedSelectionWorkflowDeviceTest#switchingArtworkCannotReuseAnotherDocumentsSavedSelection",
+      "com.artflow.studio.data.SecondaryGrainMigrationDeviceTest#signedV3VectorsKeepHistoricalCoverageWhileNewV4StrokesRetainTheirGrainModes",
+      "com.artflow.studio.data.SettingsPersistenceTest#completePreferencesAndPaletteNamesSurviveDatabaseReopen",
+      "com.artflow.studio.data.SettingsPersistenceTest#failurePartwayThroughBatchRollsBackEveryRowAndLeavesCacheUnchanged",
+      "com.artflow.studio.data.SettingsPersistenceTest#unreadablePaletteRowSurvivesUnrelatedEditsAndOnlyResetsAfterBackup",
+      "com.artflow.studio.data.StorageTraversalDeviceTest#atomicWritesRejectLinkedParentsAndPreserveTargets",
+      "com.artflow.studio.data.StorageTraversalDeviceTest#deletingARootLinkDoesNotDeleteAnotherProject",
+      "com.artflow.studio.data.StorageTraversalDeviceTest#exportCleanupCannotDeleteAnotherProjectsArtworkThroughADirectoryLink",
+      "com.artflow.studio.data.StorageTraversalDeviceTest#exportFileLinksAreNotListedOrPruned",
+      "com.artflow.studio.data.StorageTraversalDeviceTest#linkedExportsContainerCannotMakeEditableArtworkShareable",
+      "com.artflow.studio.data.StorageTraversalDeviceTest#linkedProjectContainerCannotRedirectSizeOrDelete",
+      "com.artflow.studio.data.StorageTraversalDeviceTest#linkedProjectRootCannotRedirectReadsOrWrites",
+      "com.artflow.studio.data.StorageTraversalDeviceTest#metadataAndRasterLinksCannotReadOtherProjectPixels",
+      "com.artflow.studio.data.StorageTraversalDeviceTest#pruneSizeAndDeleteStayInsideTheOwnedProject",
+      "com.artflow.studio.data.StorageTraversalDeviceTest#pruningThroughALinkedProjectCannotDeleteAnotherProject",
+      "com.artflow.studio.data.StorageTraversalDeviceTest#repeatedHousekeepingDoesNotAccumulateFilesOrFollowCycles",
+      "com.artflow.studio.data.StrokePreviewRegressionTest#cancelledStrokeCannotLeakIntoExportSaveOrUndo",
+      "com.artflow.studio.data.StrokePreviewRegressionTest#inFlightStrokeIsHiddenByHigherOpaqueLayer",
+      "com.artflow.studio.data.StrokePreviewRegressionTest#legacyVectorStrokesAreBakedBeforeNewPaintInsteadOfCoveringIt",
+      "com.artflow.studio.data.StrokePreviewRegressionTest#liveEraserRevealsUnderlyingLayersInsteadOfPaintingInkOnTop",
+      "com.artflow.studio.data.StrokePreviewRegressionTest#previewEqualsCommitForPressureGrainOpacitySelectionAndLayerBlend",
+      "com.artflow.studio.data.StrokePreviewRegressionTest#previewHonorsAlphaLockAndLayerMask",
+      "com.artflow.studio.data.StrokePreviewRegressionTest#shortFinalSegmentSurvivesPreviewCommitHistoryAndReopen",
+      "com.artflow.studio.data.StrokeTimingDeviceTest#liveStrokeFramesAreTimed"
+    ]
+  },
+  "executionTotals": {
+    "expectedFinalMatrixExecutions": 1771,
+    "totalExecutions": 1575,
+    "totals": {
+      "passed": 1572,
+      "skipped": 2,
+      "failure": 1
+    },
+    "retainedFirstAttemptExecutions": 42,
+    "retainedFirstAttemptTotals": {
+      "passed": 41,
+      "failure": 1
+    },
+    "allAttemptsExecutions": 1617,
+    "allAttemptsTotals": {
+      "passed": 1613,
+      "skipped": 2,
+      "failure": 2
+    },
+    "automaticFrameworkRetries": 1,
+    "manualWorkflowReruns": 0
+  },
+  "countQualifications": [
+    "API 26 console says Finished 255 tests. Original XML contains 253 unique identities, including 2 allowed skips; original XML governs completeness.",
+    "Final attempts and interrupted first attempts remain separate; no union of partial attempts supplies an accepted suite.",
+    "The only skips are cancelled-pointer flags below API33 and MediaStore gallery publication below API29."
+  ],
+  "build": {
+    "buildJob": 120956251464,
+    "artifacts": {
+      "verification-reports": {
+        "id": 12572421882,
+        "size_in_bytes": 767839,
+        "digest": "sha256:01a48010163571673acbd8df8dc9997a97ad4bba73585e30dea68a931b9335a7"
+      },
+      "artflow-source": {
+        "id": 12571492403,
+        "size_in_bytes": 1845645,
+        "digest": "sha256:61f9cb3be625fad623236b5dfeca0408b0db1792385f90abe6fce670cacd7b16"
+      }
+    },
+    "python": {
+      "suites": [
+        82,
+        57
+      ],
+      "tests": 139
+    },
+    "ktlintReports": 5,
+    "detektErrors": 0,
+    "detektBaselineUnchanged": true,
+    "lint": {
+      "debug": {
+        "Warning": 154,
+        "Hint": 5
+      },
+      "release": {
+        "Warning": 152,
+        "Hint": 5
+      }
+    },
+    "corpus": {
+      "reference_sha256": "7b1dad3ac95f8aeca3c22b432b5d6fd94182a3bf9f84fb93588adb126368b54e",
+      "brushes": "394",
+      "compound_brushes": "140",
+      "components": "534",
+      "components_with_signed_dynamics": "35",
+      "parsed_channel_curves": "2135",
+      "metadata_import_and_persistence": "PASS",
+      "image_decode_tested": "false",
+      "reference_runtime_executed": "false",
+      "pixel_parity_verified": "false"
+    },
+    "sampleDocuments": {
+      "count": 5,
+      "distinctArchiveByteStreams": 4,
+      "sourceCommit": "0e12deb2ae1ffb152fc4a3d09add230590f52f68",
+      "inputAndIccHashesGated": true,
+      "nativeHierarchyMaskAndDarkenProbesGated": true,
+      "reports": [
+        "Mask_Test_File.procreate: 2048x2048 300 dpi, 1 layers, 0 groups, 1 masks, profile DISPLAY_P3, unsupported profile false, blend modes [NORMAL], calibration error 3.37, composite difference 0.00",
+        "Reference_Blend_File 2.procreate: 2118x1836 300 dpi, 53 layers, 26 groups, 0 masks, profile DISPLAY_P3, unsupported profile false, blend modes [NORMAL, DIVIDE, DARKER_COLOR, LIGHTER_COLOR, PIN_LIGHT, LINEAR_LIGHT, VIVID_LIGHT, HARD_MIX, DARKEN, SOFT_LIGHT, SATURATION, HUE, LUMINOSITY, COLOR, HARD_LIGHT, OVERLAY, COLOR_BURN, COLOR_DODGE, LINEAR_BURN, SUBTRACT, DIFFERENCE, EXCLUSION, LIGHTEN, ADD, SCREEN, MULTIPLY], calibration error 7.69, composite difference 0.36",
+        "Reference_Blend_File 3.procreate: 2118x1836 300 dpi, 55 layers, 27 groups, 0 masks, profile DISPLAY_P3, unsupported profile false, blend modes [NORMAL, DIVIDE, DARKER_COLOR, LIGHTER_COLOR, PIN_LIGHT, LINEAR_LIGHT, VIVID_LIGHT, HARD_MIX, DARKEN, SOFT_LIGHT, SATURATION, HUE, LUMINOSITY, COLOR, HARD_LIGHT, OVERLAY, COLOR_BURN, COLOR_DODGE, LINEAR_BURN, SUBTRACT, DIFFERENCE, EXCLUSION, LIGHTEN, ADD, SCREEN, MULTIPLY], calibration error 8.19, composite difference 0.36",
+        "Reference_Blend_File.procreate: 2118x1836 300 dpi, 53 layers, 26 groups, 0 masks, profile DISPLAY_P3, unsupported profile false, blend modes [NORMAL, DIVIDE, DARKER_COLOR, LIGHTER_COLOR, PIN_LIGHT, LINEAR_LIGHT, VIVID_LIGHT, HARD_MIX, DARKEN, SOFT_LIGHT, SATURATION, HUE, LUMINOSITY, COLOR, HARD_LIGHT, OVERLAY, COLOR_BURN, COLOR_DODGE, LINEAR_BURN, SUBTRACT, DIFFERENCE, EXCLUSION, LIGHTEN, ADD, SCREEN, MULTIPLY], calibration error 7.69, composite difference 0.36",
+        "reference.procreate: 2118x1836 300 dpi, 55 layers, 27 groups, 0 masks, profile DISPLAY_P3, unsupported profile false, blend modes [NORMAL, DIVIDE, DARKER_COLOR, LIGHTER_COLOR, PIN_LIGHT, LINEAR_LIGHT, VIVID_LIGHT, HARD_MIX, DARKEN, SOFT_LIGHT, SATURATION, HUE, LUMINOSITY, COLOR, HARD_LIGHT, OVERLAY, COLOR_BURN, COLOR_DODGE, LINEAR_BURN, SUBTRACT, DIFFERENCE, EXCLUSION, LIGHTEN, ADD, SCREEN, MULTIPLY], calibration error 8.19, composite difference 0.36"
+      ],
+      "thumbnailCalibrationGate": true,
+      "recompositeDifferenceGate": false
+    },
+    "nativeSpacing": {
+      "namedMethods": 6,
+      "instructionAnchors": 33,
+      "selectorAnchors": 6,
+      "archiveKeyAnchors": 4,
+      "archive_key": "plotSpacingVersion",
+      "archive_key_anchors": 4,
+      "cache_method": "0x100ad1a88",
+      "decode_method": "0x100a3f508",
+      "encode_method": "0x100a416e0",
+      "explicit_version": "decodeIntegerForKey: when the key is present",
+      "implicit_version": "0 if legacy dualBlendMode is present, otherwise 1; extended-only does not select 0",
+      "instruction_anchors": 33,
+      "limitations": [
+        "Native pressure preprocessing, placement, random sequence and rendered pixels are not evaluated."
+      ],
+      "plot_method": "0x100ad20b8",
+      "scope": "Archive version selection, setter/encoder linkage and two cached size-factor decisions.",
+      "selector_anchors": 6,
+      "size_factor": {
+        "constant_address": "0x100c3c9f8",
+        "other_versions_float_bits": "3fb504f3",
+        "version_zero": 1.0
+      },
+      "spacing_edit_version": 1,
+      "spacing_setter": "0x100a3e2d8",
+      "version_getter": "0x100a46054",
+      "version_ivar_offset": "0x498"
+    },
+    "nativeReferenceReports": {
+      "archive-contracts.json": "2a7fecb393b27c9ff39acc7d43499b3e47366a38c0e2c512522895e13e091639",
+      "dual-brush-contracts.json": "019fb6d8e2b9fce58f364a4c02bc1742dc9753beaec5fd731cc9a6a7b6ce819b",
+      "layer-blend-contracts.json": "25b4b0222fe08f30e1456d7ef39949e57734b64dc012dcd255a08eb45ff038de",
+      "native-document-contracts.json": "87b31a6093f8916f728349e7ca33bb578abe2368138487b2de15c0c27e697184",
+      "pressure-spline.json": "bbcd905e0284bb1d4c775d95bea365bee1dfb6cd4af19ae28292a4950d6c8178"
+    },
+    "nativeReferenceRuntimeExecuted": false,
+    "nativeSplineFixturesMatched": 13,
+    "nativeLayerFixturesMatched": 9,
+    "packageIntegrityAndNativeAlignment": "PASS",
+    "productionSigningNegativeGuard": "PASS",
+    "productionReleaseSigningEstablished": false,
+    "jobLogSha256": "b210e7cb515eeed7e9e59ae4ede4a9d4d17dca9882408f153f415dafac538312",
+    "auditorSha256": "02b41c967cb1fbd97ab4e9f6b7b24fe4ef877f5dfa0257d9f9849b60d05bf237",
+    "jvm": {
+      "suites": 251,
+      "tests": 1511,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "uniqueIdentities": 1511,
+      "taskExecuted": true,
+      "addedIdentityCount": 26,
+      "removedIdentityCount": 0,
+      "priorRevision": "e2aa900b91298fe08eca8529d0345220faa9e2eb",
+      "addedSuiteCount": 6
+    }
+  },
+  "source": {
+    "runId": 40122287040,
+    "revision": "8050121a7a6e3a1d52854d3c398ad1d29a33bcfe",
+    "tree": "50babbad74a5198da9051448acfd6180153b1496",
+    "artifactId": 12571492403,
+    "artifactBytes": 1845645,
+    "artifactSHA256": "61f9cb3be625fad623236b5dfeca0408b0db1792385f90abe6fce670cacd7b16",
+    "zipEntries": [
+      "artflow-source.tar.gz",
+      "REVISION.txt"
+    ],
+    "sourceTarSHA256": "b95e9cf3d61ce195175878e04d0e149e89e6d2f9a21c03a9182b1bc0732d37ff",
+    "fileCount": 881,
+    "byteExactGitArchive": true,
+    "allBlobHashesAndExecuteBitsMatch": true,
+    "archiveModeVerification": "All archive metadata, including modes 0664/0775, is byte-exact with independently generated git archive; Git tree modes preserve only regular/executable distinctions.",
+    "readerCorrection": "An initial local predicate compared archive permissions to Git canonical 100644/100755 literally; the original archive was unchanged, and exact independent git-archive comparison resolved that reader error."
+  },
+  "frozenCiSources": {
+    ".github/workflows/android-ci.yml": "d927a192fe9e2b2adb4aaa408c7ce860921b73fcb523c31c54a3a9657d8b6c44",
+    ".github/scripts/run-device-tests.sh": "4e0a4ce517a764d966956fab838baade42130501ad174bf253337c0ffaff4df0",
+    ".github/scripts/configure-emulator-runtime.sh": "4432c6483355e64d890851037239e7d1cc70b7b7a59f68da62f5981b5b5266e4",
+    ".github/scripts/recover-android15-emulator.sh": "42e64e82386bf9b4a17aeedc525aef2023106b3231f35f49cf8cf38f01be9f4f",
+    ".github/scripts/classify_android15_reference_queue_crash.py": "0348fb59122fc9ec093ecf626801e5bb6126c9cfe36a5cf130b57793c08c2837",
+    ".github/scripts/summarize_device_results.py": "b76ce370c0dce6ff73f4d8b0c5fc5ee7ce382af7032c075254b50a2fcf2d3750"
+  },
+  "independentAuditAnchors": {
+    "run312-device-acceptance.json": {
+      "file": "run312-device-acceptance.json",
+      "bytes": 1319457,
+      "sha256": "3da11b29b52ff5a63e49e858cb87c544535219cc1bee08ed97bb57fbe4e6631b"
+    },
+    "run312-device-acceptance.md": {
+      "file": "run312-device-acceptance.md",
+      "bytes": 6910,
+      "sha256": "a8636efee419af7098af235f37bd559d3644eb16892d4e36c31adce77ba83377"
+    },
+    "run312-visual-acceptance.json": {
+      "file": "run312-visual-acceptance.json",
+      "bytes": 203885,
+      "sha256": "0a14ef87ba8462b90143552a051faa73fe5a13602fa2fea7f96addff5b31846e"
+    },
+    "run312-build-acceptance.json": {
+      "file": "run312-build-acceptance.json",
+      "bytes": 12367,
+      "sha256": "585b8ff3988d9297f5a3cca63cd7a8f504e2e727fd6faf00217ac99bb392e8f1"
+    },
+    "run312-source-proof.json": {
+      "file": "run312-source-proof.json",
+      "bytes": 234740,
+      "sha256": "c87c3b7f0272bc397c8abdc8ef51511ae988e198e0ae483cd0cf64c946097e80"
+    },
+    "run312-timing-summary.json": {
+      "file": "run312-timing-summary.json",
+      "bytes": 39410,
+      "sha256": "dde14c62e363aeaa780b6e78f26e05de1f2f3319132790b0b9d8d0668951d5f1"
+    },
+    "run312_expected_device_tests.json": {
+      "file": "run312_expected_device_tests.json",
+      "bytes": 24945,
+      "sha256": "3060aed343ea6847ded70d5be13726d5592669873d2857a4bee2b9a73b5cb689"
+    },
+    "run312_device_test_identities.txt": {
+      "file": "run312_device_test_identities.txt",
+      "bytes": 24373,
+      "sha256": "4e76353b9c571de94d348176485f7205ebf6648c0d6ce76641acd8a8c80b5b66"
+    },
+    "runtime-triage.json": {
+      "file": "runtime-triage.json",
+      "bytes": 11299,
+      "sha256": "444fe642d9a0fd87c26cecb73122d29de1467a4a1caee5a3d8d3ca9aef409415"
+    }
+  },
+  "anchorEncoding": "Each file SHA256 covers original retained bytes. Bounded evidence group object SHA256 uses sorted-key compact UTF-8 JSON with ensure_ascii=true and no trailing newline, as embedded in the full independent audit.",
+  "runtimeFailureAndRetryAttribution": {
+    "scope": "Bounded read-only process, stack, source-phase and classifier attribution. No root-cause proof or repair claim.",
+    "first": {
+      "caseStart": "19:10:20.725",
+      "appPid": 4731,
+      "systemServerPid": 2458,
+      "signalTime": "19:10:21.435",
+      "fatalThread": 3397,
+      "signal": "SIGSEGV",
+      "faultAddress": "0x20",
+      "frameZero": "android.os.BinderProxy$ProxyMap.set+389",
+      "frameZeroObject": "/system/framework/x86_64/boot-framework.oat",
+      "frameZeroBuildId": "bc047a67a4076b80992fbdfabdfba12acbd1924a",
+      "linkage": "BinderProxy.getInstance → javaObjectForIBinder → Parcel.readStrongBinder → IAccessibilityManager$Stub.onTransact. Fatal process is system_server, not ArtFlow.",
+      "phase": "Activity reached RESUMED at19:10:20.858 and PAUSED at19:10:21.355; InstrumentationActivityInvoker EmptyActivity moved to front before the signal. Consistent with scenario teardown, but no TestRunner finished event and an empty failure do not prove the test passed.",
+      "secondaryAppDiagnostic": "At19:10:22.472, after system_server died, app4731 reported JNI NewStringUTF with pending DeadSystemRuntimeException during Binder/IWindowSession/ViewRootImpl relayout. This is subsequent evidence, not the initial fatal signal.",
+      "raw": [
+        {
+          "path": "_temp/artflow-device/android15-framework-retry/first-attempt-results/emulator-5554 - 15/logcat-com.artflow.studio.CanvasInputDeviceTest-emptyOverlaySelectionDoesNotChangePixelsOrHistory.txt",
+          "bytes": 1330491,
+          "sha256": "c0e75d139d5c6379a8b65aee31b4936a241da381e4d09ad20f6468dd2fbc2b6d"
+        },
+        {
+          "path": "_temp/artflow-device/android15-framework-retry/first-attempt-results/TEST-emulator-5554 - 15-_app-.xml",
+          "bytes": 6586,
+          "sha256": "ac54632ee588d7b1a651532b26e01e316a84bc14fc4f70a4e72fdf4cd120ab52"
+        }
+      ],
+      "tombstonePrintedAt": "2026-10-24T19:10:21.805Z",
+      "sameAssociatedCasePassedInLanes": [
+        "26",
+        "35-standard-4k",
+        "35-16k-repeat",
+        "36",
+        "36-16k",
+        "36-tablet"
+      ]
+    },
+    "final": {
+      "caseStart": "19:13:21.327",
+      "appPid": 3889,
+      "fatalThread": 3889,
+      "signalTime": "19:13:21.505",
+      "signal": "SIGSEGV",
+      "faultAddress": "0x10",
+      "frameZero": "art::mirror::Class::GetDescriptor+201",
+      "artBuildId": "e4a3c6c284a8b17d09fd84d661cf181b",
+      "phase": "During ArtFlowCanvasView construction in withCanvas scenario.onActivity: generated Hilt ViewCImpl.injectArtFlowCanvasView2 → ART class initialization → PrettyClass/GetDescriptor. The view has not returned to attachToCanvas/setActiveLayerId/setEditorInput, and the supplied test body containing layer changes and MotionEvents has not begun.",
+      "raw": [
+        {
+          "path": "Experiment-2/Experiment-2/app/build/outputs/androidTest-results/connected/debug/emulator-5554 - 15/logcat-com.artflow.studio.CanvasInputDeviceTest-layerChangeCancelsShapeAndDisablingFingerPaintingCancelsFingerStroke.txt",
+          "bytes": 105544,
+          "sha256": "7f231e76b53f559e644e8e4816b3f56c59b1069cc0a121ca10521117d8657883"
+        },
+        {
+          "path": "Experiment-2/Experiment-2/app/build/outputs/androidTest-results/connected/debug/TEST-emulator-5554 - 15-_app-.xml",
+          "bytes": 8702,
+          "sha256": "087a47fca7386f6e2292e04dce95093d7dc9f9a122d9c307f8c7ae2c2bc84dfa"
+        }
+      ],
+      "tombstonePrintedAt": "2026-10-24T19:13:21.755Z",
+      "sameAssociatedCasePassedInLanes": [
+        "26",
+        "35-standard-4k",
+        "35-16k-repeat",
+        "36",
+        "36-16k",
+        "36-tablet"
+      ]
+    },
+    "recovery": {
+      "automaticRetries": 1,
+      "record": {
+        "path": "_temp/artflow-device/framework-recovery.txt",
+        "bytes": 137,
+        "sha256": "6d2182569709d01126dabd1048db2b134ed9d2667bbb6572457315af10b06f89"
+      },
+      "bootBefore": "037d58db-0995-4b81-8025-f84f45bb3b9e",
+      "bootAfter": "4acc09c9-529d-45ff-840d-357d2740046a",
+      "reportedStatus": "PASS",
+      "finalSuiteIncomplete": true,
+      "minifiedLaunchReached": false
+    },
+    "classifier": {
+      "sourceRevision": "8050121a7a6e3a1d52854d3c398ad1d29a33bcfe",
+      "path": ".github/scripts/classify_android15_reference_queue_crash.py",
+      "sha256": "0348fb59122fc9ec093ecf626801e5bb6126c9cfe36a5cf130b57793c08c2837",
+      "firstDecision": true,
+      "firstMatchingReferenceQueueLog": {
+        "path": "_temp/artflow-device/android15-framework-retry/first-attempt-results/emulator-5554 - 15/logcat-com.artflow.studio.ArtworkWorkflowTest-createPaintSaveReopenRecreateAndDiscardPreserveTheSavedPixels.txt",
+        "bytes": 1639686,
+        "sha256": "ec0dc96c7dd67a45dac2f05c356a66660cea281d561585a1fa78cb9af3ff521f"
+      },
+      "matchingEarlierCasePassed": true,
+      "matchingProcess": "com.google.android.gms.persistent",
+      "matchingPid": 2884,
+      "matchingTime": "19:08:49.418",
+      "interruptedCaseReferenceQueueMatched": false,
+      "interruptedCaseAppArtFrameZeroMatched": false,
+      "firstDecisionAssociationDefect": "The frozen classifier scans every retained text log without failed-case or process association. Its only matching first-attempt log belongs to an earlier passing ArtworkWorkflow case and a separate Google process.",
+      "finalDecision": true,
+      "finalSignatureAppArtFrameZeroMatched": true,
+      "newRetryGranted": false
+    },
+    "sourceReferences": [
+      {
+        "path": "app/src/androidTest/java/com/artflow/studio/CanvasInputDeviceTest.kt",
+        "revision": "8050121a7a6e3a1d52854d3c398ad1d29a33bcfe",
+        "sha256": "d7a4b31ba771db7cc19be884471d9d99f617b120474807ac076ac70fc2837996",
+        "relevantFunctions": [
+          "withCanvas",
+          "emptyOverlaySelectionDoesNotChangePixelsOrHistory",
+          "layerChangeCancelsShapeAndDisablingFingerPaintingCancelsFingerStroke"
+        ]
+      }
+    ],
+    "limits": [
+      "No failing app assertion or concrete app memory misuse is established by these artifacts.",
+      "A framework/ART frame identifies the detection site; it does not by itself prove platform root cause or exclude earlier application, lifecycle or native memory effects.",
+      "The two attempts and earlier Google ReferenceQueue event are distinct observations; a common underlying cause is not established.",
+      "This review does not authorize another retry or reclassify the final failed lane as accepted."
+    ]
+  },
+  "backgroundRuntimeEvents": [
+    {
+      "lane": "35-16k-repeat",
+      "scope": "Complete post-test device capture; absent from final per-test and instrumentation fatal scans",
+      "time": "2026-10-24T19:24:26.484Z",
+      "pid": 5240,
+      "tid": 5616,
+      "processNameInSignal": "earchbox:search",
+      "signal": "SIGSEGV",
+      "code": "128 (SI_KERNEL)",
+      "faultAddress": "0x0",
+      "sourcePath": "_temp/artflow-device/device-logcat.txt",
+      "line": 141152,
+      "qualification": "Recorded after suite completion at19:18:59.228; a separate Search-process event, not an ArtFlow testcase failure or proof of shared cause."
+    }
+  ],
+  "visualScope": {
+    "reviewCounts": {
+      "expectedUiPositions": 203,
+      "retainedUiPositions": 180,
+      "directOriginalUiViews": 66,
+      "exactBodyPixelComparisons": 114,
+      "directRawLayerViews": 6,
+      "unavailableUiPositions": 23
+    },
+    "reviewComplete": true,
+    "visualFailureLanes": [
+      "26"
+    ],
+    "unavailableLane": "35",
+    "sixCompleteModelAndRasterSets": true,
+    "expectedUiPositionsPerLane": 29,
+    "modelUiPositionsPerCompleteLane": 7,
+    "priorEditorUiPositionsPerLane": 22,
+    "limits": [
+      "No screenshot existence check substitutes for missing or failed test identities.",
+      "Real model readiness/gesture history/modal coordinates require passing exact device identities; images separately show retained states.",
+      "Model raw layer positions are derived from actual view geometry, so cross-lane raw hash equality is not an oracle.",
+      "No native Procreate 3D or physical stylus latency/material/performance comparison.",
+      "All published source and artifact metadata must be independently frozen by the artifact auditor before this review.",
+      "Review complete means all retained scoped outputs have been assessed; missing main35 states remain unavailable and are not accepted. New header correction is a separate, unexecuted candidate."
+    ]
+  },
+  "timingScope": {
+    "clock": "System.nanoTime",
+    "unit": "nanoseconds",
+    "repositoryFixture": "2048x2048 at264dpi;1 Paper+4 striped+1 Ink layers;80 ordered samples each for pen12px,textured80px,soft airbrush300px; earlier committed strokes remain.",
+    "rasterFixture": "256x256 alpha/channel formula; same dirty capacity-one pool;6 warmup+20 measured alternating pairs;52 calls.",
+    "elapsedIncludes": "Called work plus dispatch/scheduling/lock/GC waits.",
+    "excludes": [
+      "CPU-time measurement",
+      "device input delivery",
+      "GL upload/draw",
+      "display presentation",
+      "native Procreate comparison"
+    ],
+    "additionalPerformanceThreshold": null,
+    "comparisonLimit": "Only raster current/prior calls are paired within the same lane and fixture; distinct emulator images/hostedVMs are not a controlled device ranking.",
+    "main35TimingReached": false
+  },
+  "scope": [
+    "Only exact 8050121 and its 253 declared identities are in scope; later wet-preview/header/classifier changes are separate.",
+    "Raw native/PSD/P3 retained-fixture checks do not execute Procreate or establish arbitrary native rendering equivalence.",
+    "Actual model MotionEvents/history assertions are distinguished from independently inspected pixels; API 26 header visibility failed despite passing interactions.",
+    "Repository timing and paired raster-transfer timing measure elapsed calls, including scheduling and GC waits, not CPU time or input-to-display latency.",
+    "Raster-transfer comparison alternates 26 pairs in one fixture: 6 warmup and 20 measured; 52 calls validate exact bytes. It does not claim an overall rendering speedup.",
+    "All native/system/background events remain scoped to process and attempt. No same-source manual rerun, retry expansion or root-cause claim is introduced."
+  ],
+  "lanes": [
+    {
+      "lane": "26",
+      "label": "API 26",
+      "jobId": 120959959050,
+      "jobConclusion": "success",
+      "startedAt": "2026-10-24T19:03:13Z",
+      "completedAt": "2026-10-24T19:15:23Z",
+      "jobSeconds": 730.0,
+      "artifact": {
+        "id": 12572103532,
+        "url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40122287040/artifacts/12572103532",
+        "bytes": 2765794,
+        "sha256": "cdd541682eb56338a838a17b82a00befc52875956ea89ba8e2b8f494d10f5165"
+      },
+      "independentInspectionSHA256": "af233d6d537810d0e77ddc101bc17b879409d080f9c805d60a6150a47f1158f4",
+      "jobLogSHA256": "48245fe13ea5b589f72964b8a4063c5bfbb842532387a31bc480c80a2e104134",
+      "final": {
+        "counts": {
+          "passed": 251,
+          "skipped": 2
+        },
+        "reported": 253,
+        "missingIdentityIndexes": [],
+        "unexpectedIdentities": [],
+        "duplicateIdentities": [],
+        "skippedIdentityIndexes": [
+          40,
+          165
+        ],
+        "failures": []
+      },
+      "complete253IdentityGate": true,
+      "measuredRuntimeCase": {
+        "sdk": "26",
+        "abis": "x86_64, x86",
+        "pageSize": "4096",
+        "fingerprint": "Android/sdk_gphone_x86_64/generic_x86_64:8.0.0/OSR1.180418.026/6741039:userdebug/dev-keys"
+      },
+      "runtimeConfiguration": {
+        "requestedJit": "default",
+        "verifiedProperties": {
+          "ro.build.fingerprint": "Android/sdk_gphone_x86_64/generic_x86_64:8.0.0/OSR1.180418.026/6741039:userdebug/dev-keys",
+          "ro.build.version.sdk": "26",
+          "ro.product.cpu.abilist": "x86_64,x86",
+          "ro.kernel.qemu": "1",
+          "ro.debuggable": "1",
+          "dalvik.vm.usejit": "true",
+          "dalvik.vm.usejitprofiles": "true",
+          "configurationStatus": "PASS"
+        }
+      },
+      "profileEvidence": {
+        "avdCreateCommand": "2026-10-24T19:07:14.7322359Z [command]/usr/bin/sh -c \\echo no | avdmanager create avd --force -n test --package 'system-images;android-26;google_apis;x86_64'",
+        "requestedImage": "system-images;android-26;google_apis;x86_64",
+        "minifiedScreenDimensions": [
+          [
+            320,
+            640
+          ]
+        ],
+        "tabletProfile": null
+      },
+      "emulatorVersions": [
+        "37.2.12.0 (build_id 16428233) (CL:N/A)"
+      ],
+      "minifiedLaunchPassed": true,
+      "automaticRetries": 0,
+      "instrumentationStarts": [
+        [
+          "2026-10-24T19:07:49.9457292Z",
+          "253",
+          "emulator-5554 - 8.0.0"
+        ]
+      ],
+      "consoleFinishes": [
+        [
+          "2026-10-24T19:10:25.2448875Z",
+          "255",
+          "emulator-5554 - 8.0.0"
+        ]
+      ],
+      "attemptSuiteSeconds": [
+        155.299158
+      ],
+      "boundedEvidenceGroups": {
+        "extendedEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "8fc298c20d3cda00774968ab9266c67f19299d13e69c56b842c9301e28e88e6c"
+        },
+        "nativeImportEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "216c9e7a511061086a53447c466ba73fe050e4de50508933649c11c4d8e5f0dc"
+        },
+        "nativeExportEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "c217c4d924cad6e6c37973402d734facbe6bdafeb26989f4d20a82e4fb601c8f"
+        },
+        "nativeDarkenEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "d2de20a0a07cb6a34901e826b1f00fa28f0098364204c869ef0814134d85e627"
+        },
+        "rasterTransferEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "bc30d0ce275ef5cca37cf7f154345d8887ff8a84ed1d7e54b37e1da8abff66ab"
+        },
+        "modelEditorEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "56926d51354522fe846a3f48c5c9cb9067ae4bdbbe900ed0b44b6aa674c51d2a"
+        }
+      },
+      "visual": {
+        "reviewStatus": "FAILED: model header is invisible on API26 despite passing device assertions",
+        "retainedUiPositions": 29,
+        "missingUiImages": [],
+        "directOriginalViews": 13,
+        "rawModelLayer": {
+          "width": 96,
+          "height": 64,
+          "opaquePixels": 6144,
+          "exactOriginalGapPixels": 512,
+          "gapColumnsInclusive": [
+            44,
+            51
+          ],
+          "originalRGBA": [
+            176,
+            64,
+            32,
+            255
+          ],
+          "changedPixels": 318,
+          "leftIslandChangedPixels": 158,
+          "rightIslandChangedPixels": 156,
+          "greenDominantPixels": 260,
+          "rgbaSHA256": "d0897248c03261bf6724a41bf77f8049f06d83742f6d632f6df38558d7086321",
+          "scope": "All retained alpha and gap pixels plus paint presence in both islands. No cross-lane hash oracle; input locations depend on actual view geometry."
+        },
+        "invisibleHeaderEvidence": {
+          "model-editor-restored.png": {
+            "inspectionCrop": [
+              10,
+              136,
+              310,
+              172
+            ],
+            "totalPixels": 10800,
+            "underlyingWorkAreaPixels": 10800,
+            "dominantRGB": [
+              [
+                [
+                  20,
+                  20,
+                  23
+                ],
+                10800
+              ]
+            ]
+          },
+          "model-editor-provisional.png": {
+            "inspectionCrop": [
+              10,
+              136,
+              310,
+              172
+            ],
+            "totalPixels": 10800,
+            "underlyingWorkAreaPixels": 10800,
+            "dominantRGB": [
+              [
+                [
+                  20,
+                  20,
+                  23
+                ],
+                10800
+              ]
+            ]
+          },
+          "model-editor-cancelled.png": {
+            "inspectionCrop": [
+              10,
+              136,
+              310,
+              172
+            ],
+            "totalPixels": 10800,
+            "underlyingWorkAreaPixels": 10800,
+            "dominantRGB": [
+              [
+                [
+                  20,
+                  20,
+                  23
+                ],
+                10800
+              ]
+            ]
+          },
+          "model-editor-committed.png": {
+            "inspectionCrop": [
+              10,
+              136,
+              310,
+              172
+            ],
+            "totalPixels": 10800,
+            "underlyingWorkAreaPixels": 10800,
+            "dominantRGB": [
+              [
+                [
+                  20,
+                  20,
+                  23
+                ],
+                10800
+              ]
+            ]
+          },
+          "model-editor-navigation.png": {
+            "inspectionCrop": [
+              10,
+              136,
+              310,
+              172
+            ],
+            "totalPixels": 10800,
+            "underlyingWorkAreaPixels": 10800,
+            "dominantRGB": [
+              [
+                [
+                  20,
+                  20,
+                  23
+                ],
+                10800
+              ]
+            ]
+          }
+        }
+      },
+      "elapsedRepositoryTiming": {
+        "casePassed": true,
+        "rawFile": {
+          "copies": 1,
+          "bytes": 43535,
+          "sha256": "a899a8f6571cd4ba72f538212cf21b93d9c25ade0c3c0a1cd0718681efb8c265",
+          "auditCopyBasename": "stroke-timing.json"
+        },
+        "textFile": {
+          "copies": 1,
+          "bytes": 1661,
+          "sha256": "0d2168132b4dd5a5b5e0be8be03b3e5a9efd534f045c2b4ae9f87de722b3453d",
+          "auditCopyBasename": "stroke-timing.txt"
+        },
+        "fixture": {
+          "width": 2048,
+          "height": 2048,
+          "dpi": 264,
+          "paperLayers": 1,
+          "stripedLayers": 4,
+          "inkLayers": 1,
+          "totalLayers": 6,
+          "samplesPerBrush": 80,
+          "priorCommittedStrokesRetained": true,
+          "startX": 240,
+          "step": 12,
+          "centreY": 1024,
+          "waveDivisor": 9,
+          "amplitude": 260
+        },
+        "brushes": [
+          {
+            "name": "pen 12 px",
+            "sampleCount": 80,
+            "summaries": {
+              "continueStrokeSummary": {
+                "p50Nanos": 6048,
+                "p95Nanos": 11961,
+                "maxNanos": 25251
+              },
+              "compositePreviewFrameSummary": {
+                "p50Nanos": 727180,
+                "p95Nanos": 8100860,
+                "maxNanos": 11871905
+              },
+              "combinedSampleSummary": {
+                "p50Nanos": 734553,
+                "p95Nanos": 8106225,
+                "maxNanos": 11879753
+              }
+            },
+            "phases": {
+              "preStrokePreviewNanos": 309921437,
+              "beginStrokeNanos": 112334,
+              "endStrokeNanos": 8211844,
+              "finalPreviewNanos": 83384396,
+              "endAndFinalPreviewNanos": 91596240
+            }
+          },
+          {
+            "name": "textured 80 px",
+            "sampleCount": 80,
+            "summaries": {
+              "continueStrokeSummary": {
+                "p50Nanos": 2520,
+                "p95Nanos": 6315,
+                "maxNanos": 20520
+              },
+              "compositePreviewFrameSummary": {
+                "p50Nanos": 2070744,
+                "p95Nanos": 8255618,
+                "maxNanos": 9703168
+              },
+              "combinedSampleSummary": {
+                "p50Nanos": 2071595,
+                "p95Nanos": 8256841,
+                "maxNanos": 9707482
+              }
+            },
+            "phases": {
+              "preStrokePreviewNanos": 849650,
+              "beginStrokeNanos": 113980,
+              "endStrokeNanos": 34526962,
+              "finalPreviewNanos": 25292170,
+              "endAndFinalPreviewNanos": 59819132
+            }
+          },
+          {
+            "name": "soft airbrush 300 px",
+            "sampleCount": 80,
+            "summaries": {
+              "continueStrokeSummary": {
+                "p50Nanos": 3923,
+                "p95Nanos": 6777,
+                "maxNanos": 19279
+              },
+              "compositePreviewFrameSummary": {
+                "p50Nanos": 17442242,
+                "p95Nanos": 26410311,
+                "maxNanos": 32452335
+              },
+              "combinedSampleSummary": {
+                "p50Nanos": 17446228,
+                "p95Nanos": 26411752,
+                "maxNanos": 32456157
+              }
+            },
+            "phases": {
+              "preStrokePreviewNanos": 2497256,
+              "beginStrokeNanos": 117726,
+              "endStrokeNanos": 51556833,
+              "finalPreviewNanos": 154222069,
+              "endAndFinalPreviewNanos": 205778902
+            }
+          }
+        ],
+        "sampleOrderAndArithmeticVerified": true,
+        "independentPercentilesVerified": true,
+        "readableTextAgreesToThreeDecimals": true,
+        "additionalPerformanceThreshold": null
+      },
+      "pairedRasterTransfer": {
+        "casePassed": true,
+        "pairCount": 26,
+        "validatedCalls": 52,
+        "warmupPairs": 6,
+        "measuredPairs": 20,
+        "summaryNanos": {
+          "currentMedianNanos": 68802.5,
+          "referenceMedianNanos": 2344730.5
+        },
+        "files": {
+          "compositor-raster-transfer.argb": {
+            "bytes": 262144,
+            "sha256": "d0c182f79088483e024627e0df21c0f696823c416d33b208fa4be21531af409e"
+          },
+          "compositor-raster-transfer-timing.json": {
+            "bytes": 7131,
+            "sha256": "aedcfcfb353d5091429f8d302812b8e2727c6792b4b44e3922e0859cf86e4381"
+          }
+        },
+        "allRetainedPixelsVerified": 65536,
+        "sourcePixelSHA256": "292422aad2148fc1ce7b4d76c6c298a919e504a1189bf9467783103403879e23",
+        "outputPixelSHA256": "d0c182f79088483e024627e0df21c0f696823c416d33b208fa4be21531af409e",
+        "threshold": null,
+        "pixelVerificationScope": "Every retained final-current ARGB byte is independently checked; all 52 transfer outputs, source immutability and pool ownership are assertions of the exact passing device case."
+      }
+    },
+    {
+      "lane": "35-standard-4k",
+      "label": "API 35 standard 4 KB",
+      "jobId": 120959959056,
+      "jobConclusion": "success",
+      "startedAt": "2026-10-24T19:03:13Z",
+      "completedAt": "2026-10-24T19:19:31Z",
+      "jobSeconds": 978.0,
+      "artifact": {
+        "id": 12572770427,
+        "url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40122287040/artifacts/12572770427",
+        "bytes": 10380358,
+        "sha256": "4047c06367c449fb0b16be422e462ee7313dca4bae7f80e3941ff217da0cffea"
+      },
+      "independentInspectionSHA256": "a099d0de808c0d3e3c56ed17a98046e3f353fd140badddb0dafcba685bd216ac",
+      "jobLogSHA256": "d85807348216ab409ff8f58852f635660b83e1d130b35579e511b81c4f1dba9c",
+      "final": {
+        "counts": {
+          "passed": 253
+        },
+        "reported": 253,
+        "missingIdentityIndexes": [],
+        "unexpectedIdentities": [],
+        "duplicateIdentities": [],
+        "skippedIdentityIndexes": [],
+        "failures": []
+      },
+      "complete253IdentityGate": true,
+      "measuredRuntimeCase": {
+        "sdk": "35",
+        "abis": "x86_64, arm64-v8a",
+        "pageSize": "4096",
+        "fingerprint": "google/sdk_gphone64_x86_64/emu64xa:15/AE3A.240806.043/12960925:userdebug/dev-keys"
+      },
+      "runtimeConfiguration": {
+        "requestedJit": "default",
+        "verifiedProperties": {
+          "ro.build.fingerprint": "google/sdk_gphone64_x86_64/emu64xa:15/AE3A.240806.043/12960925:userdebug/dev-keys",
+          "ro.build.version.sdk": "35",
+          "ro.product.cpu.abilist": "x86_64,arm64-v8a",
+          "ro.kernel.qemu": "1",
+          "ro.debuggable": "1",
+          "dalvik.vm.usejit": "true",
+          "dalvik.vm.usejitprofiles": "",
+          "configurationStatus": "PASS"
+        }
+      },
+      "profileEvidence": {
+        "avdCreateCommand": "2026-10-24T19:07:54.8547347Z [command]/usr/bin/sh -c \\echo no | avdmanager create avd --force -n test --package 'system-images;android-35;google_apis;x86_64'",
+        "requestedImage": "system-images;android-35;google_apis;x86_64",
+        "minifiedScreenDimensions": [
+          [
+            320,
+            640
+          ]
+        ],
+        "tabletProfile": null
+      },
+      "emulatorVersions": [
+        "37.2.12.0 (build_id 16428233) (CL:N/A)"
+      ],
+      "minifiedLaunchPassed": true,
+      "automaticRetries": 0,
+      "instrumentationStarts": [
+        [
+          "2026-10-24T19:09:06.9902390Z",
+          "253",
+          "emulator-5554 - 15"
+        ]
+      ],
+      "consoleFinishes": [
+        [
+          "2026-10-24T19:13:23.3892225Z",
+          "253",
+          "emulator-5554 - 15"
+        ]
+      ],
+      "attemptSuiteSeconds": [
+        256.398983
+      ],
+      "boundedEvidenceGroups": {
+        "extendedEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "03e0794312e4c641baae4b8a22a799f47e1bfa747e8d6f91315492b061af86e4"
+        },
+        "nativeImportEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "9033e81a1b02fe0c2db11a31c9d107e68590ada3b7c72e8b1f84539e9952d5ae"
+        },
+        "nativeExportEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "e83b4a67776cf8008ab77fd9f8a66729e3dee86f94b3d453fc3ae2e30f5cfa2f"
+        },
+        "nativeDarkenEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "bdcca2c7b4f601de4f91e9c7bdc9d5ffc2eff2f85da4e8c36473b5df3418cc3b"
+        },
+        "rasterTransferEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "fb2c09e15fffe3d37909c6794e3999c8d10751d7f5b369df7420da6bf68a362c"
+        },
+        "modelEditorEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "722a9d039de06fd454730ec2fdc50e3d85873e35a359a42d34089deac5fda9d2"
+        }
+      },
+      "visual": {
+        "reviewStatus": "Scoped original review complete; no concrete visual defect",
+        "retainedUiPositions": 29,
+        "missingUiImages": [],
+        "directOriginalViews": 9,
+        "rawModelLayer": {
+          "width": 96,
+          "height": 64,
+          "opaquePixels": 6144,
+          "exactOriginalGapPixels": 512,
+          "gapColumnsInclusive": [
+            44,
+            51
+          ],
+          "originalRGBA": [
+            176,
+            64,
+            32,
+            255
+          ],
+          "changedPixels": 318,
+          "leftIslandChangedPixels": 158,
+          "rightIslandChangedPixels": 156,
+          "greenDominantPixels": 260,
+          "rgbaSHA256": "d0897248c03261bf6724a41bf77f8049f06d83742f6d632f6df38558d7086321",
+          "scope": "All retained alpha and gap pixels plus paint presence in both islands. No cross-lane hash oracle; input locations depend on actual view geometry."
+        }
+      },
+      "elapsedRepositoryTiming": {
+        "casePassed": true,
+        "rawFile": {
+          "copies": 1,
+          "bytes": 43579,
+          "sha256": "022397383d08b4c386259b18a7efa5be27319993155ea5105e09fd7278ac0e17",
+          "auditCopyBasename": "stroke-timing.json"
+        },
+        "textFile": {
+          "copies": 1,
+          "bytes": 1659,
+          "sha256": "83ae996780c5cce1afb05bd2f8c34717eba43c1bb1ffeb9870cffdc68f9e77bb",
+          "auditCopyBasename": "stroke-timing.txt"
+        },
+        "fixture": {
+          "width": 2048,
+          "height": 2048,
+          "dpi": 264,
+          "paperLayers": 1,
+          "stripedLayers": 4,
+          "inkLayers": 1,
+          "totalLayers": 6,
+          "samplesPerBrush": 80,
+          "priorCommittedStrokesRetained": true,
+          "startX": 240,
+          "step": 12,
+          "centreY": 1024,
+          "waveDivisor": 9,
+          "amplitude": 260
+        },
+        "brushes": [
+          {
+            "name": "pen 12 px",
+            "sampleCount": 80,
+            "summaries": {
+              "continueStrokeSummary": {
+                "p50Nanos": 4408,
+                "p95Nanos": 7785,
+                "maxNanos": 15370
+              },
+              "compositePreviewFrameSummary": {
+                "p50Nanos": 1076077,
+                "p95Nanos": 12064338,
+                "maxNanos": 16087552
+              },
+              "combinedSampleSummary": {
+                "p50Nanos": 1080155,
+                "p95Nanos": 12068597,
+                "maxNanos": 16091269
+              }
+            },
+            "phases": {
+              "preStrokePreviewNanos": 632230612,
+              "beginStrokeNanos": 105787,
+              "endStrokeNanos": 20704652,
+              "finalPreviewNanos": 196549004,
+              "endAndFinalPreviewNanos": 217253656
+            }
+          },
+          {
+            "name": "textured 80 px",
+            "sampleCount": 80,
+            "summaries": {
+              "continueStrokeSummary": {
+                "p50Nanos": 4579,
+                "p95Nanos": 6011,
+                "maxNanos": 22994
+              },
+              "compositePreviewFrameSummary": {
+                "p50Nanos": 4479394,
+                "p95Nanos": 5445917,
+                "maxNanos": 16908793
+              },
+              "combinedSampleSummary": {
+                "p50Nanos": 4483601,
+                "p95Nanos": 5450585,
+                "maxNanos": 16912780
+              }
+            },
+            "phases": {
+              "preStrokePreviewNanos": 334504,
+              "beginStrokeNanos": 44122,
+              "endStrokeNanos": 64239947,
+              "finalPreviewNanos": 27413514,
+              "endAndFinalPreviewNanos": 91653461
+            }
+          },
+          {
+            "name": "soft airbrush 300 px",
+            "sampleCount": 80,
+            "summaries": {
+              "continueStrokeSummary": {
+                "p50Nanos": 5620,
+                "p95Nanos": 11481,
+                "maxNanos": 53390
+              },
+              "compositePreviewFrameSummary": {
+                "p50Nanos": 53414963,
+                "p95Nanos": 67725306,
+                "maxNanos": 73295719
+              },
+              "combinedSampleSummary": {
+                "p50Nanos": 53423940,
+                "p95Nanos": 67732539,
+                "maxNanos": 73301049
+              }
+            },
+            "phases": {
+              "preStrokePreviewNanos": 309618,
+              "beginStrokeNanos": 60572,
+              "endStrokeNanos": 118723637,
+              "finalPreviewNanos": 356583722,
+              "endAndFinalPreviewNanos": 475307359
+            }
+          }
+        ],
+        "sampleOrderAndArithmeticVerified": true,
+        "independentPercentilesVerified": true,
+        "readableTextAgreesToThreeDecimals": true,
+        "additionalPerformanceThreshold": null
+      },
+      "pairedRasterTransfer": {
+        "casePassed": true,
+        "pairCount": 26,
+        "validatedCalls": 52,
+        "warmupPairs": 6,
+        "measuredPairs": 20,
+        "summaryNanos": {
+          "currentMedianNanos": 111903.5,
+          "referenceMedianNanos": 7679106.0
+        },
+        "files": {
+          "compositor-raster-transfer.argb": {
+            "bytes": 262144,
+            "sha256": "d0c182f79088483e024627e0df21c0f696823c416d33b208fa4be21531af409e"
+          },
+          "compositor-raster-transfer-timing.json": {
+            "bytes": 7135,
+            "sha256": "fbdd30e60706365cddbfeb4c508f781fbfbe52101f0415c656bf632b0d2eab10"
+          }
+        },
+        "allRetainedPixelsVerified": 65536,
+        "sourcePixelSHA256": "292422aad2148fc1ce7b4d76c6c298a919e504a1189bf9467783103403879e23",
+        "outputPixelSHA256": "d0c182f79088483e024627e0df21c0f696823c416d33b208fa4be21531af409e",
+        "threshold": null,
+        "pixelVerificationScope": "Every retained final-current ARGB byte is independently checked; all 52 transfer outputs, source immutability and pool ownership are assertions of the exact passing device case."
+      }
+    },
+    {
+      "lane": "35",
+      "label": "API 35 16 KB",
+      "jobId": 120959959054,
+      "jobConclusion": "failure",
+      "startedAt": "2026-10-24T19:03:14Z",
+      "completedAt": "2026-10-24T19:14:10Z",
+      "jobSeconds": 656.0,
+      "artifact": {
+        "id": 12571988636,
+        "url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40122287040/artifacts/12571988636",
+        "bytes": 7229448,
+        "sha256": "15e4e8a199f751856d44df1af4d1020ae580374745db4fc7ad71a4f64f920837"
+      },
+      "independentInspectionSHA256": "ff5ef70824f01ef10295a19bd49f4a658ee307d730e473618b0a1b2a659a6282",
+      "jobLogSHA256": "b29da9f719f9c6da344789c6c98acd377f135628691eabdabad880b7e58c81a6",
+      "final": {
+        "counts": {
+          "passed": 56,
+          "failure": 1
+        },
+        "reported": 57,
+        "missingIdentityIndexes": [
+          34,
+          36,
+          46,
+          52,
+          55,
+          57,
+          62,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71,
+          72,
+          73,
+          74,
+          75,
+          76,
+          77,
+          78,
+          79,
+          80,
+          81,
+          82,
+          83,
+          84,
+          85,
+          86,
+          87,
+          88,
+          89,
+          90,
+          91,
+          92,
+          93,
+          94,
+          95,
+          96,
+          97,
+          98,
+          99,
+          100,
+          101,
+          102,
+          103,
+          104,
+          105,
+          106,
+          107,
+          108,
+          109,
+          110,
+          111,
+          112,
+          113,
+          114,
+          115,
+          116,
+          117,
+          118,
+          119,
+          120,
+          121,
+          122,
+          123,
+          124,
+          125,
+          126,
+          127,
+          128,
+          129,
+          130,
+          131,
+          132,
+          133,
+          134,
+          135,
+          136,
+          137,
+          138,
+          139,
+          140,
+          141,
+          142,
+          143,
+          144,
+          145,
+          146,
+          147,
+          148,
+          149,
+          150,
+          151,
+          152,
+          153,
+          154,
+          155,
+          156,
+          157,
+          158,
+          159,
+          160,
+          161,
+          162,
+          163,
+          164,
+          165,
+          166,
+          167,
+          168,
+          169,
+          170,
+          171,
+          172,
+          173,
+          174,
+          175,
+          176,
+          177,
+          178,
+          179,
+          180,
+          181,
+          182,
+          183,
+          184,
+          185,
+          186,
+          187,
+          188,
+          189,
+          190,
+          191,
+          192,
+          193,
+          194,
+          195,
+          196,
+          197,
+          198,
+          199,
+          200,
+          201,
+          202,
+          203,
+          204,
+          205,
+          206,
+          207,
+          208,
+          209,
+          210,
+          211,
+          212,
+          213,
+          214,
+          215,
+          216,
+          217,
+          218,
+          219,
+          220,
+          221,
+          222,
+          223,
+          224,
+          225,
+          226,
+          227,
+          228,
+          229,
+          230,
+          231,
+          232,
+          233,
+          234,
+          235,
+          236,
+          237,
+          238,
+          239,
+          240,
+          241,
+          242,
+          243,
+          244,
+          245,
+          246,
+          247,
+          248,
+          249,
+          250,
+          251,
+          252
+        ],
+        "unexpectedIdentities": [],
+        "duplicateIdentities": [],
+        "skippedIdentityIndexes": [],
+        "failures": [
+          {
+            "identityIndex": 47,
+            "identity": "com.artflow.studio.CanvasInputDeviceTest#layerChangeCancelsShapeAndDisablingFingerPaintingCancelsFingerStroke",
+            "outcome": "failure",
+            "timeSeconds": "0.479",
+            "rawFailureElements": [
+              "<failure />\n  "
+            ]
+          }
+        ]
+      },
+      "complete253IdentityGate": false,
+      "measuredRuntimeCase": null,
+      "runtimeConfiguration": {
+        "requestedJit": "disabled",
+        "verifiedProperties": {
+          "ro.build.fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys",
+          "ro.build.version.sdk": "35",
+          "ro.product.cpu.abilist": "x86_64,arm64-v8a",
+          "ro.kernel.qemu": "1",
+          "ro.debuggable": "1",
+          "dalvik.vm.usejit": "false",
+          "dalvik.vm.usejitprofiles": "false",
+          "configurationStatus": "PASS"
+        }
+      },
+      "profileEvidence": {
+        "avdCreateCommand": "2026-10-24T19:07:14.1502409Z [command]/usr/bin/sh -c \\echo no | avdmanager create avd --force -n test --package 'system-images;android-35;google_apis_ps16k;x86_64'",
+        "requestedImage": "system-images;android-35;google_apis_ps16k;x86_64",
+        "minifiedScreenDimensions": [],
+        "tabletProfile": null
+      },
+      "emulatorVersions": [
+        "37.2.12.0 (build_id 16428233) (CL:N/A)"
+      ],
+      "minifiedLaunchPassed": false,
+      "automaticRetries": 1,
+      "instrumentationStarts": [
+        [
+          "2026-10-24T19:08:25.7175329Z",
+          "253",
+          "emulator-5554 - 15"
+        ],
+        [
+          "2026-10-24T19:11:28.4055907Z",
+          "253",
+          "emulator-5554 - 15"
+        ]
+      ],
+      "consoleFinishes": [
+        [
+          "2026-10-24T19:10:35.5175837Z",
+          "42",
+          "emulator-5554 - 15"
+        ],
+        [
+          "2026-10-24T19:13:33.9091985Z",
+          "57",
+          "emulator-5554 - 15"
+        ]
+      ],
+      "attemptSuiteSeconds": [
+        129.800051,
+        125.503608
+      ],
+      "boundedEvidenceGroups": {
+        "extendedEvidence": {
+          "problems": 4,
+          "fullReportObjectSHA256": "1e211e2fbf9b22383dab7a49a51ba3c9a090d4df5331911a97ee1d5f1c340825"
+        },
+        "nativeImportEvidence": {
+          "problems": 7,
+          "fullReportObjectSHA256": "d9056d8f387c9c44e087c755970e8d54b01c7bba6b8b3ff6429246744055723b"
+        },
+        "nativeExportEvidence": {
+          "problems": 4,
+          "fullReportObjectSHA256": "c3138ccb8a220a196896f04ffffa1db78785b3364902c30ec188d1a19103e207"
+        },
+        "nativeDarkenEvidence": {
+          "problems": 4,
+          "fullReportObjectSHA256": "a69c9d6f766603de07322b749d5262f29f155c1ab5734529056add46a3e80453"
+        },
+        "rasterTransferEvidence": {
+          "problems": 2,
+          "fullReportObjectSHA256": "64663e3ea51a3ebc743d0fd770ae7fa29942ab9fd7bbc163d660adf5d2a102a1"
+        },
+        "modelEditorEvidence": {
+          "problems": 10,
+          "fullReportObjectSHA256": "5c0368a728d6786378a230092f96c80ba5e77e9f891b6dbab70672cbc244cd4a"
+        }
+      },
+      "visual": {
+        "reviewStatus": "Available scoped originals reviewed; incomplete lane is not accepted",
+        "retainedUiPositions": 6,
+        "missingUiImages": [
+          "reference-editor-left.png",
+          "reference-editor-right.png",
+          "reference-editor-modal.png",
+          "reference-editor-focus.png",
+          "reference-editor-focus-large-targets.png",
+          "guide-status-light.png",
+          "guide-status-focus.png",
+          "studio-light.png",
+          "studio-dark.png",
+          "studio-focus.png",
+          "studio-tools-large-text.png",
+          "studio-tools-strip-large-text.png",
+          "studio-palette-large-text.png",
+          "layers-imported-darken.png",
+          "studio-compact-light.png",
+          "studio-compact-dark.png",
+          "model-editor-layers.png",
+          "model-editor-focus.png",
+          "model-editor-restored.png",
+          "model-editor-provisional.png",
+          "model-editor-cancelled.png",
+          "model-editor-committed.png",
+          "model-editor-navigation.png"
+        ],
+        "directOriginalViews": 6
+      },
+      "attempts": {
+        "first": {
+          "reported": 42,
+          "counts": {
+            "passed": 41,
+            "failure": 1
+          },
+          "missingIdentityIndexes": [
+            34,
+            35,
+            36,
+            37,
+            38,
+            40,
+            42,
+            43,
+            46,
+            47,
+            49,
+            51,
+            52,
+            53,
+            55,
+            56,
+            57,
+            58,
+            59,
+            60,
+            61,
+            62,
+            64,
+            65,
+            66,
+            67,
+            68,
+            69,
+            70,
+            71,
+            72,
+            73,
+            74,
+            75,
+            76,
+            77,
+            78,
+            79,
+            80,
+            81,
+            82,
+            83,
+            84,
+            85,
+            86,
+            87,
+            88,
+            89,
+            90,
+            91,
+            92,
+            93,
+            94,
+            95,
+            96,
+            97,
+            98,
+            99,
+            100,
+            101,
+            102,
+            103,
+            104,
+            105,
+            106,
+            107,
+            108,
+            109,
+            110,
+            111,
+            112,
+            113,
+            114,
+            115,
+            116,
+            117,
+            118,
+            119,
+            120,
+            121,
+            122,
+            123,
+            124,
+            125,
+            126,
+            127,
+            128,
+            129,
+            130,
+            131,
+            132,
+            133,
+            134,
+            135,
+            136,
+            137,
+            138,
+            139,
+            140,
+            141,
+            142,
+            143,
+            144,
+            145,
+            146,
+            147,
+            148,
+            149,
+            150,
+            151,
+            152,
+            153,
+            154,
+            155,
+            156,
+            157,
+            158,
+            159,
+            160,
+            161,
+            162,
+            163,
+            164,
+            165,
+            166,
+            167,
+            168,
+            169,
+            170,
+            171,
+            172,
+            173,
+            174,
+            175,
+            176,
+            177,
+            178,
+            179,
+            180,
+            181,
+            182,
+            183,
+            184,
+            185,
+            186,
+            187,
+            188,
+            189,
+            190,
+            191,
+            192,
+            193,
+            194,
+            195,
+            196,
+            197,
+            198,
+            199,
+            200,
+            201,
+            202,
+            203,
+            204,
+            205,
+            206,
+            207,
+            208,
+            209,
+            210,
+            211,
+            212,
+            213,
+            214,
+            215,
+            216,
+            217,
+            218,
+            219,
+            220,
+            221,
+            222,
+            223,
+            224,
+            225,
+            226,
+            227,
+            228,
+            229,
+            230,
+            231,
+            232,
+            233,
+            234,
+            235,
+            236,
+            237,
+            238,
+            239,
+            240,
+            241,
+            242,
+            243,
+            244,
+            245,
+            246,
+            247,
+            248,
+            249,
+            250,
+            251,
+            252
+          ],
+          "unexpectedIdentities": [],
+          "duplicateIdentities": [],
+          "failures": [
+            {
+              "identityIndex": 45,
+              "identity": "com.artflow.studio.CanvasInputDeviceTest#emptyOverlaySelectionDoesNotChangePixelsOrHistory",
+              "outcome": "failure",
+              "timeSeconds": "2.843",
+              "rawFailureElements": [
+                "<failure />\n  "
+              ]
+            }
+          ],
+          "frozenClassifierResult": true
+        },
+        "final": {
+          "reported": 57,
+          "counts": {
+            "passed": 56,
+            "failure": 1
+          },
+          "missingIdentityIndexes": [
+            34,
+            36,
+            46,
+            52,
+            55,
+            57,
+            62,
+            64,
+            65,
+            66,
+            67,
+            68,
+            69,
+            70,
+            71,
+            72,
+            73,
+            74,
+            75,
+            76,
+            77,
+            78,
+            79,
+            80,
+            81,
+            82,
+            83,
+            84,
+            85,
+            86,
+            87,
+            88,
+            89,
+            90,
+            91,
+            92,
+            93,
+            94,
+            95,
+            96,
+            97,
+            98,
+            99,
+            100,
+            101,
+            102,
+            103,
+            104,
+            105,
+            106,
+            107,
+            108,
+            109,
+            110,
+            111,
+            112,
+            113,
+            114,
+            115,
+            116,
+            117,
+            118,
+            119,
+            120,
+            121,
+            122,
+            123,
+            124,
+            125,
+            126,
+            127,
+            128,
+            129,
+            130,
+            131,
+            132,
+            133,
+            134,
+            135,
+            136,
+            137,
+            138,
+            139,
+            140,
+            141,
+            142,
+            143,
+            144,
+            145,
+            146,
+            147,
+            148,
+            149,
+            150,
+            151,
+            152,
+            153,
+            154,
+            155,
+            156,
+            157,
+            158,
+            159,
+            160,
+            161,
+            162,
+            163,
+            164,
+            165,
+            166,
+            167,
+            168,
+            169,
+            170,
+            171,
+            172,
+            173,
+            174,
+            175,
+            176,
+            177,
+            178,
+            179,
+            180,
+            181,
+            182,
+            183,
+            184,
+            185,
+            186,
+            187,
+            188,
+            189,
+            190,
+            191,
+            192,
+            193,
+            194,
+            195,
+            196,
+            197,
+            198,
+            199,
+            200,
+            201,
+            202,
+            203,
+            204,
+            205,
+            206,
+            207,
+            208,
+            209,
+            210,
+            211,
+            212,
+            213,
+            214,
+            215,
+            216,
+            217,
+            218,
+            219,
+            220,
+            221,
+            222,
+            223,
+            224,
+            225,
+            226,
+            227,
+            228,
+            229,
+            230,
+            231,
+            232,
+            233,
+            234,
+            235,
+            236,
+            237,
+            238,
+            239,
+            240,
+            241,
+            242,
+            243,
+            244,
+            245,
+            246,
+            247,
+            248,
+            249,
+            250,
+            251,
+            252
+          ],
+          "unexpectedIdentities": [],
+          "duplicateIdentities": [],
+          "failures": [
+            {
+              "identityIndex": 47,
+              "identity": "com.artflow.studio.CanvasInputDeviceTest#layerChangeCancelsShapeAndDisablingFingerPaintingCancelsFingerStroke",
+              "outcome": "failure",
+              "timeSeconds": "0.479",
+              "rawFailureElements": [
+                "<failure />\n  "
+              ]
+            }
+          ],
+          "frozenClassifierResult": true
+        }
+      },
+      "recovery": {
+        "automaticRetries": 1,
+        "record": {
+          "path": "_temp/artflow-device/framework-recovery.txt",
+          "bytes": 137,
+          "sha256": "6d2182569709d01126dabd1048db2b134ed9d2667bbb6572457315af10b06f89"
+        },
+        "bootBefore": "037d58db-0995-4b81-8025-f84f45bb3b9e",
+        "bootAfter": "4acc09c9-529d-45ff-840d-357d2740046a",
+        "reportedStatus": "PASS",
+        "finalSuiteIncomplete": true,
+        "minifiedLaunchReached": false
+      },
+      "nativeRuntimeContext": {
+        "sdk": 35,
+        "pageSize": 16384,
+        "fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys",
+        "basis": "Fingerprint/page-size lines in final per-case app tombstone; the dedicated RuntimeEnvironmentTest was not reached."
+      }
+    },
+    {
+      "lane": "35-16k-repeat",
+      "label": "API 35 independent 16 KB repeat",
+      "jobId": 120959959208,
+      "jobConclusion": "success",
+      "startedAt": "2026-10-24T19:03:14Z",
+      "completedAt": "2026-10-24T19:25:16Z",
+      "jobSeconds": 1322.0,
+      "artifact": {
+        "id": 12573010746,
+        "url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40122287040/artifacts/12573010746",
+        "bytes": 10679325,
+        "sha256": "7a0ad038bbcc6486d7efb2b4be2c5f929da14e20a6b8fc6a2a922540d94d75d6"
+      },
+      "independentInspectionSHA256": "363013b8a23c8c5653279b8641db2c26cdbe3e62e3690dcf82a8e3a8037e649c",
+      "jobLogSHA256": "c437338d790c1083b74b02dff77bb91069a95b95a419bfc9ceef65e856df0e87",
+      "final": {
+        "counts": {
+          "passed": 253
+        },
+        "reported": 253,
+        "missingIdentityIndexes": [],
+        "unexpectedIdentities": [],
+        "duplicateIdentities": [],
+        "skippedIdentityIndexes": [],
+        "failures": []
+      },
+      "complete253IdentityGate": true,
+      "measuredRuntimeCase": {
+        "sdk": "35",
+        "abis": "x86_64, arm64-v8a",
+        "pageSize": "16384",
+        "fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys"
+      },
+      "runtimeConfiguration": {
+        "requestedJit": "disabled",
+        "verifiedProperties": {
+          "ro.build.fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys",
+          "ro.build.version.sdk": "35",
+          "ro.product.cpu.abilist": "x86_64,arm64-v8a",
+          "ro.kernel.qemu": "1",
+          "ro.debuggable": "1",
+          "dalvik.vm.usejit": "false",
+          "dalvik.vm.usejitprofiles": "false",
+          "configurationStatus": "PASS"
+        }
+      },
+      "profileEvidence": {
+        "avdCreateCommand": "2026-10-24T19:08:12.8120303Z [command]/usr/bin/sh -c \\echo no | avdmanager create avd --force -n test --package 'system-images;android-35;google_apis_ps16k;x86_64'",
+        "requestedImage": "system-images;android-35;google_apis_ps16k;x86_64",
+        "minifiedScreenDimensions": [
+          [
+            320,
+            640
+          ]
+        ],
+        "tabletProfile": null
+      },
+      "emulatorVersions": [
+        "37.2.12.0 (build_id 16428233) (CL:N/A)"
+      ],
+      "minifiedLaunchPassed": true,
+      "automaticRetries": 0,
+      "instrumentationStarts": [
+        [
+          "2026-10-24T19:09:43.1297510Z",
+          "253",
+          "emulator-5554 - 15"
+        ]
+      ],
+      "consoleFinishes": [
+        [
+          "2026-10-24T19:18:59.2279765Z",
+          "253",
+          "emulator-5554 - 15"
+        ]
+      ],
+      "attemptSuiteSeconds": [
+        556.098225
+      ],
+      "boundedEvidenceGroups": {
+        "extendedEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "203a624c7a875062fe3d4c4694dc7c8a513464475ef2aa16c6b4e82124d7dad5"
+        },
+        "nativeImportEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "9c480ac314d38a1ffb16b2ad03b77bb4f8f719d51ed827307706c9fe2e30e511"
+        },
+        "nativeExportEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "edc804e448d24bf47f811127b569f39c297a4017aba10a6b88fbe71c94af6d39"
+        },
+        "nativeDarkenEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "e4b53ac7bad5641b5f961c6235eb7840baad8f1340c024feb020af9f401d373d"
+        },
+        "rasterTransferEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "ec163ac9e27492f4753cf900de0d3018210256bb0fd49886ea51f96b8b869b83"
+        },
+        "modelEditorEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "2f4e8f97fa9000be0c295e8c19a65fd0946bcde59d98d9afd6b5fbaf2dc51af1"
+        }
+      },
+      "visual": {
+        "reviewStatus": "Scoped original review complete; no concrete visual defect",
+        "retainedUiPositions": 29,
+        "missingUiImages": [],
+        "directOriginalViews": 13,
+        "rawModelLayer": {
+          "width": 96,
+          "height": 64,
+          "opaquePixels": 6144,
+          "exactOriginalGapPixels": 512,
+          "gapColumnsInclusive": [
+            44,
+            51
+          ],
+          "originalRGBA": [
+            176,
+            64,
+            32,
+            255
+          ],
+          "changedPixels": 318,
+          "leftIslandChangedPixels": 158,
+          "rightIslandChangedPixels": 156,
+          "greenDominantPixels": 260,
+          "rgbaSHA256": "d0897248c03261bf6724a41bf77f8049f06d83742f6d632f6df38558d7086321",
+          "scope": "All retained alpha and gap pixels plus paint presence in both islands. No cross-lane hash oracle; input locations depend on actual view geometry."
+        }
+      },
+      "elapsedRepositoryTiming": {
+        "casePassed": true,
+        "rawFile": {
+          "copies": 1,
+          "bytes": 44570,
+          "sha256": "9e265aa82ecb1ec2645c13632c36f99bd4cefd759ca3f0e920cc29894acd3043",
+          "auditCopyBasename": "stroke-timing.json"
+        },
+        "textFile": {
+          "copies": 1,
+          "bytes": 1701,
+          "sha256": "7ba443f147d1a251b9beea53605e6da59fe97967c35b5d9db1e34bdf0444ee37",
+          "auditCopyBasename": "stroke-timing.txt"
+        },
+        "fixture": {
+          "width": 2048,
+          "height": 2048,
+          "dpi": 264,
+          "paperLayers": 1,
+          "stripedLayers": 4,
+          "inkLayers": 1,
+          "totalLayers": 6,
+          "samplesPerBrush": 80,
+          "priorCommittedStrokesRetained": true,
+          "startX": 240,
+          "step": 12,
+          "centreY": 1024,
+          "waveDivisor": 9,
+          "amplitude": 260
+        },
+        "brushes": [
+          {
+            "name": "pen 12 px",
+            "sampleCount": 80,
+            "summaries": {
+              "continueStrokeSummary": {
+                "p50Nanos": 20258,
+                "p95Nanos": 43041,
+                "maxNanos": 83536
+              },
+              "compositePreviewFrameSummary": {
+                "p50Nanos": 11114434,
+                "p95Nanos": 219452233,
+                "maxNanos": 423854423
+              },
+              "combinedSampleSummary": {
+                "p50Nanos": 11182392,
+                "p95Nanos": 219473524,
+                "maxNanos": 423876144
+              }
+            },
+            "phases": {
+              "preStrokePreviewNanos": 19828498915,
+              "beginStrokeNanos": 132347,
+              "endStrokeNanos": 236819828,
+              "finalPreviewNanos": 5417616074,
+              "endAndFinalPreviewNanos": 5654435902
+            }
+          },
+          {
+            "name": "textured 80 px",
+            "sampleCount": 80,
+            "summaries": {
+              "continueStrokeSummary": {
+                "p50Nanos": 20358,
+                "p95Nanos": 61585,
+                "maxNanos": 76974
+              },
+              "compositePreviewFrameSummary": {
+                "p50Nanos": 91265695,
+                "p95Nanos": 110388871,
+                "maxNanos": 116072754
+              },
+              "combinedSampleSummary": {
+                "p50Nanos": 91286364,
+                "p95Nanos": 110415861,
+                "maxNanos": 116142274
+              }
+            },
+            "phases": {
+              "preStrokePreviewNanos": 1123758,
+              "beginStrokeNanos": 219830,
+              "endStrokeNanos": 1055959853,
+              "finalPreviewNanos": 767475170,
+              "endAndFinalPreviewNanos": 1823435023
+            }
+          },
+          {
+            "name": "soft airbrush 300 px",
+            "sampleCount": 80,
+            "summaries": {
+              "continueStrokeSummary": {
+                "p50Nanos": 31598,
+                "p95Nanos": 42880,
+                "maxNanos": 71634
+              },
+              "compositePreviewFrameSummary": {
+                "p50Nanos": 1427981851,
+                "p95Nanos": 1846000063,
+                "maxNanos": 1982916087
+              },
+              "combinedSampleSummary": {
+                "p50Nanos": 1428021675,
+                "p95Nanos": 1846031892,
+                "maxNanos": 1982945071
+              }
+            },
+            "phases": {
+              "preStrokePreviewNanos": 1222011,
+              "beginStrokeNanos": 218939,
+              "endStrokeNanos": 3446510142,
+              "finalPreviewNanos": 10388847321,
+              "endAndFinalPreviewNanos": 13835357463
+            }
+          }
+        ],
+        "sampleOrderAndArithmeticVerified": true,
+        "independentPercentilesVerified": true,
+        "readableTextAgreesToThreeDecimals": true,
+        "additionalPerformanceThreshold": null
+      },
+      "pairedRasterTransfer": {
+        "casePassed": true,
+        "pairCount": 26,
+        "validatedCalls": 52,
+        "warmupPairs": 6,
+        "measuredPairs": 20,
+        "summaryNanos": {
+          "currentMedianNanos": 9045050.5,
+          "referenceMedianNanos": 234359290.0
+        },
+        "files": {
+          "compositor-raster-transfer.argb": {
+            "bytes": 262144,
+            "sha256": "d0c182f79088483e024627e0df21c0f696823c416d33b208fa4be21531af409e"
+          },
+          "compositor-raster-transfer-timing.json": {
+            "bytes": 7220,
+            "sha256": "8edcbdf90359636a73c3b55bba23f26cc4a758d7e08c466fecdf4c2d89bfe5f8"
+          }
+        },
+        "allRetainedPixelsVerified": 65536,
+        "sourcePixelSHA256": "292422aad2148fc1ce7b4d76c6c298a919e504a1189bf9467783103403879e23",
+        "outputPixelSHA256": "d0c182f79088483e024627e0df21c0f696823c416d33b208fa4be21531af409e",
+        "threshold": null,
+        "pixelVerificationScope": "Every retained final-current ARGB byte is independently checked; all 52 transfer outputs, source immutability and pool ownership are assertions of the exact passing device case."
+      }
+    },
+    {
+      "lane": "36",
+      "label": "API 36",
+      "jobId": 120959959057,
+      "jobConclusion": "success",
+      "startedAt": "2026-10-24T19:03:13Z",
+      "completedAt": "2026-10-24T19:19:55Z",
+      "jobSeconds": 1002.0,
+      "artifact": {
+        "id": 12572558838,
+        "url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40122287040/artifacts/12572558838",
+        "bytes": 8320432,
+        "sha256": "5159f95a53ac1265111aa92bc736c283e40837e5142d74c3965acd2a33002aef"
+      },
+      "independentInspectionSHA256": "fc2a555cdbca800e55fe7a1f1d2e6845448552a305dfa15e4d69644175dec9c9",
+      "jobLogSHA256": "6ed6dd6e41834e5ed617ed4960111936eb74e024468993fb6f1d9cc672871d74",
+      "final": {
+        "counts": {
+          "passed": 253
+        },
+        "reported": 253,
+        "missingIdentityIndexes": [],
+        "unexpectedIdentities": [],
+        "duplicateIdentities": [],
+        "skippedIdentityIndexes": [],
+        "failures": []
+      },
+      "complete253IdentityGate": true,
+      "measuredRuntimeCase": {
+        "sdk": "36",
+        "abis": "x86_64, arm64-v8a",
+        "pageSize": "4096",
+        "fingerprint": "google/sdk_gphone64_x86_64/emu64xa:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys"
+      },
+      "runtimeConfiguration": {
+        "requestedJit": "default",
+        "verifiedProperties": {
+          "ro.build.fingerprint": "google/sdk_gphone64_x86_64/emu64xa:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys",
+          "ro.build.version.sdk": "36",
+          "ro.product.cpu.abilist": "x86_64,arm64-v8a",
+          "ro.kernel.qemu": "1",
+          "ro.debuggable": "1",
+          "dalvik.vm.usejit": "true",
+          "dalvik.vm.usejitprofiles": "",
+          "configurationStatus": "PASS"
+        }
+      },
+      "profileEvidence": {
+        "avdCreateCommand": "2026-10-24T19:08:06.5605565Z [command]/usr/bin/sh -c \\echo no | avdmanager create avd --force -n test --package 'system-images;android-36;google_apis;x86_64'",
+        "requestedImage": "system-images;android-36;google_apis;x86_64",
+        "minifiedScreenDimensions": [
+          [
+            320,
+            640
+          ]
+        ],
+        "tabletProfile": null
+      },
+      "emulatorVersions": [
+        "37.2.12.0 (build_id 16428233) (CL:N/A)"
+      ],
+      "minifiedLaunchPassed": true,
+      "automaticRetries": 0,
+      "instrumentationStarts": [
+        [
+          "2026-10-24T19:09:28.4581862Z",
+          "253",
+          "emulator-5554 - 16"
+        ]
+      ],
+      "consoleFinishes": [
+        [
+          "2026-10-24T19:14:06.6583203Z",
+          "253",
+          "emulator-5554 - 16"
+        ]
+      ],
+      "attemptSuiteSeconds": [
+        278.200134
+      ],
+      "boundedEvidenceGroups": {
+        "extendedEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "c3fcb747913e7097aa32c94287d8ba206b95c8bc350769d9d1f6e88615c026be"
+        },
+        "nativeImportEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "4da0d02268aa4896ca4a491f5a03b18a2b9fe21c8435712b65f094aac07ccacb"
+        },
+        "nativeExportEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "9c902c64f115cbeda451cce6af54fd5217bac7829ba01938853c3438b3c16fc3"
+        },
+        "nativeDarkenEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "fff943adeccfab50c1e2f9ecd71b01d02cc16fbeda2b03f567881c2a540b69c6"
+        },
+        "rasterTransferEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "62c1fe172b50bb17151ddbc356736b085119049b1ce73d3382c415a5319111cc"
+        },
+        "modelEditorEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "6fce6395e2f4126d3be6ecef5eb66e2629d143d4ab44cc5f9981e3be0e96a6ae"
+        }
+      },
+      "visual": {
+        "reviewStatus": "Scoped original review complete; no concrete visual defect",
+        "retainedUiPositions": 29,
+        "missingUiImages": [],
+        "directOriginalViews": 8,
+        "rawModelLayer": {
+          "width": 96,
+          "height": 64,
+          "opaquePixels": 6144,
+          "exactOriginalGapPixels": 512,
+          "gapColumnsInclusive": [
+            44,
+            51
+          ],
+          "originalRGBA": [
+            176,
+            64,
+            32,
+            255
+          ],
+          "changedPixels": 318,
+          "leftIslandChangedPixels": 158,
+          "rightIslandChangedPixels": 156,
+          "greenDominantPixels": 260,
+          "rgbaSHA256": "d0897248c03261bf6724a41bf77f8049f06d83742f6d632f6df38558d7086321",
+          "scope": "All retained alpha and gap pixels plus paint presence in both islands. No cross-lane hash oracle; input locations depend on actual view geometry."
+        }
+      },
+      "elapsedRepositoryTiming": {
+        "casePassed": true,
+        "rawFile": {
+          "copies": 1,
+          "bytes": 43726,
+          "sha256": "f64af8c2af6c39336e278523ee08d3e4ca524fa301a40cbf40bd2d5e5da3a977",
+          "auditCopyBasename": "stroke-timing.json"
+        },
+        "textFile": {
+          "copies": 1,
+          "bytes": 1661,
+          "sha256": "d0e8def7e4317b027b6e918a14299d6d972f4fa80991bfc5b713a85376283f5e",
+          "auditCopyBasename": "stroke-timing.txt"
+        },
+        "fixture": {
+          "width": 2048,
+          "height": 2048,
+          "dpi": 264,
+          "paperLayers": 1,
+          "stripedLayers": 4,
+          "inkLayers": 1,
+          "totalLayers": 6,
+          "samplesPerBrush": 80,
+          "priorCommittedStrokesRetained": true,
+          "startX": 240,
+          "step": 12,
+          "centreY": 1024,
+          "waveDivisor": 9,
+          "amplitude": 260
+        },
+        "brushes": [
+          {
+            "name": "pen 12 px",
+            "sampleCount": 80,
+            "summaries": {
+              "continueStrokeSummary": {
+                "p50Nanos": 7624,
+                "p95Nanos": 37951,
+                "maxNanos": 107360
+              },
+              "compositePreviewFrameSummary": {
+                "p50Nanos": 1746166,
+                "p95Nanos": 11170597,
+                "maxNanos": 15540458
+              },
+              "combinedSampleSummary": {
+                "p50Nanos": 1759172,
+                "p95Nanos": 11180606,
+                "maxNanos": 15551990
+              }
+            },
+            "phases": {
+              "preStrokePreviewNanos": 639081224,
+              "beginStrokeNanos": 84278,
+              "endStrokeNanos": 13546457,
+              "finalPreviewNanos": 197183678,
+              "endAndFinalPreviewNanos": 210730135
+            }
+          },
+          {
+            "name": "textured 80 px",
+            "sampleCount": 80,
+            "summaries": {
+              "continueStrokeSummary": {
+                "p50Nanos": 7855,
+                "p95Nanos": 12774,
+                "maxNanos": 93505
+              },
+              "compositePreviewFrameSummary": {
+                "p50Nanos": 6827505,
+                "p95Nanos": 8670573,
+                "maxNanos": 11911774
+              },
+              "combinedSampleSummary": {
+                "p50Nanos": 6836292,
+                "p95Nanos": 8678909,
+                "maxNanos": 11919608
+              }
+            },
+            "phases": {
+              "preStrokePreviewNanos": 607213,
+              "beginStrokeNanos": 114784,
+              "endStrokeNanos": 100748226,
+              "finalPreviewNanos": 26992349,
+              "endAndFinalPreviewNanos": 127740575
+            }
+          },
+          {
+            "name": "soft airbrush 300 px",
+            "sampleCount": 80,
+            "summaries": {
+              "continueStrokeSummary": {
+                "p50Nanos": 12272,
+                "p95Nanos": 20379,
+                "maxNanos": 25868
+              },
+              "compositePreviewFrameSummary": {
+                "p50Nanos": 64569362,
+                "p95Nanos": 86134695,
+                "maxNanos": 95442562
+              },
+              "combinedSampleSummary": {
+                "p50Nanos": 64586554,
+                "p95Nanos": 86150535,
+                "maxNanos": 95455476
+              }
+            },
+            "phases": {
+              "preStrokePreviewNanos": 440511,
+              "beginStrokeNanos": 95338,
+              "endStrokeNanos": 131048274,
+              "finalPreviewNanos": 368204440,
+              "endAndFinalPreviewNanos": 499252714
+            }
+          }
+        ],
+        "sampleOrderAndArithmeticVerified": true,
+        "independentPercentilesVerified": true,
+        "readableTextAgreesToThreeDecimals": true,
+        "additionalPerformanceThreshold": null
+      },
+      "pairedRasterTransfer": {
+        "casePassed": true,
+        "pairCount": 26,
+        "validatedCalls": 52,
+        "warmupPairs": 6,
+        "measuredPairs": 20,
+        "summaryNanos": {
+          "currentMedianNanos": 85454.5,
+          "referenceMedianNanos": 7371455.5
+        },
+        "files": {
+          "compositor-raster-transfer.argb": {
+            "bytes": 262144,
+            "sha256": "d0c182f79088483e024627e0df21c0f696823c416d33b208fa4be21531af409e"
+          },
+          "compositor-raster-transfer-timing.json": {
+            "bytes": 7118,
+            "sha256": "25d5526a9e587fba5b18b3c75442a1b3ce43b6856d59471c87fbae55d2d367ec"
+          }
+        },
+        "allRetainedPixelsVerified": 65536,
+        "sourcePixelSHA256": "292422aad2148fc1ce7b4d76c6c298a919e504a1189bf9467783103403879e23",
+        "outputPixelSHA256": "d0c182f79088483e024627e0df21c0f696823c416d33b208fa4be21531af409e",
+        "threshold": null,
+        "pixelVerificationScope": "Every retained final-current ARGB byte is independently checked; all 52 transfer outputs, source immutability and pool ownership are assertions of the exact passing device case."
+      }
+    },
+    {
+      "lane": "36-16k",
+      "label": "API 36 16 KB",
+      "jobId": 120959959126,
+      "jobConclusion": "success",
+      "startedAt": "2026-10-24T19:03:14Z",
+      "completedAt": "2026-10-24T19:15:16Z",
+      "jobSeconds": 722.0,
+      "artifact": {
+        "id": 12572553155,
+        "url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40122287040/artifacts/12572553155",
+        "bytes": 7765398,
+        "sha256": "cc0d701a2625c2d4bc1f941f4f0ac716f52949e9775befa2d94a082fb706e224"
+      },
+      "independentInspectionSHA256": "f7bfc423aea8e7719ac54142c4695e1dc5694cc07a5a1ed931a1719e9bebe7d1",
+      "jobLogSHA256": "fe4ee7040e158dec3d88c009c2cbf3fe252f7d769c13281bb7554156774ca434",
+      "final": {
+        "counts": {
+          "passed": 253
+        },
+        "reported": 253,
+        "missingIdentityIndexes": [],
+        "unexpectedIdentities": [],
+        "duplicateIdentities": [],
+        "skippedIdentityIndexes": [],
+        "failures": []
+      },
+      "complete253IdentityGate": true,
+      "measuredRuntimeCase": {
+        "sdk": "36",
+        "abis": "x86_64, arm64-v8a",
+        "pageSize": "16384",
+        "fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys"
+      },
+      "runtimeConfiguration": {
+        "requestedJit": "default",
+        "verifiedProperties": {
+          "ro.build.fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys",
+          "ro.build.version.sdk": "36",
+          "ro.product.cpu.abilist": "x86_64,arm64-v8a",
+          "ro.kernel.qemu": "1",
+          "ro.debuggable": "1",
+          "dalvik.vm.usejit": "true",
+          "dalvik.vm.usejitprofiles": "",
+          "configurationStatus": "PASS"
+        }
+      },
+      "profileEvidence": {
+        "avdCreateCommand": "2026-10-24T19:06:44.1417482Z [command]/usr/bin/sh -c \\echo no | avdmanager create avd --force -n test --package 'system-images;android-36;google_apis_ps16k;x86_64'",
+        "requestedImage": "system-images;android-36;google_apis_ps16k;x86_64",
+        "minifiedScreenDimensions": [
+          [
+            320,
+            640
+          ]
+        ],
+        "tabletProfile": null
+      },
+      "emulatorVersions": [
+        "37.2.12.0 (build_id 16428233) (CL:N/A)"
+      ],
+      "minifiedLaunchPassed": true,
+      "automaticRetries": 0,
+      "instrumentationStarts": [
+        [
+          "2026-10-24T19:07:51.9167051Z",
+          "253",
+          "emulator-5554 - 16"
+        ]
+      ],
+      "consoleFinishes": [
+        [
+          "2026-10-24T19:10:57.2176421Z",
+          "253",
+          "emulator-5554 - 16"
+        ]
+      ],
+      "attemptSuiteSeconds": [
+        185.300937
+      ],
+      "boundedEvidenceGroups": {
+        "extendedEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "b402c37faf6be3ec630d64c68c67ed17770a122da18b94f965c7cfba725f26c1"
+        },
+        "nativeImportEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "bae176f2a0cb46b06502af59d344c00acce7702de3fe2508c8e587254235cfc1"
+        },
+        "nativeExportEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "7761201614014c23c98f6311a6ede7942f875547134e50ebe92ec36716306477"
+        },
+        "nativeDarkenEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "2d76aa629a5e50a879eb2046134a92a54026aa155517a66508a78a6bd510ab96"
+        },
+        "rasterTransferEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "7be388a646b998aca1ffc40b15b1e67ccaf32cf1724c3af1f5c5043fa02adbce"
+        },
+        "modelEditorEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "c5a480e5bbdc89e2e73e154cf831f6431e2fae4ee9607d3b5a9853b09949f8b9"
+        }
+      },
+      "visual": {
+        "reviewStatus": "Scoped original review complete; no concrete visual defect",
+        "retainedUiPositions": 29,
+        "missingUiImages": [],
+        "directOriginalViews": 8,
+        "rawModelLayer": {
+          "width": 96,
+          "height": 64,
+          "opaquePixels": 6144,
+          "exactOriginalGapPixels": 512,
+          "gapColumnsInclusive": [
+            44,
+            51
+          ],
+          "originalRGBA": [
+            176,
+            64,
+            32,
+            255
+          ],
+          "changedPixels": 318,
+          "leftIslandChangedPixels": 158,
+          "rightIslandChangedPixels": 156,
+          "greenDominantPixels": 260,
+          "rgbaSHA256": "d0897248c03261bf6724a41bf77f8049f06d83742f6d632f6df38558d7086321",
+          "scope": "All retained alpha and gap pixels plus paint presence in both islands. No cross-lane hash oracle; input locations depend on actual view geometry."
+        }
+      },
+      "elapsedRepositoryTiming": {
+        "casePassed": true,
+        "rawFile": {
+          "copies": 1,
+          "bytes": 43628,
+          "sha256": "65b95401b8dd804c558b3a1d4ddf7ac542230e12cb8de7650f7476ab1771cdc2",
+          "auditCopyBasename": "stroke-timing.json"
+        },
+        "textFile": {
+          "copies": 1,
+          "bytes": 1660,
+          "sha256": "f6968812760ed60169cc163c129240ed1da2eab5d5b45fbb639a0e95d9b04b5c",
+          "auditCopyBasename": "stroke-timing.txt"
+        },
+        "fixture": {
+          "width": 2048,
+          "height": 2048,
+          "dpi": 264,
+          "paperLayers": 1,
+          "stripedLayers": 4,
+          "inkLayers": 1,
+          "totalLayers": 6,
+          "samplesPerBrush": 80,
+          "priorCommittedStrokesRetained": true,
+          "startX": 240,
+          "step": 12,
+          "centreY": 1024,
+          "waveDivisor": 9,
+          "amplitude": 260
+        },
+        "brushes": [
+          {
+            "name": "pen 12 px",
+            "sampleCount": 80,
+            "summaries": {
+              "continueStrokeSummary": {
+                "p50Nanos": 3485,
+                "p95Nanos": 7672,
+                "maxNanos": 12849
+              },
+              "compositePreviewFrameSummary": {
+                "p50Nanos": 987111,
+                "p95Nanos": 10713638,
+                "maxNanos": 23490399
+              },
+              "combinedSampleSummary": {
+                "p50Nanos": 990426,
+                "p95Nanos": 10717674,
+                "maxNanos": 23499923
+              }
+            },
+            "phases": {
+              "preStrokePreviewNanos": 514970747,
+              "beginStrokeNanos": 82815,
+              "endStrokeNanos": 8026807,
+              "finalPreviewNanos": 128403844,
+              "endAndFinalPreviewNanos": 136430651
+            }
+          },
+          {
+            "name": "textured 80 px",
+            "sampleCount": 80,
+            "summaries": {
+              "continueStrokeSummary": {
+                "p50Nanos": 4336,
+                "p95Nanos": 6900,
+                "maxNanos": 11818
+              },
+              "compositePreviewFrameSummary": {
+                "p50Nanos": 4194284,
+                "p95Nanos": 8818274,
+                "maxNanos": 12143234
+              },
+              "combinedSampleSummary": {
+                "p50Nanos": 4198831,
+                "p95Nanos": 8823271,
+                "maxNanos": 12151006
+              }
+            },
+            "phases": {
+              "preStrokePreviewNanos": 345148,
+              "beginStrokeNanos": 61112,
+              "endStrokeNanos": 103255497,
+              "finalPreviewNanos": 21836181,
+              "endAndFinalPreviewNanos": 125091678
+            }
+          },
+          {
+            "name": "soft airbrush 300 px",
+            "sampleCount": 80,
+            "summaries": {
+              "continueStrokeSummary": {
+                "p50Nanos": 13210,
+                "p95Nanos": 18607,
+                "maxNanos": 33481
+              },
+              "compositePreviewFrameSummary": {
+                "p50Nanos": 43755597,
+                "p95Nanos": 56650369,
+                "maxNanos": 65329935
+              },
+              "combinedSampleSummary": {
+                "p50Nanos": 43768807,
+                "p95Nanos": 56665852,
+                "maxNanos": 65344547
+              }
+            },
+            "phases": {
+              "preStrokePreviewNanos": 320451,
+              "beginStrokeNanos": 470035,
+              "endStrokeNanos": 83922679,
+              "finalPreviewNanos": 235914182,
+              "endAndFinalPreviewNanos": 319836861
+            }
+          }
+        ],
+        "sampleOrderAndArithmeticVerified": true,
+        "independentPercentilesVerified": true,
+        "readableTextAgreesToThreeDecimals": true,
+        "additionalPerformanceThreshold": null
+      },
+      "pairedRasterTransfer": {
+        "casePassed": true,
+        "pairCount": 26,
+        "validatedCalls": 52,
+        "warmupPairs": 6,
+        "measuredPairs": 20,
+        "summaryNanos": {
+          "currentMedianNanos": 46480.0,
+          "referenceMedianNanos": 5524401.0
+        },
+        "files": {
+          "compositor-raster-transfer.argb": {
+            "bytes": 262144,
+            "sha256": "d0c182f79088483e024627e0df21c0f696823c416d33b208fa4be21531af409e"
+          },
+          "compositor-raster-transfer-timing.json": {
+            "bytes": 7114,
+            "sha256": "855d633cb563243099462711816d069a96c6f417c1acfd9095b8b2533392fd79"
+          }
+        },
+        "allRetainedPixelsVerified": 65536,
+        "sourcePixelSHA256": "292422aad2148fc1ce7b4d76c6c298a919e504a1189bf9467783103403879e23",
+        "outputPixelSHA256": "d0c182f79088483e024627e0df21c0f696823c416d33b208fa4be21531af409e",
+        "threshold": null,
+        "pixelVerificationScope": "Every retained final-current ARGB byte is independently checked; all 52 transfer outputs, source immutability and pool ownership are assertions of the exact passing device case."
+      }
+    },
+    {
+      "lane": "36-tablet",
+      "label": "API 36 tablet",
+      "jobId": 120959959134,
+      "jobConclusion": "success",
+      "startedAt": "2026-10-24T19:03:14Z",
+      "completedAt": "2026-10-24T19:31:03Z",
+      "jobSeconds": 1669.0,
+      "artifact": {
+        "id": 12573155892,
+        "url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40122287040/artifacts/12573155892",
+        "bytes": 11446832,
+        "sha256": "a151b90b70efb5d4f15d186d292601cdd8b438add55059d62cb1d153c71e2d5c"
+      },
+      "independentInspectionSHA256": "bba9465da585d1846cb59e6b2c4922d82b8ed94190046a64e0d98da8e8d4382e",
+      "jobLogSHA256": "aecad7e2733e68d75cb9d529429bd84f634b8f941616f52365f6ef6fed71726e",
+      "final": {
+        "counts": {
+          "passed": 253
+        },
+        "reported": 253,
+        "missingIdentityIndexes": [],
+        "unexpectedIdentities": [],
+        "duplicateIdentities": [],
+        "skippedIdentityIndexes": [],
+        "failures": []
+      },
+      "complete253IdentityGate": true,
+      "measuredRuntimeCase": {
+        "sdk": "36",
+        "abis": "x86_64, arm64-v8a",
+        "pageSize": "4096",
+        "fingerprint": "google/sdk_gphone64_x86_64/emu64xa:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys"
+      },
+      "runtimeConfiguration": {
+        "requestedJit": "default",
+        "verifiedProperties": {
+          "ro.build.fingerprint": "google/sdk_gphone64_x86_64/emu64xa:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys",
+          "ro.build.version.sdk": "36",
+          "ro.product.cpu.abilist": "x86_64,arm64-v8a",
+          "ro.kernel.qemu": "1",
+          "ro.debuggable": "1",
+          "dalvik.vm.usejit": "true",
+          "dalvik.vm.usejitprofiles": "",
+          "configurationStatus": "PASS"
+        }
+      },
+      "profileEvidence": {
+        "avdCreateCommand": "2026-10-24T19:08:10.0168570Z [command]/usr/bin/sh -c \\echo no | avdmanager create avd --force -n test --package 'system-images;android-36;google_apis;x86_64' --device 'pixel_c'",
+        "requestedImage": "system-images;android-36;google_apis;x86_64",
+        "minifiedScreenDimensions": [
+          [
+            2560,
+            1800
+          ]
+        ],
+        "tabletProfile": "pixel_c"
+      },
+      "emulatorVersions": [
+        "37.2.12.0 (build_id 16428233) (CL:N/A)"
+      ],
+      "minifiedLaunchPassed": true,
+      "automaticRetries": 0,
+      "instrumentationStarts": [
+        [
+          "2026-10-24T19:10:10.8660561Z",
+          "253",
+          "emulator-5554 - 16"
+        ]
+      ],
+      "consoleFinishes": [
+        [
+          "2026-10-24T19:24:22.3647138Z",
+          "253",
+          "emulator-5554 - 16"
+        ]
+      ],
+      "attemptSuiteSeconds": [
+        851.498657
+      ],
+      "boundedEvidenceGroups": {
+        "extendedEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "789878bf94d60fcfdbd8e6257b2c83c6eab16697154372a9c330194a2ab09e8e"
+        },
+        "nativeImportEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "2d0d3d65445856bf9fb76429a64e58f15e628a0c40c4d0d4acb611dd4dabf1ae"
+        },
+        "nativeExportEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "c02c50b5786f8cd330618170a9ae1fd8770abb44e1c37b046ea57d1f80dd10c4"
+        },
+        "nativeDarkenEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "1c8600230b12cf00f152d3af0fa518cfb6f9af37ea4efff9be7dd60a6f663261"
+        },
+        "rasterTransferEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "e41d3efad85e6e86bcca8da42cee8a9e377b3afaf778d41eaab53660dd5b43a2"
+        },
+        "modelEditorEvidence": {
+          "problems": 0,
+          "fullReportObjectSHA256": "08c3c83ca336e9059e3d49a553a55909c7d533bb2eee1d9438d180b8cf745820"
+        }
+      },
+      "visual": {
+        "reviewStatus": "Scoped original review complete; no concrete visual defect",
+        "retainedUiPositions": 29,
+        "missingUiImages": [],
+        "directOriginalViews": 9,
+        "rawModelLayer": {
+          "width": 96,
+          "height": 64,
+          "opaquePixels": 6144,
+          "exactOriginalGapPixels": 512,
+          "gapColumnsInclusive": [
+            44,
+            51
+          ],
+          "originalRGBA": [
+            176,
+            64,
+            32,
+            255
+          ],
+          "changedPixels": 324,
+          "leftIslandChangedPixels": 164,
+          "rightIslandChangedPixels": 156,
+          "greenDominantPixels": 262,
+          "rgbaSHA256": "80775dd98be2f96b40247bb72c1c0b034efba40bdaa54b35fc15d93302ca3719",
+          "scope": "All retained alpha and gap pixels plus paint presence in both islands. No cross-lane hash oracle; input locations depend on actual view geometry."
+        }
+      },
+      "elapsedRepositoryTiming": {
+        "casePassed": true,
+        "rawFile": {
+          "copies": 1,
+          "bytes": 43852,
+          "sha256": "09ab7f6e20896dd6c45983843606924104f18cd57c641bb1620ade90eb003bf9",
+          "auditCopyBasename": "stroke-timing.json"
+        },
+        "textFile": {
+          "copies": 1,
+          "bytes": 1667,
+          "sha256": "861c0cf2e4bde84d8a74fc7a56351498d5bac9edfad8cd345fea1b9fe2d957b1",
+          "auditCopyBasename": "stroke-timing.txt"
+        },
+        "fixture": {
+          "width": 2048,
+          "height": 2048,
+          "dpi": 264,
+          "paperLayers": 1,
+          "stripedLayers": 4,
+          "inkLayers": 1,
+          "totalLayers": 6,
+          "samplesPerBrush": 80,
+          "priorCommittedStrokesRetained": true,
+          "startX": 240,
+          "step": 12,
+          "centreY": 1024,
+          "waveDivisor": 9,
+          "amplitude": 260
+        },
+        "brushes": [
+          {
+            "name": "pen 12 px",
+            "sampleCount": 80,
+            "summaries": {
+              "continueStrokeSummary": {
+                "p50Nanos": 8055,
+                "p95Nanos": 17363,
+                "maxNanos": 33893
+              },
+              "compositePreviewFrameSummary": {
+                "p50Nanos": 1758903,
+                "p95Nanos": 22233339,
+                "maxNanos": 49848053
+              },
+              "combinedSampleSummary": {
+                "p50Nanos": 1767238,
+                "p95Nanos": 22246214,
+                "maxNanos": 49869432
+              }
+            },
+            "phases": {
+              "preStrokePreviewNanos": 622868189,
+              "beginStrokeNanos": 82554,
+              "endStrokeNanos": 19778452,
+              "finalPreviewNanos": 204176034,
+              "endAndFinalPreviewNanos": 223954486
+            }
+          },
+          {
+            "name": "textured 80 px",
+            "sampleCount": 80,
+            "summaries": {
+              "continueStrokeSummary": {
+                "p50Nanos": 10210,
+                "p95Nanos": 25708,
+                "maxNanos": 132436
+              },
+              "compositePreviewFrameSummary": {
+                "p50Nanos": 7256621,
+                "p95Nanos": 20744151,
+                "maxNanos": 29526891
+              },
+              "combinedSampleSummary": {
+                "p50Nanos": 7281488,
+                "p95Nanos": 20752898,
+                "maxNanos": 29549875
+              }
+            },
+            "phases": {
+              "preStrokePreviewNanos": 424993,
+              "beginStrokeNanos": 105286,
+              "endStrokeNanos": 110867202,
+              "finalPreviewNanos": 27367711,
+              "endAndFinalPreviewNanos": 138234913
+            }
+          },
+          {
+            "name": "soft airbrush 300 px",
+            "sampleCount": 80,
+            "summaries": {
+              "continueStrokeSummary": {
+                "p50Nanos": 20770,
+                "p95Nanos": 38392,
+                "maxNanos": 67125
+              },
+              "compositePreviewFrameSummary": {
+                "p50Nanos": 72040537,
+                "p95Nanos": 109257040,
+                "maxNanos": 146467979
+              },
+              "combinedSampleSummary": {
+                "p50Nanos": 72060254,
+                "p95Nanos": 109280022,
+                "maxNanos": 146497815
+              }
+            },
+            "phases": {
+              "preStrokePreviewNanos": 512576,
+              "beginStrokeNanos": 162033,
+              "endStrokeNanos": 121714938,
+              "finalPreviewNanos": 352767107,
+              "endAndFinalPreviewNanos": 474482045
+            }
+          }
+        ],
+        "sampleOrderAndArithmeticVerified": true,
+        "independentPercentilesVerified": true,
+        "readableTextAgreesToThreeDecimals": true,
+        "additionalPerformanceThreshold": null
+      },
+      "pairedRasterTransfer": {
+        "casePassed": true,
+        "pairCount": 26,
+        "validatedCalls": 52,
+        "warmupPairs": 6,
+        "measuredPairs": 20,
+        "summaryNanos": {
+          "currentMedianNanos": 126250.5,
+          "referenceMedianNanos": 7337708.0
+        },
+        "files": {
+          "compositor-raster-transfer.argb": {
+            "bytes": 262144,
+            "sha256": "d0c182f79088483e024627e0df21c0f696823c416d33b208fa4be21531af409e"
+          },
+          "compositor-raster-transfer-timing.json": {
+            "bytes": 7134,
+            "sha256": "a0a259db9eaebefa19fe1bb5723705ee2152f7fcbacd46c666830525d7a6a9aa"
+          }
+        },
+        "allRetainedPixelsVerified": 65536,
+        "sourcePixelSHA256": "292422aad2148fc1ce7b4d76c6c298a919e504a1189bf9467783103403879e23",
+        "outputPixelSHA256": "d0c182f79088483e024627e0df21c0f696823c416d33b208fa4be21531af409e",
+        "threshold": null,
+        "pixelVerificationScope": "Every retained final-current ARGB byte is independently checked; all 52 transfer outputs, source immutability and pool ownership are assertions of the exact passing device case."
+      }
+    }
+  ]
+}

@@ -10,11 +10,13 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ComposeTimeoutException
@@ -30,9 +32,12 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.dp
+import androidx.core.graphics.ColorUtils
 import androidx.lifecycle.viewModelScope
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artflow.studio.core.pixels.PixelBuffer
@@ -55,6 +60,7 @@ import com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView
 import com.artflow.studio.presentation.ui.components.canvas.ModelView
 import com.artflow.studio.presentation.ui.screens.canvas.CanvasScreen
 import com.artflow.studio.presentation.ui.theme.ArtFlowTheme
+import com.artflow.studio.presentation.ui.theme.studioColorScheme
 import com.artflow.studio.presentation.ui.viewmodel.CanvasUiState
 import com.artflow.studio.presentation.ui.viewmodel.CanvasViewModel
 import dagger.hilt.android.testing.HiltAndroidRule
@@ -76,6 +82,8 @@ import java.io.File
 import java.util.Locale
 import javax.inject.Inject
 import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.roundToInt
 
 /** Real editor/modal input and MotionEvents through its attached GL model; no native-app comparison. */
@@ -471,7 +479,71 @@ class ModelEditorUiTest {
             TestEvidence.screenshot("model-editor-$method-render-timeout.png")
             throw AssertionError("Expected ${if (painted) "green paint" else "red artwork"} on the model at $points: $observed", timeout)
         }
+        assertModelHeaderVisible()
     }
+
+    /** Screen pixels include SurfaceView's hole, which semantic visibility and node captures can miss. */
+    private fun assertModelHeaderVisible() {
+        val controls =
+            linkedMapOf(
+                "title" to modelChip("3D"),
+                "Turn" to modelChip("Turn"),
+                "Paint" to modelChip("Paint"),
+                "Light" to modelChip("Light"),
+                "close" to close,
+            )
+        val root = compose.onRoot().fetchSemanticsNode()
+        val rootShift = root.boundsInWindow.topLeft - root.boundsInRoot.topLeft
+        val windowShift =
+            compose.runOnIdle {
+                val decor = compose.activity.window.decorView
+                val screen = IntArray(2).also(decor::getLocationOnScreen)
+                val window = IntArray(2).also(decor::getLocationInWindow)
+                Offset(screen[0] - window[0].toFloat(), screen[1] - window[1].toFloat())
+            }
+        val areas = controls.mapValues { (_, node) -> node.assertIsDisplayed().bounds().translate(rootShift + windowShift) }
+        val samples =
+            areas.mapValues { (_, bounds) ->
+                (ceil(bounds.top).toInt() until floor(bounds.bottom).toInt()).flatMap { y ->
+                    (ceil(bounds.left).toInt() until floor(bounds.right).toInt()).map { x -> x to y }
+                }
+            }
+        assertTrue("Every header control must have a nonempty on-screen area: $areas", samples.values.all { it.size >= 8 })
+        val scheme = studioColorScheme(preferences.accent, false, preferences.highContrast)
+        val papers = listOf(scheme.surfaceColorAtElevation(6.dp).toArgb(), scheme.secondaryContainer.toArgb())
+        val inks = listOf(scheme.onSurface.toArgb(), scheme.onSurfaceVariant.toArgb(), scheme.onSecondaryContainer.toArgb())
+        var observed = emptyMap<String, String>()
+        try {
+            compose.waitUntil(10_000) {
+                val captured = TestEvidence.colorsAtScreenPoints(samples.values.flatten()) ?: return@waitUntil false
+                var offset = 0
+                val readable = mutableMapOf<String, Boolean>()
+                observed =
+                    samples.mapValues { (name, points) ->
+                        val histogram = captured.subList(offset, offset + points.size).groupingBy { it }.eachCount()
+                        offset += points.size
+                        val paper = histogram.filterKeys { actual -> papers.any { closeColor(actual, it) } }.maxByOrNull { it.value }
+                        val ink = histogram.filterKeys { actual -> inks.any { closeColor(actual, it) } }.maxByOrNull { it.value }
+                        val contrast = if (paper != null && ink != null) ColorUtils.calculateContrast(ink.key, paper.key) else 0.0
+                        readable[name] = (paper?.value ?: 0) >= 4 && (ink?.value ?: 0) >= 4 && contrast >= 4.5
+                        "paper=$paper, ink=$ink, contrast=$contrast, common=${histogram.entries.sortedByDescending { it.value }.take(4)}"
+                    }
+                readable.values.all { it }
+            }
+        } catch (timeout: ComposeTimeoutException) {
+            val method = testName.methodName.replace(Regex("[A-Z]")) { "-${it.value.lowercase(Locale.ROOT)}" }
+            TestEvidence.screenshot("model-editor-$method-header-timeout.png")
+            throw AssertionError(
+                "Model title/mode/close controls need actual opaque paper and readable ink; bounds=$areas, $observed",
+                timeout,
+            )
+        }
+    }
+
+    private fun closeColor(
+        actual: Int,
+        expected: Int,
+    ): Boolean = (0..24 step 8).all { shift -> abs((actual ushr shift and 255) - (expected ushr shift and 255)) <= 2 }
 
     private fun assertPinchStillNavigatesWithoutPainting(
         view: ModelView,
@@ -491,6 +563,7 @@ class ModelEditorUiTest {
         sendPointers(view, MotionEvent.ACTION_POINTER_UP, zoomed, changed = 1)
         send(view, MotionEvent.ACTION_UP, zoomed.first())
         awaitModelPoint(view, probe, "model-editor-navigation-timeout.png") { dominant(it, painted = false) }
+        assertModelHeaderVisible()
         assertStoredPixels(committed)
         compose.runOnIdle { assertEquals("Pinching cannot commit the first finger's provisional mark", history, canvas.historyMark) }
         TestEvidence.screenshot("model-editor-navigation.png")

@@ -1,0 +1,236 @@
+{
+  "comparison": {
+    "runId": 40122287040,
+    "revision": "8050121a7a6e3a1d52854d3c398ad1d29a33bcfe",
+    "frozenClassifierSha256": "0348fb59122fc9ec093ecf626801e5bb6126c9cfe36a5cf130b57793c08c2837",
+    "correctedClassifierSha256": "c65649891591fe3d0f75b6069541e1b0156a899546206d62ed0c5543dcc3c39b",
+    "decisions": [
+      {
+        "phase": "first",
+        "frozenDecision": true,
+        "correctedDecision": false,
+        "artifactFilesChanged": false
+      },
+      {
+        "phase": "final",
+        "frozenDecision": true,
+        "correctedDecision": true,
+        "artifactFilesChanged": false
+      }
+    ],
+    "scope": "Read-only comparison against original retained artifacts; no retry or source-result rewrite."
+  },
+  "triage": {
+    "runId": 40122287040,
+    "revision": "8050121a7a6e3a1d52854d3c398ad1d29a33bcfe",
+    "lane": "API35/16384 main",
+    "artifact": {
+      "id": 12571988636,
+      "bytes": 7229448,
+      "sha256": "15e4e8a199f751856d44df1af4d1020ae580374745db4fc7ad71a4f64f920837",
+      "url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40122287040/artifacts/12571988636"
+    },
+    "scope": "Bounded read-only process, stack, source-phase and classifier attribution. No root-cause proof or repair claim.",
+    "first": {
+      "counts": {
+        "reported": 42,
+        "passed": 41,
+        "failure": 1,
+        "missing": 211,
+        "failures": [
+          {
+            "identity": "com.artflow.studio.CanvasInputDeviceTest#emptyOverlaySelectionDoesNotChangePixelsOrHistory",
+            "failureText": "",
+            "failureAttributes": {}
+          }
+        ]
+      },
+      "caseStart": "19:10:20.725",
+      "appPid": 4731,
+      "systemServerPid": 2458,
+      "signalTime": "19:10:21.435",
+      "fatalThread": 3397,
+      "signal": "SIGSEGV",
+      "faultAddress": "0x20",
+      "frameZero": "android.os.BinderProxy$ProxyMap.set+389",
+      "frameZeroObject": "/system/framework/x86_64/boot-framework.oat",
+      "frameZeroBuildId": "bc047a67a4076b80992fbdfabdfba12acbd1924a",
+      "linkage": "BinderProxy.getInstance \u2192 javaObjectForIBinder \u2192 Parcel.readStrongBinder \u2192 IAccessibilityManager$Stub.onTransact. Fatal process is system_server, not ArtFlow.",
+      "phase": "Activity reached RESUMED at19:10:20.858 and PAUSED at19:10:21.355; InstrumentationActivityInvoker EmptyActivity moved to front before the signal. Consistent with scenario teardown, but no TestRunner finished event and an empty failure do not prove the test passed.",
+      "secondaryAppDiagnostic": "At19:10:22.472, after system_server died, app4731 reported JNI NewStringUTF with pending DeadSystemRuntimeException during Binder/IWindowSession/ViewRootImpl relayout. This is subsequent evidence, not the initial fatal signal.",
+      "raw": [
+        {
+          "path": "_temp/artflow-device/android15-framework-retry/first-attempt-results/emulator-5554 - 15/logcat-com.artflow.studio.CanvasInputDeviceTest-emptyOverlaySelectionDoesNotChangePixelsOrHistory.txt",
+          "bytes": 1330491,
+          "sha256": "c0e75d139d5c6379a8b65aee31b4936a241da381e4d09ad20f6468dd2fbc2b6d"
+        },
+        {
+          "path": "_temp/artflow-device/android15-framework-retry/first-attempt-results/TEST-emulator-5554 - 15-_app-.xml",
+          "bytes": 6586,
+          "sha256": "ac54632ee588d7b1a651532b26e01e316a84bc14fc4f70a4e72fdf4cd120ab52"
+        }
+      ],
+      "excerpts": [
+        {
+          "line": 1,
+          "text": "10-24 19:10:20.725  4731  5159 I TestRunner: started: emptyOverlaySelectionDoesNotChangePixelsOrHistory(com.artflow.studio.CanvasInputDeviceTest)"
+        },
+        {
+          "line": 222,
+          "text": "10-24 19:10:21.435  2458  3397 F libc    : Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x20 in tid 3397 (binder:2458_1A), pid 2458 (system_server)"
+        },
+        {
+          "line": 471,
+          "text": "10-24 19:10:21.805  7145  7145 F DEBUG   :       #00 pc 0000000000521995  /system/framework/x86_64/boot-framework.oat (android.os.BinderProxy$ProxyMap.set+389) (BuildId: bc047a67a4076b80992fbdfabdfba12acbd1924a)"
+        },
+        {
+          "line": 472,
+          "text": "10-24 19:10:21.805  7145  7145 F DEBUG   :       #01 pc 00000000005d3e6c  /system/framework/x86_64/boot-framework.oat (android.os.BinderProxy.getInstance+460) (BuildId: bc047a67a4076b80992fbdfabdfba12acbd1924a)"
+        },
+        {
+          "line": 483,
+          "text": "10-24 19:10:21.805  7145  7145 F DEBUG   :       #12 pc 000000000021595a  /system/framework/framework.jar (android.view.accessibility.IAccessibilityManager$Stub.onTransact+1634)"
+        },
+        {
+          "line": 808,
+          "text": "10-24 19:10:22.463  6324  6324 F low.studio.test: java_vm_ext.cc:598] JNI DETECTED ERROR IN APPLICATION: JNI NewStringUTF called with pending exception android.os.DeadSystemRuntimeException: android.os.DeadSystemException"
+        },
+        {
+          "line": 881,
+          "text": "10-24 19:10:22.472  4731  4731 F .artflow.studio: java_vm_ext.cc:598] JNI DETECTED ERROR IN APPLICATION: JNI NewStringUTF called with pending exception android.os.DeadSystemRuntimeException: android.os.DeadSystemException"
+        }
+      ]
+    },
+    "final": {
+      "counts": {
+        "reported": 57,
+        "passed": 56,
+        "failure": 1,
+        "missing": 196,
+        "failures": [
+          {
+            "identity": "com.artflow.studio.CanvasInputDeviceTest#layerChangeCancelsShapeAndDisablingFingerPaintingCancelsFingerStroke",
+            "failureText": "",
+            "failureAttributes": {}
+          }
+        ]
+      },
+      "caseStart": "19:13:21.327",
+      "appPid": 3889,
+      "fatalThread": 3889,
+      "signalTime": "19:13:21.505",
+      "signal": "SIGSEGV",
+      "faultAddress": "0x10",
+      "frameZero": "art::mirror::Class::GetDescriptor+201",
+      "artBuildId": "e4a3c6c284a8b17d09fd84d661cf181b",
+      "phase": "During ArtFlowCanvasView construction in withCanvas scenario.onActivity: generated Hilt ViewCImpl.injectArtFlowCanvasView2 \u2192 ART class initialization \u2192 PrettyClass/GetDescriptor. The view has not returned to attachToCanvas/setActiveLayerId/setEditorInput, and the supplied test body containing layer changes and MotionEvents has not begun.",
+      "raw": [
+        {
+          "path": "Experiment-2/Experiment-2/app/build/outputs/androidTest-results/connected/debug/emulator-5554 - 15/logcat-com.artflow.studio.CanvasInputDeviceTest-layerChangeCancelsShapeAndDisablingFingerPaintingCancelsFingerStroke.txt",
+          "bytes": 105544,
+          "sha256": "7f231e76b53f559e644e8e4816b3f56c59b1069cc0a121ca10521117d8657883"
+        },
+        {
+          "path": "Experiment-2/Experiment-2/app/build/outputs/androidTest-results/connected/debug/TEST-emulator-5554 - 15-_app-.xml",
+          "bytes": 8702,
+          "sha256": "087a47fca7386f6e2292e04dce95093d7dc9f9a122d9c307f8c7ae2c2bc84dfa"
+        }
+      ],
+      "excerpts": [
+        {
+          "line": 1,
+          "text": "10-24 19:13:21.327  3889  4055 I TestRunner: started: layerChangeCancelsShapeAndDisablingFingerPaintingCancelsFingerStroke(com.artflow.studio.CanvasInputDeviceTest)"
+        },
+        {
+          "line": 67,
+          "text": "10-24 19:13:21.505  3889  3889 F libc    : Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x10 in tid 3889 (.artflow.studio), pid 3889 (.artflow.studio)"
+        },
+        {
+          "line": 151,
+          "text": "10-24 19:13:21.755  5265  5265 F DEBUG   :       #00 pc 000000000084e369  /apex/com.android.art/lib64/libart.so (art::mirror::Class::GetDescriptor(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>>*)+201) (BuildId: e4a3c6c284a8b17d09fd84d661cf181b)"
+        },
+        {
+          "line": 152,
+          "text": "10-24 19:13:21.755  5265  5265 F DEBUG   :       #01 pc 00000000008502bc  /apex/com.android.art/lib64/libart.so (art::mirror::Class::PrettyClass()+156) (BuildId: e4a3c6c284a8b17d09fd84d661cf181b)"
+        },
+        {
+          "line": 153,
+          "text": "10-24 19:13:21.755  5265  5265 F DEBUG   :       #02 pc 0000000000598f65  /apex/com.android.art/lib64/libart.so (art::ClassLinker::InitializeClass(art::Thread*, art::Handle<art::mirror::Class>, bool, bool)+469) (BuildId: e4a3c6c284a8b17d09fd84d661cf181b)"
+        },
+        {
+          "line": 157,
+          "text": "10-24 19:13:21.755  5265  5265 F DEBUG   :       #06 pc 0000000000003370  <anonymous:70c4d037c000> (dagger.hilt.android.internal.testing.root.DaggerDefault_HiltComponents_SingletonC$ViewCImpl.injectArtFlowCanvasView2+0)"
+        },
+        {
+          "line": 175,
+          "text": "10-24 19:13:21.756  5265  5265 F DEBUG   :       #24 pc 00000000004d9840  <anonymous:70c1e7e74000> (com.artflow.studio.presentation.ui.components.canvas.Hilt_ArtFlowCanvasView.<init>+0)"
+        },
+        {
+          "line": 181,
+          "text": "10-24 19:13:21.756  5265  5265 F DEBUG   :       #30 pc 00000000004cfcac  <anonymous:70c1e7e74000> (com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView.<init>+0)"
+        },
+        {
+          "line": 187,
+          "text": "10-24 19:13:21.756  5265  5265 F DEBUG   :       #36 pc 00000000004cff7c  <anonymous:70c1e7e74000> (com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView.<init>+0)"
+        },
+        {
+          "line": 193,
+          "text": "10-24 19:13:21.756  5265  5265 F DEBUG   :       #42 pc 0000000000754b24  <anonymous:70c1e7e74000> (com.artflow.studio.CanvasInputDeviceTest.withCanvas$lambda$4+0)"
+        }
+      ]
+    },
+    "recovery": {
+      "automaticRetries": 1,
+      "record": {
+        "path": "_temp/artflow-device/framework-recovery.txt",
+        "bytes": 137,
+        "sha256": "6d2182569709d01126dabd1048db2b134ed9d2667bbb6572457315af10b06f89"
+      },
+      "bootBefore": "037d58db-0995-4b81-8025-f84f45bb3b9e",
+      "bootAfter": "4acc09c9-529d-45ff-840d-357d2740046a",
+      "reportedStatus": "PASS",
+      "finalSuiteIncomplete": true,
+      "minifiedLaunchReached": false
+    },
+    "classifier": {
+      "sourceRevision": "8050121a7a6e3a1d52854d3c398ad1d29a33bcfe",
+      "path": ".github/scripts/classify_android15_reference_queue_crash.py",
+      "sha256": "0348fb59122fc9ec093ecf626801e5bb6126c9cfe36a5cf130b57793c08c2837",
+      "firstDecision": true,
+      "firstMatchingReferenceQueueLog": {
+        "path": "_temp/artflow-device/android15-framework-retry/first-attempt-results/emulator-5554 - 15/logcat-com.artflow.studio.ArtworkWorkflowTest-createPaintSaveReopenRecreateAndDiscardPreserveTheSavedPixels.txt",
+        "bytes": 1639686,
+        "sha256": "ec0dc96c7dd67a45dac2f05c356a66660cea281d561585a1fa78cb9af3ff521f"
+      },
+      "matchingEarlierCasePassed": true,
+      "matchingProcess": "com.google.android.gms.persistent",
+      "matchingPid": 2884,
+      "matchingTime": "19:08:49.418",
+      "interruptedCaseReferenceQueueMatched": false,
+      "interruptedCaseAppArtFrameZeroMatched": false,
+      "firstDecisionAssociationDefect": "The frozen classifier scans every retained text log without failed-case or process association. Its only matching first-attempt log belongs to an earlier passing ArtworkWorkflow case and a separate Google process.",
+      "finalDecision": true,
+      "finalSignatureAppArtFrameZeroMatched": true,
+      "newRetryGranted": false
+    },
+    "sourceReferences": [
+      {
+        "path": "app/src/androidTest/java/com/artflow/studio/CanvasInputDeviceTest.kt",
+        "revision": "8050121a7a6e3a1d52854d3c398ad1d29a33bcfe",
+        "sha256": "d7a4b31ba771db7cc19be884471d9d99f617b120474807ac076ac70fc2837996",
+        "relevantFunctions": [
+          "withCanvas",
+          "emptyOverlaySelectionDoesNotChangePixelsOrHistory",
+          "layerChangeCancelsShapeAndDisablingFingerPaintingCancelsFingerStroke"
+        ]
+      }
+    ],
+    "limits": [
+      "No failing app assertion or concrete app memory misuse is established by these artifacts.",
+      "A framework/ART frame identifies the detection site; it does not by itself prove platform root cause or exclude earlier application, lifecycle or native memory effects.",
+      "The two attempts and earlier Google ReferenceQueue event are distinct observations; a common underlying cause is not established.",
+      "This review does not authorize another retry or reclassify the final failed lane as accepted."
+    ]
+  },
+  "scope": "Original run312 retained; classifier comparison is read-only, no added retry or amended result."
+}

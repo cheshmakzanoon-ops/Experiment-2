@@ -12,8 +12,10 @@ import kotlin.math.roundToInt
  * ArtFlow's canvas-pickup model for wet brushes. These are deliberately documented local equations,
  * not a reconstruction of the reference application's native fluid or pigment simulation.
  *
- * All inputs are per-dab, in the sampled buffer's coordinates. Nothing depends on frame boundaries,
- * so a cropped render, a full replay and an incremental live frame read the same paint.
+ * All inputs are per-dab, in the sampled buffer's coordinates. A full replay must retain every
+ * earlier pickup along the stroke's path: those samples determine its later carried colour.
+ * Incremental live rendering retains that history and samples the full source even when only a
+ * damage region is displayed. A fallback replay therefore cannot sample just a cropped tail.
  */
 internal object WetBrushPickup {
     data class Sample(

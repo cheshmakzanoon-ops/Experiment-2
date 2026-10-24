@@ -1,0 +1,751 @@
+{
+  "schemaVersion": 1,
+  "runId": 40122287040,
+  "runNumber": 312,
+  "revision": "8050121a7a6e3a1d52854d3c398ad1d29a33bcfe",
+  "scope": "Original Android screenshot evidence of absent API26 Model header controls; interaction assertions passed but do not prove visible pixels. This is not native-Procreate evidence.",
+  "cropConvention": "[left,top,right,bottom], exclusive right/bottom, original screenshot pixels",
+  "headerRegion": [
+    10,
+    136,
+    310,
+    172
+  ],
+  "regionsAre": "Inspection coordinates for these exact320x640 originals only. The strengthened device regression instead derives regions from live semantic bounds and actual screen/window offsets.",
+  "lanes": {
+    "api26": {
+      "artifactId": 12572103532,
+      "artifactSHA256": "cdd541682eb56338a838a17b82a00befc52875956ea89ba8e2b8f494d10f5165",
+      "archiveBytes": 2765794,
+      "deviceCounts": {
+        "passed": 251,
+        "skipped": 2
+      },
+      "captures": {
+        "model-editor-restored.png": {
+          "pngSHA256": "6241f2762f6c9af7a1b68226f6cc65b0c1e3ace9e7f04bda3359ada332b28db5",
+          "pngBytes": 11089,
+          "dimensions": [
+            320,
+            640
+          ],
+          "regionPixels": 10800,
+          "underlyingWorkAreaRGB": [
+            20,
+            20,
+            23
+          ],
+          "underlyingWorkAreaPixels": 10800,
+          "mostCommonRGB": [
+            [
+              [
+                20,
+                20,
+                23
+              ],
+              10800
+            ]
+          ]
+        },
+        "model-editor-provisional.png": {
+          "pngSHA256": "a475a16cbab89551b571de66aa20ec15ac47c2280e79fbc41b806e227bca03e5",
+          "pngBytes": 13204,
+          "dimensions": [
+            320,
+            640
+          ],
+          "regionPixels": 10800,
+          "underlyingWorkAreaRGB": [
+            20,
+            20,
+            23
+          ],
+          "underlyingWorkAreaPixels": 10800,
+          "mostCommonRGB": [
+            [
+              [
+                20,
+                20,
+                23
+              ],
+              10800
+            ]
+          ]
+        },
+        "model-editor-cancelled.png": {
+          "pngSHA256": "6241f2762f6c9af7a1b68226f6cc65b0c1e3ace9e7f04bda3359ada332b28db5",
+          "pngBytes": 11089,
+          "dimensions": [
+            320,
+            640
+          ],
+          "regionPixels": 10800,
+          "underlyingWorkAreaRGB": [
+            20,
+            20,
+            23
+          ],
+          "underlyingWorkAreaPixels": 10800,
+          "mostCommonRGB": [
+            [
+              [
+                20,
+                20,
+                23
+              ],
+              10800
+            ]
+          ]
+        },
+        "model-editor-committed.png": {
+          "pngSHA256": "f492e3474bb5a9434f97069d10fceb87341fcab27684faaea9ccaba72dc0e440",
+          "pngBytes": 13125,
+          "dimensions": [
+            320,
+            640
+          ],
+          "regionPixels": 10800,
+          "underlyingWorkAreaRGB": [
+            20,
+            20,
+            23
+          ],
+          "underlyingWorkAreaPixels": 10800,
+          "mostCommonRGB": [
+            [
+              [
+                20,
+                20,
+                23
+              ],
+              10800
+            ]
+          ]
+        },
+        "model-editor-navigation.png": {
+          "pngSHA256": "af436ab21663246f41014e1b4b4940344fcbf99dff8eec84d73629c54e2bf0d5",
+          "pngBytes": 14444,
+          "dimensions": [
+            320,
+            640
+          ],
+          "regionPixels": 10800,
+          "underlyingWorkAreaRGB": [
+            20,
+            20,
+            23
+          ],
+          "underlyingWorkAreaPixels": 10800,
+          "mostCommonRGB": [
+            [
+              [
+                20,
+                20,
+                23
+              ],
+              10800
+            ]
+          ]
+        }
+      }
+    },
+    "api36-16k": {
+      "artifactId": 12572553155,
+      "artifactSHA256": "cc0d701a2625c2d4bc1f941f4f0ac716f52949e9775befa2d94a082fb706e224",
+      "archiveBytes": 7765398,
+      "deviceCounts": {
+        "passed": 253
+      },
+      "captures": {
+        "model-editor-restored.png": {
+          "pngSHA256": "f5ac037a593635662a38335c97f78b2a52069d7c3d1d32bf9d92475355524891",
+          "pngBytes": 14950,
+          "dimensions": [
+            320,
+            640
+          ],
+          "regionPixels": 10800,
+          "underlyingWorkAreaRGB": [
+            20,
+            20,
+            23
+          ],
+          "underlyingWorkAreaPixels": 0,
+          "mostCommonRGB": [
+            [
+              [
+                222,
+                222,
+                222
+              ],
+              7660
+            ],
+            [
+              [
+                227,
+                227,
+                227
+              ],
+              1772
+            ],
+            [
+              [
+                127,
+                127,
+                127
+              ],
+              286
+            ],
+            [
+              [
+                85,
+                85,
+                85
+              ],
+              79
+            ],
+            [
+              [
+                24,
+                24,
+                24
+              ],
+              77
+            ],
+            [
+              [
+                201,
+                201,
+                201
+              ],
+              48
+            ]
+          ]
+        },
+        "model-editor-provisional.png": {
+          "pngSHA256": "3a9416b9941b5d4ca4485270c3aacc9630b4e55392933981db6afaae381eac23",
+          "pngBytes": 17286,
+          "dimensions": [
+            320,
+            640
+          ],
+          "regionPixels": 10800,
+          "underlyingWorkAreaRGB": [
+            20,
+            20,
+            23
+          ],
+          "underlyingWorkAreaPixels": 0,
+          "mostCommonRGB": [
+            [
+              [
+                222,
+                222,
+                222
+              ],
+              7562
+            ],
+            [
+              [
+                227,
+                227,
+                227
+              ],
+              1881
+            ],
+            [
+              [
+                127,
+                127,
+                127
+              ],
+              283
+            ],
+            [
+              [
+                85,
+                85,
+                85
+              ],
+              84
+            ],
+            [
+              [
+                24,
+                24,
+                24
+              ],
+              68
+            ],
+            [
+              [
+                201,
+                201,
+                201
+              ],
+              49
+            ]
+          ]
+        },
+        "model-editor-cancelled.png": {
+          "pngSHA256": "e198e7c938decd865f3f1f3612ebb258e70daec385baed41baeaeaba7e278ca6",
+          "pngBytes": 15148,
+          "dimensions": [
+            320,
+            640
+          ],
+          "regionPixels": 10800,
+          "underlyingWorkAreaRGB": [
+            20,
+            20,
+            23
+          ],
+          "underlyingWorkAreaPixels": 0,
+          "mostCommonRGB": [
+            [
+              [
+                222,
+                222,
+                222
+              ],
+              7562
+            ],
+            [
+              [
+                227,
+                227,
+                227
+              ],
+              1881
+            ],
+            [
+              [
+                127,
+                127,
+                127
+              ],
+              283
+            ],
+            [
+              [
+                85,
+                85,
+                85
+              ],
+              84
+            ],
+            [
+              [
+                24,
+                24,
+                24
+              ],
+              68
+            ],
+            [
+              [
+                201,
+                201,
+                201
+              ],
+              49
+            ]
+          ]
+        },
+        "model-editor-committed.png": {
+          "pngSHA256": "42c5ad3556733f9cfa886ba6a4d1c389bff5638129135d44c69354041a819b0a",
+          "pngBytes": 17203,
+          "dimensions": [
+            320,
+            640
+          ],
+          "regionPixels": 10800,
+          "underlyingWorkAreaRGB": [
+            20,
+            20,
+            23
+          ],
+          "underlyingWorkAreaPixels": 0,
+          "mostCommonRGB": [
+            [
+              [
+                222,
+                222,
+                222
+              ],
+              7562
+            ],
+            [
+              [
+                227,
+                227,
+                227
+              ],
+              1881
+            ],
+            [
+              [
+                127,
+                127,
+                127
+              ],
+              283
+            ],
+            [
+              [
+                85,
+                85,
+                85
+              ],
+              84
+            ],
+            [
+              [
+                24,
+                24,
+                24
+              ],
+              68
+            ],
+            [
+              [
+                201,
+                201,
+                201
+              ],
+              49
+            ]
+          ]
+        },
+        "model-editor-navigation.png": {
+          "pngSHA256": "7d85d4ddbb3f5d637514b82e89f27445a7e641b2f0cf8d67b13659e57d4fa432",
+          "pngBytes": 18545,
+          "dimensions": [
+            320,
+            640
+          ],
+          "regionPixels": 10800,
+          "underlyingWorkAreaRGB": [
+            20,
+            20,
+            23
+          ],
+          "underlyingWorkAreaPixels": 0,
+          "mostCommonRGB": [
+            [
+              [
+                222,
+                222,
+                222
+              ],
+              7562
+            ],
+            [
+              [
+                227,
+                227,
+                227
+              ],
+              1881
+            ],
+            [
+              [
+                127,
+                127,
+                127
+              ],
+              283
+            ],
+            [
+              [
+                85,
+                85,
+                85
+              ],
+              84
+            ],
+            [
+              [
+                24,
+                24,
+                24
+              ],
+              68
+            ],
+            [
+              [
+                201,
+                201,
+                201
+              ],
+              49
+            ]
+          ]
+        }
+      }
+    }
+  },
+  "primarySource": [
+    {
+      "url": "https://android.googlesource.com/platform/frameworks/base/+/refs/tags/android-8.0.0_r1/core/java/android/view/SurfaceView.java",
+      "decodedSourceSHA256": "5e78b62c9ba22161b65271f0d1539777d760e63ac7169b35f45de1d5641fe360",
+      "relevantLines": [
+        376,
+        396
+      ]
+    },
+    {
+      "url": "https://android.googlesource.com/platform/frameworks/base/+/refs/tags/android-16.0.0_r1/core/java/android/view/SurfaceView.java",
+      "decodedSourceSHA256": "879a13996fc50705a1c574a9fd8ef26220f251ae9aa9c41d2750cb1d0e905d29",
+      "relevantLines": [
+        728,
+        746
+      ]
+    },
+    {
+      "url": "https://android.googlesource.com/platform/frameworks/support/+/e00249ed11e0fe15314bf26a2cc289ac58324060%5E%21/",
+      "claim": "Official AndroidView documentation correction explicitly states the content is not clipped to layout bounds and calls out SurfaceView containment."
+    }
+  ],
+  "mechanism": "Inference supported by platform code and original pixels: old SurfaceView clears the entire current canvas clip; unbounded Compose AndroidView exposes the shared rounded parent clip containing the header. API36 limits the hole to view dimensions.",
+  "correction": "Add Modifier.clipToBounds() to the model AndroidView only. Keep its GL engine, input, size, parent rounding, z-order and modal policy.",
+  "validationStatus": "Proposed correction and stronger screen-pixel assertions; fresh CI visibility evidence pending. Existing two ModelEditorUiTest identities remain unchanged.",
+  "restoredControlInspection": {
+    "api26": {
+      "sha256": "6241f2762f6c9af7a1b68226f6cc65b0c1e3ace9e7f04bda3359ada332b28db5",
+      "regions": {
+        "title": {
+          "inspectionRect": [
+            20,
+            143,
+            37,
+            161
+          ],
+          "paper": [
+            0,
+            null
+          ],
+          "ink": [
+            0,
+            null
+          ],
+          "contrast": 0,
+          "passesCandidateRule": false
+        },
+        "Turn": {
+          "inspectionRect": [
+            47,
+            136,
+            110,
+            168
+          ],
+          "paper": [
+            0,
+            null
+          ],
+          "ink": [
+            0,
+            null
+          ],
+          "contrast": 0,
+          "passesCandidateRule": false
+        },
+        "Paint": {
+          "inspectionRect": [
+            114,
+            136,
+            182,
+            168
+          ],
+          "paper": [
+            0,
+            null
+          ],
+          "ink": [
+            0,
+            null
+          ],
+          "contrast": 0,
+          "passesCandidateRule": false
+        },
+        "Light": {
+          "inspectionRect": [
+            186,
+            136,
+            254,
+            168
+          ],
+          "paper": [
+            0,
+            null
+          ],
+          "ink": [
+            0,
+            null
+          ],
+          "contrast": 0,
+          "passesCandidateRule": false
+        },
+        "close": {
+          "inspectionRect": [
+            260,
+            128,
+            308,
+            176
+          ],
+          "paper": [
+            0,
+            null
+          ],
+          "ink": [
+            2,
+            [
+              22,
+              22,
+              25
+            ]
+          ],
+          "contrast": 0,
+          "passesCandidateRule": false
+        }
+      },
+      "file": "model-editor-restored.png"
+    },
+    "api36-16k": {
+      "sha256": "f5ac037a593635662a38335c97f78b2a52069d7c3d1d32bf9d92475355524891",
+      "regions": {
+        "title": {
+          "inspectionRect": [
+            20,
+            143,
+            37,
+            161
+          ],
+          "paper": [
+            188,
+            [
+              222,
+              222,
+              222
+            ]
+          ],
+          "ink": [
+            18,
+            [
+              24,
+              24,
+              24
+            ]
+          ],
+          "contrast": 13.198159524623385,
+          "passesCandidateRule": true
+        },
+        "Turn": {
+          "inspectionRect": [
+            47,
+            136,
+            110,
+            168
+          ],
+          "paper": [
+            1772,
+            [
+              227,
+              227,
+              227
+            ]
+          ],
+          "ink": [
+            35,
+            [
+              24,
+              24,
+              24
+            ]
+          ],
+          "contrast": 13.835531759581066,
+          "passesCandidateRule": true
+        },
+        "Paint": {
+          "inspectionRect": [
+            114,
+            136,
+            182,
+            168
+          ],
+          "paper": [
+            1733,
+            [
+              222,
+              222,
+              222
+            ]
+          ],
+          "ink": [
+            33,
+            [
+              85,
+              85,
+              85
+            ]
+          ],
+          "contrast": 5.54140342042577,
+          "passesCandidateRule": true
+        },
+        "Light": {
+          "inspectionRect": [
+            186,
+            136,
+            254,
+            168
+          ],
+          "paper": [
+            1728,
+            [
+              222,
+              222,
+              222
+            ]
+          ],
+          "ink": [
+            46,
+            [
+              85,
+              85,
+              85
+            ]
+          ],
+          "contrast": 5.54140342042577,
+          "passesCandidateRule": true
+        },
+        "close": {
+          "inspectionRect": [
+            260,
+            128,
+            308,
+            176
+          ],
+          "paper": [
+            2111,
+            [
+              222,
+              222,
+              222
+            ]
+          ],
+          "ink": [
+            24,
+            [
+              24,
+              24,
+              24
+            ]
+          ],
+          "contrast": 13.198159524623385,
+          "passesCandidateRule": true
+        }
+      },
+      "file": "model-editor-restored.png"
+    }
+  }
+}

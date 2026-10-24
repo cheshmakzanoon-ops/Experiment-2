@@ -1,90 +1,66 @@
 ### Emulator acceptance and parity corrections (24 October 2026)
 
-[The implementation and acceptance record](docs/EMULATOR_PARITY_2026-10-24.md) covers corrected
-stroke endpoints, zero-spacing rendering modes, interpolated pen orientation, active-layer
-Automatic selection, explicit Normal/Pass Through group compositing, and accurate blend-mode
-previews. `.artflow` v5 preserves distinct imported native Darken while retaining the earlier
-group and secondary-grain migrations after original-checksum verification. Existing artwork keeps
-its historical rendering; older app builds reject new v5 documents. PSD preserves group modes. Unsupported native `.procreate`
-group metadata uses a rendered appearance layer with hidden editable sources.
-Brush interchange also preserves tilt-opacity settings and authored mask coverage, while Count
-Jitter reaches its documented range. Theme evidence waits for actual repainted dialog pixels.
-New imports follow [native stamp-count truncation](docs/NATIVE_BRUSH_COUNT.md); saved brushes keep
-their existing count. Sharing a Procreate brush or set lists any count conversion for both primary
-and secondary components, while ArtFlow sharing retains the current counts exactly.
-The guide reminder reflects active, visible guides and stays readable over the canvas. Workspace
-evidence waits for rendered artwork, and large-text tool coverage includes the real editor route.
-The tool strip exposes all 20 tools, including functional tap/drag Zoom navigation.
-The floating Reference window now stays above either brush sidebar while preserving toolbar and
-modal-panel precedence. Focus mode keeps its header clear of the normal or enlarged exit target.
-Real-coordinate device regressions cover overlap, dragging, dismissal and input outside the window.
-Secondary compound-brush grain now honors Subtract and Hard Mix, using the same local coverage
-rules as a single brush. Existing Multiply pixels stay unchanged. Legacy vector strokes migrate
-to their actual historical Multiply behavior; saved brush-library definitions keep their settings.
-Stroke timing evidence records ordered raw nanoseconds for repository continuation, preview and
-commit phases, including waits. It does not measure physical input or display presentation latency.
-New Procreate imports use the inspected native pressure spline and sampled lookup; existing saved
-curves keep their prior behavior. [Numerical contracts and boundaries](docs/NATIVE_PRESSURE_SPLINE.md)
-distinguish reconstructed expectations from a live reference-app comparison.
+**Complete Procreate feature and quality parity remains unestablished.**
+The latest completed [run 312](docs/CI_RUN_312_2026-10-24.md), revision `8050121a`, passed
+1,511 JVM tests, 139 Python checks and its build/package gates. Six emulator configurations
+completed all 253 declared cases and minified launch; API 26 retained two documented skips.
+The main Android 15 / 16 KB lane failed twice and ended with 56 passes, one failure and
+196 missing identities. Original screenshots also reveal invisible Model header controls
+on Android 8, despite passing coordinate interactions. **Run 312 is failed.**
 
-The seven-lane GitHub Actions emulator matrix retains all six original configurations and adds
-standard Android 15 / 4 KB with the default runtime. It requires every declared device test to appear
-in its results, permits only documented API-specific skips, verifies the actual API/page size and
-minified launch, and publishes `verification.json` / `verification.md` plus a job-summary table.
-New device cases cover saved-selection persistence, pixel-exact PNG export, selection source,
-group interchange, brush endpoints and the blend picker. The narrow Android-runtime retry rule
-cannot discard failures encoded in JUnit attributes. Read the **exact commit's completed workflow**
-for execution results; **complete Procreate quality and feature parity remains unestablished**.
-The completed [Android 15 runtime comparison](docs/ANDROID15_RUNTIME_COMPARISON_2026-10-24.md)
-preserves the failed 16 KB attempts and the separate standard-image control; changing JIT mode
-did not establish a repair for the 16 KB crashes.
-The JVM gate requires the hash-pinned reference brush corpus in addition to genuine sample documents.
-Native archive mappings, pressure-spline fixtures and compound-brush contracts are checked against
-that same input, with derived reports retained in the build artifact.
-Completed [run 308](docs/CI_RUN_308_2026-10-24.md) accepted revision `c5cf20d7` across the build
-and all seven emulator configurations, with no test retry. Later changes need their own run.
-[Run 309](docs/CI_RUN_309_2026-10-24.md) passed its build but failed one new P3 checksum assertion
-on every emulator. Its independent Android 15 repeat also preserves a first-attempt ART crash and
-one automatic recovery. The checksum test now verifies saved bytes according to the codec's actual
-contract. [Run 311](docs/CI_RUN_311_2026-10-24.md) passed 1,485 JVM tests, 133 Python checks and
-six complete 250-case emulator lanes (with two allowed API 26 skips). The independent Android 15 /
-16 KB lane crashed twice in ART and ended with 213 passes, one failure and 36 missing identities.
-The main 16 KB lane required one recovery before passing. **Run 311 remains failed**; its native
-document corrections passed where reached, but the required runtime configuration is not stable.
+The new correction batch addresses three demonstrated defects:
 
-New native-document corrections preserve [one-byte mask coverage](docs/PROCREATE_MASK_IMPORT_2026-10-24.md),
-the actual [layer-group hierarchy](docs/PROCREATE_HIERARCHY_IMPORT_2026-10-24.md), and recognized
-[sRGB/Display P3 profiles](docs/PROCREATE_COLOR_IMPORT_2026-10-24.md). New P3 documents retain their
-native channels; insertion into an existing canvas converts once into its profile. Thumbnail
-calibration compares both images in sRGB, and unsupported profiles receive an explicit notice.
-The genuine corpus is pinned to a source revision and complete-file hashes: five files represent
-four distinct archives. Existing saved artworks are not reinterpreted by these import changes.
+- [Wet preview pickup history](docs/WET_PREVIEW_HISTORY_2026-10-24.md): replaying only a cropped
+  tail lost earlier wet-paint pickup and displayed the wrong colour. Wet fallback paths now
+  render a complete frame, including sealed segments and historical vectors; eligible live
+  and dry previews retain regional updates. The smallest old fixture had 3,835 wrong pixels.
+- [Model header visibility](docs/MODEL_HEADER_VISIBILITY_2026-10-24.md): the AndroidView clips
+  its SurfaceView to the model viewport. Device assertions inspect actual title/control
+  pixels and contrast, in addition to semantics and taps.
+- [Retry attribution](docs/ANDROID15_RETRY_ATTRIBUTION_2026-10-24.md): a crash signature must
+  belong to the interrupted case and process. An unrelated earlier GMS crash can no longer
+  authorize recovery. Supported signatures and the one-recovery limit are unchanged.
 
-[Native legacy Darken](docs/NATIVE_LAYER_DARKEN_2026-10-24.md) now keeps its distinct alpha behavior
-on import, through undo, layer/frame copies, save/reopen and native export. The blend dialog identifies
-the imported effect before an explicit standard-mode choice replaces it. PSD preserves its visible
-appearance with hidden editable sources when its standard blend cannot represent the effect.
-[Native export corrections](docs/PROCREATE_NATIVE_EXPORT_2026-10-24.md) write a separate flat pixel
-index and group tree, native group visibility and supported P3 profiles. Opening a document with a
-hidden background now creates a transparent canvas. The run 311 record distinguishes those executed
-checks from the incomplete runtime gate; static native contracts do not establish reference-app execution.
+The [combined local gate](docs/evidence/wet-model-local.json) passes **1,518 JVM tests**, all
+150 Python checks, Android test compilation, formatting and static analysis with the baseline
+unchanged. All prior identities remain; the next device inventory is **254 per lane**.
+These corrections require their own exact-revision GitHub Actions result. The wet full-frame
+fallback has a performance cost; local correctness checks do not measure physical pen latency.
 
-The next [preview-performance candidate](docs/PREVIEW_PERFORMANCE_2026-10-24.md) removes redundant
-raster blending/copies and adds exact pixel/undo ownership checks plus a paired Android measurement.
-The [model-editor correction](docs/MODEL_EDITOR_2026-10-24.md) restores modal input precedence,
-keeps UV-seam segments provisional through cancellation, consumes historical/final pointer samples
-and coalesces visible previews. Later wet segments now sample earlier provisional paint consistently
-with commit. [Brush spacing export](docs/NATIVE_SPACING_EXPORT_2026-10-24.md) preserves imported
-spacing-version semantics when components or combine modes change, and follows the native setter
-for deliberate spacing edits. The combined inventory has 253 device identities, with none removed;
-its exact-revision Actions result is required. The [combined local gate](docs/evidence/preview-model-local.json)
-passed all 1,511 JVM tests, 139 Python checks, Android test compilation, formatting and static analysis
-with the existing baseline unchanged. The separate
-[native Count/control-pressure analysis](docs/NATIVE_CONTROL_PRESSURE_2026-10-24.md) documents the
-remaining input/placement contracts before those native graph consumers can be implemented safely.
-The [collector controls](docs/ANDROID15_COLLECTOR_CONTROL_2026-10-24.md) preserve both failed
-diagnostic revisions. The corrected control observed CC and rebuilt boot images, then system-server
-crashes and flag recovery before any reported application case. It established no stability repair.
+[The implementation record](docs/EMULATOR_PARITY_2026-10-24.md) covers stroke endpoints,
+zero-spacing modes, interpolated pen orientation, active-layer Automatic selection, accurate
+blend previews, working Zoom navigation, reference-window precedence and large-text tool access.
+Secondary compound-brush grain honors Subtract and Hard Mix while preserving historical pixels.
+New imports follow the inspected [stamp count](docs/NATIVE_BRUSH_COUNT.md) and
+[pressure spline](docs/NATIVE_PRESSURE_SPLINE.md); saved brushes retain their historical behavior.
+[Spacing export](docs/NATIVE_SPACING_EXPORT_2026-10-24.md) preserves imported version semantics
+and uses the recovered setter contract for deliberate edits.
+
+Native-document corrections preserve [mask coverage](docs/PROCREATE_MASK_IMPORT_2026-10-24.md),
+[layer hierarchy](docs/PROCREATE_HIERARCHY_IMPORT_2026-10-24.md),
+[sRGB/Display P3](docs/PROCREATE_COLOR_IMPORT_2026-10-24.md), and distinct
+[legacy Darken](docs/NATIVE_LAYER_DARKEN_2026-10-24.md). Signed `.artflow` v5 verifies old checksums
+before migration and prevents older readers from silently changing new rendering semantics.
+[Native export](docs/PROCREATE_NATIVE_EXPORT_2026-10-24.md) separates pixel and group indexes;
+unsupported group blend/mask metadata uses an appearance layer with hidden editable sources.
+The pinned genuine corpus contains five files and four distinct archives. Native reference-app
+interoperability, profile-managed CMYK and the remaining brush consumers are still open.
+
+[Preview measurements](docs/PREVIEW_PERFORMANCE_2026-10-24.md) preserve exact raster ownership
+and record elapsed repository calls. [Model gestures](docs/MODEL_EDITOR_2026-10-24.md) retain
+seam segments through cancellation, consume batched/final samples and coalesce visible previews.
+Neither establishes physical input-to-display latency or complete 3D material painting.
+[Native Count/control-pressure analysis](docs/NATIVE_CONTROL_PRESSURE_2026-10-24.md) records
+unimplemented input and placement consumers without treating static arithmetic as app execution.
+
+Every Actions device job must account for all declared cases, allowed API-specific skips,
+actual API/page size and minified launch. [Run 308](docs/CI_RUN_308_2026-10-24.md) remains the
+last fully accepted earlier revision; [309](docs/CI_RUN_309_2026-10-24.md),
+[311](docs/CI_RUN_311_2026-10-24.md), and [312](docs/CI_RUN_312_2026-10-24.md) retain their failures.
+The [runtime comparison](docs/ANDROID15_RUNTIME_COMPARISON_2026-10-24.md),
+[collector controls](docs/ANDROID15_COLLECTOR_CONTROL_2026-10-24.md), and
+[official repair review](docs/ANDROID15_OFFICIAL_REPAIR_REVIEW_2026-10-24.md) establish no
+Android 15 / 16 KB repair. No lane, assertion or skip requirement is waived.
 
 ### Selection, clipboard and crop corrections (23 October 2026)
 

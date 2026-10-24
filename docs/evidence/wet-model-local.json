@@ -1,0 +1,176 @@
+{
+  "schemaVersion": 1,
+  "baseRevision": "8050121a7a6e3a1d52854d3c398ad1d29a33bcfe",
+  "conclusion": "PASS",
+  "scope": "Local code gate only; no emulator, packaging/lint/signing or native reference-app execution is inferred.",
+  "command": "CI=true ./gradlew testDebugUnitTest compileDebugAndroidTestKotlin ktlintCheck detekt --continue --no-build-cache --stacktrace",
+  "buildCacheDisabled": true,
+  "jvmTaskExecuted": true,
+  "duration": "4m1s",
+  "log": {
+    "name": "wet-model-final-local-gate.log",
+    "bytes": 15073,
+    "sha256": "c9fa0ce6b05f5e519ae8dfeadfa116c8d198a7188e6cf72c18bed04953e0b6e4"
+  },
+  "jvm": {
+    "suites": 252,
+    "tests": 1518,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "uniqueIdentities": 1518,
+    "identityEncoding": "Lexicographically sorted UTF-8 identities, one LF-terminated identity per line",
+    "identitySHA256": "db5ade001b573408dff16b8b404b21b6215e850ab282208869851fd95930500e",
+    "retainedPriorIdentities": 1511,
+    "addedIdentities": [
+      "com.artflow.studio.data.WetPreviewFallbackTest#aDryEditCannotCropAwayThePickupOfAnEarlierSealedWetSegment",
+      "com.artflow.studio.data.WetPreviewFallbackTest#historicalWetVectorsBelowTheEditedLayerSurvivePreviewAndCancellation",
+      "com.artflow.studio.data.WetPreviewFallbackTest#historicalWetVectorsOnTheEditedLayerSurvivePreviewAndCancellation",
+      "com.artflow.studio.data.WetPreviewFallbackTest#soloLiveWetAndDryCompoundControlsKeepExactRegionalPreviews",
+      "com.artflow.studio.data.WetPreviewFallbackTest#wetCompoundTailMatchesCommitAndCancelPreservesTheOriginalDocument",
+      "com.artflow.studio.data.WetPreviewFallbackTest#wetMirrorsRetainEarlierPickupWhenOnlyTheTailMoves",
+      "com.artflow.studio.data.WetPreviewFallbackTest#wetStrokeOverDryVectorHistoryUsesTheCompletePickupPath"
+    ],
+    "removedIdentities": [],
+    "xmlManifestSHA256": "42d8619b3d2509e00be9a49b3d3b9933827ece59c1105af0b0bcf00a5bd78b3d",
+    "xmlFiles": 252
+  },
+  "android": {
+    "compilation": "PASS",
+    "declared": 254,
+    "identitySHA256": "cc6ddb5cf0a6e8f3d98bd254a5c69736e5c77c829b2e7cf764f299bb67638104",
+    "retainedPriorIdentities": 253,
+    "addedIdentities": [
+      "com.artflow.studio.data.WetCompoundPreviewDeviceTest#croppedWetTailMatchesFullCommitAndSurvivesCancellationHistoryAndDiskReopen"
+    ],
+    "removedIdentities": [],
+    "execution": "Not executed in this local gate"
+  },
+  "ktlint": {
+    "emptyReports": 5,
+    "reports": [
+      {
+        "path": "app/build/reports/ktlint/ktlintAndroidTestSourceSetCheck/ktlintAndroidTestSourceSetCheck.txt",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "app/build/reports/ktlint/ktlintDebugSourceSetCheck/ktlintDebugSourceSetCheck.txt",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "app/build/reports/ktlint/ktlintKotlinScriptCheck/ktlintKotlinScriptCheck.txt",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "app/build/reports/ktlint/ktlintMainSourceSetCheck/ktlintMainSourceSetCheck.txt",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "app/build/reports/ktlint/ktlintTestSourceSetCheck/ktlintTestSourceSetCheck.txt",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "detekt": {
+    "errors": 0,
+    "report": {
+      "path": "app/build/reports/detekt/detekt.xml",
+      "bytes": 79,
+      "sha256": "f491e274f0d208f81c3edbc7c1097c30db590a3822fcf579468ac814d9ccc62b"
+    },
+    "baselineUnchanged": true,
+    "baselineSHA256": "dcb67ce1082602a311c05c7f0110065bc64db97d0c83aa80872055a38f8e9279"
+  },
+  "python": {
+    "schemaVersion": 1,
+    "scope": "Two complete Python unittest discovery executions; no Kotlin, emulator or native-reference runtime acceptance.",
+    "provenance": "Verbatim exec-command output retained from the actual completed calls, materialized from the tool transcript afterward; these are not redirected runner log files.",
+    "tests": 150,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "suites": [
+      {
+        "command": "python3 -m unittest discover -s .github/scripts -p 'test_*.py'",
+        "tests": 93,
+        "reportedSeconds": 5.754,
+        "execWallSeconds": 5.712878212,
+        "exitCode": 0,
+        "outputBytes": 192,
+        "outputSha256": "d1da3c262b1ad303f46597548a2d96b96c99450484de21be99e5a25448f34edb",
+        "outputName": "ci-scripts-unittest.log",
+        "retainedTranscript": ".............................................................................................\n----------------------------------------------------------------------\nRan 93 tests in 5.754s\n\nOK\n"
+      },
+      {
+        "command": "python3 -m unittest discover -s tools -p 'test_*.py'",
+        "tests": 57,
+        "reportedSeconds": 1.697,
+        "execWallSeconds": 1.669761646,
+        "exitCode": 0,
+        "outputBytes": 156,
+        "outputSha256": "546ef019e6b151129d426638c93cc6157d9cab69f5a79dd1342764ec1fd3b56f",
+        "outputName": "native-tools-unittest.log",
+        "retainedTranscript": ".........................................................\n----------------------------------------------------------------------\nRan 57 tests in 1.697s\n\nOK\n"
+      }
+    ],
+    "sourceSha256": {
+      ".github/scripts/classify_android15_reference_queue_crash.py": "c65649891591fe3d0f75b6069541e1b0156a899546206d62ed0c5543dcc3c39b",
+      ".github/scripts/test_classify_android15_reference_queue_crash.py": "74c2257598decb4574ddeecb630c60118296da91d216a3941fd8946bd86bb91d"
+    },
+    "newClassifierIdentities": 11,
+    "retainedClassifierIdentities": 17,
+    "classifierIdentities": 28,
+    "additionalTestExecutionForThisRecord": false
+  },
+  "earlierLocalGate": {
+    "status": "FAILED_STATIC",
+    "jvm": {
+      "tests": 1518,
+      "suites": 252,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "androidCompilation": "PASS",
+    "ktlint": "PASS",
+    "detekt": [
+      {
+        "rule": "ComplexCondition",
+        "file": "CanvasRepositoryImpl.kt",
+        "line": 2841,
+        "reason": "Four-term condition exceeds existing threshold"
+      }
+    ],
+    "baselineChanged": false,
+    "logSha256": "9f6d66ebde5ebbd510993f1464bbf5f24e14ac8787e09e4d2453b38c491575bf",
+    "duration": "4m21s",
+    "sourceHashes": {
+      "app/src/main/java/com/artflow/studio/data/repository/canvas/CanvasRepositoryImpl.kt": "b2e01d9f2c4b11aed3e20ce76a654bfc7629e4fcfbc72f52c538e53eea7043fa",
+      "app/src/main/java/com/artflow/studio/core/render/WetBrushPickup.kt": "cdb7c42c31d4f4dd8c9381d882da11583061bcd4d19a0db449aff75b9162178c",
+      "app/src/main/java/com/artflow/studio/presentation/ui/components/editor/ModelCompanion.kt": "b03e631e5dc458acb647567ac8da98a94f8021b9de1db2da2ea1f77a01ccbef1",
+      "app/src/test/java/com/artflow/studio/data/WetPreviewFallbackTest.kt": "4e9c12c131fd0e66c6911077ce12c3d242fefb3d8de0d2cbab3f1d39e713612f",
+      "app/src/androidTest/java/com/artflow/studio/data/WetCompoundPreviewDeviceTest.kt": "282e4701eee3378ccf53e698e7307ddf540eeedd2e302dbf67f760aa15b96f32"
+    }
+  },
+  "earlierGateResolution": "Split the four-term wet-replay condition without changing semantics; no suppression, threshold or baseline change.",
+  "sourceFiles": {
+    ".github/scripts/classify_android15_reference_queue_crash.py": "c65649891591fe3d0f75b6069541e1b0156a899546206d62ed0c5543dcc3c39b",
+    ".github/scripts/test_classify_android15_reference_queue_crash.py": "74c2257598decb4574ddeecb630c60118296da91d216a3941fd8946bd86bb91d",
+    "app/src/androidTest/java/com/artflow/studio/ModelEditorUiTest.kt": "b10034dee329471553ad626b10d86d5a49cda85da5ef5b7bab9b3c797b1d1bde",
+    "app/src/androidTest/java/com/artflow/studio/data/WetCompoundPreviewDeviceTest.kt": "282e4701eee3378ccf53e698e7307ddf540eeedd2e302dbf67f760aa15b96f32",
+    "app/src/main/java/com/artflow/studio/core/render/WetBrushPickup.kt": "cdb7c42c31d4f4dd8c9381d882da11583061bcd4d19a0db449aff75b9162178c",
+    "app/src/main/java/com/artflow/studio/data/repository/canvas/CanvasRepositoryImpl.kt": "773cb0f6e731eb08fe2b00361a8c57a96143fb1268db7209d93340436c539755",
+    "app/src/main/java/com/artflow/studio/presentation/ui/components/editor/ModelCompanion.kt": "f754894add330971a0b367685e8cc106f88996b792a7017e1a9d3ef1a7f45ffe",
+    "app/src/test/java/com/artflow/studio/data/WetPreviewFallbackTest.kt": "4e9c12c131fd0e66c6911077ce12c3d242fefb3d8de0d2cbab3f1d39e713612f"
+  },
+  "reviewLimits": [
+    "Late ownership-race fallback reviewed from source; no timing-dependent race fixture is claimed.",
+    "Fixed pixel oracles were captured from the unchanged prior full-render/independent-commit path.",
+    "Native wet equations, physical stylus feel and display latency are not established."
+  ]
+}

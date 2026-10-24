@@ -34,6 +34,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -56,8 +57,8 @@ fun ModelCompanion(
     artwork: Bitmap?,
     painter: ModelPainter,
     onClose: () -> Unit,
-    interactive: Boolean = true,
     modifier: Modifier = Modifier,
+    interactive: Boolean = true,
 ) {
     var painting by rememberSaveable { mutableStateOf(false) }
     var lightingOpen by rememberSaveable { mutableStateOf(false) }
@@ -113,7 +114,9 @@ fun ModelCompanion(
                                 view.setTexture(artwork)
                             }
                         },
-                        modifier = Modifier.fillMaxSize().testTag("model-view"),
+                        // Older SurfaceView versions clear the current canvas clip to expose GL.
+                        // Bound that hole to the viewport so it cannot erase the sibling header.
+                        modifier = Modifier.fillMaxSize().clipToBounds().testTag("model-view"),
                     )
                     if (lightingOpen) {
                         LightingPanel(lighting, { lighting = it }, Modifier.align(Alignment.BottomCenter))

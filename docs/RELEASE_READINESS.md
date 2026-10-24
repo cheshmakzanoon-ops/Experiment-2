@@ -53,14 +53,25 @@ matrix has 1,711 passes, two skips and one failure; first attempts remain counte
 **The run failed and does not meet the seven-lane acceptance contract.** The native-document cases
 passed in all final attempts, but their scoped success does not waive the incomplete lane.
 
-The later [preview/segment changes](PREVIEW_PERFORMANCE_2026-10-24.md),
-[model-editor lifecycle](MODEL_EDITOR_2026-10-24.md) and
-[native spacing export](NATIVE_SPACING_EXPORT_2026-10-24.md) have a combined local gate of
-1,511 JVM tests, 139 Python checks, Android test compilation, formatting and detekt. The first
-combined invocation's two loop-style findings were refactored without changing a baseline or
-suppressing a rule; the full follow-up gate passed. Its 253 declared Android cases retain all prior
-250 and require a new exact-revision matrix. No local result or earlier device artifact accepts
-that source's device execution.
+[Run 312](CI_RUN_312_2026-10-24.md), revision `8050121a7a6e3a1d52854d3c398ad1d29a33bcfe`,
+passed 1,511 JVM tests, 139 Python checks and its build/package gates. Six lanes completed all
+253 identities and minified launch; API 26 retained its two allowed skips. Main Android 15 / 16 KB
+failed first in system_server and then in ART. Its final report contains 56 passes, one failure and
+196 missing identities. The first automatic recovery was incorrectly permitted by an unrelated
+passing test's earlier GMS crash. Both original attempts and that decision remain preserved.
+Original API 26 screenshots independently establish invisible Model header controls. Thus both
+device-artifact and visual acceptance are **FAIL**, despite the other five lanes' scoped visual passes.
+
+The next source corrects [wet preview history](WET_PREVIEW_HISTORY_2026-10-24.md),
+[Model header visibility](MODEL_HEADER_VISIBILITY_2026-10-24.md), and
+[retry evidence association](ANDROID15_RETRY_ATTRIBUTION_2026-10-24.md). Its
+[combined local gate](evidence/wet-model-local.json) passes 1,518 JVM tests / 252 suites,
+150 Python checks, Android compilation, formatting and detekt. The initial wet gate's one
+complex-condition finding was refactored without suppression or baseline changes, then the full
+gate passed. All 1,511 previous JVM and 253 Android identities remain; seven JVM cases and one
+Android case are added. The 254-case device inventory is declared, not yet accepted by execution.
+A fresh seven-lane run, original-image review and retained wet storage/pixel evidence are required.
+The narrower retry classifier does not repair the unresolved Android runtime crashes.
 
 The [collector diagnostics](ANDROID15_COLLECTOR_CONTROL_2026-10-24.md) also remain failed.
 The corrected control recorded CC and compatible boot artifacts, but the selected system servers

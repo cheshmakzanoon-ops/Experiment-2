@@ -285,25 +285,45 @@ for the exact published commit, then inspect each lane's generated verification 
 A queued, skipped, cancelled or failed run is not a completed gate. An artifact from an earlier
 commit does not validate later source changes.
 
-### Completed run 311 and the next preview candidate
+### Completed run 312 and the wet/header correction
 
-[Run 311](CI_RUN_311_2026-10-24.md) on `e2aa900b91298fe08eca8529d0345220faa9e2eb` completed
-**FAILURE**. Its build passed 1,485 JVM tests / 245 suites, 133 Python checks, static analysis,
-debug/release packaging and the signed-input/native-contract checks. Six emulator lanes completed
-250 identities each and minified launch, with the two documented API 26 skips. The main Android 15 /
-16 KB lane passed only after one interrupted attempt and recovery. The independent 16 KB repeat
-crashed twice in ART and its final attempt contained 213 passes, one failure and 36 missing identities.
-The corrected P3 and all four new native-document cases passed where reached. Full counts, hashes,
-scoped image review, native stacks and the six retained timing records are in the immutable run report.
+[Run 312](CI_RUN_312_2026-10-24.md), exact revision `8050121a7a6e3a1d52854d3c398ad1d29a33bcfe`,
+completed **FAILURE**. Its build passed 1,511 JVM tests / 251 suites, 139 Python checks, native
+contracts and static/package gates. Six emulator lanes completed all 253 identities and minified
+launch; API 26 retained two allowed skips. Main Android 15 / 16 KB failed twice, finally reporting
+56 passes, one failure and 196 missing identities. Its first retry was misattributed to an unrelated
+GMS crash in an earlier passing test. The original decision, both attempts and the native stacks
+remain preserved; the evidence does not establish the crashes' originating cause.
 
-The initial preview-only optimization passed 1,488 unique JVM identities / 246 suites. After the
-model/segment and spacing-export corrections, the [combined local gate](evidence/preview-model-local.json)
-passed **1,511 JVM tests / 251 suites**, zero failures, errors or skips, **139 Python checks**, Android
-test compilation, all five ktlint checks and detekt with the unchanged baseline. Compared with run
-311, this adds 26 JVM and three Android identities, removing none. The combined device inventory
-is **253**. An earlier combined invocation's two loop-style findings were refactored; all tests and
-the static gates then passed again. These local checks do not execute the new Android cases or
-replace the failed runtime requirement; the published source needs its own complete Actions matrix.
+The actual API 26 Model header is invisible in five original captures, despite passing coordinate
+interactions. Both device and visual acceptance therefore fail. The five other complete lanes have
+no new defect within the reviewed image scope. Raw timings remain elapsed calls, not CPU time or
+input-to-display latency; the required JIT-disabled 16 KB repeat is markedly slower in this fixture.
+
+A separate unchanged-source probe demonstrated wet preview corruption: cropping a replay removed
+earlier pickup history, producing 3,835 wrong pixels in the minimal compound fixture. The
+[wet-history repair](WET_PREVIEW_HISTORY_2026-10-24.md) requests complete frames for wet fallback
+and historical-vector dependencies, while eligible live/dry paths retain regional updates. Seven
+JVM cases exercise six reproduced failure paths and exact control behavior. One Android case
+checks fixed all-pixel hashes, cancellation, independent no-preview commits, undo/redo, signed
+storage and a fresh repository reopen, retaining nine evidence files.
+
+The [Model correction](MODEL_HEADER_VISIBILITY_2026-10-24.md) clips the native viewport and
+requires actual paper/ink pixels and contrast for all five header regions after GL readiness and
+navigation. The [classifier correction](ANDROID15_RETRY_ATTRIBUTION_2026-10-24.md) associates
+existing supported fatal signatures with the interrupted identity/process. It adds no retryable
+signature, recovery allowance, skip or workflow exception.
+
+The [combined local gate](evidence/wet-model-local.json) passes **1,518 JVM tests / 252 suites**,
+zero failures, errors or skips, **150 Python checks**, Android test compilation, five empty ktlint
+reports and detekt against the unchanged baseline. Seven JVM cases and one Android identity are
+added without removal, giving **254 declared Android cases**. An initial one-condition detekt
+finding was refactored and the complete gate then passed. This verifies local source behavior;
+the correction still requires its own exact-revision Actions matrix and original-image review.
+
+The preceding [run 311](CI_RUN_311_2026-10-24.md) also remains failed: its independent Android 15 /
+16 KB lane ended with 213 passes, one failure and 36 missing cases after two ART interruptions.
+Run 312 supersedes neither those observations nor the earlier fully accepted run 308 revision.
 
 The separate [collector controls](ANDROID15_COLLECTOR_CONTROL_2026-10-24.md) preserve two failed
 diagnostic revisions with unchanged application/tests. The corrected revision observed CC and

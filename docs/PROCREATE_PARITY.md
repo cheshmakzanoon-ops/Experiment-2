@@ -16,14 +16,23 @@ The added standard Android 15 / 4 KB lane uses its default runtime; both origina
 lanes remain required. Their unresolved crashes and the unchanged-source comparison are recorded
 in the [runtime diagnosis](ANDROID15_RUNTIME_COMPARISON_2026-10-24.md).
 
-[Run 309](CI_RUN_309_2026-10-24.md) executed all 246 final identities on every emulator but failed
-the new P3 case's assertion about a checksum that the verified loader intentionally clears.
-The corrected case checks the persisted signature directly and retains every later colour/reopen
-assertion. [Run 311](CI_RUN_311_2026-10-24.md) passed that correction and the new v5/native-export
-cases where reached. Six emulator lanes completed their full 250 identities and minified launch;
-the main Android 15 / 16 KB lane needed a recovery first. Its independent repeat crashed twice in
-ART and ended with 36 missing identities, so the run remains failed. Original attempts, artifact
-hashes and their exact revision are preserved; the later preview candidate needs its own run.
+[Run 312](CI_RUN_312_2026-10-24.md), revision `8050121a`, passed the build with 1,511 JVM
+cases and 139 Python checks. Six emulator lanes completed 253 identities each and minified launch,
+with the two allowed API 26 skips. Main Android 15 / 16 KB failed both attempts; its final report has
+56 passes, one failure and 196 missing identities. The original API 26 screenshots also expose
+invisible Model header controls, despite passing tap assertions. **The run remains failed.**
+The earlier [309](CI_RUN_309_2026-10-24.md) and [311](CI_RUN_311_2026-10-24.md) failures remain
+preserved; their scoped fixes and passing lanes do not waive the seven-lane contract.
+
+The new [wet-preview correction](WET_PREVIEW_HISTORY_2026-10-24.md) preserves full pickup history
+when a wet brush cannot use its live buffer, including symmetry, sealed segments and historical
+vector layers. The [Model viewport clip](MODEL_HEADER_VISIBILITY_2026-10-24.md) adds real screen
+pixel/contrast acceptance for its header. The [retry association correction](ANDROID15_RETRY_ATTRIBUTION_2026-10-24.md)
+requires a supported fatal signature from the interrupted case/process, retaining the existing
+one-recovery limit. Its original misclassification is recorded; no past result is rewritten.
+The [local combined gate](evidence/wet-model-local.json) passes 1,518 JVM tests, 150 Python checks,
+Android test compilation, ktlint and detekt. All prior cases remain; one added Android storage/pixel
+case brings the inventory to 254. Fresh exact-source emulator execution is still required.
 
 Native `.procreate` group blend/mask metadata remains incomplete: affected exports preserve the
 rendered appearance with editable sources hidden below it. Passing Android tests alone does not
@@ -59,8 +68,8 @@ coalesces growing paint and rejects a cancelled gesture's late result. Full-fram
 later wet segments sample preceding provisional pixels consistently with sequential commit.
 [Native spacing export](NATIVE_SPACING_EXPORT_2026-10-24.md) preserves the original archive version
 when spacing is unchanged and selects version one for deliberate spacing edits, with each component
-handled independently. These additions bring the declared Android inventory to 253; their device
-acceptance belongs to the combined source's completed Actions run.
+handled independently. Those additions were exercised in run 312 wherever reached. The later wet/history and header
+corrections require their own 254-case-per-lane result; run 312 cannot accept changed source.
 
 The [same-image collector controls](ANDROID15_COLLECTOR_CONTROL_2026-10-24.md) remain failed.
 Although the corrected setup observed CC, compatible boot images and disabled JIT, system-server

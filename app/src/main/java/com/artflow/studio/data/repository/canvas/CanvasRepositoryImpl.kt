@@ -2728,6 +2728,9 @@ class CanvasRepositoryImpl
             val below: List<Any?>?,
         )
 
+        /** A live stroke can become ineligible after the preview snapshot was taken. */
+        private class FullWetPreviewRequired : RuntimeException("Wet pickup requires the complete layer", null, false, false)
+
         /**
          * Identifies the layers below the one a single stroke in progress paints — or, with no stroke
          * in progress, below [changedLayer], the one layer just edited (a stroke being committed) —
@@ -2798,12 +2801,12 @@ class CanvasRepositoryImpl
          * composite is exact: pixel sessions in progress, filter layers, feathered masks and layer
          * effects reach beyond the pixels they cover.
          */
-        private fun previewKey(): PreviewCache.Key? {
+        private fun previewKey(snapshot: PreviewSnapshot): PreviewCache.Key? {
             val layers = currentLayers()
             val selection = activeSelection
             val local =
                 pendingEdits.keys.all { it in damageTrackedSessions } &&
-                    !hasProvisionalPickupDependency() &&
+                    !requiresFullWetPreview(snapshot) &&
                     (selection == null || (selection.width == canvasWidth && selection.height == canvasHeight)) &&
                     layers.none { it.filterType != null || it.maskFeather > 0f || it.effects != null } &&
                     layers.all { canvasSized(it.raster) && canvasSized(it.mask) }
@@ -2820,19 +2823,32 @@ class CanvasRepositoryImpl
             )
         }
 
-        /** Wet pickup needs earlier provisional paint along the whole path, outside a damage crop too. */
-        private fun hasProvisionalPickupDependency(): Boolean {
+        /**
+         * A replayed wet stroke needs every earlier pickup along its path, including samples outside
+         * the damage crop. Only a live stroke can retain that history while reading the full source.
+         */
+        private fun requiresFullWetPreview(snapshot: PreviewSnapshot): Boolean {
+            if (snapshot.layers.any { layer -> layer.strokes.any(::samplesCanvas) }) return true
             val paintedLayers = HashSet<Long>()
-            for (id in activeStrokes.keys) {
-                val destination = strokeDestinations[id] ?: StrokeDestination.LAYER
-                val layer = strokeLayerIds[id]
-                val params = strokeBrushParams[id]
-                if (destination == StrokeDestination.LAYER && layer != null && params != null) {
-                    if (!paintedLayers.add(layer) && (params.picksUpCanvas || params.dilution > 0f)) return true
+            for (stroke in snapshot.strokes) {
+                val destination = snapshot.destinations[stroke.id] ?: StrokeDestination.LAYER
+                val layer = snapshot.layers.firstOrNull { it.id == stroke.layerId }
+                if (layer != null && canReceiveStroke(layer, destination)) {
+                    val preceded = layer.id in paintedLayers
+                    if (destination == StrokeDestination.LAYER) paintedLayers.add(layer.id)
+                    val mirrors = symmetryFor(layer, snapshot.symmetry).instanceCount()
+                    val live = canUseLive(stroke, mirrors, layer, snapshot.document.width, snapshot.document.height)
+                    val replay = preceded || destination.isMask || !live
+                    if (samplesCanvas(stroke) && replay) {
+                        return true
+                    }
                 }
             }
             return false
         }
+
+        private fun samplesCanvas(stroke: Stroke): Boolean =
+            !stroke.isEraser && (stroke.brushParams.picksUpCanvas || stroke.brushParams.dilution > 0f)
 
         private fun canvasSized(buffer: PixelBuffer?): Boolean =
             buffer == null || (buffer.width == canvasWidth && buffer.height == canvasHeight)
@@ -2863,7 +2879,8 @@ class CanvasRepositoryImpl
                     withState {
                         val damage = previewDamage
                         previewDamage = PreviewCache.Damage.NONE
-                        PreviewRequest(takePreviewSnapshot(), previewKey(), damage, belowKey(damage?.layers?.singleOrNull()))
+                        val snapshot = takePreviewSnapshot()
+                        PreviewRequest(snapshot, previewKey(snapshot), damage, belowKey(damage?.layers?.singleOrNull()))
                     }
                 val snapshot = request.snapshot
                 val key = request.key
@@ -2878,13 +2895,23 @@ class CanvasRepositoryImpl
                     // A local preview where at most the painted layer changed: the layers below it come from the cache.
                     val split = request.below?.first()
                     val keepBelow = key != null && damage != null && damage.layers.all { it == split }
-                    previewCache.frame(key, damage, drawn, snapshot.document.width, snapshot.document.height) { region ->
-                        val below = request.below
-                        if (region != null && below != null && keepBelow) {
-                            renderOverBelow(snapshot, region, below)
-                        } else {
-                            belowCache.reset()
-                            renderPreview(if (region == null) snapshot else cropPreview(snapshot, region))
+                    try {
+                        previewCache.frame(key, damage, drawn, snapshot.document.width, snapshot.document.height) { region ->
+                            val below = request.below
+                            if (region != null && below != null && keepBelow) {
+                                renderOverBelow(snapshot, region, below)
+                            } else {
+                                belowCache.reset()
+                                renderPreview(if (region == null) snapshot else cropPreview(snapshot, region))
+                            }
+                        }
+                    } catch (_: FullWetPreviewRequired) {
+                        // A cancelled or sealed stroke may lose live ownership while rendering.
+                        // The cropped attempt has only touched private copies; restart the original
+                        // snapshot with full pickup history and replace the whole cached frame.
+                        belowCache.reset()
+                        previewCache.frame(null, null, drawn, snapshot.document.width, snapshot.document.height) {
+                            renderPreview(snapshot)
                         }
                     }
                 }
@@ -3031,13 +3058,7 @@ class CanvasRepositoryImpl
             width: Int,
             height: Int,
         ): List<StrokeRasterizer.LiveStroke>? {
-            if (cacheableStrokes[stroke.id] !== stroke.points.firstOrNull()) return null
-            val eligible =
-                StrokeRasterizer.canDrawLive(stroke) &&
-                    layer.strokes.isEmpty() &&
-                    (mirrors.size == 1 || (!stroke.brushParams.picksUpCanvas && stroke.brushParams.dilution <= 0f))
-            val bytes = width.toLong() * height * BYTES_PER_PIXEL * mirrors.size
-            if (!eligible || bytes > Runtime.getRuntime().maxMemory() / LIVE_HEAP_SHARE) return null
+            if (!canUseLive(stroke, mirrors.size, layer, width, height)) return null
             val lives =
                 liveStrokes.getOrPut(stroke.id) {
                     val starter = StrokeRasterizer()
@@ -3045,6 +3066,20 @@ class CanvasRepositoryImpl
                 }
             return lives.takeIf { it.size == mirrors.size }
         }
+
+        /** Shared by regional-preview planning and the actual live-buffer allocation. */
+        private fun canUseLive(
+            stroke: Stroke,
+            mirrorCount: Int,
+            layer: LayerData,
+            width: Int,
+            height: Int,
+        ): Boolean =
+            cacheableStrokes[stroke.id] === stroke.points.firstOrNull() &&
+                StrokeRasterizer.canDrawLive(stroke) &&
+                layer.strokes.isEmpty() &&
+                (mirrorCount == 1 || !samplesCanvas(stroke)) &&
+                width.toLong() * height * BYTES_PER_PIXEL * mirrorCount <= Runtime.getRuntime().maxMemory() / LIVE_HEAP_SHARE
 
         private fun paintPreviewStrokes(
             layer: LayerData,
@@ -3088,6 +3123,7 @@ class CanvasRepositoryImpl
                 }
                 if (!needsPreviousPaint && paintLive(layer, stroke, mirrors, snapshot)) return
             }
+            if (region != null && samplesCanvas(stroke)) throw FullWetPreviewRequired()
             // Shift the mirrored strokes into the region being rendered.
             val incoming =
                 mirrors.map { if (region == null) it else PreviewCache.translate(it, -region.left.toFloat(), -region.top.toFloat()) }
