@@ -247,7 +247,11 @@ class ProcreateLegacyDarkenDeviceTest {
         val decoded = requireNotNull(PsdCodec.read(bytes))
         assertEquals(WIDTH, decoded.width)
         assertEquals(HEIGHT, decoded.height)
-        assertArrayEquals(expected, requireNotNull(decoded.composite).pixels)
+        assertArrayEquals(
+            "Every merged-preview pixel after PSD white-matte quantization",
+            mergedPsdPixels(nativeContract),
+            requireNotNull(decoded.composite).pixels,
+        )
         val base = decoded.layers.single { it.name == "Base" }
         val top = decoded.layers.single { it.name == "Darken" }
         assertArrayEquals(basePixels(), base.pixels.pixels)
@@ -353,6 +357,22 @@ class ProcreateLegacyDarkenDeviceTest {
 
     /** Standard source-over Darken independently rendered by the unchanged v4 baseline as well. */
     private fun standardPixels(): IntArray = bands(intArrayOf(0x553CB45A, 0xC66F4D8D.toInt(), 0xFFA05A82.toInt(), 0x8E2AC05A.toInt()))
+
+    /**
+     * PSD's merged RGB is quantized over white; editable layer planes retain their straight bytes.
+     * For partial alpha a and channel c: stored = floor((c*a + 255*(255-a) + 127) / 255),
+     * then restored = floor((255*(stored+a-255) + floor(a/2)) / a), clamped to 0..255.
+     * These independently evaluated band literals include that round trip without calling the codec.
+     * Alpha and the opaque/fully transparent bands remain unchanged.
+     */
+    private fun mergedPsdPixels(nativeContract: Boolean): IntArray =
+        bands(
+            if (nativeContract) {
+                intArrayOf(0, 0xAA833CA5.toInt(), 0xFFA05A82.toInt(), 0x551ED25A)
+            } else {
+                intArrayOf(0x553CB45A, 0xC66F4D8C.toInt(), 0xFFA05A82.toInt(), 0x8E29C05A.toInt())
+            },
+        )
 
     private fun bands(values: IntArray): IntArray = IntArray(WIDTH * HEIGHT) { values[(it % WIDTH) / 8] }
 
