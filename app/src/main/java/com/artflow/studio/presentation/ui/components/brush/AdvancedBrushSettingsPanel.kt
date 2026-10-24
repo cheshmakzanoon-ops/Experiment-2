@@ -404,7 +404,9 @@ private fun BrushScatterSettings(
             label = stringResource(R.string.brush_adv_count),
             value = brushParams.count.toFloat(),
             onValueChange = { onBrushParamsChanged(brushParams.copy(count = it.toInt())) },
-            valueRange = 1f..16f,
+            // Procreate's Count runs to 20, and an imported brush may carry more (the library
+            // accepts up to 32): never strand a stored value above the slider's reach.
+            valueRange = 1f..maxOf(20f, brushParams.count.toFloat()),
             valueDisplay = "%d".format(brushParams.count),
             isInteger = true,
         )

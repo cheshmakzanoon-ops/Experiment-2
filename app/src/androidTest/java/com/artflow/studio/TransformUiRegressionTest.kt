@@ -32,7 +32,14 @@ class TransformUiRegressionTest {
         compose.onNodeWithText("Rotation °").performScrollTo().performTextReplacement("25")
         compose.onNodeWithText("Flip horizontal").performScrollTo().performClick()
         compose.runOnIdle { assertNull(result) }
-        compose.onNodeWithText("Apply transform").performScrollTo().performClick()
+        compose
+            .onNodeWithText("Apply transform")
+            .performScrollTo()
+            .assertIsEnabled()
+            .performClick()
+        // Apply settles in a coroutine; wait for it to reach the callback instead of assuming
+        // the draft has already been applied by the next idle frame.
+        compose.waitUntil(5_000) { result != null }
         compose.runOnIdle {
             val applied = requireNotNull(result)
             assertEquals(0.75f, applied.scaleX, 0f)

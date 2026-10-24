@@ -6,6 +6,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewModelScope
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -22,7 +23,6 @@ import com.artflow.studio.domain.repository.ProjectRepository
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import com.artflow.studio.domain.repository.settings.SettingsRepository
 import com.artflow.studio.presentation.ui.MainActivity
-import com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView
 import com.artflow.studio.presentation.ui.components.editor.StudioAction
 import com.artflow.studio.presentation.ui.components.editor.StudioToolPalette
 import com.artflow.studio.presentation.ui.screens.canvas.CanvasScreen
@@ -124,45 +124,53 @@ class StudioWorkspaceUiTest {
         compose.waitForIdle()
     }
 
-    @Test fun focusRestoresControlsAndBackDoesNotLeaveTheDocument() {
-        openEditor()
-        compose.onNodeWithContentDescription("Brush").assertIsSelected()
-        screenshot("studio-dark.png")
-        compose.onNodeWithContentDescription("Workspace menu").performClick()
-        compose.onNodeWithText("Focus canvas").performClick()
-        compose.onNodeWithText("Show controls").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Workspace menu").assertDoesNotExist()
-        screenshot("studio-focus.png")
-        Espresso.pressBack()
-        compose.onNodeWithContentDescription("Workspace menu").assertIsDisplayed()
-        compose.runOnIdle { assertEquals(0, navigations) }
-        compose.onNodeWithContentDescription("Workspace menu").performClick()
-        compose.onNodeWithText("Focus canvas").performClick()
-        compose.onNodeWithText("Show controls").performClick()
-        compose.onNodeWithContentDescription("Brush").assertIsSelected()
+    /** Full screen lives in Actions > Prefs, and the on-screen exit button must stay reachable. */
+    private fun enterFocusMode() {
+        compose.onNodeWithContentDescription("Actions").performClick()
+        compose.onNodeWithText("Prefs").performScrollTo().performClick()
+        compose.onNodeWithText("Full screen").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Exit focus mode").assertIsDisplayed()
     }
 
-    @Test fun formerlyHiddenWorkflowPanelsAreReachableFromTheEditor() {
+    @Test fun focusHidesTheChromeAndBackRestoresTheEditor() {
+        openEditor()
+        compose.onNodeWithContentDescription("Paint").assertIsOn()
+        screenshot("studio-dark.png")
+        enterFocusMode()
+        compose.onNodeWithContentDescription("Actions").assertDoesNotExist()
+        screenshot("studio-focus.png")
+        Espresso.pressBack()
+        compose.onNodeWithContentDescription("Actions").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(0, navigations) }
+        enterFocusMode()
+        compose.onNodeWithContentDescription("Exit focus mode").performClick()
+        compose.onNodeWithContentDescription("Paint").assertIsOn()
+    }
+
+    @Test fun workflowPanelsAreReachableFromTheTopBarActions() {
         openEditor()
         val routes =
             listOf(
-                "Drawing guides" to "Guides",
-                "Animation" to "Animation",
-                "Canvas setup" to "Canvas",
-                "Text settings" to "Text",
-                "Layer transform" to "Transform layer",
-                "Selection options" to "Selection",
-                "Tool options" to "Tool options",
-                "Export artwork" to "Export",
-                "Brush Studio" to "Brush settings",
+                Triple("Canvas", "Drawing Guide", "Guides"),
+                Triple("Canvas", "Animation Assist", "Animation"),
+                Triple("Add", "Add text", "Text"),
+                Triple("Share", "Share or export artwork…", "Export"),
             )
-        for ((action, title) in routes) {
-            compose.onNodeWithContentDescription("Tools").performClick()
-            compose.onNodeWithText(action).performScrollTo().performClick()
+        for ((tab, row, title) in routes) {
+            compose.onNodeWithContentDescription("Actions").performClick()
+            compose.onNodeWithText(tab).performScrollTo().performClick()
+            compose.onNodeWithText(row).performScrollTo().performClick()
             compose.onAllNodesWithText(title).onFirst().assertIsDisplayed()
             Espresso.pressBack()
-            compose.onNodeWithContentDescription("Tools").assertIsDisplayed()
+            compose.onNodeWithContentDescription("Actions").assertIsDisplayed()
         }
+        // Tapping the active tool's top-bar button opens its panel, where every tool is one tap away.
+        compose.onNodeWithContentDescription("Erase").performClick()
+        compose.onNodeWithContentDescription("Erase").performClick()
+        compose.onAllNodesWithText("Tool options").onFirst().assertIsDisplayed()
+        compose.onNodeWithText("All tools").performScrollTo().performClick()
+        compose.onNodeWithText(ToolType.PAINT_BUCKET.displayName).performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(ToolType.PAINT_BUCKET, viewModel.input.value.tool) }
     }
 
     @Test fun allNineteenToolsRemainSelectableAtLargeTextSize() {
@@ -187,9 +195,10 @@ class StudioWorkspaceUiTest {
 
     @Test fun lightWorkspaceKeepsPrimaryControlsReachable() {
         openEditor(AppSettings(themeMode = ThemeMode.LIGHT, largeTouchTargets = true, reduceMotion = true))
-        compose.onNodeWithContentDescription("Eraser").performClick()
-        compose.onNodeWithContentDescription("Eraser").assertIsSelected()
-        compose.onNodeWithContentDescription("Tools").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription("Erase").performClick()
+        compose.onNodeWithContentDescription("Erase").assertIsOn()
+        compose.onNodeWithContentDescription("Actions").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Layers").assertIsDisplayed()
         screenshot("studio-light.png")
     }
 
@@ -199,19 +208,12 @@ class StudioWorkspaceUiTest {
         val id = canvas.getActiveLayerId()
         val before = runBlocking { requireNotNull(canvas.layerPixels(id)).pixels.copyOf() }
         val depth = canvas.undoDepth
-        compose.onNodeWithContentDescription("Tools").performClick()
-        compose.onNodeWithText("Text settings").performScrollTo().performClick()
-        compose.onNodeWithText("Content").performTextReplacement("Title")
-        compose.onNodeWithText("Choose position").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Actions").performClick()
+        compose.onNodeWithText("Add").performClick()
+        compose.onNodeWithText("Add text").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(ToolType.TEXT, viewModel.input.value.tool) }
-        Espresso
-            .onView(
-                androidx.test.espresso.matcher.ViewMatchers
-                    .isAssignableFrom(ArtFlowCanvasView::class.java),
-            ).perform(
-                androidx.test.espresso.action.ViewActions
-                    .click(),
-            )
+        compose.onNodeWithText("Content").performTextReplacement("Title")
+        compose.runOnIdle { viewModel.requestTextAt(50f, 60f) }
         compose.onNodeWithText("Place on canvas").performScrollTo().performClick()
         compose.waitUntil(10_000) { canvas.undoDepth == depth + 1 }
         compose.runOnIdle { assertNull(viewModel.pendingText.value) }
@@ -240,11 +242,13 @@ class StudioWorkspaceUiTest {
     }
 
     @Test
-    fun textScaleAppliesOnceWithoutShrinkingTheLayoutWidth() {
+    fun uiScaleAppliesOnceAndKeepsTheSystemTextPreference() {
         var baseDensity = 0f
         var baseFont = 0f
         var scaledDensity = 0f
         var scaledFont = 0f
+        var baseText = 0f
+        var scaledText = 0f
         setEditorContent {
             val before = LocalDensity.current
             ArtFlowTheme(AppSettings(uiScale = 1.6f)) {
@@ -254,13 +258,18 @@ class StudioWorkspaceUiTest {
                     baseFont = before.fontScale
                     scaledDensity = after.density
                     scaledFont = after.fontScale
+                    baseText = with(before) { 20.sp.toPx() }
+                    scaledText = with(after) { 20.sp.toPx() }
                 }
             }
         }
         compose.runOnIdle {
             assertTrue(baseDensity > 0f)
-            assertEquals(baseDensity, scaledDensity, 0f)
-            assertEquals(baseFont * 1.6f, scaledFont, 0.00001f)
+            // Density carries the UI scale, so a scaled dp and a scaled sp both grow exactly once.
+            assertEquals(baseDensity * 1.6f, scaledDensity, 0.0001f)
+            assertEquals(baseText * 1.6f, scaledText, 0.01f)
+            // The independent system text preference is never overwritten by the app's scale.
+            assertEquals(baseFont, scaledFont, 0f)
         }
     }
 
