@@ -391,6 +391,97 @@ object Stamping {
         val grain: ((Int, Int) -> Float)? = null,
     )
 
+    /**
+     * Smudge's frozen pickup, aligned to source texels and reused between dabs. The extra
+     * border holds both bilinear taps at the antialiased rim. Other patch tools retain their
+     * existing sampling contract in [readPatch] and [stampPatch].
+     */
+    internal class SmudgePatch(
+        val radius: Int,
+    ) {
+        private val side = radius * 2 + 1
+        private val source = PixelBuffer(side, side)
+        private var fractionX = 0f
+        private var fractionY = 0f
+
+        fun read(
+            target: PixelBuffer,
+            centerX: Float,
+            centerY: Float,
+        ) {
+            val originX = floor(centerX).toInt()
+            val originY = floor(centerY).toInt()
+            fractionX = centerX - originX
+            fractionY = centerY - originY
+            for (y in 0 until side) {
+                for (x in 0 until side) {
+                    source.pixels[y * side + x] = target.getSafe(originX + x - radius, originY + y - radius)
+                }
+            }
+        }
+
+        fun stamp(
+            target: PixelBuffer,
+            centerX: Float,
+            centerY: Float,
+            brushRadius: Float,
+            strength: Float,
+            hardness: Float,
+            mask: SelectionMask?,
+            alphaLock: Boolean,
+            texture: PatchTexture,
+        ) {
+            // Authored tips already define their coverage; hardness belongs to the plain round
+            // tip only. Both retain Paint's one-pixel antialiased circular bounding rim.
+            val roundHardness = if (texture.shape == null) hardness.coerceIn(0f, 1f) else 1f
+            val inner = min(brushRadius * roundHardness, brushRadius - 0.5f).coerceAtLeast(0f)
+            val reach = brushRadius + 0.5f
+            val x0 = max(0, floor(centerX - reach).toInt())
+            val x1 = min(target.width - 1, ceil(centerX + reach).toInt())
+            val y0 = max(0, floor(centerY - reach).toInt())
+            val y1 = min(target.height - 1, ceil(centerY + reach).toInt())
+            for (py in y0..y1) {
+                for (px in x0..x1) {
+                    val dx = px + 0.5f - centerX
+                    val dy = py + 0.5f - centerY
+                    val distance = sqrt(dx * dx + dy * dy)
+                    if (distance >= reach) continue
+                    val rim = ((reach - distance) / (reach - inner)).coerceIn(0f, 1f)
+                    val tip = texture.shape?.invoke(dx / brushRadius, dy / brushRadius) ?: 1f
+                    val index = py * target.width + px
+                    val coverage =
+                        if (mask == null) {
+                            1f
+                        } else if (mask.width == target.width && mask.height == target.height) {
+                            mask.alphaAt(index)
+                        } else {
+                            mask.coverageAt(px, py) / 255f
+                        }
+                    val effective = rim * tip * (texture.grain?.invoke(px, py) ?: 1f) * strength * coverage
+                    target.pixels[index] = blendSample(target.pixels[index], dx, dy, effective, alphaLock)
+                }
+            }
+        }
+
+        private fun blendSample(
+            existing: Int,
+            dx: Float,
+            dy: Float,
+            effective: Float,
+            alphaLock: Boolean,
+        ): Int {
+            if (effective <= 0f || (alphaLock && (existing ushr 24) == 0)) return existing
+            // Pixel centers map directly into the frozen source grid. Bilinear sampling
+            // happens only here, with alpha-weighted colour, never on a partly written dab.
+            val sample = source.sampleBilinear(radius + dx + fractionX, radius + dy + fractionY)
+            return if (alphaLock) {
+                BlendModes.sourceAtop(existing, Channels.scaleAlpha(sample, effective))
+            } else {
+                ImageFilters.lerpArgb(existing, sample, effective)
+            }
+        }
+    }
+
     /** Reads a patch into a (2r+1)^2 buffer, reusing an exactly sized scratch when supplied. */
     fun readPatch(
         source: PixelBuffer,

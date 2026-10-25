@@ -6,6 +6,9 @@ The [new implementation record](PARITY_FOLLOW_THROUGH_2026-10-24.md) covers cont
 pressure/opacity/flow-aware Smudge with tool-specific controls, atomic clipboard commands, and
 independently paintable Metallic/Roughness layers with live model preview and OBJ map export.
 Signed `.artflow` v6 retains channel identity while validating historical checksums before migration.
+The subsequent image audit also corrects Smudge's whole-pixel jump at fractional input boundaries
+and adds a device test to capture actual pointer coordinates. Material strokes currently paint one selected channel;
+simultaneous multi-channel brush strokes and material-specific brush dynamics remain unimplemented.
 These implementations require their own full published-revision emulator result; the dated acceptance
 records below apply only to their named source revisions. Full Procreate parity remains unestablished.
 

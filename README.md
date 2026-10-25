@@ -15,6 +15,7 @@ This revision targets three concrete gaps discovered while following the emulato
 - **Smudge input and continuity:** use the selected Smudge brush's opacity, flow, pressure and
   tilt response; carry dab spacing across input events and include the release position.
   Fast gestures must not leave unstamped gaps, and the opacity controls must edit the active tool.
+  The follow-up corrects fractional patch placement exposed by the cross-API image comparison.
 - **Clipboard integrity:** prepare Paste, Copy & Paste and Cut & Paste before changing the
   document, commit each as one undo action, and preserve source pixels, prior clipboard and history
   when the project has reached its layer limit. Material maps retain their channel when copied.
@@ -43,6 +44,15 @@ implementation nor a later successful lane establishes an Android runtime repair
 stopped at two new clipboard concurrency-test preconditions, before the emulator matrix. Its
 follow-up controls worker scheduling explicitly and preserves the full safety assertions; see the
 [verification record](docs/PARITY_FOLLOW_THROUGH_2026-10-24.md) for the original failure evidence.
+
+[Run 317](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40140188018) on `8ce26b9`
+passes 1,563 JVM tests, 156 Python checks, static analysis and package gates. Six device lanes pass
+their complete inventory checks: API 26 has 262 passes and two permitted skips; the others have
+264 passes each. The independent 16 KB repeat
+requires one preserved recovery. The main Android 15 / 16 KB lane stops after 43 passes with one
+empty ART-crash failure and 220 missing tests, so the run remains failed overall. All eight new
+feature cases pass in each final passing lane. Cross-API image review exposed the fractional Smudge
+placement issue corrected by the follow-up, which requires its own published-source Actions result.
 
 ## Editor workflows
 

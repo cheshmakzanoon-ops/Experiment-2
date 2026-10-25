@@ -984,6 +984,51 @@ class CanvasInputDeviceTest {
             File(TestEvidence.directory(), "smudge-batched-tilt.png").writeBytes(BitmapPixelBridge.toPngBytes(separate, 72))
         }
 
+    @Test
+    fun subpixelSmudgeInputKeepsCoverageStableAcrossIntegerBoundaries() =
+        withCanvas(30) { canvas ->
+            val layer = repository.getActiveLayerId()
+            val original = liquifyFixture()
+            repository.setLayerPixels(layer, original, "Smudge subpixel fixture")
+            canvas.setEditorInput(
+                brush.copy(
+                    tool = ToolType.SMUDGE,
+                    smudgeParams = brush.brushParams.copy(size = 16f),
+                    smudge = PixelBrushes.SmudgeSettings(strength = 1f, hardness = 1f),
+                ),
+            )
+            val depth = repository.undoDepth
+            val inputs = StringBuilder("viewport=${canvas.width}x${canvas.height} scale=${canvas.currentScale()}\n")
+            val starts = mutableListOf<Float>()
+            val trace: (MotionEvent) -> Unit = { event ->
+                val mapped = canvas.viewToCanvas(event.getX(0), event.getY(0))
+                if (event.actionMasked == MotionEvent.ACTION_DOWN) starts += mapped.first
+                inputs.appendLine(
+                    "action=${event.actionMasked} view=${event.getX(0)},${event.getY(0)} canvas=${mapped.first},${mapped.second}",
+                )
+            }
+
+            suspend fun draw(offset: Float): PixelBuffer {
+                val pen = Touch(4, 8f + offset, 32f, MotionEvent.TOOL_TYPE_STYLUS)
+                send(canvas, MotionEvent.ACTION_DOWN, pen, trace = trace)
+                send(canvas, MotionEvent.ACTION_UP, pen.copy(x = 52.75f + offset), trace = trace)
+                await { repository.undoDepth == depth + 1 }
+                return image()
+            }
+            val below = draw(-0.0001f)
+            assertTrue(repository.undo())
+            assertArrayEquals(original.pixels, image().pixels)
+            val above = draw(0.0001f)
+            val delta = maximumChannelDifference(below, above)
+            inputs.appendLine("maximumChannelDifference=$delta")
+            File(TestEvidence.directory(), "smudge-subpixel-input.txt").writeText(inputs.toString())
+            File(TestEvidence.directory(), "smudge-subpixel-below.png").writeBytes(BitmapPixelBridge.toPngBytes(below, 72))
+            File(TestEvidence.directory(), "smudge-subpixel-above.png").writeBytes(BitmapPixelBridge.toPngBytes(above, 72))
+            assertTrue("MotionEvents must reach opposite sides of the integer boundary", starts[0] < 8f && starts[1] > 8f)
+            assertTrue("A tiny View-space translation must not create a whole-pixel smudge jump: $delta", delta <= 2)
+            assertTrue(below.getSafe(28, 32) != original.getSafe(28, 32))
+        }
+
     private fun sendSmudgeBatch(
         canvas: ArtFlowCanvasView,
         historical: Touch,
@@ -1081,6 +1126,16 @@ class CanvasInputDeviceTest {
             listOf(0, 8, 16, 24).sumOf { shift -> kotlin.math.abs(((x ushr shift) and 255) - ((y ushr shift) and 255)).toLong() }
         }
 
+    private fun maximumChannelDifference(
+        left: PixelBuffer,
+        right: PixelBuffer,
+    ): Int =
+        left.pixels.indices.maxOf { i ->
+            listOf(0, 8, 16, 24).maxOf { shift ->
+                kotlin.math.abs(((left.pixels[i] ushr shift) and 255) - ((right.pixels[i] ushr shift) and 255))
+            }
+        }
+
     private fun withCanvas(
         id: Int,
         block: suspend (ArtFlowCanvasView) -> Unit,
@@ -1151,6 +1206,7 @@ class CanvasInputDeviceTest {
         changed: Int = 0,
         flags: Int = 0,
         viewCoordinates: Boolean = false,
+        trace: ((MotionEvent) -> Unit)? = null,
     ) {
         eventTime += 10
         if (action == MotionEvent.ACTION_DOWN) downTime = eventTime
@@ -1200,6 +1256,7 @@ class CanvasInputDeviceTest {
                 flags,
             )
         try {
+            trace?.invoke(event)
             assertTrue(canvas.onTouchEvent(event))
         } finally {
             event.recycle()

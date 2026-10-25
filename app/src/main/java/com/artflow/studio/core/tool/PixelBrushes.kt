@@ -68,7 +68,7 @@ object PixelBrushes {
         private var nextDab = step(last)
         private var stampedDistance = 0.0
         private var finished = false
-        private var patch = IntArray(0)
+        private var patch: Stamping.SmudgePatch? = null
 
         /** Actual patch writes, useful for checking that wide brushes do not resample per pixel. */
         var dabCount: Int = 0
@@ -166,17 +166,18 @@ object PixelBrushes {
                 } else {
                     settings.texture
                 }
-            val patchSide = 2 * ceil(radius).toInt() + 1
-            if (patch.size != patchSide * patchSide) patch = IntArray(patchSide * patchSide)
+            val patchRadius = ceil(radius).toInt() + 1
+            val snapshot =
+                patch?.takeIf { it.radius == patchRadius }
+                    ?: Stamping.SmudgePatch(patchRadius).also { patch = it }
             // Snapshot the complete source before writing; reusing storage must not feed a
             // partly overwritten destination back into the same dab.
-            Stamping.readPatch(target, sample.x - dx / movement * lag, sample.y - dy / movement * lag, radius, patch)
-            Stamping.stampPatch(
+            snapshot.read(target, sample.x - dx / movement * lag, sample.y - dy / movement * lag)
+            snapshot.stamp(
                 target = target,
-                patch = patch,
                 centerX = sample.x,
                 centerY = sample.y,
-                radius = radius,
+                brushRadius = radius,
                 strength = strength,
                 hardness = settings.hardness,
                 mask = settings.mask,
