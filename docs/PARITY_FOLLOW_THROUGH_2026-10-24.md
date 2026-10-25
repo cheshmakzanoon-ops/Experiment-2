@@ -115,7 +115,10 @@ storage, fresh reopen, and independently decoded exported maps.
 
 Each stroke paints one selected channel; simultaneous multi-channel strokes and per-brush material
 dynamics are not implemented. This remains a single-atlas implementation. Existing OBJ/glTF/USD
-imports retain base color but do not newly decode imported metallic/roughness textures. Original material sets are not independently
+imports at this record's tested revisions retain base color but do not newly decode imported
+metallic/roughness textures. The later [OBJ material-reimport correction](OBJ_MATERIAL_REIMPORT_2026-10-25.md)
+restores those maps for the supported own-export single-material subset; general glTF/USD scalar
+import remains open. Original material sets are not independently
 preserved. The renderer uses approximate diffuse/specular lighting, not a physically accurate BRDF
 or Procreate's renderer. Receiving applications must support the optional PBR MTL extensions; export
 reports this limitation. Native `.procreate` materials, glTF/USDZ material export, normal maps,

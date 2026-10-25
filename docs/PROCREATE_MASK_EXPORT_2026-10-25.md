@@ -221,6 +221,16 @@ Logs, installed APKs and independent analysis outputs remain outside the source 
 | `api-36-16k` | 12583567174 | 8,976,828 | `f2ae3e4459ba63c036e1f802eb085221f5df40730391948b5336bbac5f94fd5c` |
 | `api-36-tablet` | 12583284916 | 12,128,690 | `82dc14fb4ca4fc57eeeb989c4ee729368c99ea7b38d1e940e44ab368a4d8d0b0` |
 
+### Later revision: run 322
+
+[Run 322](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40155809360), on
+`185115f32090c034fe78bc3d2eac214ff0eca06f`, independently passes the same native-mask
+device identity and raw archive/PNG/state audit on five complete configurations: API 26, API 35
+standard 4 KB, API 36 standard 4 KB, API 36 16 KB and API 36 tablet. Both Android 15 16 KB
+configurations stop at separate ART SIGSEGVs before this case executes; the main has 266 missing
+cases on its final attempt, and the independent repeat has 185. Consequently this newer revision
+does **not** have a complete seven-lane acceptance result, despite the five positive archives.
+
 This correction concerns ordinary layer-mask representation and typed tile disambiguation. It does
 not establish native group-mask metadata, every legacy format version, native-app opening, native
 brush/rendering equivalence, or full Procreate feature and quality parity.

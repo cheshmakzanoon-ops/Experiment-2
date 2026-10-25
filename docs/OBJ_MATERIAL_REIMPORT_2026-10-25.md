@@ -168,10 +168,61 @@ with zero errors. The focused log has SHA-256
 has SHA-256 `df9aaf340d9441c7fb834ed299517d6ac5763b7d772720cbcff5677401702d10`.
 The new Actions run must establish published-source acceptance; the previous failed run stays failed.
 
-**Device acceptance is pending.** These implementation and test files are not part of native-mask
-[run 320](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40151899389), which tests
-`09940e4e03f99b61c07f2922a7229d4faee40c7b`. The subsequent exact-source Actions artifacts must
-be recorded here before claiming execution of the new material cases.
+### Published follow-up build — run 322
+
+The controlled-scheduler follow-up is commit
+[`185115f32090c034fe78bc3d2eac214ff0eca06f`](https://github.com/cheshmakzanoon-ops/Experiment-2/commit/185115f32090c034fe78bc3d2eac214ff0eca06f),
+tested by [run 322](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40155809360).
+Its four changed files match the frozen, locally tested candidate. Author and committer retain the
+repository owner's identity. Application, instrumentation, dependency, runtime and CI-gate files are
+identical to `ec8b146`; the only executable change is the JVM test scheduler described above.
+
+Original source artifact `12583529943` is 2,148,186 bytes, SHA-256
+`b4e091a9c119764e42c7c97057c28dc77ce9284639ae3782f8ced87e1aacc2fe`.
+All 938 extracted files match the exact commit, and its 269 device identities equal run 321's
+unexecuted inventory. Original build-report artifact `12584755838` is 810,275 bytes, SHA-256
+`1028c152345559cddc59ad416f0bb19103cc2e72420d9536e73c6da616f7fde7`.
+
+The published build passes **1,630 JVM cases across 267 suites**, with no failures, errors or skips.
+The four initialization cases all pass. It also passes 190 Python checks (114 plus 76), the pinned
+reference gates, all 68 native-document instruction anchors, signing-input refusal checks, ktlint,
+Detekt, both Android lint variants, debug APK and release AAB builds, and packaged native-library
+integrity/alignment checks. Debug lint retains 154 warnings and five hints; release lint retains
+152 warnings and five hints, with no errors. The complete build-job log has SHA-256
+`6a406711bc35c5f3844b9137cb4df1d249e99e9b43a92b585a205103b9dd0616`.
+The native-contract audit explicitly records that the reference application was not executed.
+
+### Exact-source emulator acceptance — run 322
+
+The completed run tests the 269-case inventory on seven configurations. Five lanes completed their
+full inventory: API 26 with 267 passes and two documented platform skips, API 35 standard 4 KB with
+269 passes, API 36 standard 4 KB with 269 passes, API 36 16 KB with 269 passes, and API 36 tablet
+with 269 passes. Each of those lanes also passed the release-equivalent minified startup check.
+The three new material-import identities passed in all five lanes (**15 actual case executions**).
+Independent host-side audits decode the retained original test fixtures and confirm round-tripped
+scalar values, UVs, isolated channel edits, history, fresh reopen, and save retry. These are
+deterministic artifact checks, **not** execution of Procreate or a visual shader-equivalence test.
+
+Both Android 15 **16 KB** lanes failed independently: the main lane's final attempt records two
+passes, one crash-related failure and 266 missing tests; the repeated lane records 83 passes, one
+crash-related failure and 185 missing tests. Their first attempts likewise ended in native ART
+SIGSEGVs before the single, separately recorded recovery attempt. Neither lane reached the three
+new material identities or the minified launch. Across the matrix this is **1,428 passes, two
+allowed skips, two failures, and 451 unexecuted tests** out of 1,883 expected lane/case outcomes.
+All seven device artifacts and the original source ZIP are retained by [run 322](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40155809360).
+
+The installed-binary audit compares every available pre-test capture over nine instrumentation
+attempts: the 18 app DEX and seven test DEX payloads have identical names, sizes and SHA-256
+digests across successful and failed lanes. Actual failed APKs pass ZIP CRC and DEX header hash
+checks, and the two attempted installs within each failing 16 KB lane are byte-identical. This
+rules out a *captured APK-byte mismatch*; it does not explain ART's native invalid memory access.
+The existing artifacts retain logcat tombstone excerpts, not complete tombstone files with full
+process mappings and other-thread context. The initial and recovery attempts, tokens and boot
+identities remain separate; a later successful run cannot erase these two incomplete lanes.
+
+Run 320 was executed on different revision `09940e4e03f99b61c07f2922a7229d4faee40c7b` and
+does not establish acceptance of these later material changes. Run 322 establishes support for
+its five completed lanes only; the native ART failures and remaining features prevent full parity.
 
 ## Remaining material and quality work
 

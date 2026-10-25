@@ -9,11 +9,14 @@ import tempfile
 import unittest
 
 SCRIPT = Path(__file__).with_name('run-device-tests.sh').resolve()
+NATIVE_TEXT = (b'Timestamp: 2026-10-25 00:00:01.123456789+0000\nCmdline: com.artflow.studio\n'
+               b'pid: 1234, tid: 1234, name: app  >>> com.artflow.studio <<<\n'
+               b'backtrace:\n    #00 pc 00000001 libart.so\nmemory map:\n    exact original bytes\n')
 
 
 class DeviceHarnessTest(unittest.TestCase):
     def run_harness(self, expected, gradle_status=0, runtime_mode="default", retry_status=None,
-                    collector_status=None):
+                    collector_status=None, native_status=None):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             scripts = root / '.github/scripts'
@@ -26,6 +29,12 @@ class DeviceHarnessTest(unittest.TestCase):
                 'with Path(os.environ["CALLS"]).open("a") as log: log.write("capture " + " ".join(sys.argv[1:]) + "\\n")\n'
                 'if os.environ["CAPTURE_STATUS"] != "None": raise SystemExit(int(os.environ["CAPTURE_STATUS"]))\n'
                 'runpy.run_path(str(Path(__file__).with_name("real_collect_installed_apks.py")), run_name="__main__")\n')
+            shutil.copyfile(SCRIPT.with_name('collect_native_tombstones.py'), scripts / 'real_collect_native_tombstones.py')
+            (scripts / 'collect_native_tombstones.py').write_text(
+                'import os\nfrom pathlib import Path\nimport runpy\nimport sys\n'
+                'with Path(os.environ["CALLS"]).open("a") as log: log.write("tombstones " + " ".join(sys.argv[1:]) + "\\n")\n'
+                'if os.environ["NATIVE_STATUS"] != "None": raise SystemExit(int(os.environ["NATIVE_STATUS"]))\n'
+                'runpy.run_path(str(Path(__file__).with_name("real_collect_native_tombstones.py")), run_name="__main__")\n')
             if retry_status is not None:
                 # Classifier and runtime correctness have their own independent suites.
                 # This fixture isolates ordering and status propagation around an allowed recovery.
@@ -36,17 +45,41 @@ class DeviceHarnessTest(unittest.TestCase):
                 (scripts / 'recover-android15-emulator.sh').write_text('#!/bin/sh\nprintf "recover\\n" >> "$CALLS"\n')
             commands = root / 'commands'
             commands.mkdir()
+            (root / 'fixture-tombstone').write_bytes(NATIVE_TEXT)
             # No getconf is provided. The API 26 image does not have one either.
             stubs = {
-                'adb': '''#!/bin/sh
-printf '%s\\n' "$*" >> "$CALLS"
-case "$*" in
-  *getconf*) exit 127 ;;
-  'shell am start '*) echo 'Status: ok' ;;
-  'shell pidof '*) echo 42 ;;
-  'pull /sdcard/artflow-window.xml '*) printf 'package="com.artflow.studio"' > "$3" ;;
-esac
-exit 0
+                'adb': f'#!{sys.executable}\n' + '''import hashlib
+import os
+from pathlib import Path
+import re
+import sys
+args = sys.argv[1:]
+with Path(os.environ["CALLS"]).open("a") as log:
+    log.write(" ".join(args) + "\\n")
+data = Path("fixture-tombstone").read_bytes()
+if any("getconf" in arg for arg in args):
+    raise SystemExit(127)
+if args[:3] == ["shell", "am", "start"]:
+    print("Status: ok")
+elif args[:2] == ["shell", "pidof"]:
+    print(42)
+elif args[:2] == ["pull", "/sdcard/artflow-window.xml"]:
+    Path(args[2]).write_text('package="com.artflow.studio"')
+elif args == ["shell", "id", "-u"]:
+    print(0)
+elif args == ["shell", "cat", "/proc/sys/kernel/random/boot_id"]:
+    print("fixture-boot")
+elif args[:3] == ["shell", "date", "-u"]:
+    print("2026-10-25T00:00:10Z")
+elif args == ["shell", "ls", "-1", "/data/tombstones"]:
+    print("tombstone_00\\ntombstone_00.pb")
+elif args[:2] == ["shell", "stat"]:
+    print(str(len(data)) + ":1234")
+elif args[:3] == ["exec-out", "head", "-c"]:
+    sys.stdout.buffer.write(data[:int(args[3])])
+elif args[0] == "shell" and len(args) == 2 and "sha256sum" in args[1]:
+    size = int(re.search(r"head -c ([0-9]+)", args[1])[1])
+    print(hashlib.sha256(data[:size]).hexdigest() + "  -")
 ''',
                 'sleep': '#!/bin/sh\nexit 0\n',
             }
@@ -103,7 +136,8 @@ if sys.argv[1] == "connectedDebugAndroidTest":
             env = dict(os.environ, PATH=f'{commands}:{os.environ["PATH"]}',
                        RUNNER_TEMP=str(root), CALLS=str(log), GRADLE_STATUS=str(gradle_status),
                        RETRY_STATUS=str(retry_status if retry_status is not None else gradle_status),
-                       ART_JIT_MODE=runtime_mode, CAPTURE_STATUS=str(collector_status))
+                       ART_JIT_MODE=runtime_mode, CAPTURE_STATUS=str(collector_status),
+                       NATIVE_STATUS=str(native_status))
             env.pop('EXPECTED_PAGE_SIZE', None)
             if expected is not None:
                 env['EXPECTED_PAGE_SIZE'] = expected
@@ -111,6 +145,10 @@ if sys.argv[1] == "connectedDebugAndroidTest":
                                     capture_output=True, text=True, timeout=10)
             manifests = {path.parent.name: json.loads(path.read_text()) for path in
                          (root / 'artflow-device/apk-provenance').glob('*/manifest.json')}
+            self.native_manifests = {path.parent.name: json.loads(path.read_text()) for path in
+                                     (root / 'artflow-device/native-tombstones').glob('*/manifest.json')}
+            self.native_payloads = {str(path.relative_to(root / 'artflow-device/native-tombstones')): path.read_bytes()
+                                    for path in (root / 'artflow-device/native-tombstones').glob('*/files/*')}
             return result, log.read_text() if log.exists() else '', manifests
 
     def test_failed_runtime_configuration_prevents_instrumentation(self):
@@ -193,6 +231,48 @@ if sys.argv[1] == "connectedDebugAndroidTest":
         self.assertEqual(37, manifests['attempt-1']['instrumentationStatus'])
         self.assertEqual(23, manifests['attempt-2']['instrumentationStatus'])
         self.assertEqual(1, calls.count('recover\n'))
+
+    def test_full_tombstone_is_retained_before_recovery_and_success_never_overwrites_it(self):
+        result, calls, manifests = self.run_harness('16384', gradle_status=37,
+                                                    runtime_mode='disabled', retry_status=0)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertLess(calls.index('capture --output'), calls.index('tombstones --output'))
+        self.assertLess(calls.index('tombstones --output'), calls.index('classifier'))
+        self.assertLess(calls.index('classifier'), calls.index('recover'))
+        self.assertEqual(1, calls.count('tombstones --output'))
+        self.assertEqual({'attempt-1'}, set(self.native_manifests))
+        native = self.native_manifests['attempt-1']
+        self.assertEqual(manifests['attempt-1']['attemptToken'], native['attemptToken'])
+        self.assertEqual(37, native['instrumentationStatus'])
+        self.assertEqual('captured', native['captureStatus'])
+        self.assertTrue(native['files'][0]['transferIntegrityVerified'])
+        self.assertEqual({'attempt-1/files/tombstone_00': NATIVE_TEXT}, self.native_payloads)
+        self.assertNotIn('root\n', calls)
+
+    def test_second_failed_attempt_retains_its_own_tombstone_without_extra_recovery(self):
+        result, calls, manifests = self.run_harness('16384', gradle_status=37,
+                                                    runtime_mode='disabled', retry_status=23)
+        self.assertEqual(23, result.returncode, result.stderr)
+        self.assertEqual(2, calls.count('tombstones --output'))
+        self.assertEqual(1, calls.count('recover\n'))
+        self.assertNotIn('assembleBenchmark', calls)
+        self.assertEqual({'attempt-1', 'attempt-2'}, set(self.native_manifests))
+        for attempt, native in self.native_manifests.items():
+            self.assertEqual(manifests[attempt]['attemptToken'], native['attemptToken'])
+            self.assertEqual(manifests[attempt]['instrumentationStatus'], native['instrumentationStatus'])
+            self.assertEqual('captured', native['captureStatus'])
+            self.assertEqual(NATIVE_TEXT, self.native_payloads[attempt + '/files/tombstone_00'])
+
+    def test_native_diagnostic_failure_preserves_failure_and_success_skips_capture(self):
+        result, calls, _ = self.run_harness('4096', gradle_status=37, native_status=19)
+        self.assertEqual(37, result.returncode)
+        self.assertIn('Native tombstone capture failed', result.stderr)
+        self.assertNotIn('assembleBenchmark', calls)
+        result, calls, _ = self.run_harness('4096', native_status=19)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertNotIn('tombstones --output', calls)
+        self.assertNotIn('/data/tombstones', calls)
+        self.assertEqual({}, self.native_manifests)
 
 
 if __name__ == '__main__':

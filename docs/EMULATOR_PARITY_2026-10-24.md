@@ -573,16 +573,25 @@ comparisons.
 
 ## What still prevents a full-parity claim
 
+This section describes the historical revisions tested in this record. The later
+[curve-preservation correction](NATIVE_PRESSURE_CURVE_PRESERVATION_2026-10-24.md) raises the retained
+inventory to 39 graphs, of which 30 still lack live consumers. The subsequent
+[material-channel implementation](PARITY_FOLLOW_THROUGH_2026-10-24.md) adds independent Color,
+Metallic and Roughness painting, and the [OBJ reimport correction](OBJ_MATERIAL_REIMPORT_2026-10-25.md)
+restores its supported own-export scalar maps. The [current comparison](PROCREATE_PARITY.md)
+separates these changes from the remaining rendering and acceptance gaps.
+
 The [comparison register](PROCREATE_PARITY.md) remains open for the native wet-paint and compound-brush
-coverage pipeline, 24 retained-only pressure graphs, continuous grain sampling, broader native document
-metadata and large-canvas performance. The pixel store is 8-bit ARGB; native CMYK documents and
-profile-managed print proof are not implemented. The 3D editor paints a base-colour atlas and uses
-global metallic/roughness controls; separate paintable material channels remain missing. Matching the
-reference application's rendering requires paired, versioned reference outputs for identical
-inputs. Current self-consistency and external-format tests cannot establish that equivalence.
-Production consumers currently use nine of the 33 observed pressure graph keys when their
-corresponding dynamics are active. The other 24 remain available for persistence and export.
-Correct spline interpolation does not supply the missing channel/scalar composition rules.
+coverage pipeline, 30 retained-only pressure graphs, continuous grain sampling, broader native document
+metadata and sustained large-canvas performance. The pixel store is 8-bit ARGB; native CMYK documents and
+profile-managed print proof are not implemented. The 3D editor now offers independent Color,
+Metallic and Roughness painting for its single-atlas subset, including supported OBJ round trips,
+but general glTF/USD materials, texture-set hierarchy, more exact lighting and native Procreate 3D
+interchange remain open. Matching the reference application's rendering requires paired, versioned
+reference outputs for identical inputs. Current self-consistency and external-format tests cannot
+establish that equivalence. Production consumers use nine of the 39 retained pressure graph keys;
+the other 30 are preserved without complete execution semantics. Correct spline interpolation alone
+does not supply the missing channel/scalar composition rules.
 
 [Compound scalar equations and source-to-shader mode translation](REA_DUAL_BLEND_CONTRACT_2026-10-24.md)
 have now been reconstructed. They are not substituted into the current three-mode renderer: native

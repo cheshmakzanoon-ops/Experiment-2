@@ -218,9 +218,11 @@ Originally updated 6 October 2026 for `claude/ecstatic-gauss-3nkeht`, with brush
 PSD corrections on 21 October. Rows describe what is reachable in the editor; device validation
 by artists is still outstanding for every row.
 The colour, native metadata, 3D material and timing-budget boundaries were rechecked against source
-on 24 October. Procreate documents [RGB/CMYK profiles][8] and [separate paintable 3D materials][15];
-those workflows need implementation as well as validation here. The 8-bit storage limitation below
-describes external-file fidelity, without assuming a particular Procreate high-bit-depth requirement.
+on 24 October. Procreate documents [RGB/CMYK profiles][8] and [separate paintable 3D materials][15].
+Profile-managed CMYK and the remaining 3D capabilities listed below still need implementation and
+validation; independent Color, Metallic and Roughness painting is now implemented. The 8-bit storage
+limitation describes external-file fidelity, without assuming a particular Procreate high-bit-depth
+requirement.
 
 | Workflow | Reference product | ArtFlow now | Remaining work |
 | --- | --- | --- | --- |

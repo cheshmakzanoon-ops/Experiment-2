@@ -33,6 +33,16 @@ run_instrumentation() {
     --instrumentation-status "$attempt_status" --attempt-token "$attempt_token"; then
     echo "APK provenance capture failed for instrumentation attempt $instrumentation_attempt" >&2
   fi
+  if ((attempt_status != 0)); then
+    # Retain full native reports while this attempt's process/boot evidence still applies.
+    # Missing permissions or diagnostics must never change the instrumentation outcome.
+    if ! timeout --kill-after=2s 58s python "$(dirname "${BASH_SOURCE[0]}")/collect_native_tombstones.py" \
+      --output "$root/native-tombstones/attempt-$instrumentation_attempt" \
+      --apk-provenance "$root/apk-provenance/attempt-$instrumentation_attempt/manifest.json" \
+      --instrumentation-status "$attempt_status" --attempt-token "$attempt_token"; then
+      echo "Native tombstone capture failed for instrumentation attempt $instrumentation_attempt" >&2
+    fi
+  fi
   return "$attempt_status"
 }
 instrumentation_status=0
