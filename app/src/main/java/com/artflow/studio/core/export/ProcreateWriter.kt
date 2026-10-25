@@ -18,7 +18,8 @@ import com.artflow.studio.domain.model.layer.Layer as StackLayer
 /**
  * Writes Procreate documents (.procreate): the zip that [ProcreateReader] opens, with the keyed archive
  * ("Document.archive") describing the canvas and its layer tree, and each layer's pixels as 256-pixel tiles
- * in Apple's LZ4 container, stored premultiplied in RGBA order in the upright layout.
+ * in Apple's LZ4 container, stored premultiplied in RGBA order in the upright layout. Native masks
+ * declare type 3 and store one byte of coverage per pixel.
  *
  * The file has no thumbnail. [ProcreateReader] calibrates its tile layout against a thumbnail when one is
  * present, and a symmetrical artwork can calibrate to a mirrored layout, so the writer leaves the layout alone.
@@ -45,6 +46,7 @@ object ProcreateWriter {
         val alphaLocked: Boolean = false,
         val mask: SelectionMask? = null,
         val blendContract: LayerBlendContract = LayerBlendContract.STANDARD,
+        val maskEnabled: Boolean = true,
     ) : Node
 
     /** A group of layers; [children] are top first, as Procreate lists them. */
@@ -248,7 +250,11 @@ object ProcreateWriter {
                 require(mask.width == width && mask.height == height) { "The mask of \"${layer.name}\" is not the size of the document" }
                 val maskUuid = uuid()
                 pending += Pending(maskUuid, null, mask)
-                fields["mask"] = archive.instance(LAYER, layerFields(maskUuid, "Mask", 1f, true, BlendMode.NORMAL, false, false))
+                fields["mask"] =
+                    archive.instance(
+                        LAYER,
+                        layerFields(maskUuid, "Mask", 1f, layer.maskEnabled, BlendMode.NORMAL, false, false) + ("type" to MASK_TYPE),
+                    )
             }
             return archive.instance(LAYER, fields).also { pixelLayers += it }
         }
@@ -352,8 +358,8 @@ object ProcreateWriter {
     }
 
     /**
-     * A mask tile as opaque grey (the coverage in every channel), or null when the tile reveals everything, as
-     * a missing tile does when read back.
+     * A native type-3 tile stores one coverage byte per pixel. Missing tiles and off-canvas padding
+     * reveal everything, so an allocated tile starts at 255 and an all-white tile is omitted.
      */
     private fun maskTile(
         mask: SelectionMask,
@@ -368,14 +374,10 @@ object ProcreateWriter {
         for (y in top until bottom) {
             for (x in left until right) {
                 val coverage = mask.coverage[y * mask.width + x].toInt() and 0xFF
-                // Full coverage stays transparent here, and a transparent mask pixel reads back as full coverage.
                 if (coverage == FULL) continue
-                val bytes = tile ?: ByteArray(TILE * TILE * 4).also { tile = it }
-                val at = ((y - top) * TILE + (x - left)) * 4
+                val bytes = tile ?: ByteArray(TILE * TILE) { FULL.toByte() }.also { tile = it }
+                val at = (y - top) * TILE + (x - left)
                 bytes[at] = coverage.toByte()
-                bytes[at + 1] = coverage.toByte()
-                bytes[at + 2] = coverage.toByte()
-                bytes[at + 3] = FULL.toByte()
             }
         }
         return tile
@@ -425,6 +427,7 @@ object ProcreateWriter {
     private const val ARCHIVE = "Document.archive"
     private const val DOCUMENT = "SilicaDocument"
     private const val LAYER = "SilicaLayer"
+    private const val MASK_TYPE = 3L
     private const val GROUP = "SilicaGroup"
     private const val DEFAULT_DPI = 132
     private const val MAX_DPI = 10_000

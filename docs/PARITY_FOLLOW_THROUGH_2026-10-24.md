@@ -443,6 +443,78 @@ dependencies, runtime flags, device test identities/assertions, coverage gates, 
 and the single-recovery limit remain unchanged. It does not establish a repair for either the native
 crashes or the verifier failure.
 
+### Run 319: installed-binary evidence capture — 25 October 2026
+
+[Run 319](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40148722269) tests
+`635ebcc2458efbe8b11f8b3e48ae4bfd9ce776dd`. Its application code is unchanged from run 318; the
+diagnostic runner/host capture and the preceding audit record are the changes. The exact source
+ZIP, artifact `12581706318`, is 2,096,494 bytes with SHA-256
+`644d88bb1c2fc572eaf2db759f986099a67ea8060056b0d46419bda4b7ea3da7`. All 922 archived files match
+the commit byte-for-byte, and all 265 device identities match run 318 with none added or removed.
+
+Build job `121035537127` passes. The original report ZIP, artifact `12581593490`, is 791,470 bytes
+with SHA-256 `0aaf5ecfc1eb596c7141daae03cbb6a5af27d686c5010c902277deff65dbf79c`. Its raw XML
+contains 1,569 unique passing JVM outcomes across 260 suites, with no failures, errors or skips.
+The job also passes 177 Python checks (114 CI-script and 63 reference-tool cases), the signing
+rejection guard, pinned native/corpus checks, static analysis, both lint variants, APK/bundle builds
+and native package/alignment checks. Lint remains at 154 debug and 152 release warnings, plus five
+hints per variant and no errors.
+
+All seven device lanes complete successfully. Their original XML, source inventories, measured
+runtimes, minified-launch evidence and startup APK manifests are audited against the exact source.
+The final matrix has **1,853 passes and two allowed API 26 skips**, with zero failures, errors,
+missing or unexpected identities. All seven minified launches pass and no lane requires recovery.
+
+| Final lane | Passed | Failed/errors | Allowed skips | Missing | Minified launch | Recovery |
+| --- | ---: | ---: | ---: | ---: | --- | --- |
+| API 26 / 4 KB | 263 | 0 | 2 | 0 | PASS | None |
+| API 35 / 16 KB, main | 265 | 0 | 0 | 0 | PASS | None |
+| API 35 / 4 KB | 265 | 0 | 0 | 0 | PASS | None |
+| API 36 / 4 KB | 265 | 0 | 0 | 0 | PASS | None |
+| API 35 / 16 KB, independent repeat | 265 | 0 | 0 | 0 | PASS | None |
+| API 36 / 16 KB | 265 | 0 | 0 | 0 | PASS | None |
+| API 36 tablet / 4 KB | 265 | 0 | 0 | 0 | PASS | None |
+
+Each completed lane has exactly one complete, error-free startup capture token. Both package
+records agree between the runner and host on file size and SHA-256; the runner manifest retained
+by the host is byte-identical to its original UTP copy. Its PID and capture time agree with the
+retained instrumentation logs. The installed records match that lane's separately recorded build
+metadata. All 18 app DEX entries and all seven test DEX entries have identical names, sizes and
+SHA-256 values across all seven lanes. App `classes18.dex` is 7,871,304 bytes with SHA-256
+`07de52f3ea75416063e4d16755bd678dc463f82b736a8041d0b75bb5994d0d49`.
+
+Success cleanup removes captured APK/partial payloads and preserves both manifests and verified
+hashes. Whole APK hashes vary across lanes; their cause is not inferred from the manifests. No
+substitute local or build-job APK is used to claim inspection of a failed installed binary. Both
+API 35 / 16 KB lanes pass on their first attempt, without reproducing either preceding failure.
+Unrelated system and Google-process crashes in retained logs are explicitly excluded from the
+application's test result by process identity. Diagnostic startup work can change execution timing;
+this passing observation establishes neither the earlier crash cause nor its repair. The failed-
+attempt binary-retention path remains covered by its automated script tests, without a live failing
+attempt in this run.
+
+All nine feature cases added since the 256-case starting inventory pass in every lane. The new
+Smudge integer-boundary pair has zero differing PNG pixels within each of the seven lanes. The
+continuous-stroke images match exactly among the five modern phone lanes; API 26 and the tablet
+each differ from the standard API 35 image at 14 pixels, by at most one channel level. This retains
+the corrected placement behavior without claiming universal cross-device or native-app pixel parity.
+
+Each original device ZIP was downloaded and independently checked for its published byte count,
+SHA-256 and ZIP integrity before extraction. Reports remain outside the repository.
+
+| Lane | Artifact ID | Bytes | SHA-256 |
+| --- | ---: | ---: | --- |
+| API 26 / 4 KB | `12581418995` | 3,445,368 | `f5f739d02cbbf6d5ee953a78476eb2fb1ee3be4208572fdc7ee1f174a876c58d` |
+| API 35 / 16 KB, main | `12581624196` | 11,628,173 | `55f120978093a7b0af8aa9e86da37a4fb15f942ae01a3295039c5381690f3be2` |
+| API 35 / 4 KB | `12582539656` | 11,345,747 | `7fe7598e6b20e4859ba838a6318690cf951431788f495fd0300aa4802924792a` |
+| API 36 / 4 KB | `12581943578` | 8,991,026 | `5ffd7c41989f491b073265425e5e70e349951ce8974552f9c1e350c3312792e3` |
+| API 35 / 16 KB, repeat | `12581384358` | 11,372,248 | `9bdf98d2c1f4089dbfdb53fcf61fe9390103652567654d921f3665bb256c0431` |
+| API 36 / 16 KB | `12582630460` | 9,046,562 | `f02c1d3fc2da1bdbc10e0fb76058ec892b3f8a3de6ef06d441636b0ed0912a01` |
+| API 36 tablet / 4 KB | `12582936511` | 12,419,232 | `d4077de9b935d110ee870fc97ad9cf35b71e53104eb854ee7ecfa27b1d51c8a5` |
+
+The separate native mask correction described in the
+[mask export record](PROCREATE_MASK_EXPORT_2026-10-25.md) is not part of run 319's source.
+
 ## Remaining requirements for a parity claim
 
 The [parity register](PROCREATE_PARITY.md) remains the broader source of truth. Outstanding work

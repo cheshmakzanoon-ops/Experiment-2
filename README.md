@@ -65,10 +65,17 @@ and 411 missing tests. The new subpixel case passes in every final attempt with 
 across each lane's integer-boundary pair; see the
 [verification record](docs/PARITY_FOLLOW_THROUGH_2026-10-24.md).
 
-The diagnostic follow-up captures exact installed app/test APKs before UTP removes them, verifies
-per-attempt hashes on the host, and preserves failed-attempt binaries for inspection. It changes no
-application behavior, runtime setting, assertion, coverage gate or recovery predicate. Local script
-and instrumentation build checks pass; live emulator capture remains to be verified by Actions.
+[Run 319](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40148722269) on `635ebcc`
+passes the complete seven-lane matrix: **1,853 device passes and two permitted API 26 skips**,
+with no failed, missing or unexpected cases, seven successful minified launches and no recovery.
+Its build passes 1,569 JVM tests and 177 Python checks. The diagnostic follow-up captures installed
+app/test APKs before UTP removes them; all seven runner/host handoffs are complete and their
+18 app DEX and seven test DEX hashes match across lanes. Success retains verified metadata;
+failed-attempt payload retention is covered by script tests. Application code, runtime settings,
+assertions, coverage gates and recovery rules are unchanged from run 318. Passing this diagnostic
+revision does not establish the cause or repair of the earlier intermittent runtime failures.
+Original artifacts, hashes and the seven-lane image audit are in the
+[verification record](docs/PARITY_FOLLOW_THROUGH_2026-10-24.md).
 
 ## Editor workflows
 
@@ -91,7 +98,8 @@ and reconstructed arithmetic are distinct from executing the original applicatio
 - [All 39 native brush pressure curves](docs/NATIVE_PRESSURE_CURVE_PRESERVATION_2026-10-24.md),
   [native spline](docs/NATIVE_PRESSURE_SPLINE.md), [Count](docs/NATIVE_BRUSH_COUNT.md), and
   [spacing interchange](docs/NATIVE_SPACING_EXPORT_2026-10-24.md).
-- [Native document masks](docs/PROCREATE_MASK_IMPORT_2026-10-24.md),
+- [Native mask import](docs/PROCREATE_MASK_IMPORT_2026-10-24.md) and
+  [editable mask export](docs/PROCREATE_MASK_EXPORT_2026-10-25.md),
   [hierarchy](docs/PROCREATE_HIERARCHY_IMPORT_2026-10-24.md),
   [color profiles](docs/PROCREATE_COLOR_IMPORT_2026-10-24.md),
   [Darken blending](docs/NATIVE_LAYER_DARKEN_2026-10-24.md), and
@@ -110,13 +118,13 @@ and reconstructed arithmetic are distinct from executing the original applicatio
 | Painting | Pressure/dynamics, smoothing, taper, flow, wet mix, jitter, procedural and imported grains, tilt, dual brushes, staged Brush Studio | Native wet/compound/grain equivalence and unused retained pressure graphs; large-canvas responsiveness, curated-library and physical stylus validation |
 | Tools | Brush, eraser, continuous pressure/opacity/flow-aware Smudge, clone, healing, liquify, bucket, gradients, text and shapes; QuickShape recognition with hold-to-adjust and Edit Shape; ColorDrop with adjustable threshold and Continue Filling | Artist validation of shape recognition and handle gestures; comparative fill thresholds and anti-aliased edge quality |
 | Selections | Automatic samples the active layer with an adjustable threshold; freehand, rectangle and ellipse; Add/Remove/Intersect, invert/feather and Save & Load; Remove without an existing selection keeps it empty | Gesture ergonomics and artist validation; comparative reference-app thresholds and selection-edge quality |
-| Transform | Freeform, uniform, distort and warp with snapping, cancel and undo | Device validation of large multi-layer moves |
+| Transform | Freeform, uniform, distort and warp with snapping, cancel and undo | Transforms rasterise editable text; retaining text editability after transformation remains unimplemented. Device validation of large multi-layer moves. |
 | Layers | Pixel/mask/effect workflows, nested groups, clipping, alpha lock, reorder; atomic clipboard commands | Merge Down bakes opacity and blend mode into pixels and does not carry alpha lock or clipping |
 | Colour | Disc, Classic (HSB), Value (RGB/HSV/CMYK), palettes, harmonies, Display P3 canvases | Profile-managed CMYK and arbitrary ICC transforms; Classic model parity and real print-proof validation |
 | Animation | Frames, duration/FPS, loop, one-shot and ping-pong; preview and animation export share playback range, frame visibility and order; background/foreground pins, separate previous/next onion colours, timelapse and GIF/MP4/APNG export | Reference hold-count semantics and artist-tested timing; long-animation playback/encoding performance and physical-device qualification; native `.procreate` animation metadata |
 | 3D materials | Independent Color/Metallic/Roughness paint layers, live model preview, undo, persistence and OBJ scalar-map export | Single UV atlas and approximate lighting; imported scalar textures, independent source material sets, native/glTF/USDZ material export and physical GPU validation |
 | Documents | Atomic signed `.artflow` v6 saves, thumbnails, autosave and recovery; older checksums verified before migration | Broader interruption, low-storage and long-session acceptance |
-| Export | PNG/JPEG/WebP/PDF/PSD/TIFF/GIF/APNG/MP4, layer PNG zip and frame-sequence ZIP; `.procreate` with supported sRGB/Display P3 channels, a generated Display P3 profile, layer hierarchy and the native Darken contract; picker/gallery/sharing | Opening exported files in Procreate and broader external interoperability; native group blend/mask metadata, arbitrary ICC transforms and PSB. PSD retains supported independent masks; post-mask effects use baked masks, while resized enabled masks and native Darken use a rendered appearance layer with hidden editable sources |
+| Export | PNG/JPEG/WebP/PDF/PSD/TIFF/GIF/APNG/MP4, layer PNG zip and frame-sequence ZIP; `.procreate` with supported sRGB/Display P3 channels, a generated Display P3 profile, layer hierarchy, native Darken and independent type-3 layer masks with enabled/disabled state; picker/gallery/sharing | Opening exported files in Procreate and broader external interoperability; native group blend/mask metadata, arbitrary ICC transforms and PSB. PSD and native export retain supported independent layer masks; post-mask effects use baked masks, while resized enabled masks use a rendered appearance layer with hidden editable sources. Native Darken also uses that appearance fallback in PSD |
 
 The [parity register](docs/PROCREATE_PARITY.md) tracks the current implementation and remaining work.
 Its dated sections, including *Parity sweep candidate*, retain their historical scope. The

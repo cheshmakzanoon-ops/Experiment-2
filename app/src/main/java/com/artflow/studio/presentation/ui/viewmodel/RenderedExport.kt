@@ -28,7 +28,7 @@ internal suspend fun renderedExport(
             allFrames,
             resolved.includeHiddenLayers,
             resolved.format.needsLayers,
-            preserveLayerMasks = resolved.format == ExportFormat.PSD,
+            preserveLayerMasks = resolved.format == ExportFormat.PSD || resolved.format == ExportFormat.PROCREATE,
             animationPlayback = allFrames && resolved.format.requiresAnimation,
             includeMaterials = resolved.format == ExportFormat.MODEL_OBJ,
         )

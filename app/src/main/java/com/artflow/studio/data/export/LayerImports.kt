@@ -188,7 +188,10 @@ object LayerImports {
                 if (!node.visible) repository.setLayerVisibility(id, false)
                 if (node.clipped) repository.setLayerClippingMask(id, true)
                 if (node.alphaLocked) repository.setLayerAlphaLock(id, true)
-                withContext(Dispatchers.Default) { document.mask(node) }?.let { repository.addLayerMask(id, it) }
+                withContext(Dispatchers.Default) { document.mask(node) }?.let {
+                    repository.addLayerMask(id, it)
+                    if (!node.maskEnabled) repository.setLayerMaskEnabled(id, false)
+                }
                 Built.Pixels(id)
             }
         }

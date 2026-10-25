@@ -87,16 +87,53 @@ class ProcreateMaskTilesTest {
     @Test
     fun legacyRgbaAlphaAndAmbiguousCroppedTileLengthsKeepTheirMeaning() {
         // 8x8 RGBA is also the length of a padded 16x16 single-channel tile.
-        // Preserve the already-supported RGBA interpretation when the length alone cannot distinguish them.
-        val entries = document(8, 8)
+        // Historical ArtFlow exports omitted the native mask type. Keep their RGBA interpretation.
+        val entries = document(8, 8, maskType = null)
         val colors = intArrayOf(0xFF000000.toInt(), 0x80000000.toInt(), 0x80404040.toInt(), 0)
         entries["MASK/0~0.lz4"] = apple(rgba(8, 8) { colors[it % colors.size] })
         val opened = open(entries)
+        assertTrue(opened.layers().single().maskEnabled)
         val expected = intArrayOf(0, 127, 191, 255)
         assertArrayEquals(
             ByteArray(64) { expected[it % expected.size].toByte() },
             requireNotNull(opened.mask(opened.layers().single())).coverage,
         )
+    }
+
+    @Test
+    fun declaredSingleChannelMasksResolveAmbiguousPaddedTileLengths() {
+        // Native mask type 2 is normalized to type 3; both have a one-channel backing.
+        for (type in listOf(2L, 3L)) {
+            val entries = document(8, 8, maskType = type)
+            entries["MASK/0~0.lz4"] = apple(ByteArray(256) { (it * 2).toByte() })
+            entries["INK/0~0.lz4"] = apple(rgba(8, 8) { 0xFF114477.toInt() })
+            val opened = open(entries)
+            val layer = opened.layers().single()
+            val expected = ByteArray(64) { at -> ((at / 8 * 16 + at % 8) * 2).toByte() }
+            assertArrayEquals("type $type", expected, requireNotNull(opened.mask(layer)).coverage)
+            assertTrue(opened.pixels(layer).pixels.all { it == 0xFF114477.toInt() })
+        }
+    }
+
+    @Test
+    fun declaredSingleChannelMasksRetainUnambiguousFullAndCroppedRgbaCompatibility() {
+        val entries = document(19, 18)
+        val colors = intArrayOf(0xFF000000.toInt(), 0x80000000.toInt(), 0x80404040.toInt(), 0)
+        entries["MASK/0~0.lz4"] = apple(rgba(16, 16) { colors[it % colors.size] })
+        entries["MASK/1~1.lz4"] = apple(rgba(3, 2) { colors[it % colors.size] })
+        val expectedCoverage = intArrayOf(0, 127, 191, 255)
+        val expected =
+            ByteArray(19 * 18) { at ->
+                val x = at % 19
+                val y = at / 19
+                when {
+                    x < 16 && y < 16 -> expectedCoverage[(y * 16 + x) % 4]
+                    x >= 16 && y >= 16 -> expectedCoverage[((y - 16) * 3 + x - 16) % 4]
+                    else -> 255
+                }.toByte()
+            }
+        val opened = open(entries)
+        assertArrayEquals(expected, requireNotNull(opened.mask(opened.layers().single())).coverage)
     }
 
     @Test
@@ -133,9 +170,12 @@ class ProcreateMaskTilesTest {
     private fun document(
         width: Int,
         height: Int,
+        maskType: Long? = 3L,
     ): MutableMap<String, ByteArray> {
         val archive = KeyedArchiveBuilder()
-        val mask = archive.instance("SilicaLayer", mapOf("UUID" to archive.add("MASK"), "type" to 3L))
+        val fields = mutableMapOf<String, Any?>("UUID" to archive.add("MASK"))
+        maskType?.let { fields["type"] = it }
+        val mask = archive.instance("SilicaLayer", fields)
         val ink =
             archive.instance(
                 "SilicaLayer",

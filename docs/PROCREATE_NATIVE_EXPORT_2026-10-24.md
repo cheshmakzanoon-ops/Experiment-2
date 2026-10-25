@@ -1,5 +1,9 @@
 # Native document export structure, P3 and transparency — 24 October 2026
 
+The [25 October mask follow-up](PROCREATE_MASK_EXPORT_2026-10-25.md) adds independent type-3
+layer-mask export, preserves disabled state, and extends the pinned native contract checks. This
+record describes the earlier hierarchy/profile/transparency correction.
+
 ## Confirmed gaps and changes
 
 The exporter placed its nested group tree in the archive's flat pixel-layer index. It also wrote
@@ -43,7 +47,7 @@ executable SHA-256 `76d3ff1249a987b8f03ac3ecc64c54e48f618bac467e9fbb1f238b91fab1
 | `colorProfile`, key at `0x100b1a678`, call at `0x100b1a684` | Object field offset `0x1d0`, identical to the named getter. |
 | `ValkyrieColorProfile.encodeWithCoder:`, `0x100b0e588` | Writes ICC bytes through `encodeBytes:length:forKey:` under `SiColorProfileArchiveICCDataKey`, and a separate name under `SiColorProfileArchiveICCNameKey`. |
 
-The tool checks five method identities, five archive fields, five additional source selectors
+For this initial correction, the tool checked five method identities, five archive fields, five additional source selectors
 and twenty instruction anchors. Its report explicitly marks reference execution and exported
 file opening in Procreate as false. The pinned genuine archives independently provide the
 `SiColorProfile` descriptor class, native group visibility key and flat-index/tree leaf identity
@@ -97,8 +101,9 @@ gate. Earlier runs do not accept these later declarations.
 ## Remaining limits
 
 Exported files still require direct opening and editing in a versioned Procreate installation.
-The current native tile writer, legacy RGBA mask representation and absent thumbnail do not
-gain blanket native-app acceptance from these metadata checks. Native group blend/mask behavior
+The native tile writer and absent thumbnail do not gain blanket native-app acceptance from these
+metadata checks. The later mask follow-up replaces the old RGBA mask export representation;
+native group blend/mask behavior
 uses the existing rendered-appearance fallback where necessary. Animation, editable text,
 guides, 3D document metadata, arbitrary ICC profiles and profile-managed CMYK are not added.
 

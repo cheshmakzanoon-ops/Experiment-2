@@ -48,6 +48,8 @@ object ProcreateReader {
         internal val uuid: String?,
         internal val maskUuid: String?,
         val blendContract: LayerBlendContract = LayerBlendContract.STANDARD,
+        internal val maskType: Long? = null,
+        val maskEnabled: Boolean = true,
     ) : Node
 
     class Group(
@@ -83,10 +85,10 @@ object ProcreateReader {
         /** A layer's pixels (straight ARGB in [colorProfile]), upright; empty when it has no tiles. */
         fun pixels(layer: Layer): PixelBuffer = tiles.layer(layer.uuid)
 
-        /** The layer's mask as coverage (white reveals; areas with no stored pixels reveal too), or null when it has none. */
+        /** Editable mask coverage, including disabled masks; white and areas with no stored pixels reveal. */
         fun mask(layer: Layer): SelectionMask? {
             val uuid = layer.maskUuid ?: return null
-            val pixels = tiles.layer(uuid, mask = true)
+            val pixels = tiles.layer(uuid, mask = true, preferSingleChannel = layer.maskType == 2L || layer.maskType == 3L)
             val coverage =
                 ByteArray(pixels.pixels.size) { index ->
                     val pixel = pixels.pixels[index]
@@ -176,6 +178,7 @@ object ProcreateReader {
             return Group(name, opacity, visible, children)
         }
         val blend = ProcreateLayerBlendModes.decode(item)
+        val mask = archive.map(item["mask"])
         return Layer(
             name = name,
             opacity = opacity,
@@ -184,8 +187,10 @@ object ProcreateReader {
             clipped = item["clipped"] == true,
             alphaLocked = item["preserve"] == true,
             uuid = archive.string(item["UUID"]),
-            maskUuid = archive.string(archive.map(item["mask"])?.get("UUID")),
+            maskUuid = archive.string(mask?.get("UUID")),
             blendContract = blend.contract,
+            maskType = mask?.get("type") as? Long,
+            maskEnabled = mask?.get("hidden") != true,
         )
     }
 
@@ -251,8 +256,9 @@ object ProcreateReader {
         fun layer(
             uuid: String?,
             mask: Boolean = false,
+            preferSingleChannel: Boolean = false,
         ): PixelBuffer {
-            val stored = uuid?.let { stored(it, mask) }
+            val stored = uuid?.let { stored(it, mask, preferSingleChannel) }
             val out = PixelBuffer(width, height)
             stored ?: return out
             val swap = bgra
@@ -315,10 +321,11 @@ object ProcreateReader {
         private fun stored(
             uuid: String,
             mask: Boolean = false,
+            preferSingleChannel: Boolean = false,
         ): IntArray? {
             val tiles = byLayer[uuid] ?: return null
             val pixels = IntArray(storedWidth * storedHeight)
-            tiles.forEach { tile -> files.read(tile.path)?.let { place(pixels, tile, it, mask) } }
+            tiles.forEach { tile -> files.read(tile.path)?.let { place(pixels, tile, it, mask, preferSingleChannel) } }
             return pixels
         }
 
@@ -327,6 +334,7 @@ object ProcreateReader {
             tile: Tile,
             data: ByteArray,
             mask: Boolean,
+            preferSingleChannel: Boolean,
         ) {
             // Long arithmetic: a corrupt tile index must not wrap around into a valid-looking position.
             val leftL = tile.column.toLong() * size
@@ -337,7 +345,7 @@ object ProcreateReader {
             val visibleWidth = minOf(size, storedWidth - left)
             val visibleHeight = minOf(size, storedHeight - top)
             val bytes = decode(tile.path, data, size * size * 4) ?: return
-            val layout = tileLayout(bytes.size, visibleWidth, visibleHeight, mask) ?: return
+            val layout = tileLayout(bytes.size, visibleWidth, visibleHeight, mask, preferSingleChannel) ?: return
             for (y in 0 until visibleHeight) {
                 var at = y * layout.stride * layout.channels
                 val row = (top + y) * storedWidth + left
@@ -360,18 +368,31 @@ object ProcreateReader {
             val channels: Int,
         )
 
-        /** Whole/cut RGBA tiles retain precedence when their byte length also fits a one-channel mask. */
+        /** Native type 2/3 resolves ambiguous edge lengths; untyped historical masks keep RGBA precedence. */
         private fun tileLayout(
             bytes: Int,
             visibleWidth: Int,
             visibleHeight: Int,
             mask: Boolean,
-        ): TileLayout? =
-            when {
+            preferSingleChannel: Boolean,
+        ): TileLayout? {
+            val coverage = if (mask) coverageLayout(bytes, visibleWidth, visibleHeight) else null
+            return when {
                 bytes == size * size * 4 -> TileLayout(size, 4)
+                preferSingleChannel && coverage != null -> coverage
                 bytes == visibleWidth * visibleHeight * 4 -> TileLayout(visibleWidth, 4)
-                mask && bytes == size * size -> TileLayout(size, 1)
-                mask && bytes == visibleWidth * visibleHeight -> TileLayout(visibleWidth, 1)
+                else -> coverage
+            }
+        }
+
+        private fun coverageLayout(
+            bytes: Int,
+            visibleWidth: Int,
+            visibleHeight: Int,
+        ): TileLayout? =
+            when (bytes) {
+                size * size -> TileLayout(size, 1)
+                visibleWidth * visibleHeight -> TileLayout(visibleWidth, 1)
                 else -> null
             }
 

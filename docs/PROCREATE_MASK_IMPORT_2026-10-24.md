@@ -1,5 +1,9 @@
 # Native single-channel mask import
 
+The [25 October follow-up](PROCREATE_MASK_EXPORT_2026-10-25.md) establishes the native mask-type
+contract, resolves typed edge-tile ambiguity, and addresses independent native mask export. This
+earlier record preserves the evidence and limits of the initial import correction.
+
 ## Confirmed defect
 
 `ProcreateReader.Tiles.place` previously accepted only four-byte RGBA tiles. The genuine

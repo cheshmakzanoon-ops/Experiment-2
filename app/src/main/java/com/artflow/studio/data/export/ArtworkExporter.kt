@@ -32,6 +32,7 @@ import com.artflow.studio.core.export.PsdFolders
 import com.artflow.studio.core.export.TiffCodec
 import com.artflow.studio.core.pixels.BlendModes
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.three.MaterialChannel
 import com.artflow.studio.core.three.ObjExport
 import com.artflow.studio.data.local.ProjectStorage
@@ -115,6 +116,7 @@ class ArtworkExporter
                     val fileName = ExportNaming.fileName(projectName, options)
                     var resizedPsdMasks = false
                     var renderedNativePsdBlends = false
+                    var nativeDocumentWarning: String? = null
 
                     val bytes: ByteArray =
                         when (options.format) {
@@ -160,7 +162,10 @@ class ArtworkExporter
                             }
 
                             ExportFormat.PROCREATE -> {
-                                buildProcreate(prepared, layers, projectName, options, hasAdjustmentLayers, groups)
+                                val document =
+                                    buildProcreate(prepared, layers, projectName, options, hasAdjustmentLayers, groups, layerMasks)
+                                nativeDocumentWarning = document.warning
+                                document.bytes
                             }
 
                             ExportFormat.MODEL_OBJ -> {
@@ -196,6 +201,7 @@ class ArtworkExporter
                                     resizedPsdMasks ->
                                         "Resized masks are rendered into Artwork to preserve appearance; " +
                                             "editable layers and masks are included hidden."
+                                    nativeDocumentWarning != null -> nativeDocumentWarning
                                     layeredDocument(options.format) && hasAdjustmentLayers ->
                                         "Adjustment/filter effects are baked into Artwork; original pixel layers are included hidden."
                                     else -> null
@@ -554,6 +560,11 @@ class ArtworkExporter
         /** Formats that store each layer as a layer of the file. */
         private fun layeredDocument(format: ExportFormat): Boolean = format == ExportFormat.PSD || format == ExportFormat.PROCREATE
 
+        private data class ProcreateOutput(
+            val bytes: ByteArray,
+            val warning: String?,
+        )
+
         /**
          * The layers as a Procreate document, nested as the groups are. Like PSD, a stack with adjustment
          * effects keeps its pixel layers hidden and adds the rendered artwork on top. Group blend modes
@@ -567,14 +578,29 @@ class ArtworkExporter
             options: ExportOptions,
             hasAdjustmentLayers: Boolean,
             groups: List<Layer>,
-        ): ByteArray {
-            val needsRenderedAppearance =
-                hasAdjustmentLayers || groups.any { it.blendMode != BlendMode.PASS_THROUGH || it.hasActiveMask() }
+            layerMasks: Map<Long, PixelBuffer>,
+        ): ProcreateOutput {
+            val unsupportedGroups = groups.any { it.blendMode != BlendMode.PASS_THROUGH || it.hasActiveMask() }
+            val resizedMasks =
+                layers.any { entry ->
+                    entry.layer.maskEnabled &&
+                        layerMasks[entry.layer.id]?.let {
+                            LayerMaskExport.requiresResampling(it, composite.width, composite.height, options.fitMode)
+                        } == true
+                }
+            val needsRenderedAppearance = hasAdjustmentLayers || unsupportedGroups || resizedMasks
+
+            fun mask(layer: Layer): SelectionMask? =
+                layerMasks[layer.id]?.let { coverage ->
+                    val resized = LayerMaskExport.resize(coverage, composite.width, composite.height, options.fitMode)
+                    SelectionMask(resized.width, resized.height, ByteArray(resized.size) { (resized.pixels[it] ushr 24).toByte() })
+                }
 
             fun shown(layer: Layer) = !needsRenderedAppearance && (options.includeHiddenLayers || layer.isVisible)
             val rendered: List<ProcreateWriter.Node> =
                 if (needsRenderedAppearance) {
-                    listOf(ProcreateWriter.Layer("Artwork (rendered effects)", composite))
+                    val name = if (resizedMasks) "Artwork (resized masks)" else "Artwork (rendered effects)"
+                    listOf(ProcreateWriter.Layer(name, composite))
                 } else {
                     emptyList()
                 }
@@ -595,19 +621,41 @@ class ArtworkExporter
                             blendMode = entry.layer.blendMode,
                             clipped = entry.layer.isClippingMask,
                             alphaLocked = entry.layer.isAlphaLocked,
+                            mask = mask(entry.layer),
                             blendContract = entry.layer.blendContract,
+                            maskEnabled = entry.layer.maskEnabled,
                         )
                     },
                 )
-            return ProcreateWriter.write(
-                width = composite.width,
-                height = composite.height,
-                nodes = rendered + tree,
-                composite = composite,
-                background = if (options.flattenOntoBackground) options.outputBackground else null,
-                dpi = options.dpi,
-                name = projectName,
-                colorProfile = options.outputProfile,
+            val reasons =
+                listOfNotNull(
+                    "resized masks".takeIf { resizedMasks },
+                    "group blending or group masks".takeIf { unsupportedGroups },
+                    "adjustment/filter effects".takeIf { hasAdjustmentLayers },
+                )
+            val warnings =
+                listOfNotNull(
+                    reasons.takeIf { it.isNotEmpty() }?.joinToString(
+                        prefix = "Rendered appearance preserves ",
+                        postfix = "; source layers and supported masks are included hidden.",
+                    ),
+                    "Layer effects are rendered into pixels; masks on those layers are not separately editable in this file."
+                        .takeIf { layers.any { it.layer.hasMask() && it.layer.effects != null } },
+                    "Group masks are omitted from the editable hierarchy."
+                        .takeIf { groups.any { it.hasMask() } },
+                )
+            return ProcreateOutput(
+                ProcreateWriter.write(
+                    width = composite.width,
+                    height = composite.height,
+                    nodes = rendered + tree,
+                    composite = composite,
+                    background = if (options.flattenOntoBackground) options.outputBackground else null,
+                    dpi = options.dpi,
+                    name = projectName,
+                    colorProfile = options.outputProfile,
+                ),
+                warnings.takeIf { it.isNotEmpty() }?.joinToString(" "),
             )
         }
 
