@@ -25,7 +25,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
@@ -54,7 +54,9 @@ class CanvasModelInitializationTest {
     @Test
     fun readyAndAutosaveWaitForTheWholeBundleAndItsModelFile() =
         runTest {
-            Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+            // Keep Main queued after Ready is observed so runCurrent also registers the autosave
+            // timer before virtual time advances; unconfined worker resumptions can race it.
+            Dispatchers.setMain(StandardTestDispatcher(testScheduler))
             val fixture = Fixture(temporary.newFolder("files"))
             try {
                 fixture.viewModel.open(PROJECT_ID)
@@ -90,7 +92,7 @@ class CanvasModelInitializationTest {
     @Test
     fun aFailedInitialSaveRetainsItsReceiptAndRetriesPersistenceWithoutDuplicatePlanes() =
         runTest {
-            Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+            Dispatchers.setMain(StandardTestDispatcher(testScheduler))
             val fixture = Fixture(temporary.newFolder("files"))
             try {
                 fixture.failInitialSave = true
@@ -121,7 +123,7 @@ class CanvasModelInitializationTest {
     @Test
     fun cancellationAfterPlanePublicationKeepsTheBundleForAReopenedUnsavedCanvas() =
         runTest {
-            Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+            Dispatchers.setMain(StandardTestDispatcher(testScheduler))
             val fixture = Fixture(temporary.newFolder("files"))
             try {
                 fixture.pauseInitialSave = true
@@ -157,7 +159,7 @@ class CanvasModelInitializationTest {
     @Test
     fun aPersistenceFailureStaysRecoverableAndRetryInstallsTheBundleOnlyOnce() =
         runTest {
-            Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+            Dispatchers.setMain(StandardTestDispatcher(testScheduler))
             val fixture = Fixture(temporary.newFolder("files"))
             try {
                 fixture.failPublication = true

@@ -94,8 +94,12 @@ fails acceptance. Both failed attempts now retain their exact installed APKs; al
 test DEX payloads match the passing lanes. The [mask record](docs/PROCREATE_MASK_EXPORT_2026-10-25.md)
 preserves the full matrix, crash chronology, artifact hashes and the unresolved causal limits.
 The subsequent [OBJ material-reimport correction](docs/OBJ_MATERIAL_REIMPORT_2026-10-25.md) passes
-its 1,630-test local JVM suite and full local gate; its three new device cases require their own
-published-source Actions run.
+its 1,630-test local JVM suite and full local gate. Its first published
+[run 321](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40154781197) stops at one
+new test's post-Ready autosave assertion: 1,629 JVM passes and one failure, with no emulator execution.
+The follow-up controls the test's Main queue before advancing virtual time and preserves every
+assertion. Its focused four-case class, full 1,630-case JVM suite and static/lint checks pass locally;
+the three new device cases still require their own successful published-source run.
 
 ## Editor workflows
 

@@ -130,6 +130,44 @@ all 266 identities from run 320 retained. The complete passing gate log has SHA-
 attempt remains separately recorded as
 `9f3fa28f3b2ea94f2c1d12f15d433022dbe50c48eb4aa54f0d59c0aff9746abd`.
 
+### Published build and controlled test scheduling
+
+The implementation was published as `ec8b14665ed6b4ff5f46b19d582eb496d73235d2` and triggered
+[run 321](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40154781197). Its original
+source artifact `12584411661` is 2,146,851 bytes, SHA-256
+`ac18ebbe27eff2a3a09cd9cf1c82fb0e6e48caa30ad59f839ccc72508ccdc037`; all 938 files match the
+published commit. The original build-report artifact `12584177418` is 669,876 bytes, SHA-256
+`8d947d2d2e9013abea80a232b8f067b7b89c82b7b09aceb8d9098ecd5f56920b`.
+
+Run 321 passes all 190 Python checks and the 68 native-document instruction anchors, then records
+**1,629 passing JVM cases and one failure across 267 suites**, with no errors or skips. The failed
+case is `CanvasModelInitializationTest.readyAndAutosaveWaitForTheWholeBundleAndItsModelFile`, at
+its final `autosaves > 0` assertion. Every earlier assertion in that case passes, including Loading,
+no premature autosave, complete insertion/history, initial save, gallery metadata and pending-payload
+removal. Static analysis and packaging are skipped after this failure; **no emulator tests execute**.
+The original failed report and the earlier passing local XML remain separately retained.
+
+Source review identifies an ordering race in the test harness. Production `open()` publishes Ready
+before synchronously finishing its state refresh and starting autosave. With
+[`UnconfinedTestDispatcher`](https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-test/kotlinx.coroutines.test/-unconfined-test-dispatcher.html),
+that Main continuation can resume on a worker while the separate Ready observer resumes the test's
+virtual clock. `runCurrent()` cannot join unconfined work already running outside its queue, so the
+five-second advance can precede timer registration.
+
+The follow-up uses
+[`StandardTestDispatcher(testScheduler)`](https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-test/kotlinx.coroutines.test/-standard-test-dispatcher.html)
+for Main in all four initialization cases. The existing `runCurrent()` then drains queued Main
+initialization/autosave work before the time advance. All test identities, assertions, exact 20-second
+and five-second advances, failure/cancellation controls and real worker/IO boundaries remain intact.
+No application, device-test, runtime, dependency or CI-gate code changes. The focused follow-up passes
+all four cases. The fresh full JVM run then passes **1,630 cases across 267 suites, with no failures,
+errors or skips**; ktlint, Detekt, debug lint and release lint pass in the same 3-minute-23-second gate.
+Debug lint retains 154 warnings and five hints; release lint retains 152 warnings and five hints,
+with zero errors. The focused log has SHA-256
+`3fbe71e3294073caa807883592a3bc4199479899ce07a4bd543d37c52e56ec2c`; the complete follow-up gate log
+has SHA-256 `df9aaf340d9441c7fb834ed299517d6ac5763b7d772720cbcff5677401702d10`.
+The new Actions run must establish published-source acceptance; the previous failed run stays failed.
+
 **Device acceptance is pending.** These implementation and test files are not part of native-mask
 [run 320](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40151899389), which tests
 `09940e4e03f99b61c07f2922a7229d4faee40c7b`. The subsequent exact-source Actions artifacts must

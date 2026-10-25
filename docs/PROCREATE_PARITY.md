@@ -8,9 +8,12 @@ preserves raw scalar samples and the existing UV layout, prepares all planes bef
 creation, and installs them as one undoable layer change. Editor initialization awaits the initial
 document save; an identity-checked retry preserves installed layers instead of duplicating them.
 Independent fixtures and three new device cases cover exact pixels, isolated editing, fresh reopen,
-re-export and save retry. Their exact-source execution is pending and must be recorded separately
-from the native-mask run below. General glTF/USD scalar import, multiple material sets and reference
-rendering equivalence remain open.
+re-export and save retry. Its first published run 321 passes 1,629 JVM cases but fails the new
+post-Ready autosave assertion before any emulator executes. The test-only follow-up queues Main on
+the controlled scheduler, preserving every assertion and time advance. Its focused four-case class,
+fresh 1,630-case JVM suite and static/lint checks pass locally. Device acceptance remains pending and
+is separate from the native-mask run below. General glTF/USD scalar import, multiple material sets
+and reference rendering equivalence remain open.
 
 ## Native layer-mask follow-up — 25 October 2026
 
