@@ -21,6 +21,10 @@ The current work closes concrete gaps found through emulator tests and native-fi
   tilt response; carry dab spacing across input events and include the release position.
   Fast gestures must not leave unstamped gaps, and the opacity controls must edit the active tool.
   The follow-up corrects fractional patch placement exposed by the cross-API image comparison.
+- **Blur memory:** Gaussian/box convolution uses three reusable float planes instead of five;
+  a 2048-square working canvas consequently retains 48 MiB instead of 80 MiB of convolution
+  scratch at once. Premultiplied colour and cancellation checkpoints remain, with new pixel
+  regressions. Frame-time and real-device memory measurements are still required.
 - **Clipboard integrity:** prepare Paste, Copy & Paste and Cut & Paste before changing the
   document, commit each as one undo action, and preserve source pixels, prior clipboard and history
   when the project has reached its layer limit. Material maps retain their channel when copied.

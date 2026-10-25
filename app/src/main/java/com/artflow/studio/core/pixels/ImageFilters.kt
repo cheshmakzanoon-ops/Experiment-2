@@ -374,7 +374,11 @@ object ImageFilters {
     // Internals
     // -----------------------------------------------------------------------------------------
 
-    /** Separable convolution on premultiplied channels. */
+    /**
+     * Separable convolution on premultiplied channels. Retain only three full-size float planes:
+     * alpha (later reused for inverse alpha), the shared horizontal-pass scratch, and one reusable
+     * colour plane. Emitting one colour at a time avoids keeping separate R/G/B planes alive.
+     */
     private fun separableConvolve(
         source: PixelBuffer,
         kernel: FloatArray,
@@ -384,33 +388,44 @@ object ImageFilters {
         val height = source.height
         val count = width * height
         val pixels = source.pixels
-
-        // One shared pass plane serves every channel. Each channel's result plane also holds its input before
-        // the horizontal pass, so a blur holds five float planes at a time instead of six. The arithmetic per
-        // channel is unchanged.
         val passed = FloatArray(count)
+        val alpha = FloatArray(count)
+        val colour = FloatArray(count)
 
-        // shift < 0 blurs alpha; otherwise the colour channel at [shift] is premultiplied by alpha first.
-        fun blur(shift: Int): FloatArray {
-            val result = FloatArray(count)
+        fun blurInto(
+            shift: Int,
+            destination: FloatArray,
+        ) {
             for (i in 0 until count) {
                 val pixel = pixels[i]
-                val alpha = ((pixel ushr 24) and 0xFF) / 255f
-                result[i] = if (shift < 0) alpha else ((pixel ushr shift) and 0xFF) / 255f * alpha
+                val coverage = ((pixel ushr 24) and 0xFF) / 255f
+                destination[i] = if (shift < 0) coverage else ((pixel ushr shift) and 0xFF) / 255f * coverage
             }
-            horizontalPass(result, passed, width, height, kernel, checkpoint)
-            verticalPassReal(passed, result, width, height, kernel, checkpoint)
-            return result
+            horizontalPass(destination, passed, width, height, kernel, checkpoint)
+            verticalPassReal(passed, destination, width, height, kernel, checkpoint)
         }
 
-        val a = blur(-1)
-        val r = blur(16)
-        val g = blur(8)
-        val b = blur(0)
-
+        blurInto(-1, alpha)
         val out = PixelBuffer(width, height)
         for (i in 0 until count) {
-            out.pixels[i] = unpremultiply(a[i], r[i], g[i], b[i])
+            val coverage = alpha[i].coerceIn(0f, 1f)
+            if (coverage <= 0.0001f) {
+                alpha[i] = 0f
+            } else {
+                out.pixels[i] = (coverage * 255f).roundToInt().coerceIn(0, 255) shl 24
+                // Keep the exact reciprocal used by unpremultiply; later channels can share it.
+                alpha[i] = 1f / coverage
+            }
+        }
+
+        for (shift in 16 downTo 0 step 8) {
+            blurInto(shift, colour)
+            for (i in 0 until count) {
+                val reciprocal = alpha[i]
+                if (reciprocal == 0f) continue
+                val channel = (colour[i] * reciprocal * 255f).coerceIn(0f, 255f).roundToInt().coerceIn(0, 255)
+                out.pixels[i] = out.pixels[i] or (channel shl shift)
+            }
         }
         return out
     }

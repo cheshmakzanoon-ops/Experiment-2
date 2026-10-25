@@ -11,6 +11,17 @@ points; an Android instrumentation case checks the geometry across the emulator 
 does **not** establish physical stylus feel, precise Procreate fitting equivalence, or complete
 drawing-assistance parity. CI results must be read against the exact resulting commit.
 
+## Blur scratch-memory reduction — 25 October 2026
+
+Gaussian and box convolution previously retained four output float channels plus a pass scratch
+buffer (five full-resolution planes). The candidate retains three float planes: alpha (reused for
+inverse alpha), one colour plane and the pass scratch. It emits colour channels directly to the
+ARGB result while preserving the original premultiplied-channel arithmetic and per-row
+cancellation checks. For a 2048 × 2048 canvas, the simultaneously retained full-size float scratch
+changes from 80 MiB to 48 MiB (32 MiB fewer), excluding the source/output pixel arrays and
+temporary allocator/GC behavior. Three JVM regressions check hidden RGB, mixed alpha and uniform
+colour. Exact-output acceptance, device memory and timing remain subject to CI and physical checks.
+
 ## OBJ material reimport — 25 October 2026
 
 The [material reimport record](OBJ_MATERIAL_REIMPORT_2026-10-25.md) addresses loss of the
