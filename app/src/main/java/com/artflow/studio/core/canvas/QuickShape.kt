@@ -324,15 +324,49 @@ object QuickShape {
         }
     }
 
-    /** Principal-axis ellipse fit from the covariance of the stroke samples. */
+    /**
+     * Fit samples at uniform distances along the stroke, including its closing segment.
+     * MotionEvent cadence depends on pen speed and batching; weighting raw events pulls
+     * an oval toward the arc where the pen moved most slowly.
+     */
+    private fun evenlySpacedLoop(points: List<Pair<Float, Float>>): List<Pair<Float, Float>> {
+        val loop = if (points.first() == points.last()) points else points + points.first()
+        val lengths =
+            loop.zipWithNext().map { (a, b) ->
+                hypot((b.first - a.first).toDouble(), (b.second - a.second).toDouble())
+            }
+        val total = lengths.sum()
+        if (total <= 0.0 || !total.isFinite()) return points
+        var segment = 0
+        var passed = 0.0
+        return List(ELLIPSE_FIT_SAMPLES) { index ->
+            val distance = total * index / ELLIPSE_FIT_SAMPLES
+            while (segment < lengths.lastIndex && passed + lengths[segment] <= distance) {
+                passed += lengths[segment]
+                segment++
+            }
+            val a = loop[segment]
+            val b = loop[segment + 1]
+            val fraction =
+                if (lengths[segment] > 0.0) {
+                    ((distance - passed) / lengths[segment]).coerceIn(0.0, 1.0).toFloat()
+                } else {
+                    0f
+                }
+            (a.first + (b.first - a.first) * fraction) to (a.second + (b.second - a.second) * fraction)
+        }
+    }
+
+    /** Principal-axis ellipse fit from distance-spaced rather than time-spaced samples. */
     private fun ellipse(points: List<Pair<Float, Float>>): Result? {
-        val n = points.size
-        val cx = points.sumOf { it.first.toDouble() } / n
-        val cy = points.sumOf { it.second.toDouble() } / n
+        val samples = evenlySpacedLoop(points)
+        val n = samples.size
+        val cx = samples.sumOf { it.first.toDouble() } / n
+        val cy = samples.sumOf { it.second.toDouble() } / n
         var sxx = 0.0
         var syy = 0.0
         var sxy = 0.0
-        points.forEach { (x, y) ->
+        samples.forEach { (x, y) ->
             val dx = x - cx
             val dy = y - cy
             sxx += dx * dx
@@ -348,7 +382,7 @@ object QuickShape {
         // Radii from the furthest projection onto each principal axis.
         var ru = 0.0
         var rv = 0.0
-        points.forEach { (x, y) ->
+        samples.forEach { (x, y) ->
             val dx = x - cx
             val dy = y - cy
             ru = max(ru, abs(dx * cosA + dy * sinA))
@@ -363,7 +397,7 @@ object QuickShape {
         }
         // Reject strokes that stray far from the fitted outline (e.g. scribbles).
         var error = 0.0
-        points.forEach { (x, y) ->
+        samples.forEach { (x, y) ->
             val dx = x - cx
             val dy = y - cy
             val u = (dx * cosA + dy * sinA) / ru
@@ -371,7 +405,15 @@ object QuickShape {
             error += abs(sqrt(u * u + v * v) - 1.0)
         }
         if (error / n > MAX_ELLIPSE_ERROR) return null
-        val start = atan2(points.first().second - cy, points.first().first - cx) - angle
+        // Parametric angle, not polar angle: an eccentric ellipse otherwise jumps away from
+        // the original pen-down point when QuickShape first replaces the freehand stroke.
+        val startDx = points.first().first - cx
+        val startDy = points.first().second - cy
+        val start =
+            atan2(
+                (-startDx * sinA + startDy * cosA) / rv,
+                (startDx * cosA + startDy * sinA) / ru,
+            )
         val nodes =
             listOf(ru to 0.0, 0.0 to rv, -ru to 0.0, 0.0 to -rv).map { (u, v) ->
                 (cx + u * cosA - v * sinA).toFloat() to (cy + u * sinA + v * cosA).toFloat()
@@ -388,6 +430,7 @@ object QuickShape {
     private const val MIN_RADIUS = 6.0
     private const val ELLIPSE_NODES = 4
     private const val MIN_ELLIPSE_STEPS = 24
+    private const val ELLIPSE_FIT_SAMPLES = 96
     private const val CIRCLE_SNAP = 0.12
     private const val MAX_ELLIPSE_ERROR = 0.12
     private const val SAMPLE_SPACING = 3f

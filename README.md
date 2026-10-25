@@ -12,6 +12,11 @@ The [comparison](docs/PROCREATE_PARITY.md) records implemented workflows and rem
 
 The current work closes concrete gaps found through emulator tests and native-file inspection:
 
+- **QuickShape input fidelity:** fit closed ovals using uniformly spaced stroke-distance samples so
+  slow stylus movement, batched input and duplicate stationary events do not distort the ellipse;
+  eccentric ovals also retain the pen-down position when snapping.
+  New JVM and Android-runtime regressions exercise the geometry; physical stylus feel and a
+  Procreate-on-iPad comparison remain unverified.
 - **Smudge input and continuity:** use the selected Smudge brush's opacity, flow, pressure and
   tilt response; carry dab spacing across input events and include the release position.
   Fast gestures must not leave unstamped gaps, and the opacity controls must edit the active tool.

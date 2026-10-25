@@ -1,5 +1,16 @@
 # ArtFlow / Procreate workflow comparison
 
+## QuickShape stroke-cadence correction — 25 October 2026
+
+An oval previously fit the covariance of raw pointer events, so slowing down or repeated stationary
+events biased its centre toward one arc. The candidate now resamples the closed stroke at 96
+uniform arc-length positions before fitting ellipse axes and evaluating fit error, while keeping
+the true parametric starting angle so eccentric ellipses do not jump from the pen-down point.
+JVM regressions cover uneven cadence, initial-point continuity and repeated
+points; an Android instrumentation case checks the geometry across the emulator matrix. This
+does **not** establish physical stylus feel, precise Procreate fitting equivalence, or complete
+drawing-assistance parity. CI results must be read against the exact resulting commit.
+
 ## OBJ material reimport — 25 October 2026
 
 The [material reimport record](OBJ_MATERIAL_REIMPORT_2026-10-25.md) addresses loss of the

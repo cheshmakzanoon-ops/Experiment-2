@@ -51,6 +51,56 @@ class QuickShapeTest {
         assertTrue(none.finish(100f, 0f).isEmpty())
     }
 
+    @Test
+    fun unevenPointerCadencePreservesEllipseGeometry() {
+        // The first arc has many more events than the rest, as when the artist slows down.
+        val points =
+            List(240) { i ->
+                val progress = i / 239.0
+                val angle = 2 * PI * progress * progress * progress
+                (200 + 110 * cos(angle)).toFloat() to (160 + 65 * sin(angle)).toFloat()
+            }
+        val result = requireNotNull(QuickShape.recognize(points))
+        assertEquals(QuickShape.Kind.ELLIPSE, result.kind)
+        val centreX = (result.nodes[0].first + result.nodes[2].first) / 2f
+        val centreY = (result.nodes[0].second + result.nodes[2].second) / 2f
+        assertTrue("oval centre X: $centreX", kotlin.math.abs(centreX - 200f) < 3f)
+        assertTrue("oval centre Y: $centreY", kotlin.math.abs(centreY - 160f) < 3f)
+        val major = hypot(result.nodes[0].first - centreX, result.nodes[0].second - centreY)
+        assertTrue("major radius: $major", major in 105f..115f)
+        val minor = hypot(result.nodes[1].first - centreX, result.nodes[1].second - centreY)
+        assertTrue("minor radius: $minor", minor in 60f..70f)
+    }
+
+    @Test
+    fun repeatedStationaryEventsDoNotWarpCircle() {
+        val circle =
+            List(81) { i ->
+                val angle = 2 * PI * i / 80
+                (100 + 75 * cos(angle)).toFloat() to (100 + 75 * sin(angle)).toFloat()
+            }
+        val result = requireNotNull(QuickShape.recognize(List(150) { circle.first() } + circle))
+        assertEquals(QuickShape.Kind.ELLIPSE, result.kind)
+        val centreX = (result.nodes[0].first + result.nodes[2].first) / 2f
+        val centreY = (result.nodes[0].second + result.nodes[2].second) / 2f
+        assertTrue(kotlin.math.abs(centreX - 100f) < 3f)
+        assertTrue(kotlin.math.abs(centreY - 100f) < 3f)
+    }
+
+    @Test
+    fun elongatedEllipseStartsAtTheOriginalPenDownPoint() {
+        val points =
+            List(101) { i ->
+                val angle = PI / 4 + 2 * PI * i / 100
+                (300 + 120 * cos(angle)).toFloat() to (150 + 40 * sin(angle)).toFloat()
+            }
+        val result = requireNotNull(QuickShape.recognize(points))
+        assertEquals(QuickShape.Kind.ELLIPSE, result.kind)
+        val start = result.points.first()
+        val jump = hypot(start.first - points.first().first, start.second - points.first().second)
+        assertTrue("ellipse jump: $jump", jump < 3f)
+    }
+
     @Test fun roughRectangleSnapsToExactRectangle() {
         val corners = listOf(0f to 0f, 120f to 3f, 118f to 80f, -2f to 78f, 1f to 1f)
         val points =
