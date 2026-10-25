@@ -31,6 +31,7 @@ import com.artflow.studio.core.tool.PixelBrushes
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.data.export.ArtworkExporter
 import com.artflow.studio.data.export.LayerImports
+import com.artflow.studio.data.export.ModelImports
 import com.artflow.studio.data.export.PendingImports
 import com.artflow.studio.data.export.ProcreateImport
 import com.artflow.studio.data.export.TimelapseRecorder
@@ -273,6 +274,10 @@ class CanvasViewModel
                             return@launch
                         }
                         val recoveryAvailable = canvasRepository.hasRecovery(projectId)
+                        PendingImports.takeProfile(projectId)?.let { canvasRepository.setColorProfile(it, undoable = false) }
+                        model.initialize(projectId) { thumbnail ->
+                            project = ModelImports.updateProject(canvasRepository, projectRepository, existing, thumbnail)
+                        }
                         _uiState.value =
                             CanvasUiState.Ready(
                                 projectId = projectId,
@@ -291,9 +296,7 @@ class CanvasViewModel
                         _timelapseRecording.value = timelapse.isRecording(projectId)
                         startObserving()
                         startAutosave()
-                        PendingImports.takeProfile(projectId)?.let { canvasRepository.setColorProfile(it, undoable = false) }
                         PendingImports.take(projectId)?.let(::insertImageLayer)
-                        PendingImports.takeModel(projectId)?.let(model::attach) ?: model.load()
                         PendingImports.takePsd(projectId)?.let(::importPsd)
                         PendingImports.takeProcreate(projectId)?.let(::importProcreate)
                         Timber.d("Opened project $projectId (${state.width}x${state.height})")
@@ -1346,18 +1349,7 @@ class CanvasViewModel
                     val thumbnail = requireNotNull(canvasRepository.saveCanvas(projectId)) { "No artwork was saved" }
                     val existing = project ?: projectRepository.getProjectById(projectId)
                     if (existing != null) {
-                        val size = canvasRepository.getCanvasSize()
-                        val updated =
-                            existing.copy(
-                                thumbnailPath = thumbnail,
-                                width = size.width,
-                                height = size.height,
-                                dpi = size.dpi,
-                                layerCount = canvasRepository.getAllLayers().size,
-                                modifiedAt = System.currentTimeMillis(),
-                            )
-                        projectRepository.updateProject(updated)
-                        project = updated
+                        project = ModelImports.updateProject(canvasRepository, projectRepository, existing, thumbnail)
                     }
                     _dirty.value = canvasRepository.hasUnsavedChanges()
                     notify(if (_dirty.value) "Saved snapshot; newer edits are still unsaved" else "Saved")

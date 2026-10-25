@@ -3,6 +3,8 @@ package com.artflow.studio.presentation.ui.viewmodel
 import com.artflow.studio.core.three.MaterialChannel
 import com.artflow.studio.core.three.Mesh
 import com.artflow.studio.core.three.ObjParser
+import com.artflow.studio.data.export.ModelImports
+import com.artflow.studio.data.export.PendingImports
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.StrokePoint
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
@@ -46,20 +48,49 @@ class ModelController(
 
     /** Loads the open artwork's model, if it has one. */
     fun load() {
-        scope.launch {
-            // Most artworks have no model; an unreadable one is treated the same way.
-            val text =
-                try {
-                    repository.loadModel()
-                } catch (failure: IOException) {
-                    unreadable(failure)
-                } catch (failure: IllegalArgumentException) {
-                    unreadable(failure)
-                } catch (failure: IllegalStateException) {
-                    unreadable(failure)
-                }
-            _mesh.value = text?.let { withContext(Dispatchers.Default) { runCatching { prepared(it) }.getOrNull() } }
+        scope.launch { loadAwaited() }
+    }
+
+    /** The canvas stays Loading until the entire pending bundle and its model file have committed. */
+    suspend fun initialize(
+        projectId: Long,
+        onSaved: suspend (String) -> Unit = {},
+    ) {
+        val bundle = PendingImports.modelBundle(projectId)
+        if (bundle != null) {
+            val parsed = withContext(Dispatchers.Default) { prepared(bundle.objText) }
+            check(repository.projectId() == projectId && ModelImports.install(repository, bundle)) {
+                "The model could not be installed; reopen the artwork to try again"
+            }
+            // The repository recorded a retry receipt with the plane commit. Cancellation or any
+            // save failure keeps both it and the payload until the initial document is durable.
+            val thumbnail =
+                checkNotNull(repository.saveCanvas(projectId)) { "The model layers could not be saved; reopen the artwork to try again" }
+            check(repository.projectId() == projectId) { "The imported artwork is no longer open" }
+            onSaved(thumbnail)
+            PendingImports.completeModelBundle(projectId, bundle)
+            if (repository.projectId() == projectId) _mesh.value = parsed
+        } else {
+            val legacy = PendingImports.takeModel(projectId)
+            if (legacy != null) attachAwaited(legacy) else loadAwaited()
         }
+    }
+
+    private suspend fun loadAwaited() {
+        val projectId = repository.projectId()
+        // Most artworks have no model; an unreadable saved one is treated the same way.
+        val text =
+            try {
+                repository.loadModel()
+            } catch (failure: IOException) {
+                unreadable(failure)
+            } catch (failure: IllegalArgumentException) {
+                unreadable(failure)
+            } catch (failure: IllegalStateException) {
+                unreadable(failure)
+            }
+        val parsed = text?.let { withContext(Dispatchers.Default) { runCatching { prepared(it) }.getOrNull() } }
+        if (repository.projectId() == projectId) _mesh.value = parsed
     }
 
     /** Parses [objText] and works out its UV islands here, off the main thread, before painting needs them. */
@@ -73,11 +104,16 @@ class ModelController(
     /** Makes the open artwork the texture of the model in [objText]. */
     fun attach(objText: String) {
         scope.launch {
-            val parsed = withContext(Dispatchers.Default) { runCatching { prepared(objText) } }
-            parsed.onFailure { notify(it.message ?: "That 3D model could not be read") }
-            val model = parsed.getOrNull() ?: return@launch
-            if (repository.saveModel(objText)) _mesh.value = model
+            attachAwaited(objText)
         }
+    }
+
+    private suspend fun attachAwaited(objText: String) {
+        val projectId = repository.projectId()
+        val parsed = withContext(Dispatchers.Default) { runCatching { prepared(objText) } }
+        parsed.onFailure { notify(it.message ?: "That 3D model could not be read") }
+        val model = parsed.getOrNull() ?: return
+        if (repository.projectId() == projectId && repository.saveModel(objText) && repository.projectId() == projectId) _mesh.value = model
     }
 
     /** Captures the brush and layer once per pointer gesture, including its seam-separated segments. */

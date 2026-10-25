@@ -10,11 +10,11 @@ import com.artflow.studio.core.color.ProcreateSwatches
 import com.artflow.studio.core.export.FileKind
 import com.artflow.studio.core.export.FileKinds
 import com.artflow.studio.core.export.PsdCodec
-import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.three.ModelPackage
 import com.artflow.studio.core.three.ObjParser
-import com.artflow.studio.core.three.TextureAtlas
+import com.artflow.studio.core.three.PreparedModelImport
 import com.artflow.studio.data.export.ArtflowPackage
+import com.artflow.studio.data.export.ModelImports
 import com.artflow.studio.data.export.PendingImports
 import com.artflow.studio.data.export.ProcreateImport
 import com.artflow.studio.data.local.BrushArchives
@@ -171,30 +171,19 @@ internal class GalleryImports(
                     (failure is IllegalArgumentException || failure is IllegalStateException) && failure !is NumberFormatException
                 say(failure.message?.takeIf { explained } ?: "That 3D model could not be read")
             }
-            val (model, texture) = read.getOrNull() ?: return@launch
-            val width = texture?.width ?: MODEL_TEXTURE
-            val height = texture?.height ?: MODEL_TEXTURE
-            viewModel.createProject("3D model", null, width, height, MODEL_DPI) { id ->
-                PendingImports.putModel(id, model)
-                // The model's own texture becomes the first layer to paint over.
-                texture?.let { PendingImports.put(id, it) }
+            val prepared = read.getOrNull() ?: return@launch
+            viewModel.createProject("3D model", null, prepared.width, prepared.height, MODEL_DPI) { id ->
+                PendingImports.putModelBundle(id, prepared)
                 scope.launch { openArtwork(id) }
             }
         }
     }
 
-    private fun readModel(uri: Uri): Pair<String, PixelBuffer?> {
+    private fun readModel(uri: Uri): PreparedModelImport {
         val bytes = requireNotNull(context.contentResolver.openInputStream(uri)?.use { it.readBytes() })
-        val contents = ModelPackage.read(bytes)
-        ObjParser.parse(contents.objText)
-        // Several textured materials share one artwork, each in its own cell.
-        val decoded =
-            contents.textures
-                .mapNotNull { (name, image) -> BitmapPixelBridge.fromEncodedBytes(image)?.let { name to it } }
-                .toMap()
-        val atlas = TextureAtlas.pack(contents.objText, decoded, MAX_MODEL_TEXTURE)?.takeIf { decoded.isNotEmpty() }
-        if (atlas != null) return atlas.objText to atlas.image
-        return contents.objText to contents.texture?.let(BitmapPixelBridge::fromEncodedBytes)?.let(::fittedTexture)
+        return PreparedModelImport
+            .prepare(ModelPackage.read(bytes), BitmapPixelBridge::fromEncodedBytes, MAX_MODEL_TEXTURE, MODEL_TEXTURE)
+            .also(ModelImports::requireSupportedSize)
     }
 
     /** Brush, palette and unlabelled zip files are small enough to read whole. */
@@ -290,12 +279,5 @@ internal class GalleryImports(
         const val MODEL_TEXTURE = 2048
         const val MAX_MODEL_TEXTURE = 4096
         const val MODEL_DPI = 132
-
-        /** A model texture scaled down, if needed, so its longest side fits the canvas limit. */
-        fun fittedTexture(texture: PixelBuffer): PixelBuffer {
-            val scale = MAX_MODEL_TEXTURE.toFloat() / maxOf(texture.width, texture.height)
-            if (scale >= 1f) return texture
-            return texture.scaled((texture.width * scale).toInt().coerceAtLeast(1), (texture.height * scale).toInt().coerceAtLeast(1))
-        }
     }
 }

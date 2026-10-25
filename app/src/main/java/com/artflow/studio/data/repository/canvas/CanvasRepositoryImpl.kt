@@ -23,6 +23,9 @@ import com.artflow.studio.core.render.TileCache
 import com.artflow.studio.core.symmetry.SymmetryEngine
 import com.artflow.studio.core.text.TextLayerContent
 import com.artflow.studio.core.three.MaterialChannel
+import com.artflow.studio.core.three.PreparedModelImport
+import com.artflow.studio.data.export.ModelImports
+import com.artflow.studio.data.export.PendingImports
 import com.artflow.studio.data.local.CanvasDocument
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.renderer.BitmapPixelBridge
@@ -93,6 +96,7 @@ class CanvasRepositoryImpl
     internal constructor(
         private val storage: ProjectStorage,
         private val clipboardDispatcher: CoroutineDispatcher,
+        private val publishModel: (ModelImports.StagedModel) -> Unit = { it.commit() },
     ) : CanvasRepository {
         @Inject
         constructor(storage: ProjectStorage) : this(storage, Dispatchers.Default)
@@ -2443,6 +2447,79 @@ class CanvasRepositoryImpl
             val projectId = currentProjectId.takeIf { it > 0 } ?: return false
             storage.saveModel(projectId, objText)
             return true
+        }
+
+        override suspend fun importModel(prepared: PreparedModelImport): Boolean =
+            withState {
+                if (!modelImportReady(prepared)) return@withState false
+                ModelImports.requireSupportedSize(prepared)
+                val layers = currentLayers()
+                val projectId = currentProjectId
+                val active = activeLayerId()
+                val revision = editRevision
+                val selection = activeSelection
+                val profile = colorProfile
+                val existingColor = layers.lastOrNull { it.materialChannel == MaterialChannel.COLOR && it.canPaint() }
+                var staged: ModelImports.StagedModel? = null
+                try {
+                    val (planes, fingerprints) =
+                        withContext(clipboardDispatcher) {
+                            val owned = ModelImports.ownedPlanes(prepared, profile)
+                            val hashes = ModelImports.fingerprints(owned)
+                            staged = ModelImports.stage(storage, projectId, prepared.objText)
+                            owned to hashes
+                        }
+                    coroutineContext.ensureActive()
+                    if (projectId != currentProjectId || currentLayers() !== layers) return@withState false
+                    if (activeLayerId() != active || editRevision != revision || activeSelection !== selection) return@withState false
+                    if (!modelImportReady(prepared)) return@withState false
+                    val additions =
+                        planes.entries
+                            .mapIndexed { index, (channel, pixels) ->
+                                LayerData(nextLayerId + index, "${channel.displayName} texture").also {
+                                    it.materialChannel = channel
+                                    it.raster = pixels
+                                }
+                            }.toMutableList()
+                    if (prepared.color == null && existingColor == null) {
+                        additions += LayerData(nextLayerId + additions.size, "Color paint")
+                    }
+                    val colorLayer = additions.firstOrNull { it.materialChannel == MaterialChannel.COLOR } ?: checkNotNull(existingColor)
+                    val receipt =
+                        ModelImports.Receipt(
+                            projectId,
+                            canvasWidth,
+                            canvasHeight,
+                            activeFrame,
+                            colorLayer.id,
+                            layers.map { it.id }.toSet(),
+                            additions.mapIndexed { index, layer -> layer.toDomain(layers.size + index) },
+                            additions.associate { it.id to fingerprints[it.materialChannel] },
+                        )
+                    // Nothing before this publication changes the model, layers, selection or history.
+                    publishModel(checkNotNull(staged))
+                    if (additions.isNotEmpty()) {
+                        pushUndo()
+                        layers.addAll(additions)
+                        nextLayerId += additions.size
+                        dirtyRasters.addAll(additions.map { it.id })
+                        dirty = true
+                    }
+                    setActiveLayerId(colorLayer.id)
+                    PendingImports.recordModelReceipt(projectId, prepared, receipt)
+                    emit(CanvasInvalidationEvent.LayersChanged)
+                    true
+                } finally {
+                    staged?.close()
+                }
+            }
+
+        private fun modelImportReady(prepared: PreparedModelImport): Boolean {
+            if (prepared.width != canvasWidth || prepared.height != canvasHeight || currentProjectId <= 0) return false
+            if (activeStrokes.isNotEmpty() || pendingEdits.isNotEmpty() || pendingSelection != null) return false
+            val provided = listOfNotNull(prepared.color, prepared.metallic, prepared.roughness).size
+            val needsColor = prepared.color == null && currentLayers().none { it.materialChannel == MaterialChannel.COLOR && it.canPaint() }
+            return hasLayerCapacity(provided + if (needsColor) 1 else 0)
         }
 
         override fun trackedTimeMs(): Long = trackedMs.get()

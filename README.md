@@ -8,9 +8,9 @@ models, and save or export real documents.
 The [comparison](docs/PROCREATE_PARITY.md) records implemented workflows and remaining gaps;
 [release readiness](docs/RELEASE_READINESS.md) tracks the separate distribution requirements.
 
-## Current development — 24 October 2026
+## Current development — 25 October 2026
 
-This revision targets three concrete gaps discovered while following the emulator tests:
+The current work closes concrete gaps found through emulator tests and native-file inspection:
 
 - **Smudge input and continuity:** use the selected Smudge brush's opacity, flow, pressure and
   tilt response; carry dab spacing across input events and include the release position.
@@ -21,6 +21,12 @@ This revision targets three concrete gaps discovered while following the emulato
   when the project has reached its layer limit. Material maps retain their channel when copied.
 - **3D material painting:** independently edit Color, Metallic and Roughness on persisted layers,
   preview their effect on the model, and preserve the maps through undo, save/reopen and model export.
+- **Editable native masks:** preserve concealed paint, independent coverage and the enabled state
+  in `.procreate` layer-mask export, including a fresh import and mask toggle.
+- **OBJ material reimport:** prepare and install the application's own single-material color,
+  metallic and roughness maps together, preserve their UV layout and retain a pending import until
+  its first save succeeds. The [material reimport record](docs/OBJ_MATERIAL_REIMPORT_2026-10-25.md)
+  distinguishes the implementation from its pending exact-source device acceptance.
 
 The [implementation and verification record](docs/PARITY_FOLLOW_THROUGH_2026-10-24.md) distinguishes
 implemented changes, executed local checks and published-revision device results. Emulator results
@@ -77,6 +83,20 @@ revision does not establish the cause or repair of the earlier intermittent runt
 Original artifacts, hashes and the seven-lane image audit are in the
 [verification record](docs/PARITY_FOLLOW_THROUGH_2026-10-24.md).
 
+[Run 320](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40151899389) tests the
+native-mask correction on `09940e4`, with 1,585 passing JVM tests, 190 Python checks and passing
+build/package gates. Six emulator configurations account for all 266 declared identities (API 26
+has 264 passes and its two allowed skips), and pass minified launches and the independent
+native-mask archive/pixel audit.
+The main API 35 / 16 KB lane crashes in both its original and single recovered attempt. Final
+matrix totals are **1,595 passes, one failure, two allowed skips and 264 missing cases**, so the run
+fails acceptance. Both failed attempts now retain their exact installed APKs; all 18 app and seven
+test DEX payloads match the passing lanes. The [mask record](docs/PROCREATE_MASK_EXPORT_2026-10-25.md)
+preserves the full matrix, crash chronology, artifact hashes and the unresolved causal limits.
+The subsequent [OBJ material-reimport correction](docs/OBJ_MATERIAL_REIMPORT_2026-10-25.md) passes
+its 1,630-test local JVM suite and full local gate; its three new device cases require their own
+published-source Actions run.
+
 ## Editor workflows
 
 The workspace has a canvas toolbar, size/opacity sidebar, left/right-handed layouts, hide-interface
@@ -107,6 +127,8 @@ and reconstructed arithmetic are distinct from executing the original applicatio
 - [Wet-preview integrity](docs/WET_PREVIEW_HISTORY_2026-10-24.md),
   [model input and display](docs/MODEL_EDITOR_2026-10-24.md), and
   [measured preview-call performance](docs/PREVIEW_PERFORMANCE_2026-10-24.md).
+- [Editable OBJ material reimport](docs/OBJ_MATERIAL_REIMPORT_2026-10-25.md), including independent
+  input fixtures, bounded scalar-map decoding and initial-save retry behavior.
 - [Earlier development](docs/DEVELOPMENT_LOG_2026-10-17.md),
   [emulator corrections](docs/EMULATOR_PARITY_2026-10-24.md), and
   [Android 15 repair investigation](docs/ANDROID15_OFFICIAL_REPAIR_REVIEW_2026-10-24.md).
@@ -122,7 +144,7 @@ and reconstructed arithmetic are distinct from executing the original applicatio
 | Layers | Pixel/mask/effect workflows, nested groups, clipping, alpha lock, reorder; atomic clipboard commands | Merge Down bakes opacity and blend mode into pixels and does not carry alpha lock or clipping |
 | Colour | Disc, Classic (HSB), Value (RGB/HSV/CMYK), palettes, harmonies, Display P3 canvases | Profile-managed CMYK and arbitrary ICC transforms; Classic model parity and real print-proof validation |
 | Animation | Frames, duration/FPS, loop, one-shot and ping-pong; preview and animation export share playback range, frame visibility and order; background/foreground pins, separate previous/next onion colours, timelapse and GIF/MP4/APNG export | Reference hold-count semantics and artist-tested timing; long-animation playback/encoding performance and physical-device qualification; native `.procreate` animation metadata |
-| 3D materials | Independent Color/Metallic/Roughness paint layers, live model preview, undo, persistence and OBJ scalar-map export | Single UV atlas and approximate lighting; imported scalar textures, independent source material sets, native/glTF/USDZ material export and physical GPU validation |
+| 3D materials | Independent Color/Metallic/Roughness paint layers, live model preview, undo, persistence, OBJ scalar-map export and reimport of the supported single-material OBJ maps | Single UV atlas and approximate lighting; broader scalar texture formats/options, independent source material sets, native/glTF/USDZ material interchange and physical GPU validation |
 | Documents | Atomic signed `.artflow` v6 saves, thumbnails, autosave and recovery; older checksums verified before migration | Broader interruption, low-storage and long-session acceptance |
 | Export | PNG/JPEG/WebP/PDF/PSD/TIFF/GIF/APNG/MP4, layer PNG zip and frame-sequence ZIP; `.procreate` with supported sRGB/Display P3 channels, a generated Display P3 profile, layer hierarchy, native Darken and independent type-3 layer masks with enabled/disabled state; picker/gallery/sharing | Opening exported files in Procreate and broader external interoperability; native group blend/mask metadata, arbitrary ICC transforms and PSB. PSD and native export retain supported independent layer masks; post-mask effects use baked masks, while resized enabled masks use a rendered appearance layer with hidden editable sources. Native Darken also uses that appearance fallback in PSD |
 

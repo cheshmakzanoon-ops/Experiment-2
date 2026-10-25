@@ -1,5 +1,17 @@
 # ArtFlow / Procreate workflow comparison
 
+## OBJ material reimport — 25 October 2026
+
+The [material reimport record](OBJ_MATERIAL_REIMPORT_2026-10-25.md) addresses loss of the
+application's own exported Metallic and Roughness maps. The bounded single-material OBJ path
+preserves raw scalar samples and the existing UV layout, prepares all planes before project
+creation, and installs them as one undoable layer change. Editor initialization awaits the initial
+document save; an identity-checked retry preserves installed layers instead of duplicating them.
+Independent fixtures and three new device cases cover exact pixels, isolated editing, fresh reopen,
+re-export and save retry. Their exact-source execution is pending and must be recorded separately
+from the native-mask run below. General glTF/USD scalar import, multiple material sets and reference
+rendering equivalence remain open.
+
 ## Native layer-mask follow-up — 25 October 2026
 
 The [mask export record](PROCREATE_MASK_EXPORT_2026-10-25.md) covers a native representation defect
@@ -9,8 +21,13 @@ The actual export path preserves concealed paint, editable coverage and enabled/
 Resampled active masks retain a rendered appearance plus hidden editable sources; unsupported
 group masks and masks baked with layer effects are disclosed. The new Android case exercises
 actual files, a fresh repository reopen, mask toggling and independently checked PNG pixels.
-Its exact-source build and Actions results belong to that record; the earlier runs below do not
-establish execution of this additional case or direct exported-file acceptance in Procreate.
+Its exact-source [run 320](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40151899389)
+passes 1,585 JVM tests, 190 Python checks and all build gates. The new mask case and independent
+archive/pixel audit pass in six complete emulator lanes. The required matrix still fails: the main
+API 35 / 16 KB lane crashes in its original and single recovered attempt, ending with 264 missing
+identities. Exact installed APKs now survive both crashes and their DEX payloads match all passing
+lanes; this does not establish the cause or a repair. See the mask record for the complete matrix,
+original failures, artifact hashes and bounds on native-file acceptance.
 
 ## Current follow-through — 24 October 2026
 
@@ -220,7 +237,7 @@ describes external-file fidelity, without assuming a particular Procreate high-b
 | Drawing timelapse | Recording, replay and export [10] | Automatic capture, in-app replay with scrubbing, full-length or 30-second MP4 export, 720p, 1080p or 1440p recording | Device validation of 1440p encoding |
 | Gallery | Stacks, preview, import and share [11] | Import of photos and layered PSD files as new artworks, stacks with drag-to-stack (touch and hold, drop on an artwork or stack), Select mode to stack, duplicate or delete several artworks, full-screen swipe preview, share, photo import as a new canvas | Artist validation of drag gestures in long galleries |
 | File interchange | Image and layered-document import and sharing [11] | PNG/JPEG/WebP/PDF/PSD/TIFF, animated GIF/PNG and MP4, layers as PNG files and frame-sequence export; `.artflow` artwork files that carry every layer, frame and setting to another device (export from Share, import in the gallery). PSD import/export retains nested folders, clipping and independent enabled/disabled layer and folder masks, with original layer alpha separate. Images dragged in from another app become a new layer. Procreate documents import their native nested hierarchy, opacity, supported blend modes, visibility, clipping, alpha lock, one-byte or RGBA layer masks and background. Recognized sRGB/Display P3 channels retain their source profile on new canvases or convert into an existing canvas profile. Tile calibration compares sRGB thumbnails consistently, with a profile-aware flattened fallback beyond the memory budget. `.procreate` export writes separate flat-layer and nested-group structures, native group visibility, supported P3 channels and its generated profile, the persisted legacy Darken contract, and independent type-3 layer masks with enabled/disabled state. Typed mask metadata resolves ambiguous edge-tile sizes; resampled active masks use a visible rendered appearance with hidden editable sources. A hidden native background becomes transparent when opened as a new artwork; insertion retains the existing-background behavior. | Native group blend/mask, animation, editable-text and guide metadata; generic ICC transforms and profiles beyond supported sRGB/Display P3; opening exported files in the native application and broader current-version external fixtures beyond the four distinct genuine archives exercised in the five-file gate; PSD layers with post-mask effects retain baked masks; resized enabled masks keep editable layers hidden below a rendered appearance layer; adjustment fallbacks and PSB support remain limited |
-| Page and 3D workflows | Page Assist and independent color/metallic/roughness painting [12][15] | Page Assist with thumbnails, page management and PDF export. OBJ/glTF/GLB/USDZ/USD import of texture coordinates and base-color artwork into one UV atlas. The model window paints independent Color, Metallic and Roughness layers with a scalar Paint value, current brush shape/pressure/opacity, provisional preview, cancellation, undo/redo, masks, group visibility and signed v6 storage. Lighting controls and wire display remain available. OBJ ZIP exports the painted color atlas plus scalar PNGs and optional PBR MTL references; other rendered exports explicitly warn they contain color only. | Imported metallic/roughness textures, independent source material sets, native `.procreate` materials and glTF/USDZ material export; normal maps and environment lighting; the current GL lighting is approximate, not a reference BRDF; receiving applications must support PBR MTL extensions; physical-device and artist validation |
+| Page and 3D workflows | Page Assist and independent color/metallic/roughness painting [12][15] | Page Assist with thumbnails, page management and PDF export. OBJ/glTF/GLB/USDZ/USD import of texture coordinates and base-color artwork into one UV atlas. The model window paints independent Color, Metallic and Roughness layers with a scalar Paint value, current brush shape/pressure/opacity, provisional preview, cancellation, undo/redo, masks, group visibility and signed v6 storage. Lighting controls and wire display remain available. OBJ ZIP exports the painted color atlas plus scalar PNGs and optional PBR MTL references; the bounded single-material import restores those channel values without changing UVs. Other rendered exports explicitly warn they contain color only. | General scalar-map import outside the supported OBJ subset, independent source material sets, native `.procreate` materials and glTF/USDZ material export; normal maps and environment lighting; the current GL lighting is approximate, not a reference BRDF; receiving applications must support PBR MTL extensions; physical-device and artist validation |
 | Reliability and performance | Measured through executed tasks | CPU painting/compositing with incremental live-stroke dabs, tile-cached lower layers and bounded dirty-region GL ES 2.0 display uploads; display-only motion prediction does not enter saved paint. The device timing fixture uses a 2048-square canvas with Paper, four painted layers and Ink. Ordered raw elapsed repository-call timings separate continuation, preview and commit phases, including waits; [executed historical results and scope](EMULATOR_PARITY_2026-10-24.md) remain tied to their exact revisions. | Physical input-to-display latency, frame-time/memory/thermal measurements with enforced acceptance budgets; current emulator timings have no speed threshold; large-brush performance and a GPU painting pipeline remain open |
 
 Cloud collaboration and smart objects are separate ArtFlow roadmap ideas, not asserted Procreate
@@ -370,7 +387,7 @@ those implementation gaps.
 | 2 | Useful transformations and layer organization | Done in this branch: on-canvas transform with handles (freeform, uniform, distort, warp) with cancel/undo/redo, nested groups kept through save and PSD/Procreate import. PR #34's separate transform work overlaps this and conflicts with it, so it was not merged. Remaining: artist validation of large multi-layer moves. |
 | 3 | Artist-grade brushes | Done: imported shape/grain sources, tilt-aware tips, dual brushes, 200 original presets, and Procreate (.brush/.brushset, with settings) and Photoshop (.abr) brush import. Remaining: compare named physical styluses on the same pressure/tilt/speed tasks. |
 | 4 | Drawing assistance and colour fidelity | Done: QuickShape with Edit Shape nodes, ColorDrop threshold, saved selections, CMYK proof, ICC-tagged export, PSD and Procreate document import. Remaining: validation against files from current Procreate and Photoshop versions (fixtures are synthetic or open-source). |
-| 5 | Broader Procreate workflows | Implemented: drawing timelapse with private-photo exclusion, Page Assist, base-color model import and independent material painting. Remaining: the current comparison above lists unresolved scalar import, material sets, native/export fidelity, rendering and physical-device/artist validation. |
+| 5 | Broader Procreate workflows | Implemented: drawing timelapse with private-photo exclusion, Page Assist, base-color model import, independent material painting and bounded OBJ scalar reimport. Remaining: the current comparison above lists broader scalar import, material sets, native/export fidelity, rendering and physical-device/artist validation. |
 
 A high-contrast theme is not whole-app accessibility; a decoder is not faithful interchange;
 a numerical transform helper is not an ergonomic transform workflow; and automated tests alone

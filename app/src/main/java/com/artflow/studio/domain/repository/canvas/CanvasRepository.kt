@@ -9,6 +9,7 @@ import com.artflow.studio.core.pixels.LayerTransform
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.three.MaterialChannel
+import com.artflow.studio.core.three.PreparedModelImport
 import com.artflow.studio.domain.model.animation.AnimationFrame
 import com.artflow.studio.domain.model.animation.AnimationSettings
 import com.artflow.studio.domain.model.brush.BrushParams
@@ -579,6 +580,14 @@ interface CanvasRepository {
 
     /** Makes this artwork the texture of [objText]'s model. */
     suspend fun saveModel(objText: String): Boolean = false
+
+    /**
+     * Publishes a prepared model and inserts its typed texture planes as one undoable layer change.
+     * Refuses dimensions, capacity or stale destinations without changing layers, selection or history.
+     * Model-file publication must finish before the layer commit; its I/O failures are reported to the caller.
+     * Undo restores the texture-layer change, following the existing separate lifetime of the saved model.
+     */
+    suspend fun importModel(prepared: PreparedModelImport): Boolean = false
 
     /** Time spent changing the artwork, saved with it (Procreate's tracked time). */
     fun trackedTimeMs(): Long = 0L

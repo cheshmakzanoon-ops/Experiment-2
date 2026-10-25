@@ -6,8 +6,8 @@ import java.util.zip.ZipInputStream
 
 /**
  * A 3D model as picked by the artist: plain OBJ text, glTF, USD, or a zip holding the OBJ with its MTL
- * materials and texture images. From a zip, the diffuse texture (map_Kd) of the first material
- * the model uses comes along so painting starts from the model's own look.
+ * materials and texture images. Color-only packages retain their diffuse textures. The bounded
+ * single-material contract written by [ObjExport] also retains its independent scalar maps.
  */
 object ModelPackage {
     const val MAX_BYTES = 64 * 1024 * 1024
@@ -20,6 +20,13 @@ object ModelPackage {
         val texture: ByteArray? = null,
         /** Each material's texture by the name its faces use (`usemtl`), for models with several. */
         val textures: Map<String, ByteArray> = emptyMap(),
+        /** Non-null only for the supported single-material OBJ contract; these are data, not RGB color. */
+        val scalarMaps: ScalarMaps? = null,
+    )
+
+    class ScalarMaps(
+        val metallic: ByteArray? = null,
+        val roughness: ByteArray? = null,
     )
 
     fun read(bytes: ByteArray): Contents {
@@ -27,9 +34,10 @@ object ModelPackage {
         if (GltfReader.isGlb(bytes) || isGltfText(bytes)) return gltf(bytes, emptyMap())
         if (UsdReader.isUsd(bytes)) return contents(UsdReader.read(bytes))
         if (!isZip(bytes)) return Contents(bytes.decodeToString())
+        val duplicates = HashSet<String>()
         val files =
             try {
-                unzip(bytes)
+                unzip(bytes, duplicates)
             } catch (damaged: java.io.IOException) {
                 // A damaged archive, such as a CRC mismatch or a cut-off entry, is a refusal like any other.
                 throw IllegalArgumentException("The 3D model package is damaged", damaged)
@@ -40,6 +48,9 @@ object ModelPackage {
         }
         files.keys.firstOrNull { it.endsWith(".obj") }?.let { name ->
             val objText = requireNotNull(files[name]).decodeToString()
+            scalarMaterial(objText, files, duplicates)?.let { material ->
+                return Contents(objText, material.color, mapOf(material.name to material.color), material.maps)
+            }
             val textures = materialTextures(objText, files)
             return Contents(objText, textureFor(objText, files), textures)
         }
@@ -54,6 +65,111 @@ object ModelPackage {
     ): Contents = contents(GltfReader.read(bytes, files))
 
     private fun contents(result: GltfReader.Result) = Contents(result.objText, result.texture, result.textures)
+
+    private class MaterialDefinition(
+        val name: String,
+        val library: String,
+    ) {
+        val values = LinkedHashMap<String, MutableList<String>>()
+
+        fun one(key: String): String? {
+            val declarations = values[key] ?: return null
+            require(declarations.size == 1) { "The model material repeats $key" }
+            return declarations.single()
+        }
+    }
+
+    private class ScalarMaterial(
+        val name: String,
+        val color: ByteArray,
+        val maps: ScalarMaps,
+    )
+
+    /** Optional PBR MTL fields are accepted only where their meanings match our own export. */
+    private fun scalarMaterial(
+        objText: String,
+        files: Map<String, ByteArray>,
+        duplicates: Set<String>,
+    ): ScalarMaterial? {
+        val used = TextureAtlas.materials(objText)
+        val libraries = statements(objText, "mtllib").map(::baseName).distinct()
+        val definitions =
+            files
+                .filterKeys { it.endsWith(".mtl") && (libraries.isEmpty() || it in libraries) }
+                .flatMap { (name, bytes) -> materialDefinitions(name, bytes.decodeToString()) }
+                .filter { it.name in used }
+        if (definitions.none { definition -> definition.values.keys.any { it in SCALAR_FIELDS } }) return null
+        require(used.size == 1 && used.single().isNotBlank()) { "Scalar maps require one used OBJ material with one shared UV atlas" }
+        require(definitions.size == 1) { "The scalar material definition is missing or ambiguous" }
+        val material = definitions.single()
+        require(material.library !in duplicates) { "The scalar material library has an ambiguous file name" }
+        require(material.values.keys.all { it in SUPPORTED_SCALAR_MATERIAL_FIELDS }) {
+            "This scalar material uses unsupported properties; import an ArtFlow-compatible OBJ material"
+        }
+        material.one("Kd")?.let { color ->
+            val values = color.split(WHITESPACE).map { it.toFloatOrNull() }
+            require(values == listOf(1f, 1f, 1f)) { "Scalar material import requires an unmodified color texture (Kd 1 1 1)" }
+        }
+        val metallic = scalarImage(material, "Pm", MaterialChannel.METALLIC.defaultValue, files, duplicates)
+        val roughness = scalarImage(material, "Pr", MaterialChannel.ROUGHNESS.defaultValue, files, duplicates)
+        val color = requireNotNull(material.one("map_Kd")) { "The scalar material needs its color texture (map_Kd)" }
+        return ScalarMaterial(material.name, materialImage("map_Kd", color, files, duplicates), ScalarMaps(metallic, roughness))
+    }
+
+    private fun materialDefinitions(
+        library: String,
+        text: String,
+    ): List<MaterialDefinition> {
+        val definitions = mutableListOf<MaterialDefinition>()
+        var current: MaterialDefinition? = null
+        text.lineSequence().forEach { raw ->
+            val line = raw.substringBefore('#').trim()
+            if (line.isNotEmpty()) {
+                val parts = line.split(WHITESPACE, limit = 2)
+                val key = parts[0]
+                val value = parts.getOrElse(1) { "" }.trim()
+                if (key == "newmtl") {
+                    current = MaterialDefinition(value, library).also { definitions += it }
+                } else {
+                    require(current != null || key !in SCALAR_FIELDS) { "A scalar map has no material definition" }
+                    current?.values?.getOrPut(key) { mutableListOf() }?.add(value)
+                }
+            }
+        }
+        return definitions
+    }
+
+    private fun scalarImage(
+        material: MaterialDefinition,
+        factorKey: String,
+        fallback: Float,
+        files: Map<String, ByteArray>,
+        duplicates: Set<String>,
+    ): ByteArray? {
+        val mapKey = "map_$factorKey"
+        val map = material.one(mapKey)
+        val factor = material.one(factorKey)?.toFloatOrNull() ?: if (map == null && factorKey !in material.values) fallback else null
+        val expected = if (map == null) fallback else 1f
+        require(factor != null && factor.isFinite() && factor == expected) {
+            "The supported scalar material requires $factorKey $expected ${if (map == null) "without $mapKey" else "with $mapKey"}"
+        }
+        return map?.let { materialImage(mapKey, it, files, duplicates) }
+    }
+
+    private fun materialImage(
+        key: String,
+        path: String,
+        files: Map<String, ByteArray>,
+        duplicates: Set<String>,
+    ): ByteArray {
+        require(path.isNotBlank() && path.split(WHITESPACE).none { it.startsWith('-') }) {
+            "$key needs a texture file without map options"
+        }
+        val name = baseName(path)
+        require(name.endsWith(".png")) { "$key must reference a PNG texture" }
+        require(name !in duplicates) { "$key has an ambiguous texture file name" }
+        return requireNotNull(files[name]) { "The model package is missing the $key texture: $path" }
+    }
 
     /** Every material's diffuse texture found in the package, by material name. */
     internal fun materialTextures(
@@ -136,7 +252,10 @@ object ModelPackage {
             .toList()
 
     /** Zip entries keyed by lower-case file name without folders; later duplicates are ignored. */
-    private fun unzip(bytes: ByteArray): Map<String, ByteArray> {
+    private fun unzip(
+        bytes: ByteArray,
+        duplicates: MutableSet<String>,
+    ): Map<String, ByteArray> {
         val files = LinkedHashMap<String, ByteArray>()
         var total = 0L
         ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
@@ -144,11 +263,14 @@ object ModelPackage {
             var entry = zip.nextEntry
             while (entry != null) {
                 require(++entries <= MAX_ENTRIES) { "The zip has too many files" }
-                if (!entry.isDirectory) {
-                    val data = readEntry(zip, MAX_BYTES - total)
-                    total += data.size
-                    files.putIfAbsent(baseName(entry.name), data)
+                if (entry.isDirectory) {
+                    entry = zip.nextEntry
+                    continue
                 }
+                val data = readEntry(zip, MAX_BYTES - total)
+                total += data.size
+                val name = baseName(entry.name)
+                if (files.putIfAbsent(name, data) != null) duplicates += name
                 entry = zip.nextEntry
             }
         }
@@ -183,4 +305,7 @@ object ModelPackage {
     private const val BUFFER = 64 * 1024
     private const val PEEK = 4096
     private val IMAGE_EXTENSIONS = listOf(".png", ".jpg", ".jpeg", ".webp", ".bmp")
+    private val WHITESPACE = Regex("\\s+")
+    private val SCALAR_FIELDS = setOf("Pm", "Pr", "map_Pm", "map_Pr")
+    private val SUPPORTED_SCALAR_MATERIAL_FIELDS = SCALAR_FIELDS + setOf("Ka", "Kd", "Ks", "map_Kd")
 }

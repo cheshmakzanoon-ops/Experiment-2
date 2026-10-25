@@ -114,6 +114,113 @@ reopened/toggled images and saved documents are retained. The candidate inventor
 identities**, retaining all 265 from run 319 and adding this one case. Compilation alone does not
 establish that this device case has executed.
 
+### Published revision and Actions build
+
+[Run 320](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40151899389) tests the
+published correction at `09940e4e03f99b61c07f2922a7229d4faee40c7b`. Its source artifact
+`12583011748` is 2,114,337 bytes, SHA-256
+`ac3b25e981cbe77ac1fc65b555b1ea869cadcc4c44405be4a261909a4ad5d857`.
+All 928 source files match the commit byte-for-byte; the immutable source declares exactly 266
+device identities with no earlier identities removed. The later OBJ material-import work is not
+part of this source.
+
+Build job `121044979633` passes. The original report artifact `12582957949` is 798,177 bytes,
+SHA-256 `e66e159b589e60904cc44fb9d84d8e2117a4217e885c3bfc4143fafe81b6dc4e`.
+Its raw JVM XML contains **1,585 unique passes across 263 suites**, with no failures, errors or
+skips. The job also passes **190 Python checks** (114 CI-script and 76 reference-tool tests), the
+68 native-document instruction anchors, the signing rejection guard, pinned reference/corpus
+checks, static analysis, debug/release lint, APK/bundle packaging and native-alignment checks.
+Lint remains at 154 debug and 152 release warnings, plus five hints per variant and no errors.
+
+### Final device result
+
+**Run 320 fails the required matrix.** Six configurations pass their complete inventories and
+minified launches on their first attempts. The main API 35 / 16 KB job crashes twice across its
+original attempt and single permitted recovery. The passing independent repeat does not replace
+that failed lane.
+
+| Configuration | Passed | Failed | Allowed skips | Missing | Minified launch | New mask case |
+| --- | ---: | ---: | ---: | ---: | --- | --- |
+| API 26 / 4 KB | 264 | 0 | 2 | 0 | Pass | Pass |
+| API 35 / 16 KB main | 1 | 1 | 0 | 264 | Not reached | Not reached |
+| API 35 / 4 KB | 266 | 0 | 0 | 0 | Pass | Pass |
+| API 35 / 16 KB independent repeat | 266 | 0 | 0 | 0 | Pass | Pass |
+| API 36 / 4 KB | 266 | 0 | 0 | 0 | Pass | Pass |
+| API 36 / 16 KB | 266 | 0 | 0 | 0 | Pass | Pass |
+| API 36 tablet / 4 KB | 266 | 0 | 0 | 0 | Pass | Pass |
+
+Final totals are **1,595 passes, one failure, two permitted skips and 264 missing identities**, with
+no error or unexpected identities. The two API 26 skips retain their original API 33 pointer-flag
+and API 29 scoped MediaStore gates. Raw XML, source inventory, runtime measurements and published
+summaries agree. Both main-lane crash tombstones independently report 16,384-byte pages; that lane
+does not reach the later runtime-evidence test.
+
+Independent plist, bounded LZ4, raw-buffer, PNG and saved-manifest inspection passes on all six
+complete lanes. Across their 12 enabled/disabled native archives, masks declare integer type 3,
+retain the correct hidden state and contain exactly 65,536 coverage bytes. Canvas coverage has
+5,376 zero, 5,632 half-coverage and 5,376 full-coverage pixels; all 49,152 off-canvas bytes remain 255.
+Underlying ink and archived composites match independent expectations. Each lane's four fresh-reopen
+and toggle PNGs match all 16,384 pixels exactly, and root/frame mask-enabled values persist correctly.
+All 494 extracted files in each passing artifact match the original ZIP members. The main lane
+produces no native-mask archive and does not execute the new case in either attempt.
+
+### Preserved runtime failures and exact installed binaries
+
+The original main-lane attempt has **153 passes, one empty failure and 112 missing identities**.
+`StudioWorkspaceUiTest.smudgeSidebarUsesItsOwnOpacityAndLeavesPaintUnchanged` starts at
+02:08:33.482 UTC. App PID 4577 / HeapTaskDaemon TID 4589 receives SIGSEGV at 02:08:33.828,
+fault address `0xc`, with top frame `MarkCompact::ScanObject<true>+36` (`libart.so` PC `0x641f94`).
+The strict existing classifier permits one verified reboot.
+
+The final attempt has the one-pass result shown in the table. The failing playback case starts at
+02:10:01.441; PID 3804 / DefaultDispatch TID 4191 receives SIGSEGV at 02:10:01.838, address `0x10`,
+with top frame `interpreter::DoCall<false>+183` (PC `0x6e8007`). Its first managed frame is
+`ProjectStorage.maximumStoredProjectId`, followed by project creation. That identifies code in use,
+not the cause of the invalid native state. The same playback case passed in the original attempt.
+Both crashes name ART Build ID `e4a3c6c284a8b17d09fd84d661cf181b`; neither contains an application
+assertion body or a `VerifyError`. The second failure remains failed after the recovery limit is used.
+
+The pre-test capture now retains the actual app/test APKs from both failed processes:
+
+| Package | Bytes | SHA-256 |
+| --- | ---: | --- |
+| App | 24,348,791 | `c395122ccc9b8d54f6da63c4675fa24d52a6795d39347a31fc5bba2becd569a6` |
+| Test | 1,792,435 | `1498f713681c8c9d96ca43e2feee3bfee55b2b8cffe9bf44a79ab58868f9f684` |
+
+Each package is byte-for-byte identical across the two failed attempts. All eight capture tokens,
+process IDs/times and runner/host handoffs verify without errors. All 18 app and seven test DEX
+names, lengths and hashes match across the seven lanes, including the passing independent 16 KB
+repeat. The retained failed APKs additionally pass ZIP CRC/no-duplicate-entry checks and all 25 DEX
+header-size, SHA-1, Adler32 and SDK checksum checks. Targeted disassembly finds one application
+declaration each for the named storage/coroutine classes, with none duplicated in the test APK.
+These structural checks do not execute ART verification or inspect the crashing process's heap,
+class-loader state or generated code. Passing-lane byte comparisons use preserved capture metadata;
+successful APK payloads are removed as designed. Both failed attempts retain their app and test files.
+
+A bounded graphics-path follow-up verifies the installed version and native bytes as AndroidX
+1.1.0. Its API 35 traversal uses the platform iterator, while native loading/conic conversion still
+exist. The first attempt's explicit compatibility load passes; the second attempt's retained log
+has no graphics-path load/test occurrence before its early crash. The inspected official fixes
+provide no matching repair. Neither loading/alignment checks nor log absence proves general native
+memory safety. Dependencies, runtime flags, assertions and recovery rules remain unchanged.
+The earlier run 318 `VerifyError` still lacks its original failed APK and cannot be diagnosed by
+substituting this newer binary. The runtime cause and repair remain unresolved.
+
+### Original device artifacts
+
+Every original ZIP was checked against the Actions byte count and digest before extraction.
+Logs, installed APKs and independent analysis outputs remain outside the source repository.
+
+| Artifact suffix | Artifact ID | Bytes | SHA-256 |
+| --- | ---: | ---: | --- |
+| `api-26` | 12582704886 | 3,430,939 | `137df6fd7e28901545235d882eaf020ba0d6607aeabf3428154abdf5e6bb6ef0` |
+| `api-35` | 12583845072 | 56,883,582 | `f80849f50e7f788710f5c85a56c0d14742c925fadd614a448c440b8d7f3015a4` |
+| `api-35-standard-4k` | 12582679973 | 8,813,463 | `c3b4a410ca6877c7b6872d43344b55bd03d8a0c04fbcceaad1bcb8064e40efbc` |
+| `api-36` | 12583711603 | 8,758,560 | `6a0d1315530f221ad9c608204f6777d203cdbda82cb12ffc0363c648c9d4b754` |
+| `api-35-16k-repeat` | 12583508237 | 11,055,095 | `6f49be10cedfbaf7ec75b1687710ab7b3a47807b22f34ec88a90856d38ccd270` |
+| `api-36-16k` | 12583567174 | 8,976,828 | `f2ae3e4459ba63c036e1f802eb085221f5df40730391948b5336bbac5f94fd5c` |
+| `api-36-tablet` | 12583284916 | 12,128,690 | `82dc14fb4ca4fc57eeeb989c4ee729368c99ea7b38d1e940e44ab368a4d8d0b0` |
+
 This correction concerns ordinary layer-mask representation and typed tile disambiguation. It does
 not establish native group-mask metadata, every legacy format version, native-app opening, native
 brush/rendering equivalence, or full Procreate feature and quality parity.
