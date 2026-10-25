@@ -16,10 +16,24 @@ case "${EXPECTED_PAGE_SIZE:-}" in
 esac
 # Record default runtime settings, or explicitly configure and verify the debug-emulator mitigation.
 bash "$(dirname "${BASH_SOURCE[0]}")/configure-emulator-runtime.sh" || exit $?
+instrumentation_attempt=0
 run_instrumentation() {
+  instrumentation_attempt=$((instrumentation_attempt + 1))
+  local attempt_status=0
+  local attempt_token
+  attempt_token="$(python -c 'import uuid; print(uuid.uuid4())')"
   ./gradlew connectedDebugAndroidTest \
     "-Pandroid.testInstrumentationRunnerArguments.expectedPageSize=${EXPECTED_PAGE_SIZE}" \
-    --stacktrace
+    "-Pandroid.testInstrumentationRunnerArguments.artflowApkEvidenceToken=${attempt_token}" \
+    --stacktrace || attempt_status=$?
+  # Verify the runner's pre-test snapshots before recovery or benchmark installation.
+  # Diagnostic collection must never replace the instrumentation exit status.
+  if ! python "$(dirname "${BASH_SOURCE[0]}")/collect_installed_apks.py" \
+    --output "$root/apk-provenance/attempt-$instrumentation_attempt" \
+    --instrumentation-status "$attempt_status" --attempt-token "$attempt_token"; then
+    echo "APK provenance capture failed for instrumentation attempt $instrumentation_attempt" >&2
+  fi
+  return "$attempt_status"
 }
 instrumentation_status=0
 run_instrumentation || instrumentation_status=$?

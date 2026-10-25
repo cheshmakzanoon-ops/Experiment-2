@@ -9,8 +9,16 @@ Signed `.artflow` v6 retains channel identity while validating historical checks
 The subsequent image audit also corrects Smudge's whole-pixel jump at fractional input boundaries
 and adds a device test to capture actual pointer coordinates. Material strokes currently paint one selected channel;
 simultaneous multi-channel brush strokes and material-specific brush dynamics remain unimplemented.
-These implementations require their own full published-revision emulator result; the dated acceptance
-records below apply only to their named source revisions. Full Procreate parity remains unestablished.
+The corrected application is tested by [run 318](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40145078365)
+on `8074d9d`, with 1,569 passing JVM tests and 265 declared device tests per lane. Both required
+Android 15 / 16 KB lanes fail, including a distinct unresolved coroutine-class verification error.
+The five other lanes complete their inventories and minified launches. The new subpixel case passes
+in all seven final attempts; the [follow-through record](PARITY_FOLLOW_THROUGH_2026-10-24.md)
+retains original artifacts, actual input traces, image comparisons and all incomplete coverage.
+A diagnostic follow-up preserves exact installed binaries before UTP uninstall; it makes no
+application or runtime repair claim and still requires live Actions verification.
+The dated acceptance records below apply only to their named source revisions. Full Procreate parity
+remains unestablished.
 
 
 ## Emulator acceptance and corrections — 24 October 2026

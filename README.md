@@ -52,7 +52,23 @@ their complete inventory checks: API 26 has 262 passes and two permitted skips; 
 requires one preserved recovery. The main Android 15 / 16 KB lane stops after 43 passes with one
 empty ART-crash failure and 220 missing tests, so the run remains failed overall. All eight new
 feature cases pass in each final passing lane. Cross-API image review exposed the fractional Smudge
-placement issue corrected by the follow-up, which requires its own published-source Actions result.
+placement issue corrected by the next application revision.
+
+[Run 318](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40145078365) on `8074d9d`
+tests that correction with 265 device identities per lane and no removed tests. Its build passes
+1,569 JVM tests, 156 Python checks, static analysis and package gates. Both Android 15 / 16 KB
+jobs fail: main has two native ART crashes across its original and single recovered attempt;
+the repeat has a distinct nonempty coroutine-class `VerifyError`. The exact installed APK was not
+retained, so the verifier failure's cause remains unresolved. The other five lanes pass their complete
+inventories and minified launches. Final totals are 1,440 passes, two failures, two permitted skips
+and 411 missing tests. The new subpixel case passes in every final attempt with identical PNGs
+across each lane's integer-boundary pair; see the
+[verification record](docs/PARITY_FOLLOW_THROUGH_2026-10-24.md).
+
+The diagnostic follow-up captures exact installed app/test APKs before UTP removes them, verifies
+per-attempt hashes on the host, and preserves failed-attempt binaries for inspection. It changes no
+application behavior, runtime setting, assertion, coverage gate or recovery predicate. Local script
+and instrumentation build checks pass; live emulator capture remains to be verified by Actions.
 
 ## Editor workflows
 

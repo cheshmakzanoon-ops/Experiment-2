@@ -2,6 +2,7 @@ package com.artflow.studio
 
 import android.app.Application
 import android.content.Context
+import android.util.Log
 import androidx.test.runner.AndroidJUnitRunner
 import dagger.hilt.android.testing.HiltTestApplication
 
@@ -11,6 +12,15 @@ import dagger.hilt.android.testing.HiltTestApplication
  * `testInstrumentationRunner`.
  */
 class HiltTestRunner : AndroidJUnitRunner() {
+    override fun onStart() {
+        try {
+            InstalledApkEvidence.capture(this)
+        } catch (error: Exception) {
+            Log.w("InstalledApkEvidence", "Could not preserve installed APK evidence", error)
+        }
+        super.onStart()
+    }
+
     override fun newApplication(
         cl: ClassLoader?,
         name: String?,

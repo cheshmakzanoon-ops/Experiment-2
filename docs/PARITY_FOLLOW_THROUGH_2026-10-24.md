@@ -283,8 +283,8 @@ release bundle also pass. Lint retains 154 debug and 152 release warnings plus f
 with no errors. The rebuilt debug APK and release bundle pass the native packaging/alignment verifier.
 Stale generated dex shards caused local duplicate-class packaging failures; the original shards and
 logs were preserved, and only generated dex task outputs were regenerated without build-cache reuse.
-No source assertion, CI gate, runtime setting or recovery classifier was relaxed. The fresh
-published-source Actions run remains pending for this correction.
+No source assertion, CI gate, runtime setting or recovery classifier was relaxed. The published
+correction and its subsequent Actions result are recorded below.
 
 A paired desktop probe compares source `8ce26b9` with the final corrected sampler on the same
 8,192 × 4,882 canvas (39,993,344 pixels), 8,845.076-pixel path and size-512 brush. Three warmed pairs
@@ -301,6 +301,147 @@ No garbage collection occurred inside a measured gesture. The largest observed p
 use was 167.02 MiB. The sampling halo adds 8,224 retained bytes upright and 24,608 at full tilt;
 the largest patch is 9,474,084 bytes. No material slowdown was observed in this small comparison.
 The small median differences establish neither a speed improvement nor Android/physical pen latency.
+
+### Run 318: corrected Smudge sampler — 25 October 2026
+
+[Run 318](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40145078365) tests exact
+source `8074d9d02f260820a16f7970c841d73cc872819f`. Its original source artifact `12579829488` is
+2,079,957 bytes with SHA-256
+`96d1b7e3f66753df21aa90ba5e7c756d443b7ca5d52b3a35b9aabb3e38e8dfe2`. All 919 archived files were
+independently compared byte-for-byte with that Git commit. The immutable inventory has 265 device
+identities: all 264 from run 317 plus the new subpixel input case, with none removed.
+
+Build job `121024564303` passes. Its original report ZIP `12581161415` is 791,538 bytes with SHA-256
+`830e1b724bd0e5d51299186e794f45d3940f515db384a4887b387ed720cb241b`. Independent raw XML counting
+confirms **1,569 JVM tests across 260 suites**, including all six new `SmudgeSubpixelTest` cases,
+with zero failures, errors or skips. All 156 Python checks (93 CI-script and 63 reference-tool cases),
+the signing-negative guard, pinned genuine-file/reference-corpus contracts, ktlint, Detekt, both lint
+variants, debug APK, release bundle and native package/alignment checks pass. Lint retains 154 debug
+and 152 release warnings plus five hints per variant, with no errors.
+
+The completed final attempts account for **1,440 passes, two failures, two permitted skips and
+411 missing identities** out of 1,855 required outcomes. There are no errors or unexpected
+identities. Both required API 35 / 16 KB jobs fail, so this revision does not pass emulator acceptance.
+
+| Lane | Passed | Failed | Skipped | Missing | Minified launch |
+| --- | ---: | ---: | ---: | ---: | --- |
+| API 26 / 4 KB | 263 | 0 | 2 | 0 | Pass |
+| API 35 / 16 KB main | 51 | 1 | 0 | 213 | Not reached |
+| API 35 / 4 KB | 265 | 0 | 0 | 0 | Pass |
+| API 36 / 4 KB | 265 | 0 | 0 | 0 | Pass |
+| API 35 / 16 KB independent repeat | 66 | 1 | 0 | 198 | Not reached |
+| API 36 / 16 KB | 265 | 0 | 0 | 0 | Pass |
+| API 36 tablet / 4 KB | 265 | 0 | 0 | 0 | Pass |
+
+Each passing lane completes the exact 265-case inventory, reports its requested API/page size and
+passes the minified launch without recovery. API 26 retains only the existing cancelled-pointer
+flag and scoped MediaStore skips. The original attempt preceding the main lane's recovery is
+preserved separately and is not added to the final-attempt totals.
+
+The main lane's original attempt has 86 passes, one empty failure and 178 missing identities at
+`FillGestureDeviceTest#bucketPreservesLayerAlphaAndUndo`. The case starts at 00:28:32.629 UTC;
+app PID/TID 4422 receives SIGSEGV at 00:28:32.826, fault address `0x10`, followed by the matching
+tombstone at 00:28:33.079. Frame 0 is `art::mirror::Class::FindClassMethod(...)+3876`, PC `0x8551c4`.
+The unchanged strict classifier accepts this failure, and the recorded recovery verifies a new boot.
+
+Its single recovered attempt then has 51 passes, one empty failure and 213 missing identities at
+`CanvasInputDeviceTest#actionCancelWithMultiplePointersDiscardsAllProvisionalInk`. The case starts
+at 00:32:06.222; app PID/TID 3699 receives SIGSEGV at 00:32:06.334, fault address `0x70`, with its
+tombstone at 00:32:06.559. Frame 0 is `NterpGetStaticField+294`, PC `0xa885a6`. Both app tombstones
+identify 16,384-byte pages and ART Build ID `e4a3c6c284a8b17d09fd84d661cf181b`. The final crash also
+matches the strict classifier, but the single recovery is already consumed; no further retry runs.
+
+The independent repeat is a different failure: 66 passes, one **nonempty `VerifyError`** and 198
+missing identities. `CanvasInputDeviceTest#zoomToolDragUsesStartScaleAndAnchorAcrossReversalsAndClamps`
+starts at 00:28:23.246. At 00:28:24.272, app main PID/TID 4316 reports that
+`kotlinx.coroutines.JobSupport$Finishing` cannot access its own instance fields and that a precise
+reference to the class is not an instance of that same displayed type. Its reported declaration is
+the installed app's `base.apk!classes18.dex`; the stack reaches `CoroutineScope.cancel()` from
+`ArtFlowCanvasView.onDetachedFromWindow:679`. This is a fatal verification error, not a failed
+test assertion or an empty native-crash result. The strict classifier rejects it; no recovery runs.
+An unrelated Google search process's later SIGSEGV at 00:28:37.739 (PID 2788) is excluded.
+
+Thirty-two canvas input cases passed in the repeat's same process before the failure, including
+repeated activity destruction and scope cancellation. The immediately preceding activity reaches
+`DESTROYED` at 00:28:23.209 and its case finishes at 00:28:23.244. This does not prove that the exact
+`JobSupport$Finishing` slow path or its class verification had already executed. Neither failed lane
+reaches its measured `RuntimeEnvironmentTest` report or the minified launch.
+
+Neither original failed-lane artifact retains APK/DEX bytes or an installed-package hash. The repeat
+uses a fresh checkout and executes its dex-building tasks; restored dependency/transform caches
+do not establish cache corruption. Its exact failing `classes18.dex` cannot be reconstructed from
+these reports. The cause remains unresolved; attributing it to coroutines, malformed bytecode,
+cache corruption or ART would exceed the available evidence. The old
+[coroutines issue 2931](https://github.com/Kotlin/kotlinx.coroutines/issues/2931) concerns Android 4.4
+and optimized boolean/int verification, and does not supply a matching repair for this non-minified
+API 35 failure.
+
+#### Original artifacts and image verification
+
+All seven original ZIP sizes and SHA-256 digests match GitHub's artifact metadata. Raw XML from
+each final attempt was independently compared with the immutable source inventory and the
+published verification summary.
+
+| Lane | Artifact ID | Bytes | SHA-256 |
+| --- | ---: | ---: | --- |
+| API 26 | 12580143885 | 3,358,454 | `5505bfce61ac1d8fdcafe6ec4a239d261d4ab626ace44ba776071fb5e11635cc` |
+| API 35 / 16 KB main | 12580773422 | 6,997,814 | `7fa0097ffc775f25c8bb7075977217096b90f236216a04f9b5392e9d9236b3ae` |
+| API 35 / 4 KB | 12580718274 | 9,765,854 | `5af42f1c94a7b7f669ec85eda0c8022f965a9d81f9e46ab0f0662d69c19549ea` |
+| API 36 / 4 KB | 12581033617 | 9,079,653 | `3781ce14605ae562d4ce1de3aa9448209c9037d2179e144e08bba0b6a746ad81` |
+| API 35 / 16 KB repeat | 12581207583 | 4,165,138 | `a999dbaede0c4042fa4ee45a0500776818c8c032890eec55b7cdccef8178a56c` |
+| API 36 / 16 KB | 12581346862 | 9,142,409 | `a80248a892a290fd4ed6d40ae94110b9cd93639dd9d963dbb356a82878cb26c8` |
+| API 36 tablet | 12581054814 | 12,154,559 | `04e0c2f718c726137403b50f1f69216e972953baf03fa62e9002414c587c72da` |
+
+The new subpixel Smudge case passes in **all seven final attempts**, including both incomplete
+lanes. Each real input trace reaches opposite sides of canvas x=8, and each lane's below/above
+64 × 64 PNG pair has **zero differing pixels and zero maximum channel difference**. Actual starts
+are 7.999901/8.000099 on API 26, 7.999914/8.000128 on the other phone configurations, and
+7.9998875/8.000113 on the tablet. These are measured inputs, not an assumed Android precision rule.
+
+Across the five complete lanes, the continuous Smudge stroke has the same changed bounds
+`[4,24,60,39]`. API 35 / 4 KB, API 36 / 4 KB and API 36 / 16 KB are pixel-identical; API 26 and
+the tablet each differ from that phone reference in only 14 pixels, by at most one channel level.
+The prior run-317 API 26 versus standard-phone difference was 839 pixels with a maximum difference
+of 132. Phone/tablet subpixel PNGs differ across lanes in two texels by one red-channel level,
+consistent with their distinct recorded coordinates; within each lane the boundary pair is exact.
+This establishes the tested discontinuity correction, not native Procreate pixel equivalence.
+
+Both material device cases pass on the API 36 / 16 KB phone and tablet. Original GL captures show
+readable channel controls, a provisional metallic spot, its removal on cancellation and its retention
+on commit while the Color canvas stays unchanged. Reopened and exported maps are byte-identical
+between those two lanes and their respective run-317 maps. Independent checks of every 32 × 32
+exported scalar texel find zero mismatches: painted metallic/roughness centers are 255/64, and
+transparent coverage resolves to defaults 0/153. The OBJ ZIP includes both maps and their MTL
+references. These checks validate the implemented single-atlas behavior within the stated material
+boundaries.
+
+### Follow-up: preserve exact installed binaries for diagnosis
+
+The new run-318 `VerifyError` cannot be diagnosed from source and a separately built APK alone.
+UTP removes both installed packages before the Gradle command returns: the repeat's removals occur
+at 00:28:36.481 and 00:28:36.688, before Gradle reports failure at 00:28:38.948. Both main-lane
+attempts have the same ordering. A host `adb pull` after Gradle would therefore miss these bytes.
+
+The test runner now copies its actual target and instrumentation `sourceDir` and split APKs before
+executing tests, under a unique per-attempt UUID in the existing additional-output directory. It
+streams each copy through SHA-256, stages partial files, verifies byte counts, and marks only a
+completed rename as a complete copy. Copy failures remain explicit and do not suppress test
+execution. UTP already retrieves this directory before uninstalling packages.
+
+The host consumes only that attempt's matching token from the canonical UTP output. It rejects
+missing, duplicate, mismatched or incomplete captures; verifies the runner's size and whole-file
+hash; then hashes individual uncompressed `classes*.dex` entries. Built APK metadata is recorded
+separately and never substitutes for an installed snapshot. Failed attempts retain the original
+snapshot namespace before inspection, including malformed bytes or partial files. Successful
+attempts retain metadata and hashes without retaining APK payloads. A failure before runner capture
+will still honestly report missing evidence.
+
+Local verification passes all **114 CI-script tests**, including the collector and harness scenarios,
+plus Android-test Kotlin compilation, ktlint, Detekt and instrumentation APK packaging. The next
+Actions run must verify the live UTP handoff. This is a diagnostic change: application code,
+dependencies, runtime flags, device test identities/assertions, coverage gates, crash classification
+and the single-recovery limit remain unchanged. It does not establish a repair for either the native
+crashes or the verifier failure.
 
 ## Remaining requirements for a parity claim
 
