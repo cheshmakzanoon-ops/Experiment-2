@@ -1,0 +1,91 @@
+name: Android 15 16 KB host comparison acceptance
+
+# Isolated diagnostic: unchanged application and test source on an alternative runner.
+# This is not a replacement for the seven required main-branch lanes.
+on:
+  push:
+    branches:
+      - diagnostics/android15-16kb-idle-control
+    paths:
+      - .github/workflows/android15-16kb-host22-acceptance.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android15-16kb:
+    name: Full 270-case API 35 16 KB gate (Ubuntu 22.04)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Prepare instrumentation artifacts
+        shell: bash
+        run: |
+          set -uo pipefail
+          status=1
+          for attempt in 1 2 3; do
+            echo "Instrumentation build attempt ${attempt}/3"
+            ./gradlew assembleDebug assembleDebugAndroidTest --stacktrace && exit 0
+            status=$?
+            if (( attempt < 3 )); then sleep $((attempt * 5)); fi
+          done
+          exit "$status"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run unchanged instrumentation and minified launch
+        env:
+          EXPECTED_PAGE_SIZE: '16384'
+          ART_JIT_MODE: disabled
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis_ps16k
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -memory 4096
+          script: bash .github/scripts/run-device-tests.sh
+      - name: Verify complete 270-case coverage and publish evidence
+        if: always()
+        env:
+          EXPECTED_API: '35'
+          EXPECTED_PAGE_SIZE: '16384'
+        run: |
+          status=0
+          python .github/scripts/summarize_device_results.py \
+            --source app/src/androidTest/java \
+            --results app/build/outputs/androidTest-results/connected/debug \
+            --evidence app/build/outputs/connected_android_test_additional_output \
+            --launch "${RUNNER_TEMP}/artflow-device/minified-launch.txt" \
+            --api "$EXPECTED_API" --page-size "$EXPECTED_PAGE_SIZE" \
+            --revision "$(git rev-parse HEAD)" \
+            --output "${RUNNER_TEMP}/artflow-device" || status=$?
+          cat "${RUNNER_TEMP}/artflow-device/verification.md" >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+      - name: Retain all device results and failed attempts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: host22-api35-16k-full-gate
+          path: |
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
+            app/build/outputs/connected_android_test_additional_output/
+            ${{ runner.temp }}/artflow-device/
+          if-no-files-found: ignore
+          retention-days: 14
