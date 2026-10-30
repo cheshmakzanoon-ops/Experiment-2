@@ -241,7 +241,11 @@ jobs:
   device-tests:
     name: Device tests (${{ matrix.label }})
     needs: build
-    runs-on: ubuntu-latest
+    # Android 15 16 KB google_apis_ps16k has shown native ART crashes on Ubuntu 24.04,
+    # including app-free AVD controls. Ubuntu 22.04 passed the unchanged 270-case
+    # instrumentation and minified-launch gate (diagnostic Actions run 41133064397).
+    # Keep both Android 15 16 KB lanes independent with every acceptance gate intact.
+    runs-on: ${{ matrix.api == 35 && matrix.page_size == 16384 && 'ubuntu-22.04' || 'ubuntu-latest' }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
