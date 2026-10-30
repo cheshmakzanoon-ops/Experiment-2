@@ -1,0 +1,168 @@
+name: Android 15 supported CC collector control
+
+on:
+  push:
+    branches:
+      - codex/android15-cc-control-e2aa900
+  workflow_dispatch:
+
+concurrency:
+  group: android15-cc-control-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  collector-control:
+    name: Same-image CC control (${{ matrix.lane }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        lane: [A, B]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Verify unchanged application and freeze all 250 identities
+        env:
+          CONTROL_LANE: ${{ matrix.lane }}
+        run: |
+          set -euo pipefail
+          candidate=e2aa900b91298fe08eca8529d0345220faa9e2eb
+          # Diagnostic corrections may put the immutable application base beyond checkout's depth.
+          if ! git cat-file -e "$candidate^{commit}" 2>/dev/null; then
+            git fetch --no-tags --depth 1 origin "$candidate"
+          fi
+          git cat-file -e "$candidate^{commit}"
+          mkdir -p "${RUNNER_TEMP}/artflow-device/cc-control"
+          python - <<'PY'
+          import hashlib, importlib.util, json, os, subprocess
+          from pathlib import Path
+          candidate = 'e2aa900b91298fe08eca8529d0345220faa9e2eb'
+          allowed = {
+              '.github/workflows/android15-cc-control.yml',
+              '.github/scripts/configure-android15-cc-control.sh',
+              '.github/scripts/run-android15-cc-control.sh',
+              '.github/scripts/verify_android15_cc_control.py',
+              '.github/scripts/test_verify_android15_cc_control.py',
+          }
+          changes = subprocess.check_output(['git', 'diff', '--name-status', candidate, 'HEAD'], text=True).splitlines()
+          changed_paths = {line.split('\t')[-1] for line in changes}
+          if len(changes) != len(allowed) or changed_paths != allowed or any(line.split('\t')[0] != 'A' for line in changes):
+              raise SystemExit('Diagnostic may only add its declared workflow/control files: ' + repr(changes))
+          spec = importlib.util.spec_from_file_location('inventory', '.github/scripts/summarize_device_results.py')
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          tests = sorted(module.source_inventory(Path('app/src/androidTest/java')))
+          digest = hashlib.sha256(('\n'.join(tests) + '\n').encode()).hexdigest()
+          if len(tests) != 250 or digest != '308b1663e5f2711c2279997de1e4a5b34ace31bbf8dd5a440db1aae5342a54c2':
+              raise SystemExit('The frozen application test inventory changed')
+          revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          root = Path(os.environ['RUNNER_TEMP']) / 'artflow-device' / 'cc-control'
+          manifest = {'applicationRevision': candidate, 'workflowRevision': revision,
+                      'lane': os.environ['CONTROL_LANE'], 'applicationSourceUnchanged': True,
+                      'testIdentitySha256': digest, 'tests': tests, 'changes': changes}
+          (root / 'source-provenance.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          (root / 'REVISION.txt').write_text(revision + '\n')
+          (root / 'source.tar.gz').write_bytes(subprocess.check_output(['git', 'archive', '--format=tar.gz', 'HEAD']))
+          print(f'Unchanged application {candidate}: {len(tests)} exact identities; workflow {revision}')
+          PY
+          bash -n .github/scripts/configure-android15-cc-control.sh .github/scripts/run-android15-cc-control.sh
+          python -m unittest discover -s .github/scripts -p 'test_verify_android15_cc_control.py'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Prepare unchanged instrumentation artifacts
+        run: |
+          set -euo pipefail
+          ./gradlew assembleDebug assembleDebugAndroidTest --stacktrace
+          sha256sum app/build/outputs/apk/debug/*.apk app/build/outputs/apk/androidTest/debug/*.apk > "${RUNNER_TEMP}/artflow-device/cc-control/apk-sha256.txt"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run one complete suite after the supported collector switch
+        env:
+          EXPECTED_PAGE_SIZE: '16384'
+          ART_JIT_MODE: disabled
+          ART_BOOT_TIMEOUT_SECONDS: '300'
+          ART_CC_CONTROL_DISPOSABLE: '1'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis_ps16k
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -memory 4096
+          script: bash .github/scripts/run-android15-cc-control.sh
+      - name: Record the installed emulator, image and host
+        if: always()
+        run: |
+          set -euo pipefail
+          control="${RUNNER_TEMP}/artflow-device/cc-control"
+          mkdir -p "$control"
+          cat /etc/os-release > "$control/host-os-release.txt"
+          printf 'ImageOS=%s\nImageVersion=%s\n' "${ImageOS:-unknown}" "${ImageVersion:-unknown}" > "$control/host-image.txt"
+          sdk="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          version_status=0
+          # Use the same headless frontend as the successful emulator launch. The GUI QEMU
+          # executable requires libpulse.so.0, which is absent on this hosted runner image.
+          "$sdk/emulator/emulator" -no-window -noaudio -version > "$control/emulator-version.txt" 2>&1 || version_status=$?
+          printf 'exitCode=%s\n' "$version_status" > "$control/emulator-version-status.txt"
+          cp "$sdk/emulator/source.properties" "$control/emulator-source.properties"
+          image="$sdk/system-images/android-35/google_apis_ps16k/x86_64"
+          cp "$image/source.properties" "$control/system-image-source.properties"
+          cp "$image/package.xml" "$control/system-image-package.xml"
+          python - "$image" "$control/system-image-sha256.json" <<'PY'
+          import hashlib, json, sys
+          from pathlib import Path
+          root, output = map(Path, sys.argv[1:])
+          names = ('system.img', 'vendor.img', 'ramdisk.img', 'kernel-ranchu', 'source.properties', 'package.xml')
+          manifest = {}
+          for name in names:
+              path = root / name
+              if not path.is_file():
+                  raise SystemExit('Missing installed system-image component: ' + str(path))
+              with path.open('rb') as stream:
+                  digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+              manifest[name] = {'bytes': path.stat().st_size, 'sha256': digest}
+          output.write_text(json.dumps(manifest, indent=2) + '\n')
+          PY
+          exit "$version_status"
+      - name: Verify every frozen identity and minified launch
+        if: always()
+        run: |
+          status=0
+          python .github/scripts/summarize_device_results.py \
+            --source app/src/androidTest/java \
+            --results app/build/outputs/androidTest-results/connected/debug \
+            --evidence app/build/outputs/connected_android_test_additional_output \
+            --launch "${RUNNER_TEMP}/artflow-device/minified-launch.txt" \
+            --api 35 --page-size 16384 --revision "$(git rev-parse HEAD)" \
+            --output "${RUNNER_TEMP}/artflow-device" || status=$?
+          cat "${RUNNER_TEMP}/artflow-device/verification.md" >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+      - name: Preserve original runtime, source and test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android15-cc-control-${{ matrix.lane }}
+          path: |
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
+            app/build/outputs/connected_android_test_additional_output/
+            ${{ runner.temp }}/artflow-device/
+          if-no-files-found: error
+          retention-days: 14

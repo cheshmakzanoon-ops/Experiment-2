@@ -1,0 +1,177 @@
+name: Android 15 default runtime diagnostic
+
+# This isolated comparison preserves the application, tests and acceptance gates
+# from e0470f0. Both fresh API 35 / 16 KB emulators use Android's default runtime.
+# The existing runner does not retry instrumentation under ART_JIT_MODE=default.
+on:
+  push:
+    branches:
+      - codex/android15-default-runtime-e0470f0
+  workflow_dispatch:
+
+concurrency:
+  group: android15-runtime-diagnostic-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  device-tests:
+    name: Default runtime (${{ matrix.label }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - api: 35
+            label: API 35 / 16 KB A
+            artifact: 35-default-a
+            target: google_apis_ps16k
+            page_size: 16384
+          - api: 35
+            label: API 35 / 16 KB B
+            artifact: 35-default-b
+            target: google_apis_ps16k
+            page_size: 16384
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Verify unchanged application and test source
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=e0470f0861681d2a84f1383f6724e427a1eaf67c
+          git diff --exit-code "$base" HEAD -- . ':(exclude).github/workflows/android15-runtime-diagnostic.yml'
+          mkdir -p "${RUNNER_TEMP}/artflow-device"
+          {
+            printf 'applicationBaseRevision=%s\n' "$base"
+            printf 'workflowRevision=%s\n' "$(git rev-parse HEAD)"
+            printf 'applicationTree=%s\n' "$(git rev-parse HEAD:app)"
+            printf 'deviceScriptsTree=%s\n' "$(git rev-parse HEAD:.github/scripts)"
+            printf 'sourceComparison=PASS\nrequestedJitMode=default\ninstrumentationRetry=disabled\n'
+          } | tee "${RUNNER_TEMP}/artflow-device/source-provenance.txt"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Prepare instrumentation artifacts
+        shell: bash
+        run: |
+          set -uo pipefail
+          status=1
+          for attempt in 1 2 3; do
+            echo "Instrumentation build attempt ${attempt}/3"
+            ./gradlew assembleDebug assembleDebugAndroidTest --stacktrace && exit 0
+            status=$?
+            if (( attempt < 3 )); then sleep $((attempt * 5)); fi
+          done
+          exit "$status"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run instrumentation tests
+        env:
+          EXPECTED_PAGE_SIZE: ${{ matrix.page_size }}
+          ART_JIT_MODE: default
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          target: ${{ matrix.target }}
+          profile: ${{ matrix.profile }}
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -memory 4096
+          script: bash .github/scripts/run-device-tests.sh
+      - name: Verify complete device coverage and publish evidence summary
+        if: always()
+        env:
+          EXPECTED_API: ${{ matrix.api }}
+          EXPECTED_PAGE_SIZE: ${{ matrix.page_size }}
+        run: |
+          status=0
+          python .github/scripts/summarize_device_results.py \
+            --source app/src/androidTest/java \
+            --results app/build/outputs/androidTest-results/connected/debug \
+            --evidence app/build/outputs/connected_android_test_additional_output \
+            --launch "${RUNNER_TEMP}/artflow-device/minified-launch.txt" \
+            --api "$EXPECTED_API" --page-size "$EXPECTED_PAGE_SIZE" \
+            --revision "$(git rev-parse HEAD)" \
+            --output "${RUNNER_TEMP}/artflow-device" || status=$?
+          cat "${RUNNER_TEMP}/artflow-device/verification.md" >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+      - name: Upload device test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-diagnostic-api-${{ matrix.artifact }}
+          path: |
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
+            app/build/outputs/connected_android_test_additional_output/
+            ${{ runner.temp }}/artflow-device/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Report live stroke timing
+        if: always()
+        run: find app/build/outputs/connected_android_test_additional_output "${RUNNER_TEMP}/artflow-device" -name 'stroke-timing.txt' -exec cat {} + 2>/dev/null || true
+
+      - name: Summarise failed device tests
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          import glob, os, xml.etree.ElementTree as ET
+
+          emitted = 0
+
+          def note(message):
+              # GitHub renders ::error:: lines as check annotations, which stay readable for a public
+              # repository even when the job log needs a sign-in. Keep them single-line and escaped.
+              global emitted
+              if emitted >= 10:
+                  return
+              emitted += 1
+              clean = " ".join(str(message).split()).replace("%", "%25")[:380]
+              print(f"::error::{clean}")
+
+          for path in glob.glob("app/build/outputs/androidTest-results/**/*.xml", recursive=True):
+              for case in ET.parse(path).getroot().iter("testcase"):
+                  for problem in list(case.findall("failure")) + list(case.findall("error")):
+                      # Some failures carry only a stack trace, so keep both parts and drop blanks.
+                      raw = "\n".join(filter(None, [(problem.get("message") or "").strip(), (problem.text or "").strip()]))
+                      text = [line for line in raw.splitlines() if line.strip()]
+                      name = f"{case.get('classname')}.{case.get('name')}"
+                      print(f"FAILED {name}: {' | '.join(text[:6])[:900]}")
+                      note(f"FAILED {name}: {' | '.join(text[:4])[:300]}")
+                      # The frames that say who did it: the app's own, the test's and any cause.
+                      trace = (problem.text or "").splitlines()
+                      for line in [l.strip() for l in trace if "com.artflow" in l or "Caused by" in l][:30]:
+                          print(f"    {line[:300]}")
+          if emitted == 0:
+              root = os.path.join(os.environ.get("RUNNER_TEMP", ""), "artflow-device")
+              for path in glob.glob(os.path.join(root, "**", "*logcat*.txt"), recursive=True):
+                  try:
+                      for line in open(path, errors="ignore"):
+                          if "FATAL EXCEPTION" in line or "Fatal signal" in line or "Process: com.artflow" in line:
+                              note(line)
+                  except OSError:
+                      pass
+          PY
+          grep -rhE 'FAILED|Process crashed|INSTRUMENTATION_FAILED' "${RUNNER_TEMP}/artflow-device" 2>/dev/null | head -20 || true
+          # The app's own crash, if any: the exception and the frames that explain it.
+          grep -h -A 40 'FATAL EXCEPTION' "${RUNNER_TEMP}"/artflow-device/*logcat*.txt 2>/dev/null | grep -E 'FATAL|Process: |Exception|Error|Caused by|\tat com\.artflow|at com\.artflow' | head -60 || true
+          # A native crash (including the first attempt before a framework-crash retry): the signal,
+          # the crashing thread and the top of its backtrace.
+          find "${RUNNER_TEMP}/artflow-device" -name '*logcat*.txt' -exec grep -hE 'Fatal signal|>>> com\.artflow|Abort message|#(0[0-9]|1[0-5]) pc ' {} + 2>/dev/null | head -80 || true
