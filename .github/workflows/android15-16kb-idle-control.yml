@@ -1,0 +1,61 @@
+name: Android 15 16 KB emulator-only control
+
+# This experiment never installs ArtFlow. It is NOT an app acceptance lane.
+on:
+  push:
+    branches:
+      - diagnostics/android15-16kb-idle-control
+    paths:
+      - .github/workflows/android15-16kb-idle-control.yml
+      - .github/scripts/diagnose-android15-emulator-only.sh
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-control:
+    name: Emulator-only runtime (${{ matrix.jit }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        jit: [disabled, default]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Launch app-free Android 15/16 KB control
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          ART_JIT_MODE: ${{ matrix.jit }}
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis_ps16k
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -memory 4096
+          script: bash .github/scripts/diagnose-android15-emulator-only.sh
+      - name: Retain emulator-only evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-only-android15-16kb-${{ matrix.jit }}
+          path: ${{ runner.temp }}/artflow-android15-control/
+          if-no-files-found: warn
+          retention-days: 14
