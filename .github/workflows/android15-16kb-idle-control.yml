@@ -15,8 +15,8 @@ permissions:
 
 jobs:
   runtime-control:
-    name: Emulator-only runtime (${{ matrix.jit }})
-    runs-on: ubuntu-24.04
+    name: Emulator-only Ubuntu 22.04 (${{ matrix.jit }})
+    runs-on: ubuntu-22.04
     timeout-minutes: 35
     strategy:
       fail-fast: false
