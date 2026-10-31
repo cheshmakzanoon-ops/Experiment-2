@@ -1,0 +1,180 @@
+name: Android 15 16 KB CPU-core reliability comparison
+
+# Diagnostic only. This does not replace or weaken any required Android CI lane.
+# Compare the same public API 35/16 KB Google APIs image, ART mode and suite
+# on independent Ubuntu 22.04 runners while changing only the AVD core count.
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/android15-16kb-core-count-control.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android15-16kb-core-count-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  app-free:
+    name: App-free ART control (cores=${{ matrix.cores }})
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        cores: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run app-free Settings workload on verified image
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          ART_JIT_MODE: disabled
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis_ps16k
+          cores: ${{ matrix.cores }}
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -memory 4096
+          script: |
+            set -eu
+            mkdir -p "$RUNNER_TEMP/artflow-android15-control"
+            adb shell nproc | tr -d '\r' > "$RUNNER_TEMP/artflow-android15-control/guest-vcpus.txt"
+            test "$(cat "$RUNNER_TEMP/artflow-android15-control/guest-vcpus.txt")" = '${{ matrix.cores }}'
+            bash .github/scripts/diagnose-android15-emulator-only.sh
+      - name: Summarize control without declaring application acceptance
+        if: always()
+        shell: bash
+        run: |
+          echo "## App-free API35 / 16 KB, cores=${{ matrix.cores }}" >> "$GITHUB_STEP_SUMMARY"
+          if test -f "$RUNNER_TEMP/artflow-android15-control/summary.json"; then
+            python3 -m json.tool "$RUNNER_TEMP/artflow-android15-control/summary.json" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Control did not finish collecting evidence." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "A clean app-free control is not application acceptance." >> "$GITHUB_STEP_SUMMARY"
+      - name: Preserve app-free logs, tombstones and image identity
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api35-16kb-app-free-cores-${{ matrix.cores }}
+          path: ${{ runner.temp }}/artflow-android15-control/
+          if-no-files-found: warn
+          retention-days: 14
+
+  full-suite:
+    name: Unmodified 270-case gate (cores=${{ matrix.cores }})
+    runs-on: ubuntu-22.04
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        cores: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Prepare unchanged instrumentation APKs
+        shell: bash
+        run: |
+          set -uo pipefail
+          status=1
+          for attempt in 1 2 3; do
+            echo "Instrumentation build attempt ${attempt}/3"
+            ./gradlew assembleDebug assembleDebugAndroidTest --stacktrace && exit 0
+            status=$?
+            if (( attempt < 3 )); then sleep $((attempt * 5)); fi
+          done
+          exit "$status"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run same instrumentation and minified launch
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          EXPECTED_PAGE_SIZE: '16384'
+          ART_JIT_MODE: disabled
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis_ps16k
+          cores: ${{ matrix.cores }}
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -memory 4096
+          script: |
+            set -eu
+            mkdir -p "$RUNNER_TEMP/artflow-device"
+            adb shell nproc | tr -d '\r' > "$RUNNER_TEMP/artflow-device/guest-vcpus.txt"
+            test "$(cat "$RUNNER_TEMP/artflow-device/guest-vcpus.txt")" = '${{ matrix.cores }}'
+            bash .github/scripts/run-device-tests.sh
+      - name: Verify all declared tests, page size and minified launch
+        if: always()
+        env:
+          EXPECTED_API: '35'
+          EXPECTED_PAGE_SIZE: '16384'
+        shell: bash
+        run: |
+          status=0
+          python .github/scripts/summarize_device_results.py \
+            --source app/src/androidTest/java \
+            --results app/build/outputs/androidTest-results/connected/debug \
+            --evidence app/build/outputs/connected_android_test_additional_output \
+            --launch "$RUNNER_TEMP/artflow-device/minified-launch.txt" \
+            --api "$EXPECTED_API" --page-size "$EXPECTED_PAGE_SIZE" \
+            --revision "$(git rev-parse HEAD)" \
+            --output "$RUNNER_TEMP/artflow-device" || status=$?
+          if test -f "$RUNNER_TEMP/artflow-device/verification.md"; then
+            cat "$RUNNER_TEMP/artflow-device/verification.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$status"
+      - name: Reject recovered attempts as first-attempt reliability evidence
+        if: always()
+        shell: bash
+        run: |
+          if test -d "$RUNNER_TEMP/artflow-device/android15-framework-retry"; then
+            echo "::error::Instrumentation needed framework recovery: not a first-attempt pass"
+            echo "First attempt failed; original and recovered evidence retained." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "No framework recovery directory was recorded." >> "$GITHUB_STEP_SUMMARY"
+      - name: Preserve all device results, APK hashes and original crashes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api35-16kb-full-suite-cores-${{ matrix.cores }}
+          path: |
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
+            app/build/outputs/connected_android_test_additional_output/
+            ${{ runner.temp }}/artflow-device/
+          if-no-files-found: warn
+          retention-days: 14
