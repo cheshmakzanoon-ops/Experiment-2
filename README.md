@@ -110,6 +110,14 @@ The follow-up controls the test's Main queue before advancing virtual time and p
 assertion. Its focused four-case class, full 1,630-case JVM suite and static/lint checks pass locally;
 the three new device cases still require their own successful published-source run.
 
+### Latest device-acceptance status — 31 October 2026
+
+The required eight-job Android CI matrix remains mandatory. [Post-merge run #327](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/41146206986) on `217328f` passed six jobs; the independent Android 15 / 16 KB repeat aborted with an AndroidX class-cast failure and system-process native crashes, while a separate Android 16 tablet case reported a Compose concurrency failure. The primary Android 15 / 16 KB gate passed.
+
+On unchanged application/test source, [run #328](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/41150385563) on `dd44cf7` again **failed first-attempt acceptance** (six of eight jobs passing): the independent Android 15 / 16 KB repeat stopped after 41 passes and two failures, and the Android 16 / 16 KB lane stopped after six passes and one layout failure. The primary Android 15 / 16 KB lane passed all 270 cases and the minified launch.
+
+The independent [31 October 2026 CPU-core comparison](docs/ANDROID15_CORE_COUNT_EXPERIMENT_2026-10-31.md) used GitHub-hosted emulator Actions at verified one and two vCPUs, with no app changes. Two cores passed all 270 cases plus 16 KB and minified verification on its initial execution. One core crashed after 165 passes and one failure; its recovered rerun passed 270/270 but was correctly marked a **failed first attempt**. Changing emulator core count is **not a validated repair**. [Issue #38](https://github.com/cheshmakzanoon-ops/Experiment-2/issues/38) tracks the still-open Android 15 runtime reliability problem, and the separate Android 16 Compose failures require distinct triage. No required tests or acceptance checks were relaxed.
+
 ## Editor workflows
 
 The workspace has a canvas toolbar, size/opacity sidebar, left/right-handed layouts, hide-interface
