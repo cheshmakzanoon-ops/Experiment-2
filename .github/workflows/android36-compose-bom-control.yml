@@ -1,0 +1,124 @@
+name: Android 16 Compose runtime dependency A/B
+
+# Investigation only; does not replace the mandatory 270-case device matrix.
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/android36-compose-bom-control.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: api36-compose-bom-control-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  compose-control:
+    name: API36 ${{ matrix.label }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include:
+          - label: tablet-original-bom
+            bom: '2024.09.03'
+            target: google_apis
+            page_size: 4096
+            profile: pixel_c
+          - label: tablet-stable-bom
+            bom: '2026.09.00'
+            target: google_apis
+            page_size: 4096
+            profile: pixel_c
+          - label: 16kb-original-bom
+            bom: '2024.09.03'
+            target: google_apis_ps16k
+            page_size: 16384
+          - label: 16kb-stable-bom
+            bom: '2026.09.00'
+            target: google_apis_ps16k
+            page_size: 16384
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Prepare exactly one declared Compose BOM variant
+        env:
+          SELECTED_BOM: ${{ matrix.bom }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(grep -Fc 'androidx.compose:compose-bom:2024.09.03' app/build.gradle.kts)" = 1
+          if [[ "$SELECTED_BOM" != '2024.09.03' ]]; then
+            sed -i "s/androidx.compose:compose-bom:2024.09.03/androidx.compose:compose-bom:$SELECTED_BOM/" app/build.gradle.kts
+          fi
+          grep -F "androidx.compose:compose-bom:$SELECTED_BOM" app/build.gradle.kts
+          printf 'Git source: %s\nBOM: %s\n' "$(git rev-parse HEAD)" "$SELECTED_BOM" > "$RUNNER_TEMP/compose-bom.txt"
+          sha256sum app/build.gradle.kts >> "$RUNNER_TEMP/compose-bom.txt"
+      - name: Test focused-result inventory parser
+        run: python3 -m unittest discover -s .github/scripts -p 'test_verify_compose_repetition.py'
+      - name: Build selected Compose version without changing repository source
+        shell: bash
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug assembleDebugAndroidTest --stacktrace --console=plain 2>&1 | tee "$RUNNER_TEMP/compose-build.log"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run 8 focused instrumentations within one emulator boot
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          EXPECTED_PAGE_SIZE: '${{ matrix.page_size }}'
+          ART_JIT_MODE: default
+          COMPOSE_BOM: '${{ matrix.bom }}'
+          COMPOSE_ITERATIONS: '8'
+        with:
+          api-level: 36
+          arch: x86_64
+          target: ${{ matrix.target }}
+          profile: ${{ matrix.profile }}
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -memory 4096
+          script: bash .github/scripts/diagnose-compose-runtime.sh
+      - name: Summarize each first-attempt result
+        if: always()
+        shell: bash
+        run: |
+          echo '## API36 Compose A/B — ${{ matrix.label }}' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Diagnostic only. Repetitions share one boot; no failed invocation is rerun or accepted as a pass.' >> "$GITHUB_STEP_SUMMARY"
+          if test -f "$RUNNER_TEMP/artflow-compose-control/attempts.tsv"; then
+            echo '### Original invocation statuses' >> "$GITHUB_STEP_SUMMARY"
+            echo '~~~text' >> "$GITHUB_STEP_SUMMARY"
+            cat "$RUNNER_TEMP/artflow-compose-control/attempts.tsv" >> "$GITHUB_STEP_SUMMARY"
+            echo '~~~' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Focused instrumentations did not begin; inspect build logs.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Preserve per-invocation reports, APK hashes and crash evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api36-compose-${{ matrix.label }}
+          path: |
+            ${{ runner.temp }}/artflow-compose-control/
+            ${{ runner.temp }}/compose-bom.txt
+            ${{ runner.temp }}/compose-build.log
+          if-no-files-found: warn
+          retention-days: 14
