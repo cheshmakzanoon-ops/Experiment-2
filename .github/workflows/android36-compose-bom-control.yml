@@ -7,6 +7,12 @@ on:
     paths:
       - .github/workflows/android36-compose-bom-control.yml
   workflow_dispatch:
+    inputs:
+      candidate_bom:
+        description: Compose BOM for the candidate diagnostic arm (YYYY.MM.PP)
+        type: string
+        required: false
+        default: '2025.05.01'
 
 permissions:
   contents: read
@@ -30,8 +36,8 @@ jobs:
             target: google_apis
             page_size: 4096
             profile: pixel_c
-          - label: tablet-stable-bom
-            bom: '2026.09.00'
+          - label: tablet-candidate-bom
+            bom: ${{ inputs.candidate_bom || '2025.05.01' }}
             target: google_apis
             page_size: 4096
             profile: pixel_c
@@ -39,8 +45,8 @@ jobs:
             bom: '2024.09.03'
             target: google_apis_ps16k
             page_size: 16384
-          - label: 16kb-stable-bom
-            bom: '2026.09.00'
+          - label: 16kb-candidate-bom
+            bom: ${{ inputs.candidate_bom || '2025.05.01' }}
             target: google_apis_ps16k
             page_size: 16384
 
@@ -63,6 +69,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          [[ "$SELECTED_BOM" =~ ^[0-9]{4}\.[0-9]{2}\.[0-9]{2}$ ]] || { echo 'BOM must be YYYY.MM.PP'; exit 2; }
           test "$(grep -Fc 'androidx.compose:compose-bom:2024.09.03' app/build.gradle.kts)" = 1
           if [[ "$SELECTED_BOM" != '2024.09.03' ]]; then
             sed -i "s/androidx.compose:compose-bom:2024.09.03/androidx.compose:compose-bom:$SELECTED_BOM/" app/build.gradle.kts
