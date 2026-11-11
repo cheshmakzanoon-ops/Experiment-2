@@ -108,6 +108,8 @@ def classpath() -> str:
 
 
 def kotlinc(sources: list[Path], out: Path, extra_cp: str = "") -> tuple[bool, str]:
+    if not sources:
+        return True, ""
     out.mkdir(parents=True, exist_ok=True)
     listing = out.parent / (out.name + ".args")
     listing.write_text("\n".join(str(source) for source in sources))
@@ -118,9 +120,13 @@ def kotlinc(sources: list[Path], out: Path, extra_cp: str = "") -> tuple[bool, s
         "-nowarn",
         f"-Xplugin={plugin}",
         "-cp", classpath() + (":" + extra_cp if extra_cp else ""),
+    ]
+    if extra_cp:
+        command.append(f"-Xfriend-paths={extra_cp}")
+    command.extend([
         "-d", str(out),
         f"@{listing}",
-    ]
+    ])
     result = subprocess.run(command, capture_output=True, text=True, cwd=ROOT)
     return result.returncode == 0, result.stdout + result.stderr
 
@@ -130,6 +136,8 @@ def compile_pruning(sources: list[Path], out: Path, extra_cp: str, label: str) -
     kept = list(sources)
     dropped: list[Path] = []
     for _ in range(40):
+        if not kept:
+            return [], dropped
         ok, log = kotlinc(kept, out, extra_cp)
         if ok:
             return kept, dropped

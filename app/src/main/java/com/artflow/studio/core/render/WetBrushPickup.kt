@@ -17,7 +17,7 @@ import kotlin.math.roundToInt
  * Incremental live rendering retains that history and samples the full source even when only a
  * damage region is displayed. A fallback replay therefore cannot sample just a cropped tail.
  */
-internal object WetBrushPickup {
+object WetBrushPickup {
     data class Sample(
         val x: Float,
         val y: Float,
@@ -34,15 +34,19 @@ internal object WetBrushPickup {
         sample: Sample,
         random: Random,
     ): Int {
-        val dilution = brush.wetDilution.coerceIn(0f, 1f)
+        val dilutionCurve = brush.optionalChannelPressure(sample.pressure, "dynamicsPressureDilutionCurve")
+        val dilution = (brush.wetDilution.coerceIn(0f, 1f) * dilutionCurve).coerceIn(0f, 1f)
         val thinned = Channels.scaleAlpha(color, 1f - dilution)
         if (canvas == null) return thinned
-        val wetness = brush.wetMix.coerceIn(0f, 1f)
+        val wetnessCurve = brush.optionalChannelPressure(sample.pressure, "dynamicsPressureWetnessCurve")
+        val wetness = (brush.wetMix.coerceIn(0f, 1f) * wetnessCurve).coerceIn(0f, 1f)
         // Preserve the older Dilution control's pickup equation for saved brushes.
         val legacyPickup = wetness + (1f - wetness) * DILUTION_PICKUP * brush.dilution.coerceIn(0f, 1f)
         val bleed = brush.bleed.coerceIn(0f, 1f) * brush.channelPressure(sample.pressure, "dynamicsPressureBleedCurve")
         val pickup = (legacyPickup + bleed).coerceIn(0f, 1f) * PICKUP_STRENGTH * attack(brush, sample)
-        val charge = brush.wetCharge.coerceIn(0f, 1f)
+        val chargeCurve = brush.optionalChannelPressure(sample.pressure, "dynamicsPressureCharge")
+        val rawCharge = (brush.wetCharge.coerceIn(0f, 1f) * chargeCurve).coerceIn(0f, 1f)
+        val charge = if (rawCharge < 1f) (rawCharge * kotlin.math.exp(-sample.travelled / (brush.size.coerceAtLeast(1f) * 30f))).coerceIn(0f, 1f) else 1f
         var amount = pickup
         if (charge < 1f) amount = 1f - (1f - amount) * charge
         if (dilution > 0f) amount += (1f - amount) * dilution
@@ -59,7 +63,8 @@ internal object WetBrushPickup {
         brush: BrushParams,
         sample: Sample,
     ): Float {
-        val immediate = brush.wetAttack.coerceIn(0f, 1f)
+        val attackCurve = brush.optionalChannelPressure(sample.pressure, "dynamicsPressureAttackCurve")
+        val immediate = (brush.wetAttack.coerceIn(0f, 1f) * attackCurve).coerceIn(0f, 1f)
         if (immediate >= 1f) return 1f
         val ramp = (sample.travelled / (brush.size.coerceAtLeast(1f) * ATTACK_SIZES)).coerceIn(0f, 1f)
         return immediate + (1f - immediate) * ramp
@@ -72,11 +77,13 @@ internal object WetBrushPickup {
         random: Random,
     ): Int {
         val size = brush.size.coerceAtLeast(1f)
-        val pull = (size * StrokeReach.PULL_SIZES * brush.wetPull.coerceIn(0f, 1f)).coerceAtMost(sample.travelled)
+        val pullCurve = brush.optionalChannelPressure(sample.pressure, "dynamicsPressureWetPullCurve")
+        val pull = (size * StrokeReach.PULL_SIZES * brush.wetPull.coerceIn(0f, 1f) * pullCurve).coerceAtMost(sample.travelled)
         val x = sample.x - sample.directionX * pull
         val y = sample.y - sample.directionY * pull
         val blur = size * StrokeReach.BLUR_SIZES * brush.wetBlur.coerceIn(0f, 1f)
-        val jitter = brush.wetBlurJitter.coerceIn(0f, 1f)
+        val blurJitterCurve = brush.optionalChannelPressure(sample.pressure, "dynamicsPressureBlurJitterCurve")
+        val jitter = (brush.wetBlurJitter.coerceIn(0f, 1f) * blurJitterCurve).coerceIn(0f, 1f)
         val reach = if (blur > 0f && jitter > 0f) blur * (1f + (random.nextFloat() * 2f - 1f) * jitter) else blur
         return if (reach >= 1f) blurred(canvas, x, y, reach) else canvas.getSafe(floor(x).toInt(), floor(y).toInt())
     }

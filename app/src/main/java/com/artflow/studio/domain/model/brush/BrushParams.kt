@@ -202,8 +202,10 @@ data class BrushParams(
         }
 
         // Apply size jitter
-        if (sizeJitter > 0f) {
-            val jitterFactor = 1f + ((random?.nextFloat() ?: 0.5f) * 2f - 1f) * sizeJitter
+        val sizeJitterScale = optionalChannelPressure(pressure, "dynamicsPressureSizeJitterCurve")
+        val effectiveSizeJitter = (sizeJitter * sizeJitterScale).coerceIn(0f, 1f)
+        if (effectiveSizeJitter > 0f) {
+            val jitterFactor = 1f + ((random?.nextFloat() ?: 0.5f) * 2f - 1f) * effectiveSizeJitter
             effectiveSize *= jitterFactor
         }
 
@@ -234,8 +236,10 @@ data class BrushParams(
         }
 
         // Apply opacity jitter
-        if (opacityJitter > 0f) {
-            val jitterFactor = ((random?.nextFloat() ?: 0.5f) * 2f - 1f) * opacityJitter
+        val opacityJitterScale = optionalChannelPressure(pressure, "dynamicsPressureOpacityJitterCurve")
+        val effectiveOpacityJitter = (opacityJitter * opacityJitterScale).coerceIn(0f, 1f)
+        if (effectiveOpacityJitter > 0f) {
+            val jitterFactor = ((random?.nextFloat() ?: 0.5f) * 2f - 1f) * effectiveOpacityJitter
             effectiveOpacity *= 1f + jitterFactor
         }
 
@@ -273,6 +277,19 @@ data class BrushParams(
     ): Float {
         val overall = pressureResponse(pressure)
         return importedAuxiliaryCurves[curve]?.map(overall) ?: overall
+    }
+
+    /**
+     * Resolves an auxiliary curve when present, or returns [defaultFactor] when not configured.
+     */
+    fun optionalChannelPressure(
+        pressure: Float,
+        curve: String,
+        defaultFactor: Float = 1f,
+    ): Float {
+        val mapping = importedAuxiliaryCurves[curve] ?: return defaultFactor
+        val overall = pressureResponse(pressure)
+        return mapping.map(overall)
     }
 
     private fun pressureFactor(

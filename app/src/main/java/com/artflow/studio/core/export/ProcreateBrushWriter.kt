@@ -203,6 +203,9 @@ object ProcreateBrushWriter {
                 DualBrush.Mode.MULTIPLY -> 1
                 DualBrush.Mode.ADD -> 3
                 DualBrush.Mode.SUBTRACT -> 7
+                DualBrush.Mode.COMBINE -> 0
+                DualBrush.Mode.INTENSE_BLEND -> 12
+                DualBrush.Mode.DISPLACE -> 34
             }
         return mapOf("dualBlendMode" to mode.toLong())
     }

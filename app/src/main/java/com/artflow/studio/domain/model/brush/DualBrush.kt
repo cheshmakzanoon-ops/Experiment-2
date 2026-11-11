@@ -22,5 +22,14 @@ data class DualBrush(
 
         /** Both brushes paint. */
         ADD("Add"),
+
+        /** Combine both brushes with normal alpha blending. */
+        COMBINE("Combine"),
+
+        /** High-contrast intense blend between primary and secondary brush dabs. */
+        INTENSE_BLEND("Intense Blend"),
+
+        /** Secondary brush modulates and displaces primary dab coverage. */
+        DISPLACE("Displace"),
     }
 }

@@ -546,14 +546,17 @@ class StrokeRasterizer(
         walk.carried = color
 
         // Scatter offsets each dab; count repeats it along a random perpendicular offset.
-        val most = params.count.coerceIn(1, 32)
-        val jitter = params.countJitter.coerceIn(0f, 1f)
+        val countCurve = params.optionalChannelPressure(pressure, "dynamicsPressureStampCountCurve")
+        val most = (params.count.coerceIn(1, 32) * countCurve).roundToInt().coerceIn(1, 32)
+        val jitterCurve = params.optionalChannelPressure(pressure, "dynamicsPressureStampCountJitterCurve")
+        val jitter = (params.countJitter.coerceIn(0f, 1f) * jitterCurve).coerceIn(0f, 1f)
         // Include both endpoints: a count of 10 at 50% jitter can stamp 5 through 10 times.
         val removable = (jitter * most).toInt().coerceAtMost(most - 1)
         val dabs = if (jitter > 0f && most > 1) most - (random.nextFloat() * (removable + 1)).toInt() else most
         val azimuth = if (params.tiltToRotation) interpolatedAzimuth(previous.tiltY, current.tiltY, t) else 0f
         repeat(dabs) { index ->
-            val scatter = params.scatter.coerceIn(0f, 4f) * params.size
+            val scatterCurve = params.optionalChannelPressure(pressure, "dynamicsPressureShapeScatterCurve")
+            val scatter = params.scatter.coerceIn(0f, 4f) * params.size * scatterCurve
             val jitterX = if (scatter > 0f) ((random.nextFloat() * 2f - 1f) * scatter / 2f) else 0f
             val jitterY = if (scatter > 0f) ((random.nextFloat() * 2f - 1f) * scatter / 2f) else 0f
             val offsetScale = if (dabs == 1) 0f else (index / (dabs - 1f) - 0.5f) * params.size * 0.5f
@@ -904,6 +907,9 @@ class StrokeRasterizer(
                     DualBrush.Mode.MULTIPLY -> own * other
                     DualBrush.Mode.SUBTRACT -> own * (1f - other)
                     DualBrush.Mode.ADD -> own + other - own * other
+                    DualBrush.Mode.COMBINE -> own * (1f - other) + other
+                    DualBrush.Mode.INTENSE_BLEND -> if (other < 0.5f) 2f * own * other else 1f - 2f * (1f - own) * (1f - other)
+                    DualBrush.Mode.DISPLACE -> (own * (0.5f + 0.5f * other)).coerceIn(0f, 1f)
                 }
             val colour = if (own > 0f) primary else second
             return Channels.withAlpha(colour, (alpha * 255f).roundToInt().coerceIn(0, 255))
