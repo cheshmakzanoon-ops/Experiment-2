@@ -106,6 +106,27 @@ class CanvasPreviewControllerTest {
             runCurrent()
         }
 
+    @Test
+    fun ordinaryRefreshFollowingFinishProvisionalDoesNotDowngradeOrDelayCommittedRender() =
+        runTest {
+            val repository = DeferredPreviewRepository()
+            val controller = CanvasPreviewController(repository, backgroundScope, StandardTestDispatcher(testScheduler))
+            controller.refreshProvisional()
+            runCurrent()
+            val pending = repository.started.receive()
+            controller.finishProvisional()
+            controller.refresh()
+            runCurrent()
+            pending.result.complete(PixelBuffer.filled(2, 2, 0xFFFF0000.toInt()))
+            runCurrent()
+            val committed = repository.started.receive()
+            assertEquals(false, committed.provisional)
+            val updated = PixelBuffer.filled(2, 2, 0xFF00FF00.toInt())
+            committed.result.complete(updated)
+            runCurrent()
+            assertSame(updated, controller.preview.value)
+        }
+
     private class DeferredPreviewRepository : CanvasRepository by mock(CanvasRepository::class.java) {
         val started = Channel<Render>(Channel.UNLIMITED)
         var startedCount = 0

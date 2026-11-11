@@ -159,6 +159,9 @@ class CanvasViewModel
         private val _history = MutableStateFlow(HistoryState())
         val history: StateFlow<HistoryState> = _history.asStateFlow()
 
+        private val _contentRevision = MutableStateFlow(0L)
+        val contentRevision: StateFlow<Long> = _contentRevision.asStateFlow()
+
         private val _selection = MutableStateFlow<SelectionMask?>(null)
         val selection: StateFlow<SelectionMask?> = _selection.asStateFlow()
 
@@ -369,7 +372,9 @@ class CanvasViewModel
             startTimelapse()
             observationJob =
                 viewModelScope.launch(editorErrors) {
+                    _contentRevision.value = canvasRepository.contentRevision
                     canvasRepository.observeCanvasInvalidation().collect { event ->
+                        _contentRevision.value = canvasRepository.contentRevision
                         when (event) {
                             is CanvasInvalidationEvent.LayersChanged -> refreshLayers()
                             is CanvasInvalidationEvent.FrameChanged -> {

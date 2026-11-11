@@ -33,6 +33,8 @@ class CanvasPreviewController(
     private var generation = 0L
     private var growing = false
 
+    private var pendingMode: Mode? = null
+
     /** Ordinary Reference updates retain the existing settle delay. */
     fun refresh() {
         submit(Mode.SETTLED)
@@ -49,9 +51,22 @@ class CanvasPreviewController(
     }
 
     private fun submit(mode: Mode) {
-        if (mode != Mode.PROVISIONAL || !growing) generation++
-        growing = mode == Mode.PROVISIONAL
-        requests.trySend(Request(mode, generation))
+        val effectiveMode =
+            when {
+                mode == Mode.COMMITTED -> Mode.COMMITTED
+                pendingMode == Mode.COMMITTED && mode == Mode.SETTLED -> Mode.COMMITTED
+                else -> mode
+            }
+        val shouldIncrement =
+            when {
+                pendingMode == Mode.COMMITTED && mode == Mode.SETTLED -> false
+                effectiveMode == Mode.PROVISIONAL && growing -> false
+                else -> true
+            }
+        if (shouldIncrement) generation++
+        growing = effectiveMode == Mode.PROVISIONAL
+        pendingMode = effectiveMode
+        requests.trySend(Request(effectiveMode, generation))
         if (worker?.isActive == true) return
         worker = scope.launch { processRequests() }
     }
@@ -62,7 +77,10 @@ class CanvasPreviewController(
             while (request.mode == Mode.SETTLED) {
                 request = withTimeoutOrNull(SETTLE_MS) { requests.receive() } ?: break
             }
-            if (request.generation != generation) continue
+            if (pendingMode == request.mode) {
+                pendingMode = null
+            }
+            if (request.generation != generation && request.mode == Mode.PROVISIONAL) continue
             val frame =
                 if (request.mode == Mode.PROVISIONAL) {
                     repository.compositePreview()
@@ -71,7 +89,9 @@ class CanvasPreviewController(
                 }
             if (frame != null) {
                 val preview = withContext(renderDispatcher) { shrink(frame) }
-                if (request.generation == generation) _preview.value = preview
+                if (request.mode != Mode.PROVISIONAL || request.generation == generation) {
+                    _preview.value = preview
+                }
             }
             val maps = mutableMapOf<MaterialChannel, PixelBuffer>()
             MaterialChannel.entries.filter { it.isScalar }.forEach { channel ->
@@ -79,7 +99,9 @@ class CanvasPreviewController(
                     maps[channel] = withContext(renderDispatcher) { shrink(pixels) }
                 }
             }
-            if (request.generation == generation) _materialMaps.value = maps
+            if (request.mode != Mode.PROVISIONAL || request.generation == generation) {
+                _materialMaps.value = maps
+            }
             // One serial worker bounds raster work; a burst of moves retains only the latest request.
             if (request.mode == Mode.PROVISIONAL && request.generation == generation) delay(PROVISIONAL_INTERVAL_MS)
         }

@@ -200,6 +200,7 @@ fun CanvasScreen(
     val input by viewModel.input.collectAsState()
     val layers by viewModel.layers.collectAsState()
     val history by viewModel.history.collectAsState()
+    val contentRevision by viewModel.contentRevision.collectAsState()
     val settings by viewModel.settings.collectAsState()
     val canPasteFrame by viewModel.frameClipboard.canPaste.collectAsState()
     val timeline by viewModel.timeline.collectAsState()
@@ -289,7 +290,7 @@ fun CanvasScreen(
     var showModel by rememberSaveable(projectId) { mutableStateOf(true) }
     var proof by rememberSaveable(projectId) { mutableStateOf(CmykProof.Mode.OFF) }
     var viewFilter by rememberSaveable(projectId) { mutableStateOf(ViewFilter.OFF) }
-    LaunchedEffect(showReference, referenceCanvas, history, modelMesh, showModel) {
+    LaunchedEffect(showReference, referenceCanvas, contentRevision, history, modelMesh, showModel) {
         val referenceShowsCanvas = showReference && referenceCanvas
         val modelShown = modelMesh != null && showModel
         if (referenceShowsCanvas || modelShown) viewModel.canvasPreview.refresh()
