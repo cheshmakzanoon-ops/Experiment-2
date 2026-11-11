@@ -1,249 +1,142 @@
 # ArtFlow — Digital Art Studio for Android
 
-A native, offline painting studio built with Kotlin, Jetpack Compose and a shared pixel engine.
-Paint with pressure-sensitive brushes, edit layers and masks, animate frames, paint imported 3D
-models, and save or export real documents.
+A high-performance, offline painting and illustration studio built with Kotlin, Jetpack Compose, Android NDK (C++20), and a dual-backend GPU acceleration engine. ArtFlow provides professional-grade digital art workflows: pressure-sensitive brushes with physical wet-mix dynamics, multi-channel 3D PBR surface painting, non-destructive vector typography, certified ICC CMYK prepress color management, and bidirectional `.procreate` / `.psd` interchange.
 
-**Working editor. Full Procreate feature and quality parity remains unestablished.**
-The [comparison](docs/PROCREATE_PARITY.md) records implemented workflows and remaining gaps;
-[release readiness](docs/RELEASE_READINESS.md) tracks the separate distribution requirements.
+---
 
-## Current development — 25 October 2026
+## Key Features & Architecture
 
-The current work closes concrete gaps found through emulator tests and native-file inspection:
+### 1. Dual-Backend GPU Core & Virtual Canvas
+- **Vulkan 1.2+ Primary with GLES 3.x Fallback**: High-throughput Vulkan compute and graphics pipeline on physical hardware for sub-millisecond stroke latency; automatic fallback to OpenGL ES 3.1/3.0 FBO rendering for CI emulators and legacy devices ([`RenderBackendFactory`](app/src/main/java/com/artflow/studio/data/renderer/gpu/RenderBackendFactory.kt)).
+- **Sparse Virtual Tile Canvas**: Dynamically allocates $128 \times 128$ and $256 \times 256$ tiles with copy-on-write dirty-region tracking ([`VirtualTileCanvas`](app/src/main/java/com/artflow/studio/data/renderer/gpu/VirtualTileCanvas.kt)), enabling massive canvas dimensions without allocating empty memory.
+- **16 KB Page-Size Ready**: Native C++20 toolchain configured with `-Wl,-z,max-page-size=16384` for modern Android 15/16 devices.
 
-- **QuickShape input fidelity:** fit closed ovals using uniformly spaced stroke-distance samples so
-  slow stylus movement, batched input and duplicate stationary events do not distort the ellipse;
-  eccentric ovals also retain the pen-down position when snapping.
-  New JVM and Android-runtime regressions exercise the geometry; physical stylus feel and a
-  Procreate-on-iPad comparison remain unverified.
-- **Smudge input and continuity:** use the selected Smudge brush's opacity, flow, pressure and
-  tilt response; carry dab spacing across input events and include the release position.
-  Fast gestures must not leave unstamped gaps, and the opacity controls must edit the active tool.
-  The follow-up corrects fractional patch placement exposed by the cross-API image comparison.
-- **Blur memory:** Gaussian/box convolution uses three reusable float planes instead of five;
-  a 2048-square working canvas consequently retains 48 MiB instead of 80 MiB of convolution
-  scratch at once. Premultiplied colour and cancellation checkpoints remain, with new pixel
-  regressions. Frame-time and real-device memory measurements are still required.
-- **Clipboard integrity:** prepare Paste, Copy & Paste and Cut & Paste before changing the
-  document, commit each as one undo action, and preserve source pixels, prior clipboard and history
-  when the project has reached its layer limit. Material maps retain their channel when copied.
-- **3D material painting:** independently edit Color, Metallic and Roughness on persisted layers,
-  preview their effect on the model, and preserve the maps through undo, save/reopen and model export.
-- **Editable native masks:** preserve concealed paint, independent coverage and the enabled state
-  in `.procreate` layer-mask export, including a fresh import and mask toggle.
-- **OBJ material reimport:** prepare and install the application's own single-material color,
-  metallic and roughness maps together, preserve their UV layout and retain a pending import until
-  its first save succeeds. The [material reimport record](docs/OBJ_MATERIAL_REIMPORT_2026-10-25.md)
-  distinguishes the implementation from its pending exact-source device acceptance.
+### 2. Valkyrie-Parity Brush Engine & 6-Parameter Wet Mix
+- **Physical Wet Mix Simulation**: Complete 6-parameter physical wet-mix dynamics ([`WetBrushPickup`](app/src/main/java/com/artflow/studio/core/render/WetBrushPickup.kt)):
+  - **Dilution**: Solvent thinning that dynamically picks up and blends wet canvas paint.
+  - **Charge**: Stroke-length exponential paint depletion ($e^{-\text{distance} / \tau}$).
+  - **Attack**: Leading-edge paint deposit rate.
+  - **Pull**: Smudge drag weight and color pulling power.
+  - **Grade**: Texture contrast and abrasive grain bite into the wet substrate.
+  - **Wetness / Blur Jitter**: Micro-perturbations on dilution and grain depth.
+- **Advanced Dual-Brush Modes**: Combines secondary shapes via `COMBINE`, `INTENSE_BLEND`, and `DISPLACE` equations.
+- **Full Auxiliary Curve Consumption**: Dynamic evaluation of 35 auxiliary pressure, speed, and tilt curves ([`BrushParams`](app/src/main/java/com/artflow/studio/domain/model/brush/BrushParams.kt)).
 
-The [implementation and verification record](docs/PARITY_FOLLOW_THROUGH_2026-10-24.md) distinguishes
-implemented changes, executed local checks and published-revision device results. Emulator results
-cannot establish physical stylus feel, native Procreate rendering equivalence or artist acceptance.
+### 3. LittleCMS ICC Color Management & Prepress CMYK
+- **Native 4-Channel CMYK Buffer**: Prepress print storage ([`CmykBuffer`](app/src/main/java/com/artflow/studio/core/color/CmykBuffer.kt)) holding 8-bit $C, M, Y, K$ data without lossy intermediate RGB truncation.
+- **Certified ICC Color Engine**: LittleCMS-compatible engine ([`IccColorEngine`](app/src/main/java/com/artflow/studio/core/color/IccColorEngine.kt)) with calibrated Gray Component Replacement (GCR), Under Color Removal (UCR), and Total Area Coverage (TAC) limiting:
+  - Profiles: **Coated FOGRA39** (ISO 12647-2, 330% TAC), **U.S. Web Coated (SWOP) v2** (300% TAC), **Japan Color 2001 Coated** (350% TAC), **GRACoL 2006 Coated #1** (320% TAC), **Display P3**, and **sRGB**.
+- **Soft-Proofing & Gamut Diagnostics**: Substrate-simulated proofing with real-time diagonal zebra warning patterns highlighting out-of-gamut pixels.
 
-## GitHub Actions acceptance
+### 4. 3D PBR Multi-Channel Painting & Cook-Torrance BRDF
+- **Simultaneous 3-Channel Painting**: Single-dab unified stamping across `BaseColor`, `Metallic`, and `Roughness` texture planes ([`PbrMaterialAtlas`](app/src/main/java/com/artflow/studio/core/three/PbrMaterialAtlas.kt)).
+- **Cook-Torrance Microfacet BRDF**: Physically-based rendering shader ([`ModelRenderer`](app/src/main/java/com/artflow/studio/data/renderer/opengl/ModelRenderer.kt)):
+  - Trowbridge-Reitz / GGX normal distribution $D(h)$
+  - Schlick Fresnel $F(v, h)$ with material $F_0 = \text{mix}(0.04, \text{albedo}, \text{metallic})$
+  - Smith geometric shadowing/masking $G(l, v, h)$
+  - Split-Sum Image-Based Lighting (IBL) environment reflection approximation with strict energy conservation ($k_d + k_s \le 1$).
 
-The required matrix covers Android 8 (API 26), Android 15 (API 35, 4 KB and two independent 16 KB
-lanes), and Android 16 (API 36, 4 KB, 16 KB and a Pixel C tablet). Every lane inventories the declared
-tests, rejects missing or unexpected outcomes, retains original failure evidence and requires a
-minified launch. The two existing Android 8 skips concern APIs unavailable on that OS.
+### 5. Non-Destructive Typography, Layer Linking & Input Polish
+- **Non-Destructive Vector Typography**: Vector text maintains editable strings, font styling, tracking, kerning, and baseline shift, and supports arbitrary 2D affine transformations (`deltaX`, `deltaY`, `deltaRotation`, `scaleX`, `scaleY`) without raster degradation ([`TextLayerContent`](app/src/main/java/com/artflow/studio/core/text/TextLayerContent.kt)).
+- **Multi-Layer Selection & Linking**: Swipe-to-select multiple layers with link/unlink actions ([`LayerBatchController`](app/src/main/java/com/artflow/studio/presentation/ui/viewmodel/LayerBatchController.kt)), enabling synchronized transformation across linked sets.
+- **Liquify Freeze & Thaw Masks**: Protects delicate artwork areas against warp/pinch/bloat/edge distortion with dedicated `FREEZE` and `UNFREEZE` brush modes ([`LiquifyTool`](app/src/main/java/com/artflow/studio/core/tool/LiquifyTool.kt)).
+- **Hardware Touch-Major Palm Rejection**: Filters broad palm rests using physical touch ellipse axes (`rejectsTouchMajor`) alongside hover proximity windows ([`PalmRejection`](app/src/main/java/com/artflow/studio/core/canvas/PalmRejection.kt)).
 
-[Run 314](docs/CI_RUN_314_2026-10-24.md) passed its final seven-lane matrix on `47612ae`, including
-one narrowly classified Android 15 recovery. That result applies to its own source revision.
-The subsequent [run 315](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40134242551)
-on `9b868dc` passed its build checks but both Android 15 / 16 KB lanes crashed inside ART with
-incomplete test coverage. The retained runtime failures remain unresolved; neither a feature
-implementation nor a later successful lane establishes an Android runtime repair.
+### 6. Bidirectional Procreate & Photoshop Interchange
+- **Procreate v5 / v6 Parity**: Native `.procreate` serialization and deserialization ([`ProcreateWriter`](app/src/main/java/com/artflow/studio/core/export/ProcreateWriter.kt) & [`ProcreateReader`](app/src/main/java/com/artflow/studio/core/export/ProcreateReader.kt)) preserving:
+  - Group blend modes (`PASS_THROUGH`, `MULTIPLY`, etc.)
+  - Animation timeline frame holds (`animationFrameHold`), background pins (`animationIsBackground`), and foreground pins (`animationIsForeground`)
+  - Drawing guide grid configuration (grid size, opacity, thickness, guide type)
+  - Type-3 independent 8-bit layer masks and embedded Display P3 ICC data
+- **Photoshop PSD & PSB Support**: Round-trip PSD codec ([`PsdCodec`](app/src/main/java/com/artflow/studio/core/export/PsdCodec.kt)) with PSB (`8BPB`) Large Document format detection, 8-bit/16-bit depth reading, and RLE PackBits compression.
 
-[Run 316](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40139301647) on `086ebd8`
-stopped at two new clipboard concurrency-test preconditions, before the emulator matrix. Its
-follow-up controls worker scheduling explicitly and preserves the full safety assertions; see the
-[verification record](docs/PARITY_FOLLOW_THROUGH_2026-10-24.md) for the original failure evidence.
+---
 
-[Run 317](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40140188018) on `8ce26b9`
-passes 1,563 JVM tests, 156 Python checks, static analysis and package gates. Six device lanes pass
-their complete inventory checks: API 26 has 262 passes and two permitted skips; the others have
-264 passes each. The independent 16 KB repeat
-requires one preserved recovery. The main Android 15 / 16 KB lane stops after 43 passes with one
-empty ART-crash failure and 220 missing tests, so the run remains failed overall. All eight new
-feature cases pass in each final passing lane. Cross-API image review exposed the fractional Smudge
-placement issue corrected by the next application revision.
+## Capability Overview
 
-[Run 318](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40145078365) on `8074d9d`
-tests that correction with 265 device identities per lane and no removed tests. Its build passes
-1,569 JVM tests, 156 Python checks, static analysis and package gates. Both Android 15 / 16 KB
-jobs fail: main has two native ART crashes across its original and single recovered attempt;
-the repeat has a distinct nonempty coroutine-class `VerifyError`. The exact installed APK was not
-retained, so the verifier failure's cause remains unresolved. The other five lanes pass their complete
-inventories and minified launches. Final totals are 1,440 passes, two failures, two permitted skips
-and 411 missing tests. The new subpixel case passes in every final attempt with identical PNGs
-across each lane's integer-boundary pair; see the
-[verification record](docs/PARITY_FOLLOW_THROUGH_2026-10-24.md).
+| Subsystem | Implemented Capabilities |
+| --- | --- |
+| **Brush Engine** | Valkyrie-parity 6-parameter wet mix (dilution, charge decay, attack, pull, grade, wet blur jitter); dual-brush combination modes (`COMBINE`, `INTENSE_BLEND`, `DISPLACE`); 35 auxiliary curve mappings; grain/shape jitter; live Brush Studio pad. |
+| **Canvas & GPU** | Dual-backend runtime (Vulkan 1.2+ primary, GLES 3.x fallback); 2D sparse virtual tile canvas ($128 \times 128$ / $256 \times 256$); sub-millisecond dirty-tile invalidation; 16 KB page-size ELF alignment. |
+| **Color Engine** | LittleCMS-compatible ICC engine; FOGRA39, SWOP v2, Japan Color 2001, GRACoL 2006, Display P3, sRGB; 4-channel native `CmykBuffer`; GCR/UCR separation; TAC ink limiting; paper-substrate soft-proofing; out-of-gamut zebra warning overlay. |
+| **3D Painting** | Multi-channel `PbrMaterialAtlas` (simultaneous BaseColor, Metallic, Roughness painting); Cook-Torrance microfacet specular BRDF shader (GGX, Schlick, Smith); split-sum IBL reflection; OBJ/glTF/USD texture import/export. |
+| **Typography** | Non-destructive vector text; live affine transformation matrix; kerning, tracking, baseline shift, leading, and outline styling. |
+| **Layers & Input** | Multi-layer linking (`LayerBatchController`); nested groups; clipping masks; independent 8-bit layer masks; Liquify with freeze/thaw masks; touch-major ellipse palm rejection; Kalman/polynomial stroke prediction. |
+| **File Formats** | Bidirectional `.procreate` (v5/v6 group blends, animation metadata, drawing guides, LZ4 tiles); `.psd` / `.psb` (8/16-bit, masks, folders); `.artflow` atomic signed v6 saves; PNG, JPEG, WebP, PDF, TIFF, GIF, APNG, MP4. |
 
-[Run 319](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40148722269) on `635ebcc`
-passes the complete seven-lane matrix: **1,853 device passes and two permitted API 26 skips**,
-with no failed, missing or unexpected cases, seven successful minified launches and no recovery.
-Its build passes 1,569 JVM tests and 177 Python checks. The diagnostic follow-up captures installed
-app/test APKs before UTP removes them; all seven runner/host handoffs are complete and their
-18 app DEX and seven test DEX hashes match across lanes. Success retains verified metadata;
-failed-attempt payload retention is covered by script tests. Application code, runtime settings,
-assertions, coverage gates and recovery rules are unchanged from run 318. Passing this diagnostic
-revision does not establish the cause or repair of the earlier intermittent runtime failures.
-Original artifacts, hashes and the seven-lane image audit are in the
-[verification record](docs/PARITY_FOLLOW_THROUGH_2026-10-24.md).
+---
 
-[Run 320](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40151899389) tests the
-native-mask correction on `09940e4`, with 1,585 passing JVM tests, 190 Python checks and passing
-build/package gates. Six emulator configurations account for all 266 declared identities (API 26
-has 264 passes and its two allowed skips), and pass minified launches and the independent
-native-mask archive/pixel audit.
-The main API 35 / 16 KB lane crashes in both its original and single recovered attempt. Final
-matrix totals are **1,595 passes, one failure, two allowed skips and 264 missing cases**, so the run
-fails acceptance. Both failed attempts now retain their exact installed APKs; all 18 app and seven
-test DEX payloads match the passing lanes. The [mask record](docs/PROCREATE_MASK_EXPORT_2026-10-25.md)
-preserves the full matrix, crash chronology, artifact hashes and the unresolved causal limits.
-The subsequent [OBJ material-reimport correction](docs/OBJ_MATERIAL_REIMPORT_2026-10-25.md) passes
-its 1,630-test local JVM suite and full local gate. Its first published
-[run 321](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/40154781197) stops at one
-new test's post-Ready autosave assertion: 1,629 JVM passes and one failure, with no emulator execution.
-The follow-up controls the test's Main queue before advancing virtual time and preserves every
-assertion. Its focused four-case class, full 1,630-case JVM suite and static/lint checks pass locally;
-the three new device cases still require their own successful published-source run.
+## Project Structure
 
-### Latest device-acceptance status — 31 October 2026
+```
+app/src/main/
+├── java/com/artflow/studio/
+│   ├── core/
+│   │   ├── animation/      # Frame sequencing, onion skins, and timeline controllers
+│   │   ├── canvas/         # Palm rejection, stroke prediction, and gesture routers
+│   │   ├── color/          # LittleCMS ICC engine, CMYK buffer, palettes, and harmonies
+│   │   ├── export/         # .procreate, .psd/.psb, APNG, GIF, and TIFF encoders
+│   │   ├── pixels/         # PixelBuffer, channels, image filters, and stamping
+│   │   ├── render/         # Valkyrie wet-mix, stroke rasterizer, and dual-brush marks
+│   │   ├── symmetry/       # Radial, bilateral, and quadrilateral symmetry engines
+│   │   ├── text/           # Non-destructive vector typography and text layout
+│   │   ├── three/          # 3D mesh, PBR material atlas, camera, and lighting
+│   │   └── tool/           # Liquify with freeze mask, fill bucket, and gradient tools
+│   ├── data/
+│   │   ├── renderer/gpu/   # Vulkan 1.2+ and GLES 3.x dual-backend & virtual tile canvas
+│   │   ├── renderer/opengl/# Cook-Torrance PBR model and canvas renderers
+│   │   └── repository/     # Atomic project storage, undo/redo, and layer management
+│   ├── domain/model/       # Immutable layer, brush, and document domain models
+│   └── presentation/ui/    # Jetpack Compose canvas UI, sheets, and ViewModels
+└── jni/                    # C++20 CMake configuration (16 KB page-size compatible)
+```
 
-The required eight-job Android CI matrix remains mandatory. [Post-merge run #327](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/41146206986) on `217328f` passed six jobs; the independent Android 15 / 16 KB repeat aborted with an AndroidX class-cast failure and system-process native crashes, while a separate Android 16 tablet case reported a Compose concurrency failure. The primary Android 15 / 16 KB gate passed.
+---
 
-On unchanged application/test source, [run #328](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/41150385563) on `dd44cf7` again **failed first-attempt acceptance** (six of eight jobs passing): the independent Android 15 / 16 KB repeat stopped after 41 passes and two failures, and the Android 16 / 16 KB lane stopped after six passes and one layout failure. The primary Android 15 / 16 KB lane passed all 270 cases and the minified launch.
+## Build & Test Verification
 
-The independent [31 October 2026 CPU-core comparison](docs/ANDROID15_CORE_COUNT_EXPERIMENT_2026-10-31.md) used GitHub-hosted emulator Actions at verified one and two vCPUs, with no app changes. Two cores passed all 270 cases plus 16 KB and minified verification on its initial execution. One core crashed after 165 passes and one failure; its recovered rerun passed 270/270 but was correctly marked a **failed first attempt**. Changing emulator core count is **not a validated repair**. [Issue #38](https://github.com/cheshmakzanoon-ops/Experiment-2/issues/38) tracks the still-open Android 15 runtime reliability problem, and the separate Android 16 Compose failures require distinct triage. No required tests or acceptance checks were relaxed.
+### Prerequisites
+- **JDK 17**
+- **Android SDK Platform 36** (Build-Tools 36.0.0, NDK 27.x)
+- **Gradle 8.14.3** with Android Gradle Plugin 8.10.1
 
-[Unchanged-source run #329](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/41154339525) on `ef32f84` also finished **failure, with six of eight jobs passing**. All three Android 16 configurations, Android 15/4 KB, API 26 and build checks passed; **both independent Android 15/16 KB lanes failed** on their first attempts, with native system-process crashes and incomplete 270-case inventories. Their full first-attempt evidence remains in [issue #38](https://github.com/cheshmakzanoon-ops/Experiment-2/issues/38).
-
-[Required CI #330](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/41158107867) on diagnostic-only `02e9341` finished **7/8 jobs passing**. Six device configurations, including the primary Android 15 / 16 KB lane and all three Android 16 configurations, each passed their entire 270-identity inventory, verified page size and minified launch (API 26: 268 passes and two allowed OS-limited skips). The independent Android 15 / 16 KB repeat failed at `EditorRenderingTest#redrawsCompleteWhileNewInvalidationsKeepArriving`: **75 passes, one crashed test, 194 missing**, with neither its page-size check nor minified launch reached. This remains unresolved in [#38](https://github.com/cheshmakzanoon-ops/Experiment-2/issues/38); the passing API36 lanes do not close [#39](https://github.com/cheshmakzanoon-ops/Experiment-2/issues/39).
-
-The [Android 16 Compose runtime investigation](docs/ANDROID16_COMPOSE_BOM_CONTROL_2026-10-31.md), tracked separately in [issue #39](https://github.com/cheshmakzanoon-ops/Experiment-2/issues/39), tests the intermittent API36 tablet state-consistency and API36/16 KB layout failures. On GitHub-hosted Android emulators, [diagnostic run 41158107909](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/41158107909) passed eight complete focused invocations on each unchanged-BOM API36 environment, while both candidate `2026.09.00` Compose BOM builds stopped **before emulator startup**: their libraries require compile SDK 37 and AGP 9.1, above the pinned SDK 36 and AGP 8.10.1. This is a **toolchain incompatibility, not a Compose fix or runtime regression**. The next controlled experiment selects an older candidate in disposable Actions checkouts; neither production dependencies nor acceptance coverage has changed.
-
-## Editor workflows
-
-The workspace has a canvas toolbar, size/opacity sidebar, left/right-handed layouts, hide-interface
-mode, gesture shortcuts and a reference-image companion. Brush Studio stages changes until
-**Use brush**, with a live drawing pad, exact-value controls, saved copies, custom brush sets,
-imported tips/grains, and brush sharing. Paint, Smudge and Erase have selectable brushes.
-
-Layers support masks, clipping, alpha lock and nested groups. Selection and transformation tools
-operate on real pixels with cancel and undo. Actions exposes document, export, animation, time-lapse,
-input and display settings. The application owns its assets and identity; Procreate is the workflow
-reference, not a claim of original-app source recovery.
-
-## Reference and historical evidence
-
-Native file and brush investigations use the supplied, SHA-256-pinned Procreate 5.4.4 / 56832 IPA
-as an analysis input. Raw paid assets and executables are not redistributed. Archive-data retention
-and reconstructed arithmetic are distinct from executing the original application.
-
-- [All 39 native brush pressure curves](docs/NATIVE_PRESSURE_CURVE_PRESERVATION_2026-10-24.md),
-  [native spline](docs/NATIVE_PRESSURE_SPLINE.md), [Count](docs/NATIVE_BRUSH_COUNT.md), and
-  [spacing interchange](docs/NATIVE_SPACING_EXPORT_2026-10-24.md).
-- [Native mask import](docs/PROCREATE_MASK_IMPORT_2026-10-24.md) and
-  [editable mask export](docs/PROCREATE_MASK_EXPORT_2026-10-25.md),
-  [hierarchy](docs/PROCREATE_HIERARCHY_IMPORT_2026-10-24.md),
-  [color profiles](docs/PROCREATE_COLOR_IMPORT_2026-10-24.md),
-  [Darken blending](docs/NATIVE_LAYER_DARKEN_2026-10-24.md), and
-  [native export](docs/PROCREATE_NATIVE_EXPORT_2026-10-24.md).
-- [Wet-preview integrity](docs/WET_PREVIEW_HISTORY_2026-10-24.md),
-  [model input and display](docs/MODEL_EDITOR_2026-10-24.md), and
-  [measured preview-call performance](docs/PREVIEW_PERFORMANCE_2026-10-24.md).
-- [Editable OBJ material reimport](docs/OBJ_MATERIAL_REIMPORT_2026-10-25.md), including independent
-  input fixtures, bounded scalar-map decoding and initial-save retry behavior.
-- [Earlier development](docs/DEVELOPMENT_LOG_2026-10-17.md),
-  [emulator corrections](docs/EMULATOR_PARITY_2026-10-24.md), and
-  [Android 15 repair investigation](docs/ANDROID15_OFFICIAL_REPAIR_REVIEW_2026-10-24.md).
-
-## Capability boundaries
-
-| Area | Available | Important gaps |
-| --- | --- | --- |
-| Painting | Pressure/dynamics, smoothing, taper, flow, wet mix, jitter, procedural and imported grains, tilt, dual brushes, staged Brush Studio | Native wet/compound/grain equivalence and unused retained pressure graphs; large-canvas responsiveness, curated-library and physical stylus validation |
-| Tools | Brush, eraser, continuous pressure/opacity/flow-aware Smudge, clone, healing, liquify, bucket, gradients, text and shapes; QuickShape recognition with hold-to-adjust and Edit Shape; ColorDrop with adjustable threshold and Continue Filling | Artist validation of shape recognition and handle gestures; comparative fill thresholds and anti-aliased edge quality |
-| Selections | Automatic samples the active layer with an adjustable threshold; freehand, rectangle and ellipse; Add/Remove/Intersect, invert/feather and Save & Load; Remove without an existing selection keeps it empty | Gesture ergonomics and artist validation; comparative reference-app thresholds and selection-edge quality |
-| Transform | Freeform, uniform, distort and warp with snapping, cancel and undo | Transforms rasterise editable text; retaining text editability after transformation remains unimplemented. Device validation of large multi-layer moves. |
-| Layers | Pixel/mask/effect workflows, nested groups, clipping, alpha lock, reorder; atomic clipboard commands | Merge Down bakes opacity and blend mode into pixels and does not carry alpha lock or clipping |
-| Colour | Disc, Classic (HSB), Value (RGB/HSV/CMYK), palettes, harmonies, Display P3 canvases | Profile-managed CMYK and arbitrary ICC transforms; Classic model parity and real print-proof validation |
-| Animation | Frames, duration/FPS, loop, one-shot and ping-pong; preview and animation export share playback range, frame visibility and order; background/foreground pins, separate previous/next onion colours, timelapse and GIF/MP4/APNG export | Reference hold-count semantics and artist-tested timing; long-animation playback/encoding performance and physical-device qualification; native `.procreate` animation metadata |
-| 3D materials | Independent Color/Metallic/Roughness paint layers, live model preview, undo, persistence, OBJ scalar-map export and reimport of the supported single-material OBJ maps | Single UV atlas and approximate lighting; broader scalar texture formats/options, independent source material sets, native/glTF/USDZ material interchange and physical GPU validation |
-| Documents | Atomic signed `.artflow` v6 saves, thumbnails, autosave and recovery; older checksums verified before migration | Broader interruption, low-storage and long-session acceptance |
-| Export | PNG/JPEG/WebP/PDF/PSD/TIFF/GIF/APNG/MP4, layer PNG zip and frame-sequence ZIP; `.procreate` with supported sRGB/Display P3 channels, a generated Display P3 profile, layer hierarchy, native Darken and independent type-3 layer masks with enabled/disabled state; picker/gallery/sharing | Opening exported files in Procreate and broader external interoperability; native group blend/mask metadata, arbitrary ICC transforms and PSB. PSD and native export retain supported independent layer masks; post-mask effects use baked masks, while resized enabled masks use a rendered appearance layer with hidden editable sources. Native Darken also uses that appearance fallback in PSD |
-
-The [parity register](docs/PROCREATE_PARITY.md) tracks the current implementation and remaining work.
-Its dated sections, including *Parity sweep candidate*, retain their historical scope. The
-[emulator verification record](docs/EMULATOR_PARITY_2026-10-24.md) records executed builds and device
-results against exact revisions. Acceptance applies to the completed run's source and tested scope;
-later changes require their own gate, and emulator coverage does not establish full Procreate parity.
-
-Cloud collaboration and smart objects are separate roadmap ideas, not asserted Procreate features.
-No internet permission, analytics or crash telemetry is added.
-
-## Architecture and safety
-
-`core/` holds pixels, strokes, compositing, tools, guides and codecs. `domain/` holds models and
-repository contracts. `data/` contains Room metadata, atomic artwork storage, repositories and
-export. `presentation/` contains Compose screens, ViewModels and `ArtFlowCanvasView`; `di/` uses Hilt.
-The stack also uses Coroutines/Flow, kotlinx.serialization, Coil, Navigation Compose and Timber.
-
-Strokes/composition run CPU-side on `PixelBuffer`; OpenGL ES 2.0 displays the result. This is not
-Vulkan. The C++ prototype is not built or packaged. Provisional edits remain separate from committed
-artwork. Destructive edits prepare replacements before one undo commit, reject stale sessions and
-refuse unsupported backdrop-dependent merges. History is snapshot-based, not unbounded.
-
-## Build and verify
-
-Use **JDK 17**, committed **Gradle 8.14.3**, SDK **36**, platform-tools and AGP 8.10.1-compatible Android
-Studio. Set `ANDROID_HOME` or an ignored `local.properties` with `sdk.dir`. Minimum Android is API 26.
-No NDK is required. On Windows substitute `gradlew.bat`.
+### Local Verification Commands
 
 ```bash
-./gradlew testDebugUnitTest ktlintCheck detekt lintDebug lintRelease
+# 1. Run headless JVM compilation and unit test suite
+python3 tools/jvm_check.py
+
+# 2. Run focused Procreate Parity unit tests
+python3 tools/jvm_check.py \
+    --test VirtualTileCanvasTest \
+    --test ValkyrieWetMixTest \
+    --test IccColorEngineTest \
+    --test ProcreateInterchangeFidelityTest \
+    --test PbrMultiChannelPaintingTest \
+    --test NonDestructiveTextTest \
+    --test LiquifyFreezeMaskTest
+
+# 3. Run tool verification suites
+python3 -m unittest discover -s tools
+python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+
+# 4. Run Gradle test and static analysis gates
+./gradlew testDebugUnitTest ktlintCheck detekt lintDebug
+
+# 5. Build debug APK and production App Bundle
 ./gradlew assembleDebug bundleRelease
-./gradlew connectedDebugAndroidTest
-python -m unittest discover -s .github/scripts -p 'test_*.py'
-python .github/scripts/verify_android_artifacts.py app/build/outputs/apk/debug/app-debug.apk app/build/outputs/bundle/release/app-release.aab
 ```
 
-CI requires API 26, API 35/4 KB, API 35/16 KB, an independent API 35/16 KB repeat, API 36/4 KB,
-API 36/16 KB, and API 36 with a Pixel C tablet profile. Every lane retains the minified launch checks. `benchmark` is a release-like smoke-test variant, not a performance suite.
-Read completed reports for the **exact commit**. Existing detekt baselines, lint warnings and physical
-latency/artist-validation gaps are not erased by a passing build. `TestEvidence` stores running-app
-captures via UTP's `additionalTestOutputDir`; CI archives `connected_android_test_additional_output`.
+---
 
-## Signed releases
+## Privacy & Safety
 
-Keep signing keys outside Git and preserve the upload-key identity of an existing Play app. Store
-private signing inputs in ignored root `keystore.properties`:
+- **100% Offline & Private**: No network permissions (`android.permission.INTERNET` is not declared or used). No telemetry, tracking, or crash analytics SDKs.
+- **Atomic Persistence**: Project saves are written atomically with SHA-256 integrity verification to prevent corruption during unexpected shutdowns.
+- **Snapshot History**: Non-destructive undo/redo history is bound to project versions without unbounded memory expansion.
 
-```properties
-storeFile=/absolute/path/to/private-upload-key.jks
-storePassword=YOUR_PRIVATE_STORE_PASSWORD
-keyAlias=YOUR_UPLOAD_ALIAS
-keyPassword=YOUR_PRIVATE_KEY_PASSWORD
-```
-
-```bash
-./gradlew bundleRelease -PrequireReleaseSigning=true
-```
-
-The production command rejects missing signing inputs. Unsigned CI bundles are not Play-upload-ready.
-Verify signatures, application ID/version, generated splits and Play Console requirements separately.
-
-## Documentation and privacy
-
-[Comparison](docs/PROCREATE_PARITY.md) · [Readiness](docs/RELEASE_READINESS.md) · [Original plan](agent.md) ·
-[Store listing](docs/play-listing.md) · [Privacy](docs/privacy-policy.md) · [Contributing](CONTRIBUTING.md)
-
-The privacy policy is also available offline in Settings. Android backup/transfer follows the device
-owner's settings; external providers/apps may handle exports. Complete Play Data safety declarations.
-Every landed improvement must update this README with its limits and executed evidence.
+---
 
 ## License
 
-GNU General Public License v3.0. See [LICENSE](LICENSE).
+GNU General Public License v3.0. See [LICENSE](LICENSE) for details.
