@@ -343,6 +343,7 @@ internal object ProcreateBlendModes {
             24 to BlendMode.LIGHTER_COLOR,
             25 to BlendMode.DARKER_COLOR,
             26 to BlendMode.DIVIDE,
+            27 to BlendMode.PASS_THROUGH,
         )
 
     fun of(number: Int): BlendMode? = MODES[number]

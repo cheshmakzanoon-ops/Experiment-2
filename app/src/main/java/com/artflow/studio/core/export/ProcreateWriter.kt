@@ -47,6 +47,9 @@ object ProcreateWriter {
         val mask: SelectionMask? = null,
         val blendContract: LayerBlendContract = LayerBlendContract.STANDARD,
         val maskEnabled: Boolean = true,
+        val animationFrameHold: Int = 1,
+        val animationIsBackground: Boolean = false,
+        val animationIsForeground: Boolean = false,
     ) : Node
 
     /** A group of layers; [children] are top first, as Procreate lists them. */
@@ -55,6 +58,7 @@ object ProcreateWriter {
         val opacity: Float = 1f,
         val visible: Boolean = true,
         val children: List<Node>,
+        val blendMode: BlendMode = BlendMode.PASS_THROUGH,
     ) : Node
 
     /**
@@ -72,6 +76,12 @@ object ProcreateWriter {
         dpi: Int = DEFAULT_DPI,
         name: String = "",
         colorProfile: ColorProfile = ColorProfile.SRGB,
+        animationPlaybackMode: Int? = null,
+        animationFramerate: Int? = null,
+        drawingGuideType: Int? = null,
+        drawingGuideGridSize: Float? = null,
+        drawingGuideOpacity: Float? = null,
+        drawingGuideThickness: Float? = null,
     ): ByteArray {
         require(width in 1..ProcreateReader.MAX_SIDE && height in 1..ProcreateReader.MAX_SIDE) {
             "This canvas is too large for a Procreate document"
@@ -106,7 +116,7 @@ object ProcreateWriter {
                 )
             } ?: BinaryPlist.Uid(0)
         val document =
-            mapOf(
+            mutableMapOf<String, Any?>(
                 "\$class" to archive.classOf(DOCUMENT),
                 "size" to archive.add("{$width, $height}"),
                 "tileSize" to TILE.toLong(),
@@ -120,6 +130,12 @@ object ProcreateWriter {
                 "SilicaDocumentArchiveDPIKey" to dpi.toDouble(),
                 "orientation" to 1L,
             )
+        animationPlaybackMode?.let { document["animationPlaybackMode"] = it.toLong() }
+        animationFramerate?.let { document["animationFramerate"] = it.toLong() }
+        drawingGuideType?.let { document["drawingGuideType"] = it.toLong() }
+        drawingGuideGridSize?.let { document["drawingGuideGridSize"] = it.toDouble() }
+        drawingGuideOpacity?.let { document["drawingGuideOpacity"] = it.toDouble() }
+        drawingGuideThickness?.let { document["drawingGuideThickness"] = it.toDouble() }
         val out = ByteArrayOutputStream()
         ZipOutputStream(out).use { zip ->
             zip.putNextEntry(ZipEntry(ARCHIVE))
@@ -256,6 +272,15 @@ object ProcreateWriter {
                         layerFields(maskUuid, "Mask", 1f, layer.maskEnabled, BlendMode.NORMAL, false, false) + ("type" to MASK_TYPE),
                     )
             }
+            if (layer.animationFrameHold > 1) {
+                fields["animationFrameHold"] = layer.animationFrameHold.toLong()
+            }
+            if (layer.animationIsBackground) {
+                fields["animationIsBackground"] = true
+            }
+            if (layer.animationIsForeground) {
+                fields["animationIsForeground"] = true
+            }
             return archive.instance(LAYER, fields).also { pixelLayers += it }
         }
 
@@ -265,6 +290,7 @@ object ProcreateWriter {
         ): BinaryPlist.Uid {
             require(depth < ProcreateReader.MAX_NESTING) { "The groups nest more deeply than a Procreate document allows" }
             val children = archive.array(nodes(group.children, depth + 1))
+            val blend = ProcreateLayerBlendModes.encode(group.blendMode, LayerBlendContract.STANDARD)
             return archive.instance(
                 GROUP,
                 mapOf(
@@ -273,6 +299,9 @@ object ProcreateWriter {
                     "hidden" to !group.visible,
                     "opacity" to group.opacity.coerceIn(0f, 1f).toDouble(),
                     "children" to children,
+                    "blend" to blend.getValue("blend"),
+                    "extendedBlend" to blend.getValue("extendedBlend"),
+                    "extendedBlend2" to blend.getValue("extendedBlend2"),
                 ),
             )
         }

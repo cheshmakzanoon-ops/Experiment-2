@@ -50,6 +50,9 @@ object ProcreateReader {
         val blendContract: LayerBlendContract = LayerBlendContract.STANDARD,
         internal val maskType: Long? = null,
         val maskEnabled: Boolean = true,
+        val animationFrameHold: Int = 1,
+        val animationIsBackground: Boolean = false,
+        val animationIsForeground: Boolean = false,
     ) : Node
 
     class Group(
@@ -58,6 +61,7 @@ object ProcreateReader {
         override val visible: Boolean,
         /** Top first, as Procreate lists them. */
         val children: List<Node>,
+        val blendMode: BlendMode = BlendMode.PASS_THROUGH,
     ) : Node
 
     class Document internal constructor(
@@ -75,6 +79,12 @@ object ProcreateReader {
         val nodes: List<Node>,
         private val tiles: Tiles,
         private val compositeUuid: String?,
+        val animationPlaybackMode: Int? = null,
+        val animationFramerate: Int? = null,
+        val drawingGuideType: Int? = null,
+        val drawingGuideGridSize: Float? = null,
+        val drawingGuideOpacity: Float? = null,
+        val drawingGuideThickness: Float? = null,
     ) {
         /**
          * How far the calibrated layout's image is from the file's thumbnail: the mean difference
@@ -149,6 +159,12 @@ object ProcreateReader {
         val sample = composite?.takeIf { tiles.has(it) } ?: tiles.largest()
         if (thumbnail != null && sample != null) tiles.calibrate(sample, thumbnail, background ?: WHITE, profile)
         val dpi = number(document["SilicaDocumentArchiveDPIKey"])?.roundToInt()?.takeIf { it in 1..MAX_DPI } ?: DEFAULT_DPI
+        val animMode = (document["animationPlaybackMode"] as? Number)?.toInt()
+        val animFps = (document["animationFramerate"] as? Number)?.toInt()
+        val guideType = (document["drawingGuideType"] as? Number)?.toInt()
+        val guideSize = (document["drawingGuideGridSize"] as? Number)?.toFloat()
+        val guideOpacity = (document["drawingGuideOpacity"] as? Number)?.toFloat()
+        val guideThick = (document["drawingGuideThickness"] as? Number)?.toFloat()
         return Document(
             tiles.width,
             tiles.height,
@@ -160,6 +176,12 @@ object ProcreateReader {
             nodes,
             tiles,
             composite,
+            animationPlaybackMode = animMode,
+            animationFramerate = animFps,
+            drawingGuideType = guideType,
+            drawingGuideGridSize = guideSize,
+            drawingGuideOpacity = guideOpacity,
+            drawingGuideThickness = guideThick,
         )
     }
 
@@ -175,10 +197,18 @@ object ProcreateReader {
             require(depth < MAX_NESTING) { "The Procreate document's groups are nested too deeply" }
             val children = archive.array(item["children"]).mapNotNull { node(archive, it, depth + 1) }
             val visible = (item["isHidden"] as? Boolean ?: item["hidden"] as? Boolean) != true
-            return Group(name, opacity, visible, children)
+            val groupBlend = if ("blend" in item || "extendedBlend" in item || "extendedBlend2" in item) {
+                ProcreateLayerBlendModes.decode(item).mode
+            } else {
+                BlendMode.PASS_THROUGH
+            }
+            return Group(name, opacity, visible, children, groupBlend)
         }
         val blend = ProcreateLayerBlendModes.decode(item)
         val mask = archive.map(item["mask"])
+        val frameHold = (item["animationFrameHold"] as? Number)?.toInt() ?: 1
+        val isAnimBg = item["animationIsBackground"] == true
+        val isAnimFg = item["animationIsForeground"] == true
         return Layer(
             name = name,
             opacity = opacity,
@@ -191,6 +221,9 @@ object ProcreateReader {
             blendContract = blend.contract,
             maskType = mask?.get("type") as? Long,
             maskEnabled = mask?.get("hidden") != true,
+            animationFrameHold = frameHold,
+            animationIsBackground = isAnimBg,
+            animationIsForeground = isAnimFg,
         )
     }
 

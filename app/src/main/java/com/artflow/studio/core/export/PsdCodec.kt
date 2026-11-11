@@ -24,7 +24,9 @@ import kotlin.math.min
  */
 object PsdCodec {
     const val SIGNATURE = "8BPS"
+    const val SIGNATURE_PSB = "8BPB"
     private const val VERSION = 1
+    const val VERSION_PSB = 2
     private const val COLOR_MODE_RGB = 3
     private const val COLOR_MODE_GRAYSCALE = 1
     private const val COLOR_MODE_CMYK = 4
@@ -436,15 +438,23 @@ object PsdCodec {
     // Reading
     // -----------------------------------------------------------------------------------------
 
-    /** Parses a PSD file. Returns null when the data is not a PSD or is structurally invalid. */
+    /** True when [bytes] begin with the standard PSD or large-document PSB signature. */
+    fun isPsdOrPsb(bytes: ByteArray): Boolean {
+        if (bytes.size < 26) return false
+        val sig = String(bytes, 0, 4, Charsets.US_ASCII)
+        return sig == SIGNATURE || sig == SIGNATURE_PSB
+    }
+
+    /** Parses a PSD or PSB file. Returns null when the data is not a PSD or is structurally invalid. */
     fun read(bytes: ByteArray): PsdDocument? {
         if (bytes.size < 26) return null
-        if (String(bytes, 0, 4, Charsets.US_ASCII) != SIGNATURE) return null
+        val sig = String(bytes, 0, 4, Charsets.US_ASCII)
+        if (sig != SIGNATURE && sig != SIGNATURE_PSB) return null
 
         val reader = PsdReader(bytes)
         reader.position = 4
         val version = reader.readShort()
-        if (version != VERSION) return null
+        if (version != VERSION && version != VERSION_PSB) return null
         reader.skip(6)
         val channelCount = reader.readShort()
         val height = reader.readInt()
