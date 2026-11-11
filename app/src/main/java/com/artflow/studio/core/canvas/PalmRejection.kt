@@ -44,6 +44,19 @@ class PalmRejection(
         return large || nearContact
     }
 
+    /**
+     * Touch-major ellipse palm rejection: detects broad resting palm contacts
+     * using physical touch ellipse dimensions (touchMajor, touchMinor in pixels).
+     */
+    fun rejectsTouchMajor(
+        touchMajor: Float,
+        touchMinor: Float = 0f,
+        thresholdMajorPx: Float = DEFAULT_TOUCH_MAJOR_THRESHOLD_PX,
+    ): Boolean {
+        if (!touchMajor.isFinite()) return false
+        return touchMajor >= thresholdMajorPx
+    }
+
     /** Clears the stylus state, for example when the canvas is paused or detached. */
     fun reset() {
         hovering = false
@@ -52,6 +65,8 @@ class PalmRejection(
     }
 
     companion object {
+        /** Default pixel threshold for touch-major axis ellipse palm detection. */
+        const val DEFAULT_TOUCH_MAJOR_THRESHOLD_PX = 50f
         /** A finger within this long of the pen's contact is taken to be the palm that came with it. */
         const val CONTACT_WINDOW_MS = 400L
 

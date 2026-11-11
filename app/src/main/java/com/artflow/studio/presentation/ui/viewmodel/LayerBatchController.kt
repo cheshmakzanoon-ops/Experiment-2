@@ -37,4 +37,15 @@ class LayerBatchController(
             _picked.value = emptySet()
             check(repository.removeLayers(layerIds) > 0) { "The last layer cannot be deleted" }
         }
+
+    fun link(layerIds: List<Long>) =
+        perform {
+            _picked.value = emptySet()
+            check(repository.linkLayers(layerIds)) { "At least two layers must be chosen to link" }
+        }
+
+    fun unlink(layerId: Long) =
+        perform {
+            check(repository.unlinkLayer(layerId)) { "Layer cannot be unlinked" }
+        }
 }

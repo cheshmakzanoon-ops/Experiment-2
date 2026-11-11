@@ -38,6 +38,8 @@ object LiquifyTool {
         /** Draws content in toward the stroke's path, creasing it into a line. */
         EDGE("Edge"),
         RECONSTRUCT("Reconstruct"),
+        FREEZE("Freeze"),
+        UNFREEZE("Unfreeze"),
     }
 
     /**
@@ -256,6 +258,8 @@ object LiquifyTool {
                     Mode.CRYSTALS -> applyCrystals(centerX, centerY, stepDistance)
                     Mode.EDGE -> applyEdge(centerX, centerY, dx / distance, dy / distance, stepDistance)
                     Mode.RECONSTRUCT -> applyReconstruction(centerX, centerY, stepDistance)
+                    Mode.FREEZE -> settings.freezeMask?.let { paintFreezeMask(it, map.width, map.height, centerX, centerY, settings.radius, frozen = true) }
+                    Mode.UNFREEZE -> settings.freezeMask?.let { paintFreezeMask(it, map.width, map.height, centerX, centerY, settings.radius, frozen = false) }
                 }
             }
 
