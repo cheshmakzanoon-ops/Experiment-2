@@ -4,8 +4,8 @@
 cmake_minimum_required(VERSION 3.18.1)
 project("artflow-native")
 
-# Enable C++17
-set(CMAKE_CXX_STANDARD 17)
+# Enable C++20
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Add native brush library
@@ -28,6 +28,10 @@ target_link_libraries(
     GLESv3
     m
 )
+
+# Enforce 16 KB page-size alignment for Android 15/16 compatibility
+target_link_options(artflow-brush PRIVATE "-Wl,-z,max-page-size=16384")
+
 
 # Optimization flags for release builds
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
