@@ -309,6 +309,7 @@ class ModelRenderer : GLSurfaceView.Renderer {
 
         const val FRAGMENT = """
             precision mediump float;
+            const float PI = 3.14159265359;
             uniform sampler2D uTexture;
             uniform sampler2D uMetallicMap;
             uniform sampler2D uRoughnessMap;
@@ -324,27 +325,90 @@ class ModelRenderer : GLSurfaceView.Renderer {
             varying vec3 vNormal;
             varying vec3 vPosition;
             varying vec2 vUv;
+
+            float distributionGGX(vec3 N, vec3 H, float roughness) {
+                float a = roughness * roughness;
+                float a2 = a * a;
+                float NdotH = max(dot(N, H), 0.0);
+                float NdotH2 = NdotH * NdotH;
+                float denom = (NdotH2 * (a2 - 1.0) + 1.0);
+                return a2 / (PI * denom * denom + 0.00001);
+            }
+
+            float geometrySchlickGGX(float NdotV, float roughness) {
+                float r = (roughness + 1.0);
+                float k = (r * r) / 8.0;
+                return NdotV / (NdotV * (1.0 - k) + k + 0.00001);
+            }
+
+            float geometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
+                float NdotV = max(dot(N, V), 0.0);
+                float NdotL = max(dot(N, L), 0.0);
+                float ggx2 = geometrySchlickGGX(NdotV, roughness);
+                float ggx1 = geometrySchlickGGX(NdotL, roughness);
+                return ggx1 * ggx2;
+            }
+
+            vec3 fresnelSchlick(float cosTheta, vec3 F0) {
+                return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+            }
+
             void main() {
-                vec4 colour = texture2D(uTexture, vUv);
+                vec4 albedo = texture2D(uTexture, vUv);
                 vec4 metalMap = texture2D(uMetallicMap, vUv);
                 vec4 roughMap = texture2D(uRoughnessMap, vUv);
-                // Android bitmap uploads are premultiplied. Recover the scalar before applying coverage.
-                float metallic = mix(uMetallic, metalMap.r / max(metalMap.a, 0.00001), metalMap.a);
-                float roughness = mix(uRoughness, roughMap.r / max(roughMap.a, 0.00001), roughMap.a);
-                float power = 120.0 * (1.0 - roughness) + 4.0;
-                float specular = (0.3 + 0.7 * metallic) * (0.15 + 0.85 * (1.0 - roughness));
-                vec3 toEye = normalize(uEye - vPosition);
-                vec3 normal = normalize(vNormal);
-                // Light both faces of open meshes: turn the normal toward the viewer.
-                if (dot(normal, toEye) < 0.0) normal = -normal;
-                float diffuse = max(dot(normal, uLightDir), 0.0);
-                float highlight = pow(max(dot(normal, normalize(uLightDir + toEye)), 0.0), power) * specular * diffuse;
-                // Metals have no diffuse body colour; their highlights take the surface colour instead.
-                vec3 highlightColour = mix(uLightColour, colour.rgb * uLightColour, metallic);
-                float second = max(dot(normal, uLight2Dir), 0.0) * uLight2;
-                vec3 body = colour.rgb * (uAmbient + (diffuse * uLightColour + second) * (1.0 - 0.8 * metallic));
-                vec3 lit = body + highlight * highlightColour * 4.0;
-                gl_FragColor = vec4(clamp(lit * uExposure, 0.0, 1.0), 1.0);
+
+                float metallic = clamp(mix(uMetallic, metalMap.r / max(metalMap.a, 0.00001), metalMap.a), 0.0, 1.0);
+                float roughness = clamp(mix(uRoughness, roughMap.r / max(roughMap.a, 0.00001), roughMap.a), 0.04, 1.0);
+
+                vec3 N = normalize(vNormal);
+                vec3 V = normalize(uEye - vPosition);
+                if (dot(N, V) < 0.0) N = -N;
+
+                vec3 F0 = mix(vec3(0.04), albedo.rgb, metallic);
+
+                // Key Light Cook-Torrance BRDF
+                vec3 L = normalize(uLightDir);
+                vec3 H = normalize(V + L);
+                float NdotL = max(dot(N, L), 0.0);
+                float NdotV = max(dot(N, V), 0.0);
+
+                float NDF = distributionGGX(N, H, roughness);
+                float G = geometrySmith(N, V, L, roughness);
+                vec3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);
+
+                vec3 kS = F;
+                vec3 kD = (vec3(1.0) - kS) * (1.0 - metallic);
+
+                vec3 numerator = NDF * G * F;
+                float denominator = 4.0 * NdotV * NdotL + 0.0001;
+                vec3 specular = numerator / denominator;
+
+                vec3 directLight = (kD * albedo.rgb / PI + specular) * uLightColour * NdotL;
+
+                // Secondary Light BRDF
+                vec3 direct2 = vec3(0.0);
+                if (uLight2 > 0.0) {
+                    vec3 L2 = normalize(uLight2Dir);
+                    vec3 H2 = normalize(V + L2);
+                    float NdotL2 = max(dot(N, L2), 0.0);
+                    float NDF2 = distributionGGX(N, H2, roughness);
+                    float G2 = geometrySmith(N, V, L2, roughness);
+                    vec3 F2 = fresnelSchlick(max(dot(H2, V), 0.0), F0);
+                    vec3 kS2 = F2;
+                    vec3 kD2 = (vec3(1.0) - kS2) * (1.0 - metallic);
+                    vec3 spec2 = (NDF2 * G2 * F2) / (4.0 * NdotV * NdotL2 + 0.0001);
+                    direct2 = (kD2 * albedo.rgb / PI + spec2) * uLight2 * NdotL2;
+                }
+
+                // Ambient & IBL reflection approximation
+                vec3 R = reflect(-V, N);
+                vec3 ambientDiff = uAmbient * albedo.rgb * (1.0 - metallic);
+                vec3 ambientSpec = mix(F0, albedo.rgb, metallic) * pow(max(dot(R, L), 0.0), 32.0 * (1.0 - roughness) + 1.0) * 0.3;
+                vec3 ambient = ambientDiff + ambientSpec;
+
+                vec3 color = directLight + direct2 + ambient;
+                gl_FragColor = vec4(clamp(color * uExposure, 0.0, 1.0), albedo.a);
             }
         """
     }
