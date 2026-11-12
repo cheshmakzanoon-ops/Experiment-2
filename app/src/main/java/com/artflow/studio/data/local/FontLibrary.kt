@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Typeface
 import android.net.Uri
 import android.provider.OpenableColumns
+import com.artflow.studio.core.export.readAtMost
 import java.io.File
 
 /**
@@ -52,8 +53,8 @@ object FontLibrary {
                 .trim()
                 .ifEmpty { "Font" }
                 .take(MAX_NAME)
-        val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
-        if (bytes.isEmpty() || bytes.size > MAX_BYTES) return null
+        val bytes = resolver.openInputStream(uri)?.use { it.readAtMost(MAX_BYTES.toLong()) } ?: return null
+        if (bytes.isEmpty()) return null
         val target = File(dir(context), "$base.$extension")
         target.writeBytes(bytes)
         // Keep only files Android can actually render.

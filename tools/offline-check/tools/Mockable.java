@@ -74,6 +74,7 @@ public class Mockable implements Opcodes {
     static byte[] transform(byte[] bytes) {
         ClassNode cn = new ClassNode();
         new ClassReader(bytes).accept(cn, 0);
+        cn.version = V17;
         boolean isInterface = (cn.access & ACC_INTERFACE) != 0;
         boolean isEnum = (cn.access & ACC_ENUM) != 0;
         cn.access &= ~ACC_FINAL;

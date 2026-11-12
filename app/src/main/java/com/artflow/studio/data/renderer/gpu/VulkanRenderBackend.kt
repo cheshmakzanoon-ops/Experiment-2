@@ -4,9 +4,9 @@ import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.PixelBuffer
 
 /**
- * Vulkan 1.2+ hardware render backend.
- * Primary high-performance backend using compute shader dispatch for low-latency dab rasterization,
- * zero CPU-GPU readback, and 120 FPS frame presentation on supported hardware.
+ * Experimental preview backend for future Vulkan integration.
+ * Currently under development; non-shipping preview using CPU-backed tile compositing.
+ * The production editor ships on the validated OpenGL ES 3.x pipeline.
  */
 class VulkanRenderBackend : IRenderBackend {
     override val backendType: RenderBackendType = RenderBackendType.VULKAN

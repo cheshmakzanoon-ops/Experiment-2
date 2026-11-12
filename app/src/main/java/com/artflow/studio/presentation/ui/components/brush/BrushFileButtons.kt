@@ -115,6 +115,8 @@ internal suspend fun shareBrushes(
         false
     } catch (failed: SecurityException) {
         false
+    } catch (failed: UnsupportedOperationException) {
+        false
     }
 }
 

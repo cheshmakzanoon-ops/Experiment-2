@@ -12,11 +12,14 @@ import com.artflow.studio.presentation.ui.viewmodel.ExportUiState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -44,7 +47,7 @@ class AuthoritativeRecoveryTest {
         Dispatchers.setMain(testDispatcher)
         val context = mock(Context::class.java)
         `when`(context.filesDir).thenReturn(temporary.newFolder("files"))
-        storage = ProjectStorage(context)
+        storage = ProjectStorage(context, testDispatcher)
         repository = CanvasRepositoryImpl(storage)
         exporter = ArtworkExporter(context, storage)
         recorder = TimelapseRecorder(storage)
@@ -52,7 +55,9 @@ class AuthoritativeRecoveryTest {
 
     @After
     fun tearDown() {
-        repository.dispose()
+        if (::repository.isInitialized) {
+            repository.dispose()
+        }
         Dispatchers.resetMain()
     }
 
@@ -177,5 +182,135 @@ class AuthoritativeRecoveryTest {
             val autosaveDoc = storage.loadAutosave(projectId)
             assertNotNull(autosaveDoc)
             assertTrue(autosaveDoc!!.resolvedFrames().flatMap { it.layers }.any { it.name == "Background Dirty Layer" })
+        }
+
+    @Test
+    fun art009_dismissRecoveryEditAutosaveKillProcessReopenPreservesRecovery() =
+        runTest {
+            // 1. Initialize canvas and save base document
+            repository.loadOrCreate(projectId, 64, 64, 72)
+            repository.saveCanvas(projectId)
+
+            // 2. Add layer and autosave to simulate crash recovery snapshot
+            repository.addLayer("Pre-Crash Work")
+            repository.autosave(projectId)
+
+            // 3. Re-load from disk simulating fresh launch after unexpected crash
+            repository.loadCanvas(projectId)
+            assertTrue(repository.hasUnresolvedRecovery(projectId))
+
+            // 4. Simulate user dismissing recovery prompt (without recovering or discarding)
+            // User edits the canvas
+            repository.addLayer("Post-Dismiss Edit")
+            assertTrue(repository.hasUnsavedChanges())
+
+            // 5. Autosave attempts to run (e.g. background or timer)
+            repository.autosave(projectId)
+
+            // 6. Autosave MUST NOT have overwritten the pre-crash snapshot!
+            assertTrue(storage.hasUnsavedRecovery(projectId))
+            val autosaveDoc = storage.loadAutosave(projectId)
+            assertNotNull(autosaveDoc)
+            val layerNames = autosaveDoc!!.resolvedFrames().flatMap { it.layers }.map { it.name }
+            assertTrue("Pre-crash layer must be preserved", layerNames.contains("Pre-Crash Work"))
+            assertFalse("Post-dismiss edit must not overwrite recovery data", layerNames.contains("Post-Dismiss Edit"))
+
+            // 7. Simulate process death and recreate repository from storage
+            val freshRepo = CanvasRepositoryImpl(storage)
+            freshRepo.loadCanvas(projectId)
+            assertTrue(freshRepo.hasUnresolvedRecovery(projectId))
+
+            // 8. Explicitly restore now
+            val recovered = freshRepo.recoverAutosave(projectId)
+            assertNotNull(recovered)
+            assertTrue(freshRepo.getAllLayers().any { it.name == "Pre-Crash Work" })
+            assertFalse(freshRepo.hasUnresolvedRecovery(projectId))
+            freshRepo.dispose()
+        }
+
+    @Test
+    fun art010_backgroundingWhileRecoveryUnresolvedDoesNotOverwriteSnapshot() =
+        runTest {
+            repository.loadOrCreate(projectId, 64, 64, 72)
+            repository.saveCanvas(projectId)
+            repository.addLayer("Critical Crash Snapshot")
+            repository.autosave(projectId)
+
+            // Reload fresh session
+            repository.loadCanvas(projectId)
+            assertTrue(repository.hasUnresolvedRecovery(projectId))
+
+            // Backgrounding autosave trigger
+            repository.autosave(projectId)
+
+            val autosaveDoc = storage.loadAutosave(projectId)
+            assertNotNull(autosaveDoc)
+            assertTrue(autosaveDoc!!.resolvedFrames().flatMap { it.layers }.any { it.name == "Critical Crash Snapshot" })
+        }
+
+    @Test
+    fun art011_concurrentAutosaveAttemptsAreThreadSafe() =
+        runTest {
+            repository.loadOrCreate(projectId, 64, 64, 72)
+            repository.saveCanvas(projectId)
+
+            val jobs =
+                (1..5).map { index ->
+                    launch {
+                        repository.addLayer("Concurrent Layer $index")
+                        repository.autosave(projectId)
+                    }
+                }
+            jobs.joinAll()
+
+            assertTrue(storage.hasUnsavedRecovery(projectId))
+            val autosaveDoc = storage.loadAutosave(projectId)
+            assertNotNull(autosaveDoc)
+            assertTrue(autosaveDoc!!.resolvedFrames().isNotEmpty())
+        }
+
+    @Test
+    fun art012_explicitDiscardRemovesAutosave() =
+        runTest {
+            repository.loadOrCreate(projectId, 64, 64, 72)
+            repository.saveCanvas(projectId)
+            repository.addLayer("Discardable Layer")
+            repository.autosave(projectId)
+
+            assertTrue(storage.hasUnsavedRecovery(projectId))
+            repository.discardRecovery(projectId)
+
+            assertFalse(storage.hasUnsavedRecovery(projectId))
+            assertFalse(repository.hasRecovery(projectId))
+            assertFalse(repository.hasUnresolvedRecovery(projectId))
+
+            // Normal save now succeeds
+            val savedPath = repository.saveCanvas(projectId)
+            assertNotNull(savedPath)
+        }
+
+    @Test
+    fun art013_atomicWriteProtectsAgainstFailedWrites() =
+        runTest {
+            repository.loadOrCreate(projectId, 64, 64, 72)
+            val initialPath = repository.saveCanvas(projectId)
+            assertNotNull(initialPath)
+
+            val docFile = storage.documentFile(projectId)
+            val originalBytes = docFile.readBytes()
+
+            // Verify atomic write failure preserves original file
+            val target = storage.documentFile(projectId)
+            try {
+                storage.writeAtomically(target) {
+                    throw java.io.IOException("Simulated disk full")
+                }
+            } catch (ex: java.io.IOException) {
+                // Expected
+            }
+
+            assertTrue(docFile.exists())
+            assertEquals(originalBytes.size.toLong(), docFile.length())
+            assertTrue(originalBytes.contentEquals(docFile.readBytes()))
         }
 }

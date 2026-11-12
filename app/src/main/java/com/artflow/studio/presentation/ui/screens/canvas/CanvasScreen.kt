@@ -52,6 +52,7 @@ import com.artflow.studio.core.canvas.ShortcutAction
 import com.artflow.studio.core.color.CmykProof
 import com.artflow.studio.core.color.ColorProfile
 import com.artflow.studio.core.color.ViewFilter
+import com.artflow.studio.core.export.readAtMost
 import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.LiveAdjustments
 import com.artflow.studio.core.pixels.Quad
@@ -382,8 +383,7 @@ fun CanvasScreen(
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                         runCatching {
                             context.contentResolver.openInputStream(uri)?.use { stream ->
-                                val data = stream.readBytes()
-                                data.takeIf { it.size <= MAX_PSD_IMPORT_BYTES }
+                                stream.readAtMost(MAX_PSD_IMPORT_BYTES)
                             }
                         }.getOrNull()
                     }
@@ -2002,7 +2002,7 @@ private fun toolHint(tool: ToolType): String =
         }
     }
 
-private const val MAX_PSD_IMPORT_BYTES = 256 * 1024 * 1024
+private const val MAX_PSD_IMPORT_BYTES = 256L * 1024 * 1024
 
 /** After a ColorDrop, slide to fill more or less of the area, as with Procreate's drop threshold. */
 @Composable

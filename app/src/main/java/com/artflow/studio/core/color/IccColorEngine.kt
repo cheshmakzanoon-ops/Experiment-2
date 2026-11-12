@@ -77,11 +77,12 @@ enum class RenderingIntent {
 }
 
 /**
- * LittleCMS-compatible ICC color conversion and soft-proofing engine.
+ * Profile-referenced ICC color conversion and CMYK soft-proofing engine.
  *
- * Implements high-fidelity UCR/GCR (Under Color Removal / Gray Component Replacement),
+ * Implements analytical UCR/GCR (Under Color Removal / Gray Component Replacement),
  * Total Area Coverage (TAC) clipping, and multi-profile soft-proofing with out-of-gamut
- * zebra pattern diagnostics.
+ * zebra pattern diagnostics. Note: This is an analytical ink-absorption model rather than
+ * a native C LittleCMS library integration.
  */
 object IccColorEngine {
     /** Default gamut tolerance threshold for out-of-gamut detection. */

@@ -455,6 +455,7 @@ object PsdCodec {
         reader.position = 4
         val version = reader.readShort()
         if (version != VERSION && version != VERSION_PSB) return null
+        val isPsb = version == VERSION_PSB
         reader.skip(6)
         val channelCount = reader.readShort()
         val height = reader.readInt()
@@ -467,10 +468,12 @@ object PsdCodec {
 
         // Colour mode data.
         val colorModeLength = reader.readInt()
+        if (colorModeLength < 0 || colorModeLength > reader.remaining()) return null
         reader.skip(colorModeLength)
 
         // Image resources: pull the resolution out and skip the rest.
         val resourcesLength = reader.readInt()
+        if (resourcesLength < 0 || resourcesLength > reader.remaining()) return null
         var dpi = 72
         if (resourcesLength > 0) {
             val resourcesEnd = reader.position + resourcesLength
@@ -479,21 +482,23 @@ object PsdCodec {
         }
 
         // Layer and mask information.
-        val layerAndMaskLength = reader.readInt()
+        val layerAndMaskLength = if (isPsb) reader.readLong() else reader.readInt().toLong()
+        if (layerAndMaskLength < 0 || layerAndMaskLength > reader.remaining()) return null
         val layers = mutableListOf<PsdLayer>()
         var hasMergedTransparency = false
         if (layerAndMaskLength > 0) {
-            val sectionEnd = reader.position + layerAndMaskLength
-            val layerInfoLength = reader.readInt()
+            val sectionEnd = (reader.position + layerAndMaskLength).toInt().coerceAtMost(reader.position + reader.remaining())
+            val layerInfoLength = if (isPsb) reader.readLong() else reader.readInt().toLong()
+            if (layerInfoLength < 0 || layerInfoLength > reader.remaining()) return null
             if (layerInfoLength > 0) {
-                val layerInfoEnd = reader.position + layerInfoLength
+                val layerInfoEnd = (reader.position + layerInfoLength).toInt().coerceAtMost(sectionEnd)
                 val recordsStart = reader.position
                 hasMergedTransparency = reader.readShort().toShort() < 0
                 reader.position = recordsStart
                 // A damaged layer record is a damaged file: the document reads as not a PSD, as documented.
                 layers +=
                     try {
-                        readLayerRecords(reader, width, height, channelCount, depth, colorMode)
+                        readLayerRecords(reader, width, height, channelCount, depth, colorMode, isPsb)
                     } catch (damaged: IllegalArgumentException) {
                         return null
                     }
@@ -505,7 +510,7 @@ object PsdCodec {
         // Image data (composite).
         val composite =
             if (reader.remaining() >= 2) {
-                readImageData(reader, width, height, channelCount, depth, colorMode, hasMergedTransparency)
+                readImageData(reader, width, height, channelCount, depth, colorMode, hasMergedTransparency, isPsb)
             } else {
                 null
             }
@@ -543,6 +548,34 @@ object PsdCodec {
         return result
     }
 
+    private data class PendingLayer(
+        val name: String,
+        val top: Int,
+        val left: Int,
+        val bottom: Int,
+        val right: Int,
+        val opacity: Int,
+        val isVisible: Boolean,
+        val blendMode: BlendMode,
+        val channels: List<Pair<Int, Int>>,
+        val isClippingMask: Boolean,
+        val section: Section,
+        val mask: MaskHeader?,
+    )
+
+    private data class ExtraLayerData(
+        val name: String,
+        val section: Section,
+        val folderBlend: BlendMode?,
+        val maskHeader: MaskHeader?,
+    )
+
+    private data class ExtraBlocksResult(
+        val name: String? = null,
+        val section: Section? = null,
+        val folderBlend: BlendMode? = null,
+    )
+
     private fun readLayerRecords(
         reader: PsdReader,
         canvasWidth: Int,
@@ -550,208 +583,265 @@ object PsdCodec {
         channelCount: Int,
         depth: Int,
         colorMode: Int,
+        isPsb: Boolean = false,
     ): List<PsdLayer> {
         val layerCount = kotlin.math.abs(reader.readShort().toShort().toInt())
         require(layerCount <= 1024) { "Too many PSD layers" }
         if (layerCount == 0) return emptyList()
 
-        data class Pending(
-            val name: String,
-            val top: Int,
-            val left: Int,
-            val bottom: Int,
-            val right: Int,
-            val opacity: Int,
-            val isVisible: Boolean,
-            val blendMode: BlendMode,
-            val channels: List<Pair<Int, Int>>,
-            val isClippingMask: Boolean,
-            val section: Section,
-            val mask: MaskHeader?,
-        )
-
-        val pending = mutableListOf<Pending>()
+        val pending = mutableListOf<PendingLayer>()
         for (i in 0 until layerCount) {
-            if (reader.remaining() < 32) break
-            val top = reader.readInt()
-            val left = reader.readInt()
-            val bottom = reader.readInt()
-            val right = reader.readInt()
-            val layerChannelCount = reader.readShort()
-            require(layerChannelCount <= MAX_CHANNELS) { "A PSD layer has too many channels" }
-            val channels =
-                (0 until layerChannelCount).map {
-                    val id = reader.readShort().toShort().toInt()
-                    val length = reader.readInt()
-                    require(length >= 0) { "Invalid PSD channel length" }
-                    id to length
-                }
-            val blendSignature = reader.readAscii(4)
-            val blendKey = reader.readAscii(4)
-            val opacity = reader.readByte()
-            val isClippingMask = reader.readByte() == 1
-            val flags = reader.readByte()
-            reader.skip(1) // filler
-            val extraLength = reader.readInt()
-            val extraEnd = reader.position + extraLength
-
-            var name = "Layer ${i + 1}"
-            var section = Section.NONE
-            var folderBlend: BlendMode? = null
-            var maskHeader: MaskHeader? = null
-            if (extraLength > 0 && reader.remaining() >= 8) {
-                val maskLength = reader.readInt()
-                val maskStart = reader.position
-                if (maskLength >= MASK_HEADER_LENGTH && reader.remaining() >= MASK_HEADER_LENGTH) {
-                    val maskTop = reader.readInt()
-                    val maskLeft = reader.readInt()
-                    val maskBottom = reader.readInt()
-                    val maskRight = reader.readInt()
-                    maskHeader = MaskHeader(maskTop, maskLeft, maskBottom, maskRight, reader.readByte(), reader.readByte())
-                }
-                reader.position = (maskStart + maskLength.coerceAtLeast(0)).coerceAtMost(extraEnd)
-                val blendingRangesLength = reader.readInt()
-                if (blendingRangesLength > 0) reader.skip(blendingRangesLength)
-                if (reader.position < extraEnd) {
-                    val nameLength = reader.readByte()
-                    if (nameLength > 0) name = reader.readAscii(nameLength)
-                    reader.skip((4 - (nameLength + 1) % 4) % 4)
-                }
-                // A "luni" block carries the UTF-16 name and is preferred when present; "lsct"
-                // marks folder records. Other blocks are skipped.
-                var scanPosition = reader.position
-                while (scanPosition + 12 <= extraEnd) {
-                    reader.position = scanPosition
-                    val signature = reader.readAscii(4)
-                    if (signature != "8BIM" && signature != "8B64") break
-                    val key = reader.readAscii(4)
-                    val length = reader.readInt()
-                    if (length < 0 || reader.remaining() < length) break
-                    val blockStart = reader.position
-                    if (key == "luni") {
-                        val unicodeName = reader.readUnicodeString(length)
-                        if (unicodeName.isNotBlank()) name = unicodeName
-                    } else if ((key == "lsct" || key == "lsdk") && length >= 4) {
-                        section = Section.of(reader.readInt())
-                        if (length >= LSCT_LENGTH && reader.readAscii(4) == "8BIM") {
-                            val blend = reader.readAscii(4)
-                            folderBlend = if (blend == PASS_THROUGH_KEY) BlendMode.PASS_THROUGH else blendModeFromKey(blend)
-                        }
-                    }
-                    scanPosition = blockStart + length + (length % 2)
-                }
-            }
-            reader.position = extraEnd
-
-            pending +=
-                Pending(
-                    name = name,
-                    top = top,
-                    left = left,
-                    bottom = bottom,
-                    right = right,
-                    opacity = opacity,
-                    isVisible = (flags and 0x02) == 0,
-                    blendMode = folderBlend ?: blendModeFromKey(if (blendSignature == "8BIM") blendKey else "norm"),
-                    channels = channels,
-                    isClippingMask = isClippingMask,
-                    section = section,
-                    mask = maskHeader,
-                )
+            val layer = readSingleLayerPending(reader, i, isPsb) ?: break
+            pending += layer
         }
 
-        // Channel image data follows the records, in the same order.
         val layers = mutableListOf<PsdLayer>()
         pending.forEach { record ->
             val layerWidth = (record.right - record.left).coerceAtLeast(0)
             val layerHeight = (record.bottom - record.top).coerceAtLeast(0)
-            val mask = record.mask
-            val (maskWidth, maskHeight) = maskDimensions(mask)
+            val (maskWidth, maskHeight) = maskDimensions(record.mask)
             if (record.section != Section.NONE) {
-                var maskPlane: ByteArray? = null
-                record.channels.forEach { (channelId, length) ->
-                    require(length <= reader.remaining()) { "Truncated PSD folder channel" }
-                    val start = reader.position
-                    if (channelId == CHANNEL_USER_MASK && maskWidth > 0 && maskHeight > 0) {
-                        maskPlane = readChannel(reader, maskWidth, maskHeight, depth, length)
-                    }
-                    reader.position = start + length
-                }
-                layers +=
-                    if (record.section == Section.GROUP_END) {
-                        PsdLayer.groupEnd()
-                    } else {
-                        PsdLayer
-                            .groupHeader(record.name, record.opacity, record.isVisible, record.blendMode)
-                            .copy(
-                                section = record.section,
-                                mask = mask?.let { maskOf(it, record.left, record.top, maskPlane) },
-                            )
-                    }
+                layers += decodeFolderLayer(record, reader, depth, isPsb, maskWidth, maskHeight)
                 return@forEach
             }
             if (layerWidth == 0 || layerHeight == 0) {
                 record.channels.forEach { (_, length) -> reader.skip(max(0, length)) }
                 return@forEach
             }
-            require(CanvasOperations.isSizeSafe(layerWidth, layerHeight)) { "A PSD layer is too large" }
-
-            val planes = HashMap<Int, ByteArray>()
-            record.channels.forEach { (channelId, length) ->
-                require(length <= reader.remaining()) { "Truncated PSD layer channel" }
-                val start = reader.position
-                if (channelId != CHANNEL_USER_MASK) {
-                    planes[channelId] = readChannel(reader, layerWidth, layerHeight, depth, length)
-                } else if (maskWidth > 0 && maskHeight > 0) {
-                    // The mask has its own rectangle, which need not match the layer's.
-                    planes[channelId] = readChannel(reader, maskWidth, maskHeight, depth, length)
-                }
-                // Trust the declared length over where the decoder ended up.
-                reader.position = start + length
-            }
-
-            val buffer = PixelBuffer(layerWidth, layerHeight)
-            val alpha = planes[CHANNEL_ALPHA]
-            if (colorMode == COLOR_MODE_CMYK) {
-                for (index in buffer.pixels.indices) {
-                    val black = planes[3]?.getOrNull(index)?.toInt()?.and(0xFF) ?: 0
-                    val a = alpha?.getOrNull(index)?.toInt()?.and(0xFF) ?: 255
-                    buffer.pixels[index] =
-                        Channels.argb(
-                            a,
-                            cmykToRgb(planes[0], index, black),
-                            cmykToRgb(planes[1], index, black),
-                            cmykToRgb(planes[2], index, black),
-                        )
-                }
-            } else {
-                val red = planes[CHANNEL_RED]
-                val green = planes[CHANNEL_GREEN]
-                val blue = planes[CHANNEL_BLUE]
-                for (index in buffer.pixels.indices) {
-                    val r = channelValue(red, index, colorMode)
-                    // A grayscale document has one gray plane, which fills all three colour channels.
-                    val g = if (colorMode == COLOR_MODE_GRAYSCALE) r else channelValue(green, index, colorMode)
-                    val b = if (colorMode == COLOR_MODE_GRAYSCALE) r else channelValue(blue, index, colorMode)
-                    val a = alpha?.getOrNull(index)?.toInt()?.and(0xFF) ?: 255
-                    buffer.pixels[index] = Channels.argb(a, r, g, b)
-                }
-            }
-
-            layers +=
-                PsdLayer(
-                    name = record.name,
-                    pixels = buffer,
-                    opacity = record.opacity,
-                    isVisible = record.isVisible,
-                    blendMode = record.blendMode,
-                    left = record.left,
-                    top = record.top,
-                    isClippingMask = record.isClippingMask,
-                    mask = mask?.let { maskOf(it, record.left, record.top, planes[CHANNEL_USER_MASK]) },
-                )
+            layers += decodeRasterLayer(record, reader, layerWidth, layerHeight, depth, colorMode, isPsb, maskWidth, maskHeight)
         }
         return layers
+    }
+
+    private fun readSingleLayerPending(
+        reader: PsdReader,
+        layerIndex: Int,
+        isPsb: Boolean,
+    ): PendingLayer? {
+        if (reader.remaining() < 32) return null
+        val top = reader.readInt()
+        val left = reader.readInt()
+        val bottom = reader.readInt()
+        val right = reader.readInt()
+        val layerChannelCount = reader.readShort()
+        require(layerChannelCount <= MAX_CHANNELS) { "A PSD layer has too many channels" }
+        val channels =
+            (0 until layerChannelCount).map {
+                val id = reader.readShort().toShort().toInt()
+                val length = if (isPsb) reader.readLong() else reader.readInt().toLong()
+                require(length in 0L..Int.MAX_VALUE.toLong()) { "Invalid PSD channel length" }
+                id to length.toInt()
+            }
+        val blendSignature = reader.readAscii(4)
+        val blendKey = reader.readAscii(4)
+        val opacity = reader.readByte()
+        val isClippingMask = reader.readByte() == 1
+        val flags = reader.readByte()
+        reader.skip(1)
+        val extraLength = reader.readInt()
+        val extraEnd = reader.position + extraLength
+
+        val extra = parseExtraLayerData(reader, extraLength, extraEnd, layerIndex)
+        reader.position = extraEnd
+
+        return PendingLayer(
+            name = extra.name,
+            top = top,
+            left = left,
+            bottom = bottom,
+            right = right,
+            opacity = opacity,
+            isVisible = (flags and 0x02) == 0,
+            blendMode = extra.folderBlend ?: blendModeFromKey(if (blendSignature == "8BIM") blendKey else "norm"),
+            channels = channels,
+            isClippingMask = isClippingMask,
+            section = extra.section,
+            mask = extra.maskHeader,
+        )
+    }
+
+    private fun parseExtraLayerData(
+        reader: PsdReader,
+        extraLength: Int,
+        extraEnd: Int,
+        layerIndex: Int,
+    ): ExtraLayerData {
+        var name = "Layer ${layerIndex + 1}"
+        var section = Section.NONE
+        var folderBlend: BlendMode? = null
+        var maskHeader: MaskHeader? = null
+        if (extraLength <= 0 || reader.remaining() < 8) {
+            return ExtraLayerData(name, section, folderBlend, maskHeader)
+        }
+        val maskLength = reader.readInt()
+        val maskStart = reader.position
+        if (maskLength >= MASK_HEADER_LENGTH && reader.remaining() >= MASK_HEADER_LENGTH) {
+            val maskTop = reader.readInt()
+            val maskLeft = reader.readInt()
+            val maskBottom = reader.readInt()
+            val maskRight = reader.readInt()
+            maskHeader = MaskHeader(maskTop, maskLeft, maskBottom, maskRight, reader.readByte(), reader.readByte())
+        }
+        reader.position = (maskStart + maskLength.coerceAtLeast(0)).coerceAtMost(extraEnd)
+        val blendingRangesLength = reader.readInt()
+        if (blendingRangesLength > 0) reader.skip(blendingRangesLength)
+        if (reader.position < extraEnd) {
+            val nameLength = reader.readByte()
+            if (nameLength > 0) name = reader.readAscii(nameLength)
+            reader.skip((4 - (nameLength + 1) % 4) % 4)
+        }
+        val blocks = parseExtraBlocks(reader, extraEnd)
+        return ExtraLayerData(
+            name = blocks.name ?: name,
+            section = blocks.section ?: section,
+            folderBlend = blocks.folderBlend ?: folderBlend,
+            maskHeader = maskHeader,
+        )
+    }
+
+    private fun parseExtraBlocks(
+        reader: PsdReader,
+        extraEnd: Int,
+    ): ExtraBlocksResult {
+        var name: String? = null
+        var section: Section? = null
+        var folderBlend: BlendMode? = null
+        var scanPosition = reader.position
+        while (scanPosition + 12 <= extraEnd) {
+            reader.position = scanPosition
+            val signature = reader.readAscii(4)
+            if (signature != "8BIM" && signature != "8B64") break
+            val key = reader.readAscii(4)
+            val length = reader.readInt()
+            if (length < 0 || reader.remaining() < length) break
+            val blockStart = reader.position
+            if (key == "luni") {
+                val unicodeName = reader.readUnicodeString(length)
+                if (unicodeName.isNotBlank()) name = unicodeName
+            } else if ((key == "lsct" || key == "lsdk") && length >= 4) {
+                val (sec, blend) = parseFolderSection(reader, length)
+                section = sec
+                if (blend != null) folderBlend = blend
+            }
+            scanPosition = blockStart + length + (length % 2)
+        }
+        return ExtraBlocksResult(name, section, folderBlend)
+    }
+
+    private fun parseFolderSection(
+        reader: PsdReader,
+        length: Int,
+    ): Pair<Section, BlendMode?> {
+        val section = Section.of(reader.readInt())
+        val folderBlend =
+            if (length >= LSCT_LENGTH && reader.readAscii(4) == "8BIM") {
+                val blend = reader.readAscii(4)
+                if (blend == PASS_THROUGH_KEY) BlendMode.PASS_THROUGH else blendModeFromKey(blend)
+            } else {
+                null
+            }
+        return section to folderBlend
+    }
+
+    private fun decodeFolderLayer(
+        record: PendingLayer,
+        reader: PsdReader,
+        depth: Int,
+        isPsb: Boolean,
+        maskWidth: Int,
+        maskHeight: Int,
+    ): PsdLayer {
+        var maskPlane: ByteArray? = null
+        record.channels.forEach { (channelId, length) ->
+            require(length <= reader.remaining()) { "Truncated PSD folder channel" }
+            val start = reader.position
+            if (channelId == CHANNEL_USER_MASK && maskWidth > 0 && maskHeight > 0) {
+                maskPlane = readChannel(reader, maskWidth, maskHeight, depth, length, isPsb)
+            }
+            reader.position = start + length
+        }
+        return if (record.section == Section.GROUP_END) {
+            PsdLayer.groupEnd()
+        } else {
+            PsdLayer
+                .groupHeader(record.name, record.opacity, record.isVisible, record.blendMode)
+                .copy(
+                    section = record.section,
+                    mask = record.mask?.let { maskOf(it, record.left, record.top, maskPlane) },
+                )
+        }
+    }
+
+    private fun decodeRasterLayer(
+        record: PendingLayer,
+        reader: PsdReader,
+        layerWidth: Int,
+        layerHeight: Int,
+        depth: Int,
+        colorMode: Int,
+        isPsb: Boolean,
+        maskWidth: Int,
+        maskHeight: Int,
+    ): PsdLayer {
+        require(CanvasOperations.isSizeSafe(layerWidth, layerHeight)) { "A PSD layer is too large" }
+        val planes = HashMap<Int, ByteArray>()
+        record.channels.forEach { (channelId, length) ->
+            require(length <= reader.remaining()) { "Truncated PSD layer channel" }
+            val start = reader.position
+            if (channelId != CHANNEL_USER_MASK) {
+                planes[channelId] = readChannel(reader, layerWidth, layerHeight, depth, length, isPsb)
+            } else if (maskWidth > 0 && maskHeight > 0) {
+                planes[channelId] = readChannel(reader, maskWidth, maskHeight, depth, length, isPsb)
+            }
+            reader.position = start + length
+        }
+        val buffer = decodeLayerPixels(planes, layerWidth, layerHeight, colorMode)
+        return PsdLayer(
+            name = record.name,
+            pixels = buffer,
+            opacity = record.opacity,
+            isVisible = record.isVisible,
+            blendMode = record.blendMode,
+            left = record.left,
+            top = record.top,
+            isClippingMask = record.isClippingMask,
+            mask = record.mask?.let { maskOf(it, record.left, record.top, planes[CHANNEL_USER_MASK]) },
+        )
+    }
+
+    private fun decodeLayerPixels(
+        planes: Map<Int, ByteArray>,
+        layerWidth: Int,
+        layerHeight: Int,
+        colorMode: Int,
+    ): PixelBuffer {
+        val buffer = PixelBuffer(layerWidth, layerHeight)
+        val alpha = planes[CHANNEL_ALPHA]
+        if (colorMode == COLOR_MODE_CMYK) {
+            for (index in buffer.pixels.indices) {
+                val black = planes[3]?.getOrNull(index)?.toInt()?.and(0xFF) ?: 0
+                val a = alpha?.getOrNull(index)?.toInt()?.and(0xFF) ?: 255
+                buffer.pixels[index] =
+                    Channels.argb(
+                        a,
+                        cmykToRgb(planes[0], index, black),
+                        cmykToRgb(planes[1], index, black),
+                        cmykToRgb(planes[2], index, black),
+                    )
+            }
+        } else {
+            val red = planes[CHANNEL_RED]
+            val green = planes[CHANNEL_GREEN]
+            val blue = planes[CHANNEL_BLUE]
+            for (index in buffer.pixels.indices) {
+                val r = channelValue(red, index, colorMode)
+                val g = if (colorMode == COLOR_MODE_GRAYSCALE) r else channelValue(green, index, colorMode)
+                val b = if (colorMode == COLOR_MODE_GRAYSCALE) r else channelValue(blue, index, colorMode)
+                val a = alpha?.getOrNull(index)?.toInt()?.and(0xFF) ?: 255
+                buffer.pixels[index] = Channels.argb(a, r, g, b)
+            }
+        }
+        return buffer
     }
 
     /** Validate mask bounds before allocating or decompressing the independently sized mask plane. */
@@ -808,9 +898,10 @@ object PsdCodec {
         depth: Int,
         colorMode: Int,
         hasMergedTransparency: Boolean,
+        isPsb: Boolean = false,
     ): PixelBuffer? {
         val compression = reader.readShort()
-        val planes = readMergedPlanes(reader, compression, channelCount, width, height, depth, colorMode) ?: return null
+        val planes = readMergedPlanes(reader, compression, channelCount, width, height, depth, colorMode, isPsb) ?: return null
 
         val buffer = PixelBuffer(width, height)
         val red = planes[CHANNEL_RED]
@@ -876,6 +967,7 @@ object PsdCodec {
         height: Int,
         depth: Int,
         declaredLength: Int,
+        isPsb: Boolean = false,
     ): ByteArray {
         require(declaredLength >= 2 && declaredLength <= reader.remaining()) { "Truncated PSD channel" }
         // A channel's decoder must never borrow bytes from the next channel, even when a
@@ -894,8 +986,9 @@ object PsdCodec {
                 }
 
                 COMPRESSION_RLE -> {
-                    require(channelEnd - reader.position >= height * 2) { "Truncated PSD row-length table" }
-                    val rowLengths = IntArray(height) { reader.readShort() }
+                    val countBytes = if (isPsb) 4 else 2
+                    require(channelEnd - reader.position >= height * countBytes) { "Truncated PSD row-length table" }
+                    val rowLengths = IntArray(height) { if (isPsb) reader.readInt() else reader.readShort() }
                     require(rowLengths.sumOf { it.toLong() } <= channelEnd - reader.position) { "PSD rows exceed their channel" }
                     // A 16-bit row holds two bytes per pixel, so it is decoded at its full width before downsampling.
                     val out = ByteArray(planeBytes)
@@ -1140,6 +1233,7 @@ object PsdCodec {
         height: Int,
         depth: Int,
         colorMode: Int,
+        isPsb: Boolean = false,
     ): HashMap<Int, ByteArray>? {
         val planes = HashMap<Int, ByteArray>()
         val channelIds =
@@ -1175,7 +1269,8 @@ object PsdCodec {
 
             COMPRESSION_RLE -> {
                 // The byte-count table lists every row of every channel, then the row data follows.
-                repeat(channelCount * height) { reader.readShort() }
+                // In PSB (v2), each entry is a 4-byte int instead of a 2-byte short.
+                repeat(channelCount * height) { if (isPsb) reader.readInt() else reader.readShort() }
                 val rowBytes = width * bytesPerSample
                 channelIds.forEach { id ->
                     val out = ByteArray(rowBytes * height)
@@ -1370,6 +1465,12 @@ object PsdCodec {
             val c = readByte()
             val d = readByte()
             return (a shl 24) or (b shl 16) or (c shl 8) or d
+        }
+
+        fun readLong(): Long {
+            val high = readInt().toLong() and 0xFFFFFFFFL
+            val low = readInt().toLong() and 0xFFFFFFFFL
+            return (high shl 32) or low
         }
 
         fun readBytes(count: Int): ByteArray {

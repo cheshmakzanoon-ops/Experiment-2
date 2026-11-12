@@ -569,6 +569,10 @@ class CanvasRepositoryImpl
 
         override suspend fun autosave(projectId: Long) =
             saveMutex.withLock {
+                if (hasUnresolvedRecovery(projectId)) {
+                    Timber.w("Autosave skipped for project $projectId: unresolved recovery exists")
+                    return@withLock
+                }
                 val snapshot = captureSave(projectId)
                 storage.saveAutosave(projectId, persistRasters(snapshot))
                 pruneCommittedRasters(projectId)

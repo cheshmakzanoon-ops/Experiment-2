@@ -235,6 +235,36 @@ class CanvasViewModel
                 notify(error.message ?: "The operation could not be completed")
             }
 
+        private val recoveryController =
+            CanvasRecoveryController(
+                canvasRepository = canvasRepository,
+                scope = viewModelScope + editorErrors,
+                notify = ::notify,
+                onStateRecovered = { state ->
+                    _uiState.value =
+                        CanvasUiState.Ready(
+                            projectId = currentProjectId,
+                            projectName = project?.name ?: "Untitled artwork",
+                            width = state.width,
+                            height = state.height,
+                            dpi = state.dpi,
+                            frameCount = state.frameCount,
+                            backgroundColor = state.backgroundColor,
+                        )
+                    _dirty.value = true
+                    refreshLayers()
+                    refreshHistory()
+                    refreshSelection()
+                    startObserving()
+                    startAutosave()
+                },
+                onDialogDismissed = {
+                    (_uiState.value as? CanvasUiState.Ready)?.let {
+                        _uiState.value = it.copy(recoveryAvailable = false)
+                    }
+                },
+            )
+
         /** Creating, renaming, copying, extending and deleting the user's own palettes. */
         val paletteEditor = PaletteEditor(settingsRepository, viewModelScope, editorErrors) { _palettes.value }
 
@@ -277,6 +307,7 @@ class CanvasViewModel
                             return@launch
                         }
                         val recoveryAvailable = canvasRepository.hasRecovery(projectId)
+                        recoveryController.onProjectOpened(projectId, recoveryAvailable)
                         PendingImports.takeProfile(projectId)?.let { canvasRepository.setColorProfile(it, undoable = false) }
                         model.initialize(projectId) { thumbnail ->
                             project = ModelImports.updateProject(canvasRepository, projectRepository, existing, thumbnail)
@@ -404,7 +435,7 @@ class CanvasViewModel
                         delay(settings.autosaveIntervalMs.coerceAtLeast(5_000L))
                         if (!settings.autosaveEnabled ||
                             !allowAutosave ||
-                            (_uiState.value as? CanvasUiState.Ready)?.recoveryAvailable == true
+                            recoveryController.hasUnresolvedRecovery
                         ) {
                             continue
                         }
@@ -1344,14 +1375,14 @@ class CanvasViewModel
         fun save(onSaved: (() -> Unit)? = null) {
             val projectId = currentProjectId
             if (projectId == 0L || _saving.value) return
-            // An autosave that has not been recovered holds the only copy of that work. A save would replace it.
-            if ((_uiState.value as? CanvasUiState.Ready)?.recoveryAvailable == true) {
-                notify("Recover or discard the autosaved version before saving")
-                return
-            }
             _saving.value = true
             viewModelScope.launch(editorErrors) {
                 try {
+                    // An autosave that has not been recovered holds the only copy of that work. A save would replace it.
+                    if (recoveryController.hasUnresolvedRecovery || canvasRepository.hasUnresolvedRecovery(projectId)) {
+                        notify("Recover or discard the autosaved version before saving")
+                        return@launch
+                    }
                     val thumbnail = requireNotNull(canvasRepository.saveCanvas(projectId)) { "No artwork was saved" }
                     val existing = project ?: projectRepository.getProjectById(projectId)
                     if (existing != null) {
@@ -1377,8 +1408,14 @@ class CanvasViewModel
             stopPlayback()
             if (!allowAutosave || !_settings.value.autosaveEnabled) return
             val state = _uiState.value as? CanvasUiState.Ready ?: return
-            if (state.recoveryAvailable || !canvasRepository.hasUnsavedChanges()) return
             viewModelScope.launch(editorErrors) {
+                if (
+                    recoveryController.hasUnresolvedRecovery ||
+                    canvasRepository.hasUnresolvedRecovery(state.projectId) ||
+                    !canvasRepository.hasUnsavedChanges()
+                ) {
+                    return@launch
+                }
                 // The app can be closed as soon as it stops, which cancels this scope. The save must finish instead,
                 // or the work since the last autosave is lost.
                 withContext(NonCancellable) { canvasRepository.autosave(state.projectId) }
@@ -1401,44 +1438,11 @@ class CanvasViewModel
         }
 
         /** Restores the autosave without clearing it until an explicit save succeeds. */
-        fun recoverAutosave() {
-            val projectId = currentProjectId
-            if (projectId == 0L) return
-            viewModelScope.launch(editorErrors) {
-                val state = canvasRepository.recoverAutosave(projectId)
-                if (state == null) {
-                    notify("There was nothing to recover")
-                } else {
-                    _uiState.value =
-                        CanvasUiState.Ready(
-                            projectId = projectId,
-                            projectName = project?.name ?: "Untitled artwork",
-                            width = state.width,
-                            height = state.height,
-                            dpi = state.dpi,
-                            frameCount = state.frameCount,
-                            backgroundColor = state.backgroundColor,
-                        )
-                    _dirty.value = true
-                    refreshLayers()
-                    refreshHistory()
-                    refreshSelection()
-                    startObserving()
-                    startAutosave()
-                    notify("Recovered the autosaved version")
-                }
-            }
-        }
+        fun recoverAutosave() = recoveryController.recover(currentProjectId)
 
-        fun discardRecovery() =
-            viewModelScope.launch(editorErrors) {
-                canvasRepository.discardRecovery(currentProjectId)
-                (_uiState.value as? CanvasUiState.Ready)?.let { _uiState.value = it.copy(recoveryAvailable = false) }
-            }
+        fun discardRecovery() = recoveryController.discard(currentProjectId)
 
-        fun dismissRecovery() {
-            (_uiState.value as? CanvasUiState.Ready)?.let { _uiState.value = it.copy(recoveryAvailable = false) }
-        }
+        fun dismissRecovery() = recoveryController.dismiss()
 
         /** Time spent changing this artwork, for Canvas information. */
         fun trackedTimeMs(): Long = canvasRepository.trackedTimeMs()

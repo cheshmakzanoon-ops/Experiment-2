@@ -44,6 +44,8 @@ class ProcreateImport private constructor(
 
     companion object {
         private const val MAX_ENTRY_BYTES = 256L * 1024 * 1024
+        private const val MAX_FILE_BYTES = 512L * 1024 * 1024
+        private const val MAX_ARCHIVE_ENTRIES = 10_000
 
         /** Copies [input] into [directory] and opens it as a Procreate document. */
         fun open(
@@ -54,8 +56,9 @@ class ProcreateImport private constructor(
             var zip: ZipFile? = null
             var opened: ProcreateImport? = null
             try {
-                file.outputStream().use { input.copyTo(it) }
+                copyBounded(input, file)
                 val archive = ZipFile(file).also { zip = it }
+                require(archive.size() <= MAX_ARCHIVE_ENTRIES) { "This Procreate document has too many entries" }
                 val files = Entries(archive)
                 require(ProcreateReader.isProcreate(files)) { "That file is not a Procreate document" }
                 return ProcreateImport(file, archive, ProcreateReader.open(files, BitmapPixelBridge::fromEncodedBytes)).also { opened = it }
@@ -64,6 +67,24 @@ class ProcreateImport private constructor(
                     zip?.close()
                     file.delete()
                 }
+            }
+        }
+
+        private fun copyBounded(
+            input: InputStream,
+            file: File,
+        ) {
+            file.outputStream().use { out ->
+                val buffer = ByteArray(8192)
+                var total = 0L
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    total += count
+                    require(total <= MAX_FILE_BYTES) { "This Procreate document exceeds the maximum file size" }
+                    out.write(buffer, 0, count)
+                }
+                out.flush()
             }
         }
     }

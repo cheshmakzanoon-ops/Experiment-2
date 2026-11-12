@@ -16,6 +16,7 @@ import com.artflow.studio.R
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.color.PaletteCodec
 import com.artflow.studio.core.color.PaletteExtractor
+import com.artflow.studio.core.export.readAtMost
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -46,8 +47,12 @@ fun rememberPaletteImports(
                 val palette =
                     withContext(Dispatchers.IO) {
                         runCatching {
-                            val bytes = requireNotNull(context.contentResolver.openInputStream(uri)?.use { it.readBytes() })
-                            require(bytes.size <= MAX_PALETTE_BYTES)
+                            val bytes =
+                                requireNotNull(
+                                    context.contentResolver.openInputStream(uri)?.use { stream ->
+                                        stream.readAtMost(MAX_PALETTE_BYTES.toLong())
+                                    },
+                                )
                             val name = displayName(context, uri)
                             PaletteCodec.decode(bytes, name)
                         }.getOrNull()

@@ -10,6 +10,7 @@ import com.artflow.studio.core.color.ProcreateSwatches
 import com.artflow.studio.core.export.FileKind
 import com.artflow.studio.core.export.FileKinds
 import com.artflow.studio.core.export.PsdCodec
+import com.artflow.studio.core.export.readAtMost
 import com.artflow.studio.core.three.ModelPackage
 import com.artflow.studio.core.three.ObjParser
 import com.artflow.studio.core.three.PreparedModelImport
@@ -89,7 +90,7 @@ internal class GalleryImports(
             val opened =
                 withContext(Dispatchers.IO) {
                     runCatching {
-                        val bytes = requireNotNull(context.contentResolver.openInputStream(uri)?.use { it.readBytes() })
+                        val bytes = requireNotNull(context.contentResolver.openInputStream(uri)?.use { it.readAtMost(MAX_PSD_BYTES) })
                         val document = requireNotNull(PsdCodec.read(bytes))
                         bytes to document
                     }.getOrNull()
@@ -149,7 +150,7 @@ internal class GalleryImports(
                 withContext(Dispatchers.IO) {
                     runCatching {
                         context.contentResolver.openInputStream(uri)?.use { input ->
-                            input.readBytes().also { require(it.size <= MAX_PACKAGE_BYTES) }
+                            input.readAtMost(MAX_PACKAGE_BYTES)
                         }
                     }.getOrNull()
                 }
@@ -180,7 +181,7 @@ internal class GalleryImports(
     }
 
     private fun readModel(uri: Uri): PreparedModelImport {
-        val bytes = requireNotNull(context.contentResolver.openInputStream(uri)?.use { it.readBytes() })
+        val bytes = requireNotNull(context.contentResolver.openInputStream(uri)?.use { it.readAtMost(MAX_MODEL_BYTES) })
         return PreparedModelImport
             .prepare(ModelPackage.read(bytes), BitmapPixelBridge::fromEncodedBytes, MAX_MODEL_TEXTURE, MODEL_TEXTURE)
             .also(ModelImports::requireSupportedSize)
@@ -196,7 +197,7 @@ internal class GalleryImports(
             withContext(Dispatchers.IO) {
                 runCatching {
                     context.contentResolver.openInputStream(uri)?.use { stream ->
-                        stream.readBytes().takeIf { it.size <= BrushImports.MAX_BYTES }
+                        stream.readAtMost(BrushImports.MAX_BYTES.toLong())
                     }
                 }.getOrNull()
             }
@@ -275,7 +276,9 @@ internal class GalleryImports(
     private companion object {
         const val HEAD_BYTES = 64
         const val MAX_NAME = 40
-        const val MAX_PACKAGE_BYTES = 512 * 1024 * 1024
+        const val MAX_PACKAGE_BYTES = 512L * 1024 * 1024
+        const val MAX_PSD_BYTES = 256L * 1024 * 1024
+        const val MAX_MODEL_BYTES = 64L * 1024 * 1024
         const val MODEL_TEXTURE = 2048
         const val MAX_MODEL_TEXTURE = 4096
         const val MODEL_DPI = 132

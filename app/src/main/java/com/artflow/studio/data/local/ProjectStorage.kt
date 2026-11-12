@@ -2,6 +2,7 @@ package com.artflow.studio.data.local
 
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -13,7 +14,6 @@ import java.nio.file.LinkOption
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
-import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
@@ -34,9 +34,9 @@ import javax.inject.Singleton
  */
 @Singleton
 class ProjectStorage
-    @Inject
     constructor(
         @ApplicationContext private val context: Context,
+        private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     ) {
         // -----------------------------------------------------------------------------------------
         // Paths
@@ -104,7 +104,7 @@ class ProjectStorage
             projectId: Long,
             document: CanvasDocument,
         ): File =
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 val file = documentFile(projectId)
                 writeAtomically(file) { out -> out.write(CanvasDocumentCodec.encode(document)) }
                 Timber.d("Saved project $projectId (v${document.version}, ${document.resolvedFrames().size} frames)")
@@ -116,20 +116,24 @@ class ProjectStorage
             projectId: Long,
             document: CanvasDocument,
         ): File =
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 val file = autosaveFile(projectId)
                 writeAtomically(file) { out -> out.write(CanvasDocumentCodec.encode(document)) }
+                val doc = documentFile(projectId)
+                if (doc.exists() && file.lastModified() <= doc.lastModified()) {
+                    file.setLastModified(doc.lastModified() + 1000L)
+                }
                 file
             }
 
         suspend fun discardAutosave(projectId: Long) =
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 val file = autosaveFile(projectId)
                 check(!file.exists() || file.delete()) { "Could not discard the recovery snapshot" }
             }
 
         suspend fun loadDocument(projectId: Long): CanvasDocument? =
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 val file = documentFile(projectId)
                 if (!file.exists()) return@withContext null
                 decodeDocument(file, projectId)
@@ -137,7 +141,7 @@ class ProjectStorage
 
         /** Loads the autosave copy, used by the crash-recovery prompt. */
         suspend fun loadAutosave(projectId: Long): CanvasDocument? =
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 val file = autosaveFile(projectId)
                 if (!file.exists()) return@withContext null
                 decodeDocument(file, projectId)
@@ -161,7 +165,7 @@ class ProjectStorage
 
         /** True when the autosave is newer than the last explicit save. */
         suspend fun hasUnsavedRecovery(projectId: Long): Boolean =
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 val autosave = autosaveFile(projectId)
                 val document = documentFile(projectId)
                 autosave.exists() && (!document.exists() || autosave.lastModified() > document.lastModified())
@@ -175,14 +179,14 @@ class ProjectStorage
             projectId: Long,
             pngBytes: ByteArray,
         ): File =
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 val file = flattenedFile(projectId)
                 writeAtomically(file) { out -> out.write(pngBytes) }
                 file
             }
 
         suspend fun loadFlattenedBytes(projectId: Long): ByteArray? =
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 val file = flattenedFile(projectId)
                 if (file.exists()) file.readBytes() else null
             }
@@ -191,7 +195,7 @@ class ProjectStorage
             projectId: Long,
             pngBytes: ByteArray,
         ): String =
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 val file = thumbnailFile(projectId)
                 writeAtomically(file) { out -> out.write(pngBytes) }
                 file.absolutePath
@@ -215,7 +219,7 @@ class ProjectStorage
             version: Int,
             pngBytes: ByteArray,
         ): String =
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 val relative = "$LAYERS_DIR/$layerId/${RASTER_PREFIX}$version-${digest(pngBytes)}.png"
                 val file = resolve(projectId, relative)
                 file.parentFile?.mkdirs()
@@ -227,7 +231,7 @@ class ProjectStorage
             projectId: Long,
             relativePath: String?,
         ): ByteArray? =
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 if (relativePath == null) return@withContext null
                 val file = resolve(projectId, relativePath)
                 require(file.isFile && file.length() in 1..MAX_RASTER_BYTES) { "Missing or invalid layer pixels: $relativePath" }
@@ -242,7 +246,7 @@ class ProjectStorage
             version: Int,
             pngBytes: ByteArray,
         ): String =
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 require(kind.matches(Regex("[a-zA-Z0-9_-]+"))) { "Invalid auxiliary image kind" }
                 val relative = "$LAYERS_DIR/$layerId/$kind$version-${digest(pngBytes)}.png"
                 val file = resolve(projectId, relative)
@@ -297,7 +301,7 @@ class ProjectStorage
             projectId: Long,
             keep: Set<String>,
         ): Int =
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 val layersDir = File(projectDir(projectId), LAYERS_DIR)
                 if (!layersDir.exists()) return@withContext 0
                 // Fail closed if either manifest is unreadable; never guess which artwork can be deleted.
@@ -336,7 +340,7 @@ class ProjectStorage
 
         /** The 3D model (OBJ text) this artwork paints, if it has one. */
         suspend fun loadModel(projectId: Long): String? =
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 val file = resolve(projectId, MODEL_NAME)
                 if (!file.isFile) return@withContext null
                 require(file.length() in 1..MAX_MODEL_BYTES) { "The 3D model is empty or too large" }
@@ -346,7 +350,7 @@ class ProjectStorage
         suspend fun saveModel(
             projectId: Long,
             objText: String,
-        ) = withContext(Dispatchers.IO) {
+        ) = withContext(ioDispatcher) {
             val bytes = objText.toByteArray()
             require(bytes.size in 1..MAX_MODEL_BYTES) { "The 3D model is empty or too large" }
             writeAtomically(resolve(projectId, MODEL_NAME)) { it.write(bytes) }
@@ -354,7 +358,7 @@ class ProjectStorage
 
         /** A saved project's files for an `.artflow` package: manifest, layer pixels and previews. */
         suspend fun packageFiles(projectId: Long): Map<String, ByteArray> =
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 val document = requireNotNull(loadDocument(projectId)) { "Save the artwork before sharing it" }
                 val files = linkedMapOf(DOCUMENT_NAME to documentFile(projectId).readBytes())
                 referencedFiles(document).forEach { relative -> files[relative] = requireNotNull(readRaster(projectId, relative)) }
@@ -382,7 +386,7 @@ class ProjectStorage
             projectId: Long,
             files: Map<String, ByteArray>,
         ): CanvasDocument =
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 val manifest = requireNotNull(files[DOCUMENT_NAME]) { "The artwork has no document" }
                 val destination = ownedPath("projects/$projectId")
                 check(!Files.exists(destination.toPath(), LinkOption.NOFOLLOW_LINKS)) { "The destination already contains project data" }
@@ -428,7 +432,7 @@ class ProjectStorage
             sourceId: Long,
             destinationId: Long,
         ): CanvasDocument? =
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 require(sourceId > 0 && destinationId > 0 && sourceId != destinationId) { "Invalid project copy" }
                 val document = loadDocument(sourceId)
                 val recovery = loadAutosave(sourceId)
@@ -492,7 +496,7 @@ class ProjectStorage
             fileName: String,
             bytes: ByteArray,
         ): File =
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 require(fileName.isNotBlank() && fileName.length <= 180 && fileName !in setOf(".", "..")) { "Invalid export filename" }
                 require(fileName.none { it == '/' || it == '\\' || it.code < 32 }) { "Export filename must not contain a path" }
                 require(bytes.isNotEmpty()) { "The export is empty" }
