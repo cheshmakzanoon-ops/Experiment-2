@@ -205,6 +205,10 @@ class CanvasRepositoryImpl
         /** Sessions whose every buffer change is reported as preview damage. */
         private val damageTrackedSessions = mutableSetOf<Long>()
 
+        private val recoveredProjects =
+            java.util.concurrent.ConcurrentHashMap
+                .newKeySet<Long>()
+
         init {
             // A blank frame keeps every accessor total: the repository is usable before a project is
             // created, which removes a whole class of null handling from the ViewModel.
@@ -317,17 +321,24 @@ class CanvasRepositoryImpl
             withState {
                 val document = storage.loadDocument(projectId) ?: return@withState null
                 applyDocument(projectId, document)
+                dirty = false
+                currentProjectId = projectId
+                recoveredProjects.remove(projectId)
                 Timber.d("Loaded project $projectId (${frameList.size} frames, ${currentLayers().size} layers)")
                 stateSnapshot()
             }
 
         override suspend fun hasRecovery(projectId: Long): Boolean = storage.hasUnsavedRecovery(projectId)
 
+        override suspend fun hasUnresolvedRecovery(projectId: Long): Boolean =
+            storage.hasUnsavedRecovery(projectId) && projectId !in recoveredProjects
+
         override suspend fun recoverAutosave(projectId: Long): CanvasState? =
             withState {
                 val document = storage.loadAutosave(projectId) ?: return@withState null
                 applyDocument(projectId, document)
                 dirty = true
+                recoveredProjects.add(projectId)
                 Timber.d("Recovered autosave for project $projectId")
                 stateSnapshot()
             }
@@ -515,12 +526,16 @@ class CanvasRepositoryImpl
 
         override suspend fun saveCanvas(projectId: Long): String? =
             saveMutex.withLock {
+                check(!hasUnresolvedRecovery(projectId)) {
+                    "Cannot save project $projectId: unresolved recovery exists"
+                }
                 val snapshot = captureSave(projectId)
                 val document = persistRasters(snapshot)
                 // The manifest is the commit point. A cancelled or failed pre-commit write leaves the
                 // old manifest and all of its rasters intact. Never mark newer edits as saved.
                 storage.saveDocument(projectId, document)
                 storage.discardAutosave(projectId)
+                recoveredProjects.remove(projectId)
                 val composite =
                     withContext(Dispatchers.Default) {
                         renderFrozen(snapshot.frames[snapshot.document.activeFrameIndex].layers, snapshot.document)
@@ -561,14 +576,23 @@ class CanvasRepositoryImpl
 
         override suspend fun discardRecovery(projectId: Long) =
             saveMutex.withLock {
+                recoveredProjects.remove(projectId)
                 storage.discardAutosave(projectId)
                 pruneCommittedRasters(projectId)
             }
 
         private suspend fun pruneCommittedRasters(projectId: Long) {
             try {
-                // ProjectStorage independently retains BOTH manifests and fails closed on corruption.
-                storage.pruneRasters(projectId, emptySet())
+                val activeRasters =
+                    withState {
+                        if (currentProjectId == projectId) {
+                            allLayers().flatMap { listOfNotNull(it.rasterFile, it.maskFile) }.toSet()
+                        } else {
+                            emptySet()
+                        }
+                    }
+                // ProjectStorage independently retains BOTH manifests, active pins, and active rasters.
+                storage.pruneRasters(projectId, activeRasters)
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
             } catch (error: IOException) {
@@ -1064,7 +1088,12 @@ class CanvasRepositoryImpl
                 requireClipboardTarget(layers, layer.id, revision, paste)
                 check(activeSelection === selected) { "The selection changed; copy it again" }
                 if (paste) {
-                    insertPastedLayer(checkNotNull(prepared.third), layer.takeIf { cut }, prepared.second)
+                    insertPastedLayer(
+                        checkNotNull(prepared.third),
+                        layer.takeIf { cut },
+                        prepared.second,
+                        isPrivate = layer.isPrivate,
+                    )
                 } else {
                     pushUndo()
                     replaceClipboardSource(layer, checkNotNull(prepared.second))
@@ -1100,12 +1129,14 @@ class CanvasRepositoryImpl
             source: LayerData? = null,
             remainder: PixelBuffer? = null,
             materialChannel: MaterialChannel = activeLayerData()?.materialChannel ?: MaterialChannel.COLOR,
+            isPrivate: Boolean = source?.isPrivate ?: false,
         ): Long {
             val layers = currentLayers()
             val pasted =
                 LayerData(id = nextLayerId, name = "Pasted").also {
                     it.raster = pixels
                     it.materialChannel = materialChannel
+                    it.isPrivate = isPrivate
                 }
             val insertAt = (layers.indexOfFirst { it.id == activeLayerId() } + 1).coerceIn(0, layers.size)
             pushUndo()
@@ -1275,6 +1306,7 @@ class CanvasRepositoryImpl
             name: String?,
             index: Int?,
             opacity: Float,
+            isPrivate: Boolean,
         ): Layer =
             withState {
                 require(opacity.isFinite()) { "Layer opacity must be finite" }
@@ -1287,7 +1319,10 @@ class CanvasRepositoryImpl
                         id = layerId,
                         name = name ?: "Layer ${layers.size}",
                         opacity = opacity.coerceIn(0f, 1f),
-                    ).also { it.materialChannel = activeLayerData()?.materialChannel ?: MaterialChannel.COLOR }
+                    ).also {
+                        it.isPrivate = isPrivate
+                        it.materialChannel = activeLayerData()?.materialChannel ?: MaterialChannel.COLOR
+                    }
                 val activeIndex = layers.indexOfFirst { it.id == activeLayerId() }
                 val insertAt = (index ?: (activeIndex + 1)).coerceIn(0, layers.size)
                 layers.add(insertAt, layer)

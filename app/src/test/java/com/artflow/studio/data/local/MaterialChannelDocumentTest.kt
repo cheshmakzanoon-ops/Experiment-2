@@ -33,7 +33,7 @@ class MaterialChannelDocumentTest {
         CanvasDocumentCodec.requireValidHeader(decoded)
         CanvasDocumentCodec.requireValidStructure(decoded)
         assertEquals(document, decoded)
-        assertTrue(encoded.contains("\"version\":6"))
+        assertTrue(encoded.contains("\"version\":${CanvasDocument.CURRENT_VERSION}"))
         assertEquals(encoded, CanvasDocumentCodec.encode(decoded).decodeToString())
         assertFalse(encoded.contains("\"materialChannel\":\"COLOR\""))
         assertEquals(layers, layers.map { it.copyWith() })

@@ -20,17 +20,42 @@ class CmykBuffer(
         require(data.size == width * height * 4) { "Data size does not match 4 channels per pixel" }
     }
 
-    fun index(x: Int, y: Int): Int {
+    fun index(
+        x: Int,
+        y: Int,
+    ): Int {
         require(x in 0 until width && y in 0 until height) { "Coordinates ($x, $y) out of bounds" }
         return (y * width + x) * 4
     }
 
-    fun getCyan(x: Int, y: Int): Int = data[index(x, y)].toInt() and 0xFF
-    fun getMagenta(x: Int, y: Int): Int = data[index(x, y) + 1].toInt() and 0xFF
-    fun getYellow(x: Int, y: Int): Int = data[index(x, y) + 2].toInt() and 0xFF
-    fun getBlack(x: Int, y: Int): Int = data[index(x, y) + 3].toInt() and 0xFF
+    fun getCyan(
+        x: Int,
+        y: Int,
+    ): Int = data[index(x, y)].toInt() and 0xFF
 
-    fun setCmyk(x: Int, y: Int, c: Int, m: Int, yl: Int, k: Int) {
+    fun getMagenta(
+        x: Int,
+        y: Int,
+    ): Int = data[index(x, y) + 1].toInt() and 0xFF
+
+    fun getYellow(
+        x: Int,
+        y: Int,
+    ): Int = data[index(x, y) + 2].toInt() and 0xFF
+
+    fun getBlack(
+        x: Int,
+        y: Int,
+    ): Int = data[index(x, y) + 3].toInt() and 0xFF
+
+    fun setCmyk(
+        x: Int,
+        y: Int,
+        c: Int,
+        m: Int,
+        yl: Int,
+        k: Int,
+    ) {
         val i = index(x, y)
         data[i] = c.coerceIn(0, 255).toByte()
         data[i + 1] = m.coerceIn(0, 255).toByte()
@@ -79,7 +104,8 @@ class CmykBuffer(
 
                     val separated = IccColorEngine.rgbToCmyk(r, g, b, profile)
                     cmyk.setCmyk(
-                        x, y,
+                        x,
+                        y,
                         (separated[0] * 255f).roundToInt(),
                         (separated[1] * 255f).roundToInt(),
                         (separated[2] * 255f).roundToInt(),

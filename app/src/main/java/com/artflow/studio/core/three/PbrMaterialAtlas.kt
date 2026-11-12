@@ -69,18 +69,7 @@ class PbrMaterialAtlas(
             val rowOffset = y * width
             for (x in minX..maxX) {
                 val dx = x - cx
-                val dist = hypot(dx, dy)
-                if (dist > radius) continue
-
-                val normalizedDist = dist / radius
-                val edgeAlpha = if (normalizedDist <= clampedHardness) {
-                    1.0f
-                } else {
-                    val t = (normalizedDist - clampedHardness) / (1f - clampedHardness)
-                    (1f - t * t * (3f - 2f * t)).coerceIn(0f, 1f) // Smoothstep falloff
-                }
-
-                val dabAlpha = (brushA * edgeAlpha).coerceIn(0f, 1f)
+                val dabAlpha = computeDabAlpha(hypot(dx, dy), radius, clampedHardness, brushA)
                 if (dabAlpha <= 0.001f) continue
 
                 val index = rowOffset + x
@@ -93,12 +82,13 @@ class PbrMaterialAtlas(
                     val outR = (brushR * dabAlpha + Channels.red(dstColor) * dstA * (1f - dabAlpha)) / outA
                     val outG = (brushG * dabAlpha + Channels.green(dstColor) * dstA * (1f - dabAlpha)) / outA
                     val outB = (brushB * dabAlpha + Channels.blue(dstColor) * dstA * (1f - dabAlpha)) / outA
-                    baseColor.pixels[index] = Channels.argb(
-                        (outA * 255f).roundToInt().coerceIn(0, 255),
-                        outR.roundToInt().coerceIn(0, 255),
-                        outG.roundToInt().coerceIn(0, 255),
-                        outB.roundToInt().coerceIn(0, 255),
-                    )
+                    baseColor.pixels[index] =
+                        Channels.argb(
+                            (outA * 255f).roundToInt().coerceIn(0, 255),
+                            outR.roundToInt().coerceIn(0, 255),
+                            outG.roundToInt().coerceIn(0, 255),
+                            outB.roundToInt().coerceIn(0, 255),
+                        )
                 }
 
                 // 2. Metallic blending
@@ -112,6 +102,24 @@ class PbrMaterialAtlas(
                 roughness.pixels[index] = Channels.argb(255, outRough, outRough, outRough)
             }
         }
+    }
+
+    private fun computeDabAlpha(
+        dist: Float,
+        radius: Float,
+        clampedHardness: Float,
+        brushA: Float,
+    ): Float {
+        if (dist > radius) return 0f
+        val normalizedDist = dist / radius
+        val edgeAlpha =
+            if (normalizedDist <= clampedHardness) {
+                1.0f
+            } else {
+                val t = (normalizedDist - clampedHardness) / (1f - clampedHardness)
+                (1f - t * t * (3f - 2f * t)).coerceIn(0f, 1f)
+            }
+        return (brushA * edgeAlpha).coerceIn(0f, 1f)
     }
 
     /**
@@ -140,12 +148,14 @@ class PbrMaterialAtlas(
 
         // 2. F: Schlick Fresnel
         val f0Dielectric = 0.04f
-        val f0 = FloatArray(3) { i ->
-            f0Dielectric * (1f - metallic) + albedo[i] * metallic
-        }
-        val f = FloatArray(3) { i ->
-            f0[i] + (1f - f0[i]) * Math.pow((1.0 - vh).toDouble(), 5.0).toFloat()
-        }
+        val f0 =
+            FloatArray(3) { i ->
+                f0Dielectric * (1f - metallic) + albedo[i] * metallic
+            }
+        val f =
+            FloatArray(3) { i ->
+                f0[i] + (1f - f0[i]) * Math.pow((1.0 - vh).toDouble(), 5.0).toFloat()
+            }
 
         // 3. G: Smith model with Schlick-GGX
         val k = ((roughness + 1f) * (roughness + 1f)) / 8f
@@ -155,17 +165,20 @@ class PbrMaterialAtlas(
 
         // Specular BRDF term
         val denomBrdf = 4f * nv * nl
-        val specular = FloatArray(3) { i ->
-            (d * f[i] * g) / denomBrdf
-        }
+        val specular =
+            FloatArray(3) { i ->
+                (d * f[i] * g) / denomBrdf
+            }
 
         // Energy conservation: kD + kS = 1.0
-        val kd = FloatArray(3) { i ->
-            (1f - f[i]) * (1f - metallic)
-        }
-        val diffuse = FloatArray(3) { i ->
-            kd[i] * albedo[i] / Math.PI.toFloat()
-        }
+        val kd =
+            FloatArray(3) { i ->
+                (1f - f[i]) * (1f - metallic)
+            }
+        val diffuse =
+            FloatArray(3) { i ->
+                kd[i] * albedo[i] / Math.PI.toFloat()
+            }
 
         return FloatArray(3) { i ->
             (diffuse[i] + specular[i]) * nl

@@ -41,6 +41,9 @@ internal class CanvasExportController(
     fun export(options: ExportOptions) {
         val (projectId, name) = currentProject()
         run(projectId, "Export failed") {
+            check(!repository.hasUnresolvedRecovery(projectId)) {
+                "Resolve recovery before exporting artwork"
+            }
             val format =
                 if (options.area == ExportArea.ALL_FRAMES && options.format == ExportFormat.PNG) {
                     ExportFormat.FRAME_SEQUENCE
@@ -61,7 +64,12 @@ internal class CanvasExportController(
 
     fun exportTimelapse(fullLength: Boolean) {
         val (projectId, name) = currentProject()
-        run(projectId, "Time-lapse export failed") { recorder.export(projectId, name, fullLength) }
+        run(projectId, "Time-lapse export failed") {
+            check(!repository.hasUnresolvedRecovery(projectId)) {
+                "Resolve recovery before exporting time-lapse"
+            }
+            recorder.export(projectId, name, fullLength)
+        }
     }
 
     private fun run(

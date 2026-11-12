@@ -66,6 +66,25 @@ class SelectionMaskCodecTest {
         assertNull("Broken deflate stream", SelectionMaskCodec.decode(Base64.getEncoder().encodeToString(garbage), 4, 4))
     }
 
+    @Test
+    fun art009_poorlyCompressibleHighEntropyMaskRoundTrips() {
+        val width = 256
+        val height = 256
+        val mask = SelectionMask(width, height)
+        var seed = 0x12345678L
+        for (i in mask.coverage.indices) {
+            seed = (seed * 6364136223846793005L + 1442695040888963407L)
+            mask.coverage[i] = (seed ushr 32).toByte()
+        }
+
+        val encoded = SelectionMaskCodec.encode(mask)
+        val decoded = requireNotNull(SelectionMaskCodec.decode(encoded, width, height))
+
+        assertEquals(width, decoded.width)
+        assertEquals(height, decoded.height)
+        assertArrayEquals(mask.coverage, decoded.coverage)
+    }
+
     private companion object {
         const val HEADER = 12
     }

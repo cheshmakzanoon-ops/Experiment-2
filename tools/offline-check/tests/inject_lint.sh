@@ -4,7 +4,7 @@
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AC_ROOT="$(dirname "$HERE")"
-REPO="${ARTFLOW_REPO:-/home/user/Experiment-2}"
+REPO="${ARTFLOW_REPO:-$(cd "$AC_ROOT/../.." && pwd)}"
 W="$AC_ROOT/work/inject-lint"
 rm -rf "$W" && mkdir -p "$W/repo/app"
 cp -r "$REPO/.editorconfig" "$REPO/config" "$REPO/build.gradle.kts" "$REPO/settings.gradle.kts" "$W/repo/"

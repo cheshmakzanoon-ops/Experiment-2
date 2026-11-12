@@ -7,16 +7,22 @@ import java.util.concurrent.ConcurrentHashMap
 
 /** Hands an imported picture or document from the gallery to the editor that opens its new canvas. */
 object PendingImports {
-    private val images = ConcurrentHashMap<Long, PixelBuffer>()
+    data class PendingImage(
+        val image: PixelBuffer,
+        val isPrivate: Boolean,
+    )
+
+    private val images = ConcurrentHashMap<Long, PendingImage>()
 
     fun put(
         projectId: Long,
         image: PixelBuffer,
+        isPrivate: Boolean = false,
     ) {
-        images[projectId] = image
+        images[projectId] = PendingImage(image, isPrivate)
     }
 
-    fun take(projectId: Long): PixelBuffer? = images.remove(projectId)
+    fun take(projectId: Long): PendingImage? = images.remove(projectId)
 
     private val documents = ConcurrentHashMap<Long, ByteArray>()
 

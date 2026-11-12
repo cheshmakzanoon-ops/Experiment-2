@@ -50,7 +50,7 @@ class PalmRejection(
      */
     fun rejectsTouchMajor(
         touchMajor: Float,
-        touchMinor: Float = 0f,
+        @Suppress("UnusedParameter") touchMinor: Float = 0f,
         thresholdMajorPx: Float = DEFAULT_TOUCH_MAJOR_THRESHOLD_PX,
     ): Boolean {
         if (!touchMajor.isFinite()) return false
@@ -67,6 +67,7 @@ class PalmRejection(
     companion object {
         /** Default pixel threshold for touch-major axis ellipse palm detection. */
         const val DEFAULT_TOUCH_MAJOR_THRESHOLD_PX = 50f
+
         /** A finger within this long of the pen's contact is taken to be the palm that came with it. */
         const val CONTACT_WINDOW_MS = 400L
 

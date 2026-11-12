@@ -57,7 +57,14 @@ class TimelapseRecorder
             recording: Boolean,
         ) = withContext(Dispatchers.IO) {
             val marker = pausedMarker(projectId)
-            if (recording) marker.delete() else marker.createNewFile()
+            if (recording) {
+                marker.delete()
+            } else {
+                marker.createNewFile()
+                mutex.withLock {
+                    if (projectId == lastProjectId) lastHash = 0
+                }
+            }
             Unit
         }
 
@@ -72,10 +79,12 @@ class TimelapseRecorder
             composite: PixelBuffer,
             maxSide: Int = MAX_SIDE,
         ) {
+            if (!isEnabled || !isRecording(projectId)) return
             withContext(Dispatchers.Default) {
                 val frame = downscale(composite, maxSide)
                 val hash = frame.pixels.contentHashCode()
                 mutex.withLock {
+                    if (!isEnabled || !isRecording(projectId)) return@withLock
                     if (projectId == lastProjectId && hash == lastHash) return@withLock
                     val bytes = BitmapPixelBridge.toJpegBytes(frame, JPEG_QUALITY, 0xFFFFFFFF.toInt())
                     withContext(Dispatchers.IO) {
@@ -109,38 +118,66 @@ class TimelapseRecorder
         ): Result<ExportResult> =
             withContext(Dispatchers.Default) {
                 runCatching {
-                    val recorded = mutex.withLock { withContext(Dispatchers.IO) { frames(projectId) } }
-                    require(recorded.isNotEmpty()) { "Nothing has been recorded yet — draw something first" }
-                    val files = if (fullLength) recorded else sampled(recorded, TARGET_DURATION_MS / MIN_FRAME_MS)
-                    val first = decode(files.first())
-                    // Large recordings fall back to 720p on devices whose encoder cannot take their size.
-                    val fitted = if (Mp4Encoder.supports(first.width, first.height)) first else downscale(first, MAX_SIDE)
-                    val width = max(16, (fitted.width + 1) and -2)
-                    val height = max(16, (fitted.height + 1) and -2)
-                    val perFrame = if (fullLength) MIN_FRAME_MS else (TARGET_DURATION_MS / files.size).coerceIn(MIN_FRAME_MS, MAX_FRAME_MS)
-                    val delays = List(files.size) { if (it == files.lastIndex) FINAL_HOLD_MS else perFrame }
-                    val safeName = projectName.replace(Regex("[^A-Za-z0-9 _-]"), "").trim().ifEmpty { "Artwork" }
-                    val fileName = if (fullLength) "$safeName timelapse.mp4" else "$safeName timelapse 30s.mp4"
-                    val temp = File.createTempFile("timelapse", ".mp4", storage.exportsDir(projectId))
-                    try {
-                        val options = ExportOptions(format = ExportFormat.MP4, backgroundColor = 0xFFFFFFFF.toInt())
-                        Mp4Encoder.encode(temp, width, height, files.size, delays, options) { index ->
-                            val decoded = if (index == 0) first else decode(files[index])
-                            if (decoded.width == width && decoded.height == height) decoded else decoded.scaled(width, height)
+                    val tempDir =
+                        withContext(Dispatchers.IO) {
+                            File(storage.exportsDir(projectId), "timelapse_snap_${System.currentTimeMillis()}").apply { mkdirs() }
                         }
-                        val bytes = withContext(Dispatchers.IO) { temp.readBytes() }
-                        val file = storage.saveExport(projectId, fileName, bytes)
-                        ExportResult(
-                            format = ExportFormat.MP4,
-                            filePath = file.absolutePath,
-                            fileName = fileName,
-                            byteCount = bytes.size.toLong(),
-                            width = width,
-                            height = height,
-                            frameCount = files.size,
-                        )
+                    try {
+                        val files =
+                            mutex.withLock {
+                                withContext(Dispatchers.IO) {
+                                    val recorded = frames(projectId)
+                                    require(recorded.isNotEmpty()) { "Nothing has been recorded yet — draw something first" }
+                                    val selected = if (fullLength) recorded else sampled(recorded, TARGET_DURATION_MS / MIN_FRAME_MS)
+                                    selected.mapIndexed { index, file ->
+                                        val snapFile = File(tempDir, "%06d%s".format(index, EXTENSION))
+                                        file.copyTo(snapFile, overwrite = true)
+                                        snapFile
+                                    }
+                                }
+                            }
+                        val first = decode(files.first())
+                        // Large recordings fall back to 720p on devices whose encoder cannot take their size.
+                        val fitted = if (Mp4Encoder.supports(first.width, first.height)) first else downscale(first, MAX_SIDE)
+                        val width = max(16, (fitted.width + 1) and -2)
+                        val height = max(16, (fitted.height + 1) and -2)
+                        val perFrame =
+                            if (fullLength) {
+                                MIN_FRAME_MS
+                            } else {
+                                (TARGET_DURATION_MS / files.size).coerceIn(
+                                    MIN_FRAME_MS,
+                                    MAX_FRAME_MS,
+                                )
+                            }
+                        val delays = List(files.size) { if (it == files.lastIndex) FINAL_HOLD_MS else perFrame }
+                        val safeName = projectName.replace(Regex("[^A-Za-z0-9 _-]"), "").trim().ifEmpty { "Artwork" }
+                        val fileName = if (fullLength) "$safeName timelapse.mp4" else "$safeName timelapse 30s.mp4"
+                        val temp = File.createTempFile("timelapse", ".mp4", storage.exportsDir(projectId))
+                        try {
+                            val options = ExportOptions(format = ExportFormat.MP4, backgroundColor = 0xFFFFFFFF.toInt())
+                            Mp4Encoder.encode(temp, width, height, files.size, delays, options) { index ->
+                                val decoded = if (index == 0) first else decode(files[index])
+                                if (decoded.width == width && decoded.height == height) decoded else decoded.scaled(width, height)
+                            }
+                            val bytes = withContext(Dispatchers.IO) { temp.readBytes() }
+                            val file = storage.saveExport(projectId, fileName, bytes)
+                            ExportResult(
+                                format = ExportFormat.MP4,
+                                filePath = file.absolutePath,
+                                fileName = fileName,
+                                byteCount = bytes.size.toLong(),
+                                width = width,
+                                height = height,
+                                frameCount = files.size,
+                            )
+                        } finally {
+                            temp.delete()
+                        }
                     } finally {
-                        temp.delete()
+                        withContext(Dispatchers.IO) {
+                            tempDir.deleteRecursively()
+                        }
                     }
                 }
             }

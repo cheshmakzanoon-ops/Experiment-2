@@ -18,6 +18,7 @@ object LayerImports {
     suspend fun insertImage(
         repository: CanvasRepository,
         image: PixelBuffer,
+        isPrivate: Boolean = false,
     ): Long {
         val size = repository.getCanvasSize()
         val fit = minOf(1f, size.width.toFloat() / image.width, size.height.toFloat() / image.height)
@@ -31,9 +32,9 @@ object LayerImports {
             }
         // Decoded pictures are sRGB; a Display P3 canvas stores the same colours in its own space.
         val placed = withContext(Dispatchers.Default) { ColorProfiles.convert(scaled, ColorProfile.SRGB, repository.getColorProfile()) }
-        val layer = repository.addLayer(name = "Photo")
+        val layer = repository.addLayer(name = if (isPrivate) "Private photo" else "Photo", isPrivate = isPrivate)
         val drawn =
-            repository.applyRasterEdit(layer.id, "Insert photo") { target ->
+            repository.applyRasterEdit(layer.id, if (isPrivate) "Insert private photo" else "Insert photo") { target ->
                 target.drawInto(placed, (size.width - placed.width) / 2, (size.height - placed.height) / 2)
             }
         check(drawn) { "The photo could not be placed on the new layer" }

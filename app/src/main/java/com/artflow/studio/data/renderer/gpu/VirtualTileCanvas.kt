@@ -48,10 +48,17 @@ class VirtualTileCanvas(
 
     /** Memory usage in bytes of all currently allocated tile pixel buffers. */
     val memoryUsageBytes: Long
-        @Synchronized get() = tiles.values.sumOf { it.buffer.pixels.size.toLong() * 4L }
+        @Synchronized get() =
+            tiles.values.sumOf {
+                it.buffer.pixels.size
+                    .toLong() * 4L
+            }
 
     @Synchronized
-    fun getTileIndex(column: Int, row: Int): Int {
+    fun getTileIndex(
+        column: Int,
+        row: Int,
+    ): Int {
         require(column in 0 until columns && row in 0 until rows) {
             "Tile coordinates ($column, $row) out of bounds ($columns x $rows)"
         }
@@ -59,7 +66,10 @@ class VirtualTileCanvas(
     }
 
     @Synchronized
-    fun tileBounds(column: Int, row: Int): IntBounds {
+    fun tileBounds(
+        column: Int,
+        row: Int,
+    ): IntBounds {
         require(column in 0 until columns && row in 0 until rows) {
             "Tile coordinates ($column, $row) out of bounds ($columns x $rows)"
         }
@@ -71,13 +81,19 @@ class VirtualTileCanvas(
     }
 
     @Synchronized
-    fun getTile(column: Int, row: Int): PixelBuffer? {
+    fun getTile(
+        column: Int,
+        row: Int,
+    ): PixelBuffer? {
         val index = getTileIndex(column, row)
         return tiles[index]?.buffer
     }
 
     @Synchronized
-    fun getOrCreateTile(column: Int, row: Int): PixelBuffer {
+    fun getOrCreateTile(
+        column: Int,
+        row: Int,
+    ): PixelBuffer {
         val index = getTileIndex(column, row)
         val existing = tiles[index]
         if (existing != null) return existing.buffer
@@ -118,8 +134,7 @@ class VirtualTileCanvas(
     }
 
     @Synchronized
-    fun getDirtyTileIndices(): List<Int> =
-        tiles.entries.filter { it.value.isDirty }.map { it.key }
+    fun getDirtyTileIndices(): List<Int> = tiles.entries.filter { it.value.isDirty }.map { it.key }
 
     @Synchronized
     fun clearDirty() {
@@ -140,23 +155,8 @@ class VirtualTileCanvas(
         for (r in 0 until rows) {
             for (c in 0 until columns) {
                 val tb = tileBounds(c, r)
-                var hasNonZero = false
-                val tileBuf = PixelBuffer(tb.width, tb.height)
-
-                for (y in 0 until tb.height) {
-                    val srcY = tb.top + y
-                    val srcOffset = srcY * width + tb.left
-                    val dstOffset = y * tb.width
-                    for (x in 0 until tb.width) {
-                        val px = source.pixels[srcOffset + x]
-                        tileBuf.pixels[dstOffset + x] = px
-                        if ((px ushr 24) != 0) {
-                            hasNonZero = true
-                        }
-                    }
-                }
-
-                if (hasNonZero) {
+                val tileBuf = extractTile(source, tb)
+                if (tileBuf != null) {
                     val index = r * columns + c
                     tiles[index] = Tile(c, r, tileBuf, isDirty = true)
                 }
@@ -167,8 +167,31 @@ class VirtualTileCanvas(
         }
     }
 
+    private fun extractTile(
+        source: PixelBuffer,
+        tb: IntBounds,
+    ): PixelBuffer? {
+        var hasNonZero = false
+        val tileBuf = PixelBuffer(tb.width, tb.height)
+        for (y in 0 until tb.height) {
+            val srcOffset = (tb.top + y) * width + tb.left
+            val dstOffset = y * tb.width
+            for (x in 0 until tb.width) {
+                val px = source.pixels[srcOffset + x]
+                tileBuf.pixels[dstOffset + x] = px
+                if ((px ushr 24) != 0) {
+                    hasNonZero = true
+                }
+            }
+        }
+        return if (hasNonZero) tileBuf else null
+    }
+
     @Synchronized
-    fun compositeToBuffer(target: PixelBuffer, bounds: IntBounds? = null) {
+    fun compositeToBuffer(
+        target: PixelBuffer,
+        bounds: IntBounds? = null,
+    ) {
         require(target.width == width && target.height == height) {
             "Target buffer dimensions (${target.width}x${target.height}) do not match canvas (${width}x$height)"
         }

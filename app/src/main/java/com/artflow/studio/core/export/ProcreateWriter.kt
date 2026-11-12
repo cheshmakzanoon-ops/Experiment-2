@@ -67,6 +67,7 @@ object ProcreateWriter {
      * [background] is the background colour as ARGB, or null when the background is hidden. All colour
      * channels are already encoded in [colorProfile]; this writer tags them without converting them.
      */
+    @Suppress("LongParameterList")
     fun write(
         width: Int,
         height: Int,

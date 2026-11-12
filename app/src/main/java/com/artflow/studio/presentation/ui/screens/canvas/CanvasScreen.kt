@@ -1671,8 +1671,11 @@ fun CanvasScreen(
     }
     if (showRecoveryDialog) {
         AlertDialog(
-            // A tap outside the dialog or system Back must never delete recoverable artwork.
-            onDismissRequest = {},
+            // A tap outside the dialog or system Back dismisses the dialog without deleting recoverable artwork.
+            onDismissRequest = {
+                viewModel.dismissRecovery()
+                showRecoveryDialog = false
+            },
             title = { Text(stringResource(R.string.canvasscreen_autosave_found)) },
             text = {
                 Text(stringResource(R.string.canvasscreen_artflow_closed_unexpectedly_the_last))
@@ -1685,7 +1688,7 @@ fun CanvasScreen(
             },
             dismissButton = {
                 TextButton(onClick = {
-                    viewModel.dismissRecovery()
+                    viewModel.discardRecovery()
                     showRecoveryDialog = false
                 }) { Text(stringResource(R.string.canvasscreen_discard)) }
             },

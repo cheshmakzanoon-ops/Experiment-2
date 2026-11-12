@@ -38,6 +38,7 @@ object ProcreateReader {
         val visible: Boolean
     }
 
+    @Suppress("LongParameterList")
     class Layer(
         override val name: String,
         override val opacity: Float,
@@ -64,6 +65,7 @@ object ProcreateReader {
         val blendMode: BlendMode = BlendMode.PASS_THROUGH,
     ) : Node
 
+    @Suppress("LongParameterList")
     class Document internal constructor(
         val width: Int,
         val height: Int,
@@ -197,11 +199,12 @@ object ProcreateReader {
             require(depth < MAX_NESTING) { "The Procreate document's groups are nested too deeply" }
             val children = archive.array(item["children"]).mapNotNull { node(archive, it, depth + 1) }
             val visible = (item["isHidden"] as? Boolean ?: item["hidden"] as? Boolean) != true
-            val groupBlend = if ("blend" in item || "extendedBlend" in item || "extendedBlend2" in item) {
-                ProcreateLayerBlendModes.decode(item).mode
-            } else {
-                BlendMode.PASS_THROUGH
-            }
+            val groupBlend =
+                if ("blend" in item || "extendedBlend" in item || "extendedBlend2" in item) {
+                    ProcreateLayerBlendModes.decode(item).mode
+                } else {
+                    BlendMode.PASS_THROUGH
+                }
             return Group(name, opacity, visible, children, groupBlend)
         }
         val blend = ProcreateLayerBlendModes.decode(item)

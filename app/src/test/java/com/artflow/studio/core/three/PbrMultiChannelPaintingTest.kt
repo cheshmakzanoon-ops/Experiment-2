@@ -7,7 +7,6 @@ import org.junit.Test
 import kotlin.math.abs
 
 class PbrMultiChannelPaintingTest {
-
     @Test
     fun multiChannelStampDabAppliesSynchronizedDabs() {
         val width = 64
@@ -61,15 +60,16 @@ class PbrMultiChannelPaintingTest {
         // Test across range of metallic & roughness
         for (metallic in listOf(0.0f, 0.5f, 1.0f)) {
             for (roughness in listOf(0.1f, 0.4f, 0.8f)) {
-                val radiance = atlas.evaluateCookTorrance(
-                    albedo = albedo,
-                    metallic = metallic,
-                    roughness = roughness,
-                    nDotV = 0.8f,
-                    nDotL = 0.7f,
-                    nDotH = 0.95f,
-                    vDotH = 0.85f,
-                )
+                val radiance =
+                    atlas.evaluateCookTorrance(
+                        albedo = albedo,
+                        metallic = metallic,
+                        roughness = roughness,
+                        nDotV = 0.8f,
+                        nDotL = 0.7f,
+                        nDotH = 0.95f,
+                        vDotH = 0.85f,
+                    )
 
                 for (c in radiance) {
                     assertTrue("Radiance must be non-negative (got $c)", c >= 0f)
@@ -85,26 +85,28 @@ class PbrMultiChannelPaintingTest {
         val albedo = floatArrayOf(0.8f, 0.8f, 0.8f)
 
         // Pure dielectric (metallic = 0): strong diffuse body reflection
-        val dielectricRadiance = atlas.evaluateCookTorrance(
-            albedo = albedo,
-            metallic = 0.0f,
-            roughness = 0.5f,
-            nDotV = 0.6f,
-            nDotL = 0.6f,
-            nDotH = 0.9f,
-            vDotH = 0.7f,
-        )
+        val dielectricRadiance =
+            atlas.evaluateCookTorrance(
+                albedo = albedo,
+                metallic = 0.0f,
+                roughness = 0.5f,
+                nDotV = 0.6f,
+                nDotL = 0.6f,
+                nDotH = 0.9f,
+                vDotH = 0.7f,
+            )
 
         // Pure metal (metallic = 1): diffuse body goes to zero, pure specular
-        val conductorRadiance = atlas.evaluateCookTorrance(
-            albedo = albedo,
-            metallic = 1.0f,
-            roughness = 0.5f,
-            nDotV = 0.6f,
-            nDotL = 0.6f,
-            nDotH = 0.9f,
-            vDotH = 0.7f,
-        )
+        val conductorRadiance =
+            atlas.evaluateCookTorrance(
+                albedo = albedo,
+                metallic = 1.0f,
+                roughness = 0.5f,
+                nDotV = 0.6f,
+                nDotL = 0.6f,
+                nDotH = 0.9f,
+                vDotH = 0.7f,
+            )
 
         assertTrue(dielectricRadiance[0] > 0f)
         assertTrue(conductorRadiance[0] > 0f)

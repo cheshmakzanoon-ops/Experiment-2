@@ -9,7 +9,6 @@ import org.junit.Test
 import kotlin.math.abs
 
 class IccColorEngineTest {
-
     @Test
     fun rgbToCmykSeparationCoversTacLimit() {
         // Deep saturated black/brown in RGB (0, 0, 0) could theoretically demand 100% C, M, Y, K (400%)
@@ -34,16 +33,20 @@ class IccColorEngineTest {
     fun cmykToRgbRoundTripPreservesNeutralGrays() {
         // Neutral mid-tone gray (0.5, 0.5, 0.5)
         val cmyk = IccColorEngine.rgbToCmyk(0.5f, 0.5f, 0.5f, IccProfileType.FOGRA39)
-        val proof = IccColorEngine.softProof(
-            floatArrayOf(0.5f, 0.5f, 0.5f),
-            sourceProfile = IccProfileType.SRGB,
-            targetProfile = IccProfileType.FOGRA39,
-        )
+        val proof =
+            IccColorEngine.softProof(
+                floatArrayOf(0.5f, 0.5f, 0.5f),
+                sourceProfile = IccProfileType.SRGB,
+                targetProfile = IccProfileType.FOGRA39,
+            )
 
         // Balanced gray shouldn't have extreme color casts
         assertTrue("Red and green should be balanced", abs(proof[0] - proof[1]) < 0.05f)
         assertTrue("Green and blue should be balanced", abs(proof[1] - proof[2]) < 0.05f)
-        assertFalse("Neutral gray must not be flagged as out-of-gamut", IccColorEngine.isOutOfGamut(0.5f, 0.5f, 0.5f, IccProfileType.FOGRA39))
+        assertFalse(
+            "Neutral gray must not be flagged as out-of-gamut",
+            IccColorEngine.isOutOfGamut(0.5f, 0.5f, 0.5f, IccProfileType.FOGRA39),
+        )
     }
 
     @Test
@@ -66,12 +69,13 @@ class IccColorEngineTest {
         }
 
         val zebraColor = 0xFFFF0055.toInt()
-        val zebraBuffer = IccColorEngine.generateGamutZebra(
-            buffer,
-            targetProfile = IccProfileType.SWOP_2006,
-            zebraColor = zebraColor,
-            stripeWidth = 4,
-        )
+        val zebraBuffer =
+            IccColorEngine.generateGamutZebra(
+                buffer,
+                targetProfile = IccProfileType.SWOP_2006,
+                zebraColor = zebraColor,
+                stripeWidth = 4,
+            )
 
         // Must contain zebra stripes
         var zebraCount = 0

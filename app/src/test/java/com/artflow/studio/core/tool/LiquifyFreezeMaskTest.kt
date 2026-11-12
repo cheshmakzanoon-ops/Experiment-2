@@ -7,7 +7,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LiquifyFreezeMaskTest {
-
     @Test
     fun frozenPixelsResistDisplacement() {
         val width = 64
@@ -28,20 +27,22 @@ class LiquifyFreezeMaskTest {
         assertTrue("Freeze percent should be greater than zero", LiquifyTool.frozenPercent(freezeMask) > 0)
         assertTrue("Center pixel should be frozen", freezeMask[32 * width + 32])
 
-        val settings = LiquifyTool.Settings(
-            mode = LiquifyTool.Mode.PUSH,
-            size = 40f,
-            strength = 0.8f,
-            freezeMask = freezeMask,
-        )
+        val settings =
+            LiquifyTool.Settings(
+                mode = LiquifyTool.Mode.PUSH,
+                size = 40f,
+                strength = 0.8f,
+                freezeMask = freezeMask,
+            )
 
-        val session = LiquifyTool.beginSession(
-            x = 20f,
-            y = 32f,
-            settings = settings,
-            width = width,
-            height = height,
-        )
+        val session =
+            LiquifyTool.beginSession(
+                x = 20f,
+                y = 32f,
+                settings = settings,
+                width = width,
+                height = height,
+            )
 
         // Drag right across the frozen region
         session.dragTo(45f, 32f)
@@ -62,19 +63,21 @@ class LiquifyFreezeMaskTest {
         val height = 64
         val freezeMask = BooleanArray(width * height)
 
-        val freezeSettings = LiquifyTool.Settings(
-            mode = LiquifyTool.Mode.FREEZE,
-            size = 20f,
-            freezeMask = freezeMask,
-        )
+        val freezeSettings =
+            LiquifyTool.Settings(
+                mode = LiquifyTool.Mode.FREEZE,
+                size = 20f,
+                freezeMask = freezeMask,
+            )
 
-        val session = LiquifyTool.beginSession(
-            x = 10f,
-            y = 10f,
-            settings = freezeSettings,
-            width = width,
-            height = height,
-        )
+        val session =
+            LiquifyTool.beginSession(
+                x = 10f,
+                y = 10f,
+                settings = freezeSettings,
+                width = width,
+                height = height,
+            )
 
         // Dynamic freeze stroke
         session.dragTo(15f, 15f)
@@ -82,18 +85,20 @@ class LiquifyFreezeMaskTest {
         assertTrue("Pixel should be dynamically frozen by FREEZE mode", session.settings.freezeMask!![frozenIndex])
 
         // Thaw it with UNFREEZE
-        val thawSettings = LiquifyTool.Settings(
-            mode = LiquifyTool.Mode.UNFREEZE,
-            size = 20f,
-            freezeMask = session.settings.freezeMask,
-        )
-        val thawSession = LiquifyTool.beginSession(
-            x = 10f,
-            y = 10f,
-            settings = thawSettings,
-            width = width,
-            height = height,
-        )
+        val thawSettings =
+            LiquifyTool.Settings(
+                mode = LiquifyTool.Mode.UNFREEZE,
+                size = 20f,
+                freezeMask = session.settings.freezeMask,
+            )
+        val thawSession =
+            LiquifyTool.beginSession(
+                x = 10f,
+                y = 10f,
+                settings = thawSettings,
+                width = width,
+                height = height,
+            )
         thawSession.dragTo(15f, 15f)
         assertFalse("Pixel should be dynamically thawed by UNFREEZE mode", thawSession.settings.freezeMask!![frozenIndex])
     }

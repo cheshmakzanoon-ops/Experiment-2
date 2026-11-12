@@ -30,7 +30,9 @@ object SelectionMaskCodec {
         buffer.putInt(mask.width)
         buffer.putInt(mask.height)
         buffer.put(compressed)
-        return Base64.getEncoder().encodeToString(buffer.array())
+        val encoded = Base64.getEncoder().encodeToString(buffer.array())
+        checkNotNull(decode(encoded, mask.width, mask.height)) { "Failed to encode valid selection mask" }
+        return encoded
     }
 
     /**
@@ -65,9 +67,13 @@ object SelectionMaskCodec {
         try {
             deflater.setInput(coverage)
             deflater.finish()
-            val out = ByteArray(coverage.size + 64)
-            val size = deflater.deflate(out)
-            return out.copyOf(size)
+            val bos = java.io.ByteArrayOutputStream()
+            val buffer = ByteArray(8192)
+            while (!deflater.finished()) {
+                val count = deflater.deflate(buffer)
+                bos.write(buffer, 0, count)
+            }
+            return bos.toByteArray()
         } finally {
             deflater.end()
         }

@@ -57,9 +57,10 @@ setup_compile() {
 resolve_with_gradle() {
   [ -s "$HERE/dl/resolved.txt" ] && grep -q '^mainApi|' "$HERE/dl/resolved.txt" && { copy_resolved; return 0; }
   export GRADLE_USER_HOME="$HERE/gradle-home"; mkdir -p "$GRADLE_USER_HOME"
-  local i
+  local i gbin
+  gbin="$(command -v gradle 2>/dev/null || echo /opt/gradle/bin/gradle)"
   for i in 1 2 3 4 5 6; do
-    if /opt/gradle/bin/gradle --no-daemon -q -p "$HERE/resolve" printResolved -PoutFile="$HERE/dl/resolved.txt" \
+    if "$gbin" --no-daemon -q -p "$HERE/resolve" printResolved -PoutFile="$HERE/dl/resolved.txt" \
          > "$HERE/dl/resolve.out" 2> "$HERE/dl/resolve.err"; then copy_resolved; return 0; fi
     log "gradle resolution attempt $i failed (Maven Central rate limit?); retrying"; sleep $((i * 15))
   done

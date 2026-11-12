@@ -6,7 +6,7 @@
 #   KC_EXTRA       extra kotlinc flags (word-split), e.g. -Xbackend-threads=0
 HERE_ENV="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AC_ROOT="${AC_ROOT:-$(dirname "$HERE_ENV")}"
-REPO="${ARTFLOW_REPO:-/home/user/Experiment-2}"
+REPO="${ARTFLOW_REPO:-$(cd "$AC_ROOT/../.." && pwd)}"
 APP="$REPO/app"
 LIBS="$AC_ROOT/libs"
 OUT_ROOT="${AC_OUT:-$AC_ROOT/out}"

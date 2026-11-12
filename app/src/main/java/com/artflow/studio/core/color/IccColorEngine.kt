@@ -4,7 +4,6 @@ import com.artflow.studio.core.pixels.Channels
 import com.artflow.studio.core.pixels.PixelBuffer
 import kotlin.math.abs
 import kotlin.math.pow
-import kotlin.math.roundToInt
 
 /**
  * Standard ICC color profiles for print and screen display.
@@ -57,7 +56,8 @@ enum class IccProfileType(
         totalAreaCoverage = 0.0f,
         blackLimit = 1.0f,
         description = "Standard web and sRGB display space",
-    );
+    ),
+    ;
 
     companion object {
         fun fromName(name: String?): IccProfileType =
@@ -84,7 +84,6 @@ enum class RenderingIntent {
  * zebra pattern diagnostics.
  */
 object IccColorEngine {
-
     /** Default gamut tolerance threshold for out-of-gamut detection. */
     const val DEFAULT_GAMUT_TOLERANCE = 0.08f
 
@@ -100,49 +99,53 @@ object IccColorEngine {
         val ucrFactor: Float,
     )
 
-    private val FOGRA39_INKS = InkProfile(
-        cyan = floatArrayOf(0.04f, 0.61f, 0.88f),
-        magenta = floatArrayOf(0.89f, 0.08f, 0.49f),
-        yellow = floatArrayOf(0.96f, 0.92f, 0.05f),
-        black = floatArrayOf(0.08f, 0.07f, 0.08f),
-        paperWhite = floatArrayOf(0.98f, 0.98f, 0.96f),
-        blackStart = 0.10f,
-        gcrExponent = 1.10f,
-        ucrFactor = 0.78f,
-    )
+    private val FOGRA39_INKS =
+        InkProfile(
+            cyan = floatArrayOf(0.04f, 0.61f, 0.88f),
+            magenta = floatArrayOf(0.89f, 0.08f, 0.49f),
+            yellow = floatArrayOf(0.96f, 0.92f, 0.05f),
+            black = floatArrayOf(0.08f, 0.07f, 0.08f),
+            paperWhite = floatArrayOf(0.98f, 0.98f, 0.96f),
+            blackStart = 0.10f,
+            gcrExponent = 1.10f,
+            ucrFactor = 0.78f,
+        )
 
-    private val SWOP_INKS = InkProfile(
-        cyan = floatArrayOf(0.05f, 0.58f, 0.84f),
-        magenta = floatArrayOf(0.86f, 0.09f, 0.46f),
-        yellow = floatArrayOf(0.94f, 0.89f, 0.06f),
-        black = floatArrayOf(0.12f, 0.11f, 0.11f),
-        paperWhite = floatArrayOf(0.95f, 0.95f, 0.92f),
-        blackStart = 0.18f,
-        gcrExponent = 1.25f,
-        ucrFactor = 0.70f,
-    )
+    private val SWOP_INKS =
+        InkProfile(
+            cyan = floatArrayOf(0.05f, 0.58f, 0.84f),
+            magenta = floatArrayOf(0.86f, 0.09f, 0.46f),
+            yellow = floatArrayOf(0.94f, 0.89f, 0.06f),
+            black = floatArrayOf(0.12f, 0.11f, 0.11f),
+            paperWhite = floatArrayOf(0.95f, 0.95f, 0.92f),
+            blackStart = 0.18f,
+            gcrExponent = 1.25f,
+            ucrFactor = 0.70f,
+        )
 
-    private val JAPAN_INKS = InkProfile(
-        cyan = floatArrayOf(0.03f, 0.63f, 0.90f),
-        magenta = floatArrayOf(0.91f, 0.07f, 0.52f),
-        yellow = floatArrayOf(0.98f, 0.94f, 0.04f),
-        black = floatArrayOf(0.06f, 0.06f, 0.06f),
-        paperWhite = floatArrayOf(0.99f, 0.99f, 0.98f),
-        blackStart = 0.08f,
-        gcrExponent = 1.05f,
-        ucrFactor = 0.82f,
-    )
+    private val JAPAN_INKS =
+        InkProfile(
+            cyan = floatArrayOf(0.03f, 0.63f, 0.90f),
+            magenta = floatArrayOf(0.91f, 0.07f, 0.52f),
+            yellow = floatArrayOf(0.98f, 0.94f, 0.04f),
+            black = floatArrayOf(0.06f, 0.06f, 0.06f),
+            paperWhite = floatArrayOf(0.99f, 0.99f, 0.98f),
+            blackStart = 0.08f,
+            gcrExponent = 1.05f,
+            ucrFactor = 0.82f,
+        )
 
-    private val GRACOL_INKS = InkProfile(
-        cyan = floatArrayOf(0.04f, 0.60f, 0.87f),
-        magenta = floatArrayOf(0.88f, 0.08f, 0.48f),
-        yellow = floatArrayOf(0.95f, 0.91f, 0.05f),
-        black = floatArrayOf(0.09f, 0.08f, 0.09f),
-        paperWhite = floatArrayOf(0.97f, 0.97f, 0.95f),
-        blackStart = 0.12f,
-        gcrExponent = 1.15f,
-        ucrFactor = 0.75f,
-    )
+    private val GRACOL_INKS =
+        InkProfile(
+            cyan = floatArrayOf(0.04f, 0.60f, 0.87f),
+            magenta = floatArrayOf(0.88f, 0.08f, 0.48f),
+            yellow = floatArrayOf(0.95f, 0.91f, 0.05f),
+            black = floatArrayOf(0.09f, 0.08f, 0.09f),
+            paperWhite = floatArrayOf(0.97f, 0.97f, 0.95f),
+            blackStart = 0.12f,
+            gcrExponent = 1.15f,
+            ucrFactor = 0.75f,
+        )
 
     private fun getInkProfile(profile: IccProfileType): InkProfile =
         when (profile) {
@@ -175,12 +178,13 @@ object IccColorEngine {
         val kMin = minOf(c, m, y)
 
         // Profile-specific Black Generation curve (GCR)
-        val k = if (kMin > ink.blackStart) {
-            val normalized = (kMin - ink.blackStart) / (1f - ink.blackStart)
-            (normalized.pow(ink.gcrExponent) * profile.blackLimit).coerceIn(0f, profile.blackLimit)
-        } else {
-            0f
-        }
+        val k =
+            if (kMin > ink.blackStart) {
+                val normalized = (kMin - ink.blackStart) / (1f - ink.blackStart)
+                (normalized.pow(ink.gcrExponent) * profile.blackLimit).coerceIn(0f, profile.blackLimit)
+            } else {
+                0f
+            }
 
         // Under Color Removal (UCR)
         if (k > 0f) {
@@ -247,7 +251,7 @@ object IccColorEngine {
      */
     fun softProof(
         rgb: FloatArray,
-        sourceProfile: IccProfileType = IccProfileType.SRGB,
+        @Suppress("UnusedParameter") sourceProfile: IccProfileType = IccProfileType.SRGB,
         targetProfile: IccProfileType = IccProfileType.FOGRA39,
         intent: RenderingIntent = RenderingIntent.PERCEPTUAL,
     ): FloatArray {
@@ -303,28 +307,30 @@ object IccColorEngine {
         zebraColor: Int = 0xFFFF0055.toInt(), // Vivid fluorescent warning magenta
         stripeWidth: Int = 8,
     ): PixelBuffer {
-        val result = PixelBuffer(source.width, source.height)
-        for (y in 0 until source.height) {
-            for (x in 0 until source.width) {
-                val index = y * source.width + x
-                val pixel = source.pixels[index]
-                val alpha = Channels.alpha(pixel)
+        val width = source.width
+        val height = source.height
+        val total = width * height
+        val result = PixelBuffer(width, height)
+        for (index in 0 until total) {
+            val pixel = source.pixels[index]
+            val alpha = Channels.alpha(pixel)
 
-                if (alpha <= 0.001f) {
-                    result.pixels[index] = 0
-                    continue
-                }
+            if (alpha <= 0.001f) {
+                result.pixels[index] = 0
+                continue
+            }
 
-                val r = Channels.red(pixel) / 255f
-                val g = Channels.green(pixel) / 255f
-                val b = Channels.blue(pixel) / 255f
+            val r = Channels.red(pixel) / 255f
+            val g = Channels.green(pixel) / 255f
+            val b = Channels.blue(pixel) / 255f
+            val x = index % width
+            val y = index / width
 
-                if (isOutOfGamut(r, g, b, targetProfile)) {
-                    val isStripe = ((x + y) / stripeWidth) % 2 == 0
-                    result.pixels[index] = if (isStripe) zebraColor else pixel
-                } else {
-                    result.pixels[index] = pixel
-                }
+            if (isOutOfGamut(r, g, b, targetProfile)) {
+                val isStripe = ((x + y) / stripeWidth) % 2 == 0
+                result.pixels[index] = if (isStripe) zebraColor else pixel
+            } else {
+                result.pixels[index] = pixel
             }
         }
         return result

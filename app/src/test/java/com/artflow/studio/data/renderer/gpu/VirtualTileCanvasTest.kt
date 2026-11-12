@@ -100,18 +100,20 @@ class VirtualTileCanvasTest {
 
     @Test
     fun renderBackendFactoryFallback() {
-        val vulkanBackend = RenderBackendFactory.createBackend(
-            preferredType = RenderBackendType.VULKAN,
-            isEmulator = false,
-            supportsVulkan = true,
-        )
+        val vulkanBackend =
+            RenderBackendFactory.createBackend(
+                preferredType = RenderBackendType.VULKAN,
+                isEmulator = false,
+                supportsVulkan = true,
+            )
         assertEquals(RenderBackendType.VULKAN, vulkanBackend.backendType)
 
-        val emulatorBackend = RenderBackendFactory.createBackend(
-            preferredType = RenderBackendType.VULKAN,
-            isEmulator = true,
-            supportsVulkan = false,
-        )
+        val emulatorBackend =
+            RenderBackendFactory.createBackend(
+                preferredType = RenderBackendType.VULKAN,
+                isEmulator = true,
+                supportsVulkan = false,
+            )
         assertEquals(RenderBackendType.GLES3, emulatorBackend.backendType)
 
         emulatorBackend.initialize(100, 100)

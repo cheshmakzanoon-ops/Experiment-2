@@ -47,13 +47,13 @@ class SecondaryGrainBlendTest {
     fun everyDualCombineModeUsesTheBlendedSecondaryCoverageBeforePrimaryOpacity() {
         val expected =
             mapOf(
-                GrainBlend.SUBTRACT to listOf(13, 242, 255),
-                GrainBlend.HARD_MIX to listOf(128, 128, 255),
+                GrainBlend.SUBTRACT to listOf(13, 242, 255, 255, 26, 134),
+                GrainBlend.HARD_MIX to listOf(128, 128, 255, 255, 255, 191),
             )
         val faded =
             mapOf(
-                GrainBlend.SUBTRACT to listOf(5, 97, 102),
-                GrainBlend.HARD_MIX to listOf(51, 51, 102),
+                GrainBlend.SUBTRACT to listOf(5, 97, 102, 102, 10, 54),
+                GrainBlend.HARD_MIX to listOf(51, 51, 102, 102, 102, 76),
             )
         expected.forEach { (grainBlend, values) ->
             DualBrush.Mode.entries.forEachIndexed { index, mode ->
@@ -122,7 +122,8 @@ class SecondaryGrainBlendTest {
                 parts[0] to parts[1]
             }
         assertEquals(6, expected.size)
-        for (mode in DualBrush.Mode.entries) {
+        val historicalModes = listOf(DualBrush.Mode.MULTIPLY, DualBrush.Mode.SUBTRACT, DualBrush.Mode.ADD)
+        for (mode in historicalModes) {
             for (erase in listOf(false, true)) {
                 val key = "${mode.name}-${if (erase) "erase" else "paint"}"
                 val target = SecondaryGrainLegacyFixture.backdrop()

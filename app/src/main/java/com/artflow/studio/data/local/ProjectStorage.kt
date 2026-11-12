@@ -12,6 +12,7 @@ import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -255,8 +256,39 @@ class ProjectStorage
             relativePath: String?,
         ): Boolean = relativePath != null && resolve(projectId, relativePath).exists()
 
+        private val pinnedRasters = ConcurrentHashMap<Long, MutableSet<String>>()
+
+        fun pinRasters(
+            projectId: Long,
+            paths: Collection<String>,
+        ) {
+            val projectPins = pinnedRasters.computeIfAbsent(projectId) { ConcurrentHashMap.newKeySet() }
+            projectPins.addAll(paths.map(::normalizeRelativePath))
+        }
+
+        fun unpinRasters(
+            projectId: Long,
+            paths: Collection<String>,
+        ) {
+            pinnedRasters[projectId]?.let { pins ->
+                pins.removeAll(paths.map(::normalizeRelativePath).toSet())
+                if (pins.isEmpty()) {
+                    pinnedRasters.remove(projectId, pins)
+                }
+            }
+        }
+
+        fun normalizeRelativePath(path: String): String =
+            path
+                .replace('\\', '/')
+                .trim()
+                .trimStart('/')
+                .split('/')
+                .filter { it.isNotEmpty() && it != "." }
+                .joinToString("/")
+
         /**
-         * Deletes every pixel file that is not referenced by [keep].
+         * Deletes every pixel file that is not referenced by [keep] or actively pinned.
          *
          * Called after an atomic save. Rasters are immutable generations; both the saved document
          * and recovery manifest retain their own generations. Never traverse directory links.
@@ -269,15 +301,18 @@ class ProjectStorage
                 val layersDir = File(projectDir(projectId), LAYERS_DIR)
                 if (!layersDir.exists()) return@withContext 0
                 // Fail closed if either manifest is unreadable; never guess which artwork can be deleted.
-                val retained = keep.toMutableSet()
+                val retained = keep.map(::normalizeRelativePath).toMutableSet()
+                pinnedRasters[projectId]?.let { retained.addAll(it) }
                 listOfNotNull(loadDocument(projectId), loadAutosave(projectId)).forEach { document ->
                     document.resolvedFrames().flatMap { it.layers }.forEach { layer ->
-                        retained.addAll(listOfNotNull(layer.rasterFile, layer.maskFile))
+                        listOfNotNull(layer.rasterFile, layer.maskFile).forEach {
+                            retained.add(normalizeRelativePath(it))
+                        }
                     }
                 }
                 val deleted =
                     StorageFileTree.prune(layersDir, context.filesDir) { file ->
-                        val relative = file.relativeTo(projectDir(projectId)).path.replace('\\', '/')
+                        val relative = normalizeRelativePath(file.relativeTo(projectDir(projectId)).path)
                         file.extension == "png" && relative !in retained
                     }
                 if (deleted > 0) Timber.d("Pruned $deleted stale raster versions for project $projectId")
@@ -377,7 +412,7 @@ class ProjectStorage
                 }
             }
 
-        private fun referencedFiles(document: CanvasDocument): List<String> =
+        fun referencedFiles(document: CanvasDocument): List<String> =
             document
                 .resolvedFrames()
                 .flatMap { it.layers }

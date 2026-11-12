@@ -46,7 +46,14 @@ object WetBrushPickup {
         val pickup = (legacyPickup + bleed).coerceIn(0f, 1f) * PICKUP_STRENGTH * attack(brush, sample)
         val chargeCurve = brush.optionalChannelPressure(sample.pressure, "dynamicsPressureCharge")
         val rawCharge = (brush.wetCharge.coerceIn(0f, 1f) * chargeCurve).coerceIn(0f, 1f)
-        val charge = if (rawCharge < 1f) (rawCharge * kotlin.math.exp(-sample.travelled / (brush.size.coerceAtLeast(1f) * 30f))).coerceIn(0f, 1f) else 1f
+        val charge =
+            if (rawCharge <
+                1f
+            ) {
+                (rawCharge * kotlin.math.exp(-sample.travelled / (brush.size.coerceAtLeast(1f) * 30f))).coerceIn(0f, 1f)
+            } else {
+                1f
+            }
         var amount = pickup
         if (charge < 1f) amount = 1f - (1f - amount) * charge
         if (dilution > 0f) amount += (1f - amount) * dilution

@@ -299,7 +299,9 @@ class CanvasViewModel
                         _timelapseRecording.value = timelapse.isRecording(projectId)
                         startObserving()
                         startAutosave()
-                        PendingImports.take(projectId)?.let(::insertImageLayer)
+                        PendingImports.take(projectId)?.let { (img, priv) ->
+                            if (priv) insertPrivateImageLayer(img) else insertImageLayer(img)
+                        }
                         PendingImports.takePsd(projectId)?.let(::importPsd)
                         PendingImports.takeProcreate(projectId)?.let(::importProcreate)
                         Timber.d("Opened project $projectId (${state.width}x${state.height})")
@@ -877,8 +879,7 @@ class CanvasViewModel
         /** Procreate's Insert a private photo: a photo layer the time-lapse never shows. */
         fun insertPrivateImageLayer(image: PixelBuffer) =
             layerOp {
-                val id = LayerImports.insertImage(canvasRepository, image)
-                canvasRepository.setLayerPrivate(id, true)
+                LayerImports.insertImage(canvasRepository, image, isPrivate = true)
                 notify("Private photo added: it is part of the artwork but stays out of the time-lapse")
             }
 
@@ -1374,7 +1375,7 @@ class CanvasViewModel
 
         fun saveRecoveryOnBackground() {
             stopPlayback()
-            if (!allowAutosave || !_settings.value.autosaveEnabled || _saving.value) return
+            if (!allowAutosave || !_settings.value.autosaveEnabled) return
             val state = _uiState.value as? CanvasUiState.Ready ?: return
             if (state.recoveryAvailable || !canvasRepository.hasUnsavedChanges()) return
             viewModelScope.launch(editorErrors) {
@@ -1429,12 +1430,14 @@ class CanvasViewModel
             }
         }
 
-        fun dismissRecovery() {
+        fun discardRecovery() =
             viewModelScope.launch(editorErrors) {
                 canvasRepository.discardRecovery(currentProjectId)
-                val state = _uiState.value
-                if (state is CanvasUiState.Ready) _uiState.value = state.copy(recoveryAvailable = false)
+                (_uiState.value as? CanvasUiState.Ready)?.let { _uiState.value = it.copy(recoveryAvailable = false) }
             }
+
+        fun dismissRecovery() {
+            (_uiState.value as? CanvasUiState.Ready)?.let { _uiState.value = it.copy(recoveryAvailable = false) }
         }
 
         /** Time spent changing this artwork, for Canvas information. */

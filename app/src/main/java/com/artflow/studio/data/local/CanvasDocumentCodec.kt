@@ -29,6 +29,9 @@ import java.security.MessageDigest
  *   Older documents retain their standard blends; older readers reject v5 instead of changing its pixels.
  * - **v6** separates color, metallic and roughness layers. Older readers must not paint material
  *   maps over the color image; pre-v6 documents retain their original color-only semantics.
+ * - **v7** adds non-destructive vector typography transformation (rotation, scale, tracking,
+ *   kerning, baseline shift) to editable text layers. Older documents retain their standard
+ *   untransformed text; older readers reject v7 if vector typography is present.
  *
  * Kept in the data layer because it is purely a storage concern.
  */
@@ -85,7 +88,7 @@ data class CanvasDocument(
 
     companion object {
         /** Bump when storage or replay semantics require migration code. */
-        const val CURRENT_VERSION = 6
+        const val CURRENT_VERSION = 7
     }
 }
 
@@ -189,6 +192,9 @@ object CanvasDocumentCodec {
                 require(
                     layer.blendMode == BlendMode.DARKEN && !layer.isGroup,
                 ) { "The native Darken contract requires a pixel Darken layer" }
+            }
+            if (layer.textContent?.hasTransform() == true) {
+                require(document.version >= 7) { "Vector text transforms require project version 7" }
             }
         }
     }

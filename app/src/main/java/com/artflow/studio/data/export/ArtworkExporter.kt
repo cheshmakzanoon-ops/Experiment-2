@@ -332,7 +332,12 @@ class ArtworkExporter
             options: ExportOptions,
         ): Result<ExportResult> =
             withContext(Dispatchers.IO) {
+                var pinned: List<String> = emptyList()
                 try {
+                    storage.loadDocument(projectId)?.let { doc ->
+                        pinned = storage.referencedFiles(doc)
+                        storage.pinRasters(projectId, pinned)
+                    }
                     val files = storage.packageFiles(projectId)
                     val document = storage.decodePackagedDocument(files.getValue(ArtflowPackage.DOCUMENT))
                     val bytes = ArtflowPackage.write(projectName, files)
@@ -353,6 +358,10 @@ class ArtworkExporter
                 } catch (e: Exception) {
                     Timber.e(e, "Artwork package export failed")
                     Result.failure(ExportFailure(ExportError.EncodingFailed(e.message ?: "unknown").message))
+                } finally {
+                    if (pinned.isNotEmpty()) {
+                        storage.unpinRasters(projectId, pinned)
+                    }
                 }
             }
 

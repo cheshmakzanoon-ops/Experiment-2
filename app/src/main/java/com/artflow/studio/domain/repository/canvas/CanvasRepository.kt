@@ -64,6 +64,9 @@ interface CanvasRepository {
     /** True when an autosave newer than the last explicit save exists. */
     suspend fun hasRecovery(projectId: Long): Boolean
 
+    /** True when an autosave exists that has not yet been recovered or explicitly discarded. */
+    suspend fun hasUnresolvedRecovery(projectId: Long): Boolean
+
     /** Restores the autosave copy; used by the crash-recovery prompt. */
     suspend fun recoverAutosave(projectId: Long): CanvasState?
 
@@ -335,6 +338,7 @@ interface CanvasRepository {
         name: String? = null,
         index: Int? = null,
         opacity: Float = 1.0f,
+        isPrivate: Boolean = false,
     ): Layer
 
     suspend fun removeLayer(layerId: Long): Boolean

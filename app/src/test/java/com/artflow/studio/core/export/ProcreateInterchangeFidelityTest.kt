@@ -10,7 +10,6 @@ import org.junit.Test
 import java.util.zip.ZipInputStream
 
 class ProcreateInterchangeFidelityTest {
-
     private fun filesOf(bytes: ByteArray): ProcreateReader.Files {
         val entries = LinkedHashMap<String, ByteArray>()
         ZipInputStream(bytes.inputStream()).use { zip ->
@@ -18,6 +17,7 @@ class ProcreateInterchangeFidelityTest {
         }
         return object : ProcreateReader.Files {
             override val names = entries.keys
+
             override fun read(name: String) = entries[name]
         }
     }
@@ -35,26 +35,29 @@ class ProcreateInterchangeFidelityTest {
             composite.pixels[i] = Channels.argb(255, 200, 100, 50)
         }
 
-        val childLayer = ProcreateWriter.Layer(
-            name = "Child",
-            pixels = layerPixels,
-            blendMode = BlendMode.NORMAL,
-        )
+        val childLayer =
+            ProcreateWriter.Layer(
+                name = "Child",
+                pixels = layerPixels,
+                blendMode = BlendMode.NORMAL,
+            )
 
-        val group = ProcreateWriter.Group(
-            name = "Multiply Group",
-            opacity = 0.9f,
-            visible = true,
-            children = listOf(childLayer),
-            blendMode = BlendMode.MULTIPLY,
-        )
+        val group =
+            ProcreateWriter.Group(
+                name = "Multiply Group",
+                opacity = 0.9f,
+                visible = true,
+                children = listOf(childLayer),
+                blendMode = BlendMode.MULTIPLY,
+            )
 
-        val bytes = ProcreateWriter.write(
-            width = width,
-            height = height,
-            nodes = listOf(group),
-            composite = composite,
-        )
+        val bytes =
+            ProcreateWriter.write(
+                width = width,
+                height = height,
+                nodes = listOf(group),
+                composite = composite,
+            )
 
         val document = reopen(bytes)
         assertEquals(1, document.nodes.size)
@@ -72,30 +75,33 @@ class ProcreateInterchangeFidelityTest {
         val frame1 = PixelBuffer(width, height)
         val frame2 = PixelBuffer(width, height)
 
-        val layer1 = ProcreateWriter.Layer(
-            name = "Frame 1 (Background)",
-            pixels = frame1,
-            animationFrameHold = 2,
-            animationIsBackground = true,
-            animationIsForeground = false,
-        )
+        val layer1 =
+            ProcreateWriter.Layer(
+                name = "Frame 1 (Background)",
+                pixels = frame1,
+                animationFrameHold = 2,
+                animationIsBackground = true,
+                animationIsForeground = false,
+            )
 
-        val layer2 = ProcreateWriter.Layer(
-            name = "Frame 2 (Foreground)",
-            pixels = frame2,
-            animationFrameHold = 1,
-            animationIsBackground = false,
-            animationIsForeground = true,
-        )
+        val layer2 =
+            ProcreateWriter.Layer(
+                name = "Frame 2 (Foreground)",
+                pixels = frame2,
+                animationFrameHold = 1,
+                animationIsBackground = false,
+                animationIsForeground = true,
+            )
 
-        val bytes = ProcreateWriter.write(
-            width = width,
-            height = height,
-            nodes = listOf(layer2, layer1), // Top first
-            composite = composite,
-            animationPlaybackMode = 1, // Ping-Pong
-            animationFramerate = 24,
-        )
+        val bytes =
+            ProcreateWriter.write(
+                width = width,
+                height = height,
+                nodes = listOf(layer2, layer1), // Top first
+                composite = composite,
+                animationPlaybackMode = 1, // Ping-Pong
+                animationFramerate = 24,
+            )
 
         val document = reopen(bytes)
         assertEquals(1, document.animationPlaybackMode)
@@ -121,16 +127,17 @@ class ProcreateInterchangeFidelityTest {
         val composite = PixelBuffer(width, height)
         val layer = ProcreateWriter.Layer(name = "Layer 1", pixels = composite)
 
-        val bytes = ProcreateWriter.write(
-            width = width,
-            height = height,
-            nodes = listOf(layer),
-            composite = composite,
-            drawingGuideType = 0, // 2D Grid
-            drawingGuideGridSize = 32f,
-            drawingGuideOpacity = 0.5f,
-            drawingGuideThickness = 1.5f,
-        )
+        val bytes =
+            ProcreateWriter.write(
+                width = width,
+                height = height,
+                nodes = listOf(layer),
+                composite = composite,
+                drawingGuideType = 0, // 2D Grid
+                drawingGuideGridSize = 32f,
+                drawingGuideOpacity = 0.5f,
+                drawingGuideThickness = 1.5f,
+            )
 
         val document = reopen(bytes)
         assertEquals(0, document.drawingGuideType)

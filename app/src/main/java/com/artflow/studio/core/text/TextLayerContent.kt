@@ -1,5 +1,7 @@
 package com.artflow.studio.core.text
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 
 /**
@@ -8,19 +10,37 @@ import kotlinx.serialization.Serializable
  * Non-destructive vector transformation preserves rotation, scale, tracking, kerning, and baseline shift.
  */
 @Serializable
+@OptIn(ExperimentalSerializationApi::class)
 data class TextLayerContent(
     val text: String,
     val style: TextLayout.TextStyle,
     val color: Int,
     val x: Float,
     val y: Float,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
     val rotationDegrees: Float = 0f,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
     val scaleX: Float = 1f,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
     val scaleY: Float = 1f,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
     val baselineShift: Float = 0f,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
     val kerning: Float = 0f,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
     val tracking: Float = 0f,
 ) {
+    /**
+     * Returns true if any non-default vector typography transformation is present.
+     */
+    fun hasTransform(): Boolean =
+        rotationDegrees != 0f ||
+            scaleX != 1f ||
+            scaleY != 1f ||
+            baselineShift != 0f ||
+            kerning != 0f ||
+            tracking != 0f
+
     /**
      * Non-destructively transforms the vector text parameters without baking to pixels.
      */

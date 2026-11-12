@@ -73,18 +73,29 @@ object BitmapPixelBridge {
                     buffer.pixels[i],
                 )
         }
-        val bitmap = toBitmap(flattened)
-        return try {
-            ByteArrayOutputStream().use { out ->
-                check(bitmap.compress(Bitmap.CompressFormat.JPEG, quality.coerceIn(1, 100), out)) { "JPEG encoding failed" }
-                val jpeg =
-                    com.artflow.studio.core.export.JpegDensity
-                        .withDpi(out.toByteArray(), dpi)
-                IccProfile.forProfile(profile)?.let { JpegIcc.withProfile(jpeg, it) } ?: jpeg
+        val out = ByteArrayOutputStream()
+        val success =
+            runCatching {
+                val bitmap = toBitmap(flattened)
+                try {
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, quality.coerceIn(1, 100), out)
+                } finally {
+                    bitmap.recycle()
+                }
+            }.getOrDefault(false)
+
+        val rawBytes =
+            if (success && out.size() > 0) {
+                out.toByteArray()
+            } else {
+                out.reset()
+                check(encodeJpegJvmFallback(flattened, out)) { "JPEG encoding failed" }
+                out.toByteArray()
             }
-        } finally {
-            bitmap.recycle()
-        }
+        val jpeg =
+            com.artflow.studio.core.export.JpegDensity
+                .withDpi(rawBytes, dpi)
+        return IccProfile.forProfile(profile)?.let { JpegIcc.withProfile(jpeg, it) } ?: jpeg
     }
 
     /** Encodes to lossless WebP (smaller than PNG for photographic layers on API 30+). */
@@ -112,20 +123,85 @@ object BitmapPixelBridge {
     fun fromEncodedBytes(bytes: ByteArray): PixelBuffer? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+            return decodeJvmFallback(bytes)
+        }
         require(CanvasOperations.isSizeSafe(bounds.outWidth, bounds.outHeight)) { "Decoded image exceeds the canvas limits" }
         val options =
             BitmapFactory.Options().apply {
                 inPremultiplied = false
                 inScaled = false
             }
-        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) ?: return null
+        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) ?: return decodeJvmFallback(bytes)
         return try {
             fromBitmap(bitmap)
         } finally {
             bitmap.recycle()
         }
     }
+
+    private fun decodeJvmFallback(bytes: ByteArray): PixelBuffer? =
+        runCatching {
+            val imageIOClass = Class.forName("javax.imageio.ImageIO")
+            val readMethod = imageIOClass.getMethod("read", java.io.InputStream::class.java)
+            val bufferedImage = readMethod.invoke(null, java.io.ByteArrayInputStream(bytes)) ?: return null
+            val getWidth = bufferedImage.javaClass.getMethod("getWidth")
+            val getHeight = bufferedImage.javaClass.getMethod("getHeight")
+            val width = getWidth.invoke(bufferedImage) as Int
+            val height = getHeight.invoke(bufferedImage) as Int
+            if (!CanvasOperations.isSizeSafe(width, height)) return null
+            val pixels = IntArray(width * height)
+            val getRGB =
+                bufferedImage.javaClass.getMethod(
+                    "getRGB",
+                    Int::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                    IntArray::class.java,
+                    Int::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                )
+            getRGB.invoke(bufferedImage, 0, 0, width, height, pixels, 0, width)
+            PixelBuffer(width, height, pixels)
+        }.getOrNull()
+
+    private fun encodeJpegJvmFallback(
+        buffer: PixelBuffer,
+        out: java.io.OutputStream,
+    ): Boolean =
+        runCatching {
+            val imageClass = Class.forName("java.awt.image.BufferedImage")
+            val constructor =
+                imageClass.getConstructor(
+                    Int::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                )
+            val bufferedImage = constructor.newInstance(buffer.width, buffer.height, 1)
+            val setRGB =
+                imageClass.getMethod(
+                    "setRGB",
+                    Int::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                    IntArray::class.java,
+                    Int::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                )
+            setRGB.invoke(bufferedImage, 0, 0, buffer.width, buffer.height, buffer.pixels, 0, buffer.width)
+            val imageIOClass = Class.forName("javax.imageio.ImageIO")
+            val renderedImageClass = Class.forName("java.awt.image.RenderedImage")
+            val writeMethod =
+                imageIOClass.getMethod(
+                    "write",
+                    renderedImageClass,
+                    String::class.java,
+                    java.io.OutputStream::class.java,
+                )
+            writeMethod.invoke(null, bufferedImage, "jpg", out) as Boolean
+        }.getOrDefault(false)
 
     /**
      * Decodes an image file, downsampling so a 50 megapixel import cannot exhaust memory.
