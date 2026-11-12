@@ -205,7 +205,7 @@ class CanvasRepositoryImpl
         /** Sessions whose every buffer change is reported as preview damage. */
         private val damageTrackedSessions = mutableSetOf<Long>()
 
-        private val recoveredProjects =
+        private val unresolvedRecoveryProjects =
             java.util.concurrent.ConcurrentHashMap
                 .newKeySet<Long>()
 
@@ -313,6 +313,7 @@ class CanvasRepositoryImpl
             createCanvas(width, height, dpi)
             return withState {
                 currentProjectId = projectId
+                unresolvedRecoveryProjects.remove(projectId)
                 stateSnapshot()
             }
         }
@@ -323,7 +324,11 @@ class CanvasRepositoryImpl
                 applyDocument(projectId, document)
                 dirty = false
                 currentProjectId = projectId
-                recoveredProjects.remove(projectId)
+                if (storage.hasUnsavedRecovery(projectId)) {
+                    unresolvedRecoveryProjects.add(projectId)
+                } else {
+                    unresolvedRecoveryProjects.remove(projectId)
+                }
                 Timber.d("Loaded project $projectId (${frameList.size} frames, ${currentLayers().size} layers)")
                 stateSnapshot()
             }
@@ -331,14 +336,14 @@ class CanvasRepositoryImpl
         override suspend fun hasRecovery(projectId: Long): Boolean = storage.hasUnsavedRecovery(projectId)
 
         override suspend fun hasUnresolvedRecovery(projectId: Long): Boolean =
-            storage.hasUnsavedRecovery(projectId) && projectId !in recoveredProjects
+            projectId in unresolvedRecoveryProjects && storage.hasUnsavedRecovery(projectId)
 
         override suspend fun recoverAutosave(projectId: Long): CanvasState? =
             withState {
                 val document = storage.loadAutosave(projectId) ?: return@withState null
                 applyDocument(projectId, document)
                 dirty = true
-                recoveredProjects.add(projectId)
+                unresolvedRecoveryProjects.remove(projectId)
                 Timber.d("Recovered autosave for project $projectId")
                 stateSnapshot()
             }
@@ -526,7 +531,7 @@ class CanvasRepositoryImpl
 
         override suspend fun saveCanvas(projectId: Long): String? =
             saveMutex.withLock {
-                check(!hasUnresolvedRecovery(projectId)) {
+                check(projectId !in unresolvedRecoveryProjects) {
                     "Cannot save project $projectId: unresolved recovery exists"
                 }
                 val snapshot = captureSave(projectId)
@@ -535,7 +540,7 @@ class CanvasRepositoryImpl
                 // old manifest and all of its rasters intact. Never mark newer edits as saved.
                 storage.saveDocument(projectId, document)
                 storage.discardAutosave(projectId)
-                recoveredProjects.remove(projectId)
+                unresolvedRecoveryProjects.remove(projectId)
                 val composite =
                     withContext(Dispatchers.Default) {
                         renderFrozen(snapshot.frames[snapshot.document.activeFrameIndex].layers, snapshot.document)
@@ -569,7 +574,7 @@ class CanvasRepositoryImpl
 
         override suspend fun autosave(projectId: Long) =
             saveMutex.withLock {
-                if (hasUnresolvedRecovery(projectId)) {
+                if (projectId in unresolvedRecoveryProjects) {
                     Timber.w("Autosave skipped for project $projectId: unresolved recovery exists")
                     return@withLock
                 }
@@ -580,7 +585,7 @@ class CanvasRepositoryImpl
 
         override suspend fun discardRecovery(projectId: Long) =
             saveMutex.withLock {
-                recoveredProjects.remove(projectId)
+                unresolvedRecoveryProjects.remove(projectId)
                 storage.discardAutosave(projectId)
                 pruneCommittedRasters(projectId)
             }

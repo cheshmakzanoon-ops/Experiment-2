@@ -632,11 +632,13 @@ Investigating the previous audit baseline and CI run `43155272076` revealed a cr
 - **Root Cause 1 (UI/State Coupling):** Dismissing the recovery prompt dialog cleared `recoveryAvailable` in `CanvasUiState.Ready`. Because the periodic autosave timer and background snapshot handlers only checked the UI flag, dismissing the dialog caused subsequent autosaves to treat recovery as resolved, overwriting `autosave.artflow` with an unrecovered state and destroying the user's recoverable artwork.
 - **Root Cause 2 (Filesystem Timestamp Collision):** In high-speed execution environments and unit test runners, documents and autosave snapshots created within the same millisecond resulted in `autosave.lastModified() == document.lastModified()`, causing `hasUnresolvedRecovery` to evaluate inconsistently.
 - **Root Cause 3 (Dispatcher Decoupling):** `ProjectStorage` used hardcoded `Dispatchers.IO` calls, causing tests running on `TestDispatcher` to execute concurrently without strict deterministic synchronization.
+- **Root Cause 4 (Synchronous Snapshot Timing):** In `CanvasRepositoryImpl.saveCanvas`, invoking a suspending check (`storage.hasUnsavedRecovery`) before `captureSave` caused undispatched coroutines to yield before freezing the layer snapshot, allowing subsequent edits to execute before the snapshot was captured. Furthermore, active session autosaves were conflated with unrecovered crash snapshots.
 
 **Engineering Corrections:**
 1. **Isolated Authoritative State Machine:** Extracted `CanvasRecoveryController` (`com.artflow.studio.presentation.ui.viewmodel.CanvasRecoveryController`), which holds `activeProjectId` and `hasUnresolvedRecovery` independently from `CanvasUiState.Ready.recoveryAvailable`. Dismissing the UI prompt via `dismissRecovery()` dismisses only the visual banner while preserving `hasUnresolvedRecovery = true`.
-2. **Persistence Guards:** Synchronously guarded `CanvasViewModel.save()` and `saveRecoveryOnBackground()` to reject writes while `recoveryController.hasUnresolvedRecovery` is true. The periodic autosave loop checks the in-memory controller state synchronously without dispatcher hopping.
-3. **Monotonic Timestamp Forward-Stepping:** `ProjectStorage.saveAutosave` guarantees monotonic forward timestamp advancement:
+2. **Repository-Level In-Memory Recovery Set:** Replaced coarse storage checks with `unresolvedRecoveryProjects`. A project enters this set exclusively when `loadCanvas` discovers an unrecovered crash autosave on disk. Active session autosaves do not enter this set. When `saveCanvas` or `autosave` is invoked, `projectId !in unresolvedRecoveryProjects` is checked synchronously in memory without suspending, ensuring `captureSave` runs immediately and undispatched.
+3. **Persistence Guards:** Synchronously guarded `CanvasViewModel.save()` and `saveRecoveryOnBackground()` to reject writes while `recoveryController.hasUnresolvedRecovery` is true. The periodic autosave loop checks the in-memory controller state synchronously without dispatcher hopping.
+4. **Monotonic Timestamp Forward-Stepping:** `ProjectStorage.saveAutosave` guarantees monotonic forward timestamp advancement:
    ```kotlin
    val file = autosaveFile(projectId)
    val doc = documentFile(projectId)
@@ -644,8 +646,8 @@ Investigating the previous audit baseline and CI run `43155272076` revealed a cr
        file.setLastModified(doc.lastModified() + 1000L)
    }
    ```
-4. **Dispatcher Injection:** Injected `CoroutineDispatcher` (`ioDispatcher: CoroutineDispatcher = Dispatchers.IO`) across all `ProjectStorage` constructors and Hilt bindings (`RepositoryModule.kt`), ensuring tests inject `testDispatcher` for deterministic single-threaded execution.
-5. **Deterministic Verification:** All 8 regression test cases in `AuthoritativeRecoveryTest` (`art006` through `art013`) execute with 100% determinism.
+5. **Dispatcher Injection:** Injected `CoroutineDispatcher` (`ioDispatcher: CoroutineDispatcher = Dispatchers.IO`) across all `ProjectStorage` constructors and Hilt bindings (`RepositoryModule.kt`), ensuring tests inject `testDispatcher` for deterministic single-threaded execution.
+6. **Deterministic Verification:** All 8 regression test cases in `AuthoritativeRecoveryTest` (`art006` through `art013`) and all persistence regression tests (`PersistenceRegressionTest`) execute with 100% determinism.
 
 ### 2. Stream Bounding and Import/Export Hardening
 
