@@ -93,5 +93,5 @@ Tracing the shipping rendering stack established the actual runtime behavior:
 | Static Analysis (`./gradlew detekt`) | **PASS** | `0` new issues; baseline reduced `82 -> 67` `<ID>` entries |
 | Android Lint (`./gradlew lintDebug lintRelease`) | **PASS** | `0 Fatal`, `0 Error` |
 | Instrumentation Compile (`./gradlew compileDebugAndroidTestKotlin`) | **PASS** | All `270` `@Test` identities compiled cleanly |
-| Python & Security Scripts | **PASS** | `164` `.github/scripts` tests + `76` `tools` tests; `verify_workflow_pins.py` (14 files); `scan_secrets.py`; `check_licenses_and_sbom.py` (42 components) |
+| Python & Security Scripts | **PASS** | `166` `.github/scripts` tests + `76` `tools` tests; `verify_workflow_pins.py` (14 files); `scan_secrets.py`; `check_licenses_and_sbom.py` (42 components) |
 | Release Signing Negative Guard | **PASS** | `./gradlew help -PrequireReleaseSigning=true` fails closed without private keystore |

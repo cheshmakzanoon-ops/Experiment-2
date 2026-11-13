@@ -9,7 +9,7 @@
 
 | Check / Suite | Command | Result | Verified Metrics / Notes |
 | --- | --- | :---: | --- |
-| Python `.github/scripts` suite | `python3 -m unittest discover -s .github/scripts -p 'test_*.py'` | **PASS** | `164` tests ran in `33.877s`, `0` failures |
+| Python `.github/scripts` suite | `python3 -m unittest discover -s .github/scripts -p 'test_*.py'` | **PASS** | `166` tests ran in `24.040s`, `0` failures |
 | Python `tools` suite | `python3 -m unittest discover -s tools -p 'test_*.py'` | **PASS** | `76` tests ran in `2.885s`, `0` failures |
 | Workflow SHA-pin audit | `python3 .github/scripts/verify_workflow_pins.py .github/workflows` | **PASS** | All third-party `uses:` across `14` `.github/workflows/*.yml` files pinned to 40-char commit SHAs |
 | Secret & keystore hygiene scan | `python3 .github/scripts/scan_secrets.py .` | **PASS** | Zero secrets or tracked keystore artifacts detected |
