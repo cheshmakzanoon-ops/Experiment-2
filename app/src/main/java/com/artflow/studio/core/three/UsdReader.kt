@@ -165,7 +165,7 @@ object UsdReader {
             var start = 0
             var triangles = 0
             for (count in counts) {
-                require(count >= 0 && start + count <= corners) { "The mesh faces do not match its vertices" }
+                require(count >= 0 && count.toLong() <= (corners - start).toLong()) { "The mesh faces do not match its vertices" }
                 for (k in 1 until count - 1) {
                     out.append('f')
                     intArrayOf(start, start + k, start + k + 1).forEach { corner -> appendCorner(out, offset + corner + 1, withNormals) }
@@ -202,7 +202,7 @@ object UsdReader {
             for (corner in corners.indices) {
                 val element = if (faceVarying) corner else corners[corner]
                 val index = lookup?.getOrNull(element) ?: element
-                if (index < 0 || (index + 1) * width > values.size) return null
+                if (index < 0 || (index + 1).toLong() * width > values.size.toLong()) return null
                 System.arraycopy(values, index * width, out, corner * width, width)
             }
             return out
@@ -239,14 +239,33 @@ object UsdReader {
             val kind = op.removePrefix("xformOp:").substringBefore(':')
             return when (kind) {
                 "transform" -> layer.floats(rep).also { require(it.size == MATRIX) { "Invalid transform" } }
-                "translate" -> layer.floats(rep).let { Matrix4.compose(it, NO_ROTATION, ONES) }
-                "scale" -> layer.floats(rep).let { Matrix4.compose(ZEROS, NO_ROTATION, it) }
-                "rotateX", "rotateY", "rotateZ" -> axisRotation(kind.last(), layer.floats(rep).first())
+                "translate" ->
+                    layer
+                        .floats(rep)
+                        .also { require(it.size == 3) { "Invalid translate" } }
+                        .let { Matrix4.compose(it, NO_ROTATION, ONES) }
+                "scale" ->
+                    layer
+                        .floats(rep)
+                        .also { require(it.size == 3) { "Invalid scale" } }
+                        .let { Matrix4.compose(ZEROS, NO_ROTATION, it) }
+                "rotateX", "rotateY", "rotateZ" ->
+                    layer
+                        .floats(rep)
+                        .also { require(it.size == 1) { "Invalid rotation angle" } }
+                        .let { axisRotation(kind.last(), it.first()) }
                 "rotateXYZ" ->
-                    layer.floats(rep).let { (x, y, z) ->
-                        Matrix4.multiply(axisRotation('Z', z), Matrix4.multiply(axisRotation('Y', y), axisRotation('X', x)))
-                    }
-                "orient" -> Matrix4.compose(ZEROS, layer.floats(rep), ONES)
+                    layer
+                        .floats(rep)
+                        .also { require(it.size == 3) { "Invalid XYZ rotation" } }
+                        .let { (x, y, z) ->
+                            Matrix4.multiply(axisRotation('Z', z), Matrix4.multiply(axisRotation('Y', y), axisRotation('X', x)))
+                        }
+                "orient" ->
+                    layer
+                        .floats(rep)
+                        .also { require(it.size == 4) { "Invalid orientation quaternion" } }
+                        .let { Matrix4.compose(ZEROS, it, ONES) }
                 else -> Matrix4.IDENTITY
             }
         }
@@ -342,9 +361,10 @@ object UsdReader {
             require(data.size >= TOC_OFFSET + 8) { "The USD file is cut short" }
             require(data[MAGIC.size].toInt() == 0 && minor >= MIN_MINOR) { "This USD file version is not supported" }
             var at = position(longAt(TOC_OFFSET))
-            repeat(count(longAt(at))) { index ->
+            val sectionCount = count(longAt(at))
+            require(at.toLong() + 8L + sectionCount.toLong() * SECTION_ENTRY <= data.size.toLong()) { "The USD file is damaged" }
+            repeat(sectionCount) { index ->
                 val entry = at + 8 + index * SECTION_ENTRY
-                require(entry.toLong() + SECTION_ENTRY <= data.size) { "The USD file is damaged" }
                 val name = String(data, entry, SECTION_NAME).trimEnd('\u0000')
                 sections[name] = position(longAt(entry + SECTION_NAME))
             }
@@ -356,7 +376,10 @@ object UsdReader {
             val fields = count(longAt(at))
             at += 8
             fieldNames = ints(at, fields).also { at = it.second }.first
-            val repBytes = decompress(at + 8, count(longAt(at)), fields * 8)
+            val fieldsBytesLong = fields.toLong() * 8L
+            require(fieldsBytesLong <= MAX_DECODED.toLong()) { "The USD fields section is too large" }
+            val repBytes = decompress(at + 8, count(longAt(at)), fieldsBytesLong.toInt())
+            require(repBytes.size.toLong() >= fieldsBytesLong) { "The USD fields section is damaged" }
             fieldValues = LongArray(fields) { ByteBuffer.wrap(repBytes).order(ByteOrder.LITTLE_ENDIAN).getLong(it * 8) }
             at = section("FIELDSETS")
             fieldSets = ints(at + 8, count(longAt(at))).first
@@ -374,15 +397,23 @@ object UsdReader {
             val result = HashMap<String, Map<String, Long>>()
             for (spec in 0 until count) {
                 val path = pathNames.getOrNull(paths[spec]) ?: continue
-                val fields = HashMap<String, Long>()
-                var index = sets[spec]
-                while (index in fieldSets.indices && fieldSets[index] >= 0) {
-                    val field = fieldSets[index++]
-                    tokens.getOrNull(fieldNames.getOrElse(field) { -1 })?.let { fields[it] = fieldValues[field] }
-                }
-                result[path] = fields
+                result[path] = readSpecFields(sets[spec])
             }
             return result
+        }
+
+        private fun readSpecFields(startIndex: Int): Map<String, Long> {
+            val fields = HashMap<String, Long>()
+            var index = startIndex
+            while (index in fieldSets.indices && fieldSets[index] >= 0) {
+                val field = fieldSets[index++]
+                val nameIndex = fieldNames.getOrElse(field) { -1 }
+                val fieldName = tokens.getOrNull(nameIndex)
+                if (field in fieldValues.indices && fieldName != null) {
+                    fields[fieldName] = fieldValues[field]
+                }
+            }
+            return fields
         }
 
         private fun paths(start: Int): Array<String?> {
@@ -391,14 +422,17 @@ object UsdReader {
             val (indexes, a) = ints(start + 16, encoded)
             val (elements, b) = ints(a, encoded)
             val (jumps, _) = ints(b, encoded)
+            require(total.toLong() <= data.size.toLong() * MAX_EXPANSION + EXPANSION_SLACK) { "The USD path table is too large" }
             val names = arrayOfNulls<String>(total)
+            val seen = BooleanArray(encoded)
             val pending = ArrayDeque<Pair<Int, String?>>()
             if (encoded > 0) pending.addLast(0 to null)
             while (pending.isNotEmpty()) {
                 var (current, parent) = pending.removeLast()
                 do {
                     val index = current++
-                    require(index < encoded) { "The USD path table is damaged" }
+                    require(index in 0 until encoded && !seen[index]) { "The USD path table is damaged" }
+                    seen[index] = true
                     val element = elements[index]
                     val token = tokens.getOrElse(abs(element)) { "" }
                     val path =
@@ -412,7 +446,11 @@ object UsdReader {
                     val jump = jumps[index]
                     val child = jump > 0 || jump == -1
                     val sibling = jump >= 0
-                    if (child && sibling) pending.addLast((index + jump) to parent)
+                    if (child && sibling) {
+                        val siblingIndex = index.toLong() + jump.toLong()
+                        require(siblingIndex in 0L until encoded.toLong()) { "The USD path table is damaged" }
+                        pending.addLast(siblingIndex.toInt() to parent)
+                    }
                     if (child) parent = path
                 } while (child || sibling)
             }
@@ -430,7 +468,9 @@ object UsdReader {
             if (inlined(rep) || (!tokenArray && type(rep) != TOKEN_VECTOR)) return emptyList()
             val at = position(payload(rep))
             val count = if (tokenArray) arrayCount(at) else count(longAt(at))
-            val start = at + if (tokenArray && minor < ARRAY_COUNT_64) 4 else 8
+            val startLong = at.toLong() + if (tokenArray && minor < ARRAY_COUNT_64) 4L else 8L
+            require(startLong + count.toLong() * 4L <= data.size.toLong()) { "The USD file is damaged" }
+            val start = startLong.toInt()
             return List(count) { tokens.getOrElse(intAt(start + it * 4)) { "" } }
         }
 
@@ -445,11 +485,13 @@ object UsdReader {
         override fun paths(rep: Long): List<String> {
             if (type(rep) != PATH_LIST_OP || inlined(rep)) return emptyList()
             var at = position(payload(rep))
+            require(at in data.indices) { "The USD file is damaged" }
             val header = data[at++].toInt()
             val found = mutableListOf<String>()
             for (bit in LIST_BITS) {
                 if (header and bit == 0) continue
                 val count = count(longAt(at))
+                require(at.toLong() + 8L + count.toLong() * 4L <= data.size.toLong()) { "The USD file is damaged" }
                 repeat(count) { pathNames.getOrNull(intAt(at + 8 + it * 4))?.let(found::add) }
                 at += 8 + count * 4
             }
@@ -460,9 +502,11 @@ object UsdReader {
             if (type(rep) != INT || !array(rep)) return null
             val at = position(payload(rep))
             val count = arrayCount(at)
-            val start = at + if (minor >= ARRAY_COUNT_64) 8 else 4
+            val startLong = at.toLong() + if (minor >= ARRAY_COUNT_64) 8L else 4L
+            require(startLong <= data.size.toLong()) { "The USD file is damaged" }
+            val start = startLong.toInt()
             if (compressed(rep)) return ints(start, count).first
-            require(start.toLong() + count.toLong() * 4 <= data.size) { "The USD file is damaged" }
+            require(startLong + count.toLong() * 4L <= data.size.toLong()) { "The USD file is damaged" }
             return IntArray(count) { intAt(start + it * 4) }
         }
 
@@ -475,17 +519,19 @@ object UsdReader {
             val at = position(payload(rep))
             val count = if (array(rep)) arrayCount(at) else 1
             require(!compressed(rep)) { "Compressed USD float data is not supported" }
-            val start =
-                at +
+            val startLong =
+                at.toLong() +
                     if (!array(rep)) {
-                        0
+                        0L
                     } else if (minor >= ARRAY_COUNT_64) {
-                        8
+                        8L
                     } else {
-                        4
+                        4L
                     }
             val size = if (double) 8 else 4
-            require(count.toLong() * width * size <= data.size - start) { "The USD data is cut short" }
+            require(count.toLong() * width <= (MAX_DECODED / 4).toLong()) { "The USD data is too large" }
+            require(startLong + count.toLong() * width * size <= data.size.toLong()) { "The USD data is cut short" }
+            val start = startLong.toInt()
             return FloatArray(count * width) { i ->
                 if (double) buffer.getDouble(start + i * 8).toFloat() else buffer.getFloat(start + i * 4)
             }
@@ -520,7 +566,10 @@ object UsdReader {
             count: Int,
         ): Pair<IntArray, Int> {
             val size = count(longAt(at))
-            val coded = decompress(at + 8, size, 4 + (count * 2 + 7) / 8 + count * 4)
+            val capacityLong = 4L + (count.toLong() * 2L + 7L) / 8L + count.toLong() * 4L
+            require(capacityLong <= MAX_DECODED.toLong()) { "The USD integer table is too large" }
+            val coded = decompress(at + 8, size, capacityLong.toInt())
+            require(coded.size >= 4 + (count * 2 + 7) / 8) { "The USD integer table is damaged" }
             val codes = ByteBuffer.wrap(coded).order(ByteOrder.LITTLE_ENDIAN)
             val common = codes.getInt(0)
             var value = 4 + (count * 2 + 7) / 8
@@ -531,9 +580,18 @@ object UsdReader {
                     previous +=
                         when (code) {
                             0 -> common
-                            1 -> coded[value].toInt().also { value += 1 }
-                            2 -> codes.getShort(value).toInt().also { value += 2 }
-                            else -> codes.getInt(value).also { value += 4 }
+                            1 -> {
+                                require(value < coded.size) { "The USD integer table is damaged" }
+                                coded[value++].toInt()
+                            }
+                            2 -> {
+                                require(value + 2 <= coded.size) { "The USD integer table is damaged" }
+                                codes.getShort(value).toInt().also { value += 2 }
+                            }
+                            else -> {
+                                require(value + 4 <= coded.size) { "The USD integer table is damaged" }
+                                codes.getInt(value).also { value += 4 }
+                            }
                         }
                     previous
                 }
@@ -546,11 +604,14 @@ object UsdReader {
             size: Int,
             capacity: Int,
         ): ByteArray {
-            require(size >= 1 && at + size <= data.size && capacity in 0..MAX_DECODED) { "The USD data is cut short" }
+            require(at >= 0 && size >= 1 && at.toLong() + size <= data.size.toLong() && capacity in 0..MAX_DECODED) {
+                "The USD data is cut short"
+            }
             // LZ4 expands its input by at most about 255 times, so a larger declared size cannot be honest. Refusing it
             // here stops a small file from making the reader allocate hundreds of megabytes.
             require(capacity.toLong() <= size.toLong() * MAX_EXPANSION + EXPANSION_SLACK) { "The USD data is cut short" }
             val out = ByteArray(capacity)
+            val end = at + size
             val chunks = data[at].toInt() and 0xFF
             if (chunks == 0) {
                 Lz4.decompress(data, at + 1, size - 1, out, 0)
@@ -558,7 +619,9 @@ object UsdReader {
                 var source = at + 1
                 var written = 0
                 repeat(chunks) {
+                    require(source + 4 <= end) { "The USD data is cut short" }
                     val length = intAt(source)
+                    require(length > 0 && source.toLong() + 4L + length <= end.toLong()) { "The USD data is damaged" }
                     written += Lz4.decompress(data, source + 4, length, out, written)
                     source += 4 + length
                 }

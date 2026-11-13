@@ -95,6 +95,23 @@ class NativeTombstoneCaptureTest(unittest.TestCase):
                              (['shell', 'stop'], ['shell', 'start']) for args, _ in self.adb.calls))
         return output, result
 
+    def test_timestamp_parses_nanoseconds_offsets_and_rejects_invalid_strings(self):
+        self.assertEqual(
+            '2026-11-12T09:50:02.057848+00:00',
+            collector.timestamp('2026-11-12 09:50:02.057848714+0000').isoformat(),
+        )
+        self.assertEqual(
+            '2026-11-12T09:50:02.500000+00:00',
+            collector.timestamp('2026-11-12T09:50:02.5Z').isoformat(),
+        )
+        self.assertEqual(
+            '2026-11-12T07:50:02+00:00',
+            collector.timestamp('2026-11-12T09:50:02+02:00').isoformat(),
+        )
+        for bad in (None, 123, '', '2026-11-12 09:50:02', '2026-11-12 09:50:02+00', 'not-a-timestamp'):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                collector.timestamp(bad)
+
     def test_exact_original_app_text_and_sections_survive_with_verified_hashes(self):
         self.adb.files['tombstone_02.pb'] = b'not independently attributed'
         output, result = self.capture()

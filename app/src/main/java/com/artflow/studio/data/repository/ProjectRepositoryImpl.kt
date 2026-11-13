@@ -126,6 +126,82 @@ class ProjectRepositoryImpl
             }
         }
 
+        override suspend fun importPackageFile(file: java.io.File): ProjectRepository.ImportedPackage {
+            val contents = withContext(Dispatchers.IO) { ArtflowPackage.openFile(file) }
+            contents.use { stream ->
+                val document =
+                    withContext(Dispatchers.Default) {
+                        storage.decodePackagedDocument(stream.readBytes(ArtflowPackage.DOCUMENT))
+                    }
+                return insertImportedPackage(
+                    name = stream.name,
+                    width = document.width,
+                    height = document.height,
+                    dpi = document.dpi,
+                    layerCount = document.layers.size,
+                    stream = stream,
+                )
+            }
+        }
+
+        private suspend fun insertImportedPackage(
+            name: String,
+            width: Int,
+            height: Int,
+            dpi: Int,
+            layerCount: Int,
+            stream: ArtflowPackage.StreamContents,
+        ): ProjectRepository.ImportedPackage {
+            var importedId: Long? = null
+            var completed = false
+            try {
+                val outcome =
+                    database.withTransaction {
+                        val now = System.currentTimeMillis()
+                        val project =
+                            Project(
+                                name = name,
+                                filePath = "",
+                                thumbnailPath = null,
+                                width = width,
+                                height = height,
+                                dpi = dpi,
+                                createdAt = now,
+                                modifiedAt = now,
+                                layerCount = layerCount,
+                            )
+                        val newId = insertNewProject(project.toEntity())
+                        check(!withContext(Dispatchers.IO) { storage.projectDirectoryExists(newId) }) {
+                            "The destination already contains project data"
+                        }
+                        importedId = newId
+                        val result = storage.importProjectStream(newId, stream)
+                        projectDao.updateProject(
+                            project
+                                .copy(
+                                    id = newId,
+                                    filePath = storage.documentFile(newId).absolutePath,
+                                    thumbnailPath = storage.thumbnailPathIfExists(newId),
+                                ).toEntity(),
+                        )
+                        ProjectRepository.ImportedPackage(
+                            projectId = newId,
+                            missingFonts = result.missingFonts,
+                            missingGrains = result.missingGrains,
+                        )
+                    }
+                completed = true
+                return outcome
+            } finally {
+                val id = importedId
+                if (!completed && id != null) {
+                    withContext(NonCancellable + Dispatchers.IO) {
+                        if (projectDao.getProjectById(id) == null) storage.deleteProjectFiles(id)
+                    }
+                }
+            }
+        }
+
         override suspend fun importPackage(bytes: ByteArray): Long {
             val contents = withContext(Dispatchers.Default) { ArtflowPackage.read(bytes) }
             val document = storage.decodePackagedDocument(requireNotNull(contents.files[ArtflowPackage.DOCUMENT]))

@@ -4,9 +4,9 @@ import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.PixelBuffer
 
 /**
- * Interface contract for ArtFlow GPU rendering backends.
- * Provides unified lifecycle, tile management, dab dispatch, and presentation across Vulkan,
- * GLES 3.x, and Software pipelines.
+ * Interface contract for ArtFlow tile compositing and viewport presentation backends.
+ * Covers the production OpenGL ES 2.0 presentation backend, experimental Vulkan preview stub,
+ * and pure software CPU backend.
  */
 interface IRenderBackend {
     /** The active hardware or software backend type. */

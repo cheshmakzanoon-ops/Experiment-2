@@ -335,6 +335,7 @@ class CanvasViewModel
                         }
                         PendingImports.takePsd(projectId)?.let(::importPsd)
                         PendingImports.takeProcreate(projectId)?.let(::importProcreate)
+                        PendingImports.takeNotice(projectId)?.let(::notify)
                         Timber.d("Opened project $projectId (${state.width}x${state.height})")
                     } catch (cancelled: CancellationException) {
                         throw cancelled

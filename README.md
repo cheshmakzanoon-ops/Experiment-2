@@ -1,169 +1,99 @@
 # ArtFlow — Digital Art Studio for Android
 
-[![Android CI](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/workflows/android-ci.yml/badge.svg)](https://github.com/cheshmakzanoon-ops/Experiment-2/actions)
-[![CI Matrix: 100% Green](https://img.shields.io/badge/CI%20Matrix-8%2F8%20Jobs%20Passed-brightgreen)](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/43176819261)
-[![Unit Tests](https://img.shields.io/badge/Unit%20Tests-1%2C688%20Passed-brightgreen)](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/43176819261)
-[![Static Analysis](https://img.shields.io/badge/ktlint%20%26%20detekt-0%20Issues-brightgreen)](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/43176819261)
+[![Android CI](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/workflows/android-ci.yml/badge.svg?branch=main)](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/workflows/android-ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-A high-performance, offline painting and illustration studio built with Kotlin, Jetpack Compose, Android NDK (C++20), and an OpenGL ES 3.x hardware acceleration engine (with an experimental Vulkan preview architecture in development). ArtFlow provides professional-grade digital art workflows: pressure-sensitive brushes with physical wet-mix dynamics, multi-channel 3D PBR surface painting, non-destructive vector typography, an authoritative zero-data-loss recovery state machine, ICC profile-referenced CMYK prepress color management, and bidirectional `.procreate` / `.psd` interchange.
+An offline painting and illustration studio built with Kotlin, Jetpack Compose, an **OpenGL ES 2.0** presentation surface ([`OpenGLCanvasRenderer`](app/src/main/java/com/artflow/studio/data/renderer/opengl/OpenGLCanvasRenderer.kt)), and **CPU virtual tile compositing** ([`VirtualTileCanvas`](app/src/main/java/com/artflow/studio/data/renderer/gpu/VirtualTileCanvas.kt)). ArtFlow provides pressure-sensitive brushes with wet-mix dynamics, 3D PBR surface painting, non-destructive vector typography, recovery state protection, analytical ICC-referenced CMYK separation, and `.procreate` / `.psd` / `.psb` / streaming `.artflow` interchange.
 
-> **Release Qualification Status**: Fully qualified on `main` at commit [`541a6c1`](https://github.com/cheshmakzanoon-ops/Experiment-2/commit/541a6c1). All 8 GitHub Actions CI jobs passed in [Run 43176819261](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/43176819261), executing 1,688 unit tests, static analysis gates, release bundle verification, and the complete 7-lane emulator matrix (API 26, 35, 35 standard 4k, 35 16k repeat, 36, 36 16k, and 36 tablet). Complete engineering root causes and empirical evidence are documented in [Production Readiness Audit](docs/PRODUCTION_READINESS_AUDIT.md) and [Release Readiness](docs/RELEASE_READINESS.md).
+> **Release Qualification & Honest Scope Notice**:
+> - **Historical vs Baseline `main`**: Preceding `main` commit `541a6c1` passed 8/8 jobs in historical Run [43176819261](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/43176819261), while baseline `main` commit `d340bc6` failed 1/8 jobs (`Device tests (API 35 independent 16 KB repeat)`) in Run [43189321650](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/43189321650).
+> - **Production Sign-Off Decision**: **NO-GO for unconditional public Play production rollout** from repository artifacts alone. Engineering CI, data safety, streaming packaging, codec hardening, and supply-chain checks are verified in repository/CI gates, while **private publisher upload signing (`keystore.properties`), physical Android 8/15/16 + stylus + 16 KB hardware campaigns, upgrade-from-prior-build testing, and Play Console Data Safety/privacy URL/store compliance** remain **OPEN** external publisher deliverables.
+> - See [`docs/PRODUCTION_READINESS_AUDIT.md`](docs/PRODUCTION_READINESS_AUDIT.md), [`docs/RELEASE_READINESS.md`](docs/RELEASE_READINESS.md), and [`docs/release/RELEASE_SIGNOFF.md`](docs/release/RELEASE_SIGNOFF.md).
 
 ---
 
 ## Key Features & Architecture
 
-### 1. Priority Zero — Authoritative Recovery & Zero Data Loss
-- **Persistent Authoritative Recovery State Machine**: Decouples UI dialog visibility from authoritative snapshot state ([`CanvasRecoveryController`](app/src/main/java/com/artflow/studio/presentation/ui/viewmodel/CanvasRecoveryController.kt) & [`ProjectStorage`](app/src/main/java/com/artflow/studio/data/local/ProjectStorage.kt)). Dismissing a recovery prompt never authorizes destroying recovery data.
-- **Repository-Level In-Memory Recovery Set**: Replaced coarse storage checks with `unresolvedRecoveryProjects` in [`CanvasRepositoryImpl`](app/src/main/java/com/artflow/studio/data/repository/canvas/CanvasRepositoryImpl.kt). A project is flagged only when discovering an unrecovered crash autosave on disk.
-- **Synchronous Snapshot Capture**: `saveCanvas` and periodic autosaves check recovery status synchronously in memory without coroutine suspension before capturing the immutable layer snapshot, preventing intervening user edits from mutating saving state.
-- **Race-Condition & Overwrite Immunity**: Periodic autosaves, background saves, manual saves, and export pipelines strictly guard against overwriting unresolved crash snapshots.
-- **Monotonic Timestamp Forward-Stepping**: Injected `ioDispatcher` across `ProjectStorage` and guaranteed monotonic forward timestamp advancement (`file.setLastModified(doc.lastModified() + 1000L)`) to eliminate millisecond timestamp collisions on high-speed filesystems.
-- **Atomic Persistence & SHA-256 Integrity**: Document files and metadata are written atomically via temporary staging files with checksum verification.
+### 1. Recovery & Storage Integrity
+- **Authoritative Recovery State Machine**: Decouples UI dialog visibility from authoritative snapshot state ([`CanvasRecoveryController`](app/src/main/java/com/artflow/studio/presentation/ui/viewmodel/CanvasRecoveryController.kt) & [`ProjectStorage`](app/src/main/java/com/artflow/studio/data/local/ProjectStorage.kt)). Dismissing a recovery prompt never authorizes overwriting recovery data.
+- **Repository-Level Recovery Guard**: `unresolvedRecoveryProjects` in [`CanvasRepositoryImpl`](app/src/main/java/com/artflow/studio/data/repository/canvas/CanvasRepositoryImpl.kt) blocks periodic autosaves, background saves, and manual saves synchronously in memory when unresolved crash snapshots exist.
+- **Atomic Document Persistence & Non-Symlink Storage**: Internal documents (`.artflow` storage format up to `CURRENT_VERSION = 7`) and immutable layer raster generations are staged and moved atomically with SHA-256 verification and `NOFOLLOW_LINKS` path guards ([`StorageFileTree`](app/src/main/java/com/artflow/studio/data/local/StorageFileTree.kt)).
+- **Atomic Font Staging & Portable Font IDs**: [`FontLibrary`](app/src/main/java/com/artflow/studio/data/local/FontLibrary.kt) validates imported `.ttf`/`.otf` streams in isolated staging files before atomic promotion with non-destructive suffix collision handling (`Name (2).ttf`), preventing invalid uploads from deleting existing fonts. Fonts use portable `font:<filename>` IDs (with backward compatibility for legacy `file:` paths) and expose in-editor missing-font warnings.
+- **Backup & Portable Streaming `.artflow` Packages**: [`backup_rules.xml`](app/src/main/res/xml/backup_rules.xml) and [`data_extraction_rules.xml`](app/src/main/res/xml/data_extraction_rules.xml) cover `filesDir/fonts/` and `filesDir/grains/` alongside projects and Room databases (~25 MB Android Auto Backup cloud quota vs unlimited local device-to-device transfer documented in [`privacy-policy.md`](docs/privacy-policy.md)). [`ArtflowPackage`](app/src/main/java/com/artflow/studio/data/export/ArtflowPackage.kt) streams packages via temporary files and `ZipFile`, bundling referenced custom `.grain` files and `dependencies.json` font metadata (`id`/`label`) **without redistributing third-party font binaries**.
 
-### 2. OpenGL ES 3.x Production Engine & Virtual Canvas
-- **Production-Validated OpenGL ES 3.x Core**: Fully validated hardware acceleration pipeline on physical devices and CI emulators ([`RenderBackendFactory`](app/src/main/java/com/artflow/studio/data/renderer/gpu/RenderBackendFactory.kt) & [`OpenGLCanvasRenderer`](app/src/main/java/com/artflow/studio/data/renderer/opengl/OpenGLCanvasRenderer.kt)).
-- **Experimental Vulkan Preview**: Future-facing Vulkan 1.2+ preview backend with CPU tile compositing under active development ([`VulkanRenderBackend`](app/src/main/java/com/artflow/studio/data/renderer/gpu/VulkanRenderBackend.kt)).
-- **Bounded Virtual Tile Canvas**: Dynamically allocates $128 \times 128$ and $256 \times 256$ tiles with copy-on-write dirty-region tracking ([`VirtualTileCanvas`](app/src/main/java/com/artflow/studio/data/renderer/gpu/VirtualTileCanvas.kt)), safely enforcing tested memory limits up to 8,192 $\times$ 8,192 (40 MP).
-- **16 KB Page-Size Ready**: Native C++20 toolchain configured with `-Wl,-z,max-page-size=16384` for modern Android 15/16 devices, verified on 16 KB emulator targets.
+### 2. Graphics Presentation & Virtual Tile Canvas
+- **OpenGL ES 2.0 Display + CPU Tile Compositing**: [`ArtFlowCanvasView`](app/src/main/java/com/artflow/studio/presentation/ui/components/canvas/ArtFlowCanvasView.kt) configures `setEGLContextClientVersion(2)` and presents canvas textures through [`OpenGLCanvasRenderer`](app/src/main/java/com/artflow/studio/data/renderer/opengl/OpenGLCanvasRenderer.kt) (`GLES20`), while [`VirtualTileCanvas`](app/src/main/java/com/artflow/studio/data/renderer/gpu/VirtualTileCanvas.kt) and [`Compositor`](app/src/main/java/com/artflow/studio/core/pixels/Compositor.kt) composite $128 \times 128$ / $256 \times 256$ copy-on-write tiles on CPU within an 8,192 $\times$ 8,192 (40 MP) ceiling.
+- **Honest Backend Abstraction**: [`RenderBackendFactory`](app/src/main/java/com/artflow/studio/data/renderer/gpu/RenderBackendFactory.kt) defaults to `RenderBackendType.GLES2` (`GlesRenderBackend`), returns [`SoftwareRenderBackend`](app/src/main/java/com/artflow/studio/data/renderer/gpu/SoftwareRenderBackend.kt) for `SOFTWARE`, and labels [`VulkanRenderBackend`](app/src/main/java/com/artflow/studio/data/renderer/gpu/VulkanRenderBackend.kt) accurately as an experimental CPU-composited preview path.
+- **Unwired Native C++ Prototype**: `app/src/main/jni` retains an unintegrated C++20 NDK prototype (`CMakeLists.txt` is not wired in `app/build.gradle.kts`). The only native shared object packaged in debug APK / release AAB artifacts is `libandroidx.graphics.path.so`, verified ELF 16 KB page-size aligned across all ABIs by [`verify_android_artifacts.py`](.github/scripts/verify_android_artifacts.py).
 
-### 3. Hardened Import/Export & Photoshop PSB Interoperability
-- **Bounded Streaming Architecture**: Enforced byte and entry bounds via `readAtMost` across all incoming streams (PSD up to 256 MB, native packages up to 512 MB, 3D models up to 64 MB, fonts up to 20 MB, palettes up to 1 MB) to prevent Out-Of-Memory (OOM) and heap exhaustion ([`BoundedRead`](app/src/main/java/com/artflow/studio/core/export/BoundedRead.kt) & [`BoundedImportTest`](app/src/test/java/com/artflow/studio/util/BoundedImportTest.kt)).
-- **Decompression Bomb Protection**: Hardened `.procreate` archive ingestion with limits of 512 MB decompressed payload and 10,000 archive entries.
-- **Photoshop PSD & PSB Large Document Codec**: Version-aware PSD / PSB (`8BPB`) engine ([`PsdCodec`](app/src/main/java/com/artflow/studio/core/export/PsdCodec.kt)) supporting 64-bit section headers, 64-bit channel record lengths, and 32-bit (4-byte) RLE PackBits row-length tables.
-- **Decomposed Architecture**: Monolithic PSD/PSB layer parsing decomposed into 7 single-responsibility functions with cyclomatic complexity $\le 8$.
-- **Procreate v5 / v6 Parity**: Native `.procreate` serialization and deserialization ([`ProcreateWriter`](app/src/main/java/com/artflow/studio/core/export/ProcreateWriter.kt) & [`ProcreateReader`](app/src/main/java/com/artflow/studio/core/export/ProcreateReader.kt)) preserving group blends, animation timeline holds/pins, drawing guides, and 8-bit layer masks.
+### 3. Hardened Import/Export & Binary Codecs
+- **Bounded Stream Reading & ZIP Hardening**: [`GalleryImports`](app/src/main/java/com/artflow/studio/presentation/ui/screens/gallery/GalleryImports.kt), [`ProcreateImport`](app/src/main/java/com/artflow/studio/data/export/ProcreateImport.kt), [`ArtflowPackage`](app/src/main/java/com/artflow/studio/data/export/ArtflowPackage.kt), and [`ModelPackage`](app/src/main/java/com/artflow/studio/core/three/ModelPackage.kt) enforce byte, entry, and path traversal bounds.
+- **Codec Bounds & Overflow Guards**: Hardened `ApngEncoder`, `GltfReader`, `AbrReader`, `KeyedArchive`/`BinaryPlist`, `UsdReader`, `Lz4`, `Lzo1x`, `PsdCodec` (including PSB 64-bit section/channel lengths and 32-bit RLE row tables), and `ModelPackage` against negative sizes, integer overflows, forged trailer counts, and cyclic path/chunk loops with deterministic fuzz and malformed-input unit tests in [`CodecHardeningTest`](app/src/test/java/com/artflow/studio/core/export/CodecHardeningTest.kt).
 
-### 4. Valkyrie-Parity Brush Engine & 6-Parameter Wet Mix
-- **Physical Wet Mix Simulation**: Complete 6-parameter physical wet-mix dynamics ([`WetBrushPickup`](app/src/main/java/com/artflow/studio/core/render/WetBrushPickup.kt)):
-  - **Dilution**: Solvent thinning that dynamically picks up and blends wet canvas paint.
-  - **Charge**: Stroke-length exponential paint depletion ($e^{-\text{distance} / \tau}$).
-  - **Attack**: Leading-edge paint deposit rate.
-  - **Pull**: Smudge drag weight and color pulling power.
-  - **Grade**: Texture contrast and abrasive grain bite into the wet substrate.
-  - **Wetness / Blur Jitter**: Micro-perturbations on dilution and grain depth.
-- **Advanced Dual-Brush Modes**: Combines secondary shapes via `COMBINE`, `INTENSE_BLEND`, and `DISPLACE` equations.
-- **Full Auxiliary Curve Consumption**: Dynamic evaluation of 35 auxiliary pressure, speed, and tilt curves ([`BrushParams`](app/src/main/java/com/artflow/studio/domain/model/brush/BrushParams.kt)).
-
-### 5. Profile-Referenced ICC Color Management & Prepress CMYK
-- **Native 4-Channel CMYK Buffer**: Prepress print storage ([`CmykBuffer`](app/src/main/java/com/artflow/studio/core/color/CmykBuffer.kt)) holding 8-bit $C, M, Y, K$ data without lossy intermediate RGB truncation.
-- **Profile-Referenced Color Engine**: Analytical ICC-referenced engine ([`IccColorEngine`](app/src/main/java/com/artflow/studio/core/color/IccColorEngine.kt)) with calibrated Gray Component Replacement (GCR), Under Color Removal (UCR), and Total Area Coverage (TAC) limiting:
-  - Supported profiles: **Coated FOGRA39** (ISO 12647-2, 330% TAC), **U.S. Web Coated (SWOP) v2** (300% TAC), **Japan Color 2001 Coated** (350% TAC), **GRACoL 2006 Coated #1** (320% TAC), **Display P3**, and **sRGB**.
-- **Soft-Proofing & Gamut Diagnostics**: Substrate-simulated proofing with real-time diagonal zebra warning patterns highlighting out-of-gamut pixels.
-
-### 6. 3D PBR Multi-Channel Painting & Cook-Torrance BRDF
-- **Simultaneous 3-Channel Painting**: Single-dab unified stamping across `BaseColor`, `Metallic`, and `Roughness` texture planes ([`PbrMaterialAtlas`](app/src/main/java/com/artflow/studio/core/three/PbrMaterialAtlas.kt)).
-- **Cook-Torrance Microfacet BRDF**: Physically-based rendering shader ([`ModelRenderer`](app/src/main/java/com/artflow/studio/data/renderer/opengl/ModelRenderer.kt)):
-  - Trowbridge-Reitz / GGX normal distribution $D(h)$
-  - Schlick Fresnel $F(v, h)$ with material $F_0 = \text{mix}(0.04, \text{albedo}, \text{metallic})$
-  - Smith geometric shadowing/masking $G(l, v, h)$
-  - Split-Sum Image-Based Lighting (IBL) environment reflection approximation with energy conservation ($k_d + k_s \le 1$).
-
-### 7. Non-Destructive Typography, Layer Linking & Input Polish
-- **Non-Destructive Vector Typography**: Vector text maintains editable strings, font styling, tracking, kerning, and baseline shift, and supports arbitrary 2D affine transformations (`deltaX`, `deltaY`, `deltaRotation`, `scaleX`, `scaleY`) without raster degradation ([`TextLayerContent`](app/src/main/java/com/artflow/studio/core/text/TextLayerContent.kt)).
-- **Multi-Layer Selection & Linking**: Swipe-to-select multiple layers with link/unlink actions ([`LayerBatchController`](app/src/main/java/com/artflow/studio/presentation/ui/viewmodel/LayerBatchController.kt)), enabling synchronized transformation across linked sets.
-- **Liquify Freeze & Thaw Masks**: Protects delicate artwork areas against warp/pinch/bloat/edge distortion with dedicated `FREEZE` and `UNFREEZE` brush modes ([`LiquifyTool`](app/src/main/java/com/artflow/studio/core/tool/LiquifyTool.kt)).
-- **Hardware Touch-Major Palm Rejection**: Filters broad palm rests using physical touch ellipse axes (`rejectsTouchMajor`) alongside hover proximity windows ([`PalmRejection`](app/src/main/java/com/artflow/studio/core/canvas/PalmRejection.kt)).
+### 4. Brush Engine, Analytical ICC Color, 3D PBR & Editing
+- **Wet Mix & Dual Brush**: 6-parameter wet-mix dynamics (`WetBrushPickup`), `COMBINE` / `INTENSE_BLEND` / `DISPLACE` dual-brush modes, and 35 auxiliary pressure/speed/tilt curves ([`BrushParams`](app/src/main/java/com/artflow/studio/domain/model/brush/BrushParams.kt)).
+- **Analytical ICC-Referenced CMYK Separation**: `CmykBuffer` and analytical `IccColorEngine` supporting FOGRA39, SWOP v2, Japan Color 2001, GRACoL 2006, Display P3, and sRGB profiles with soft-proofing and out-of-gamut overlay (analytical model, not LittleCMS native bindings).
+- **3D PBR Surface Painting**: `PbrMaterialAtlas` (BaseColor, Metallic, Roughness) with Cook-Torrance specular shader (`ModelRenderer`) and OBJ/glTF/USDZ material import/export.
+- **Typography, Selections & Liquify**: Non-destructive vector [`TextLayerContent`](app/src/main/java/com/artflow/studio/core/text/TextLayerContent.kt), multi-layer linking (`LayerBatchController`), Liquify with freeze/thaw masks, and hardware touch-major palm rejection (`PalmRejection`).
 
 ---
 
 ## Capability Matrix
 
-| Subsystem | Verified Production Capabilities |
+| Subsystem | Verified Implementation |
 | --- | --- |
-| **Data Safety** | Authoritative recovery state machine (`CanvasRecoveryController`); repository-level in-memory recovery set (`CanvasRepositoryImpl`); synchronous snapshot check; UI prompt decoupling; protected periodic autosave, backgrounding, and manual saves; atomic crash-consistent storage with monotonic forward timestamp advancement. |
-| **Brush Engine** | Valkyrie-parity 6-parameter wet mix (dilution, charge decay, attack, pull, grade, wet blur jitter); dual-brush combination modes (`COMBINE`, `INTENSE_BLEND`, `DISPLACE`); 35 auxiliary curve mappings; live Brush Studio pad. |
-| **Canvas & GPU** | Production OpenGL ES 3.x renderer with GLES 3.0 FBO instancing; experimental Vulkan preview backend; bounded virtual tile canvas ($128 \times 128$ / $256 \times 256$, $\le$ 40 MP safe bounds); 16 KB page-size ELF alignment. |
-| **Color Engine** | Profile-referenced analytical ICC engine; FOGRA39, SWOP v2, Japan Color 2001, GRACoL 2006, Display P3, sRGB; 4-channel native `CmykBuffer`; GCR/UCR separation; TAC ink limiting; paper soft-proofing; out-of-gamut zebra overlay. |
-| **3D Painting** | Multi-channel `PbrMaterialAtlas` (simultaneous BaseColor, Metallic, Roughness painting); Cook-Torrance microfacet specular BRDF shader (GGX, Schlick, Smith); split-sum IBL reflection; OBJ/glTF/USD texture import/export. |
-| **Typography** | Non-destructive vector text; live affine transformation matrix; kerning, tracking, baseline shift, leading, and outline styling. |
-| **Layers & Input** | Multi-layer linking (`LayerBatchController`); nested groups; clipping masks; independent 8-bit layer masks; Liquify with freeze/thaw masks; touch-major ellipse palm rejection; Kalman/polynomial stroke prediction. |
-| **File Formats** | Bidirectional `.procreate` (v5/v6 group blends, animation metadata, drawing guides, LZ4 tiles); `.psd` / `.psb` (8/16-bit, masks, folders, 64-bit PSB lengths, 32-bit RLE row tables, decomposed parser); `.artflow` atomic v6 saves; bounded streaming with `readAtMost`; PNG, JPEG, WebP, PDF, TIFF, GIF, APNG, MP4. |
+| **Data Safety & Backup** | Authoritative recovery state machine (`CanvasRecoveryController`); atomic crash-safe storage (`ProjectStorage`); atomic staged font imports (`FontLibrary`); `backup_rules.xml` & `data_extraction_rules.xml` covering `projects/`, `fonts/`, `grains/`, Room DBs; documented 25 MB cloud quota vs D2D transfer. |
+| **Canvas & GPU** | OpenGL ES 2.0 `GLSurfaceView` presentation (`OpenGLCanvasRenderer`); CPU `VirtualTileCanvas` compositing ($128 \times 128$ / $256 \times 256$, $\le 40$ MP safe bounds); `GLES2` / `SOFTWARE` / experimental `VULKAN` factory; verified 16 KB ELF alignment for `libandroidx.graphics.path.so`. |
+| **File Formats** | Streaming ZIP `.artflow` packages (custom `.grain` bundle + font metadata in `dependencies.json`, zero third-party font binary redistribution); `.procreate` (v5/v6 group blends, animation metadata, guides, LZ4 tiles); `.psd`/`.psb` (8/16-bit, masks, folders, 64-bit PSB lengths, 32-bit RLE row tables); PNG, JPEG, WebP, PDF, GIF, APNG, MP4. |
+| **Brush, Color, 3D** | 6-parameter wet-mix; dual-brush modes; 35 auxiliary curves; analytical ICC-referenced CMYK (`FOGRA39`, `SWOP v2`, `Japan Color 2001`, `GRACoL 2006`, `Display P3`, `sRGB`); 3D PBR (`BaseColor`, `Metallic`, `Roughness`) + Cook-Torrance shader. |
+| **CI & Supply Chain** | All 14 `.github/workflows/*.yml` pinned to 40-char commit SHAs (`verify_workflow_pins.py`); tracked secret/keystore scan (`scan_secrets.py`); 42-component Gradle license/GPLv3 check & CycloneDX 1.5 SBOM (`check_licenses_and_sbom.py`); Python 3.11 tombstone collection & nanosecond timestamp support. |
 
 ---
 
-## Project Structure
-
-```
-app/src/main/
-├── java/com/artflow/studio/
-│   ├── core/
-│   │   ├── animation/      # Frame sequencing, onion skins, and timeline controllers
-│   │   ├── canvas/         # Palm rejection, stroke prediction, and gesture routers
-│   │   ├── color/          # ICC color engine, CMYK buffer, palettes, and harmonies
-│   │   ├── export/         # .procreate, .psd/.psb, APNG, GIF, and TIFF codecs
-│   │   ├── pixels/         # PixelBuffer, channels, image filters, and stamping
-│   │   ├── render/         # Valkyrie wet-mix, stroke rasterizer, and dual-brush marks
-│   │   ├── symmetry/       # Radial, bilateral, and quadrilateral symmetry engines
-│   │   ├── text/           # Non-destructive vector typography and text layout
-│   │   ├── three/          # 3D mesh, PBR material atlas, camera, and lighting
-│   │   └── tool/           # Liquify with freeze mask, fill bucket, and gradient tools
-│   ├── data/
-│   │   ├── renderer/gpu/   # OpenGL ES 3.x production renderer & experimental Vulkan preview
-│   │   ├── renderer/opengl/# Cook-Torrance PBR model and canvas renderers
-│   │   └── repository/     # Atomic project storage, authoritative recovery, undo/redo
-│   ├── domain/model/       # Immutable layer, brush, and document domain models
-│   └── presentation/ui/    # Jetpack Compose canvas UI, sheets, and ViewModels
-└── jni/                    # C++20 CMake configuration (16 KB page-size compatible)
-```
-
----
-
-## Build & Test Verification
-
-### Release Qualification Matrix (GitHub Actions Run [43176819261](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/43176819261))
-
-| CI Job | Status | Duration | Scope & Verification |
-| --- | :---: | :---: | --- |
-| **Unit tests, static analysis and builds** | **PASSED** | 17m 15s | 1,688 unit tests, `ktlintCheck`, `detekt`, `lintDebug`, `lintRelease`, `assembleDebug`, `bundleRelease`, schema & artifact validation |
-| **Device tests (API 26)** | **PASSED** | 14m 12s | Min-SDK compatibility, hardware acceleration fallbacks, legacy storage |
-| **Device tests (API 35)** | **PASSED** | 21m 30s | Modern Android 15 runtime, Edge-to-Edge windowing, photo picker integration |
-| **Device tests (API 35 standard 4 KB)** | **PASSED** | 14m 27s | Modern 4 KB memory page baseline |
-| **Device tests (API 35 independent 16 KB repeat)** | **PASSED** | 36m 06s | ELF 16 KB page-size alignment, memory allocator stress verification |
-| **Device tests (API 36)** | **PASSED** | 13m 30s | Android 16 preview platform compatibility |
-| **Device tests (API 36 16 KB)** | **PASSED** | 18m 54s | Android 16 with enforced 16 KB page alignment |
-| **Device tests (API 36 tablet)** | **PASSED** | 25m 57s | Large-screen multi-windowing, stylus hovering, orientation changes |
+## Build, Verification & Supply-Chain Commands
 
 ### Prerequisites
 - **JDK 17**
-- **Android SDK Platform 36** (Build-Tools 36.0.0, NDK 27.x)
-- **Gradle 8.14.3** with Android Gradle Plugin 8.10.1
+- **Android SDK Platform 36** (Build-Tools 36.0.0)
+- **Gradle 8.14.3** / Android Gradle Plugin 8.10.1
 
 ### Local Verification Commands
 
 ```bash
-# 1. Run full offline unit test suite (1,688 tests across 281 classes)
-bash tools/offline-check/unit.sh
+# 1. Gradle JVM unit tests (1,706 tests / 284 suites locally; 2 corpora-gated tests execute in CI)
+./gradlew testDebugUnitTest --stacktrace
 
-# 2. Run static analysis gates (ktlint & detekt)
+# 2. Formatting, detekt (passes against 67-entry reduced baseline.xml, down from 82), and Android Lint
+./gradlew ktlintCheck detekt lintDebug lintRelease --stacktrace
+
+# 3. Offline check helpers
+bash tools/offline-check/unit.sh
 bash tools/offline-check/lint.sh
 
-# 3. Run Gradle test and static analysis gates
-./gradlew testDebugUnitTest ktlintCheck detekt lintDebug
+# 4. Python test suites & supply-chain security checks
+python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+python3 -m unittest discover -s tools -p 'test_*.py'
+python3 .github/scripts/verify_workflow_pins.py .github/workflows
+python3 .github/scripts/scan_secrets.py .
+python3 .github/scripts/check_licenses_and_sbom.py . --revision "$(git rev-parse HEAD)"
 
-# 4. Build debug APK and production App Bundle
-./gradlew assembleDebug bundleRelease
+# 5. Unsigned CI build checks & fail-closed signing guard
+./gradlew assembleDebug bundleRelease --stacktrace
+python3 .github/scripts/verify_android_artifacts.py app/build/outputs/apk/debug/*.apk app/build/outputs/bundle/release/*.aab
+./gradlew bundleRelease -PrequireReleaseSigning=true   # Expected to fail unless keystore.properties is provided
 ```
 
 ---
 
-## Technical Audits & Documentation
+## Technical Audits & Release Documentation
 
-- [Production Readiness Audit](docs/PRODUCTION_READINESS_AUDIT.md): 10-section comprehensive audit covering recovery state machines, memory limits, bounded streaming, PSB 64-bit parsing, and graphics architecture.
-- [Release Readiness & Evidence](docs/RELEASE_READINESS.md): Release qualification criteria, detailed root cause analyses, and test execution evidence.
-
----
-
-## Privacy & Safety
-
-- **100% Offline & Private**: No network permissions (`android.permission.INTERNET` is not declared or used). No telemetry, tracking, or crash analytics SDKs.
-- **Authoritative Recovery**: Artwork recovery state is authoritatively tracked independently of UI prompts, preventing autosaves from destroying recoverable artwork.
-- **Atomic Persistence**: Project saves are written atomically with SHA-256 integrity verification to prevent corruption during unexpected shutdowns.
-- **Memory-Bounded**: Large canvases, brush marks, and undo/redo stacks operate within fixed memory budgets to guarantee stability on memory-constrained Android devices.
+- [`docs/PRODUCTION_READINESS_AUDIT.md`](docs/PRODUCTION_READINESS_AUDIT.md): Architecture audit, security hardening, and capability reconciliation.
+- [`docs/RELEASE_READINESS.md`](docs/RELEASE_READINESS.md): Longitudinal release qualification evidence, historical CI run log, and open publisher gates.
+- [`docs/release/READINESS_MATRIX.md`](docs/release/READINESS_MATRIX.md), [`docs/release/RISK_REGISTER.md`](docs/release/RISK_REGISTER.md), [`docs/release/TEST_EVIDENCE.md`](docs/release/TEST_EVIDENCE.md), [`docs/release/RELEASE_SIGNOFF.md`](docs/release/RELEASE_SIGNOFF.md): Gate matrix, risk register, executed evidence, and formal Go/No-Go checklist.
 
 ---
 
-## License
+## Privacy & License
 
-GNU General Public License v3.0. See [LICENSE](LICENSE) for details.
+- **Offline-Only Architecture**: No `android.permission.INTERNET`, analytics, or telemetry SDKs. See [`docs/privacy-policy.md`](docs/privacy-policy.md).
+- **License**: GNU General Public License v3.0 ([`LICENSE`](LICENSE)). Third-party Gradle components are checked for GPLv3 compatibility and exported to CycloneDX 1.5 JSON in CI.

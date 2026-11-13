@@ -2,12 +2,20 @@ package com.artflow.studio.domain.repository
 
 import com.artflow.studio.domain.model.Project
 import kotlinx.coroutines.flow.Flow
+import java.io.File
 
 /**
  * Repository interface for Project operations
  * Defines the contract for project data access
  */
 interface ProjectRepository {
+    /** Result of importing an `.artflow` package, including referenced assets missing on this device. */
+    data class ImportedPackage(
+        val projectId: Long,
+        val missingFonts: List<String> = emptyList(),
+        val missingGrains: List<String> = emptyList(),
+    )
+
     /**
      * Get all projects ordered by modification date
      */
@@ -39,6 +47,9 @@ interface ProjectRepository {
 
     /** Adds the artwork in an `.artflow` package to the gallery and returns its new id. */
     suspend fun importPackage(bytes: ByteArray): Long = error("Importing artworks is not supported here")
+
+    /** Streams the artwork in an `.artflow` file on disk into the gallery and reports missing dependencies. */
+    suspend fun importPackageFile(file: File): ImportedPackage = error("Importing artworks is not supported here")
 
     /**
      * Update an existing project

@@ -20,7 +20,13 @@ object Lz4 {
         at: Int,
         window: Int = at,
     ): Int {
-        require(offset >= 0 && length >= 0 && offset + length <= source.size && window in 0..at) { DAMAGED }
+        require(
+            offset >= 0 &&
+                length >= 0 &&
+                offset.toLong() + length <= source.size &&
+                at in 0..target.size &&
+                window in 0..at,
+        ) { DAMAGED }
         val end = offset + length
         var s = offset
         var d = at
@@ -30,7 +36,7 @@ object Lz4 {
             if (literals == LONG) {
                 var extra: Int
                 do {
-                    require(s < end) { DAMAGED }
+                    require(s < end && literals <= end - s && literals <= target.size - d) { DAMAGED }
                     extra = source[s++].toInt() and 0xFF
                     literals += extra
                 } while (extra == 255)
@@ -47,11 +53,12 @@ object Lz4 {
             if (match == LONG) {
                 var extra: Int
                 do {
-                    require(s < end) { DAMAGED }
+                    require(s < end && match <= target.size - d - MIN_MATCH) { DAMAGED }
                     extra = source[s++].toInt() and 0xFF
                     match += extra
                 } while (extra == 255)
             }
+            require(match <= target.size - d - MIN_MATCH) { DAMAGED }
             match += MIN_MATCH
             require(distance in 1..d - window && match <= target.size - d) { DAMAGED }
             var from = d - distance
@@ -155,6 +162,7 @@ object Lz4 {
         source: ByteArray,
         size: Int,
     ): ByteArray {
+        require(size in 0..MAX_APPLE_SIZE) { DAMAGED }
         val out = ByteArray(size)
         var s = 0
         var d = 0
@@ -205,5 +213,6 @@ object Lz4 {
     private const val HASH_BITS = 16
     private const val HASH_MULTIPLIER = -1640531535 // 0x9E3779B1, the golden-ratio multiplier of the reference codec
     private const val MAX_DISTANCE = 65535
+    private const val MAX_APPLE_SIZE = 256 * 1024 * 1024
     private val APPLE_KINDS = byteArrayOf('4'.code.toByte(), 'x'.code.toByte()).toSet()
 }

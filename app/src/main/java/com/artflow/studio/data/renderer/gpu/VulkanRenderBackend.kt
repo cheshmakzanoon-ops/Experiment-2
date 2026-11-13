@@ -5,8 +5,8 @@ import com.artflow.studio.core.pixels.PixelBuffer
 
 /**
  * Experimental preview backend for future Vulkan integration.
- * Currently under development; non-shipping preview using CPU-backed tile compositing.
- * The production editor ships on the validated OpenGL ES 3.x pipeline.
+ * Currently non-shipping and backed by CPU [VirtualTileCanvas] compositing; the production editor
+ * presents via OpenGL ES 2.0 (`GLES20`).
  */
 class VulkanRenderBackend : IRenderBackend {
     override val backendType: RenderBackendType = RenderBackendType.VULKAN

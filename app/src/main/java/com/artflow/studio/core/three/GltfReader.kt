@@ -105,7 +105,7 @@ object GltfReader {
             val length = data.getInt(offset)
             val type = data.getInt(offset + 4)
             val start = offset + CHUNK_HEADER
-            require(length >= 0 && start + length <= bytes.size) { "This GLB file is damaged" }
+            require(length >= 0 && length.toLong() <= (bytes.size - start).toLong()) { "This GLB file is damaged" }
             when (type) {
                 CHUNK_JSON -> text = String(bytes, start, length, Charsets.UTF_8)
                 CHUNK_BIN -> bin = bytes.copyOfRange(start, start + length)
@@ -163,11 +163,25 @@ object GltfReader {
     }
 
     private fun local(node: JsonObject): FloatArray {
-        node["matrix"]?.let { return floats(it).also { values -> require(values.size == 16) { "Invalid node matrix" } } }
-        val t = node["translation"]?.let(::floats) ?: floatArrayOf(0f, 0f, 0f)
-        val r = node["rotation"]?.let(::floats) ?: floatArrayOf(0f, 0f, 0f, 1f)
-        val s = node["scale"]?.let(::floats) ?: floatArrayOf(1f, 1f, 1f)
+        node["matrix"]?.let {
+            val values = floats(it)
+            require(values.size == 16) { "Invalid node matrix" }
+            return values
+        }
+        val t = requireVector(node["translation"], 3, "Invalid node translation", floatArrayOf(0f, 0f, 0f))
+        val r = requireVector(node["rotation"], 4, "Invalid node rotation", floatArrayOf(0f, 0f, 0f, 1f))
+        val s = requireVector(node["scale"], 3, "Invalid node scale", floatArrayOf(1f, 1f, 1f))
         return Matrix4.compose(t, r, s)
+    }
+
+    private fun requireVector(
+        element: JsonElement?,
+        size: Int,
+        message: String,
+        fallback: FloatArray,
+    ): FloatArray {
+        if (element == null) return fallback
+        return floats(element).also { require(it.size == size) { message } }
     }
 
     /** Typed access to the document's accessors, materials and images. */
@@ -218,16 +232,22 @@ object GltfReader {
         ): FloatArray {
             val count = int(accessor, "count")
             // Checked before the early return below, which allocates count * components floats.
-            require(count in 0..MAX_ELEMENTS) { "This model is too large" }
+            require(count in 0..MAX_ELEMENTS && count.toLong() * components <= MAX_ELEMENTS.toLong()) { "This model is too large" }
             val viewIndex = accessor["bufferView"]?.jsonPrimitive?.intOrNull ?: return FloatArray(count * components)
             val view = view(viewIndex)
             val buffer = requireNotNull(buffers.getOrNull(int(view, "buffer"))) { "Missing buffer" }
             val size = componentSize(int(accessor, "componentType"))
-            val stride = view["byteStride"]?.jsonPrimitive?.intOrNull ?: (size * components)
-            val start = (view["byteOffset"]?.jsonPrimitive?.intOrNull ?: 0) + (accessor["byteOffset"]?.jsonPrimitive?.intOrNull ?: 0)
+            val minStride = size * components
+            val stride = view["byteStride"]?.jsonPrimitive?.intOrNull ?: minStride
+            val viewOffset = view["byteOffset"]?.jsonPrimitive?.intOrNull ?: 0
+            val accessorOffset = accessor["byteOffset"]?.jsonPrimitive?.intOrNull ?: 0
+            require(viewOffset >= 0 && accessorOffset >= 0 && stride >= minStride) { "The model's data layout is invalid" }
+            val startLong = viewOffset.toLong() + accessorOffset.toLong()
             require(
-                count == 0 || start + (count - 1).toLong() * stride + size * components <= buffer.size,
+                startLong <= buffer.size.toLong() &&
+                    (count == 0 || startLong + (count - 1).toLong() * stride + minStride <= buffer.size.toLong()),
             ) { "The model's data is cut short" }
+            val start = startLong.toInt()
             val data = little(buffer)
             return FloatArray(count * components) { i -> value(data, start + (i / components) * stride + (i % components) * size) }
         }
@@ -261,7 +281,11 @@ object GltfReader {
                 val buffer = buffers.getOrNull(int(view, "buffer")) ?: return null
                 val offset = view["byteOffset"]?.jsonPrimitive?.intOrNull ?: 0
                 val length = int(view, "byteLength")
-                return if (offset + length <= buffer.size) buffer.copyOfRange(offset, offset + length) else null
+                return if (offset >= 0 && length >= 0 && offset.toLong() + length <= buffer.size.toLong()) {
+                    buffer.copyOfRange(offset, offset + length)
+                } else {
+                    null
+                }
             }
             val uri = image["uri"]?.jsonPrimitive?.content ?: return null
             return if (uri.startsWith("data:")) Base64.getDecoder().decode(uri.substringAfter(',')) else files[baseName(uri)]

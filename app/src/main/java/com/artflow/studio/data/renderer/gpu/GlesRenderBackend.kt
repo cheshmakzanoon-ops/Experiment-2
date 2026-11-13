@@ -4,12 +4,13 @@ import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.PixelBuffer
 
 /**
- * OpenGL ES 3.x render backend.
- * Uses Framebuffer Objects (FBOs) and texture tiles to achieve reliable GPU compositing
- * across physical Android devices and headless CI emulator environments.
+ * OpenGL ES 2.0 render backend abstraction.
+ *
+ * On-screen viewport quad presentation runs on `GLES20` inside `OpenGLCanvasRenderer`, while
+ * tile-level layer compositing into [PixelBuffer] executes via [VirtualTileCanvas].
  */
 class GlesRenderBackend : IRenderBackend {
-    override val backendType: RenderBackendType = RenderBackendType.GLES3
+    override val backendType: RenderBackendType = RenderBackendType.GLES2
     override var isContextInitialized: Boolean = false
         private set
 

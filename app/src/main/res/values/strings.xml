@@ -553,4 +553,5 @@
     <string name="paletteimports_no_readable_colours">That file has no colours ArtFlow can read (ASE, GIMP, hex or ArtFlow palettes)</string>
     <string name="paletteimports_no_colours_from_picture">No colours could be taken from that picture</string>
     <string name="paletteimports_no_file_picker">No file picker is available on this device</string>
+    <string name="editorsheets_missing_font_warning">Imported font \“%1$s\” is not installed on this device; text uses a system fallback font.</string>
 </resources>

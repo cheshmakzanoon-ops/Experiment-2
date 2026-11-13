@@ -114,11 +114,34 @@ class VirtualTileCanvasTest {
                 isEmulator = true,
                 supportsVulkan = false,
             )
-        assertEquals(RenderBackendType.GLES3, emulatorBackend.backendType)
+        assertEquals(RenderBackendType.GLES2, emulatorBackend.backendType)
 
         emulatorBackend.initialize(100, 100)
         assertTrue(emulatorBackend.isContextInitialized)
         emulatorBackend.release()
         assertFalse(emulatorBackend.isContextInitialized)
+    }
+
+    @Test
+    fun softwareBackendSelectionAndCompositing() {
+        val softwareBackend = RenderBackendFactory.createBackend(preferredType = RenderBackendType.SOFTWARE)
+        assertEquals(RenderBackendType.SOFTWARE, softwareBackend.backendType)
+        assertFalse(softwareBackend.isContextInitialized)
+
+        softwareBackend.initialize(128, 128)
+        assertTrue(softwareBackend.isContextInitialized)
+
+        val tileCanvas = VirtualTileCanvas(128, 128, tileSize = 64)
+        val tile = tileCanvas.getOrCreateTile(0, 0)
+        tile.pixels[0] = 0xFF112233.toInt()
+        softwareBackend.uploadDirtyTiles(tileCanvas, listOf(0))
+
+        val target = PixelBuffer(128, 128)
+        softwareBackend.compositeLayers(listOf(tileCanvas), target)
+        assertEquals(0xFF112233.toInt(), target.pixels[0])
+
+        softwareBackend.present()
+        softwareBackend.release()
+        assertFalse(softwareBackend.isContextInitialized)
     }
 }
