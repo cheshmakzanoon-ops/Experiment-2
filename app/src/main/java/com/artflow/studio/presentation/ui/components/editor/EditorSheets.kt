@@ -27,6 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -858,7 +859,7 @@ fun CanvasOpsSheet(
             ColorChip(0xFFF5EFE6.toInt(), onClick = { onBackgroundColor(0xFFF5EFE6.toInt()) })
             ColorChip(0x00000000, onClick = { onBackgroundColor(0) })
             Text(
-                "Current: ${String.format("#%08X", backgroundColor)}",
+                "Current: ${String.format(java.util.Locale.US, "#%08X", backgroundColor)}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1438,7 +1439,12 @@ fun TextSheet(
             modifier = Modifier.fillMaxWidth(),
         )
 
+        val context = LocalContext.current
         var fontMenu by remember { mutableStateOf(false) }
+        val fontMissing =
+            remember(style.fontFamily, importedFonts) {
+                FontLibrary.isImported(style.fontFamily) && !FontLibrary.exists(style.fontFamily, context.filesDir)
+            }
         Box {
             OutlinedButton(onClick = { fontMenu = true }) { Text(FontLibrary.label(style.fontFamily)) }
             DropdownMenu(expanded = fontMenu, onDismissRequest = { fontMenu = false }) {
@@ -1461,6 +1467,13 @@ fun TextSheet(
                     )
                 }
             }
+        }
+        if (fontMissing) {
+            Text(
+                text = stringResource(R.string.editorsheets_missing_font_warning, FontLibrary.label(style.fontFamily)),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
         }
 
         LabeledSlider(

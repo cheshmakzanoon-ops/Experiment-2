@@ -334,21 +334,24 @@ class ArtworkExporter
             withContext(Dispatchers.IO) {
                 var pinned: List<String> = emptyList()
                 try {
-                    storage.loadDocument(projectId)?.let { doc ->
-                        pinned = storage.referencedFiles(doc)
+                    val document =
+                        requireNotNull(storage.loadDocument(projectId)) { "Save the artwork before sharing it" }
+                    pinned = storage.referencedFiles(document)
+                    if (pinned.isNotEmpty()) {
                         storage.pinRasters(projectId, pinned)
                     }
-                    val files = storage.packageFiles(projectId)
-                    val document = storage.decodePackagedDocument(files.getValue(ArtflowPackage.DOCUMENT))
-                    val bytes = ArtflowPackage.write(projectName, files)
+                    val sources = storage.packageSources(projectId)
                     val fileName = ExportNaming.fileName(projectName, options)
-                    val file = storage.saveExport(projectId, fileName, bytes)
+                    val file =
+                        storage.saveExportFromTempFile(projectId, fileName) { destination ->
+                            ArtflowPackage.writeToFile(projectName, destination, sources)
+                        }
                     Result.success(
                         ExportResult(
                             format = ExportFormat.ARTFLOW,
                             filePath = file.absolutePath,
                             fileName = fileName,
-                            byteCount = bytes.size.toLong(),
+                            byteCount = file.length(),
                             width = document.width,
                             height = document.height,
                         ),

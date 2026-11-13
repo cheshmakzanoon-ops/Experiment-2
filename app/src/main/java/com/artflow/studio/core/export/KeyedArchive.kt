@@ -27,8 +27,8 @@ object BinaryPlist {
         val top = number(bytes, trailer + 16, 8)
         val table = number(bytes, trailer + 24, 8)
         require(offsetSize in 1..8 && refSize in 1..8 && count in 1..MAX_OBJECTS && top in 0 until count) { DAMAGED }
-        require(table >= MAGIC.size && table + count * offsetSize <= trailer) { DAMAGED }
-        val offsets = IntArray(count.toInt()) { index -> number(bytes, (table + index * offsetSize).toInt(), offsetSize).toInt() }
+        require(table in MAGIC.size.toLong()..trailer.toLong() && count <= (trailer - table) / offsetSize) { DAMAGED }
+        val offsets = IntArray(count.toInt()) { index -> number(bytes, (table + index.toLong() * offsetSize).toInt(), offsetSize).toInt() }
         require(offsets.all { it in MAGIC.size until trailer }) { DAMAGED }
         return Reader(bytes, offsets, refSize).read(top.toInt(), 0)
     }
@@ -218,10 +218,20 @@ object BinaryPlist {
                     } else {
                         null
                     }
-                0x1 -> number(bytes, at, 1 shl info)
-                0x2 -> real(at, 1 shl info)
+                0x1 -> {
+                    require(info <= 4) { DAMAGED }
+                    number(bytes, at, 1 shl info)
+                }
+                0x2 -> {
+                    require(info in 2..3) { DAMAGED }
+                    real(at, 1 shl info)
+                }
                 0x3 -> real(at, 8)
-                0x8 -> Uid(number(bytes, at, info + 1).toInt())
+                0x8 -> {
+                    val value = number(bytes, at, info + 1)
+                    require(value in 0..Int.MAX_VALUE.toLong()) { DAMAGED }
+                    Uid(value.toInt())
+                }
                 else -> container(kind, info, at, depth)
             }
         }
@@ -235,26 +245,42 @@ object BinaryPlist {
             var at = start
             var length = info.toLong()
             if (info == 0xF) {
-                val size = 1 shl (bytes[at].toInt() and 0xF)
+                require(at < bytes.size) { DAMAGED }
+                val sizeShift = bytes[at].toInt() and 0xF
+                require(sizeShift <= 4) { DAMAGED }
+                val size = 1 shl sizeShift
                 length = number(bytes, at + 1, size)
                 at += 1 + size
             }
-            require(length in 0..bytes.size) { DAMAGED }
+            val remaining = (bytes.size - at).coerceAtLeast(0).toLong()
+            require(length in 0L..remaining) { DAMAGED }
             val n = length.toInt()
             return when (kind) {
                 0x4 -> slice(at, n)
                 0x5 -> String(slice(at, n), Charsets.ISO_8859_1)
-                0x6 -> String(slice(at, n * 2), Charsets.UTF_16BE)
-                0xA, 0xC -> List(n) { read(ref(at + it * refSize), depth + 1) }
-                0xD ->
+                0x6 -> {
+                    require(length * 2L <= remaining) { DAMAGED }
+                    String(slice(at, n * 2), Charsets.UTF_16BE)
+                }
+                0xA, 0xC -> {
+                    require(length * refSize.toLong() <= remaining) { DAMAGED }
+                    List(n) { read(ref(at + it * refSize), depth + 1) }
+                }
+                0xD -> {
+                    require(length * 2L * refSize <= remaining) { DAMAGED }
                     (0 until n).associate { i ->
                         read(ref(at + i * refSize), depth + 1).toString() to read(ref(at + (n + i) * refSize), depth + 1)
                     }
+                }
                 else -> null
             }
         }
 
-        private fun ref(at: Int): Int = number(bytes, at, refSize).toInt()
+        private fun ref(at: Int): Int {
+            val value = number(bytes, at, refSize)
+            require(value in 0L until offsets.size.toLong()) { DAMAGED }
+            return value.toInt()
+        }
 
         private fun slice(
             at: Int,

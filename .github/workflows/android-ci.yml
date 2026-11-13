@@ -21,7 +21,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
 
@@ -31,7 +31,7 @@ jobs:
           git rev-parse HEAD > "${RUNNER_TEMP}/REVISION.txt"
 
       - name: Upload source provenance
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: artflow-source
           path: |
@@ -41,22 +41,22 @@ jobs:
           retention-days: 14
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
         with:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
 
       - name: Set up reference analysis Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.11'
 
@@ -64,6 +64,12 @@ jobs:
         run: |
           python -m unittest discover -s .github/scripts -p 'test_*.py'
           python -m unittest discover -s tools -p 'test_*.py'
+
+      - name: Verify workflow pins, secret hygiene, licenses and generate SBOM
+        run: |
+          python .github/scripts/verify_workflow_pins.py .github/workflows
+          python .github/scripts/scan_secrets.py .
+          python .github/scripts/check_licenses_and_sbom.py . --revision "$(git rev-parse HEAD)" --sbom-out "${RUNNER_TEMP}/artflow-sbom.cdx.json"
 
       - name: Verify production builds reject missing signing inputs
         run: |
@@ -186,7 +192,7 @@ jobs:
           python .github/scripts/verify_android_artifacts.py app/build/outputs/apk/debug/*.apk app/build/outputs/bundle/release/*.aab | tee "${RUNNER_TEMP}/artifact-preflight.txt"
 
       - name: Preserve generated Room schemas
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: room-schemas
           path: app/schemas/
@@ -195,13 +201,14 @@ jobs:
 
       - name: Upload test and analysis reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: verification-reports
           path: |
             app/build/reports/
             app/build/test-results/
             ${{ runner.temp }}/artifact-preflight.txt
+            ${{ runner.temp }}/artflow-sbom.cdx.json
             ${{ runner.temp }}/signing-negative.log
             ${{ runner.temp }}/native-contracts/*.json
           if-no-files-found: ignore
@@ -211,7 +218,7 @@ jobs:
       # These are explicitly unverified outputs, never a signed production release.
       - name: Preserve diagnostic APK and bundle
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: artflow-builds-unverified
           path: |
@@ -291,18 +298,21 @@ jobs:
             page_size: 4096
             profile: pixel_c
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
         with:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11'
       - name: Prepare instrumentation artifacts
         shell: bash
         run: |
@@ -324,7 +334,7 @@ jobs:
         env:
           EXPECTED_PAGE_SIZE: ${{ matrix.page_size }}
           ART_JIT_MODE: ${{ matrix.api == 35 && matrix.page_size == 16384 && 'disabled' || 'default' }}
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: ${{ matrix.api }}
           arch: x86_64
@@ -352,7 +362,7 @@ jobs:
           exit "$status"
       - name: Upload device test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: device-test-results-api-${{ matrix.artifact }}
           path: |

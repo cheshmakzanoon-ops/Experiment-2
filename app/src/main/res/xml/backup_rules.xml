@@ -2,12 +2,16 @@
 <!--
   Android 11 and below (`android:fullBackupContent`).
 
-  Listing includes restricts auto backup to these paths. Project pixels (`filesDir/projects`) must
-  be included alongside the Room database, otherwise a restored install has project rows but no
-  artwork. The previous excludes pointed at files this app never creates.
+  Listing includes restricts auto backup to these paths. Project pixels (`filesDir/projects`),
+  imported fonts (`filesDir/fonts`), and custom grain tiles (`filesDir/grains`) must be included
+  alongside the Room database so a restored install preserves editable text and brush textures.
+  Note: Android cloud Auto Backup enforces a ~25 MB per-app quota; large projects require `.artflow`
+  export or wired device transfer.
 -->
 <full-backup-content>
     <include domain="sharedpref" path="." />
     <include domain="database" path="artflow_database" />
     <include domain="file" path="projects" />
+    <include domain="file" path="fonts" />
+    <include domain="file" path="grains" />
 </full-backup-content>

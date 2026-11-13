@@ -275,6 +275,7 @@ internal class GalleryImports(
 
     private companion object {
         const val HEAD_BYTES = 64
+        const val STREAM_BUFFER_BYTES = 64 * 1024
         const val MAX_NAME = 40
         const val MAX_PACKAGE_BYTES = 512L * 1024 * 1024
         const val MAX_PSD_BYTES = 256L * 1024 * 1024

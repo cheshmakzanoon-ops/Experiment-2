@@ -267,9 +267,10 @@ object ModelPackage {
                     entry = zip.nextEntry
                     continue
                 }
+                val name = baseName(entry.name)
+                require(name.isNotEmpty()) { "The 3D model package contains an invalid entry name" }
                 val data = readEntry(zip, MAX_BYTES - total)
                 total += data.size
-                val name = baseName(entry.name)
                 if (files.putIfAbsent(name, data) != null) duplicates += name
                 entry = zip.nextEntry
             }
@@ -286,8 +287,8 @@ object ModelPackage {
         val buffer = ByteArray(BUFFER)
         var read = zip.read(buffer)
         while (read >= 0) {
+            require(budget - out.size() >= read) { "This 3D model is too large" }
             out.write(buffer, 0, read)
-            require(out.size() <= budget) { "This 3D model is too large" }
             read = zip.read(buffer)
         }
         return out.toByteArray()

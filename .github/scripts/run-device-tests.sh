@@ -14,8 +14,25 @@ case "${EXPECTED_PAGE_SIZE:-}" in
   4096|16384) ;;
   *) echo 'EXPECTED_PAGE_SIZE must explicitly be 4096 or 16384' >&2; exit 2 ;;
 esac
+wait_for_system_settle() {
+  local attempt=0
+  local deadline=$((SECONDS + 90))
+  while ((attempt < 45 && SECONDS < deadline)); do
+    attempt=$((attempt + 1))
+    if [[ "$(timeout 10 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == 1 ]] \
+      && timeout 15 adb shell cmd package list packages android >/dev/null 2>&1 \
+      && timeout 10 adb shell service check activity 2>/dev/null | grep -q ': found' \
+      && timeout 10 adb shell service check settings 2>/dev/null | grep -q ': found'; then
+      break
+    fi
+    sleep 2
+  done
+  timeout 45 adb shell am wait-for-broadcast-idle >/dev/null 2>&1 || true
+  sleep 2
+}
 # Record default runtime settings, or explicitly configure and verify the debug-emulator mitigation.
 bash "$(dirname "${BASH_SOURCE[0]}")/configure-emulator-runtime.sh" || exit $?
+wait_for_system_settle
 instrumentation_attempt=0
 run_instrumentation() {
   instrumentation_attempt=$((instrumentation_attempt + 1))
@@ -57,6 +74,7 @@ if ((instrumentation_status != 0)); then
     timeout 15 adb logcat -b all -d > "$retry_root/first-attempt-logcat.txt" || true
     echo "Recovering Android before the single framework-crash retry"
     bash ".github/scripts/recover-android15-emulator.sh" || exit $?
+    wait_for_system_settle
     echo "Retrying instrumentation once after verified Android 15/16 KB runtime crash"
     run_instrumentation || exit $?
   else

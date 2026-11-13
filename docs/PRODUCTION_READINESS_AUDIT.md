@@ -1,225 +1,97 @@
 # Production Readiness Audit & Architectural Report: ArtFlow Studio (Experiment-2)
 
-**Document Version:** 1.0.0  
-**Date:** November 2026  
-**Auditor / Author:** Principal Android & Graphics Engineering Lead  
-**Repository:** `https://github.com/cheshmakzanoon-ops/Experiment-2.git`  
-**Target Release:** ArtFlow Studio Production Milestone  
+**Document Version:** 2.0.0
+**Audit Date:** November 12, 2026
+**Baseline `main` SHA:** `d340bc6f777e9444a07df97760aa4ae290c7c7c1`
+**Hardening Branch:** `fix/production-readiness-certification`
+**Repository:** `https://github.com/cheshmakzanoon-ops/Experiment-2`
 
 ---
 
-## 1. Executive Summary & Qualification Decision
+## 1. Executive Summary & Release Decision
 
-ArtFlow Studio has undergone an end-to-end engineering transformation to eliminate critical data-loss vulnerabilities, restore deterministic Continuous Integration (CI), harden import and export pipelines against memory and storage exhaustion, correct Photoshop PSD/PSB Large Document handling, honestly align graphics and color capabilities with the shipping pipeline, and achieve zero static-analysis violations without baseline expansion.
+ArtFlow Studio is a feature-rich offline digital art editor with genuine engineering assets (Hilt/Room persistence, authoritative recovery guards, atomic project writes, immutable raster generations, and comprehensive emulator matrix tooling). However, the `d340bc6` `main` baseline was **NO-GO for unconditional public production release** due to CI failure on Android 15 / 16 KB, non-atomic font overwrites, missing backup/package dependencies, misleading graphics/documentation claims, unchecked integer arithmetic in binary codecs, unpinned workflow action tags, and unfulfilled publisher/physical-device requirements.
 
-### Release Qualification Status: **PRODUCTION-QUALIFIED (TIER-1 CORE)**
+On branch `fix/production-readiness-certification`, all repository-fixable P0, P1, and P2 engineering findings have been remediated and verified locally. **Final public production launch remains gated on external publisher deliverables (`keystore.properties` private upload signing, Play Console declarations & public privacy URL, and physical Android 8/15/16 + stylus + 16 KB hardware verification).**
 
-| Qualification Gate | Previous Status | Current Status | Verification Evidence |
+| Qualification Area | Baseline (`d340bc6`) | Hardened State | Verification Basis |
 | :--- | :--- | :--- | :--- |
-| **Data Safety & Recovery** | Critical Vulnerability (Risk of Data Loss) | **Passed / Hardened** | Authoritative Recovery State Machine; 8/8 `AuthoritativeRecoveryTest` pass in 2s |
-| **CI Unit Test Suite** | Failing (`AuthoritativeRecoveryTest.art007`) | **Passed (100%)** | **1,688 unit tests run across 281 test classes, 0 failed** (`bash tools/offline-check/unit.sh`) |
-| **Static Code Analysis** | Non-compliant (Indentation, Complexity, LargeClass) | **Passed (100%)** | **ktlint: 0 findings, detekt: 0 findings** (`bash tools/offline-check/lint.sh`) |
-| **Import / Export Hardening** | Unbounded Streaming (OOM / Zip-bomb risk) | **Passed / Hardened** | Bounded streaming on all paths (`BoundedRead`), 10,000 entry limit, `BoundedImportTest` |
-| **Photoshop PSD/PSB Support** | Version 2 Length Field Mismatches | **Passed / Hardened** | 64-bit section/channel lengths, 32-bit RLE row tables, `PsbCodecTest` |
-| **Graphics Core Alignment** | False Vulkan Production Claims | **Honestly Scoped** | Production OpenGL ES 3.x shipping pipeline; Vulkan accurately labeled experimental |
-| **Color Management Engine** | Claimed LittleCMS Integration | **Honestly Scoped** | Calibrated analytical UCR/GCR/TAC engine; LittleCMS claims corrected |
-| **Architectural Quality** | High-complexity god classes | **Decomposed** | Extracted `CanvasRecoveryController`, decomposed `PsdCodec`, `copyBounded` in `ProcreateImport` |
+| **CI Tombstone Tooling & Runtime** | Failed on `ubuntu-22.04` Python 3.10 nanosecond timestamps | **Fixed** | `collect_native_tombstones.py` updated + `setup-python` 3.11 in `device-tests`; exact-SHA multi-run CI check required after push |
+| **Data Safety & Recovery** | Authoritative recovery & Room/filesystem guards present | **Verified** | `AuthoritativeRecoveryTest`, `PersistenceRegressionTest`, `StorageFileTreeTest` |
+| **Font Import & Portability** | Direct overwrite deleted prior font on validation failure; `file:` absolute paths | **Fixed** | Atomic temp staging (`ATOMIC_MOVE`), non-destructive suffix rename, `font:<filename>` IDs, UI warning (`FontLibraryTest`) |
+| **Backup & `.artflow` Packages** | `fonts/` & `grains/` excluded from backup rules; RAM-buffered ZIP; missing grain/font deps | **Fixed** | `backup_rules.xml` & `data_extraction_rules.xml` updated; streaming temp/`ZipFile` packages with `dependencies.json` font metadata only + custom `.grain` bundle |
+| **Graphics Architecture Honesty** | False OpenGL ES 3.x / NDK claims; `SOFTWARE` mapped to `GLES3` | **Reconciled** | `RenderBackendType.GLES2` (GLES 2.0 `OpenGLCanvasRenderer` + CPU `VirtualTileCanvas`), `SoftwareRenderBackend`, experimental `VulkanRenderBackend`, unwired `jni` note |
+| **Color Management Honesty** | Accurate analytical model in code; earlier docs overstated | **Reconciled** | Analytical ICC-referenced UCR/GCR/TAC model (`IccColorEngine`); zero external LittleCMS bindings claimed |
+| **Binary Codec Safety** | Multiple `Int` arithmetic overflows, forged trailer allocations, infinite loops | **Hardened** | Bounds/overflow/cycle guards across 9 codecs + `CodecHardeningTest` |
+| **Static Analysis (`detekt`)** | 82 suppressed entries in `config/detekt/baseline.xml` | **Reduced (`82 -> 67`)** | `ktlintCheck` PASS; `detekt` PASS with 0 new baseline items (`67` entries) |
+| **Workflow & Supply Chain** | Mutable tag pins (`@v4`/`@v5`/`@v3`/`@v2`), no secret/license/SBOM CI gates | **Hardened** | All 14 workflows SHA-pinned; `scan_secrets.py`, `check_licenses_and_sbom.py` (42 components, CycloneDX 1.5), wired into `android-ci.yml` |
+| **Publisher Signing & Physical Devices** | No private keystore, no Play Console submission, no physical device test logs | **OPEN (External)** | `-PrequireReleaseSigning=true` fails closed as required; physical hardware & Play Console remain publisher-owned |
 
 ---
 
-## 2. Priority Zero: Eliminating Artwork Data-Loss Risks
+## 2. Priority Zero: CI Determinism & External Release Gates
 
-### 2.1 The Inherited Defect
-The previous implementation contained a critical architectural race condition:
-1. **Coupled UI and State**: When an autosave snapshot existed from an abnormal termination, `CanvasUiState.Ready` set `recoveryAvailable = true`.
-2. **Implicit Destruction on Dismiss**: If the user dismissed the recovery dialog prompt without explicitly choosing "Recover" or "Discard", `CanvasViewModel.dismissRecovery()` copied `CanvasUiState.Ready` with `recoveryAvailable = false`.
-3. **Autosave Race**: The periodic autosave timer (`startAutosave()`) and backgrounding handler (`saveRecoveryOnBackground()`) only checked `state.recoveryAvailable`.
-4. **Data Overwrite**: Because `recoveryAvailable` was now `false`, the autosave loop ran on the next tick and overwrote `autosave.artflow`, permanently destroying the user's unrecovered work.
+### 2.1 Tombstone Timestamp Parsing & Python 3.11 Pin
+- Run `43189321650` Attempt 2 on `d340bc6` hit two separate issues in `Device tests (API 35 independent 16 KB repeat)`:
+  1. `MarkCompact::ScanObject<true>` SIGSEGV / `system_server` crash under `google_apis_ps16k`.
+  2. `collect_native_tombstones.py` raised `ValueError` in `datetime.fromisoformat()` when parsing `.9` fractional nanoseconds under `ubuntu-22.04`'s default Python `3.10`.
+- **Remediation**: Updated `.github/scripts/collect_native_tombstones.py` (`parse_tombstone_timestamp`) with Python 3.10+ nanosecond truncation, added regression coverage in `.github/scripts/test_collect_native_tombstones.py`, and pinned `actions/setup-python` (`3.11`) inside `device-tests` in `.github/workflows/android-ci.yml`.
+- **Certification Criteria**: After pushing the frozen certification SHA, `Android CI` must achieve at least **3 consecutive green `API 35` / `16 KB` runs** and **2 consecutive all-green 8-job runs** on that exact commit SHA with all **270** `@Test` identities accounted for, zero unexpected skips, `16384` runtime page size verified, and minified launch verified.
 
-### 2.2 Implemented Authoritative State Machine
-To guarantee that user artwork cannot be implicitly destroyed by normal UI navigation, lifecycle changes, or autosave races:
-- **`CanvasRecoveryController`**: Created an authoritative state controller that tracks `hasUnresolvedRecovery` independently of UI dialog visibility. Dismissing the UI prompt hides the banner but preserves `hasUnresolvedRecovery = true`.
-- **`ProjectStorage` Monotonic Timestamp Guarantee**: In rapid successive saves (e.g. initial document write followed immediately by autosave), filesystem timestamps could collide on low-resolution filesystems (`autosave.lastModified() == document.lastModified()`). `ProjectStorage.saveAutosave` now explicitly enforces `file.setLastModified(doc.lastModified() + 1000L)`, ensuring `hasUnsavedRecovery` deterministically evaluates to `true`.
-- **`CanvasRepositoryImpl.autosave` Guard**: Guarded the repository entry point directly:
-  ```kotlin
-  if (hasUnresolvedRecovery(projectId)) {
-      Timber.d("Autosave skipped for project $projectId because recovery snapshot is unresolved")
-      return@withContext
-  }
-  ```
-- **Guarded Manual and Background Saves**: Manual saving (`save()`) and background saving (`saveRecoveryOnBackground()`) explicitly verify that recovery is resolved before allowing document writes.
-
-### 2.3 Automated Verification
-Automated regression tests in `AuthoritativeRecoveryTest.kt`:
-- `art006_autosaveRestoresUnsavedWork`
-- `art007_exportAndSaveProtectedOnUnresolvedRecovery` (Deterministic pass)
-- `art008_discardRecoveryDeletesSnapshot`
-- `art009_dismissRecoveryEditAutosaveKillProcessReopenPreservesRecovery`
-- `art010_backgroundingWhileRecoveryUnresolvedDoesNotOverwriteSnapshot`
-- `art011_concurrentAutosaveAttemptsAreThreadSafe`
-- `art012_explicitDiscardRemovesAutosave`
-- `art013_atomicWriteProtectsAgainstFailedWrites`
+### 2.2 External Publisher & Hardware Gates (Open)
+- `app/build.gradle.kts` (`requireReleaseSigning`) intentionally blocks release signing when git-ignored `keystore.properties` is absent.
+- Physical Android 8 / 15 / 16 phones, tablet + stylus latency testing, 16 KB hardware verification, in-place upgrade from a prior signed build, Play Console Data Safety/listing declarations, and a hosted public privacy-policy URL remain **OPEN** external requirements documented in `docs/RELEASE_READINESS.md` and `docs/release/RELEASE_SIGNOFF.md`.
 
 ---
 
-## 3. Restoring Complete CI Reliability
+## 3. Priority One: Font Safety, Backup Coverage & Portable Packaging
 
-### 3.1 Investigation of `AuthoritativeRecoveryTest.art007` Failure
-In GitHub Actions run `43155272076`, test `art007_exportAndSaveProtectedOnUnresolvedRecovery` failed intermittently.
+### 3.1 Atomic Font Validation & Collision Protection (`FontLibrary.kt`)
+- Previously, `FontLibrary.import` wrote untrusted font bytes directly to `filesDir/fonts/<filename>` and called `target.delete()` on validation failure, deleting any pre-existing valid font of the same name.
+- `FontLibrary` now validates font streams in an isolated temporary file via `Typeface.createFromFile`, rejects symlinks (`StorageFileTree`), generates a non-destructive unique name (`Name (2).ttf`) on collision, and publishes atomically (`StandardCopyOption.ATOMIC_MOVE`).
+- Imported fonts are addressed using portable `font:<filename>` IDs rather than device-specific `file:/...` paths while retaining fallback resolution for legacy projects. Missing imported fonts surface a non-destructive warning in the canvas UI.
 
-**Root Causes:**
-1. **Coroutine Dispatcher Decoupling**: `ProjectStorage` had hardcoded `withContext(Dispatchers.IO)`. In unit tests using `StandardTestDispatcher`, coroutines dispatched to `Dispatchers.IO` hopped off the test scheduler and ran asynchronously on background threads, causing race conditions with `testScheduler.advanceUntilIdle()`.
-2. **Filesystem Timestamp Granularity**: Fast unit tests created the document and autosave within the same millisecond, leading to `autosave.lastModified() == document.lastModified()`, which caused `hasUnsavedRecovery` to return `false`.
-
-**Remediation:**
-1. Updated `ProjectStorage` to accept `ioDispatcher: CoroutineDispatcher = Dispatchers.IO` via secondary constructor with `@Inject` compatibility. Replaced all 19 occurrences of `Dispatchers.IO` with `ioDispatcher`.
-2. Updated `RepositoryModule` with `@Provides @Singleton fun provideProjectStorage(@ApplicationContext context: Context): ProjectStorage`.
-3. Injected `testDispatcher` in `AuthoritativeRecoveryTest.setUp()`.
-4. Monotonic timestamp forward-stepping in `saveAutosave`.
-
-### 3.2 Full CI Verification
-- **Unit Tests**: 1,688 unit tests passed with 0 failures across 281 test classes.
-- **ktlint**: 0 violations across all packages.
-- **detekt**: 0 violations across all packages.
+### 3.2 Backup & Portable Streaming `.artflow` Packages
+- `backup_rules.xml` and `data_extraction_rules.xml` now include `filesDir/fonts/` and `filesDir/grains/` alongside Room DBs and `filesDir/projects/`. `docs/privacy-policy.md` and `app/src/main/res/values/privacy.xml` disclose the ~25 MB Android cloud backup quota versus full device-to-device transfer.
+- `ArtflowPackage` now supports temporary-file + `ZipFile` streaming (`writeToFile`, `openFile`), eliminating full-archive heap buffering. Exported packages include referenced custom `.grain` assets and `dependencies.json` recording font metadata (`id`, `label`) **without copying or redistributing third-party font files**. On import, `ProjectStorage` and `ProjectRepositoryImpl` restore missing custom grains and report missing font IDs back to the gallery/canvas UI.
 
 ---
 
-## 4. Hardening All Import and Export Paths
+## 4. Priority One: Graphics Architecture Reconciliation
 
-### 4.1 Bounded Stream Reading
-All direct calls to `InputStream.readBytes()` on external content URIs have been replaced with `InputStream.readAtMost(limit: Long)`:
-- `GalleryImports.psd`: Bounded to `MAX_PSD_BYTES` (256 MB).
-- `GalleryImports.artwork`: Bounded to `MAX_PACKAGE_BYTES` (512 MB).
-- `GalleryImports.readModel`: Bounded to `MAX_MODEL_BYTES` (64 MB).
-- `GalleryImports.smallFile`: Bounded to `BrushImports.MAX_BYTES` (64 MB).
-- `PaletteImports`: Bounded to `MAX_PALETTE_BYTES` (1 MB).
-- `FontLibrary.import`: Bounded to `MAX_BYTES` (20 MB).
-- `CanvasScreen.psdPicker`: Bounded to `MAX_PSD_IMPORT_BYTES` (256 MB).
-
-### 4.2 Decompression-Bomb & Archive Protection
-- **`ProcreateImport`**: Implemented `copyBounded(input, file)` with `MAX_FILE_BYTES = 512MB` and `MAX_ARCHIVE_ENTRIES = 10_000`.
-- **`ArtflowPackage`**: Enforces `MAX_ENTRIES = 4,200`, strict file path regex whitelisting (`ALLOWED`), and per-entry byte bounds.
-- **`ModelPackage`**: Enforces `MAX_ENTRIES = 512`, `MAX_BYTES = 64MB`, and path normalization (`baseName`) preventing path traversal.
-- **`BrushArchives`**: Enforces `MAX_ENTRIES`, `MAX_ARCHIVE_BYTES = 64MB`, path validation (`\\` and `..` forbidden), and duplicate path rejection.
-
-### 4.3 Hostile Input Verification
-Created `BoundedImportTest.kt` verifying:
-- Complete consumption of streams within limits.
-- Exact limit boundary conditions.
-- Immediate cutoff of infinite/hostile streams without consuming excess bytes or overflowing memory.
+Tracing the shipping rendering stack established the actual runtime behavior:
+- **Canvas Presentation**: `ArtFlowCanvasView` configures `setEGLContextClientVersion(2)` and delegates surface presentation to `OpenGLCanvasRenderer` using `GLES20` shaders and textures.
+- **Layer Compositing**: `VirtualTileCanvas` allocates $128 \times 128$ / $256 \times 256$ tiles within `8,192 x 8,192` ($\le 40$ MP) bounds and composites layers on CPU via `Compositor`.
+- **Factory & Backends**: `RenderBackendType.GLES3` was replaced by `RenderBackendType.GLES2` (`GlesRenderBackend`), `RenderBackendFactory.createBackend(RenderBackendType.SOFTWARE)` now returns `SoftwareRenderBackend`, and `VulkanRenderBackend` accurately documents its experimental CPU-composited preview status.
+- **Unwired C++20 Prototype**: `app/src/main/jni` contains C++20 sources not wired into `app/build.gradle.kts`. Artifact inspection confirms only `libandroidx.graphics.path.so` is packaged and 16 KB ELF aligned.
 
 ---
 
-## 5. Photoshop PSD and PSB Implementation Correctness
+## 5. Priority One: Static Analysis & Baseline Reduction
 
-### 5.1 Adobe Specification Alignment
-Photoshop Large Document Format (PSB, Version 2) specifications require 64-bit length fields and larger RLE tables:
-1. **Header Identification**: `PsdCodec.read` recognizes Version 1 (`VERSION_PSD = 1`) and Version 2 (`VERSION_PSB = 2`).
-2. **64-bit Section Lengths**:
-   - `layerAndMaskLength`: Read as 64-bit integer (`reader.readLong()`) for PSB vs 32-bit for PSD.
-   - `layerInfoLength`: Read as 64-bit integer for PSB vs 32-bit for PSD.
-3. **64-bit Channel Record Lengths**: Each channel in a PSB layer record specifies length as a 64-bit integer.
-4. **32-bit (4-byte) RLE Row Length Tables**: In PSB, PackBits RLE compression uses 4-byte integers for row lengths (`readChannel` and `readMergedPlanes`), whereas PSD uses 2-byte shorts.
-5. **Strict Bounds Checking**: Validated that `colorModeLength`, `resourcesLength`, `layerAndMaskLength`, and `layerInfoLength` are non-negative and do not exceed `reader.remaining()`, safely returning `null` on truncated files.
-
-### 5.2 PSB Verification Suite
-Created `PsbCodecTest.kt` verifying:
-- Uncompressed raw channels with 64-bit section and channel headers.
-- PackBits RLE compressed channels with 32-bit row length table decoding.
-- Graceful `null` return on truncated PSB streams.
-- Safe rejection of corrupted/oversized PSB structures.
+- Zero new issues added to `config/detekt/baseline.xml`.
+- Resolved and removed **15** baseline/stale issues across `CanvasScreen.kt`, `EditorSheets.kt`, `OpenGLCanvasRenderer.kt`, `LiquifyTool.kt`, `PixelBrushes.kt`, `PsdCodec.kt`, and `ArtworkExporter.kt`, shrinking `config/detekt/baseline.xml` from **82** entries to **67** entries while `./gradlew ktlintCheck detekt` passes with 0 reported issues.
 
 ---
 
-## 6. Graphics Architecture Scoping & Reality Alignment
+## 6. Priority Two: Codec Hardening & Supply-Chain Security
 
-### 6.1 Active Pipeline Trace
-- **Touch / Stylus Input**: `CanvasGestureRouter` $\rightarrow$ `TouchInterception` $\rightarrow$ `PalmRejection` (hardware ellipse touch-major filtering) $\rightarrow$ `StrokePredictor` (polynomial/Kalman prediction).
-- **Brush Mark Generation**: `WetBrushPickup` (6-parameter physical wet-mix simulation) $\rightarrow$ `StrokeRasterizer` $\rightarrow$ `BrushPatch` stamping.
-- **Compositing & Layer Storage**: `VirtualTileCanvas` ($128 \times 128$ and $256 \times 256$ tiles, copy-on-write dirty-region updates) $\rightarrow$ `LayerBlending` $\rightarrow$ `PixelBuffer`.
-- **Renderer & Display**: `OpenGLCanvasRenderer` (OpenGL ES 3.0 FBO instancing and texture upload) $\rightarrow$ `ArtFlowCanvasView` (`GLSurfaceView`).
-
-### 6.2 Honest Scoping (Option A Executed)
-- **Production Shipping Backend**: OpenGL ES 3.x is the primary, validated hardware renderer delivering stable 60/120 FPS drawing and cross-device emulator compatibility.
-- **Vulkan Scoping**: The Vulkan backend in `VulkanRenderBackend.kt` is an experimental preview architecture. All claims describing Vulkan as the primary production renderer have been removed from `RenderBackendType`, `RenderBackendFactory`, `VulkanRenderBackend`, and `README.md`.
-- **Factory Default**: `RenderBackendFactory.createBackend` defaults to `RenderBackendType.GLES3`.
+- **Codec Hardening**: Guarded `ApngEncoder`, `Lz4`, `Lzo1x`, `AbrReader`, `BinaryPlist`/`KeyedArchive`, `GltfReader`, `ModelPackage`, `UsdReader`, and `PsdCodec` against integer overflows, negative lengths/counts, forged bplist trailers, directory-only ZIP entries, and cyclic LZ4/USD loops; verified with deterministic unit tests in `CodecHardeningTest.kt`.
+- **Supply-Chain & CI Pinning**:
+  - All `uses:` references across all **14** workflows under `.github/workflows/` are pinned to 40-char commit SHAs and checked in CI via `.github/scripts/verify_workflow_pins.py`.
+  - `.github/scripts/scan_secrets.py` scans tracked files for credentials/keystores and CI keystore files.
+  - `.github/scripts/check_licenses_and_sbom.py` audits 42 resolved Gradle dependency components for GPLv3 compatibility and emits a CycloneDX 1.5 JSON SBOM uploaded as a build artifact.
 
 ---
 
-## 7. Color Management Pipeline Scoping & Reality Alignment
+## 7. Local Verification Summary
 
-### 7.1 Implemented Capabilities
-- **Prepress CMYK Buffer**: Native 4-channel `CmykBuffer` ($C, M, Y, K$) for print workflows without intermediate lossy RGB clipping.
-- **Analytical ICC Engine**: `IccColorEngine` implements calibrated ink-absorption vectors for standard print profiles:
-  - Coated FOGRA39 (ISO 12647-2:2004, 330% TAC, 0.95 black limit)
-  - U.S. Web Coated (SWOP) v2 (300% TAC, 0.90 black limit)
-  - Japan Color 2001 Coated (350% TAC, 0.98 black limit)
-  - GRACoL 2006 Coated #1 (320% TAC, 0.95 black limit)
-  - Display P3 and sRGB IEC61966-2.1
-- **Gray Component Replacement (GCR) & Under Color Removal (UCR)**: Dynamic black generation and CMY ink reduction.
-- **Total Area Coverage (TAC) Limiting**: Ink summation clipping preventing press flooding.
-- **Soft-Proofing & Zebra Diagnostics**: Screen simulation of paper substrate reflectance with real-time diagonal zebra overlays on out-of-gamut pixels.
-
-### 7.2 Honest Scoping
-- Corrected misleading docstrings and README claims claiming LittleCMS integration.
-- Documented that `IccColorEngine` is a high-fidelity analytical model rather than a compiled LittleCMS native C/C++ library.
-
----
-
-## 8. Large Canvas Reliability & Memory Safety
-
-- **Virtual Tile Architecture**: Canvas storage allocates only non-empty tiles, bounding memory footprint on large documents.
-- **Safe Dimension Bounds**: Canvas bounds are strictly validated via `CanvasOperations.isSizeSafe`:
-  - Maximum width/height: $8,192 \times 8,192$ px.
-  - Maximum total pixel count: $40,000,000$ pixels (40 MP).
-  - Minimum width/height: $64 \times 64$ px.
-- **Exceeding Limits**: Any imported image, PSD, or Procreate document exceeding these bounds is rejected safely with user-facing notification before allocation.
-
----
-
-## 9. Architectural Refactoring & Static Analysis
-
-### 9.1 Deconstructed God Classes
-1. **`CanvasViewModel`**: Extracted `CanvasRecoveryController` to isolate crash recovery state management and resolution from the view model, eliminating `LargeClass` violations without expanding detekt limits.
-2. **`PsdCodec.readLayerRecords`**: Decomposed from a monolithic 54-complexity method with deep nesting into focused single-responsibility helpers:
-   - `readSingleLayerPending`
-   - `parseExtraLayerData`
-   - `parseExtraBlocks`
-   - `parseFolderSection`
-   - `decodeFolderLayer`
-   - `decodeRasterLayer`
-   - `decodeLayerPixels`
-   - Method cyclomatic complexities reduced from 54 to $\le 8$, nesting depth $\le 2$.
-3. **`ProcreateImport.open`**: Extracted `copyBounded` to eliminate nested block depth violations.
-4. **`GalleryImports` & `PaletteImports`**: Refactored stream reading with clean property wrapping and line length compliance.
-
-### 9.2 Zero Baseline Expansion
-No entries were added to `config/detekt/baseline.xml`. All static analysis gates pass cleanly:
-- `ktlint`: **0 findings**
-- `detekt`: **0 findings**
-
----
-
-## 10. Verification Evidence Summary
-
-```bash
-# Static Analysis (ktlint & detekt)
-$ bash tools/offline-check/lint.sh
-ktlint: 0 finding(s)
-detekt: 0 finding(s)
-Result: SUCCESS (Exit Code 0)
-
-# Full Unit Test Suite
-$ bash tools/offline-check/unit.sh
-compile.sh: 300 files, 85s, OK
->> compiling 289 test files
-tests: 1688 run in 281 class(es), 0 failed, 1 skipped (harness limitation), 0 ignored, 2 skipped by assumption, 55s
-Result: SUCCESS (Exit Code 0)
-```
-
-### Verified Release Artifact Commitments
-- User artwork is strictly protected against data loss across all UI and background lifecycle events.
-- All 1,688 unit tests run deterministically and pass.
-- Bounded streaming guards against hostile file inputs and decompression bombs.
-- Photoshop PSD export and PSD/PSB 64-bit Large Document import conform to Adobe specifications.
-- Graphics and color subsystems are honestly documented and production-scoped.
+| Suite / Check | Result | Measured Details |
+| --- | :---: | :--- |
+| JVM Unit Tests (`./gradlew testDebugUnitTest`) | **PASS** | `1,706` tests across `284` suites (`2` corpora-gated tests skipped locally, execute in CI; `0` failures, `0` errors) |
+| Formatting (`./gradlew ktlintCheck`) | **PASS** | `0` violations across `main`, `test`, `androidTest`, and Gradle scripts |
+| Static Analysis (`./gradlew detekt`) | **PASS** | `0` new issues; baseline reduced `82 -> 67` `<ID>` entries |
+| Android Lint (`./gradlew lintDebug lintRelease`) | **PASS** | `0 Fatal`, `0 Error` |
+| Instrumentation Compile (`./gradlew compileDebugAndroidTestKotlin`) | **PASS** | All `270` `@Test` identities compiled cleanly |
+| Python & Security Scripts | **PASS** | `166` `.github/scripts` tests + `76` `tools` tests; `verify_workflow_pins.py` (14 files); `scan_secrets.py`; `check_licenses_and_sbom.py` (42 components) |
+| Release Signing Negative Guard | **PASS** | `./gradlew help -PrequireReleaseSigning=true` fails closed without private keystore |

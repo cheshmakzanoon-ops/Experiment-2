@@ -498,7 +498,7 @@ object PsdCodec {
                 // A damaged layer record is a damaged file: the document reads as not a PSD, as documented.
                 layers +=
                     try {
-                        readLayerRecords(reader, width, height, channelCount, depth, colorMode, isPsb)
+                        readLayerRecords(reader, depth, colorMode, isPsb)
                     } catch (damaged: IllegalArgumentException) {
                         return null
                     }
@@ -578,9 +578,6 @@ object PsdCodec {
 
     private fun readLayerRecords(
         reader: PsdReader,
-        canvasWidth: Int,
-        canvasHeight: Int,
-        channelCount: Int,
         depth: Int,
         colorMode: Int,
         isPsb: Boolean = false,
@@ -597,18 +594,32 @@ object PsdCodec {
 
         val layers = mutableListOf<PsdLayer>()
         pending.forEach { record ->
-            val layerWidth = (record.right - record.left).coerceAtLeast(0)
-            val layerHeight = (record.bottom - record.top).coerceAtLeast(0)
+            val layerWidthLong = (record.right.toLong() - record.left).coerceAtLeast(0L)
+            val layerHeightLong = (record.bottom.toLong() - record.top).coerceAtLeast(0L)
             val (maskWidth, maskHeight) = maskDimensions(record.mask)
             if (record.section != Section.NONE) {
                 layers += decodeFolderLayer(record, reader, depth, isPsb, maskWidth, maskHeight)
                 return@forEach
             }
-            if (layerWidth == 0 || layerHeight == 0) {
+            if (layerWidthLong == 0L || layerHeightLong == 0L) {
                 record.channels.forEach { (_, length) -> reader.skip(max(0, length)) }
                 return@forEach
             }
-            layers += decodeRasterLayer(record, reader, layerWidth, layerHeight, depth, colorMode, isPsb, maskWidth, maskHeight)
+            require(layerWidthLong <= Int.MAX_VALUE.toLong() && layerHeightLong <= Int.MAX_VALUE.toLong()) {
+                "A PSD layer is too large"
+            }
+            layers +=
+                decodeRasterLayer(
+                    record,
+                    reader,
+                    layerWidthLong.toInt(),
+                    layerHeightLong.toInt(),
+                    depth,
+                    colorMode,
+                    isPsb,
+                    maskWidth,
+                    maskHeight,
+                )
         }
         return layers
     }
@@ -639,6 +650,7 @@ object PsdCodec {
         val flags = reader.readByte()
         reader.skip(1)
         val extraLength = reader.readInt()
+        require(extraLength in 0..reader.remaining()) { "Truncated PSD extra layer data" }
         val extraEnd = reader.position + extraLength
 
         val extra = parseExtraLayerData(reader, extraLength, extraEnd, layerIndex)
@@ -674,6 +686,7 @@ object PsdCodec {
             return ExtraLayerData(name, section, folderBlend, maskHeader)
         }
         val maskLength = reader.readInt()
+        require(maskLength >= 0) { "Invalid PSD mask length" }
         val maskStart = reader.position
         if (maskLength >= MASK_HEADER_LENGTH && reader.remaining() >= MASK_HEADER_LENGTH) {
             val maskTop = reader.readInt()
@@ -682,9 +695,12 @@ object PsdCodec {
             val maskRight = reader.readInt()
             maskHeader = MaskHeader(maskTop, maskLeft, maskBottom, maskRight, reader.readByte(), reader.readByte())
         }
-        reader.position = (maskStart + maskLength.coerceAtLeast(0)).coerceAtMost(extraEnd)
-        val blendingRangesLength = reader.readInt()
-        if (blendingRangesLength > 0) reader.skip(blendingRangesLength)
+        reader.position = (maskStart.toLong() + maskLength).coerceAtMost(extraEnd.toLong()).toInt()
+        if (reader.position + 4 <= extraEnd) {
+            val blendingRangesLength = reader.readInt()
+            require(blendingRangesLength >= 0) { "Invalid PSD blending ranges length" }
+            reader.position = (reader.position.toLong() + blendingRangesLength).coerceAtMost(extraEnd.toLong()).toInt()
+        }
         if (reader.position < extraEnd) {
             val nameLength = reader.readByte()
             if (nameLength > 0) name = reader.readAscii(nameLength)
@@ -707,14 +723,14 @@ object PsdCodec {
         var section: Section? = null
         var folderBlend: BlendMode? = null
         var scanPosition = reader.position
-        while (scanPosition + 12 <= extraEnd) {
+        while (scanPosition.toLong() + 12L <= extraEnd.toLong()) {
             reader.position = scanPosition
             val signature = reader.readAscii(4)
             if (signature != "8BIM" && signature != "8B64") break
             val key = reader.readAscii(4)
             val length = reader.readInt()
-            if (length < 0 || reader.remaining() < length) break
             val blockStart = reader.position
+            if (length < 0 || length.toLong() > (extraEnd - blockStart).toLong()) break
             if (key == "luni") {
                 val unicodeName = reader.readUnicodeString(length)
                 if (unicodeName.isNotBlank()) name = unicodeName
@@ -723,7 +739,9 @@ object PsdCodec {
                 section = sec
                 if (blend != null) folderBlend = blend
             }
-            scanPosition = blockStart + length + (length % 2)
+            val nextScan = blockStart.toLong() + length.toLong() + (length % 2).toLong()
+            if (nextScan > extraEnd.toLong()) break
+            scanPosition = nextScan.toInt()
         }
         return ExtraBlocksResult(name, section, folderBlend)
     }
@@ -974,8 +992,11 @@ object PsdCodec {
         // malformed row table or PackBits run would otherwise produce the expected pixel count.
         val channelEnd = reader.position + declaredLength
         val bytesPerSample = if (depth == DEPTH_16) 2 else 1
-        val rowBytes = width * bytesPerSample
-        val planeBytes = rowBytes * height
+        val rowBytesLong = width.toLong() * bytesPerSample
+        val planeBytesLong = rowBytesLong * height
+        require(planeBytesLong in 0L..Int.MAX_VALUE.toLong()) { "A PSD channel is too large" }
+        val rowBytes = rowBytesLong.toInt()
+        val planeBytes = planeBytesLong.toInt()
         val compression = reader.readShort()
         val plane =
             when (compression) {
@@ -986,10 +1007,12 @@ object PsdCodec {
                 }
 
                 COMPRESSION_RLE -> {
-                    val countBytes = if (isPsb) 4 else 2
-                    require(channelEnd - reader.position >= height * countBytes) { "Truncated PSD row-length table" }
+                    val countBytes = if (isPsb) 4L else 2L
+                    require((channelEnd - reader.position).toLong() >= height.toLong() * countBytes) { "Truncated PSD row-length table" }
                     val rowLengths = IntArray(height) { if (isPsb) reader.readInt() else reader.readShort() }
-                    require(rowLengths.sumOf { it.toLong() } <= channelEnd - reader.position) { "PSD rows exceed their channel" }
+                    require(rowLengths.all { it >= 0 } && rowLengths.sumOf { it.toLong() } <= (channelEnd - reader.position).toLong()) {
+                        "PSD rows exceed their channel"
+                    }
                     // A 16-bit row holds two bytes per pixel, so it is decoded at its full width before downsampling.
                     val out = ByteArray(planeBytes)
                     for (row in 0 until height) {
@@ -1186,6 +1209,7 @@ object PsdCodec {
         reader: PsdReader,
         width: Int,
     ): ByteArray {
+        require(width >= 0) { "Invalid PSD scanline width" }
         val out = ByteArray(width)
         var written = 0
         while (written < width) {
@@ -1261,8 +1285,10 @@ object PsdCodec {
         val bytesPerSample = if (depth == 16) 2 else 1
         when (compression) {
             COMPRESSION_RAW -> {
+                val sizeLong = width.toLong() * height * bytesPerSample
+                if (sizeLong !in 0L..Int.MAX_VALUE.toLong()) return null
+                val size = sizeLong.toInt()
                 channelIds.forEach { id ->
-                    val size = width * height * bytesPerSample
                     planes[id] = reader.readBytes(min(size, reader.remaining()))
                 }
             }
@@ -1270,10 +1296,16 @@ object PsdCodec {
             COMPRESSION_RLE -> {
                 // The byte-count table lists every row of every channel, then the row data follows.
                 // In PSB (v2), each entry is a 4-byte int instead of a 2-byte short.
+                val rowBytesLong = width.toLong() * bytesPerSample
+                val planeBytesLong = rowBytesLong * height
+                if (planeBytesLong !in 0L..Int.MAX_VALUE.toLong()) return null
+                val countBytes = if (isPsb) 4L else 2L
+                if (reader.remaining().toLong() < channelCount.toLong() * height * countBytes) return null
                 repeat(channelCount * height) { if (isPsb) reader.readInt() else reader.readShort() }
-                val rowBytes = width * bytesPerSample
+                val rowBytes = rowBytesLong.toInt()
+                val planeBytes = planeBytesLong.toInt()
                 channelIds.forEach { id ->
-                    val out = ByteArray(rowBytes * height)
+                    val out = ByteArray(planeBytes)
                     for (row in 0 until height) {
                         val decoded = decodeRleRow(reader, rowBytes)
                         System.arraycopy(decoded, 0, out, row * rowBytes, min(rowBytes, decoded.size))
@@ -1284,9 +1316,13 @@ object PsdCodec {
 
             COMPRESSION_ZIP, COMPRESSION_ZIP_PREDICTION -> {
                 // The merged image is one zlib stream: each channel's whole plane follows the one before it.
-                val planeBytes = width * height * bytesPerSample
-                val stream = inflate(reader.readBytes(reader.remaining()), planeBytes * channelIds.size)
-                if (stream.size < planeBytes * channelIds.size) return null
+                val planeBytesLong = width.toLong() * height * bytesPerSample
+                val totalBytesLong = planeBytesLong * channelIds.size
+                if (totalBytesLong !in 0L..Int.MAX_VALUE.toLong()) return null
+                val planeBytes = planeBytesLong.toInt()
+                val totalBytes = totalBytesLong.toInt()
+                val stream = inflate(reader.readBytes(reader.remaining()), totalBytes)
+                if (stream.size < totalBytes) return null
                 channelIds.forEachIndexed { index, id ->
                     val plane = stream.copyOfRange(index * planeBytes, (index + 1) * planeBytes)
                     if (compression == COMPRESSION_ZIP_PREDICTION) undoPrediction(plane, width, height, bytesPerSample)
@@ -1445,7 +1481,7 @@ object PsdCodec {
         fun remaining(): Int = bytes.size - position
 
         fun skip(count: Int) {
-            position = (position + count).coerceIn(0, bytes.size)
+            position = (position.toLong() + count.toLong()).coerceIn(0L, bytes.size.toLong()).toInt()
         }
 
         fun readByte(): Int {

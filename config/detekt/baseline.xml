@@ -3,17 +3,11 @@
   <ManuallySuppressedIssues></ManuallySuppressedIssues>
   <CurrentIssues>
     <ID>ComplexCondition:BrushParams.kt$BrushParams$hueJitter &lt;= 0f &amp;&amp; saturationJitter &lt;= 0f &amp;&amp; brightnessJitter &lt;= 0f &amp;&amp; !colorPressure &amp;&amp; velocityToHue &lt;= 0f</ID>
-    <ID>ComplexCondition:LiquifyTool.kt$LiquifyTool.DisplacementMap$x &lt; 0 || y &lt; 0 || x &gt;= width || y &gt;= height</ID>
-    <ID>ComplexCondition:PixelBrushes.kt$PixelBrushes$candidateX &lt; 0 || candidateY &lt; 0 || candidateX &gt;= target.width || candidateY &gt;= target.height</ID>
     <ID>ComplexCondition:PixelBuffer.kt$PixelBuffer$sx &lt; -1f || sy &lt; -1f || sx &gt; width + 1f || sy &gt; height + 1f</ID>
-    <ID>ComplexCondition:PsdCodec.kt$PsdCodec$width &lt;= 0 || height &lt;= 0 || width &gt; 30_000 || height &gt; 30_000</ID>
     <ID>ComplexCondition:SelectionMask.kt$SelectionMask.Companion$(y1p &lt;= scanY &amp;&amp; y2p &gt; scanY) || (y2p &lt;= scanY &amp;&amp; y1p &gt; scanY)</ID>
     <ID>CyclomaticComplexMethod:ArtFlowCanvasView.kt$ArtFlowCanvasView$private fun endGesture( event: MotionEvent, x: Float, y: Float, cancelled: Boolean, )</ID>
     <ID>CyclomaticComplexMethod:CanvasScreen.kt$@Composable fun CanvasScreen( projectId: Long, onNavigateBack: () -&gt; Unit, onOpenSettings: () -&gt; Unit = {}, onOpenHelp: () -&gt; Unit = {}, viewModel: CanvasViewModel = hiltViewModel(), )</ID>
     <ID>CyclomaticComplexMethod:ExportSheet.kt$@Composable fun ExportSheet( availableFormats: List&lt;ExportFormat&gt;, frameCount: Int, canvasWidth: Int, canvasHeight: Int, canvasDpi: Int, previewBytes: ByteArray?, exportState: ExportUiState, onExport: (ExportOptions) -&gt; Unit, onShare: (ExportResult) -&gt; Unit, onSaveToGallery: (ExportResult) -&gt; Unit, onView: (ExportResult) -&gt; Unit, onDismissResult: () -&gt; Unit, modifier: Modifier = Modifier, )</ID>
-    <ID>CyclomaticComplexMethod:PsdCodec.kt$PsdCodec$private fun readLayerRecords( reader: PsdReader, canvasWidth: Int, canvasHeight: Int, channelCount: Int, depth: Int, colorMode: Int, ): List&lt;PsdLayer&gt;</ID>
-    <ID>ForbiddenComment:BrushParams.kt$BrushParams$// TODO: Implement custom curve</ID>
-    <ID>ImplicitDefaultLocale:EditorSheets.kt$String.format("#%08X", backgroundColor)</ID>
     <ID>LargeClass:ArtFlowCanvasView.kt$ArtFlowCanvasView : GLSurfaceView</ID>
     <ID>LargeClass:CanvasRepositoryImpl.kt$CanvasRepositoryImpl : CanvasRepository</ID>
     <ID>LongMethod:CanvasScreen.kt$@Composable fun CanvasScreen( projectId: Long, onNavigateBack: () -&gt; Unit, onOpenSettings: () -&gt; Unit = {}, onOpenHelp: () -&gt; Unit = {}, viewModel: CanvasViewModel = hiltViewModel(), )</ID>
@@ -55,7 +49,6 @@
     <ID>NestedBlockDepth:PixelBuffer.kt$PixelBuffer$fun contentBounds(): IntBounds?</ID>
     <ID>NestedBlockDepth:PsdCodec.kt$PsdCodec$fun packBits( source: ByteArray, offset: Int, length: Int, ): ByteArray</ID>
     <ID>NestedBlockDepth:PsdCodec.kt$PsdCodec$fun unpackBits( reader: PsdReader, width: Int, ): ByteArray</ID>
-    <ID>NestedBlockDepth:PsdCodec.kt$PsdCodec$private fun readLayerRecords( reader: PsdReader, canvasWidth: Int, canvasHeight: Int, channelCount: Int, depth: Int, colorMode: Int, ): List&lt;PsdLayer&gt;</ID>
     <ID>NestedBlockDepth:SelectionMask.kt$SelectionMask$fun bounds(): IntBounds?</ID>
     <ID>NestedBlockDepth:StrokeRasterizer.kt$StrokeRasterizer$fun draw( target: PixelBuffer, stroke: Stroke, alphaLock: Boolean = false, mask: SelectionMask? = null, )</ID>
     <ID>TooGenericExceptionCaught:ArtFlowCanvasView.kt$ArtFlowCanvasView$error: Throwable</ID>
@@ -71,18 +64,10 @@
     <ID>UnusedParameter:ArtFlowCanvasView.kt$ArtFlowCanvasView$event: MotionEvent</ID>
     <ID>UnusedParameter:ArtFlowCanvasView.kt$ArtFlowCanvasView$index: Int</ID>
     <ID>UnusedParameter:ArtFlowCanvasView.kt$ArtFlowCanvasView$pressure: Float</ID>
-    <ID>UnusedParameter:ArtworkExporter.kt$ArtworkExporter$projectName: String</ID>
     <ID>UnusedParameter:OpenGLCanvasRenderer.kt$OpenGLCanvasRenderer$dpi: Int</ID>
     <ID>UnusedParameter:PerspectiveGuide.kt$PerspectiveGuide$height: Int</ID>
     <ID>UnusedParameter:PerspectiveGuide.kt$PerspectiveGuide$width: Int</ID>
-    <ID>UnusedParameter:PsdCodec.kt$PsdCodec$canvasHeight: Int</ID>
-    <ID>UnusedParameter:PsdCodec.kt$PsdCodec$canvasWidth: Int</ID>
-    <ID>UnusedParameter:PsdCodec.kt$PsdCodec$channelCount: Int</ID>
     <ID>UnusedParameter:StrokeRasterizer.kt$StrokeRasterizer$alphaScale: Float</ID>
     <ID>UnusedParameter:TextLayout.kt$TextLayout$style: TextStyle</ID>
-    <ID>UnusedPrivateProperty:CanvasScreen.kt$val density = LocalDensity.current</ID>
-    <ID>UseCheckOrError:ArtworkExporter.kt$ArtworkExporter$throw IllegalStateException("Canvas is too small for video export (minimum 16×16)")</ID>
-    <ID>UseCheckOrError:OpenGLCanvasRenderer.kt$OpenGLCanvasRenderer$throw IllegalStateException("Shader compile failed: $log")</ID>
-    <ID>UseCheckOrError:OpenGLCanvasRenderer.kt$OpenGLCanvasRenderer$throw IllegalStateException("Shader link failed: $log")</ID>
   </CurrentIssues>
 </SmellBaseline>

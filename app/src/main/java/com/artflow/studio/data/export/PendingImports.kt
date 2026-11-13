@@ -113,4 +113,16 @@ object PendingImports {
     }
 
     fun takeProfile(projectId: Long): ColorProfile? = profiles.remove(projectId)
+
+    private val notices = ConcurrentHashMap<Long, String>()
+
+    /** One-shot import warning (e.g., missing fonts) surfaced when the opened canvas becomes ready. */
+    fun putNotice(
+        projectId: Long,
+        message: String,
+    ) {
+        notices[projectId] = message
+    }
+
+    fun takeNotice(projectId: Long): String? = notices.remove(projectId)
 }

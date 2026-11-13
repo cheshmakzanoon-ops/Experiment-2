@@ -670,19 +670,28 @@ Auditing `PsdCodec.kt` against the Adobe Photoshop File Formats Specification id
 - **Architectural Decomposition:** `readLayerRecords` was decomposed from a monolithic 54-complexity method into 7 focused single-responsibility functions (`readSingleLayerPending`, `parseExtraLayerData`, `parseExtraBlocks`, `parseFolderSection`, `decodeFolderLayer`, `decodeRasterLayer`, `decodeLayerPixels`), reducing cyclomatic complexity to <= 8 and nesting depth to <= 2.
 - **Verification:** Verified with `PsbCodecTest.kt` across uncompressed PSB, 32-bit RLE row-table PSB, and truncated inputs.
 
-### 4. Production Graphics & Color Architecture Qualification
+### 4. Reconciled Graphics & Color Architecture Qualification
 
-- **Production Shipping Renderer (OpenGL ES 3.x):** The production editor uses the fully validated, hardware-accelerated OpenGL ES 3.x rendering pipeline (`Gles3RenderBackend.kt`). Vulkan is honestly qualified as an experimental preview backend utilizing CPU tile compositing (`VulkanRenderBackend.kt`), with `RenderBackendFactory` strictly defaulting to `RenderBackendType.GLES3`.
+- **Canvas Presentation & Tile Compositing:** [`ArtFlowCanvasView`](../app/src/main/java/com/artflow/studio/presentation/ui/components/canvas/ArtFlowCanvasView.kt) creates an **OpenGL ES 2.0** context (`OpenGLCanvasRenderer` via `GLES20`) for surface presentation, while [`VirtualTileCanvas`](../app/src/main/java/com/artflow/studio/data/renderer/gpu/VirtualTileCanvas.kt) and [`Compositor`](../app/src/main/java/com/artflow/studio/core/pixels/Compositor.kt) perform layer tile compositing on CPU. [`RenderBackendFactory`](../app/src/main/java/com/artflow/studio/data/renderer/gpu/RenderBackendFactory.kt) defaults to `RenderBackendType.GLES2` (`GlesRenderBackend`), returns [`SoftwareRenderBackend`](../app/src/main/java/com/artflow/studio/data/renderer/gpu/SoftwareRenderBackend.kt) for `SOFTWARE`, and marks `VulkanRenderBackend` as an experimental CPU-composited preview path. `app/src/main/jni` C++20 code remains an unintegrated prototype; only `libandroidx.graphics.path.so` ships (16 KB ELF aligned).
 - **Honest Color Pipeline:** Documented `IccColorEngine` accurately as an analytical ink-absorption model with calibrated UCR/GCR/TAC parameters rather than claiming unintegrated LittleCMS native C bindings.
 - **Canvas Dimension Safety:** Enforced maximum dimensions of 8,192 x 8,192 (<= 40 MP) to guarantee memory safety under realistic mobile memory constraints.
 
-### 5. Verification Matrix Summary
+### 5. November 12, 2026 Audit Hardening Additions (`fix/production-readiness-certification`)
 
-| Suite / Gate | Executed Identities | Failures | Status |
+Following baseline `main` `d340bc6` (Run `43189321650`, 7/8 jobs passed, `Device tests (API 35 independent 16 KB repeat)` failed), the following P0/P1/P2 engineering fixes were landed and verified locally (see [`docs/release/READINESS_MATRIX.md`](release/READINESS_MATRIX.md) and [`docs/release/RELEASE_SIGNOFF.md`](release/RELEASE_SIGNOFF.md)):
+- **Tombstone Collector & CI Python 3.11:** Fixed nanosecond timestamp parsing in `collect_native_tombstones.py` for Python 3.10+ (`test_collect_native_tombstones.py`) and pinned Python `3.11` in `device-tests`.
+- **Atomic Font Import & Portable IDs:** `FontLibrary` validates incoming fonts in isolated temporary staging files before atomic publish with collision suffixing, uses portable `font:<filename>` identifiers with `file:` legacy fallback, and triggers missing-font warnings in editor/package import flows.
+- **Backup Rules & Portable Streaming `.artflow` Packages:** Included `fonts` and `grains` in `backup_rules.xml` and `data_extraction_rules.xml` (documenting ~25 MB cloud quota vs device transfer), and added temp-file/`ZipFile` streaming (`ArtflowPackage.writeToFile`/`openFile`) carrying referenced custom `.grain` files and font metadata (`dependencies.json`) without third-party font binary redistribution.
+- **Binary Codec Hardening:** Guarded `ApngEncoder`, `Lz4`, `Lzo1x`, `AbrReader`, `KeyedArchive`/`BinaryPlist`, `GltfReader`, `ModelPackage`, `UsdReader`, and `PsdCodec` against integer overflows, negative lengths/counts, forged trailer counts, and cyclic loops (`CodecHardeningTest`).
+- **Detekt Baseline Reduction:** Reduced `config/detekt/baseline.xml` from `82` to `67` entries with `0` new baseline additions.
+- **Workflow SHA Pinning & Supply-Chain Security:** Pinned all `uses:` across all 14 `.github/workflows/*.yml` files to 40-char commit SHAs and added CI secret scanning, 42-component Gradle license/GPLv3 validation, and CycloneDX 1.5 SBOM emission.
+- **Open External Gates:** Publisher upload keystore (`-PrequireReleaseSigning=true`), Play Console Data Safety/listing/privacy URL, and physical Android 8/15/16 + stylus + 16 KB hardware tests remain **OPEN** external deliverables.
+
+| Suite / Gate (Current Branch Local Run) | Measured Coverage | Failures | Status |
 | --- | --- | --- | --- |
-| JVM Unit Tests (`tools/offline-check/unit.sh`) | 1,688 unit tests across 281 test classes | 0 | **PASS** |
-| ktlint (`tools/offline-check/lint.sh`) | Full repository source tree | 0 findings | **PASS** |
-| detekt (`tools/offline-check/lint.sh`) | Full repository source tree | 0 findings (0 baseline additions) | **PASS** |
-| Data-Loss Regression Suite (`AuthoritativeRecoveryTest`) | 8 authoritative recovery scenarios (`art006`–`art013`) | 0 | **PASS** |
-| PSD / PSB Interoperability (`PsbCodecTest`) | PSB Raw, PSB 32-bit RLE, Truncation safety | 0 | **PASS** |
-| Bounded Stream Ingestion (`BoundedImportTest`) | Boundary conditions, oversized stream cutoff | 0 | **PASS** |
+| JVM Unit Tests (`./gradlew testDebugUnitTest`) | `1,706` tests across `284` suites (`2` CI-corpora skipped locally) | `0` | **PASS** |
+| ktlint (`./gradlew ktlintCheck`) | Full Kotlin & Gradle script tree | `0` violations | **PASS** |
+| detekt (`./gradlew detekt`) | Full Kotlin tree (`baseline.xml` shrunk `82 -> 67`) | `0` new issues | **PASS** |
+| Android Lint (`./gradlew lintDebug lintRelease`) | Debug & Release variants | `0 Fatal / 0 Error` | **PASS** |
+| Python & Supply-Chain Gates | `164` `.github/scripts` + `76` `tools` tests; 14 pinned workflows; secret/license/SBOM | `0` | **PASS** |
+

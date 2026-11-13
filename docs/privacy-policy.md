@@ -8,17 +8,19 @@ permission, account system, advertising, analytics or remote crash-reporting SDK
 request access to contacts, location, microphone or camera and does not scan the media library.
 
 ## Local storage
-Artwork, brushes, palettes and preferences are stored in the private app storage. Export creates a
-separate copy. Sharing, saving to a chosen document location or publishing to the gallery transfers
-only the export you selected. Settings also offers a recovery backup of unreadable custom-palette
-text to a file you choose, before resetting that palette list. A receiving app or a cloud document
-provider may upload the copy you selected under its own privacy policy.
+Artwork, brushes, palettes, imported fonts, custom grain tiles and preferences are stored in the
+private app storage. Export creates a separate copy. Sharing, saving to a chosen document location
+or publishing to the gallery transfers only the export you selected. Settings also offers a
+recovery backup of unreadable custom-palette text to a file you choose, before resetting that palette list.
+A receiving app or a cloud document provider may upload the copy you selected under its own privacy policy.
 
 ## Android backup and device transfer
-The app allows Android to back up its project files and database and transfer them to another
-device, according to your Android backup settings and provider. That service may store the data in
-your cloud account. The developer does not receive or control these backups. Platform quotas and
-device conditions can prevent backup; do not rely on it as the only copy of important artwork.
+The app allows Android to back up its project files, imported fonts, custom grains and database and
+transfer them to another device, according to your Android backup settings and provider. That service
+may store the data in your cloud account. The developer does not receive or control these backups.
+Android cloud backup enforces strict size quotas (typically around 25 MB, unlike direct device-to-device
+transfer), and device conditions can prevent backup; do not rely on it as the only copy of important
+artwork or assets.
 
 ## Retention and deletion
 Deleting a project removes its private project files and private export copies. Uninstalling or

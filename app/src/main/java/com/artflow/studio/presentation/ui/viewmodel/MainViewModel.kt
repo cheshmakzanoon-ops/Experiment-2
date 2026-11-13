@@ -280,6 +280,25 @@ class MainViewModel
             }
         }
 
+        /** Streams an `.artflow` file on disk into the gallery and cleans up temporary staging afterwards. */
+        fun importPackageFile(
+            file: java.io.File,
+            deleteAfter: Boolean = true,
+            onImported: (ProjectRepository.ImportedPackage) -> Unit,
+        ) {
+            viewModelScope.launch(galleryErrors) {
+                try {
+                    val result = projectRepository.importPackageFile(file)
+                    storageBytes = withContext(Dispatchers.IO) { storage.totalStorageBytes() }
+                    onImported(result)
+                } finally {
+                    if (deleteAfter && file.exists()) {
+                        withContext(Dispatchers.IO) { file.delete() }
+                    }
+                }
+            }
+        }
+
         /** Saves colours as a new custom palette, for a swatch file opened from another app. */
         fun addPalette(
             name: String,

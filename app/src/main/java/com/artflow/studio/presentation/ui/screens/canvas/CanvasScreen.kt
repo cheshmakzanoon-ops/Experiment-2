@@ -221,7 +221,6 @@ fun CanvasScreen(
     val timelapseRecording by viewModel.timelapseRecording.collectAsState()
 
     val scope = rememberCoroutineScope()
-    val density = LocalDensity.current
     val snackbarHostState = remember { SnackbarHostState() }
     val exportActions = rememberExportActions(viewModel)
 
@@ -356,15 +355,19 @@ fun CanvasScreen(
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri == null) return@rememberLauncherForActivityResult
             scope.launch {
-                val family =
+                val result =
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        runCatching { FontLibrary.import(context, uri) }.getOrNull()
+                        FontLibrary.importDetailed(context, uri)
                     }
-                if (family == null) {
-                    viewModel.notify("That file is not a TrueType or OpenType font")
-                } else {
-                    importedFonts = FontLibrary.families(context)
-                    viewModel.setText(input.text, input.textStyle.copy(fontFamily = family))
+                when (result) {
+                    is FontLibrary.ImportResult.Failure -> viewModel.notify(result.message)
+                    is FontLibrary.ImportResult.Success -> {
+                        importedFonts = FontLibrary.families(context)
+                        viewModel.setText(input.text, input.textStyle.copy(fontFamily = result.family))
+                        if (result.renamedFromCollision) {
+                            viewModel.notify("Imported font as ${result.displayName} to keep existing fonts")
+                        }
+                    }
                 }
             }
         }

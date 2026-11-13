@@ -645,7 +645,7 @@ class OpenGLCanvasRenderer
             if (status[0] == 0) {
                 val log = GLES20.glGetProgramInfoLog(program)
                 GLES20.glDeleteProgram(program)
-                throw IllegalStateException("Shader link failed: $log")
+                error("Shader link failed: $log")
             }
             GLES20.glDeleteShader(vertexShader)
             GLES20.glDeleteShader(fragmentShader)
@@ -664,7 +664,7 @@ class OpenGLCanvasRenderer
             if (status[0] == 0) {
                 val log = GLES20.glGetShaderInfoLog(shader)
                 GLES20.glDeleteShader(shader)
-                throw IllegalStateException("Shader compile failed: $log")
+                error("Shader compile failed: $log")
             }
             return shader
         }
