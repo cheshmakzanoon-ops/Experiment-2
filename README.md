@@ -33,7 +33,7 @@ backup, codec, and CI hardening from [PR #40](https://github.com/cheshmakzanoon-
 | Area | Running application |
 | --- | --- |
 | Painting | Pressure/tilt response, smoothing, textured and dual brushes, wet pickup, eraser, smudge, clone/heal, fill, gradients, symmetry, and perspective assistance. Imported brush settings have varying rendering coverage. |
-| Layers | Raster layers, blending, nested groups, clipping, independent masks, adjustment/filter layers, selections, transforms, multi-selection, and undo/redo. |
+| Layers | Raster layers, blending, nested groups, clipping, independent masks, adjustment/filter layers, selections, transforms, multi-selection, persistent links, and undo/redo. Link selected layers in the Layers panel; use Whole-layer transform in Tool options for linked masks. |
 | Storage | Version-7 documents, checksum-first legacy migration, atomic manifests, immutable raster generations, autosave/recovery, independent duplication, and gallery management. |
 | Portable artworks | Native packages contain layers, frames, masks, document settings, custom grains, and font dependency metadata. Third-party font binaries are not automatically redistributed. |
 | Text | Editable text, platform/imported fonts, wrapping, alignment, letter spacing, and styling. Pixel transforms, crop, and canvas resize can rasterize text; full affine vector typography remains unfinished. |

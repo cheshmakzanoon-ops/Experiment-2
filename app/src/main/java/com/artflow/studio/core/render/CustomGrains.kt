@@ -63,6 +63,21 @@ object CustomGrains {
         tiles[id] = tile
     }
 
+    /** Import publication must not replace a tile that another artwork already uses. */
+    internal fun registerIfAbsent(
+        id: String,
+        tile: Tile,
+    ): Tile? {
+        require(isCustom(id)) { "Invalid grain identity" }
+        return tiles.putIfAbsent(id, tile)
+    }
+
+    /** Remove only the provisional tile owned by a failed import, never a later replacement. */
+    internal fun removeIfSame(
+        id: String,
+        tile: Tile,
+    ): Boolean = tiles.remove(id, tile)
+
     fun get(id: String?): Tile? = id?.let(tiles::get)
 
     fun ids(): List<String> = tiles.keys.sorted()

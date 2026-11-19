@@ -62,6 +62,10 @@ object LayerImports {
                 .takeIf { layers -> layers.any { it.section == PsdCodec.Section.NONE } }
                 ?: listOfNotNull(document.composite?.let { PsdCodec.PsdLayer("Background", it) })
         check(sources.isNotEmpty()) { "The PSD document has no readable layers" }
+        val pixelLayers = sources.count { it.section == PsdCodec.Section.NONE }
+        val masks = sources.count { it.section != PsdCodec.Section.GROUP_END && it.mask != null }
+        val layerSlots = sources.count { it.section != PsdCodec.Section.GROUP_END }
+        check(repository.canImportLayers(pixelLayers + masks, layerSlots)) { IMPORT_CAPACITY_MESSAGE }
         // Records are bottom first: a divider opens a folder, its header (above the contents) closes it.
         val open = ArrayDeque<MutableList<Node>>()
         val root = mutableListOf<Node>()
@@ -79,8 +83,16 @@ object LayerImports {
 
                 else -> {
                     val layer = repository.addLayer(name = source.name.ifBlank { "PSD layer" })
-                    repository.applyRasterEdit(layer.id, "Import PSD layer") { target ->
-                        target.drawInto(ColorProfiles.convert(source.pixels, ColorProfile.SRGB, profile), dx + source.left, dy + source.top)
+                    val applied =
+                        repository.applyRasterEdit(layer.id, "Import PSD layer") { target ->
+                            target.drawInto(
+                                ColorProfiles.convert(source.pixels, ColorProfile.SRGB, profile),
+                                dx + source.left,
+                                dy + source.top,
+                            )
+                        }
+                    check(applied) {
+                        "The PSD layer \"${source.name}\" could not be imported. The artwork changed or its memory limit was reached."
                     }
                     applyLook(repository, layer.id, source)
                     if (source.isClippingMask) repository.setLayerClippingMask(layer.id, true)
@@ -99,7 +111,7 @@ object LayerImports {
     /** What a Procreate import brought in. */
     class ProcreateResult(
         val layers: Int,
-        /** True when the layers would not fit in memory and the flattened image came in instead. */
+        /** True when the flattened image was used because editable layers were unavailable or would not fit. */
         val flattened: Boolean,
         /** The file's unrecognised ICC profile used the historical sRGB interpretation. */
         val hasUnsupportedColorProfile: Boolean,
@@ -119,6 +131,22 @@ object LayerImports {
         rasterBudgetBytes: Long = Runtime.getRuntime().maxMemory() / 2,
     ): ProcreateResult {
         require(rasterBudgetBytes >= 0) { "The import memory budget cannot be negative" }
+        val layers = document.layers()
+        val size = repository.getCanvasSize()
+        val planes = layers.size + layers.count { it.maskUuid != null }
+        val bytes = maxOf(document.width.toLong() * document.height, size.width.toLong() * size.height) * BYTES_PER_PIXEL
+        val flattened =
+            layers.isEmpty() || (planes + WORKING_COPIES) * bytes > rasterBudgetBytes ||
+                !repository.canImportLayers(planes, countNodes(document.nodes))
+        val composite =
+            if (flattened) {
+                check(repository.canImportLayers(1, 1)) { IMPORT_CAPACITY_MESSAGE }
+                withContext(Dispatchers.Default) { document.composite() }
+                    ?: error("This Procreate document cannot be imported as layers and has no flattened image to import")
+            } else {
+                null
+            }
+        // Capacity and fallback availability are checked before changing the existing document's profile or background.
         if (preserveDocumentProfile && repository.getColorProfile() != document.colorProfile) {
             check(repository.setColorProfile(document.colorProfile, undoable = false)) { "The document's colour profile could not be set" }
         }
@@ -131,31 +159,24 @@ object LayerImports {
         } else {
             document.background?.let { repository.setCanvasBackgroundColor(it, document.colorProfile) }
         }
-        val layers = document.layers()
-        val bytes = document.width.toLong() * document.height * BYTES_PER_PIXEL
-        val flattened = (layers.size + WORKING_COPIES) * bytes > rasterBudgetBytes
-        var added = 0
+        val added: Int
         if (flattened) {
-            val composite = withContext(Dispatchers.Default) { document.composite() }
-            if (composite != null) {
-                addPixels(repository, "Flattened", composite, document.colorProfile, profile)
-                added = 1
-            }
+            addPixels(repository, "Flattened", checkNotNull(composite), document.colorProfile, profile)
+            added = 1
         } else {
             val built = document.nodes.asReversed().mapNotNull { node -> build(repository, document, node, profile) }
             added = layers.size
             built.forEach { if (it is Built.Folder) group(repository, it) }
         }
-        if (added >
-            0
-        ) {
-            starting
-                .filter { id ->
-                    repository.layerPixels(id)?.pixels?.all { it == 0 } != false
-                }.forEach { repository.removeLayer(it) }
-        }
+        starting
+            .filter { id ->
+                repository.layerPixels(id)?.pixels?.all { it == 0 } != false
+            }.forEach { repository.removeLayer(it) }
         return ProcreateResult(added, flattened, document.hasUnsupportedColorProfile)
     }
+
+    private fun countNodes(nodes: List<ProcreateReader.Node>): Int =
+        nodes.sumOf { node -> 1 + if (node is ProcreateReader.Group) countNodes(node.children) else 0 }
 
     /** A Procreate node as added: a pixel layer, or a group still to be made from its members. */
     private sealed interface Built {
@@ -190,7 +211,7 @@ object LayerImports {
                 if (node.clipped) repository.setLayerClippingMask(id, true)
                 if (node.alphaLocked) repository.setLayerAlphaLock(id, true)
                 withContext(Dispatchers.Default) { document.mask(node) }?.let {
-                    repository.addLayerMask(id, it)
+                    check(repository.addLayerMask(id, it)) { "The mask on Procreate layer \"${node.name}\" could not be imported" }
                     if (!node.maskEnabled) repository.setLayerMaskEnabled(id, false)
                 }
                 Built.Pixels(id)
@@ -225,7 +246,7 @@ object LayerImports {
                 }
             }
         if (ids.isEmpty()) return null
-        val id = repository.groupLayers(ids) ?: return null
+        val id = checkNotNull(repository.groupLayers(ids)) { "The Procreate folder \"${folder.group.name}\" could not be imported" }
         repository.setLayerName(id, folder.group.name.ifBlank { "Group" })
         if (folder.group.opacity < 1f) repository.setLayerOpacity(id, folder.group.opacity)
         if (!folder.group.visible) repository.setLayerVisibility(id, false)
@@ -233,6 +254,8 @@ object LayerImports {
     }
 
     private const val BYTES_PER_PIXEL = 4L
+    private const val IMPORT_CAPACITY_MESSAGE =
+        "This import exceeds this device's artwork memory or layer limit. Reduce layers, masks, frames or canvas size."
 
     /** Buffers held besides the layers themselves: decoding, conversion and the composite. */
     private const val WORKING_COPIES = 4
@@ -263,7 +286,7 @@ object LayerImports {
                 }
             }
         if (ids.isEmpty()) return null
-        val id = repository.groupLayers(ids) ?: return null
+        val id = checkNotNull(repository.groupLayers(ids)) { "The PSD folder \"${folder.header.name}\" could not be imported" }
         repository.setLayerName(id, folder.header.name.ifBlank { "Group" })
         applyLook(repository, id, folder.header)
         applyPsdMask(repository, id, folder.header.mask, offsetX, offsetY)
@@ -280,7 +303,7 @@ object LayerImports {
         if (mask == null) return
         val size = repository.getCanvasSize()
         val coverage = mask.coverageFor(size.width, size.height, offsetX, offsetY)
-        repository.addLayerMask(id, SelectionMask(size.width, size.height, coverage))
+        check(repository.addLayerMask(id, SelectionMask(size.width, size.height, coverage))) { "The PSD layer mask could not be imported" }
         if (!mask.isEnabled) repository.setLayerMaskEnabled(id, false)
     }
 

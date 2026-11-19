@@ -3,6 +3,7 @@ package com.artflow.studio.data.repository
 import androidx.room.withTransaction
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.data.export.ArtflowPackage
+import com.artflow.studio.data.local.GrainStorage
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.local.dao.ProjectDao
 import com.artflow.studio.data.local.database.ArtFlowDatabase
@@ -152,6 +153,7 @@ class ProjectRepositoryImpl
         ): ProjectRepository.ImportedPackage {
             var importedId: Long? = null
             var completed = false
+            val grains = GrainStorage.ImportTransaction()
             try {
                 val outcome =
                     database.withTransaction {
@@ -173,7 +175,7 @@ class ProjectRepositoryImpl
                             "The destination already contains project data"
                         }
                         importedId = newId
-                        val result = storage.importProjectStream(newId, stream)
+                        val result = storage.importProjectStream(newId, stream, grains)
                         projectDao.updateProject(
                             project
                                 .copy(
@@ -191,12 +193,7 @@ class ProjectRepositoryImpl
                 completed = true
                 return outcome
             } finally {
-                val id = importedId
-                if (!completed && id != null) {
-                    withContext(NonCancellable + Dispatchers.IO) {
-                        if (projectDao.getProjectById(id) == null) storage.deleteProjectFiles(id)
-                    }
-                }
+                finishImportedPackage(importedId, completed, grains)
             }
         }
 
@@ -205,6 +202,7 @@ class ProjectRepositoryImpl
             val document = storage.decodePackagedDocument(requireNotNull(contents.files[ArtflowPackage.DOCUMENT]))
             var importedId: Long? = null
             var completed = false
+            val grains = GrainStorage.ImportTransaction()
             try {
                 val id =
                     database.withTransaction {
@@ -226,7 +224,7 @@ class ProjectRepositoryImpl
                             "The destination already contains project data"
                         }
                         importedId = newId
-                        storage.importProject(newId, contents.files)
+                        storage.importProject(newId, contents.files, grains)
                         projectDao.updateProject(
                             project
                                 .copy(
@@ -240,13 +238,23 @@ class ProjectRepositoryImpl
                 completed = true
                 return id
             } finally {
-                if (!completed) {
-                    importedId?.let { id ->
-                        withContext(NonCancellable + Dispatchers.IO) {
-                            if (projectDao.getProjectById(id) == null) storage.deleteProjectFiles(id)
-                        }
-                    }
-                }
+                finishImportedPackage(importedId, completed, grains)
+            }
+        }
+
+        private suspend fun finishImportedPackage(
+            projectId: Long?,
+            completed: Boolean,
+            grains: GrainStorage.ImportTransaction,
+        ) = withContext(NonCancellable + Dispatchers.IO) {
+            // Cancellation can arrive after Room commits. Retain assets for a committed row; if
+            // the query itself fails, leave them intact rather than guessing and breaking artwork.
+            var retain = true
+            try {
+                retain = completed || (projectId != null && projectDao.getProjectById(projectId) != null)
+                if (!retain && projectId != null) storage.deleteProjectFiles(projectId)
+            } finally {
+                if (retain) grains.commit() else grains.close()
             }
         }
 

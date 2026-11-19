@@ -480,6 +480,7 @@ class ProjectStorage
         suspend fun importProject(
             projectId: Long,
             files: Map<String, ByteArray>,
+            grainImport: GrainStorage.ImportTransaction? = null,
         ): CanvasDocument =
             withContext(ioDispatcher) {
                 val manifest = requireNotNull(files[DOCUMENT_NAME]) { "The artwork has no document" }
@@ -505,7 +506,7 @@ class ProjectStorage
                     writeAtomically(documentFile(projectId)) { it.write(manifest) }
                     val document = decodeDocument(documentFile(projectId), projectId)
                     referencedFiles(document).forEach { requireNotNull(readRaster(projectId, it)) }
-                    restoreGrainsAndAuditDependencies(dependenciesBytes, grainEntries, document)
+                    restoreGrainsAndAuditDependencies(dependenciesBytes, grainEntries, document, grainImport)
                     completed = true
                     document
                 } finally {
@@ -527,6 +528,7 @@ class ProjectStorage
         suspend fun importProjectStream(
             projectId: Long,
             contents: ArtflowPackage.StreamContents,
+            grainImport: GrainStorage.ImportTransaction? = null,
         ): ImportedPackageOutcome =
             withContext(ioDispatcher) {
                 val manifest = contents.readBytes(DOCUMENT_NAME, MAX_DOCUMENT_BYTES)
@@ -557,7 +559,7 @@ class ProjectStorage
                     val document = decodeDocument(documentFile(projectId), projectId)
                     referencedFiles(document).forEach { requireNotNull(readRaster(projectId, it)) }
                     val (missingFonts, missingGrains) =
-                        restoreGrainsAndAuditDependencies(dependenciesBytes, grainEntries, document)
+                        restoreGrainsAndAuditDependencies(dependenciesBytes, grainEntries, document, grainImport)
                     completed = true
                     ImportedPackageOutcome(document, missingFonts, missingGrains)
                 } finally {
@@ -575,17 +577,22 @@ class ProjectStorage
             dependenciesBytes: ByteArray?,
             grainEntries: Map<String, ByteArray>,
             document: CanvasDocument,
+            grainImport: GrainStorage.ImportTransaction?,
         ): Pair<List<String>, List<String>> {
             val grainDir = GrainStorage.directory(context.filesDir)
             val expectedGrainLength = CustomGrains.TILE * CustomGrains.TILE
-            grainEntries.forEach { (path, bytes) ->
-                val id = path.removePrefix("${ArtflowPackage.GRAINS_DIR}/").removeSuffix(GrainStorage.EXTENSION)
-                require(CustomGrains.isCustom(id) && bytes.size == expectedGrainLength) {
-                    "Invalid brush grain in artwork package: $path"
-                }
-                GrainStorage.save(grainDir, id, CustomGrains.Tile(CustomGrains.TILE, bytes))
-            }
+            // Neither a late invalid manifest nor a bad later tile may change global brush assets.
             val packagedDeps = dependenciesBytes?.let(ArtflowPackage::decodeDependencies)
+            val importedTiles =
+                grainEntries
+                    .map { (path, bytes) ->
+                        val id = path.removePrefix("${ArtflowPackage.GRAINS_DIR}/").removeSuffix(GrainStorage.EXTENSION)
+                        require(CustomGrains.isCustom(id) && bytes.size == expectedGrainLength) {
+                            "Invalid brush grain in artwork package: $path"
+                        }
+                        id to CustomGrains.Tile(CustomGrains.TILE, bytes)
+                    }
+                    .toMap()
             val documentDeps = collectDependencies(document)
             val fonts =
                 ((packagedDeps?.fonts ?: emptyList()) + documentDeps.fonts)
@@ -601,8 +608,16 @@ class ProjectStorage
                     .distinct()
             val missingGrains =
                 grainIds.filter { id ->
-                    CustomGrains.get(id) == null && !GrainStorage.exists(grainDir, id)
+                    id !in importedTiles && CustomGrains.get(id) == null && !GrainStorage.exists(grainDir, id)
                 }
+            if (grainImport != null) {
+                grainImport.install(grainDir, importedTiles)
+            } else {
+                GrainStorage.ImportTransaction().use { owned ->
+                    owned.install(grainDir, importedTiles)
+                    owned.commit()
+                }
+            }
             return missingFonts to missingGrains
         }
 

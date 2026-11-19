@@ -31,7 +31,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.File
-import java.io.IOException
 
 /**
  * Brings files into the gallery: pictures, Photoshop, Procreate and ArtFlow documents and 3D models become new
@@ -181,25 +180,20 @@ internal class GalleryImports(
         }
     }
 
-    // This UI boundary must report storage/provider failures while preserving coroutine cancellation.
-    @Suppress("TooGenericExceptionCaught")
     private suspend fun stagedArchive(
         uri: Uri,
         consume: suspend (File) -> Unit,
     ) {
-        try {
-            StagedImport.use(context.cacheDir, { context.contentResolver.openInputStream(uri) }, consume = consume)
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (failure: IllegalArgumentException) {
+        val failure =
+            runCatching {
+                StagedImport.use(context.cacheDir, { context.contentResolver.openInputStream(uri) }, consume = consume)
+            }.exceptionOrNull() ?: return
+        // This UI boundary reports storage/provider failures, but cancellation and VM errors must propagate.
+        if (failure is CancellationException) throw failure
+        if (failure is Error) throw failure
+        if (failure is IllegalArgumentException || failure is IllegalStateException) {
             say(failure.message ?: context.getString(R.string.galleryscreen_file_could_not_be_read))
-        } catch (failure: IllegalStateException) {
-            say(failure.message ?: context.getString(R.string.galleryscreen_file_could_not_be_read))
-        } catch (_: IOException) {
-            say(context.getString(R.string.galleryscreen_file_could_not_be_read))
-        } catch (_: SecurityException) {
-            say(context.getString(R.string.galleryscreen_file_could_not_be_read))
-        } catch (failure: Exception) {
+        } else {
             Timber.e(failure, "Gallery archive import failed")
             say(context.getString(R.string.galleryscreen_file_could_not_be_read))
         }

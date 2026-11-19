@@ -212,10 +212,14 @@ class CanvasModelInitializationTest {
                 mock(Context::class.java).also { `when`(it.filesDir).thenReturn(files) },
             )
         val document =
-            CanvasRepositoryImpl(storage, Dispatchers.Default) { staged ->
-                if (failPublication) throw IOException("Injected model publication failure")
-                staged.commit()
-            }
+            CanvasRepositoryImpl(
+                storage,
+                Dispatchers.Default,
+                publishModel = { staged ->
+                    if (failPublication) throw IOException("Injected model publication failure")
+                    staged.commit()
+                },
+            )
         val repository =
             object : CanvasRepository by document {
                 override suspend fun importModel(prepared: PreparedModelImport): Boolean {

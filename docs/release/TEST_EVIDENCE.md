@@ -7,6 +7,15 @@ must be recorded below with the source revision and workflow URL before claiming
 Local Android builds are unavailable in this session; actual Gradle and emulator execution uses
 GitHub Actions. Pending checks are not passes.
 
+| Integration revision | Run | Observed result |
+| --- | --- | --- |
+| `d2d407a` | [44451621348](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44451621348) | Build stopped at unit-test compilation: a legacy model-publication fixture's trailing lambda bound to the new budget argument. Fixed by naming the callback; no assertions removed. JVM tests, static analysis, and emulator execution were not reached. |
+
+The first run passed Python checks, workflow/secret/dependency checks, signing rejection, and
+reference-corpus/native-contract verification before compilation failed. Its logs remain available.
+The next integration revision also includes reviewed shared-grain rollback, layered-import
+preflight, composite-only fallback, and empty-linked-layer regressions; it needs its own full run.
+
 ## Historical evidence, independently inspected
 
 | Source | Run | Result and limits |

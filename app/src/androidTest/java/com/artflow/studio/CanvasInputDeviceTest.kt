@@ -520,6 +520,48 @@ class CanvasInputDeviceTest {
         }
 
     @Test
+    fun linkedEmptyLayersAreTransparentPeersAndCanOwnTheTransformControls() =
+        withCanvas(94) { canvas ->
+            val painted = repository.getActiveLayerId()
+            val original = PixelBuffer(64, 64).apply {
+                setUnchecked(20, 20, Color.RED)
+                setUnchecked(40, 40, Color.BLUE)
+            }
+            assertTrue(repository.setLayerPixels(painted, original, "Linked empty-layer fixture"))
+            val empty = repository.addLayer("Empty linked peer").id
+            assertNull(repository.layerPixels(empty))
+            assertTrue(repository.linkLayers(listOf(painted, empty)))
+            repository.setActiveLayer(painted)
+            canvas.setActiveLayerId(painted)
+            canvas.setEditorInput(brush.copy(tool = ToolType.MOVE))
+            val depth = repository.undoDepth
+            send(canvas, MotionEvent.ACTION_DOWN, Touch(1, 20f, 20f))
+            send(canvas, MotionEvent.ACTION_UP, Touch(1, 30f, 25f))
+            await { repository.undoDepth == depth + 1 }
+            assertEquals(Color.RED, image().getSafe(30, 25))
+            assertEquals(Color.BLUE, image().getSafe(50, 45))
+            assertTrue(requireNotNull(repository.layerPixels(empty)).pixels.all { it == 0 })
+            assertTrue(repository.undo())
+            assertArrayEquals(original.pixels, image().pixels)
+            assertNull(repository.layerPixels(empty))
+
+            repository.setActiveLayer(empty)
+            canvas.setActiveLayerId(empty)
+            var ready = false
+            canvas.onTransformQuadChanged = { ready = it != null }
+            canvas.setEditorInput(brush.copy(tool = ToolType.TRANSFORM, transformInterpolation = TransformQuad.Interpolation.NEAREST))
+            await { ready }
+            canvas.transformActiveLayer(rotation = 90f)
+            await { repository.undoDepth == depth + 1 }
+            assertEquals(Color.RED, image().getSafe(40, 20))
+            assertEquals(Color.BLUE, image().getSafe(20, 40))
+            assertTrue(requireNotNull(repository.layerPixels(empty)).pixels.all { it == 0 })
+            assertTrue(repository.undo())
+            assertArrayEquals(original.pixels, image().pixels)
+            assertNull(repository.layerPixels(empty))
+        }
+
+    @Test
     fun outlinedShapesHaveVisibleBordersAndPolygonStaysWithinDragBounds() =
         withCanvas(12) { canvas ->
             for (kind in listOf(ShapeKind.RECTANGLE, ShapeKind.ELLIPSE, ShapeKind.POLYGON)) {

@@ -1163,8 +1163,8 @@ class ArtFlowCanvasView
                 return
             }
             coroutineScope.launch {
-                val pixels = canvasRepository.layerPixels(layerId) ?: return@launch
                 val revision = canvasRepository.contentRevision
+                val pixels = canvasRepository.layerPixels(layerId)
                 val extra = companions.load(canvasRepository, layerId, selection)
                 if (extra == null) {
                     clearTransformSession()
@@ -1174,14 +1174,16 @@ class ArtFlowCanvasView
                 if (revision != canvasRepository.contentRevision || activeLayerId != layerId) return@launch
                 val bounds =
                     withContext(Dispatchers.Default) {
-                        TransformCompanions.bounds(LayerTransform.floatingBounds(pixels, selection), extra)
+                        TransformCompanions.bounds(pixels?.let { LayerTransform.floatingBounds(it, selection) }, extra)
                     }
                 if (bounds == null) {
                     clearTransformSession()
                     onStatusMessage?.invoke("Nothing to transform on this layer")
                     return@launch
                 }
-                val session = TransformSession(layerId, pixels, selection, bounds, Quad.fromBounds(bounds), revision, extra)
+                val size = canvasRepository.getCanvasSize()
+                val base = pixels ?: PixelBuffer(size.width, size.height)
+                val session = TransformSession(layerId, base, selection, bounds, Quad.fromBounds(bounds), revision, extra)
                 transformSession = session
                 publishTransformQuad()
                 onReady?.invoke(session)
@@ -1275,9 +1277,13 @@ class ArtFlowCanvasView
                         val placed =
                             canvasRepository.applyRasterEdits(ids, "Transform") { id, buffer ->
                                 val companion = session.companions.firstOrNull { it.layerId == id }
-                                val source = companion?.base ?: session.base
+                                val source = if (companion == null) session.base else companion.base
                                 val selection = if (companion == null) session.selection else null
-                                TransformQuad.renderShape(source, buffer, session.bounds, quad, mesh, selection, interpolation)
+                                if (source == null) {
+                                    buffer.clear()
+                                } else {
+                                    TransformQuad.renderShape(source, buffer, session.bounds, quad, mesh, selection, interpolation)
+                                }
                             }
                         if (placed) {
                             session.quad = quad
