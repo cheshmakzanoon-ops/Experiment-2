@@ -27,6 +27,7 @@ CLASSES = {
     "com.artflow.studio.EditorRenderingTest": "Presented GL pixels, context loss and redraw",
     "com.artflow.studio.ExportUiRegressionTest": "Export controls and offline privacy policy",
     "com.artflow.studio.data.PersistenceRegressionTest": "Saved rasters, frames, recovery and storage failures",
+    "com.artflow.studio.data.DocumentBoundaryDeviceTest": "Metadata rejection, saved-selection admission and bounded undo/redo with real storage",
     "com.artflow.studio.data.DatabaseMigrationDeviceTest": "Production Room upgrades, preserved artwork and recovery, rejected unsafe schemas",
     "com.artflow.studio.data.ExportDeviceTest": "Independent decoding and export/share isolation",
     "com.artflow.studio.NativeLibraryCompatibilityTest": "Real packaged native graphics library load",

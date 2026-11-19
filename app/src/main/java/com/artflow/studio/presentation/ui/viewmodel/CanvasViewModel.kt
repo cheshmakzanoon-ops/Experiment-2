@@ -254,6 +254,7 @@ class CanvasViewModel
                     refreshLayers()
                     refreshHistory()
                     refreshSelection()
+                    savedSelections.refresh()
                     startObserving()
                     startAutosave()
                 },
@@ -931,7 +932,7 @@ class CanvasViewModel
         /** Cut, copy, paste, clear and fill (Copy & Paste menu and layer options). */
         val clipboard = ClipboardController(canvasRepository, ::layerOp)
         val imports = CanvasImportController(canvasRepository, viewModelScope + editorErrors, ::notify, ::refreshLayers)
-        val savedSelections = SavedSelections(canvasRepository) { refreshSelection() }
+        val savedSelections = SavedSelections(canvasRepository, onFailure = ::notify) { refreshSelection() }
         val textLayers = TextLayerController(canvasRepository, ::layerOp)
         val layerBatch = LayerBatchController(canvasRepository, ::layerOp)
         val canvasOps = CanvasOpsController(canvasRepository, viewModelScope + editorErrors, ::notify, ::refreshUiStateSize)

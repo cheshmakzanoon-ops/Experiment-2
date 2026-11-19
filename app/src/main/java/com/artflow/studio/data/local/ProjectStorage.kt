@@ -43,7 +43,14 @@ class ProjectStorage
     constructor(
         @ApplicationContext private val context: Context,
         private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+        private val documentByteLimit: Long = MAX_DOCUMENT_BYTES,
     ) {
+        init {
+            // Tests may exercise the exact boundary with small documents; callers cannot widen the
+            // production format limit and create metadata that another reader would refuse.
+            require(documentByteLimit in 1..MAX_DOCUMENT_BYTES) { "Invalid project metadata limit" }
+        }
+
         // -----------------------------------------------------------------------------------------
         // Paths
         // -----------------------------------------------------------------------------------------
@@ -111,9 +118,10 @@ class ProjectStorage
             document: CanvasDocument,
         ): File =
             withContext(ioDispatcher) {
+                val bytes = encodeDocument(document)
                 val file = documentFile(projectId)
                 val previous = maxOf(file.lastModified(), autosaveFile(projectId).lastModified())
-                writeAtomically(file, previous) { out -> out.write(CanvasDocumentCodec.encode(document)) }
+                writeAtomically(file, previous) { out -> out.write(bytes) }
                 Timber.d("Saved project $projectId (v${document.version}, ${document.resolvedFrames().size} frames)")
                 file
             }
@@ -124,11 +132,22 @@ class ProjectStorage
             document: CanvasDocument,
         ): File =
             withContext(ioDispatcher) {
+                val bytes = encodeDocument(document)
                 val file = autosaveFile(projectId)
                 val previous = maxOf(file.lastModified(), documentFile(projectId).lastModified())
-                writeAtomically(file, previous) { out -> out.write(CanvasDocumentCodec.encode(document)) }
+                writeAtomically(file, previous) { out -> out.write(bytes) }
                 file
             }
+
+        private fun encodeDocument(document: CanvasDocument): ByteArray {
+            // Reject unreadable metadata before touching either committed manifest. In particular,
+            // compressed selection strings can still exceed the byte limit on detailed masks.
+            CanvasDocumentCodec.requireValidHeader(document)
+            CanvasDocumentCodec.requireValidStructure(document)
+            return CanvasDocumentCodec.encode(document).also {
+                require(it.size in 1..documentByteLimit) { "Project metadata is empty or too large" }
+            }
+        }
 
         suspend fun discardAutosave(projectId: Long) =
             withContext(ioDispatcher) {
@@ -160,9 +179,9 @@ class ProjectStorage
             file: File,
             projectId: Long,
         ): ByteArray {
-            require(file.length() in 1..MAX_DOCUMENT_BYTES) { "Project $projectId metadata is empty or too large" }
+            require(file.length() in 1..documentByteLimit) { "Project $projectId metadata is empty or too large" }
             return file.readBytes().also {
-                require(it.size in 1..MAX_DOCUMENT_BYTES) { "Project $projectId metadata is empty or too large" }
+                require(it.size in 1..documentByteLimit) { "Project $projectId metadata is empty or too large" }
             }
         }
 
@@ -509,7 +528,7 @@ class ProjectStorage
 
         /** The manifest of an `.artflow` package, checked before any project is created for it. */
         fun decodePackagedDocument(bytes: ByteArray): CanvasDocument {
-            require(bytes.size in 1..MAX_DOCUMENT_BYTES) { "The artwork's document is empty or too large" }
+            require(bytes.size in 1..documentByteLimit) { "The artwork's document is empty or too large" }
             val document = CanvasDocumentCodec.decode(bytes.decodeToString())
             CanvasDocumentCodec.requireValidHeader(document)
             return document
@@ -574,7 +593,7 @@ class ProjectStorage
             grainImport: GrainStorage.ImportTransaction? = null,
         ): ImportedPackageOutcome =
             withContext(ioDispatcher) {
-                val manifest = contents.readBytes(DOCUMENT_NAME, MAX_DOCUMENT_BYTES)
+                val manifest = contents.readBytes(DOCUMENT_NAME, documentByteLimit)
                 val destination = ownedPath("projects/$projectId")
                 check(!Files.exists(destination.toPath(), LinkOption.NOFOLLOW_LINKS)) { "The destination already contains project data" }
                 check(destination.mkdirs()) { "Cannot create the imported project directory" }
@@ -877,7 +896,7 @@ class ProjectStorage
             MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it.toInt() and 255) }
 
         companion object {
-            private const val MAX_DOCUMENT_BYTES = 32L * 1024 * 1024
+            private const val MAX_DOCUMENT_BYTES = ArtflowPackage.MAX_DOCUMENT_BYTES
             private const val MAX_RASTER_BYTES = 192L * 1024 * 1024
             const val MAX_FRAMES = CanvasDocumentCodec.MAX_FRAMES
             const val MAX_LAYERS = CanvasDocumentCodec.MAX_LAYERS

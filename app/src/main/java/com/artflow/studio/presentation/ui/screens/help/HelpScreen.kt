@@ -48,7 +48,8 @@ object Tutorials {
             TutorialStep(
                 "Undo with a gesture",
                 "A quick two-finger tap undoes and a three-finger tap redoes; hold the fingers down to keep " +
-                    "undoing or redoing. A four-finger tap hides the " +
+                    "undoing or redoing. Available undo steps depend on artwork size and device memory; " +
+                    "some large artworks may have no undo available. A four-finger tap hides the " +
                     "interface, a three-finger swipe down opens Copy & Paste and a three-finger scrub clears the layer. " +
                     "Each of these can be switched off in Actions > Prefs.",
                 "gesture.undo",
@@ -83,7 +84,9 @@ object Tutorials {
                 "Fill, ColorDrop and selections",
                 "Drag the colour swatch onto the canvas to fill an area, then slide along the bar to change " +
                     "the threshold. Selections can be automatic, freehand, rectangular or elliptical; save them for later, " +
-                    "fill them with colour, or copy and paste them as a new layer.",
+                    "fill them with colour, or copy and paste them as a new layer. Save & Load keeps selections with " +
+                    "the artwork. If adding one exceeds a memory or storage limit, your existing saved selections " +
+                    "stay unchanged. Remove a saved selection or use a smaller canvas to make room.",
                 "tool.fill",
             ),
             TutorialStep(

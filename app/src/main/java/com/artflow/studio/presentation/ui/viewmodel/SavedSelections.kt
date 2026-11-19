@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
  */
 class SavedSelections(
     private val repository: CanvasRepository,
+    private val onFailure: (String) -> Unit = {},
     private val onRestored: () -> Unit,
 ) {
     private val _saved = MutableStateFlow(repository.savedSelections())
@@ -24,18 +25,22 @@ class SavedSelections(
         _saved.value = repository.savedSelections()
     }
 
-    /** Keeps a copy of the current selection; false when nothing is selected. */
+    /** Keeps the repository's owned selection copy; false when absent or rejected by its budget. */
     fun save(): Boolean {
-        val mask = repository.selection()?.takeIf { it.isActive() } ?: return false
-        persist((_saved.value + mask.copy()).takeLast(MAX_SAVED))
-        return true
+        val mask = repository.selection()?.takeIf { it.isActive() }
+        if (mask == null) {
+            onFailure("Make a selection first")
+            return false
+        }
+        return persist((_saved.value + mask).takeLast(MAX_SAVED))
     }
 
     fun load(index: Int) {
         val mask = _saved.value.getOrNull(index) ?: return
         val size = repository.getCanvasSize()
         if (mask.width != size.width || mask.height != size.height) return
-        repository.setSelection(mask.copy())
+        // The repository owns its incoming copy; the slot remains unchanged by later live edits.
+        repository.setSelection(mask)
         onRestored()
     }
 
@@ -49,11 +54,16 @@ class SavedSelections(
         persist(emptyList())
     }
 
-    /** One place writes both the visible slots and the document copy, so they cannot disagree. */
-    private fun persist(masks: List<SelectionMask>) {
-        _saved.value = masks
-        repository.setSavedSelections(masks)
-    }
+    /** Publish slots only after the document accepts them, retaining both views on rejection. */
+    private fun persist(masks: List<SelectionMask>): Boolean =
+        try {
+            repository.setSavedSelections(masks)
+            _saved.value = masks
+            true
+        } catch (rejected: IllegalArgumentException) {
+            onFailure(rejected.message?.takeIf { it.isNotBlank() } ?: "Saved selections could not be updated")
+            false
+        }
 
     private companion object {
         const val MAX_SAVED = 8

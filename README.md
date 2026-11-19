@@ -80,6 +80,13 @@ backup, codec, and CI hardening from [PR #40](https://github.com/cheshmakzanoon-
   If no primary preview can be displayed, the editor reports the failure and cancels/blocks canvas
   pointer edits until a preview is available again. Save and navigation remain available. This
   fallback does not remove CPU memory limits or qualify large canvases for interactive performance.
+- **Undo and saved selections:** undo and redo share a limit of 30 retained states and a separate
+  memory allowance. The number of available steps depends on artwork size and device memory;
+  some large artworks can have no undo available. Adding a saved selection must fit both memory
+  and document-storage limits. Rejection leaves existing slots unchanged. Readable older documents
+  keep their compressed saved selections, subject to the device's memory limit, and those slots
+  can still be removed. See the [selection memory boundaries](docs/verification/selection-memory.md)
+  for the exact allowances and regression coverage.
 - **Photo insertion:** image picker and camera decoding can downsample to fit the requested size
   and the device's available memory. A bounded copy supplies both metadata and decoding; oversized
   or unreadable input is rejected with an import error. This sampling applies to inserted photos,

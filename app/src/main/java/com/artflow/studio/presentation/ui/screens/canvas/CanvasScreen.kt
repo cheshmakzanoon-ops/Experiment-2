@@ -2150,7 +2150,7 @@ private fun ContextToolbar(
                         onDeselect = viewModel::clearSelection,
                         onColorFill = { viewModel.clipboard.fill(input.brushColor) },
                         onSave = {
-                            if (!viewModel.savedSelections.save()) viewModel.notify("Make a selection first")
+                            viewModel.savedSelections.save()
                         },
                         onLoad = viewModel.savedSelections::load,
                         onDelete = viewModel.savedSelections::delete,

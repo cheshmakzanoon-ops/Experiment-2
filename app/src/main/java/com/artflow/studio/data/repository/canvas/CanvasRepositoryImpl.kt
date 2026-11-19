@@ -380,6 +380,16 @@ class CanvasRepositoryImpl
             require(rasterBudget.allows(document.width, document.height, rasterCount)) {
                 "This artwork needs more memory than this device provides"
             }
+            rasterBudget.requireSavedSelectionsFit(document.width, document.height, document.savedSelections.size)
+            // Decode the complete admitted selection set before publishing any live document state.
+            // Invalid legacy slots are ignored as before; their declared count still reserves memory.
+            val decodedSelections =
+                withContext(Dispatchers.Default) {
+                    document.savedSelections.mapNotNull { encoded ->
+                        coroutineContext.ensureActive()
+                        SelectionMaskCodec.decode(encoded, document.width, document.height)
+                    }
+                }
             val decodedFrames =
                 frames
                     .map { frame ->
@@ -441,9 +451,7 @@ class CanvasRepositoryImpl
             // Save & Load selections travel with the document; unreadable slots are dropped rather
             // than shown as slots that cannot be loaded.
             savedSelectionSlots.clear()
-            document.savedSelections.forEach { encoded ->
-                SelectionMaskCodec.decode(encoded, canvasWidth, canvasHeight)?.let { savedSelectionSlots += it }
-            }
+            savedSelectionSlots += decodedSelections
             activeStrokes.clear()
             cacheableStrokes.clear()
             synchronized(liveLock) { liveStrokes.clear() }
@@ -1342,13 +1350,31 @@ class CanvasRepositoryImpl
 
         override fun setSavedSelections(masks: List<SelectionMask>) {
             val usable = masks.filter { it.width == canvasWidth && it.height == canvasHeight }
+            rasterBudget.requireSavedSelectionsFit(canvasWidth, canvasHeight, usable.size)
             if (usable.size == savedSelectionSlots.size &&
                 usable.indices.all { usable[it].coverage.contentEquals(savedSelectionSlots[it].coverage) }
             ) {
                 return
             }
+            // Readable legacy documents may contain highly compressible slots above the new
+            // worst-case storage allowance. Let users remove those slots without permitting a
+            // smaller but unrelated, potentially incompressible replacement to bypass admission.
+            val unmatched = savedSelectionSlots.toMutableList()
+            val removalOnly =
+                usable.size < savedSelectionSlots.size &&
+                    usable.all { candidate ->
+                        val index = unmatched.indexOfFirst { it.coverage.contentEquals(candidate.coverage) }
+                        if (index < 0) {
+                            false
+                        } else {
+                            unmatched.removeAt(index)
+                            true
+                        }
+                    }
+            if (!removalOnly) rasterBudget.requireSavedSelectionEncodingFits(canvasWidth, canvasHeight, usable.size)
+            val owned = usable.map { it.copy() }
             savedSelectionSlots.clear()
-            savedSelectionSlots += usable.map { it.copy() }
+            savedSelectionSlots += owned
             // Saving, loading or deleting a slot changes the document, so it must be written.
             dirty = true
         }
@@ -3896,6 +3922,7 @@ class CanvasRepositoryImpl
             historyMark++
             redoStack.addLast(currentSnapshot())
             restore(snapshot)
+            trimHistory(redoStack)
             dirty = true
             emitAsync(CanvasInvalidationEvent.Full)
             return true
@@ -3907,6 +3934,7 @@ class CanvasRepositoryImpl
             historyMark++
             undoStack.addLast(currentSnapshot())
             restore(snapshot)
+            trimHistory(undoStack)
             dirty = true
             emitAsync(CanvasInvalidationEvent.Full)
             return true
@@ -3915,33 +3943,46 @@ class CanvasRepositoryImpl
         private fun pushUndo() {
             undoPushes++
             historyMark++
-            undoStack.addLast(currentSnapshot())
-            while (undoStack.size > MAX_HISTORY) undoStack.removeFirst()
-            // Trim by memory as well: a 4K layer is 32 MB, so 30 raster steps would be ~1 GB.
-            while (undoStack.size > 1 && rasterBytes(undoStack) > minOf(MAX_RASTER_HISTORY_BYTES, Runtime.getRuntime().maxMemory() / 4)) {
-                undoStack.removeFirst()
-            }
             redoStack.clear()
+            undoStack.addLast(currentSnapshot())
+            trimHistory(undoStack)
             // Any buffer captured by a snapshot is now shared and must be copied before the next
             // in-place edit (masks are painted in place; layer pixels clone on `beginRasterEdit`).
             allLayers().forEach { it.maskOwned = false }
         }
 
-        private fun rasterBytes(stack: ArrayDeque<Snapshot>): Long {
-            val counted = java.util.IdentityHashMap<PixelBuffer, Boolean>()
-            var total = 0L
-            stack.forEach { snapshot ->
-                snapshot.frames.forEach { frame ->
-                    frame.layers.forEach { layer ->
-                        listOfNotNull(layer.raster, layer.mask).forEach { buffer ->
-                            if (counted.put(buffer, true) == null) {
-                                total += buffer.pixels.size.toLong() * 4
-                            }
+        /** Keeps the nearest states in either direction, preferring the inverse of the last action. */
+        private fun trimHistory(preferred: ArrayDeque<Snapshot>) {
+            while (undoStack.size + redoStack.size > MAX_HISTORY || historyBufferBytes() > rasterBudget.historyBytes) {
+                val discard =
+                    when {
+                        undoStack.isEmpty() -> redoStack
+                        redoStack.isEmpty() -> undoStack
+                        undoStack.size > redoStack.size -> undoStack
+                        redoStack.size > undoStack.size -> redoStack
+                        preferred === undoStack -> redoStack
+                        else -> undoStack
+                    }
+                // A complete snapshot may exceed the allowance by itself. In that case history
+                // is unavailable for this edit; keeping one oversized entry would defeat the cap.
+                discard.removeFirst()
+            }
+        }
+
+        private fun historyBufferBytes(): Long {
+            val accounting = CanvasBufferAccounting()
+            sequenceOf(undoStack, redoStack)
+                .flatten()
+                .forEach { snapshot ->
+                    accounting.includeSelection(snapshot.selection)
+                    snapshot.frames.forEach { frame ->
+                        frame.layers.forEach { layer ->
+                            accounting.includeRaster(layer.raster)
+                            accounting.includeRaster(layer.mask)
                         }
                     }
                 }
-            }
-            return total
+            return accounting.bytes
         }
 
         private data class FrameSnapshot(
@@ -4029,7 +4070,8 @@ class CanvasRepositoryImpl
             pendingEdits.clear()
             damageTrackedSessions.clear()
             pendingSelection = null
-            activeSelection = snapshot.selection?.copy()
+            // Selection snapshots are immutable internally; public read/write boundaries copy.
+            activeSelection = snapshot.selection
             activeStrokes.clear()
             cacheableStrokes.clear()
             synchronized(liveLock) { liveStrokes.clear() }
@@ -4438,13 +4480,6 @@ class CanvasRepositoryImpl
             private const val OPACITY_MERGE_MS = 1_500L
             private const val EDIT_MERGE_MS = 1_500L
             private const val TEXT_LAYER_NAME = 32
-
-            /**
-             * Cap on the pixel memory the undo stack may hold (192 MB). Beyond this the oldest steps
-             * are dropped: keeping an artist's whole session of 4K layer snapshots in RAM is not
-             * possible on a tablet, and silently failing to allocate is worse than a shorter history.
-             */
-            private const val MAX_RASTER_HISTORY_BYTES = 192L * 1024 * 1024
 
             /** Pixel content is written as a single file per layer; undo keeps versions in memory. */
             private const val RASTER_VERSION = 1
