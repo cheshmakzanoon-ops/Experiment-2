@@ -93,13 +93,16 @@ class DocumentBoundaryDeviceTest {
     fun rejectedSelectionMemoryAndStorageBudgetsKeepVisibleAndPersistedSlots() =
         runBlocking(Dispatchers.Main) {
             openAndPaint(Color.RED)
-            repository.setSavedSelections(listOf(mask(11)))
-            repository.saveCanvas(projectId)
-
-            assertRejectedSlot(CanvasRasterBudget(4L * 1024), CanvasRasterBudget.SAVED_SELECTION_LIMIT_MESSAGE)
+            // Admit the canvas's six working planes, fit three saved masks, then reject a fourth.
+            assertRejectedSlot(
+                CanvasRasterBudget(HEAP_BYTES),
+                CanvasRasterBudget.SAVED_SELECTION_LIMIT_MESSAGE,
+                listOf(11, 12, 13),
+            )
             assertRejectedSlot(
                 CanvasRasterBudget(512L * 1024, savedSelectionMetadataBytes = 400),
                 CanvasRasterBudget.SAVED_SELECTION_METADATA_LIMIT_MESSAGE,
+                listOf(11),
             )
         }
 
@@ -139,11 +142,14 @@ class DocumentBoundaryDeviceTest {
     private suspend fun assertRejectedSlot(
         budget: CanvasRasterBudget,
         message: String,
+        values: List<Int>,
     ) {
+        repository.setSavedSelections(values.map(::mask))
+        repository.saveCanvas(projectId)
         reopen(budget)
         val failures = mutableListOf<String>()
         val slots = SavedSelections(repository, onFailure = failures::add) {}
-        assertEquals(1, slots.saved.value.size)
+        assertSlotValues(values, slots.saved.value)
         repository.setSelection(mask(22))
         val revision = repository.contentRevision
         val committed =
@@ -154,20 +160,22 @@ class DocumentBoundaryDeviceTest {
         assertFalse(slots.save())
         assertEquals(listOf(message), failures)
         assertEquals(revision, repository.contentRevision)
-        assertEquals(1, slots.saved.value.size)
-        assertArrayEquals(
-            mask(11).coverage,
-            slots.saved.value
-                .single()
-                .coverage,
-        )
-        assertArrayEquals(mask(11).coverage, repository.savedSelections().single().coverage)
+        assertSlotValues(values, slots.saved.value)
+        assertSlotValues(values, repository.savedSelections())
         assertArrayEquals(committed, storage.documentFile(projectId).readBytes())
 
         repository.saveCanvas(projectId)
         reopen(budget)
-        assertArrayEquals(mask(11).coverage, repository.savedSelections().single().coverage)
+        assertSlotValues(values, repository.savedSelections())
         assertPixels(Color.RED)
+    }
+
+    private fun assertSlotValues(
+        expected: List<Int>,
+        actual: List<SelectionMask>,
+    ) {
+        assertEquals(expected.size, actual.size)
+        expected.zip(actual).forEach { (value, selection) -> assertArrayEquals(mask(value).coverage, selection.coverage) }
     }
 
     private fun assertNavigationBudget(undoing: Boolean) {
