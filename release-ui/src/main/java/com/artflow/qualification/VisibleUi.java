@@ -4,6 +4,7 @@ import android.app.Instrumentation;
 import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.os.SystemClock;
+import android.util.Log;
 import android.view.accessibility.AccessibilityNodeInfo;
 import androidx.test.uiautomator.By;
 import androidx.test.uiautomator.BySelector;
@@ -12,7 +13,6 @@ import androidx.test.uiautomator.UiDevice;
 import androidx.test.uiautomator.UiObject2;
 import androidx.test.uiautomator.Until;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 /** Bounded operations against the visible accessibility tree, without production classes or state. */
@@ -42,10 +42,24 @@ final class VisibleUi {
         for (Direction direction : new Direction[]{Direction.DOWN, Direction.UP}) {
             for (int attempt = 0; attempt < 12; attempt++) {
                 List<UiObject2> candidates = device.findObjects(By.pkg(APP).scrollable(true));
-                candidates.removeIf(node -> node.getVisibleBounds().height() < device.getDisplayHeight() / 4);
-                if (candidates.isEmpty()) break;
-                candidates.sort(Comparator.comparingInt((UiObject2 node) -> node.getVisibleBounds().height()).reversed());
-                boolean more = candidates.get(0).scroll(direction, 0.65f);
+                AccessibilityNodeInfo.AccessibilityAction action = direction == Direction.DOWN
+                        ? AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD
+                        : AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_BACKWARD;
+                // A pointer swipe can begin on an embedded slider and never scroll its parent.
+                // Use the visible container's own advertised accessibility action instead.
+                boolean more = AccessibleScroll.request(candidates, node -> node.getVisibleBounds().height(),
+                        device.getDisplayHeight() / 4, action,
+                        (node, requested) -> {
+                            boolean advertised = node.getAccessibilityNodeInfo().getActionList().contains(requested);
+                            Log.i("ArtFlowQualification", "Scroll " + direction + " in " + node.getClassName()
+                                    + " " + node.getVisibleBounds() + "; advertised=" + advertised);
+                            return advertised;
+                        },
+                        (node, requested) -> {
+                            boolean accepted = node.getAccessibilityNodeInfo().performAction(requested.getId());
+                            Log.i("ArtFlowQualification", "Scroll " + direction + "; accepted=" + accepted);
+                            return accepted;
+                        });
                 device.waitForIdle(1_000);
                 present = device.findObject(target);
                 if (present != null && !present.getVisibleBounds().isEmpty()) return present;

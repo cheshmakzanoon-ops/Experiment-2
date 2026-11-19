@@ -1,4 +1,4 @@
-"""Exercise the release driver's real Java resolver using retained Settings hierarchy rows.
+"""Exercise the release driver's Java accessibility helpers using retained Settings evidence.
 
 Requires the JDK 17 already provisioned by Android CI. No Android SDK, emulator,
 Gradle, network resolution, substituted driver implementation, or retry is used.
@@ -35,13 +35,15 @@ class VisibleUiToggleTests(unittest.TestCase):
         subprocess.run([
             java_tool("javac"), "--release", "17", "-d", str(cls.classes),
             str(ROOT / "release-ui/src/main/java/com/artflow/qualification/AccessibleToggle.java"),
+            str(ROOT / "release-ui/src/main/java/com/artflow/qualification/AccessibleScroll.java"),
             str(FIXTURES / "AccessibleToggleRegression.java"),
+            str(FIXTURES / "AccessibleScrollRegression.java"),
         ], check=True, text=True, capture_output=True, timeout=30)
 
-    def run_case(self, name):
+    def run_case(self, name, regression="AccessibleToggleRegression", fixture="settings-checkable-rows.xml", extra=()):
         result = subprocess.run([
-            self.java, "-cp", str(self.classes), "com.artflow.qualification.AccessibleToggleRegression",
-            name, str(FIXTURES / "settings-checkable-rows.xml"),
+            self.java, "-cp", str(self.classes), "com.artflow.qualification." + regression,
+            name, str(FIXTURES / fixture), *extra,
         ], text=True, capture_output=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(result.stdout.strip(), "PASS " + name)
@@ -69,6 +71,28 @@ class VisibleUiToggleTests(unittest.TestCase):
 
     def test_missing_label_cannot_select_a_control(self):
         self.run_case("missing-label")
+
+    def scroll_case(self, name):
+        self.run_case(name, "AccessibleScrollRegression", "settings-scroll-with-slider.xml",
+                      (str(FIXTURES / "settings-scroll-original-log.txt"),))
+
+    def test_retained_swipe_hits_slider_but_scroll_action_targets_the_container_once(self):
+        self.scroll_case("scroll-retained-slider")
+
+    def test_backward_scroll_action_keeps_its_direction_and_container(self):
+        self.scroll_case("scroll-backward")
+
+    def test_unadvertised_scroll_action_is_never_sent(self):
+        self.scroll_case("scroll-unadvertised")
+
+    def test_rejected_scroll_action_is_not_retried_or_redirected(self):
+        self.scroll_case("scroll-rejected")
+
+    def test_short_horizontal_strip_cannot_capture_vertical_navigation(self):
+        self.scroll_case("scroll-short")
+
+    def test_missing_scroll_container_causes_no_action(self):
+        self.scroll_case("scroll-empty")
 
 
 if __name__ == "__main__":

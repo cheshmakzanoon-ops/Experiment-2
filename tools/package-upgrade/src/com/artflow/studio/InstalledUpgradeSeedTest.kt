@@ -156,15 +156,16 @@ class InstalledUpgradeSeedTest {
                     writeText(report.toString(2))
                 }
             }
-        val diagnostics =
+        val treeCapture =
             runCatching {
-                File(output, "old-ui-final-tree.txt").writeText(compose.onRoot(useUnmergedTree = true).printToString())
-                TestEvidence.screenshot("old-ui-final.png")
+                File(output, "old-ui-final-tree.txt")
+                    .writeText(compose.onAllNodes(isRoot(), useUnmergedTree = true).printToString(maxDepth = Int.MAX_VALUE))
             }.exceptionOrNull()
+        val screenshotCapture = runCatching { TestEvidence.screenshot("old-ui-final.png") }.exceptionOrNull()
         // Closing the Activity may request another legitimate lifecycle autosave. The host
         // freezes after this test/process finishes, and preserves that actual final state.
         val closing = runCatching { scenario.close() }.exceptionOrNull()
-        val errors = listOfNotNull(attempt.exceptionOrNull(), diagnostics, closing)
+        val errors = listOfNotNull(attempt.exceptionOrNull(), treeCapture, screenshotCapture, closing)
         if (errors.isNotEmpty()) {
             errors.drop(1).forEach(errors.first()::addSuppressed)
             throw errors.first()
@@ -226,15 +227,17 @@ class InstalledUpgradeSeedTest {
                     abs(it.boundsInRoot.width - size) < 2f &&
                     abs(it.boundsInRoot.height - size) < 2f
             }
-        File(TestEvidence.directory(), "old-ui-before-colour-tree.txt").writeText(compose.onRoot(useUnmergedTree = true).printToString())
+        File(TestEvidence.directory(), "old-ui-before-colour-tree.txt")
+            .writeText(compose.onAllNodes(isRoot(), useUnmergedTree = true).printToString(maxDepth = Int.MAX_VALUE))
         compose.onNode(hasClickAction() and chip, useUnmergedTree = true).performClick()
         compose.onNodeWithText("Colours").assertIsDisplayed()
         compose.onNodeWithText("Value").performScrollTo().performClick()
-        compose
-            .onNodeWithText("Hex")
+        // The historical mode chip also says Hex; only the field can replace text and commit IME input.
+        val hex = compose.onNode(hasText("Hex") and hasSetTextAction() and hasPerformImeAction())
+        hex
             .performScrollTo()
             .performTextReplacement("AA2211")
-        compose.onNodeWithText("Hex").performImeAction()
+        hex.performImeAction()
         closeSoftKeyboard()
         compose.waitUntil(TIMEOUT) { runBlocking { COLOR in settings.settings.first().recentColors } }
         compose.onNodeWithText("Save as palette").performScrollTo().performClick()

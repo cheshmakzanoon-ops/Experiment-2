@@ -1,0 +1,3 @@
+11-19 16:56:36.661  2237  2366 D UiObject2: Scrolling down (bounds=Rect(32, 140 - 288, 564), percent=0.650000) at 1500px/s.
+11-19 16:56:36.661  2237  2366 D UiDevice: Performing action [[Pause(point=Point(160, 564), duration=0ms), Move(start=Point(160, 564), end=Point(160, 289), duration=183ms), Pause(point=Point(160, 289), duration=250ms)]] and waiting 1000ms for EventCondition[scrollFinished=DOWN].
+11-19 16:56:38.400  2237  2366 I UiObject2: No scroll event received after scroll.

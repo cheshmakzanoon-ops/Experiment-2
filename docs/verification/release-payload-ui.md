@@ -112,6 +112,56 @@ package boundaries, hidden labels, and missing labels. These host checks establi
 the selection repair; the full ordinary-release workflow still requires a fresh
 passing attempt on the final source revision.
 
+### Subsequent scroll-action repair
+
+[Run 44570304847](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44570304847)
+included the parent-row resolver and passed all 31 then-current host checks, the
+ordinary-release build, and disposable-signing/payload preparation. Its sole UI
+attempt still failed before artwork creation: the exact **Stylus only** label was
+never brought into view. The branch head was
+`0c344841fbc768ff320e138f92a74a17ab27a53f`; the actual PR checkout was
+`bb2e931859b099620c715a785050183b2b7a02f1`, tree
+`b45e9e46bebaa0cef952fcf0b3b92aa31e56afec`.
+
+Artifact `14555205805`, `release-payload-ui-api-36-44570304847-attempt-1`, is
+30,079,911 bytes. Its independently checked SHA-256 matches the provider digest
+`383fae4a4458eaa228d3ffa7bf95af97e7f82cbbdd314ffa4a8f3c9cff1ef4c9`.
+The original log records a downward pointer gesture starting at `(160, 564)`;
+the captured interface-scale slider occupies `[6, 561]` through `[314, 605]`.
+No scroll event followed. The driver then tried upward at the top of the page,
+received no scroll event, and exhausted the unchanged target deadline. The
+gesture/slider overlap and failed scroll are observed facts; the new approach
+removes that dependency on child gesture handling.
+
+Scrolling now uses the selected visible application container's advertised
+`ACTION_SCROLL_FORWARD` or `ACTION_SCROLL_BACKWARD` accessibility action.
+The helper keeps the original minimum-height/largest-container selection and
+performs at most one action per step. An unadvertised or rejected action is not
+retried on another container. Direction, container class/bounds, advertisement,
+and acceptance are logged. The existing maximum of 12 steps per direction and
+15-second target deadline are unchanged. Settings, new-artwork controls, text
+fields, and export/result navigation all use this helper; only the actual canvas
+painting step retains a pointer stroke.
+
+Six additional host cases execute the actual Java container/action helper against
+reduced observed scroll/slider nodes and three unchanged original log lines. They
+cover the recorded overlap, correct backward dispatch, unsupported/rejected
+actions, short horizontal strips, and missing containers. Together with the eight
+toggle cases and 23 existing evidence-verifier cases, all 37 host cases pass; all
+five driver Java sources compile against API 36 and the pinned AndroidX artifacts.
+
+The new failure hierarchy SHA-256 is
+`94b0e0f76f40e87b483a89aef45ef3027ab4029850b7f4294a27e75ca825d3b8`;
+the failure PNG SHA-256 is
+`508e788a99c1f9ec7927710bcae3c00e8f37609aba1b1f60d1f3b345b094d5a2`.
+Independent inspection of the downloaded evidence validated the exact source
+commit/tree, all 153 unchanged release payload entries, both pulled installed APKs,
+official signature verification, disposable certificate identity, and 1,770 renamed
+application classes with normal release shrinker rules. It still rejects the
+original failed runtime result. Neither this repair nor those build/identity checks
+qualifies paint/save, process death, chooser grants, or pixel preservation; those
+still require the complete ordinary-release workflow to pass on the final source.
+
 For a clean checkout and a fresh local disposable emulator:
 
 ```bash

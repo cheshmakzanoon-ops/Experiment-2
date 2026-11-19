@@ -1,19 +1,26 @@
 package com.artflow.studio
 
+import android.graphics.Rect
 import android.os.SystemClock
+import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.Window
+import android.view.accessibility.AccessibilityNodeInfo
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.OnBackPressedDispatcher
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.platform.ViewRootForTest
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.test.core.app.ActivityScenario
@@ -21,6 +28,7 @@ import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.matcher.RootMatchers.isDialog
 import androidx.test.espresso.matcher.ViewMatchers
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.domain.model.settings.ThemeMode
 import com.artflow.studio.domain.repository.ProjectRepository
@@ -34,11 +42,14 @@ import dagger.hilt.android.testing.HiltAndroidTest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 import javax.inject.Inject
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -153,11 +164,7 @@ class ArtworkWorkflowTest {
         compose.onNodeWithText("Brush studio").assertIsDisplayed()
         selectFineLiner()
         TestEvidence.screenshot("artwork-workflow-brush-studio-ready.png")
-        compose
-            .onNodeWithText("Drawing pad")
-            .assertIsDisplayed()
-            .performClick()
-            .assertIsSelected()
+        tapDrawingPadThroughWindow()
         compose
             .onNodeWithTag("brush-practice-pad")
             .assertIsDisplayed()
@@ -165,6 +172,7 @@ class ArtworkWorkflowTest {
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "1 test strokes; not part of artwork"))
         assertArrayEquals("Practice must never paint the real document", expectedPixels, pixels())
         assertEquals(depth, runBlocking(Dispatchers.Main) { canvas.undoDepth })
+        TestEvidence.screenshot("artwork-workflow-brush-practice.png")
         compose.onNodeWithContentDescription("Cancel brush changes").performClick()
         compose.onNodeWithContentDescription("Smudge").assertIsOn()
         assertArrayEquals(expectedPixels, pixels())
@@ -195,6 +203,210 @@ class ArtworkWorkflowTest {
             ready
         }
         compose.waitForIdle()
+    }
+
+    /**
+     * Exercise one physical touch through the Android window, retaining the event route and geometry.
+     * Compose's direct View dispatch left this visible tab unselected even after IME readiness; its
+     * cause is not established. This is one original OS touch, never a fallback or a semantic click.
+     */
+    private fun tapDrawingPadThroughWindow() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val events = JSONArray()
+        val receipt =
+            JSONObject()
+                .put("schemaVersion", 1)
+                .put("route", "UiAutomation.injectInputEvent")
+                .put("targetText", "Drawing pad")
+                .put("targetRole", "Tab")
+                .put("attemptToken", InstrumentationRegistry.getArguments().getString("artflowApkEvidenceToken"))
+                .put("events", events)
+        var window: Window? = null
+        var originalCallback: Window.Callback? = null
+        var failure: Throwable? = null
+        try {
+            val tab = compose.onNode(hasText("Drawing pad") and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab))
+            tab.assertIsDisplayed().assertIsEnabled().assertIsNotSelected()
+            val node = tab.fetchSemanticsNode()
+            val root = requireNotNull(node.root as? ViewRootForTest).view
+            val origin = IntArray(2)
+            val bounds = node.boundsInRoot
+            instrumentation.runOnMainSync {
+                root.getLocationOnScreen(origin)
+                val inWindow = IntArray(2).also(root::getLocationInWindow)
+                receipt.put("rootOnScreen", JSONArray(origin.toList()))
+                receipt.put("rootInWindow", JSONArray(inWindow.toList()))
+                receipt.put("boundsInRoot", JSONArray(listOf(bounds.left, bounds.top, bounds.right, bounds.bottom)))
+                var parent: View? = root
+                while (parent != null && parent !is DialogWindowProvider) parent = parent.parent as? View
+                window = requireNotNull(parent as? DialogWindowProvider) { "The tab is not in a Dialog window" }.window
+            }
+            val expected = listOf(bounds.left + origin[0], bounds.top + origin[1], bounds.right + origin[0], bounds.bottom + origin[1])
+            receipt.put("expectedScreenBounds", JSONArray(expected))
+            val observed = drawingPadScreenBounds(expected, receipt)
+            receipt.put("accessibilityScreenBounds", JSONArray(listOf(observed.left, observed.top, observed.right, observed.bottom)))
+            val actual = listOf(observed.left, observed.top, observed.right, observed.bottom)
+            assertTrue(
+                "Compose and accessibility disagree on the tab's screen bounds: $receipt",
+                expected.zip(actual).all { (a, b) -> abs(a - b) <= 1f },
+            )
+            val x = observed.exactCenterX()
+            val y = observed.exactCenterY()
+            receipt.put("screenPoint", JSONArray(listOf(x, y)))
+            instrumentation.runOnMainSync {
+                val delegate = requireNotNull(requireNotNull(window).callback)
+                originalCallback = delegate
+                requireNotNull(window).callback =
+                    object : Window.Callback by delegate {
+                        override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+                            val observation =
+                                JSONObject()
+                                    .put("action", event.actionMasked)
+                                    .put("downTime", event.downTime)
+                                    .put("eventTime", event.eventTime)
+                                    .put("x", event.x)
+                                    .put("y", event.y)
+                                    .put("rawX", event.rawX)
+                                    .put("rawY", event.rawY)
+                            events.put(observation)
+                            return delegate.dispatchTouchEvent(event).also { observation.put("handled", it) }
+                        }
+                    }
+            }
+            val downTime = SystemClock.uptimeMillis()
+            val down = injectScreenTouch(MotionEvent.ACTION_DOWN, downTime, x, y)
+            receipt.put("downAccepted", down)
+            val up = injectScreenTouch(MotionEvent.ACTION_UP, downTime, x, y)
+            receipt.put("upAccepted", up)
+            assertTrue("Android rejected the Drawing pad DOWN event: $receipt", down)
+            assertTrue("Android rejected the Drawing pad UP event: $receipt", up)
+            compose.waitForIdle()
+            receipt.put("selectedAfter", tab.fetchSemanticsNode().config.getOrNull(SemanticsProperties.Selected))
+            assertEquals(
+                "The Dialog must receive exactly this original DOWN/UP gesture: $receipt",
+                listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP),
+                (0 until events.length()).map { events.getJSONObject(it).getInt("action") },
+            )
+            tab.assertIsSelected()
+        } catch (error: Throwable) {
+            failure = error
+            receipt.put("failure", error.toString())
+            throw error
+        } finally {
+            val restoreFailure =
+                runCatching { instrumentation.runOnMainSync { originalCallback?.let { requireNotNull(window).callback = it } } }
+                    .exceptionOrNull()
+            restoreFailure?.let { receipt.put("callbackRestoreFailure", it.toString()) }
+            val receiptFailure =
+                runCatching { File(TestEvidence.directory(), "artwork-workflow-drawing-pad-touch.json").writeText(receipt.toString(2)) }
+                    .exceptionOrNull()
+            val originalFailure = failure
+            val additional = listOfNotNull(restoreFailure, receiptFailure)
+            if (originalFailure != null) {
+                additional.forEach(originalFailure::addSuppressed)
+            } else if (additional.isNotEmpty()) {
+                additional.drop(1).forEach(additional.first()::addSuppressed)
+                throw additional.first()
+            }
+        }
+    }
+
+    private fun drawingPadScreenBounds(
+        expected: List<Float>,
+        receipt: JSONObject,
+    ): Rect {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val root = requireNotNull(instrumentation.uiAutomation.rootInActiveWindow)
+        var labels: List<AccessibilityNodeInfo> = emptyList()
+        val targets = mutableListOf<AccessibilityNodeInfo>()
+        val observations = JSONArray()
+        receipt.put("accessibilityCandidates", observations)
+        try {
+            labels = root.findAccessibilityNodeInfosByText("Drawing pad")
+            labels.filter { it.text?.toString() == "Drawing pad" }.forEach { label ->
+                // Compose accessibility exposes unmerged text separately from the parent's OnClick.
+                // Resolve that actual clickable ancestor, never invoke the label's semantic action.
+                val target = nearestClickableAncestor(label, instrumentation.targetContext.packageName)
+                val observation = JSONObject().put("labelClickable", label.isClickable).put("hasClickableAncestor", target != null)
+                observations.put(observation)
+                if (target != null) {
+                    val bounds = Rect().also(target::getBoundsInScreen)
+                    val edges = listOf(bounds.left, bounds.top, bounds.right, bounds.bottom)
+                    val matches = expected.zip(edges).all { (a, b) -> abs(a - b) <= 1f }
+                    observation.put("ancestorScreenBounds", JSONArray(edges)).put("matchesExpectedTab", matches)
+                    if (matches && targets.none { it == target }) targets.add(target) else target.recycle()
+                }
+            }
+            receipt.put("matchingAccessibilityTargets", targets.size)
+            assertEquals("Expected one unambiguous clickable Drawing pad Tab at the observed bounds: $receipt", 1, targets.size)
+            val target = targets.single()
+            return Rect().also(target::getBoundsInScreen).also { assertFalse("Drawing pad has empty screen bounds", it.isEmpty) }
+        } finally {
+            targets.forEach { it.recycle() }
+            labels.forEach { it.recycle() }
+            root.recycle()
+        }
+    }
+
+    /** Returns an owned node copy; the caller must recycle it after checking identity and bounds. */
+    private fun nearestClickableAncestor(
+        label: AccessibilityNodeInfo,
+        packageName: String,
+    ): AccessibilityNodeInfo? {
+        var node: AccessibilityNodeInfo? = AccessibilityNodeInfo.obtain(label)
+        while (node != null) {
+            if (node.isVisibleToUser && node.isClickable && node.packageName?.toString() == packageName) return node
+            val parent =
+                try {
+                    node.parent
+                } finally {
+                    node.recycle()
+                }
+            node = parent
+        }
+        return null
+    }
+
+    private fun injectScreenTouch(
+        action: Int,
+        downTime: Long,
+        x: Float,
+        y: Float,
+    ): Boolean {
+        val properties =
+            MotionEvent.PointerProperties().apply {
+                id = 0
+                toolType = MotionEvent.TOOL_TYPE_FINGER
+            }
+        val coordinates =
+            MotionEvent.PointerCoords().apply {
+                this.x = x
+                this.y = y
+                pressure = if (action == MotionEvent.ACTION_UP) 0f else 1f
+                size = 1f
+            }
+        val event =
+            MotionEvent.obtain(
+                downTime,
+                SystemClock.uptimeMillis(),
+                action,
+                1,
+                arrayOf(properties),
+                arrayOf(coordinates),
+                0,
+                0,
+                1f,
+                1f,
+                0,
+                0,
+                InputDevice.SOURCE_TOUCHSCREEN,
+                0,
+            )
+        return try {
+            InstrumentationRegistry.getInstrumentation().uiAutomation.injectInputEvent(event, true)
+        } finally {
+            event.recycle()
+        }
     }
 
     private fun inspectReachablePanels(

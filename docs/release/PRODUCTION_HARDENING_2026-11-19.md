@@ -597,6 +597,53 @@ runtime failure follow-through; this does not add a twenty-first wave or replace
   actual transform before input. All UI writes and persisted artwork/recovery checks remain;
   the pinned historical production source is unchanged. The failed campaign stays failed.
 
+### Actual runtime follow-through on the published wave-20 candidate
+
+The next branch head was `0c344841fbc768ff320e138f92a74a17ab27a53f`; Actions checked out the PR merge
+`bb2e931859b099620c715a785050183b2b7a02f1`. Its retained 1,148-file archive reconstructed tree
+`b45e9e46bebaa0cef952fcf0b3b92aa31e56afec`, exactly matching local `48226c4`. Android CI 44570304602
+passed the complete build job. Independently inspected XML contains 2,001 JVM cases in 323 suites,
+with no failures, errors or skips, including the external corpora. The source artifact is
+14553877026 and the build-report artifact is 14556210353. Device acceptance remains separate.
+
+- Ordinary-release run 44570304847 passed its source, 153 payload-entry, official-signature and
+  installed-APK checks, then failed before artwork creation. The retained DOWN scroll started
+  inside the interface-scale slider and did not scroll the Settings container. The shared driver
+  now requests that visible container's advertised accessibility scroll action, preserving its
+  container selection, 12-step directional bounds and 15-second target deadline. Fourteen helper
+  cases and all 23 evidence-verifier cases passed; the driver APK built in 17 seconds. The actual
+  painting step still requires pointer input. A new complete runtime remains required.
+- Installed-upgrade run 44570304423 reached the historical Value panel but selected both the Hex
+  mode chip and the Hex input. The overlay now requires the actual field's text-edit and IME
+  actions; retained nodes 550/578 reduce to the unique editable node 578. All-root semantic dumps
+  include explicit full depth, and screenshot capture runs independently of tree capture while
+  preserving the original failure. The revised overlay compiled against unchanged historical
+  production in 40 seconds. The original seed failed once; replacement and migration did not run.
+- Optimized run 44570304519 built, verified its APKs, and executed all 43 identities: 42 passed,
+  one failed, none skipped. Fine liner selection and the dialog's keyboard/layout preconditions
+  passed, but Drawing pad remained unselected after the direct Compose test tap. Ready/failure
+  images were identical. Actual Gradle resolution confirms UI test 1.9.0; its dispatcher and view
+  sources do not support a fixed-offset or dependency-change diagnosis. The test now uses one
+  original system touch to the unique visible tab, cross-checks semantic and accessibility screen
+  geometry, and retains the dialog's delivered DOWN/UP events. Callback delegation is restored
+  on every exit. Selection, one practice stroke and artwork-isolation assertions remain required.
+  This changes the test's input route; the direct-dispatch failure's cause is not claimed solved
+  without new runtime evidence. The same screenshot visibly confirms the compact toolbar repair.
+- The new toolbar regression then failed in the actual API26, API36 and API36/16 KB lanes of
+  Android CI 44570304602: `Save a copy` reported visual overflow at font scale 1.0 despite a
+  single-line layout. It was the sole failure in those complete 322-case inventories; the new
+  stale-palette interaction passed. The existing evidence does not distinguish product clipping
+  from a layout-metric inconsistency. A narrow diagnostic change now retains text/paragraph/line
+  measurements, visual and interactive bounds, trees and screenshots for all three font scales
+  before rethrowing the first assertion with subsequent failures attached. No production layout
+  change or readability assertion removal is inferred from an unexplained metric. The 48 dp,
+  containment and nonoverlap requirements now measure the actual `touchBoundsInRoot`, as defined
+  by the resolved Compose API; visual bounds remain in the evidence. Fresh runtime is required.
+
+All original attempts and their failures remain retained. These follow-through repairs belong to
+the existing assignments and do not add another wave. Current run outcomes and final exact-main
+acceptance are maintained in PR 41 after each source freeze.
+
 The final frozen main revision still requires the repeated Android workflow and primary API35 /
 16KB executions specified in [release signoff](RELEASE_SIGNOFF.md), plus all 43 optimized cases,
 the ordinary-release UI workflow and an actual installed historical-app upgrade. Their final
