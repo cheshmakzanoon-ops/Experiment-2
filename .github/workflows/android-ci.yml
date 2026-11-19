@@ -65,11 +65,11 @@ jobs:
           python -m unittest discover -s .github/scripts -p 'test_*.py'
           python -m unittest discover -s tools -p 'test_*.py'
 
-      - name: Verify workflow pins, secret hygiene, licenses and generate SBOM
+      - name: Verify workflow pins, secret hygiene and dependency declarations
         run: |
           python .github/scripts/verify_workflow_pins.py .github/workflows
           python .github/scripts/scan_secrets.py .
-          python .github/scripts/check_licenses_and_sbom.py . --revision "$(git rev-parse HEAD)" --sbom-out "${RUNNER_TEMP}/artflow-sbom.cdx.json"
+          python .github/scripts/check_licenses_and_sbom.py . --declarations-only
 
       - name: Verify production builds reject missing signing inputs
         run: |
@@ -78,6 +78,13 @@ jobs:
             exit 1
           fi
           grep -F "Production signing is required" "${RUNNER_TEMP}/signing-negative.log"
+
+      - name: Resolve release dependencies and verify licensed SBOM evidence
+        run: |
+          ./gradlew :app:writeReleaseDependencyInventory --stacktrace
+          python .github/scripts/check_licenses_and_sbom.py . \
+            --resolved-inventory app/build/reports/dependencies/release-runtime.json \
+            --revision "$(git rev-parse HEAD)" --sbom-out "${RUNNER_TEMP}/artflow-sbom.cdx.json"
 
       # Documents saved by Procreate itself, from Avarel/silicate, fetched rather than committed. The job
       # pins the source revision; RealProcreateFilesTest verifies every complete archive's SHA-256.

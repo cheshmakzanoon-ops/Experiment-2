@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "width": 32,
+  "height": 24,
+  "dpi": 240,
+  "backgroundColor": 0,
+  "activeLayerId": 7,
+  "nextLayerId": 8,
+  "layers": [
+    {
+      "id": 7,
+      "name": "Recovered ink 🎨",
+      "index": 0,
+      "rasterFile": "layers/7/recovered.png"
+    }
+  ],
+  "savedAt": 1700000001100
+}

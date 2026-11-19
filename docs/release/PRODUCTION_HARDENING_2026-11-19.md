@@ -26,8 +26,8 @@ Planned later assignments may be refined to address concrete review findings or 
 | --- | --- | --- |
 | 01 | PSD allocation budget; import resource ownership; transaction design review | Implemented/reviewed; Kotlin execution pending |
 | 02 | Atomic import implementation; decoder adversarial review; ownership regression review | Implemented/reviewed; runtime verification pending |
-| 03 | Resolved dependency inventory; optimized release workflow coverage; database migration coverage | In progress |
-| 04 | Transaction adversarial review; dependency report verification; release test integration review | Planned |
+| 03 | Resolved dependency inventory; optimized release workflow coverage; database migration coverage | Implemented; execution and independent review pending |
+| 04 | Transaction adversarial review; dependency report verification; release test integration review | In progress |
 | 05 | Real import failure-path tests; optimized artwork workflow tests; upgrade preservation tests | Planned |
 | 06 | Cancellation/concurrency review; memory-budget boundaries; dependency/artifact integrity | Planned |
 | 07 | Editor error/notice behavior; large-canvas scope checks; input acceptance coverage | Planned |
@@ -95,3 +95,26 @@ Update this record with completed wave assignments, fixes, test outcomes, and re
 - Build Tools 36.0.0 is now explicit, matching the documented build contract. Local tooling setup
   exposed an installed JRE without javac; a verified full JDK 17 and Android SDK 36 are now
   installed. Targeted tests are running after configuring the managed proxy trust store.
+
+### Wave 03
+
+- `w03_resolved_dependencies`: replaced the declaration-derived SBOM with the resolved release
+  runtime graph, artifact hashes, hash-verified raw Maven POMs, inherited license evidence, and
+  build-input fingerprints. Twenty-three focused Python tests passed.
+- `w03_optimized_qualification`: added a separately selected benchmark instrumentation variant,
+  installed-build assertions, a real paint/save/fresh-Activity reopen/PNG export workflow, and a
+  fixed API 36 qualification lane. The verifier checks the exact selected class inventory,
+  installed APK bytes, R8/resource-shrinker evidence, and one attempt without skips or retries.
+- `w03_room_upgrade`: added four real SQLite/production Room regressions for v1-to-v2 preservation,
+  absent-migration rejection/retry, validation rollback, and unknown-future-version rejection.
+  Fixtures include referenced artwork/recovery and settings; physical old-APK upgrade remains open.
+- Root integrated resolved dependency verification into the existing main workflow and published
+  waves 01–02 in draft [PR 41](https://github.com/cheshmakzanoon-ops/Experiment-2/pull/41).
+- Local production and JVM test sources compiled. The first targeted run executed 103 cases:
+  81 passed and 22 failed during Mockito initialization because the local runtime could not attach
+  its instrumentation agent. The same Byte Buddy agent is now preloaded in a local-only Gradle
+  init script; no application/test assertion was changed. Regression execution is being repeated.
+
+- With the agent preloaded, 102 of 103 targeted cases passed. The remaining late-mask regression
+  used an all-white mask that the writer correctly omitted, so the intended I/O failure never
+  occurred. Wave 04 is correcting the fixture to require an actual stored mask tile.

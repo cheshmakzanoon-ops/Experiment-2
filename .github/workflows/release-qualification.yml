@@ -1,0 +1,126 @@
+name: Release-optimized qualification
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: release-qualification-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  optimized-api-36:
+    name: Optimized drawing, persistence and export — API 36
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Record source identity
+        run: |
+          mkdir -p "${RUNNER_TEMP}/artflow-release-qualification"
+          git rev-parse HEAD > "${RUNNER_TEMP}/artflow-release-qualification/REVISION.txt"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+
+      - name: Set up evidence verification Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11'
+
+      - name: Test qualification evidence and failure handling
+        run: |
+          python -m unittest discover -s .github/scripts -p 'test_release_qualification.py'
+          python -m unittest discover -s .github/scripts -p 'test_run_release_qualification.py'
+
+      # This APK is signed only with the disposable Android debug key. The release publisher
+      # signature and physical-device qualification remain separate, required release gates.
+      - name: Build release-optimized application and instrumentation
+        timeout-minutes: 30
+        run: |
+          set -euo pipefail
+          ./gradlew :app:verifyReleaseQualificationBuildType :app:assembleBenchmark :app:assembleBenchmarkAndroidTest \
+            -PartflowTestBuildType=benchmark --stacktrace 2>&1 | tee "${RUNNER_TEMP}/artflow-release-qualification/build.log"
+
+      - name: Verify optimized APK integrity and test signatures
+        run: |
+          set -euo pipefail
+          python .github/scripts/verify_android_artifacts.py \
+            app/build/outputs/apk/benchmark/app-benchmark.apk \
+            app/build/outputs/apk/androidTest/benchmark/app-benchmark-androidTest.apk \
+            | tee "${RUNNER_TEMP}/artflow-release-qualification/artifact-preflight.txt"
+          "${ANDROID_HOME}/build-tools/36.0.0/apksigner" verify --verbose --print-certs \
+            app/build/outputs/apk/benchmark/app-benchmark.apk \
+            > "${RUNNER_TEMP}/artflow-release-qualification/app-test-signature.txt"
+          "${ANDROID_HOME}/build-tools/36.0.0/apksigner" verify --verbose --print-certs \
+            app/build/outputs/apk/androidTest/benchmark/app-benchmark-androidTest.apk \
+            > "${RUNNER_TEMP}/artflow-release-qualification/instrumentation-test-signature.txt"
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run one optimized instrumentation attempt
+        timeout-minutes: 30
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 36
+          arch: x86_64
+          target: google_apis
+          cores: 2
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -memory 4096 -no-snapshot
+          script: bash .github/scripts/run-release-qualification.sh
+
+      - name: Require complete optimized evidence
+        if: always()
+        run: |
+          set -uo pipefail
+          status=0
+          python .github/scripts/release_qualification.py verify \
+            --output "${RUNNER_TEMP}/artflow-release-qualification" --revision "$(git rev-parse HEAD)" || status=$?
+          if [[ -f "${RUNNER_TEMP}/artflow-release-qualification/verification.md" ]]; then
+            cat "${RUNNER_TEMP}/artflow-release-qualification/verification.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$status"
+
+      - name: Preserve first-attempt binaries, mapping, reports and device evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-optimized-api-36-evidence
+          path: |
+            ${{ runner.temp }}/artflow-release-qualification/
+            app/build/reports/release-qualification/
+            app/build/reports/androidTests/connected/benchmark/
+            app/build/outputs/androidTest-results/connected/benchmark/
+            app/build/outputs/connected_android_test_additional_output/benchmarkAndroidTest/
+            app/build/outputs/apk/benchmark/
+            app/build/outputs/apk/androidTest/benchmark/
+            app/build/outputs/mapping/benchmark/
+          if-no-files-found: error
+          retention-days: 14

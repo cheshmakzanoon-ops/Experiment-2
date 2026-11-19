@@ -59,9 +59,18 @@ ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
+// Preserve the complete debug matrix unless an explicit optimized qualification is requested.
+// `benchmark` inherits release shrinking and uses the disposable Android debug signing key only.
+val instrumentationBuildType = providers.gradleProperty("artflowTestBuildType").orElse("debug").get()
+check(instrumentationBuildType in setOf("debug", "benchmark")) {
+    "artflowTestBuildType must be debug or benchmark"
+}
+
 android {
     namespace = "com.artflow.studio"
     compileSdk = 36
+    buildToolsVersion = "36.0.0"
+    testBuildType = instrumentationBuildType
 
     defaultConfig {
         applicationId = "com.artflow.studio"
@@ -103,10 +112,14 @@ android {
         }
         create("benchmark") {
             initWith(buildTypes.getByName("release"))
+            // Test artifact only: publisher signing is qualified separately against release.
+            isDebuggable = false
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
         }
     }
+
+    sourceSets.getByName("androidTest").assets.srcDir("$projectDir/schemas")
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -197,6 +210,44 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+    // createComposeRule requires its host Activity in the tested APK for either selected variant.
+    // Hilt test components continue to use androidTestImplementation / kspAndroidTest above.
+    add("benchmarkImplementation", "androidx.compose.ui:ui-test-manifest")
+}
+
+tasks.register("verifyReleaseQualificationBuildType") {
+    group = "verification"
+    description = "Rejects non-optimized or publisher-signed instrumentation qualification variants"
+    val report = layout.buildDirectory.file("reports/release-qualification/build-contract.json")
+    outputs.file(report)
+    // This contract inspects live configuration, including calls made by an applied build script.
+    outputs.upToDateWhen { false }
+    doLast {
+        val selected = android.buildTypes.getByName("benchmark")
+        val production = android.buildTypes.getByName("release")
+        check(android.testBuildType == "benchmark") { "Select -PartflowTestBuildType=benchmark for optimized qualification" }
+        check(selected.isMinifyEnabled && selected.isShrinkResources && !selected.isDebuggable) {
+            "Qualification requires release R8, resource shrinking and a non-debuggable application"
+        }
+        check(selected.signingConfig?.name == "debug") { "Qualification must use the disposable test signing configuration" }
+        check(selected.proguardFiles == production.proguardFiles) { "Qualification must retain the release R8 rules unchanged" }
+        val destination = report.get().asFile
+        destination.parentFile.mkdirs()
+        destination.writeText(
+            """
+            {
+              "schemaVersion": 1,
+              "buildType": "benchmark",
+              "minifyEnabled": true,
+              "shrinkResources": true,
+              "debuggable": false,
+              "signingConfig": "debug",
+              "releaseRulesUnchanged": true,
+              "publisherQualified": false
+            }
+            """.trimIndent() + "\n",
+        )
+    }
 }
 
 // Local unit tests run on the host JDK. Keep its independent ImageIO decoders available to
@@ -257,3 +308,5 @@ tasks.named("check") {
     dependsOn(tasks.matching { it.name in setOf("ktlintKotlinScriptCheck", "ktlintMainSourceSetCheck", "ktlintTestSourceSetCheck") })
     dependsOn("detekt")
 }
+
+apply(from = rootProject.file("gradle/release-dependencies.gradle.kts"))
