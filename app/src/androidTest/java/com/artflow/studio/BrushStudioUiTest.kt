@@ -23,11 +23,15 @@ import com.artflow.studio.presentation.ui.components.brush.BrushStudioContent
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class BrushStudioUiTest {
-    @get:Rule val compose = createComposeRule()
+    private val diagnostics = UiFailureDiagnosticsRule()
+    private val compose = createComposeRule()
+
+    @get:Rule val rules: RuleChain = RuleChain.outerRule(diagnostics).around(compose)
 
     @Test
     fun searchingAndSelectingAPresetDoesNotApplyUntilConfirmed() {
@@ -67,18 +71,26 @@ class BrushStudioUiTest {
         val original = BrushParams(size = 9f, spacing = 0.23f)
         val applied = mutableListOf<BrushParams>()
         var open by mutableStateOf(true)
-        compose.setContent {
-            MaterialTheme {
-                if (open) BrushStudioContent(original, { applied.add(it) }, { open = false })
+        diagnostics.action("Open Brush Studio with the original settings") {
+            compose.setContent {
+                MaterialTheme {
+                    if (open) BrushStudioContent(original, { applied.add(it) }, { open = false })
+                }
             }
         }
-        compose.onNodeWithText("Restore initial").assertIsNotEnabled()
-        compose.onNodeWithText("Search brushes").performTextInput("fine liner")
-        compose.onNodeWithText("Fine liner").performClick()
-        compose.onNodeWithText("Restore initial").performClick().assertIsNotEnabled()
-        compose.onNodeWithText("Use brush").performClick()
-        compose.runOnIdle { assertEquals(listOf(original), applied) }
-        compose.onNodeWithText("Use brush").assertDoesNotExist()
+        diagnostics.action("Verify Restore initial starts disabled") {
+            compose.onNodeWithText("Restore initial").assertIsNotEnabled()
+        }
+        diagnostics.action("Search for Fine liner") { compose.onNodeWithText("Search brushes").performTextInput("fine liner") }
+        diagnostics.action("Select Fine liner") { compose.onNodeWithText("Fine liner").performClick() }
+        diagnostics.action("Restore the original settings and verify the button is disabled") {
+            compose.onNodeWithText("Restore initial").performClick().assertIsNotEnabled()
+        }
+        diagnostics.action("Apply the restored brush") { compose.onNodeWithText("Use brush").performClick() }
+        diagnostics.action("Verify the exact original settings were applied once") {
+            compose.runOnIdle { assertEquals(listOf(original), applied) }
+        }
+        diagnostics.action("Verify Brush Studio closed") { compose.onNodeWithText("Use brush").assertDoesNotExist() }
     }
 
     @Test

@@ -11,16 +11,78 @@ GitHub Actions. Pending checks are not passes.
 | --- | --- | --- |
 | `d2d407a` | [44451621348](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44451621348) | Build stopped at unit-test compilation: a legacy model-publication fixture's trailing lambda bound to the new budget argument. Fixed by naming the callback; no assertions removed. JVM tests, static analysis, and emulator execution were not reached. |
 | `bbdfee0` | [44452446543](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44452446543) | 1,751 JVM tests in 292 suites passed with zero failures/errors/skips; all 283 instrumentation tests compiled. Android Lint had no errors/fatals. The static-analysis gate failed on formatting and one staged-copy loop readability finding, so APK/AAB and emulator stages were not reached. |
+| `a9afcd3` | [44454662010](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44454662010) | All build gates passed: 1,751 JVM tests in 292 suites, instrumentation compilation, ktlint, detekt, debug/release Lint, APK/AAB integrity, and native alignment. Emulator execution exposed a linked-menu test targeting error and a separate API35/16 KB runtime field-resolution failure; see the retained attempt details below. |
 
 The first run passed Python checks, workflow/secret/dependency checks, signing rejection, and
 reference-corpus/native-contract verification before compilation failed. Its logs remain available.
-The next integration revision also includes reviewed shared-grain rollback, layered-import
-preflight, composite-only fallback, and empty-linked-layer regressions; it needs its own full run.
+The integration includes reviewed shared-grain rollback, layered-import preflight, composite-only
+fallback, and empty-linked-layer regressions. Their build and device evidence belongs to each
+tested revision; earlier passing counts cannot qualify a later revision.
 
 The downloaded `bbdfee0` verification artifact confirms the JVM counts and unchanged Lint totals:
 154 debug / 152 release warnings plus five hints in each. Formatting and the loop structure are
 corrected in the next candidate without expanding the baseline or excluding tests. A JVM pass
 does not substitute for the still-required emulator and packaged-artifact gates.
+
+### Retained `a9afcd3` emulator findings
+
+The workflow checks out PR merge revision `92000116fb245f6dc0aeb9f63abb20de56c64d49`,
+merging branch head `a9afcd3` into `d340bc6`. The source tree matches the published candidate.
+
+The API26, API35 standard 4 KB, and API36 16 KB artifacts each report all 283 unique test
+identities. API26 has 280 passes, two permitted skips, and one failure; the other two have 282
+passes and one failure. All three fail the same new
+`LinkedLayersUiTest.selectedLayersLinkAndTheActiveLayerMenuUnlinksThem` menu assertion.
+The test touched the merged active-layer card, whose bounds include its opacity slider. The
+correction touches the actual visible layer label, asserts the menu opened, and scrolls the
+unlink item into view before the real click. Link/unlink, history, and undo assertions remain.
+The production menu already places **Unlink layer** second; its ordering is unchanged.
+
+Separately, [API35/16 KB job 135333792714](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44454662010/job/135333792714)
+stopped after 79 passes and one `NoSuchFieldError` during activity/database initialization in
+`EditorRenderingTest`, leaving 203 identities missing. The captured installed APK matches the
+built APK; its `classes12.dex` declares `DatabaseModule.INSTANCE` with the exact requested type,
+and the generated provider reads that same field. All 18 app DEX files and seven test DEX files
+are byte-for-byte identical to the API35/4 KB peer, which passed all three rendering cases.
+JIT was verified disabled. No matching app native tombstone was present.
+
+These observations exclude a field absent from the installed bytecode; runtime/class-resolution
+state corruption is an inference, not an established mechanism. The existing classifier correctly
+rejects the app-frame Java failure as non-retryable. Keep the failed attempt, leave the DI contract
+and classifier unchanged, and require a fresh complete matrix after correcting the independent
+UI-test targeting error. A passing peer does not waive the interrupted lane.
+
+The independent API35/16 KB lane completed its first invocation with 282 passes, the same single
+linked-menu failure, and no missing identities or recovery. All three `EditorRenderingTest`
+cases passed. Its 18 app and seven instrumentation DEX files also exactly match the failed
+API35/16 KB lane. The database field-resolution error did not recur in this independent execution;
+its absence does not establish the earlier failure's mechanism.
+
+The API36 standard phone completed all 283 identities with 281 passes and two failures on its
+first invocation, with no recovery. In addition to the linked-menu assertion,
+`BrushStudioUiTest.restoringTheDraftAndApplyingUseTheCorrectSnapshot` reported concurrent
+`SnapshotStateObserver` access from thread 51 and the main thread. This separate rendering/test
+failure remains under investigation; it is not classified as an allowed framework retry. The
+failing test performs normal Compose UI actions, and the reviewed screenshot/preview workers do
+not draw the Compose owner. No causal production change is supported by the captured stack. The
+next revision adds an outer failure rule to retain live Java thread IDs, names, and stacks plus
+the last marked brush action. It rethrows the original failure and adds no delays or retries.
+
+The API36 tablet also completed all 283 identities with 282 passes and the single linked-menu
+failure. All seven device jobs finished; none used an instrumentation recovery, and none reached
+minified-launch acceptance after its failing test result. Each captured installed app/test APK
+matches the corresponding per-job build. The build's success does not make this an accepted
+eight-job workflow.
+
+| `a9afcd3` lane | Passed | Failed | Allowed skips | Missing identities |
+| --- | ---: | ---: | ---: | ---: |
+| API26 | 280 | 1 | 2 | 0 |
+| API35 standard 4 KB | 282 | 1 | 0 | 0 |
+| API35 16 KB | 79 | 1 | 0 | 203 |
+| API35 independent 16 KB | 282 | 1 | 0 | 0 |
+| API36 standard phone | 281 | 2 | 0 | 0 |
+| API36 16 KB | 282 | 1 | 0 | 0 |
+| API36 tablet | 282 | 1 | 0 | 0 |
 
 ## Historical evidence, independently inspected
 

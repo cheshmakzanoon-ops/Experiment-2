@@ -14,6 +14,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artflow.studio.data.local.ProjectStorage
@@ -77,8 +78,10 @@ class LinkedLayersUiTest {
             assertTrue(batch.picked.value.isEmpty())
             assertEquals(depth + 1, repository.undoDepth)
         }
-        compose.onNodeWithText("Colour").performClick()
-        compose.onNodeWithText("Unlink layer").assertIsDisplayed().performClick()
+        // The merged card includes the opacity slider; its centre is not the layer name's tap target.
+        compose.onNodeWithText("Colour", useUnmergedTree = true).assertIsDisplayed().performClick()
+        compose.onNodeWithText("Rename").assertIsDisplayed()
+        compose.onNodeWithText("Unlink layer").performScrollTo().assertIsDisplayed().performClick()
         compose.waitUntil(5_000) { repository.getAllLayers().all { it.linkGroupId == null } }
         assertEquals(depth + 2, repository.undoDepth)
         runBlocking(Dispatchers.Main) {
