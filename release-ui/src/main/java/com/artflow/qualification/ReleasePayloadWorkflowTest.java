@@ -10,6 +10,7 @@ import android.os.SystemClock;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.uiautomator.By;
+import androidx.test.uiautomator.BySelector;
 import org.json.JSONObject;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -118,7 +119,13 @@ public final class ReleasePayloadWorkflowTest {
         assertTrue(context.getSharedPreferences("receipt", Context.MODE_PRIVATE).edit()
                 .putString("token", token).putString("phase", phase).commit());
         ui.text("Share");
-        ui.await(By.text("Qualification PNG receiver")).click();
+        // The system chooser initially shows suggested apps; the receiver can be below them.
+        // Wait for its actual scroll container, then expose and click the visible target there.
+        String chooser = "com.android.intentresolver";
+        BySelector chooserContent = By.pkg(chooser)
+                .res(chooser + ":id/chooser_scrollable_container").scrollable(true);
+        ui.await(chooserContent);
+        ui.scroll(By.pkg(chooser).text("Qualification PNG receiver"), chooserContent, chooser).click();
         File receipt = new File(output, phase + "-receipt.json");
         File error = new File(output, phase + "-error.txt");
         long deadline = SystemClock.uptimeMillis() + VisibleUi.TIMEOUT;

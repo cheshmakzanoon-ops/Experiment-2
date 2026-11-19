@@ -212,6 +212,26 @@ painting, save/process-death/reopen, FileProvider grant and complete pixel compa
 Before/after visible content is retained in the trace. The corrected driver still requires a new
 complete original runtime on the final source; the diagnostic failure is not counted as a pass.
 
+### Exposing the receiver in Android's share sheet
+
+[Run 44593435934](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44593435934)
+passed settings, artwork creation, pointer painting, save/reopen navigation and PNG generation,
+then failed its sole original invocation while awaiting a visible `Qualification PNG receiver`.
+The retained screenshot shows the exported painted image and the first five suggested targets.
+Android's resolver log confirms that `PngReceiptActivity` is registered; the accessibility dump
+records its exact label below the visible viewport. Artifact `14563059783` has SHA-256
+`53d85da6eadbade273b63a517ef03a841fbcf71e1426857585e85664d0125e8d`.
+Independent source, 155-entry payload, official signatures, installed bytes and normal R8 checks
+passed. The receiver, process-death reopen and exported-pixel comparisons were not reached.
+
+The driver now waits for the observed `com.android.intentresolver:id/chooser_scrollable_container`
+and applies its existing bounded scroll search to that container. Both target matching and
+visible-content observation are scoped to the resolver package. The application's existing
+scroll operations keep their application scope. Each step still requires one advertised action
+and observes its fresh target or viewport result; direction and timeout limits are unchanged.
+The receiver must still be visibly selected through the actual chooser and verify its URI grant,
+PNG content and complete saved/reopened pixel comparison. A fresh complete original run is required.
+
 For a clean checkout and a fresh local disposable emulator:
 
 ```bash

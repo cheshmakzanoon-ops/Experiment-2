@@ -49,11 +49,15 @@ final class VisibleUi {
     void description(String value) { scroll(By.pkg(APP).desc(value)).click(); }
 
     UiObject2 scroll(BySelector target) {
+        return scroll(target, By.pkg(APP).scrollable(true), APP);
+    }
+
+    UiObject2 scroll(BySelector target, BySelector containers, String packageName) {
         UiObject2 present = freshVisible(target);
         if (present != null) return present;
         for (Direction direction : new Direction[]{Direction.DOWN, Direction.UP}) {
             for (int attempt = 0; attempt < 12; attempt++) {
-                List<UiObject2> candidates = device.findObjects(By.pkg(APP).scrollable(true));
+                List<UiObject2> candidates = device.findObjects(containers);
                 AccessibilityNodeInfo.AccessibilityAction action = direction == Direction.DOWN
                         ? AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD
                         : AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_BACKWARD;
@@ -67,9 +71,9 @@ final class VisibleUi {
                                     + " " + node.getVisibleBounds() + "; advertised=" + advertised);
                             return advertised;
                         },
-                        (node, requested) -> scrollAndWait(node, requested, target));
+                        (node, requested) -> scrollAndWait(node, requested, target, packageName));
                 device.waitForIdle(1_000);
-                logVisibleText(target);
+                logVisibleText(target, packageName);
                 present = freshVisible(target);
                 if (present != null) return present;
                 if (!more) break;
@@ -79,8 +83,8 @@ final class VisibleUi {
     }
 
     private boolean scrollAndWait(UiObject2 container,
-            AccessibilityNodeInfo.AccessibilityAction action, BySelector target) {
-        String before = visibleContainerContent(container);
+            AccessibilityNodeInfo.AccessibilityAction action, BySelector target, String packageName) {
+        String before = visibleContainerContent(container, packageName);
         boolean accepted = container.getAccessibilityNodeInfo().performAction(action.getId());
         Log.i("ArtFlowQualification", "Scroll action=" + action.getId()
                 + "; accepted=" + accepted + "; target=" + target + "; before=" + before);
@@ -89,33 +93,33 @@ final class VisibleUi {
         // Observe the result of this one action instead of waiting for an event it does not send.
         boolean changed = device.wait(ignored -> {
             if (freshVisible(target) != null) return true;
-            return !before.equals(visibleContainerContent(container));
+            return !before.equals(visibleContainerContent(container, packageName));
         }, 1_000);
         Log.i("ArtFlowQualification", "Observed target or changed viewport for " + target
-                + ": " + changed + "; after=" + visibleContainerContent(container));
+                + ": " + changed + "; after=" + visibleContainerContent(container, packageName));
         return changed;
     }
 
-    private String visibleContainerContent(UiObject2 container) {
+    private String visibleContainerContent(UiObject2 container, String packageName) {
         // UiObject2 owns its cached node; recycle only this copy and the children we obtain.
         AccessibilityNodeInfo root = AccessibilityNodeInfo.obtain(container.getAccessibilityNodeInfo());
         StringBuilder content = new StringBuilder();
-        try { collectVisibleText(root, content); }
+        try { collectVisibleText(root, content, packageName); }
         finally { root.recycle(); }
         return content.toString();
     }
 
-    private void logVisibleText(BySelector target) {
+    private void logVisibleText(BySelector target, String packageName) {
         AccessibilityNodeInfo root = instrumentation.getUiAutomation().getRootInActiveWindow();
         StringBuilder text = new StringBuilder();
-        try { collectVisibleText(root, text); }
+        try { collectVisibleText(root, text, packageName); }
         finally { if (root != null) root.recycle(); }
         Log.i("ArtFlowQualification", "Visible text while seeking " + target + ": " + text);
     }
 
-    private void collectVisibleText(AccessibilityNodeInfo node, StringBuilder text) {
+    private void collectVisibleText(AccessibilityNodeInfo node, StringBuilder text, String packageName) {
         if (node == null) return;
-        if (node.isVisibleToUser() && APP.contentEquals(String.valueOf(node.getPackageName()))) {
+        if (node.isVisibleToUser() && packageName.contentEquals(String.valueOf(node.getPackageName()))) {
             Rect bounds = new Rect();
             node.getBoundsInScreen(bounds);
             if (node.getText() != null) text.append('[').append(node.getText()).append('@').append(bounds).append("] ");
@@ -126,7 +130,7 @@ final class VisibleUi {
         }
         for (int i = 0; i < node.getChildCount(); i++) {
             AccessibilityNodeInfo child = node.getChild(i);
-            try { collectVisibleText(child, text); }
+            try { collectVisibleText(child, text, packageName); }
             finally { if (child != null) child.recycle(); }
         }
     }

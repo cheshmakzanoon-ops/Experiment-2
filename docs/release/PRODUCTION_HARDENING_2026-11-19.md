@@ -735,6 +735,58 @@ changes exactly eight family entries from 1.7.3 to 1.9.0; BOM, Material3, shrink
 all assertions remain unchanged. This is a controlled runtime-parity repair whose optimized
 outcome must still be demonstrated by a fresh original execution, not an inferred pass.
 
+### Original outcomes after runtime alignment
+
+Head `0be07e881b9153d589eaa64dd9289e91d1ebfa7a` ran as checkout
+`7515c55cbd76fc4fdd6333c55608cb650a538c73`, tree
+`675a4b246cbe43d81c9f3c2b1574e0a255fa1d30`. The retained 1,152-file source archive
+independently reconstructs that tree. Local optimized app/test and release-driver APKs, generated
+ABI checks, full ktlint/detekt and the 150-component resolved license/SBOM gate passed.
+Android CI 44593435556 then passed its complete build; independent artifact 14566315755 contains
+2,001 unique JVM cases in 323 suites, with no failures, errors or skips, including the corpora.
+Its device matrix remains a separate runtime gate.
+
+Installed-upgrade run 44593437368 passed on original attempt 1. Independent artifact 14564973298
+validates unchanged historical production, exact candidate sources, all four signatures and
+manifests, one signer, version-code 3-to-4 replacement and identical stopped-data snapshots.
+Seed, edit and fresh-process reopen each passed exactly once; different candidate PIDs preserve
+all 4,096 exported pixels and metadata agreeing with the saved document. This is API36/4 KB
+debug-signed installed-upgrade evidence; publisher/store qualification remains separate.
+
+Ordinary-release run 44593435934 progressed through settings, creation, real painting, saving,
+reopening and PNG generation. It failed because its chooser lookup only waited for a visible
+receiver, while Android placed that registered target below the visible suggested apps. Original
+screenshot, hierarchy and resolver logs agree; this is not evidence of an absent receiver. The
+driver now scopes its bounded container scroll and fresh visible-content observations to the
+actual resolver container before clicking the receiver. All grant, process and pixel assertions
+remain. Independent source, 155-entry payload, signature and installed-byte checks passed on the
+failed original; its downstream pixel/persistence campaign still requires a complete new run.
+
+Optimized run 44593435634 initially failed while SDK Manager prepared the API36 Google APIs
+x86_64 system-image ZIP, before creating an emulator or invoking instrumentation. Its built APKs
+and original artifact remain retained. A parallel ordinary-release runner installed and booted
+the same requested package/channel successfully; the exact downloaded image revision bytes were
+not recorded. One explicit unchanged-source infrastructure rerun was requested. This is separate
+from application outcomes. Attempt 2 passed its first actual application execution: all 43 exact
+identities passed with no failures, errors or skips. Independent artifact 14565892391 verifies
+built-versus-installed APK bytes, aligned runtime metadata, normal benchmark shrinking and the
+source inventory. All 72 node refreshes succeeded; one original OS DOWN/UP selected Drawing pad
+at the same independently matching coordinates. The practice screenshot and full workflow
+confirm artwork/pixel/undo isolation and save/reopen/recreate/discard behavior. The separate
+optimized paint/save/reopen/export pixel report also passed. The original setup failure remains
+retained. These results demonstrate the repaired optimized behavior without proving a specific
+coroutine-level cause for the earlier failure; final-source repetition remains required.
+
+The fresh API26 lane then passed. Artifact 14566028552 contains all 322 exact identities:
+320 passed, zero failures/errors, and the two existing API-conditional skips. There was one
+original instrumentation invocation without framework recovery, and minified launch passed.
+All 73 accessibility refreshes succeeded; the formerly stale tab bounds now exactly equal
+Compose's screen geometry. One original DOWN/UP selected Drawing pad, and the full artwork,
+toolbar and palette regressions passed. The chooser-only follow-up compiled its driver APK
+in 17 seconds and passed independent scope/readiness/recycling review; its new runtime remains
+required. Other unfinished lanes on this prior source must not be counted as accepted if
+superseded by publication of that follow-up.
+
 The final frozen main revision still requires the repeated Android workflow and primary API35 /
 16KB executions specified in [release signoff](RELEASE_SIGNOFF.md), plus all 43 optimized cases,
 the ordinary-release UI workflow and an actual installed historical-app upgrade. Their final
