@@ -26,6 +26,7 @@ CLASSES = {
     "com.artflow.studio.EditorRenderingTest": "Presented GL pixels, context loss and redraw",
     "com.artflow.studio.ExportUiRegressionTest": "Export controls and offline privacy policy",
     "com.artflow.studio.data.PersistenceRegressionTest": "Saved rasters, frames, recovery and storage failures",
+    "com.artflow.studio.data.DatabaseMigrationDeviceTest": "Production Room upgrades, preserved artwork and recovery, rejected unsafe schemas",
     "com.artflow.studio.data.ExportDeviceTest": "Independent decoding and export/share isolation",
     "com.artflow.studio.NativeLibraryCompatibilityTest": "Real packaged native graphics library load",
     "com.artflow.studio.RuntimeEnvironmentTest": "Measured API, ABI and process page size",
@@ -100,16 +101,22 @@ def verify_installed_apks(project: Path, evidence: Path, token: str) -> dict:
         raise ValueError("Expected exactly one installed APK snapshot from this attempt; stale/repeated captures are rejected")
     namespace = namespaces[0]
     source = json.loads((namespace / "manifest.json").read_text())
-    if (source.get("schemaVersion") != 1 or source.get("attemptToken") != token
-            or source.get("errors") != [] or set(source.get("packages", {})) != set(APK_PATHS)):
+    if (not isinstance(source, dict) or source.get("schemaVersion") != 1 or source.get("attemptToken") != token
+            or source.get("errors") != [] or not isinstance(source.get("packages"), dict)
+            or set(source["packages"]) != set(APK_PATHS)):
         raise ValueError("Malformed or failed runner APK capture")
     packages = {}
     for package, built_path in APK_PATHS.items():
         record = source["packages"][package]
-        captures = record.get("apks", [])
-        if record.get("packageName") != package or record.get("errors") != [] or len(captures) != 1:
+        if not isinstance(record, dict):
+            raise ValueError(f"Malformed runner APK capture for {package}")
+        captures = record.get("apks")
+        if (record.get("packageName") != package or record.get("errors") != []
+                or not isinstance(captures, list) or len(captures) != 1):
             raise ValueError(f"Missing or failed single-APK capture for {package}")
         captured = captures[0]
+        if not isinstance(captured, dict):
+            raise ValueError(f"Malformed installed APK record for {package}")
         path = snapshot_file(namespace, package, captured.get("file"))
         if path is None or captured.get("captureComplete") is not True or captured.get("errors") != []:
             raise ValueError(f"Incomplete installed APK capture for {package}")
@@ -204,7 +211,7 @@ def verify(project: Path, output: Path, revision: str) -> dict:
              f"**{'PASS' if report['passed'] else 'FAIL'}** — {report['counts'].get('passed', 0)} passed / "
              f"{len(expected)} declared cases, one attempt, zero permitted skips.", "",
              "Requested runtime: API 36, x86_64, 4096-byte process pages.", "",
-             "This benchmark APK uses release R8/resource shrinking, the test Compose host, Hilt test "
+             "This benchmark APK uses release R8/resource shrinking, test Compose/Android View hosts, Hilt test "
              "application wiring, and a disposable debug signing key. Publisher signing, physical-device "
              "performance and the complete seven-lane debug matrix remain separate gates.", "",
              "| Test class | Scope |", "| --- | --- |"]

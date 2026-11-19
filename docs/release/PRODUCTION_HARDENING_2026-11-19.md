@@ -27,8 +27,8 @@ Planned later assignments may be refined to address concrete review findings or 
 | 01 | PSD allocation budget; import resource ownership; transaction design review | Implemented/reviewed; Kotlin execution pending |
 | 02 | Atomic import implementation; decoder adversarial review; ownership regression review | Implemented/reviewed; runtime verification pending |
 | 03 | Resolved dependency inventory; optimized release workflow coverage; database migration coverage | Implemented; execution and independent review pending |
-| 04 | Transaction adversarial review; dependency report verification; release test integration review | In progress |
-| 05 | Real import failure-path tests; optimized artwork workflow tests; upgrade preservation tests | Planned |
+| 04 | Transaction adversarial review; dependency report verification; release test integration review | Implemented/reviewed |
+| 05 | Document-bound picker/import failures; optimized runtime integration; upgrade preservation review | In progress |
 | 06 | Cancellation/concurrency review; memory-budget boundaries; dependency/artifact integrity | Planned |
 | 07 | Editor error/notice behavior; large-canvas scope checks; input acceptance coverage | Planned |
 | 08 | Physical-performance evidence tooling; signed artifact validation; upgrade execution tooling | Planned |
@@ -118,3 +118,17 @@ Update this record with completed wave assignments, fixes, test outcomes, and re
 - With the agent preloaded, 102 of 103 targeted cases passed. The remaining late-mask regression
   used an all-white mask that the writer correctly omitted, so the intended I/O failure never
   occurred. Wave 04 is correcting the fixture to require an actual stored mask tile.
+
+### Wave 04
+
+- `w04_atomic_adversarial`: corrected the native-mask fixture so it contains a real tile and checks
+  the injected storage exception; the original artwork/history equality assertion is unchanged.
+  Independent source review found no additional confirmed atomic publication defect.
+- `w04_dependency_review`: rejected UTF-16 XML DTD/entity evidence, separated version constraints
+  from actual CycloneDX dependency edges, and rejected contradictory GPL/permissive declarations
+  without exporting a fabricated permissive license. Twenty-seven dependency tests passed.
+- `w04_release_integration`: preserved first-attempt diagnostics on refused/concurrent reruns and
+  made malformed installed-APK JSON produce failed reports instead of escaping report generation.
+  Twenty-one verifier and eight harness tests passed; focused Kotlin formatting passed.
+- Root compiled all debug instrumentation sources successfully, including the new migration and
+  optimized workflow tests. Real dependency inventory generation and device execution are pending.

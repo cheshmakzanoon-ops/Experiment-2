@@ -100,7 +100,8 @@ class AtomicLayerImportTest {
             val before = state()
             val document = documentWithUnreadableLastMask()
             val failure = runCatching { LayerImports.importProcreate(repository, document) }.exceptionOrNull()
-            assertTrue(failure is IOException)
+            assertTrue("Expected the late mask read to fail with IOException, got $failure", failure is IOException)
+            assertEquals("Imported mask storage became unavailable", failure?.message)
             assertEquals(before, state())
         }
 
@@ -287,7 +288,8 @@ class AtomicLayerImportTest {
                 4,
                 4,
                 listOf(
-                    ProcreateWriter.Layer("Last", pixels, mask = SelectionMask(4, 4, ByteArray(16) { 255.toByte() })),
+                    // The writer omits all-white masks; nonwhite coverage guarantees a real tile read.
+                    ProcreateWriter.Layer("Last", pixels, mask = SelectionMask(4, 4, ByteArray(16) { 128.toByte() })),
                     ProcreateWriter.Layer("First", pixels),
                 ),
                 pixels,
@@ -312,7 +314,9 @@ class AtomicLayerImportTest {
                     }
                 },
             ) { null }
-        if (fail) unreadableMask = requireNotNull(document.layers().first { it.name == "Last" }.maskUuid)
+        val maskUuid = requireNotNull(document.layers().first { it.name == "Last" }.maskUuid)
+        assertTrue("The failure fixture must contain a stored mask tile", files.keys.any { it.startsWith("$maskUuid/") })
+        if (fail) unreadableMask = maskUuid
         return document
     }
 

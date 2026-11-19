@@ -119,6 +119,14 @@ android {
         }
     }
 
+    // androidTest sources compile together even when the runner selects only some classes.
+    // Both tested variants therefore need this real-View host; publisher release excludes it.
+    listOf("debug", "benchmark").forEach { variant ->
+        sourceSets.getByName(variant) {
+            java.srcDir("src/deviceTestHost/java")
+            manifest.srcFile("src/deviceTestHost/AndroidManifest.xml")
+        }
+    }
     sourceSets.getByName("androidTest").assets.srcDir("$projectDir/schemas")
 
     compileOptions {

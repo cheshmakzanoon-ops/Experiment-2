@@ -73,7 +73,14 @@ class OptimizedArtworkWorkflowTest {
                 ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                     createArtwork(name)
                     awaitCanvas(scenario)
-                    projectId = runBlocking { projects.getAllProjects().first().single { it.name == name }.id }
+                    projectId =
+                        runBlocking {
+                            projects
+                                .getAllProjects()
+                                .first()
+                                .single { it.name == name }
+                                .id
+                        }
                     val blank = pixels()
                     paint(scenario)
                     compose.waitUntil(15_000) { runBlocking(Dispatchers.Main) { canvas.hasUnsavedChanges() } }

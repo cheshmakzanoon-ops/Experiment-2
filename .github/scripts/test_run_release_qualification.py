@@ -13,7 +13,7 @@ SCRIPT = Path(__file__).with_name("run-release-qualification.sh").resolve()
 
 
 class ReleaseQualificationHarnessTest(unittest.TestCase):
-    def run_harness(self, status=0, api=36, previous_attempt=False, stale_results=False):
+    def run_harness(self, status=0, api=36, previous_attempt=False, stale_results=False, stale_evidence=False):
         with tempfile.TemporaryDirectory() as directory:
             project = Path(directory)
             scripts = project / ".github/scripts"
@@ -44,10 +44,16 @@ class ReleaseQualificationHarnessTest(unittest.TestCase):
             if previous_attempt:
                 output.mkdir()
                 (output / "attempt-token.txt").write_text("previous")
+                (output / "first-attempt-logcat.txt").write_text("Original failed-attempt logcat\n")
+                (output / "device-properties.txt").write_text("Original failed-attempt device\n")
             if stale_results:
                 path = project / "app/build/outputs/androidTest-results/connected/benchmark/TEST-stale.xml"
                 path.parent.mkdir(parents=True)
                 path.write_text("<testsuite/>")
+            if stale_evidence:
+                path = project / "app/build/outputs/connected_android_test_additional_output/benchmarkAndroidTest/stale.txt"
+                path.parent.mkdir(parents=True)
+                path.write_text("old evidence")
             env = dict(os.environ, PATH=f"{commands}:{os.environ['PATH']}", RUNNER_TEMP=str(project),
                        STATUS=str(status), API=str(api))
             result = subprocess.run(["bash", str(scripts / SCRIPT.name)], cwd=project, env=env,
@@ -93,10 +99,24 @@ class ReleaseQualificationHarnessTest(unittest.TestCase):
         self.assertNotIn("gradle ", calls)
         self.assertEqual("previous", files["attempt-token.txt"])
 
+    def test_refused_second_attempt_preserves_original_diagnostics(self):
+        result, calls, files = self.run_harness(previous_attempt=True)
+        self.assertNotEqual(0, result.returncode)
+        self.assertNotIn("adb ", calls)
+        self.assertEqual("Original failed-attempt logcat\n", files["first-attempt-logcat.txt"])
+        self.assertEqual("Original failed-attempt device\n", files["device-properties.txt"])
+
     def test_stale_reports_are_refused(self):
         result, calls, _ = self.run_harness(stale_results=True)
         self.assertNotEqual(0, result.returncode)
         self.assertNotIn("gradle ", calls)
+
+    def test_stale_evidence_is_refused_without_touching_the_device(self):
+        result, calls, files = self.run_harness(stale_evidence=True)
+        self.assertNotEqual(0, result.returncode)
+        self.assertNotIn("gradle ", calls)
+        self.assertNotIn("adb ", calls)
+        self.assertNotIn("attempt-token.txt", files)
 
 
 if __name__ == "__main__":

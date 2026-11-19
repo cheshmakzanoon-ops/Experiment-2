@@ -68,7 +68,8 @@ backup, codec, and CI hardening from [PR #40](https://github.com/cheshmakzanoon-
   preview, and exports. These ceilings are not certified interactive workloads.
 - **Performance:** `StrokeTimingDeviceTest` records repository timings and excludes input delivery,
   GL upload/draw, and physical display latency. It has no speed threshold. The `benchmark` build
-  type provides a minified launch smoke test, not a performance benchmark suite.
+  type supports minified launch smoke and selected workflow qualification; it has no performance
+  benchmark suite or physical latency acceptance threshold.
 - **Procreate:** supported rasters, hierarchy, layer masks, and blends have independent fixture
   coverage. Application-level animation/guide interchange and some group/effect semantics remain
   incomplete. Some exports use a rendered appearance layer with hidden sources. Self-roundtrips
@@ -108,8 +109,41 @@ substitutes for stock ARM64 device acceptance.
 
 `detekt` passes against an existing baseline; historical findings remain. Android Lint warnings
 remain visible. CI pins actions and scans for signing material and selected secret patterns. The
-current CycloneDX report inventories direct Gradle declarations; it is not a resolved transitive
-dependency/license or vulnerability certification.
+CycloneDX gate inventories the resolved release runtime graph and artifact hashes, with retained
+Maven POM evidence for license declarations and inheritance. Missing, contradictory, or unreviewed
+license evidence fails the gate. This inventories build inputs before shrinking; it does not certify
+the final binary's embedded components or establish that dependencies are free of vulnerabilities.
+
+### Optimized workflow qualification
+
+The separate **Release-optimized qualification** workflow builds and runs selected drawing,
+rendering, save/reopen, export, and production Room upgrade regressions on API 36 / x86_64 with
+4096-byte process pages. It uses `-PartflowTestBuildType=benchmark`; the default remains the full
+debug device matrix. Its verifier derives the selected test identities from the checked-out source
+and requires every case to pass on the original attempt, with no skips or recovery retries.
+
+The benchmark APK inherits the release R8 rules, minification and resource shrinking, and is
+non-debuggable. It uses a disposable debug signing key, test-only Compose and Android View host
+activities, and Hilt test application wiring. The shared View host is included in debug and
+benchmark only. These differences make this a scoped optimized test artifact; publisher signing,
+the actual publisher release APK/bundle, and physical-device acceptance remain separate gates.
+
+To build the tested variant, run:
+
+```bash
+./gradlew :app:verifyReleaseQualificationBuildType :app:assembleBenchmark :app:assembleBenchmarkAndroidTest \
+  -PartflowTestBuildType=benchmark
+```
+
+With the required emulator running, `.github/scripts/run-release-qualification.sh` performs one
+bounded instrumentation invocation and retains its exit status and original diagnostic log.
+`release_qualification.py verify` then checks all selected results, the measured runtime, installed
+APK bytes against the built files, retained pixel/export assertions, and actual R8/resource-shrinker
+outputs. A missing log or failed log capture cannot qualify. Reusing a prior attempt or stale device
+results is refused; use a fresh output directory and clean build evidence for a new invocation.
+The Actions artifact retains the first attempt's binaries, mapping, reports and diagnostics even
+when compilation or instrumentation fails. A configured workflow is not passing execution evidence;
+use its exact-revision report to determine acceptance.
 
 ### Signed releases
 

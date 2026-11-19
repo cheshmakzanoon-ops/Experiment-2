@@ -72,6 +72,13 @@ class InventoryError(ValueError):
     """Incomplete, stale or inconsistent release evidence."""
 
 
+class PomTreeBuilder(ET.TreeBuilder):
+    """Reject DTDs before expansion, regardless of the POM's XML byte encoding."""
+
+    def doctype(self, name: str, pubid: str | None, system: str | None) -> None:
+        raise InventoryError("POM DTD/entity declarations are forbidden")
+
+
 def extract_components(root_build: Path, app_build: Path) -> list[dict]:
     """Return source declarations only. An unversioned member is never given a BOM version."""
     components = []
@@ -171,7 +178,10 @@ def validate_inventory(inventory: dict, root: Path) -> None:
         require(isinstance(edge, dict), "Invalid dependency edge")
         require(edge.get("from") in adjacency and edge.get("to") in ids, "Dependency edge references a missing component")
         require(type(edge.get("constraint")) is bool and is_text(edge.get("requested")), "Missing dependency selection evidence")
-        adjacency[edge["from"]].add(edge["to"])
+        # Constraints influence versions but cannot introduce a dependency. Requiring a path
+        # of actual dependency edges also detects an omitted direct/transitive relationship.
+        if not edge["constraint"]:
+            adjacency[edge["from"]].add(edge["to"])
     reached, pending = set(), [root_id]
     while pending:
         identifier = pending.pop()
@@ -219,8 +229,7 @@ def load_poms(inventory: dict, directory: Path) -> dict[str, dict]:
         data = evidence.read_bytes()
         require(entry.get("sha256") == sha256(data) and entry.get("size") == len(data), f"POM evidence hash/size mismatch: {coordinate}")
         try:
-            require(b"<!DOCTYPE" not in data.upper() and b"<!ENTITY" not in data.upper(), "POM DTD/entity declarations are forbidden")
-            document = ET.fromstring(data)
+            document = ET.fromstring(data, parser=ET.XMLParser(target=PomTreeBuilder()))
             require(document.tag.rsplit("}", 1)[-1] == "project", "POM does not have a project root")
             parts = coordinate.split(":")
             require(len(parts) == 3 and child_text(document, "artifactId") == parts[1], "POM artifact identity mismatch")
@@ -236,6 +245,19 @@ def load_poms(inventory: dict, directory: Path) -> dict[str, dict]:
     return poms
 
 
+def gpl_declaration(name: str, url: str) -> bool:
+    if re.search(r"\bA?GPL(?:\b|v?\d)|GNU\s+(?:Affero\s+)?General\s+Public", name, re.IGNORECASE):
+        return True
+    parsed = urlsplit(url)
+    host = (parsed.hostname or "").lower().removeprefix("www.")
+    # These canonical GNU text URLs establish GPL/AGPL evidence, but cannot establish
+    # SPDX's 'only' versus 'or-later' choice. Never manufacture an SPDX identifier here.
+    return parsed.scheme in {"http", "https"} and host == "gnu.org" and re.fullmatch(
+        r"/licenses/(?:old-licenses/)?a?gpl(?:-[123]\.0)?(?:\.en)?(?:\.html|\.txt)?/?",
+        parsed.path.lower(),
+    ) is not None
+
+
 def normalize_license(name: str, url: str) -> str | None:
     by_name = LICENSE_NAMES.get(" ".join(name.split()).casefold())
     parsed = urlsplit(url)
@@ -247,6 +269,8 @@ def normalize_license(name: str, url: str) -> str | None:
     if parsed.scheme in {"http", "https"} and host == "spdx.org" and path.startswith("/licenses/"):
         by_url = LICENSE_NAMES.get(path.removeprefix("/licenses/"))
     if by_name and by_url and by_name != by_url:
+        return None
+    if gpl_declaration(name, url) and (by_name in ALLOWED_LICENSES or by_url in ALLOWED_LICENSES):
         return None
     return by_name or by_url
 
@@ -299,10 +323,10 @@ def check_licenses(components: list[dict]) -> list[str]:
         for license_item in component["licenses"]:
             license_id = license_item["id"]
             raw_name = license_item["name"]
-            # A conflicting permissive URL must not hide an explicit GPL/AGPL declaration.
-            copyleft = re.search(r"\b(?:A?GPL)(?:\b|-)|GNU\s+(?:Affero\s+)?General\s+Public", raw_name, re.IGNORECASE)
-            if license_id in DISALLOWED_LICENSES or copyleft:
-                errors.append(f"Disallowed GPL/AGPL POM declaration for {coordinate}: {raw_name or license_id}")
+            # Either a name or a canonical license URL can reveal conflicting GPL/AGPL
+            # evidence. Keep that evidence visible even when the other field is permissive.
+            if license_id in DISALLOWED_LICENSES or gpl_declaration(raw_name, license_item["url"]):
+                errors.append(f"Disallowed GPL/AGPL POM declaration for {coordinate}: {raw_name!r} {license_item['url']!r}")
             elif license_id not in ALLOWED_LICENSES:
                 errors.append(f"UNKNOWN/unreviewed POM license for {coordinate}: {raw_name!r} {license_item['url']!r}")
     return errors
@@ -350,7 +374,10 @@ def build_cyclonedx_sbom(inventory: dict, components: list[dict], revision: str 
         cdx_components.append(record)
     adjacency = {reference: set() for reference in refs.values()}
     for edge in inventory["edges"]:
-        adjacency[refs[edge["from"]]].add(refs[edge["to"]])
+        # CycloneDX dependsOn denotes direct dependencies. Keep version constraints in
+        # the complete selection-edges property instead of inventing dependency links.
+        if not edge["constraint"]:
+            adjacency[refs[edge["from"]]].add(refs[edge["to"]])
     fingerprint = sha256(json.dumps(inventory, sort_keys=True).encode("utf-8"))
     serial = uuid.uuid5(uuid.NAMESPACE_URL, f"artflow:{revision}:releaseRuntimeClasspath:{fingerprint}")
     return {

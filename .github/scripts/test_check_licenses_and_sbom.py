@@ -74,7 +74,7 @@ class CheckLicensesAndSbomTest(unittest.TestCase):
     def edge(source, target, requested=None, constraint=False):
         return {"from": source, "to": target, "requested": requested or target, "constraint": constraint}
 
-    def pom(self, coordinate, license_name="Apache License, Version 2.0", license_url="https://www.apache.org/licenses/LICENSE-2.0.txt", parent=None, raw=None):
+    def pom(self, coordinate, license_name="Apache License, Version 2.0", license_url="https://www.apache.org/licenses/LICENSE-2.0.txt", parent=None, raw=None, encoding="utf-8"):
         group, name, version = coordinate.split(":")
         if raw is None:
             parent_xml = ""
@@ -89,7 +89,7 @@ class CheckLicensesAndSbomTest(unittest.TestCase):
                 f"{parent_xml}<groupId>{group}</groupId><artifactId>{name}</artifactId><version>{version}</version>"
                 f"{license_xml}</project>"
             )
-        data = raw.encode("utf-8")
+        data = raw.encode(encoding)
         relative = f"release-poms/{sha256(coordinate.encode())}.pom"
         (self.report_directory / relative).write_bytes(data)
         self.inventory["poms"] = [entry for entry in self.inventory["poms"] if entry["id"] != coordinate]
@@ -157,6 +157,20 @@ class CheckLicensesAndSbomTest(unittest.TestCase):
         module = next(item for item in sbom["components"] if item["name"] == "ui")
         self.assertNotIn("hashes", module)
         self.assertEqual({item["hashes"][0]["content"] for item in module["components"]}, {item["sha256"] for item in self.ui["artifacts"]})
+
+    def test_constraints_remain_selection_evidence_without_becoming_dependencies(self):
+        sbom = build_cyclonedx_sbom(self.inventory, self.components())
+        by_name = {item["name"]: item for item in sbom["components"]}
+        dependencies = {item["ref"]: item["dependsOn"] for item in sbom["dependencies"]}
+        self.assertEqual(dependencies[by_name["compose-bom"]["bom-ref"]], [])
+        self.assertIn(by_name["ui"]["bom-ref"], dependencies["project::app"])
+        selection = next(item["value"] for item in sbom["metadata"]["properties"] if item["name"] == "artflow:gradle:selection-edges")
+        self.assertIn(self.edge(self.bom["id"], self.ui["id"], constraint=True), json.loads(selection))
+
+    def test_constraint_cannot_replace_a_missing_dependency_relationship(self):
+        self.inventory["edges"] = [edge for edge in self.inventory["edges"] if edge["from"] != "project::app" or edge["to"] != self.ui["id"]]
+        with self.assertRaisesRegex(InventoryError, "unreachable"):
+            validate_inventory(self.inventory, self.root)
 
     def test_stale_build_inputs_fail(self):
         (self.root / "app/build.gradle.kts").write_text("// changed release dependencies\n")
@@ -253,16 +267,53 @@ class CheckLicensesAndSbomTest(unittest.TestCase):
         self.pom(self.ui["id"], raw='<project><groupId>androidx.compose.ui</groupId><artifactId>wrong</artifactId><version>1.7.3</version></project>')
         self.assertIn("identity mismatch", "\n".join(check_licenses(self.components())))
 
+    def test_dtd_entities_cannot_supply_licenses_in_any_supported_xml_encoding(self):
+        for encoding in ("utf-8", "utf-16", "utf-16-le", "utf-16-be"):
+            with self.subTest(encoding=encoding):
+                declaration = "UTF-8" if encoding == "utf-8" else "UTF-16"
+                raw = (
+                    f'<?xml version="1.0" encoding="{declaration}"?>'
+                    '<!DOCTYPE project [<!ENTITY license "Apache-2.0">]>'
+                    '<project><groupId>androidx.compose.ui</groupId><artifactId>ui</artifactId><version>1.7.3</version>'
+                    '<licenses><license><name>&license;</name></license></licenses></project>'
+                )
+                self.pom(self.ui["id"], raw=raw, encoding=encoding)
+                self.write_inventory()
+                output = self.root / "sbom.json"
+                code, _, stderr = self.invoke("--sbom-out", output)
+                self.assertEqual(code, 1)
+                self.assertIn("DTD/entity", stderr)
+                ui = next(item for item in json.loads(output.read_text())["components"] if item["name"] == "ui")
+                self.assertNotIn("licenses", ui)
+
+    def test_utf16_pom_without_a_dtd_preserves_explicit_license_evidence(self):
+        raw = (
+            '<?xml version="1.0" encoding="UTF-16"?>'
+            '<project><groupId>androidx.compose.ui</groupId><artifactId>ui</artifactId><version>1.7.3</version>'
+            '<licenses><license><name>MIT</name></license></licenses></project>'
+        )
+        self.pom(self.ui["id"], raw=raw, encoding="utf-16")
+        self.assertEqual(check_licenses(self.components()), [])
+        ui = next(item for item in self.components() if item["id"] == self.ui["id"])
+        self.assertEqual(ui["licenses"][0]["id"], "MIT")
+
     def test_license_conflicts_and_copyleft_declarations_fail(self):
         for name, url in (
             ("GPL-3.0-only", "https://www.apache.org/licenses/LICENSE-2.0"),
+            ("GPLv3", "https://www.apache.org/licenses/LICENSE-2.0"),
+            ("AGPLv3", "https://opensource.org/licenses/MIT"),
             ("GNU Affero General Public License", "https://opensource.org/licenses/MIT"),
+            ("MIT", "https://www.gnu.org/licenses/gpl-3.0.html"),
+            ("Apache-2.0", "https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html"),
             ("MIT", "https://www.apache.org/licenses/LICENSE-2.0"),
             ("Unreviewed License", "https://example.org/license"),
         ):
             with self.subTest(name=name):
                 self.pom(self.ui["id"], name, url)
-                self.assertTrue(check_licenses(self.components()))
+                components = self.components()
+                self.assertTrue(check_licenses(components))
+                ui = next(item for item in components if item["id"] == self.ui["id"])
+                self.assertIsNone(ui["licenses"][0]["id"])
 
     def test_license_urls_require_an_exact_recognized_host(self):
         self.assertEqual(normalize_license("", "https://www.apache.org/licenses/LICENSE-2.0.txt"), "Apache-2.0")

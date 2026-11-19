@@ -27,24 +27,41 @@ fun dependencySha256(file: File): String {
 }
 
 fun dependencyPomName(coordinate: String): String =
-    MessageDigest.getInstance("SHA-256").digest(coordinate.toByteArray(Charsets.UTF_8))
+    MessageDigest
+        .getInstance("SHA-256")
+        .digest(coordinate.toByteArray(Charsets.UTF_8))
         .joinToString("") { "%02x".format(it) } + ".pom"
 
 fun Element.dependencyChild(name: String): Element? =
-    (0 until childNodes.length).map { childNodes.item(it) }
-        .filterIsInstance<Element>().firstOrNull { it.localName == name }
+    (0 until childNodes.length)
+        .map { childNodes.item(it) }
+        .filterIsInstance<Element>()
+        .firstOrNull { it.localName == name }
 
 fun dependencyParentPom(file: File): String? {
-    val factory = DocumentBuilderFactory.newInstance().apply {
-        isNamespaceAware = true
-        setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
-        setFeature("http://xml.org/sax/features/external-general-entities", false)
-        setFeature("http://xml.org/sax/features/external-parameter-entities", false)
-        setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "")
-        setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "")
-    }
-    val parent = factory.newDocumentBuilder().parse(file).documentElement.dependencyChild("parent") ?: return null
-    val parts = listOf("groupId", "artifactId", "version").map { parent.dependencyChild(it)?.textContent?.trim().orEmpty() }
+    val factory =
+        DocumentBuilderFactory.newInstance().apply {
+            isNamespaceAware = true
+            setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+            setFeature("http://xml.org/sax/features/external-general-entities", false)
+            setFeature("http://xml.org/sax/features/external-parameter-entities", false)
+            setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "")
+            setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "")
+        }
+    val parent =
+        factory
+            .newDocumentBuilder()
+            .parse(file)
+            .documentElement
+            .dependencyChild("parent") ?: return null
+    val parts =
+        listOf("groupId", "artifactId", "version").map {
+            parent
+                .dependencyChild(it)
+                ?.textContent
+                ?.trim()
+                .orEmpty()
+        }
     // Property expressions and dynamic parent versions require review; never guess their values.
     return parts.takeIf { values -> values.all { it.matches(Regex("[A-Za-z0-9_.-]+")) } }?.joinToString(":")
 }
@@ -76,6 +93,7 @@ tasks.register("writeReleaseDependencyInventory") {
         }
         val rootId = resolution.rootComponent.get().id
         val rootRef = "project:${project.path}"
+
         fun reference(id: ComponentIdentifier): String =
             when {
                 id == rootId -> rootRef
@@ -83,25 +101,39 @@ tasks.register("writeReleaseDependencyInventory") {
                 else -> error("Unsupported release component must be inventoried explicitly: $id")
             }
 
-        val modules = resolution.allComponents.filter { it.id != rootId }.associateBy { reference(it.id) }.toSortedMap()
+        val modules =
+            resolution.allComponents
+                .filter { it.id != rootId }
+                .associateBy { reference(it.id) }
+                .toSortedMap()
         check(modules.isNotEmpty()) { "Resolved release dependency graph is empty" }
         // ArtifactCollection is deliberately strict: unresolved artifacts fail, including artifacts
         // that are only reached transitively. Local/project artifacts cannot silently disappear.
-        val artifacts = configuration.incoming.artifacts.artifacts.groupBy { reference(it.id.componentIdentifier) }
+        val artifacts =
+            configuration.incoming.artifacts.artifacts
+                .groupBy { reference(it.id.componentIdentifier) }
         check(artifacts.keys.all { it in modules }) { "Release artifacts exist outside the resolved module graph" }
         check(artifacts.isNotEmpty()) { "Resolved release artifact inventory is empty" }
 
         val poms = sortedMapOf<String, Map<String, Any>>()
-        fun collectPom(coordinate: String, depth: Int = 0) {
+
+        fun collectPom(
+            coordinate: String,
+            depth: Int = 0,
+        ) {
             if (coordinate in poms) return
             poms[coordinate] = mapOf("id" to coordinate, "status" to "unresolved", "reason" to "POM unavailable")
             if (depth > 20) return
             val parts = coordinate.split(':')
             val query =
-                dependencies.createArtifactResolutionQuery().forModule(parts[0], parts[1], parts[2])
-                    .withArtifacts(MavenModule::class.java, MavenPomArtifact::class.java).execute()
+                dependencies
+                    .createArtifactResolutionQuery()
+                    .forModule(parts[0], parts[1], parts[2])
+                    .withArtifacts(MavenModule::class.java, MavenPomArtifact::class.java)
+                    .execute()
             val files =
-                query.resolvedComponents.flatMap { it.getArtifacts(MavenPomArtifact::class.java) }
+                query.resolvedComponents
+                    .flatMap { it.getArtifacts(MavenPomArtifact::class.java) }
                     .filterIsInstance<ResolvedArtifactResult>()
             if (files.size != 1) return
             val source = files.single().file
@@ -132,30 +164,43 @@ tasks.register("writeReleaseDependencyInventory") {
                     "version" to id.version,
                     "pomId" to coordinate,
                     "artifacts" to
-                        artifacts[coordinate].orEmpty().map { artifact ->
-                            mapOf(
-                                "fileName" to artifact.file.name,
-                                "sha256" to dependencySha256(artifact.file),
-                                "size" to artifact.file.length(),
-                                "variant" to artifact.variant.displayName,
-                            )
-                        }.distinct().sortedBy { "${it["fileName"]}:${it["sha256"]}:${it["variant"]}" },
+                        artifacts[coordinate]
+                            .orEmpty()
+                            .map { artifact ->
+                                mapOf(
+                                    "fileName" to artifact.file.name,
+                                    "sha256" to dependencySha256(artifact.file),
+                                    "size" to artifact.file.length(),
+                                    "variant" to artifact.variant.displayName,
+                                )
+                            }.distinct()
+                            .sortedBy { "${it["fileName"]}:${it["sha256"]}:${it["variant"]}" },
                 )
             }
         val edges =
-            resolution.allDependencies.filterIsInstance<ResolvedDependencyResult>().map {
-                mapOf(
-                    "from" to reference(it.from.id),
-                    "to" to reference(it.selected.id),
-                    "requested" to it.requested.displayName,
-                    "constraint" to it.isConstraint,
-                )
-            }.distinct().sortedBy { "${it["from"]}:${it["to"]}:${it["requested"]}:${it["constraint"]}" }
+            resolution.allDependencies
+                .filterIsInstance<ResolvedDependencyResult>()
+                .map {
+                    mapOf(
+                        "from" to reference(it.from.id),
+                        "to" to reference(it.selected.id),
+                        "requested" to it.requested.displayName,
+                        "constraint" to it.isConstraint,
+                    )
+                }.distinct()
+                .sortedBy { "${it["from"]}:${it["to"]}:${it["requested"]}:${it["constraint"]}" }
         val inputPaths =
             listOf(
-                "build.gradle.kts", "settings.gradle.kts", "app/build.gradle.kts", "gradle.properties",
-                "gradle/wrapper/gradle-wrapper.properties", "gradle/release-dependencies.gradle.kts",
-                "gradle/libs.versions.toml", "gradle/verification-metadata.xml", "gradle.lockfile", "app/gradle.lockfile",
+                "build.gradle.kts",
+                "settings.gradle.kts",
+                "app/build.gradle.kts",
+                "gradle.properties",
+                "gradle/wrapper/gradle-wrapper.properties",
+                "gradle/release-dependencies.gradle.kts",
+                "gradle/libs.versions.toml",
+                "gradle/verification-metadata.xml",
+                "gradle.lockfile",
+                "app/gradle.lockfile",
             )
         val buildInputs = inputPaths.filter { rootProject.file(it).isFile }.associateWith { dependencySha256(rootProject.file(it)) }
         val inventory =

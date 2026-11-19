@@ -170,6 +170,22 @@ class ReleaseQualificationTest(unittest.TestCase):
         self.write_json(path, manifest)
         self.assert_rejected("Incomplete installed APK capture")
 
+    def test_malformed_runner_records_produce_a_failed_report(self):
+        path = self.namespace / "manifest.json"
+        original = json.loads(path.read_text())
+        malformed = [None, [], {**original, "packages": None}]
+        for record in (None, [], {"apks": None}, {"apks": [None]}):
+            value = json.loads(json.dumps(original))
+            if isinstance(record, dict):
+                value["packages"]["com.artflow.studio"].update(record)
+            else:
+                value["packages"]["com.artflow.studio"] = record
+            malformed.append(value)
+        for value in malformed:
+            with self.subTest(value=value):
+                self.write_json(path, value)
+                self.assert_rejected("installedApks:")
+
     def test_second_attempt_snapshot_is_rejected(self):
         (self.namespace.parent / "00000000-0000-0000-0000-000000000000").mkdir()
         self.assert_rejected("stale/repeated captures")

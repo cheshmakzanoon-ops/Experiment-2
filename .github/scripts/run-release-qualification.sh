@@ -9,8 +9,6 @@ collect() {
   timeout 15 adb pull /sdcard/Android/data/com.artflow.studio/files/test-evidence \
     "$qualification_root/app-external-evidence" || true
 }
-trap collect EXIT
-
 if [[ -e "$qualification_root/attempt-token.txt" ]]; then
   echo 'Refusing a second qualification attempt in the same output directory' >&2
   exit 2
@@ -24,7 +22,10 @@ if any(results.rglob("TEST-*.xml")) or (evidence.exists() and any(evidence.rglob
     raise SystemExit("Refusing stale benchmark results or evidence; use a clean qualification checkout")
 PY
 attempt_token="$(python -c 'import uuid; print(uuid.uuid4())')"
-printf '%s\n' "$attempt_token" > "$qualification_root/attempt-token.txt"
+# Claim the attempt exclusively, including when two invocations start concurrently. Refused
+# invocations must not collect new diagnostics over the preserved first-attempt evidence.
+(set -o noclobber; printf '%s\n' "$attempt_token" > "$qualification_root/attempt-token.txt")
+trap collect EXIT
 classes="$(python .github/scripts/release_qualification.py inventory --output "$qualification_root/test-inventory.json")"
 api="$(timeout 15 adb shell getprop ro.build.version.sdk | tr -d '\r')"
 if [[ "$api" != 36 ]]; then
