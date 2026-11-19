@@ -26,7 +26,9 @@ fun SavedBrushToolbar(
     var fileError by remember { mutableStateOf<String?>(null) }
     val state = controls.state
     val available = !state.loading && !state.busy && state.error == null
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+    // A centered minimum touch target can extend half a pixel past its rounded layout slot.
+    // Keep that complete hit region inside the toolbar when the last button row wraps.
+    Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 1.dp)) {
         // The count needs its own line: three actions leave only a few pixels for a weighted
         // label on a 320 dp phone. Wrap whole buttons when the user increases the font size.
         Text(

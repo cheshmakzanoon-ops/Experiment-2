@@ -162,6 +162,31 @@ original failed runtime result. Neither this repair nor those build/identity che
 qualifies paint/save, process death, chooser grants, or pixel preservation; those
 still require the complete ordinary-release workflow to pass on the final source.
 
+### Observing the accepted scroll
+
+[Run 44577466047](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44577466047)
+passed the original Stylus-only step, then failed to find **Autosave**. Its single original
+UI invocation failed once; artwork creation and pixel preservation were not reached.
+The actual checkout was `686cd94ffa148d2f8f80bea19cd4eebbd10ff03a`, tree
+`7d93328e106349b2381f1b2c90ff542fff42f7b9`. Artifact `14557213207` is 30,083,856 bytes,
+with independently verified SHA-256
+`092d63d8bf5a18fd4bdbb8a69a4edc0772b70fa7ed7f8f41ce44c13b85d82abc`.
+Source/raw-commit validation, all 153 release payload entries, official signatures,
+both installed APKs and 1,770 renamed app classes passed the independent audit.
+
+The retained log shows accepted scroll actions in both directions, but the driver did not
+observe their corresponding events before querying the next screen. The pinned UiAutomator
+implementation delegates idle detection to the preceding accessibility event stream; an
+accepted asynchronous action can precede its first event. The driver now registers a
+[`UiAutomation.executeAndWaitForEvent`](https://developer.android.com/reference/android/app/UiAutomation#executeAndWaitForEvent(java.lang.Runnable,%20android.app.UiAutomation.AccessibilityEventFilter,%20long))
+filter before issuing that same single action. It requires a scroll event from the selected
+application container, then uses the existing idle wait and a fresh target lookup. Accepted
+actions without a matching event fail explicitly. Event coordinates and visible label text
+are retained to distinguish timing, page movement and selector failures in the next run.
+The container selection, action count and bounded search are preserved. This repairs an
+observable synchronization gap; only a new original runtime can establish whether it resolves
+the missed Autosave lookup. The earlier failed run remains failed.
+
 For a clean checkout and a fresh local disposable emulator:
 
 ```bash

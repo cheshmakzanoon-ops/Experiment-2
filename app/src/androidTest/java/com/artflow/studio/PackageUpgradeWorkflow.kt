@@ -96,7 +96,18 @@ internal class PackageUpgradeWorkflow(
         }
         val before = runBlocking { requireNotNull(projects.getProjectById(projectId)) }
         assertEquals(baseline.getString("projectName"), before.name)
-        assertEquals(storage.documentFile(projectId).canonicalPath, File(before.filePath).canonicalPath)
+        // The real v1 UI leaves filePath empty after saving; the document is addressed by ID.
+        // Preserve that exact row value while independently checking its actual retained file.
+        assertEquals("The repository must preserve the frozen document metadata", frozenProjectText("filePath"), before.filePath)
+        assertEquals("The repository must preserve the frozen thumbnail metadata", frozenProjectText("thumbnailPath"), before.thumbnailPath)
+        val relativeDocument = "files/projects/$projectId/canvas.artflow"
+        assertTrue("The frozen seed must contain its document", baseline.getJSONObject("files").has(relativeDocument))
+        assertEquals(
+            "Project storage must resolve the actual frozen document",
+            File(context.dataDir.canonicalFile, relativeDocument).canonicalPath,
+            storage.documentFile(projectId).canonicalPath,
+        )
+        assertTrue(storage.documentFile(projectId).isFile)
         assertEquals(storage.thumbnailFile(projectId).canonicalPath, File(requireNotNull(before.thumbnailPath)).canonicalPath)
         assertTrue(runBlocking { storage.hasUnsavedRecovery(projectId) })
         val expectedRecovery = expectedOldPixels()
@@ -125,6 +136,13 @@ internal class PackageUpgradeWorkflow(
         val after = runBlocking { requireNotNull(projects.getProjectById(projectId)) }
         assertTrue(after.modifiedAt >= before.modifiedAt)
         assertEquals("Only the edited project's modification time should change", before.copy(modifiedAt = after.modifiedAt), after)
+        val savedDocument = runBlocking { requireNotNull(storage.loadDocument(projectId)) }
+        assertEquals(savedDocument.width, after.width)
+        assertEquals(savedDocument.height, after.height)
+        assertEquals(savedDocument.dpi, after.dpi)
+        assertEquals(savedDocument.frames[savedDocument.activeFrameIndex].layers.size, after.layerCount)
+        assertEquals(maxOf(before.modifiedAt, savedDocument.savedAt), after.modifiedAt)
+        assertEquals(storage.thumbnailFile(projectId).canonicalPath, File(requireNotNull(after.thumbnailPath)).canonicalPath)
         assertEquals(originalPreferences, runBlocking { settings.settings.first() })
         assertStoredRows(skipEditedProject = true)
         val checkpoint =
@@ -208,6 +226,22 @@ internal class PackageUpgradeWorkflow(
             assertEquals(relative, expected.getLong("modifiedSeconds"), file.lastModified() / 1000)
             assertEquals(relative, expected.getString("sha256"), digest(file.readBytes()))
         }
+    }
+
+    private fun frozenProjectText(column: String): String {
+        val table = baseline.getJSONObject("database").getJSONObject("tables").getJSONObject("projects")
+        val columns = table.getJSONArray("columns")
+        val idIndex = (0 until columns.length()).single { columns.getString(it) == "id" }
+        val valueIndex = (0 until columns.length()).single { columns.getString(it) == column }
+        val rows = table.getJSONArray("rows")
+        val row =
+            (0 until rows.length()).map { rows.getJSONArray(it) }.single {
+                val id = it.getJSONObject(idIndex)
+                id.getString("type") == "integer" && id.getString("value") == projectId.toString()
+            }
+        val cell = row.getJSONObject(valueIndex)
+        assertEquals("Frozen project $column storage class", "text", cell.getString("type"))
+        return cell.getString("value")
     }
 
     /** Preserve SQLite storage classes as well as values; no JSON-number rounding of 64-bit IDs. */

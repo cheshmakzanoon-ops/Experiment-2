@@ -640,6 +640,46 @@ with no failures, errors or skips, including the external corpora. The source ar
   containment and nonoverlap requirements now measure the actual `touchBoundsInRoot`, as defined
   by the resolved Compose API; visual bounds remain in the evidence. Fresh runtime is required.
 
+### Follow-through checkpoint and original outcomes
+
+Head `e9505b1ac6e450b59fdc20446744696068ab8511` was tested as PR checkout
+`686cd94ffa148d2f8f80bea19cd4eebbd10ff03a`. Its retained 1,152-file source archive
+reconstructed tree `7d93328e106349b2381f1b2c90ff542fff42f7b9`, matching local `9c4bf88`.
+
+- Ordinary-release run 44577466047 passed the Stylus-only step and failed the next Autosave
+  lookup after accepted accessibility scroll actions. Independent source, payload, official
+  signature and installed-byte checks passed. The driver now registers observation before its
+  single scroll action and requires the selected container's event before idle detection and
+  a fresh lookup. Event coordinates and visible text remain in the trace. The repaired driver
+  APK compiled in 17 seconds; resolving the original missed lookup still requires fresh runtime.
+- Optimized run 44577466171 executed all 43 cases: 42 passed, one failed, none skipped. Its new
+  tab cross-check found no accessibility candidates, so no OS touch was injected. Exact resolved
+  source showed that Compose's virtual-node provider does not implement the text-search method
+  used by the helper. One traversal of actual child nodes replaces that unsupported query;
+  root/window identity and accepted/rejected nodes are retained. Geometry, unique target,
+  single DOWN/UP, selected state, practice stroke and artwork-isolation checks all remain.
+- Installed-upgrade run 44577466002 passed the actual historical UI seed and version-code 3-to-4
+  replacement with byte-for-byte stopped-data preservation. Candidate editing failed before
+  recovery because the probe expected a canonical path in a legacy metadata field that the
+  real old UI leaves empty. The probe now compares the exact frozen SQL text while independently
+  checking the real document path/file. Current-save dimensions, DPI, active-frame layer count,
+  thumbnail and commit time are separately checked against the newly saved manifest. The strict
+  old rows/files/recovery/pixels and fresh-process checks remain. The original edit failed once;
+  reopen was not invoked, and overall installed-upgrade qualification remains pending.
+- Android CI 44577466005 again passed its complete build, including all 2,001 JVM cases without
+  skips. Its retained API26 device inventory contains 322 cases: 318 passed, two failed and two
+  have their existing API-conditional skips. The palette regression passed. The Drawing pad
+  failure occurred before OS input at the unsupported accessibility query described above.
+  The toolbar's three screenshots and twelve label measurements show complete single lines at
+  font scales 1.0, 1.3 and 2.0. Reconstructed paragraph widths equal the parent constraint rather
+  than the measured text width, causing nine false overflow flags. The regression now requires
+  exact text, the complete visible character range, no ellipsis or height overflow, and line
+  extents inside the actual measured size. Raw overflow flags remain in the evidence. A separate
+  real defect put the enlarged Import touch region 0.5 px outside the toolbar at scale 1.3;
+  one dp of bottom padding now contains that rounding expansion. The strict 48 dp, containment,
+  nonoverlap, enabled/click and dialog requirements remain. These repairs require fresh runtime;
+  the original failures remain failures.
+
 All original attempts and their failures remain retained. These follow-through repairs belong to
 the existing assignments and do not add another wave. Current run outcomes and final exact-main
 acceptance are maintained in PR 41 after each source freeze.

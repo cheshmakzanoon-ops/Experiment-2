@@ -65,10 +65,7 @@ class SavedBrushToolbarLayoutTest {
                     assertEquals("$label wraps at font scale $scale\n${measurement.details()}", 1, measurement.layout.lineCount)
                 }
                 recordFailure(failures) {
-                    assertFalse(
-                        "$label overflows at font scale $scale\n${measurement.details()}",
-                        measurement.layout.hasVisualOverflow,
-                    )
+                    assertReadableLabel(label, scale, measurement)
                 }
             }
             val targets =
@@ -125,6 +122,32 @@ class SavedBrushToolbarLayoutTest {
         node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
         val semantics = node.fetchSemanticsNode()
         return LabelMeasurement(layouts.single(), semantics.boundsInRoot, semantics.touchBoundsInRoot)
+    }
+
+    private fun assertReadableLabel(
+        label: String,
+        scale: Float,
+        measurement: LabelMeasurement,
+    ) {
+        val layout = measurement.layout
+        val message = "$label is not fully readable at font scale $scale\n${measurement.details()}"
+        assertEquals(message, label, layout.layoutInput.text.text)
+        assertFalse(message, layout.didOverflowHeight)
+        // String Text semantics reconstructs a paragraph with the parent's maximum width.
+        // Its hasVisualOverflow flag can be true even when the complete drawn line fits.
+        // Check the actual line content and extents against the measured label instead.
+        if (layout.lineCount == 1) {
+            assertEquals(message, 0, layout.getLineStart(0))
+            assertEquals(message, label.length, layout.getLineEnd(0, visibleEnd = true))
+            assertFalse(message, layout.isLineEllipsized(0))
+            assertTrue(
+                message,
+                layout.getLineLeft(0) >= 0f &&
+                    layout.getLineRight(0) <= layout.size.width &&
+                    layout.getLineTop(0) >= 0f &&
+                    layout.getLineBottom(0) <= layout.size.height,
+            )
+        }
     }
 
     private fun captureMeasurements(

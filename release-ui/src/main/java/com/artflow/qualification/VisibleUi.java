@@ -5,6 +5,7 @@ import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.util.Log;
+import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import androidx.test.uiautomator.By;
 import androidx.test.uiautomator.BySelector;
@@ -14,6 +15,7 @@ import androidx.test.uiautomator.UiObject2;
 import androidx.test.uiautomator.Until;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeoutException;
 
 /** Bounded operations against the visible accessibility tree, without production classes or state. */
 final class VisibleUi {
@@ -55,18 +57,73 @@ final class VisibleUi {
                                     + " " + node.getVisibleBounds() + "; advertised=" + advertised);
                             return advertised;
                         },
-                        (node, requested) -> {
-                            boolean accepted = node.getAccessibilityNodeInfo().performAction(requested.getId());
-                            Log.i("ArtFlowQualification", "Scroll " + direction + "; accepted=" + accepted);
-                            return accepted;
-                        });
+                        (node, requested) -> scrollAndWait(node, requested, target));
                 device.waitForIdle(1_000);
+                logVisibleText(target);
                 present = device.findObject(target);
                 if (present != null && !present.getVisibleBounds().isEmpty()) return present;
                 if (!more) break;
             }
         }
         return await(target);
+    }
+
+    private boolean scrollAndWait(UiObject2 container,
+            AccessibilityNodeInfo.AccessibilityAction action, BySelector target) {
+        AccessibilityNodeInfo requestedContainer = container.getAccessibilityNodeInfo();
+        boolean[] accepted = {false};
+        try {
+            // Register before the action. A quiet accessibility stream before an asynchronous
+            // scroll starts is not evidence that the resulting screen has been observed.
+            AccessibilityEvent event = instrumentation.getUiAutomation().executeAndWaitForEvent(
+                    () -> {
+                        accepted[0] = requestedContainer.performAction(action.getId());
+                        Log.i("ArtFlowQualification", "Scroll action=" + action.getId()
+                                + "; accepted=" + accepted[0] + "; target=" + target);
+                    },
+                    candidate -> {
+                        if (candidate.getEventType() != AccessibilityEvent.TYPE_VIEW_SCROLLED
+                                || !APP.contentEquals(String.valueOf(candidate.getPackageName()))) return false;
+                        AccessibilityNodeInfo source = candidate.getSource();
+                        try {
+                            boolean matches = requestedContainer.equals(source);
+                            Log.i("ArtFlowQualification", "Scroll event for " + target + ": selectedContainer="
+                                    + matches + ", y=" + candidate.getScrollY() + "/" + candidate.getMaxScrollY());
+                            return matches;
+                        }
+                        finally { if (source != null) source.recycle(); }
+                    }, 1_000);
+            try {
+                Log.i("ArtFlowQualification", "Observed scroll for " + target + ": y=" + event.getScrollY()
+                        + "/" + event.getMaxScrollY() + ", x=" + event.getScrollX()
+                        + "/" + event.getMaxScrollX());
+                return accepted[0];
+            } finally { event.recycle(); }
+        } catch (TimeoutException failure) {
+            if (!accepted[0]) return false;
+            throw new AssertionError("Accepted scroll produced no matching container event for " + target, failure);
+        }
+    }
+
+    private void logVisibleText(BySelector target) {
+        AccessibilityNodeInfo root = instrumentation.getUiAutomation().getRootInActiveWindow();
+        StringBuilder text = new StringBuilder();
+        try { collectVisibleText(root, text); }
+        finally { if (root != null) root.recycle(); }
+        Log.i("ArtFlowQualification", "Visible text while seeking " + target + ": " + text);
+    }
+
+    private void collectVisibleText(AccessibilityNodeInfo node, StringBuilder text) {
+        if (node == null) return;
+        if (node.isVisibleToUser() && APP.contentEquals(String.valueOf(node.getPackageName()))) {
+            if (node.getText() != null) text.append('[').append(node.getText()).append("] ");
+            if (node.getHintText() != null) text.append("hint[").append(node.getHintText()).append("] ");
+        }
+        for (int i = 0; i < node.getChildCount(); i++) {
+            AccessibilityNodeInfo child = node.getChild(i);
+            try { collectVisibleText(child, text); }
+            finally { if (child != null) child.recycle(); }
+        }
     }
 
     void toggle(String label, boolean desired, boolean description) {

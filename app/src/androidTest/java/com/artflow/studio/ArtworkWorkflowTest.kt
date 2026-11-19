@@ -322,17 +322,23 @@ class ArtworkWorkflowTest {
         val observations = JSONArray()
         receipt.put("accessibilityCandidates", observations)
         try {
-            labels = root.findAccessibilityNodeInfosByText("Drawing pad")
-            labels.filter { it.text?.toString() == "Drawing pad" }.forEach { label ->
+            receipt.put("accessibilityRoot", accessibilityObservation(root))
+            labels = drawingPadLabels(root, receipt)
+            labels.forEach { label ->
                 // Compose accessibility exposes unmerged text separately from the parent's OnClick.
                 // Resolve that actual clickable ancestor, never invoke the label's semantic action.
                 val target = nearestClickableAncestor(label, instrumentation.targetContext.packageName)
-                val observation = JSONObject().put("labelClickable", label.isClickable).put("hasClickableAncestor", target != null)
+                val observation =
+                    accessibilityObservation(label).put("labelClickable", label.isClickable).put(
+                        "hasClickableAncestor",
+                        target != null,
+                    )
                 observations.put(observation)
                 if (target != null) {
                     val bounds = Rect().also(target::getBoundsInScreen)
                     val edges = listOf(bounds.left, bounds.top, bounds.right, bounds.bottom)
                     val matches = expected.zip(edges).all { (a, b) -> abs(a - b) <= 1f }
+                    observation.put("ancestor", accessibilityObservation(target))
                     observation.put("ancestorScreenBounds", JSONArray(edges)).put("matchesExpectedTab", matches)
                     if (matches && targets.none { it == target }) targets.add(target) else target.recycle()
                 }
@@ -346,6 +352,57 @@ class ArtworkWorkflowTest {
             labels.forEach { it.recycle() }
             root.recycle()
         }
+    }
+
+    private fun drawingPadLabels(
+        root: AccessibilityNodeInfo,
+        receipt: JSONObject,
+    ): List<AccessibilityNodeInfo> {
+        val observations = JSONArray()
+        receipt.put("accessibilityTraversal", observations)
+        val labels = mutableListOf<AccessibilityNodeInfo>()
+        val pending = ArrayDeque<Pair<AccessibilityNodeInfo, String>>()
+        pending.addLast(AccessibilityNodeInfo.obtain(root) to "root")
+        try {
+            // Compose's provider implements node creation, but not findAccessibilityNodeInfosByText.
+            // Walk its actual child nodes once; retain the full observed tree, including rejected labels.
+            while (pending.isNotEmpty()) {
+                val (node, path) = pending.removeFirst()
+                try {
+                    val missingChildren = JSONArray()
+                    observations.put(accessibilityObservation(node).put("path", path).put("missingChildIndices", missingChildren))
+                    if (node.text?.toString() == "Drawing pad") labels.add(AccessibilityNodeInfo.obtain(node))
+                    repeat(node.childCount) { index ->
+                        val child = node.getChild(index)
+                        if (child == null) missingChildren.put(index) else pending.addLast(child to "$path/$index")
+                    }
+                } finally {
+                    node.recycle()
+                }
+            }
+            return labels
+        } catch (failure: Throwable) {
+            labels.forEach { it.recycle() }
+            throw failure
+        } finally {
+            pending.forEach { (node, _) -> node.recycle() }
+        }
+    }
+
+    private fun accessibilityObservation(node: AccessibilityNodeInfo): JSONObject {
+        val bounds = Rect().also(node::getBoundsInScreen)
+        return JSONObject()
+            .put("windowId", node.windowId)
+            .put("packageName", node.packageName?.toString() ?: JSONObject.NULL)
+            .put("className", node.className?.toString() ?: JSONObject.NULL)
+            .put("text", node.text?.toString() ?: JSONObject.NULL)
+            .put("contentDescription", node.contentDescription?.toString() ?: JSONObject.NULL)
+            .put("screenBounds", JSONArray(listOf(bounds.left, bounds.top, bounds.right, bounds.bottom)))
+            .put("visibleToUser", node.isVisibleToUser)
+            .put("enabled", node.isEnabled)
+            .put("clickable", node.isClickable)
+            .put("selected", node.isSelected)
+            .put("childCount", node.childCount)
     }
 
     /** Returns an owned node copy; the caller must recycle it after checking identity and bounds. */
