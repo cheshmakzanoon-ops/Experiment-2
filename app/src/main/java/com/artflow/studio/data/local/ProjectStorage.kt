@@ -112,7 +112,8 @@ class ProjectStorage
         ): File =
             withContext(ioDispatcher) {
                 val file = documentFile(projectId)
-                writeAtomically(file) { out -> out.write(CanvasDocumentCodec.encode(document)) }
+                val previous = maxOf(file.lastModified(), autosaveFile(projectId).lastModified())
+                writeAtomically(file, previous) { out -> out.write(CanvasDocumentCodec.encode(document)) }
                 Timber.d("Saved project $projectId (v${document.version}, ${document.resolvedFrames().size} frames)")
                 file
             }
@@ -124,11 +125,8 @@ class ProjectStorage
         ): File =
             withContext(ioDispatcher) {
                 val file = autosaveFile(projectId)
-                writeAtomically(file) { out -> out.write(CanvasDocumentCodec.encode(document)) }
-                val doc = documentFile(projectId)
-                if (doc.exists() && file.lastModified() <= doc.lastModified()) {
-                    file.setLastModified(doc.lastModified() + 1000L)
-                }
+                val previous = maxOf(file.lastModified(), documentFile(projectId).lastModified())
+                writeAtomically(file, previous) { out -> out.write(CanvasDocumentCodec.encode(document)) }
                 file
             }
 
@@ -442,22 +440,24 @@ class ProjectStorage
             block: suspend (PackageSnapshot) -> T,
         ): T =
             withContext(ioDispatcher) {
-                var pinned: List<String> = emptyList()
-                try {
-                    val snapshot =
-                        rasterRetentionMutex.withLock {
-                            val file = documentFile(projectId)
-                            require(file.exists()) { "Save the artwork before sharing it" }
-                            val bytes = readDocumentBytes(file, projectId)
-                            val document = decodeDocument(bytes, projectId)
-                            pinned = referencedFiles(document)
-                            pinRasters(projectId, pinned)
-                            PackageSnapshot(document, packageSources(projectId, document, bytes))
-                        }
-                    block(snapshot)
-                } finally {
-                    // Synchronous release also runs when the archive or dispatcher return is cancelled.
-                    unpinRasters(projectId, pinned)
+                PackageAssetSnapshots().use { assets ->
+                    var pinned: List<String> = emptyList()
+                    try {
+                        val snapshot =
+                            rasterRetentionMutex.withLock {
+                                val file = documentFile(projectId)
+                                require(file.exists()) { "Save the artwork before sharing it" }
+                                val bytes = readDocumentBytes(file, projectId)
+                                val document = decodeDocument(bytes, projectId)
+                                pinned = referencedFiles(document)
+                                pinRasters(projectId, pinned)
+                                PackageSnapshot(document, packageSources(projectId, document, bytes, assets))
+                            }
+                        block(snapshot)
+                    } finally {
+                        // Synchronous release also runs when the archive or dispatcher return is cancelled.
+                        unpinRasters(projectId, pinned)
+                    }
                 }
             }
 
@@ -466,6 +466,7 @@ class ProjectStorage
             projectId: Long,
             document: CanvasDocument,
             documentBytes: ByteArray,
+            assets: PackageAssetSnapshots,
         ): List<ArtflowPackage.EntrySource> {
             val sources = mutableListOf<ArtflowPackage.EntrySource>()
             sources += ArtflowPackage.EntrySource(DOCUMENT_NAME) { ByteArrayInputStream(documentBytes) }
@@ -479,7 +480,8 @@ class ProjectStorage
             listOf(FLATTENED_NAME, THUMBNAIL_NAME, MODEL_NAME).forEach { name ->
                 val file = resolve(projectId, name)
                 if (file.isFile) {
-                    sources += ArtflowPackage.EntrySource(name) { FileInputStream(file) }
+                    val limit = if (name == MODEL_NAME) MAX_MODEL_BYTES else MAX_RASTER_BYTES
+                    sources += assets.capture(name, file, limit)
                 }
             }
             val dependencies = collectDependencies(document)
@@ -703,14 +705,14 @@ class ProjectStorage
                             writeAtomically(resolve(destinationId, name)) { out -> source.inputStream().use { it.copyTo(out) } }
                         }
                     }
-                    // Preserve recovery ordering: the newer autosave is written AFTER the saved
-                    // manifest. savedAt is retained, so neither snapshot claims to be a new edit.
-                    document?.let { saveDocument(destinationId, it) }
-                    recovery?.let {
-                        saveAutosave(destinationId, it)
-                        val savedTime = documentFile(destinationId).lastModified()
-                        val modified = if (newerRecovery) savedTime + 1000L else (savedTime - 1000L).coerceAtLeast(0L)
-                        check(autosaveFile(destinationId).setLastModified(modified)) { "Cannot preserve recovery ordering" }
+                    // Commit the authoritative snapshot last. Its timestamp ordering is durable
+                    // before publication; savedAt is retained without claiming a new user edit.
+                    if (newerRecovery) {
+                        document?.let { saveDocument(destinationId, it) }
+                        recovery?.let { saveAutosave(destinationId, it) }
+                    } else {
+                        recovery?.let { saveAutosave(destinationId, it) }
+                        document?.let { saveDocument(destinationId, it) }
                     }
                     completed = true
                     document
@@ -832,6 +834,12 @@ class ProjectStorage
         internal fun writeAtomically(
             target: File,
             write: (FileOutputStream) -> Unit,
+        ) = writeAtomically(target, null, write)
+
+        internal fun writeAtomically(
+            target: File,
+            modifiedAfter: Long?,
+            write: (FileOutputStream) -> Unit,
         ) {
             StorageFileTree.requireUnlinked(target, context.filesDir)
             val parent = requireNotNull(target.parentFile)
@@ -841,6 +849,9 @@ class ProjectStorage
                 FileOutputStream(temp).use { out ->
                     write(out)
                     out.flush()
+                    // Recovery ordering must already be valid if the process stops immediately
+                    // after rename. A failed adjustment cannot replace either committed manifest.
+                    modifiedAfter?.let { StorageCommitTime.ensureAfter(temp, it) }
                     out.fd.sync()
                 }
                 // Never fall back to an overwrite copy: a failed atomic replacement must leave the

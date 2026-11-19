@@ -36,6 +36,7 @@ RESULTS = Path("app/build/outputs/androidTest-results/connected/benchmark")
 EVIDENCE = Path("app/build/outputs/connected_android_test_additional_output/benchmarkAndroidTest")
 BUILD_CONTRACT = Path("app/build/reports/release-qualification/build-contract.json")
 TEST_ABI = Path("app/build/reports/release-qualification/test-abi")
+TEST_ABI_FIXTURES = Path("app/build/reports/release-qualification/test-abi-fixtures")
 REFLECTION_RULES = Path("app/proguard-benchmark-test-reflection.pro")
 APK_PATHS = {
     "com.artflow.studio": Path("app/build/outputs/apk/benchmark/app-benchmark.apk"),
@@ -82,7 +83,7 @@ def verify_test_abi(project: Path, configuration: str) -> dict:
     if (not isinstance(report, dict) or report.get("schemaVersion") != 1
             or report.get("generator") != "R8 TraceReferences"
             or report.get("scope") != "benchmark-instrumentation-boundary"
-            or report.get("allowObfuscation") is not True
+            or report.get("allowObfuscation") is not False
             or report.get("publisherReleaseRulesModified") is not False
             or not isinstance(report.get("r8Version"), str) or not report["r8Version"]):
         raise ValueError("Malformed generated test ABI scope or obfuscation contract")
@@ -145,10 +146,9 @@ def verify_test_abi(project: Path, configuration: str) -> dict:
         keep = re.fullmatch(r"-keep(?P<allow>,allowobfuscation)? (?P<kind>class|interface|@interface|enum) "
                             r"(?P<name>[A-Za-z0-9_.$-]+)(?P<body> \{)?", line)
         if keep and not block:
-            if not keep["allow"]:
-                if keep["kind"] != "enum":
-                    raise ValueError("Generated test ABI disables obfuscation for a non-enum class")
-                # TraceReferences retains names of enum constants even with allowobfuscation.
+            if keep["allow"]:
+                raise ValueError("Generated test ABI does not preserve its exact external symbol names")
+            if keep["kind"] == "enum":
                 kept_enum_names.append(keep["name"])
             kept_classes.append(keep["name"])
             block = bool(keep["body"])
@@ -182,14 +182,61 @@ def verify_test_abi(project: Path, configuration: str) -> dict:
     applied = normalized_rules(configuration)
     if normalized_rules(rules) not in applied or normalized_rules(reflection) not in applied:
         raise ValueError("R8 did not apply the recorded generated ABI and reflection rules")
-    return {"scope": report["scope"], "allowsObfuscation": True,
+    fixtures = verify_test_abi_fixtures(project, report)
+    return {"scope": report["scope"], "allowsObfuscation": False,
             "publisherReleaseEquivalent": False, "report": report_record,
             "r8Version": report["r8Version"], "r8Tool": tool, "artifacts": records,
             "keptClasses": len(boundary["classes"]), "keptFields": len(boundary["fields"]),
             "keptMethods": len(boundary["methods"]), "retainedPackages": boundary["packages"],
             "enumNamesPreservedByR8": kept_enum_names,
             "reflectionRules": reflection_record, "reflectionFields": 2,
-            "externalUnresolvedReferenceCount": len(unresolved)}
+            "externalUnresolvedReferenceCount": len(unresolved), "fixtures": fixtures}
+
+
+def verify_test_abi_fixtures(project: Path, abi: dict) -> dict:
+    """Require real R8 linkage fixtures using the exact Kotlin dependency bytes traced for the app."""
+    directory = project / TEST_ABI_FIXTURES
+    report_path = directory / "report.json"
+    report_record = file_record(report_path)
+    value = json.loads(report_path.read_text())
+    if (not isinstance(value, dict) or type(value.get("schemaVersion")) is not int
+            or value["schemaVersion"] != 1 or value.get("scope") != "benchmark-test-abi-fixtures"
+            or value.get("passed") is not True or value.get("publisherQualified") is not False
+            or any(type(value.get(key)) is not int or value[key] != expected
+                   for key, expected in (("tests", 6), ("failures", 0), ("errors", 0), ("skipped", 0)))
+            or value.get("r8Tool") != abi["r8Tool"]):
+        raise ValueError("Missing complete, unskipped ABI fixture success with the same R8 tool")
+    inputs = value.get("inputs")
+    if (not isinstance(inputs, dict) or set(inputs) != {"applicationInput", "kotlin", "annotations"}
+            or inputs["applicationInput"] != abi["files"]["appInput"]):
+        raise ValueError("ABI fixtures did not use the recorded application bytecode")
+    retained = {}
+    with zipfile.ZipFile(project / TEST_ABI / "app-input.jar") as application:
+        for role, prefix, required in (
+            ("kotlin", "kotlin/", "kotlin/coroutines/ContinuationInterceptor$DefaultImpls.class"),
+            ("annotations", "org/jetbrains/annotations/", "org/jetbrains/annotations/NotNull.class"),
+        ):
+            path = directory / f"{role}-input.jar"
+            record = file_record(path)
+            expected = {"file": path.name, "sizeBytes": record["sizeBytes"], "sha256": record["sha256"]}
+            item = inputs[role]
+            if (not isinstance(item, dict) or set(item) != {*expected, "classes"}
+                    or any(item[key] != expected[key] for key in expected)
+                    or type(item["classes"]) is not int or item["classes"] <= 0):
+                raise ValueError(f"ABI fixture dependency identity is invalid: {role}")
+            names = sorted(name for name in application.namelist() if name.startswith(prefix) and name.endswith(".class"))
+            try:
+                fixture_archive = zipfile.ZipFile(path)
+            except zipfile.BadZipFile as error:
+                raise ValueError(f"Malformed ABI fixture dependency archive: {role}") from error
+            with fixture_archive as fixture:
+                actual = fixture.namelist()
+                if (required not in names or len(actual) != len(set(actual))
+                        or sorted(actual) != names or item["classes"] != len(names)
+                        or any(fixture.read(name) != application.read(name) for name in names)):
+                    raise ValueError(f"ABI fixture dependency differs from the actual application classes: {role}")
+            retained[role] = record
+    return {"report": report_record, "tests": value["tests"], "skipped": value["skipped"], "inputs": retained}
 
 
 def verify_build(project: Path, evidence: Path, token: str) -> dict:
@@ -198,7 +245,7 @@ def verify_build(project: Path, evidence: Path, token: str) -> dict:
     expected = {"schemaVersion": 2, "buildType": "benchmark", "minifyEnabled": True,
                 "shrinkResources": True, "debuggable": False, "signingConfig": "debug",
                 "publisherReleaseRulesUnchanged": True, "benchmarkAddsGeneratedTestAbiRules": True,
-                "benchmarkAddsAuditedReflectionFields": True, "testAbiAllowsObfuscation": True,
+                "benchmarkAddsAuditedReflectionFields": True, "testAbiAllowsObfuscation": False,
                 "publisherQualified": False}
     if contract != expected:
         raise ValueError("Build contract does not declare benchmark test ABI constraints, optimization and test-only signing")

@@ -11,6 +11,13 @@ import java.util.zip.InflaterInputStream
 
 /** A small PNG decoder for tests (Android unit tests have no javax.imageio): 8-bit, not interlaced. */
 internal object TestPng {
+    /** Inspect fixture dimensions without inflating IDAT or allocating a pixel buffer. */
+    fun dimensions(bytes: ByteArray): Pair<Int, Int>? {
+        if (bytes.size < 33 || String(bytes, 12, 4, Charsets.US_ASCII) != "IHDR") return null
+        val data = ByteBuffer.wrap(bytes)
+        return data.getInt(16) to data.getInt(20)
+    }
+
     /**
      * Matches the Android import callback for these fixtures' recognised ICC profiles only.
      * Unknown ICC transforms are not implemented here; [decode] retains raw channels for codec tests.

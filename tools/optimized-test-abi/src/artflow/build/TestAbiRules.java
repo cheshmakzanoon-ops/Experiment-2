@@ -65,8 +65,12 @@ public final class TestAbiRules {
         writeJar(appJar, app);
         writeJar(testJar, tests);
 
+        // The separately compiled test APK must see a stable external ABI. R8 8.10.24
+        // can write a repackaged synthetic identity for Kotlin DefaultImpls methods;
+        // applying that mapping to the original caller then misses the member rename.
+        // Preserve only the exact traced names, never all classes or all members.
         Boundary boundary = new Boundary(app.keySet(), TraceReferencesKeepRules.builder()
-                .setAllowObfuscation(true).setOutputPath(rules).build());
+                .setAllowObfuscation(false).setOutputPath(rules).build());
         TraceReferencesCommand.Builder command = TraceReferencesCommand.builder()
                 .addTargetFiles(appJar).addSourceFiles(testJar).setConsumer(boundary);
         for (Path library : paths.get("--library")) {
@@ -88,7 +92,7 @@ public final class TestAbiRules {
         evidence.put("r8Version", Version.getVersionString());
         evidence.put("r8Tool", fileRecord(Path.of(TraceReferences.class.getProtectionDomain().getCodeSource().getLocation().toURI())));
         evidence.put("scope", "benchmark-instrumentation-boundary");
-        evidence.put("allowObfuscation", true);
+        evidence.put("allowObfuscation", false);
         evidence.put("publisherReleaseRulesModified", false);
         evidence.put("appInputClasses", app.size());
         evidence.put("testInputClasses", tests.size());

@@ -8,7 +8,7 @@ import unittest
 import xml.etree.ElementTree as ET
 import zipfile
 
-from release_qualification import APK_PATHS, BUILD_CONTRACT, CLASSES, EVIDENCE, REFLECTION_RULES, RESULTS, TEST_ABI, selected_inventory, verify
+from release_qualification import APK_PATHS, BUILD_CONTRACT, CLASSES, EVIDENCE, REFLECTION_RULES, RESULTS, TEST_ABI, TEST_ABI_FIXTURES, selected_inventory, verify
 
 
 TOKEN = "12345678-1234-1234-1234-123456789abc"
@@ -48,7 +48,7 @@ class ReleaseQualificationTest(unittest.TestCase):
             "schemaVersion": 2, "buildType": "benchmark", "minifyEnabled": True,
             "shrinkResources": True, "debuggable": False, "signingConfig": "debug",
             "publisherReleaseRulesUnchanged": True, "benchmarkAddsGeneratedTestAbiRules": True,
-            "benchmarkAddsAuditedReflectionFields": True, "testAbiAllowsObfuscation": True,
+            "benchmarkAddsAuditedReflectionFields": True, "testAbiAllowsObfuscation": False,
             "publisherQualified": False,
         })
         self.installed = {"schemaVersion": 1, "attemptToken": TOKEN, "packageName": "com.artflow.studio",
@@ -63,16 +63,19 @@ class ReleaseQualificationTest(unittest.TestCase):
             (self.mapping / name).write_text(content)
         self.abi = self.project / TEST_ABI
         self.abi.mkdir(parents=True)
-        for name, classes in (("app-input.jar", ["fixture/Library.class"]), ("test-input.jar", ["tests/Caller.class"])):
+        self.kotlin_class = "kotlin/coroutines/ContinuationInterceptor$DefaultImpls.class"
+        self.annotation_class = "org/jetbrains/annotations/NotNull.class"
+        for name, classes in (("app-input.jar", ["fixture/Library.class", self.kotlin_class, self.annotation_class]),
+                              ("test-input.jar", ["tests/Caller.class"])):
             with zipfile.ZipFile(self.abi / name, "w") as archive:
                 for entry in classes:
                     archive.writestr(entry, b"fixture class inventory; actual bytecode is exercised by the R8 fixture gate")
-        self.generated_rules = "-keep,allowobfuscation class fixture.Library {\n  public static int value();\n}\n"
+        self.generated_rules = "-keep class fixture.Library {\n  public static int value();\n}\n"
         (self.abi / "keep-rules.pro").write_text(self.generated_rules)
         self.abi_report = {
             "schemaVersion": 1, "generator": "R8 TraceReferences", "r8Version": "8.10.24",
-            "scope": "benchmark-instrumentation-boundary", "allowObfuscation": True,
-            "publisherReleaseRulesModified": False, "appInputClasses": 1, "testInputClasses": 1,
+            "scope": "benchmark-instrumentation-boundary", "allowObfuscation": False,
+            "publisherReleaseRulesModified": False, "appInputClasses": 3, "testInputClasses": 1,
             "r8Tool": {"file": "builder-8.10.1.jar", "sizeBytes": 10, "sha256": "a" * 64},
             "boundary": {"classes": ["fixture.Library"], "fields": [], "methods": ["int fixture.Library.value()"], "packages": []},
             "externalUnresolvedReferences": [],
@@ -80,6 +83,19 @@ class ReleaseQualificationTest(unittest.TestCase):
                 ("appInput", "app-input.jar"), ("testInput", "test-input.jar"), ("rules", "keep-rules.pro"))},
         }
         self.save_abi()
+        self.fixture_root = self.project / TEST_ABI_FIXTURES
+        self.fixture_root.mkdir(parents=True)
+        self.fixture_report = {"schemaVersion": 1, "scope": "benchmark-test-abi-fixtures", "passed": True,
+                               "tests": 6, "failures": 0, "errors": 0, "skipped": 0, "publisherQualified": False,
+                               "r8Tool": self.abi_report["r8Tool"],
+                               "inputs": {"applicationInput": self.abi_report["files"]["appInput"]}}
+        with zipfile.ZipFile(self.abi / "app-input.jar") as application:
+            for role, name in (("kotlin", self.kotlin_class), ("annotations", self.annotation_class)):
+                path = self.fixture_root / f"{role}-input.jar"
+                with zipfile.ZipFile(path, "w") as fixture:
+                    fixture.writestr(name, application.read(name))
+                self.fixture_report["inputs"][role] = self.fixture_record(role)
+        self.save_fixtures()
         reflection = Path(__file__).resolve().parents[2] / REFLECTION_RULES
         (self.project / REFLECTION_RULES).write_text(reflection.read_text())
         with (self.mapping / "configuration.txt").open("a") as configuration:
@@ -126,6 +142,16 @@ class ReleaseQualificationTest(unittest.TestCase):
     def save_abi(self):
         self.write_json(self.abi / "report.json", self.abi_report)
 
+    def fixture_record(self, role):
+        path = self.fixture_root / f"{role}-input.jar"
+        data = path.read_bytes()
+        with zipfile.ZipFile(path) as archive:
+            count = len(archive.namelist())
+        return {"file": path.name, "sizeBytes": len(data), "sha256": hashlib.sha256(data).hexdigest(), "classes": count}
+
+    def save_fixtures(self):
+        self.write_json(self.fixture_root / "report.json", self.fixture_report)
+
     def report(self):
         return verify(self.project, self.output, REVISION)
 
@@ -143,6 +169,8 @@ class ReleaseQualificationTest(unittest.TestCase):
         self.assertEqual(set(APK_PATHS), set(report["installedApks"]["packages"]))
         self.assertIn("resources.txt", report["build"]["r8AndResourceShrinker"])
         self.assertFalse(report["build"]["testAbi"]["publisherReleaseEquivalent"])
+        self.assertFalse(report["build"]["testAbi"]["allowsObfuscation"])
+        self.assertEqual(6, report["build"]["testAbi"]["fixtures"]["tests"])
         self.assertEqual(1, report["build"]["testAbi"]["keptMethods"])
         self.assertEqual(2, report["build"]["testAbi"]["reflectionFields"])
 
@@ -252,7 +280,7 @@ class ReleaseQualificationTest(unittest.TestCase):
         self.assertTrue(result["passed"], result["problems"])
 
     def test_r8_enum_name_preservation_is_explicit(self):
-        rules = self.generated_rules.replace("-keep,allowobfuscation class", "-keep enum")
+        rules = self.generated_rules.replace("-keep class", "-keep enum")
         (self.abi / "keep-rules.pro").write_text(rules)
         self.abi_report["files"]["rules"] = self.abi_record("keep-rules.pro")
         self.save_abi()
@@ -262,11 +290,11 @@ class ReleaseQualificationTest(unittest.TestCase):
         self.assertTrue(result["passed"], result["problems"])
         self.assertEqual(["fixture.Library"], result["build"]["testAbi"]["enumNamesPreservedByR8"])
 
-    def test_generated_non_enum_classes_must_allow_obfuscation(self):
-        (self.abi / "keep-rules.pro").write_text(self.generated_rules.replace(",allowobfuscation", ""))
+    def test_generated_external_abi_must_preserve_names(self):
+        (self.abi / "keep-rules.pro").write_text(self.generated_rules.replace("-keep class", "-keep,allowobfuscation class"))
         self.abi_report["files"]["rules"] = self.abi_record("keep-rules.pro")
         self.save_abi()
-        self.assert_rejected("disables obfuscation for a non-enum class")
+        self.assert_rejected("does not preserve its exact external symbol names")
 
     def test_mutated_generated_rules_cannot_reuse_a_successful_trace(self):
         with (self.abi / "keep-rules.pro").open("a") as rules:
@@ -307,10 +335,36 @@ class ReleaseQualificationTest(unittest.TestCase):
         self.save_abi()
         self.assert_rejected("do not match the retained symbol inventory")
 
-    def test_obfuscation_cannot_be_disabled_on_the_generated_boundary(self):
-        self.abi_report["allowObfuscation"] = False
+    def test_boundary_name_retention_cannot_be_hidden_in_the_report(self):
+        self.abi_report["allowObfuscation"] = True
         self.save_abi()
         self.assert_rejected("scope or obfuscation contract")
+
+    def test_missing_or_skipped_real_kotlin_fixture_cannot_qualify(self):
+        for field, replacement in (("tests", 5), ("skipped", 1), ("failures", 1), ("passed", False)):
+            with self.subTest(field=field):
+                original = self.fixture_report[field]
+                self.fixture_report[field] = replacement
+                self.save_fixtures()
+                self.assert_rejected("complete, unskipped ABI fixture success")
+                self.fixture_report[field] = original
+
+    def test_fixture_dependency_must_be_the_exact_traced_application_input(self):
+        self.fixture_report["inputs"]["applicationInput"] = {**self.fixture_report["inputs"]["applicationInput"], "sha256": "b" * 64}
+        self.save_fixtures()
+        self.assert_rejected("did not use the recorded application bytecode")
+
+    def test_fabricated_fixture_dependency_cannot_qualify_even_with_an_updated_hash(self):
+        with zipfile.ZipFile(self.fixture_root / "kotlin-input.jar", "w") as archive:
+            archive.writestr(self.kotlin_class, b"substitute Kotlin implementation")
+        self.fixture_report["inputs"]["kotlin"] = self.fixture_record("kotlin")
+        self.save_fixtures()
+        self.assert_rejected("differs from the actual application classes")
+
+    def test_fixture_r8_tool_must_match_the_boundary_generator(self):
+        self.fixture_report["r8Tool"] = {**self.fixture_report["r8Tool"], "sha256": "b" * 64}
+        self.save_fixtures()
+        self.assert_rejected("same R8 tool")
 
     def test_wrong_runtime_cannot_qualify(self):
         (self.evidence / "runtime-environment.txt").write_text(

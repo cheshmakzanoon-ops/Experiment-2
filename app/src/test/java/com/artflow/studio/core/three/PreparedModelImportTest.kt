@@ -33,7 +33,7 @@ class PreparedModelImportTest {
 
     @Test
     fun independentFixtureRetainsEveryValueAndOriginalUvText() {
-        val prepared = PreparedModelImport.prepare(ModelPackage.read(fixture), TestPng::decode)
+        val prepared = PreparedModelImport.prepare(ModelPackage.read(fixture), TestPng::decode, inspect = TestPng::dimensions)
         assertEquals(files.getValue("model.obj").decodeToString(), prepared.objText)
         assertEquals(8, prepared.width)
         assertEquals(4, prepared.height)
@@ -44,7 +44,7 @@ class PreparedModelImportTest {
 
     @Test
     fun oneDownsizeKeepsAllThreePlanesRegisteredWithoutRewritingUvs() {
-        val prepared = PreparedModelImport.prepare(ModelPackage.read(fixture), TestPng::decode, maxSize = 4)
+        val prepared = PreparedModelImport.prepare(ModelPackage.read(fixture), TestPng::decode, maxSize = 4, inspect = TestPng::dimensions)
         assertEquals(files.getValue("model.obj").decodeToString(), prepared.objText)
         assertEquals(4, prepared.width)
         assertEquals(2, prepared.height)
@@ -65,7 +65,8 @@ class PreparedModelImportTest {
                         decoded++
                         TestPng.decode(bytes)
                     },
-                    memoryBudgetBytes = 1024,
+                    memoryBudgetBytes = 1024 * 1024L + 1500,
+                    inspect = TestPng::dimensions,
                 )
             }
         assertTrue(error.message.orEmpty().contains("memory"))
@@ -78,7 +79,8 @@ class PreparedModelImportTest {
                     TestPng.decode(bytes)
                 },
                 maxSize = 4,
-                memoryBudgetBytes = 1024,
+                memoryBudgetBytes = 1024 * 1024L + 1500,
+                inspect = TestPng::dimensions,
             )
         assertEquals(3, decoded)
         assertEquals(4, fitted.width)
@@ -91,10 +93,14 @@ class PreparedModelImportTest {
         val mismatched = contents(metallic = PngCodec.encode(PixelBuffer.filled(4, 4, gray(128))))
         val error =
             assertThrows(IllegalArgumentException::class.java) {
-                PreparedModelImport.prepare(mismatched, {
-                    decoded++
-                    null
-                })
+                PreparedModelImport.prepare(
+                    mismatched,
+                    {
+                        decoded++
+                        null
+                    },
+                    inspect = TestPng::dimensions,
+                )
             }
         assertTrue(error.message.orEmpty().contains("Metallic map must match"))
         assertEquals(0, decoded)
@@ -107,10 +113,14 @@ class PreparedModelImportTest {
             var decoded = 0
             val error =
                 assertThrows(IllegalArgumentException::class.java) {
-                    PreparedModelImport.prepare(contents(metallic = bytes), {
-                        decoded++
-                        null
-                    })
+                    PreparedModelImport.prepare(
+                        contents(metallic = bytes),
+                        {
+                            decoded++
+                            null
+                        },
+                        inspect = TestPng::dimensions,
+                    )
                 }
             assertTrue(error.message.orEmpty().contains("Metallic"))
             assertEquals(0, decoded)
@@ -123,7 +133,7 @@ class PreparedModelImportTest {
             val map = PixelBuffer.filled(8, 4, gray(128)).apply { pixels[7] = badPixel }
             val error =
                 assertThrows(IllegalArgumentException::class.java) {
-                    PreparedModelImport.prepare(contents(metallic = PngCodec.encode(map)), TestPng::decode)
+                    PreparedModelImport.prepare(contents(metallic = PngCodec.encode(map)), TestPng::decode, inspect = TestPng::dimensions)
                 }
             assertTrue(error.message.orEmpty().contains("opaque grayscale"))
         }
@@ -135,7 +145,15 @@ class PreparedModelImportTest {
         val badMap = requireNotNull(source.scalarMaps?.roughness)
         val error =
             assertThrows(IllegalArgumentException::class.java) {
-                PreparedModelImport.prepare(source, { bytes -> if (bytes === badMap) null else TestPng.decode(bytes) })
+                PreparedModelImport.prepare(source, { bytes ->
+                    if (bytes ===
+                        badMap
+                    ) {
+                        null
+                    } else {
+                        TestPng.decode(bytes)
+                    }
+                }, inspect = TestPng::dimensions)
             }
         assertTrue(error.message.orEmpty().contains("Roughness texture could not be decoded"))
     }
@@ -166,10 +184,14 @@ class PreparedModelImportTest {
             var decoded = 0
             val error =
                 assertThrows(IllegalArgumentException::class.java) {
-                    PreparedModelImport.prepare(contents(metallic = tagged), {
-                        decoded++
-                        TestPng.decode(it)
-                    })
+                    PreparedModelImport.prepare(
+                        contents(metallic = tagged),
+                        {
+                            decoded++
+                            TestPng.decode(it)
+                        },
+                        inspect = TestPng::dimensions,
+                    )
                 }
             assertTrue(error.message.orEmpty().contains("color metadata ($type)"))
             assertEquals(0, decoded)
@@ -182,16 +204,20 @@ class PreparedModelImportTest {
         var decoded = 0
         val error =
             assertThrows(IllegalArgumentException::class.java) {
-                PreparedModelImport.prepare(contents(roughness = taggedMap), {
-                    decoded++
-                    TestPng.decodeSrgb(it)
-                })
+                PreparedModelImport.prepare(
+                    contents(roughness = taggedMap),
+                    {
+                        decoded++
+                        TestPng.decodeSrgb(it)
+                    },
+                    inspect = TestPng::dimensions,
+                )
             }
         assertTrue(error.message.orEmpty().contains("color metadata (iCCP)"))
         assertEquals(0, decoded)
 
         val taggedColor = PngCodec.encode(PixelBuffer(8, 4, expectedColor(8, 4)), profile = ColorProfile.DISPLAY_P3)
-        val prepared = PreparedModelImport.prepare(contents(color = taggedColor), TestPng::decodeSrgb)
+        val prepared = PreparedModelImport.prepare(contents(color = taggedColor), TestPng::decodeSrgb, inspect = TestPng::dimensions)
         assertArrayEquals(requireNotNull(TestPng.decodeSrgb(taggedColor)).pixels, requireNotNull(prepared.color).pixels)
         assertArrayEquals(expectedGray(metallicValues, 8, 4), requireNotNull(prepared.metallic).pixels)
         assertArrayEquals(expectedGray(roughnessValues, 8, 4), requireNotNull(prepared.roughness).pixels)
@@ -200,7 +226,7 @@ class PreparedModelImportTest {
     @Test
     fun harmlessPhysicalPixelMetadataDoesNotChangeScalarValues() {
         val physical = PngCodec.encode(PixelBuffer(8, 4, expectedGray(metallicValues, 8, 4)), dpi = 132)
-        val prepared = PreparedModelImport.prepare(contents(metallic = physical), TestPng::decode)
+        val prepared = PreparedModelImport.prepare(contents(metallic = physical), TestPng::decode, inspect = TestPng::dimensions)
         assertArrayEquals(expectedGray(metallicValues, 8, 4), requireNotNull(prepared.metallic).pixels)
     }
 
@@ -210,10 +236,14 @@ class PreparedModelImportTest {
         var decoded = 0
         val error =
             assertThrows(IllegalArgumentException::class.java) {
-                PreparedModelImport.prepare(contents(metallic = complete.copyOf(complete.size - 1)), {
-                    decoded++
-                    null
-                })
+                PreparedModelImport.prepare(
+                    contents(metallic = complete.copyOf(complete.size - 1)),
+                    {
+                        decoded++
+                        null
+                    },
+                    inspect = TestPng::dimensions,
+                )
             }
         assertTrue(error.message.orEmpty().contains("PNG chunks are incomplete"))
         assertEquals(0, decoded)
@@ -223,14 +253,19 @@ class PreparedModelImportTest {
     fun theDecodedSizeMustAgreeWithThePreflightHeader() {
         val error =
             assertThrows(IllegalArgumentException::class.java) {
-                PreparedModelImport.prepare(contents(), { PixelBuffer(1, 1) })
+                PreparedModelImport.prepare(contents(), { PixelBuffer(1, 1) }, inspect = TestPng::dimensions)
             }
         assertTrue(error.message.orEmpty().contains("size is inconsistent"))
     }
 
     @Test
     fun absentScalarPlanesStayAbsentInsteadOfCreatingUnrelatedColorLayers() {
-        val prepared = PreparedModelImport.prepare(contents(metallic = null, roughness = null), TestPng::decode)
+        val prepared =
+            PreparedModelImport.prepare(
+                contents(metallic = null, roughness = null),
+                TestPng::decode,
+                inspect = TestPng::dimensions,
+            )
         assertNull(prepared.metallic)
         assertNull(prepared.roughness)
         assertArrayEquals(expectedColor(8, 4), requireNotNull(prepared.color).pixels)
@@ -240,17 +275,20 @@ class PreparedModelImportTest {
     fun scalarPayloadCannotBypassTheSingleMaterialAndColorRequirements() {
         val multiple = files.getValue("model.obj").decodeToString() + "usemtl Other\nf 1/1 2/2 3/3\n"
         assertThrows(IllegalArgumentException::class.java) {
-            PreparedModelImport.prepare(contents(objText = multiple), TestPng::decode)
+            PreparedModelImport.prepare(contents(objText = multiple), TestPng::decode, inspect = TestPng::dimensions)
         }
         assertThrows(IllegalArgumentException::class.java) {
-            PreparedModelImport.prepare(contents(color = null), TestPng::decode)
+            PreparedModelImport.prepare(contents(color = null), TestPng::decode, inspect = TestPng::dimensions)
         }
     }
 
     @Test
     fun aLegacyUntexturedModelRetainsTheRequestedDefaultCanvasAndGeometry() {
         val obj = files.getValue("model.obj").decodeToString()
-        val prepared = PreparedModelImport.prepare(ModelPackage.Contents(obj), { error("No image should be decoded") }, defaultSize = 16)
+        val prepared =
+            PreparedModelImport.prepare(ModelPackage.Contents(obj), {
+                error("No image should be decoded")
+            }, defaultSize = 16, inspect = TestPng::dimensions)
         assertEquals(obj, prepared.objText)
         assertEquals(16, prepared.width)
         assertEquals(16, prepared.height)
@@ -265,7 +303,7 @@ class PreparedModelImportTest {
         val first = PngCodec.encode(PixelBuffer.filled(2, 2, 0xFFFF0000.toInt()))
         val second = PngCodec.encode(PixelBuffer.filled(2, 2, 0xFF0000FF.toInt()))
         val source = ModelPackage.Contents(two, first, mapOf("painted" to first, "Other" to second))
-        val prepared = PreparedModelImport.prepare(source, TestPng::decode)
+        val prepared = PreparedModelImport.prepare(source, TestPng::decode, inspect = TestPng::dimensions)
         assertEquals(4, prepared.width)
         assertEquals(2, prepared.height)
         assertEquals(0xFFFF0000.toInt(), requireNotNull(prepared.color).getSafe(0, 0))

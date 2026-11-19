@@ -47,9 +47,11 @@ Those remain separate release gates. In particular, a real package-upgrade campa
 an independently identified old APK and a compatible signed candidate, seeded old-app data,
 post-install launch/edit/save/reopen checks, and retained APK/device/test evidence.
 The [installed-package campaign tool](installed-package-upgrade.md) now executes that separate
-debug-APK path with a bounded manual old-app seed, exact stopped-data snapshots, `adb install -r`,
-and candidate recovery/edit/save/fresh-process-reopen assertions. Its implementation and host
-tests are not a device campaign pass; the required APK/key/device inputs remain outstanding.
+debug-APK path with either an automated pinned-v1 UI seed or an explicitly manual seed, exact
+stopped-data snapshots, `adb install -r`, and candidate recovery/edit/save/fresh-process-reopen
+assertions. A dedicated PR/main workflow builds the identified v1 source and the candidate with
+one disposable test signer. Implementation and host tests are not a device campaign pass;
+inspect that workflow's actual exact-revision result before accepting the installed-upgrade gate.
 
 The rejection snapshots preserve SQLite storage classes and exact numeric values: NULL, 64-bit
 integers, doubles, text, and blob bytes remain distinct. String conversion alone could hide a
@@ -89,11 +91,14 @@ the result as an upgrade between rebuilt sources. Seed the old app, retain the p
 and settings, use `adb install -r` without uninstalling or clearing application data, and verify
 launch, gallery/settings/library reads, newer recovery, edit/save, and reopen after replacement.
 
-This identified baseline already uses Room v2. It can qualify package replacement and persisted
-artwork continuity, but it cannot supply an installed v1→v2 database migration. The available
-shallow history's oldest visible database snapshot, `3b0eedf99334f5ba88ba0639c9882a4c7248df4f`,
-also uses Room v2. A real v1 application build and its provenance remain unidentified; the pinned
-v1 SQLite fixture must not be presented as that missing APK evidence.
+This archived baseline already uses Room v2. It can qualify package replacement and persisted
+artwork continuity, but it cannot supply an installed v1→v2 database migration. The original
+shallow-history review could not identify a v1 source. Wave 11 deepened the history and identified
+`ca9ce535c09d35ceca6aba9f686c60f58f93bc09`, the parent of the gallery-stacks migration, as an authentic
+Room-v1 application. Its committed schema is byte-identical to the fixture above. The automatic
+campaign now builds that pinned source with a test-only UI driver and labels its provenance as
+rebuilt source. It does not claim an original archived v1 APK, and the synthetic SQLite fixtures
+remain distinct from the installed-app campaign's actual old-app data and execution evidence.
 
 ## Running and recording
 

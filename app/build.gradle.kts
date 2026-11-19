@@ -215,6 +215,7 @@ dependencies {
 
     // Image Loading
     implementation("io.coil-kt:coil-compose:2.5.0")
+    implementation("androidx.exifinterface:exifinterface:1.4.2")
 
     // Logging
     implementation("com.jakewharton.timber:timber:5.0.1")
@@ -341,6 +342,18 @@ components.onVariants(components.selector().withBuildType("benchmark")) { varian
             generatorClasspath.from(compileGenerator.flatMap { it.destinationDirectory }, r8Jar)
             outputDirectory.set(layout.buildDirectory.dir("reports/release-qualification/test-abi"))
         }
+    tasks.named<Exec>("verifyBenchmarkTestAbiGenerator") {
+        dependsOn(generate)
+        args(
+            "--application-input",
+            generate.flatMap { it.outputDirectory.file("app-input.jar") }.get().asFile,
+            "--report-directory",
+            layout.buildDirectory
+                .dir("reports/release-qualification/test-abi-fixtures")
+                .get()
+                .asFile,
+        )
+    }
     variant.artifacts
         .forScope(ScopedArtifacts.Scope.ALL)
         .use(generate)
@@ -404,7 +417,7 @@ tasks.register("verifyReleaseQualificationBuildType") {
               "publisherReleaseRulesUnchanged": true,
               "benchmarkAddsGeneratedTestAbiRules": true,
               "benchmarkAddsAuditedReflectionFields": true,
-              "testAbiAllowsObfuscation": true,
+              "testAbiAllowsObfuscation": false,
               "publisherQualified": false
             }
             """.trimIndent() + "\n",

@@ -4,30 +4,86 @@
 
 `.github/scripts/run_package_upgrade.py` executes a retained package-replacement campaign on
 one explicitly designated **disposable** Android device or emulator. It installs a provided old
-APK, pauses for data creation through that old application's real UI, freezes its actual private
-storage, installs the candidate with `adb install -r`, and runs the candidate's real editor
-recovery/edit/save workflow followed by reopen in a separate application process.
+APK, creates actual user data through that old application's UI (automatically or manually), freezes
+its private storage, installs the candidate with `adb install -r`, and runs real editor recovery,
+editing, saving and reopen in a separate application process.
 
-The host tests exercise rejection, snapshot and evidence contracts. They do **not** establish
-that an Android package campaign passed. No device campaign was executed while adding this tool:
-there is no attached designated test device or supplied compatible APK/key pair in this session.
-Android compilation and real device execution remain required. The tool never substitutes host
-tests, an empty result, the ordinary artwork workflow test, or an operator assertion for the
-candidate's campaign-specific evidence.
+The automatic path is wired into [Installed application upgrade](../../.github/workflows/installed-package-upgrade.yml)
+on pull requests, main pushes and manual dispatch. Host regression tests and source checks validate
+the harness only. **Actual execution of the new installed-v1 campaign is still pending at this
+implementation checkpoint.** A green build or another artwork test cannot substitute for this
+campaign's exact nonce, source, artifact, original-data and process evidence.
 
-This first campaign supports single-base, **debuggable test APKs**, using `run-as` for stopped-data
-preservation. It requires identical current signer certificate SHA-256 values for the old,
-candidate and instrumentation APKs. It deliberately does not handle signing-key rotation,
-split APKs, non-primary Android users, non-debuggable publisher builds or store delivery.
-`publisherQualified`, `storeReleaseQualified` and `installedV1MigrationQualified` remain false,
-including after a successful campaign. Physical-device qualification is a separate gate.
+The campaign supports single-base, **debuggable test APKs** and uses `run-as` for stopped-data
+preservation. All old, candidate and instrumentation APKs must have the same measured current
+signer certificate. Key rotation, split APKs, non-primary Android users, non-debuggable publisher
+builds and store delivery remain outside this campaign. `publisherQualified` and
+`storeReleaseQualified` always remain false. Physical-device qualification is separate.
 
-The [identified historical package](database-upgrade-preservation.md#historical-package-baseline-for-follow-up)
-already has Room v2 and version code 3. Replacing it with another code-3 APK is recorded as
-`same-version-engineering-replacement`. A greater candidate code is recorded as
-`increasing-version-test-update`; this still does not approve a store release. Lower codes and
-identical old/candidate APKs are rejected. A genuine installed v1→v2 campaign requires an
-independently identified real v1 application, which remains unavailable.
+A successful genuine Room-v1 baseline campaign sets `installedV1MigrationQualified` only after the
+installed candidate reports schema v2 and verifies every original typed row, the exact migration
+addition, preserved artwork and the complete recovery/edit/save/reopen workflow. A v2 continuity
+campaign leaves that v1 flag false. Increasing application version codes are labeled
+`increasing-version-test-update`; same codes are labeled `same-version-engineering-replacement`.
+Neither label approves a store release. Lower codes and identical old/candidate APKs are rejected.
+
+## Automatic installed Room-v1 campaign
+
+The authentic historical baseline is source
+[`ca9ce535c09d35ceca6aba9f686c60f58f93bc09`](https://github.com/cheshmakzanoon-ops/Experiment-2/tree/ca9ce535c09d35ceca6aba9f686c60f58f93bc09),
+the parent of the gallery-stacks migration. Its application uses Room v1, version code 3 and version
+name 1.1.0. Its committed schema is byte-identical to the current migration fixture:
+`afbdb33dcf9e2e6f2610560ca1adf4cd876c5241a3f56b62a162361c5c493dde` (SHA-256).
+The maintenance candidate's code 4 / version 1.1.1 provides an increasing-version test update.
+The publisher must independently check account/distributed version codes before any release.
+
+The workflow uses separate clean checkouts and sequential builds on the same fresh runner, sharing
+only that runner's disposable Android debug key. It never uses a publisher key. The old production
+sources and build files stay unchanged; the only allowed old-source overlay is the new
+`app/src/androidTest/java/com/artflow/studio/InstalledUpgradeSeedTest.kt`, copied from
+[the reviewed driver](../../tools/package-upgrade/src/com/artflow/studio/InstalledUpgradeSeedTest.kt). This is explicitly
+**rebuilt pinned source**, not a claim to reproduce an originally distributed historical binary.
+
+[The build collector](../../.github/scripts/package_upgrade_build.py) checks both source revisions,
+rejects tracked edits and unexpected untracked inputs, verifies the schema digest, archives both
+exact source trees, and retains the driver plus all four APK hashes. It checks again after builds.
+The campaign rechecks these source/input/output receipts and uses official `apkanalyzer` and
+`apksigner` before any install. These are measured workflow records, not an independent remote
+attestation or a reproducible-build claim. Build/tool versions, logs, source archives, overlay,
+APK bytes/certificates and every campaign command remain in the job artifact.
+
+On one fresh API 36 emulator, the workflow then runs these phases once:
+
+1. **Prepare:** verify both application packages and both instrumentation packages; require no
+   registered application/test package or retained uninstalled data; install and normally launch
+   the actual old APK.
+2. **Seed through old UI:** install its matching test-only driver, acknowledge onboarding, choose
+   Light theme, toggle stylus-only on and off, choose the five-second autosave interval, create a
+   64 × 64 artwork, create a custom palette and saved brush, paint through real pointer input,
+   use **Save and leave**, reopen and compare pixels, then paint again and wait for the old app's
+   actual autosave timer. There are no repository/SQL writes or injected artwork files in this
+   driver. Repository reads only observe the results. The historical unlabeled colour chip is
+   selected by its unique actual 34 dp semantic bounds; the retained tree and the asserted opened
+   Colours panel expose that baseline-specific interaction.
+3. **Freeze:** require the driver's one passing test and complete token/APK/source-bound proof;
+   force-stop the old application and retain its real database, WAL, artwork and timestamps.
+4. **Upgrade:** verify unchanged stopped data, install the candidate with `-r`, verify unchanged
+   data before first launch, launch the real candidate, then replace the test APK with `-r -t`.
+   No uninstall or data-clear command is used. Execute recovery/edit/save and fresh-process reopen
+   through the candidate's existing campaign mode.
+
+The old UI driver only appears in the separate historical test APK. It does not enlarge, skip or
+replace the candidate's ordinary full-matrix test inventory. Its report proves automated UI
+observations; the automatic path never substitutes a named operator's attestation. The candidate
+reports the actual old and current database versions. For v1, the only accepted new project column
+is nullable `stack`, with NULL values in all legacy rows; all original columns, SQL storage classes,
+values and row counts remain exact before editing. A future or unrecognized schema is rejected.
+
+The automation entry point is [run_installed_upgrade_ci.py](../../.github/scripts/run_installed_upgrade_ci.py).
+It requires a completed build receipt and executes prepare → seed → freeze → upgrade without retries.
+The required workflow conclusion checks both the installed-v1 flag and increasing version scope.
+Failed initial attempts and all partial evidence are retained; a new attempt requires a new output
+and fresh disposable emulator.
 
 ## Required artifacts and device
 
@@ -40,8 +96,9 @@ Supply all of the following before `prepare` can install anything:
   APK, each with an independently recorded SHA-256. The instrumentation APK must include
   `PackageUpgradeWorkflow` and target `com.artflow.studio.HiltTestRunner`.
 - Exact 40-character historical and candidate source revisions and an explicit baseline origin:
-  `archived-apk` or `rebuilt-pinned-source`. Source-to-artifact provenance is supplied by the
-  operator; the tool measures and pins the actual APK bytes and installed copies.
+  `archived-apk` or `rebuilt-pinned-source`. For manual archived-package campaigns, source-to-artifact provenance is supplied by the
+  operator. Automatic campaigns require the measured clean-source/test-overlay build receipt.
+  Both paths pin the actual APK bytes and installed copies.
 - Android SDK `adb`, `apkanalyzer` and `apksigner`, plus Python 3.11 or newer. Tool paths may be
   supplied explicitly. The candidate and old app must support the measured device API.
 
@@ -60,7 +117,7 @@ and candidate in separate checkouts with the same dedicated disposable test key,
 build logs and APK hashes, and select `rebuilt-pinned-source`. Do not present those rebuilt
 packages as the original archived APKs or use a publisher's private key for this fixture.
 
-## Execute one campaign
+## Execute a manual campaign
 
 The paths, revisions and hashes below are explicit operator inputs. Use a fresh output directory;
 each phase is exclusively claimed once. A failed or completed campaign cannot be retried in place.
@@ -143,12 +200,12 @@ tar bytes are retained. Linked, duplicate, escaping and oversized archive entrie
 
 The upgrade phase rechecks the device fingerprint/API/page size and exact installed old APK.
 It compares a second stopped-data capture with the frozen seed before replacing the package.
-The only candidate install command is `adb -s SERIAL install -r CANDIDATE`; no downgrade,
+The candidate application install is `adb -s SERIAL install -r CANDIDATE`; no downgrade,
 uninstall or data-clear flag is used. Immediately after replacement, before candidate launch,
 another snapshot must preserve every original file and logical database row.
 
 The real candidate is launched normally, then stopped. Its matching instrumentation APK is
-installed, and a nonce-bound baseline is copied into a separate private campaign directory.
+installed or replaces the old UI driver with `-r -t`, and a nonce-bound baseline is copied into a separate private campaign directory.
 Two bounded invocations select the existing
 `OptimizedArtworkWorkflowTest#realPointerPaintSurvivesSaveFreshActivityReopenAndUiPngExport`
 method with explicit campaign arguments. Its ordinary full-matrix assertions remain the default;
@@ -156,14 +213,15 @@ the helper declares no skipped or extra tests.
 
 | Candidate phase | Required observations |
 | --- | --- |
-| `edit` | Exact old project, legacy-brush, settings and sequence rows; unchanged old artwork bytes and timestamps before editing; decoded palette/brush library; saved canvas pixels equal the old app's flattened PNG; distinct newer recovery decoded and selected through the real recovery dialog; real pointer input changes pixels; **Save and leave** persists those edited pixels. |
+| `edit` | Exact old project, legacy-brush, settings and sequence rows (plus only the nullable v1→v2 `stack` addition when applicable); unchanged old artwork bytes and timestamps before editing; decoded palette/brush library; saved canvas pixels equal the old app's flattened PNG; distinct newer recovery decoded and selected through the real recovery dialog; real pointer input changes pixels; **Save and leave** persists those edited pixels. |
 | `reopen` | A different process ID, linked to the edit checkpoint; gallery reopen through `MainActivity`; exact edited-pixel hash and saved PNG equality; no unsaved edits or pending recovery; preserved settings and every other project row. |
 
 The old saved and recovery images are read through an independent candidate repository before
 the UI phase. This verifies usability of the preserved original files; it does not independently
 reimplement the old renderer. The old saved composite PNG supplies the independent saved-picture
-comparison. The operator's old-app save/reopen observation and the retained final seed screenshot
-make the manual evidence boundary explicit.
+comparison. The automatic old-app driver independently asserts its own saved/reopened pixels and records
+the seed screenshots; manual campaigns retain the operator's explicit save/reopen observation.
+These two evidence boundaries are labeled separately.
 
 The script requires exactly one passing test per invocation **and** the complete phase report,
 matching token, baseline hash, old/candidate APK hashes, project ID and assertion set. A normal
@@ -185,7 +243,8 @@ Host regression checks:
 python3 -m unittest discover -s .github/scripts -p 'test_run_package_upgrade.py' -v
 ```
 
-The initial host checks passed 17 cases. The two touched instrumentation files passed standalone
-ktlint and detekt with the existing configuration and baseline. Those checks establish host-tool
-and source hygiene only; they do not establish APK installation, hardware execution, a publisher
-signature, or an installed v1 database migration.
+The extended host checks pass 23 campaign cases and seven build-provenance cases. Run the latter
+with `python3 -m unittest discover -s .github/scripts -p 'test_package_upgrade_build.py' -v`.
+These checks establish host-tool behavior only; Android compilation and the actual installed-v1
+workflow must pass separately. No host fixture establishes hardware execution, a publisher
+signature or original-distribution provenance.

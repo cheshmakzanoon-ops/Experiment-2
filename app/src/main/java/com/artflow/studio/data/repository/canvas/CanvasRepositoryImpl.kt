@@ -321,7 +321,13 @@ class CanvasRepositoryImpl
             createCanvas(width, height, dpi)
             return withState {
                 currentProjectId = projectId
-                unresolvedRecoveryProjects.remove(projectId)
+                // A crash can leave the first autosave before any explicit document exists.
+                // The blank fallback must not authorize save/export to discard that only copy.
+                if (storage.hasUnsavedRecovery(projectId)) {
+                    unresolvedRecoveryProjects.add(projectId)
+                } else {
+                    unresolvedRecoveryProjects.remove(projectId)
+                }
                 stateSnapshot()
             }
         }

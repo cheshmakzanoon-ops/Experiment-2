@@ -12,6 +12,8 @@ import com.artflow.studio.core.export.FileKind
 import com.artflow.studio.core.export.FileKinds
 import com.artflow.studio.core.export.PsdCodec
 import com.artflow.studio.core.export.readAtMost
+import com.artflow.studio.core.pixels.ImportMemoryBudget
+import com.artflow.studio.core.pixels.ImportPreparation
 import com.artflow.studio.core.three.ModelPackage
 import com.artflow.studio.core.three.ObjParser
 import com.artflow.studio.core.three.PreparedModelImport
@@ -254,12 +256,26 @@ internal class GalleryImports(
         }
     }
 
-    private fun readModel(uri: Uri): PreparedModelImport {
-        val bytes = requireNotNull(context.contentResolver.openInputStream(uri)?.use { it.readAtMost(MAX_MODEL_BYTES) })
-        return PreparedModelImport
-            .prepare(ModelPackage.read(bytes), BitmapPixelBridge::fromEncodedBytes, MAX_MODEL_TEXTURE, MODEL_TEXTURE)
-            .also(ModelImports::requireSupportedSize)
-    }
+    private fun readModel(uri: Uri): PreparedModelImport =
+        ImportPreparation.withAdmission {
+            val budget = ImportMemoryBudget.currentBytes()
+            // Stream growth and its returned copy happen before model/texture metadata exists.
+            val limit = minOf(MAX_MODEL_BYTES, budget / 4)
+            require(limit > 0) { "Not enough memory to import this model. Save your artwork and try a smaller model." }
+            val bytes =
+                requireNotNull(context.contentResolver.openInputStream(uri)?.use { it.readAtMost(limit) }) {
+                    "This model file could not be read within the available memory. Save your artwork and try a smaller model."
+                }
+            PreparedModelImport
+                .prepare(
+                    ModelPackage.read(bytes),
+                    BitmapPixelBridge::decodeModelTexture,
+                    BitmapPixelBridge::encodedDimensions,
+                    MAX_MODEL_TEXTURE,
+                    MODEL_TEXTURE,
+                    budget,
+                ).also(ModelImports::requireSupportedSize)
+        }
 
     /** Brush and palette payloads have their own small-file limits. Artwork ZIPs never enter this path. */
     private suspend fun smallFile(

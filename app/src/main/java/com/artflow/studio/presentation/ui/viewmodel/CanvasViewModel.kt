@@ -299,8 +299,15 @@ class CanvasViewModel
             loadJob =
                 viewModelScope.launch(editorErrors) {
                     _uiState.value = CanvasUiState.Loading
+                    // Opening owns the model handoff before project or document I/O can suspend.
+                    // Failed or cancelled opens keep the claimed payload for the editor's retry.
+                    val pendingModel = PendingImports.claimModelBundle(projectId)
                     try {
-                        val existing = requireNotNull(projectRepository.getProjectById(projectId)) { "This artwork no longer exists" }
+                        val existing = projectRepository.getProjectById(projectId)
+                        if (existing == null) {
+                            pendingModel?.let { PendingImports.completeModelBundle(projectId, it) }
+                            error("This artwork no longer exists")
+                        }
                         project = existing
                         val state = canvasRepository.loadOrCreate(projectId, existing.width, existing.height, existing.dpi)
                         if (state == null) {

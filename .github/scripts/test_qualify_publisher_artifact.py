@@ -1,6 +1,7 @@
 """Adversarial publisher gate fixtures; generated fixture keys never leave temporary dirs."""
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import io
 import json
@@ -8,9 +9,12 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
+import threading
 import unittest
+from unittest.mock import patch
 import warnings
 import zipfile
 
@@ -126,6 +130,15 @@ class ManifestAndInputTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Duplicate JSON"):
                 load_object(path)
 
+    def test_nonfinite_json_numbers_are_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "approval.json"
+            for token in ("NaN", "Infinity", "-Infinity", "1e9999", "-1e9999"):
+                with self.subTest(token=token):
+                    path.write_text('{"evidence":{"unexpected":[' + token + ']}}')
+                    with self.assertRaisesRegex(ValueError, "Non-finite JSON"):
+                        load_object(path)
+
     def test_no_old_report_overwrite(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)
@@ -133,6 +146,87 @@ class ManifestAndInputTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "empty output directory"):
                 qualify(parser().parse_args(["--output-dir", str(path)]))
             self.assertEqual("retained evidence", (path / "verification.json").read_text())
+
+    def test_linked_output_directory_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            destination = root / "retained"
+            destination.mkdir()
+            output = root / "output-link"
+            output.symlink_to(destination, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, "linked output directory"):
+                qualify(parser().parse_args(["--output-dir", str(output)]))
+            self.assertEqual([], list(destination.iterdir()))
+
+    def test_late_report_entry_is_not_overwritten_or_followed(self):
+        for linked in (False, True):
+            with self.subTest(linked=linked), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                output = root / "output"
+                target = root / "outside.json"
+                report_path = output / "verification.json"
+
+                def create_conflict(*args):
+                    if linked:
+                        report_path.symlink_to(target)
+                    else:
+                        report_path.write_text("retained evidence")
+                    raise ValueError("Synthetic approval failure after conflicting evidence appeared")
+
+                with patch("qualify_publisher_artifact.verify_approval", side_effect=create_conflict):
+                    with self.assertRaises(FileExistsError):
+                        qualify(parser().parse_args(["--output-dir", str(output)]))
+                self.assertFalse(target.exists())
+                if linked:
+                    self.assertTrue(report_path.is_symlink())
+                else:
+                    self.assertEqual("retained evidence", report_path.read_text())
+
+    def test_command_log_collision_preserves_evidence_and_does_not_execute(self):
+        for linked in (False, True):
+            with self.subTest(linked=linked), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                target = root / "outside.txt"
+                log = root / "00-existing.txt"
+                if linked:
+                    log.symlink_to(target)
+                else:
+                    log.write_text("retained evidence")
+                with patch("qualify_publisher_artifact.subprocess.run") as command:
+                    with self.assertRaises(FileExistsError):
+                        Tools(root, []).run("existing", [sys.executable, "-c", "print('fixture')"])
+                    command.assert_not_called()
+                self.assertFalse(target.exists())
+                if linked:
+                    self.assertTrue(log.is_symlink())
+                else:
+                    self.assertEqual("retained evidence", log.read_text())
+
+    def test_concurrent_attempts_cannot_share_an_initially_empty_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "output"
+            options = parser().parse_args(["--output-dir", str(output)])
+            both_observed_empty = threading.Barrier(2)
+            original_iterdir = Path.iterdir
+
+            def coordinated_iterdir(path):
+                entries = list(original_iterdir(path))
+                if path == output:
+                    both_observed_empty.wait(timeout=10)
+                return iter(entries)
+
+            reports, conflicts = [], []
+            with patch.object(Path, "iterdir", coordinated_iterdir), ThreadPoolExecutor(max_workers=2) as pool:
+                attempts = [pool.submit(qualify, options) for _ in range(2)]
+                for attempt in attempts:
+                    try:
+                        reports.append(attempt.result(timeout=15))
+                    except FileExistsError as error:
+                        conflicts.append(error)
+            self.assertEqual(1, len(conflicts))
+            self.assertEqual(1, len(reports))
+            self.assertFalse(reports[0]["qualified"])
+            self.assertEqual(reports[0], json.loads((output / "verification.json").read_text()))
 
     def test_missing_and_mismatched_approval(self):
         with tempfile.TemporaryDirectory() as directory:

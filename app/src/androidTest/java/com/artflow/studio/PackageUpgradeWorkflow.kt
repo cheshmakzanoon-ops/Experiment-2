@@ -215,7 +215,8 @@ internal class PackageUpgradeWorkflow(
         runBlocking(Dispatchers.IO) {
             val expectedDatabase = baseline.getJSONObject("database")
             val sqlite = database.openHelper.writableDatabase
-            assertEquals("This package campaign covers v2 continuity, not a v1 migration", 2, expectedDatabase.getInt("version"))
+            val oldVersion = expectedDatabase.getInt("version")
+            assertTrue("The stopped baseline must be actual Room v1 or v2", oldVersion in 1..2)
             assertEquals(2, sqlite.version)
             sqlite.query("PRAGMA quick_check").use { cursor ->
                 assertTrue(cursor.moveToFirst())
@@ -227,10 +228,21 @@ internal class PackageUpgradeWorkflow(
                 val expected = tables.getJSONObject(table)
                 val columns = expected.getJSONArray("columns")
                 val rows = expected.getJSONArray("rows")
+                val migratedStack = oldVersion == 1 && table == "projects"
+                if (migratedStack) {
+                    assertFalse(
+                        "A real v1 project table has no stack column",
+                        (0 until columns.length()).any {
+                            columns.getString(it) ==
+                                "stack"
+                        },
+                    )
+                }
                 val where = if (skipEditedProject && table == "projects") " WHERE id <> $projectId" else ""
                 sqlite.query("SELECT * FROM $table$where ORDER BY `$order`").use { cursor ->
-                    assertEquals(columns.length(), cursor.columnCount)
+                    assertEquals(columns.length() + if (migratedStack) 1 else 0, cursor.columnCount)
                     repeat(columns.length()) { index -> assertEquals(columns.getString(index), cursor.getColumnName(index)) }
+                    if (migratedStack) assertEquals("stack", cursor.getColumnName(columns.length()))
                     for (rowIndex in 0 until rows.length()) {
                         val row = rows.getJSONArray(rowIndex)
                         if (skipEditedProject &&
@@ -240,6 +252,12 @@ internal class PackageUpgradeWorkflow(
                             continue
                         }
                         assertTrue("Missing $table row $rowIndex", cursor.moveToNext())
+                        if (migratedStack) {
+                            assertTrue(
+                                "Migration must preserve an unstacked legacy project",
+                                cursor.isNull(columns.length()),
+                            )
+                        }
                         repeat(columns.length()) { index ->
                             val expectedCell = row.getJSONObject(index)
                             val (type, value) = cell(cursor, index)
@@ -350,6 +368,8 @@ internal class PackageUpgradeWorkflow(
             .put("oldApkSha256", baseline.getString("oldApkSha256"))
             .put("candidateApkSha256", baseline.getString("candidateApkSha256"))
             .put("projectId", projectId)
+            .put("oldDatabaseVersion", baseline.getJSONObject("database").getInt("version"))
+            .put("databaseVersion", database.openHelper.writableDatabase.version)
             .put("pid", Process.myPid())
             .put("success", true)
 

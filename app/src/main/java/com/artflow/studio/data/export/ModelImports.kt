@@ -30,6 +30,7 @@ object ModelImports {
         prepared: PreparedModelImport,
     ): Boolean =
         withContext(Dispatchers.Main.immediate) {
+            PendingImports.claimModelBundle(repository.projectId(), prepared)
             val receipt = PendingImports.modelReceipt(repository.projectId(), prepared)
             if (receipt != null && alreadyInstalled(repository, prepared, receipt)) return@withContext true
             repository.importModel(prepared)

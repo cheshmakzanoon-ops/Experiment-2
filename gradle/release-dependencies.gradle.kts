@@ -74,6 +74,7 @@ val dependencyInputPaths =
         "gradle.properties",
         "gradle/wrapper/gradle-wrapper.properties",
         "gradle/release-dependencies.gradle.kts",
+        "release-ui/build.gradle.kts",
         "tools/optimized-test-abi/src/artflow/build/TestAbiRules.java",
         "tools/optimized-test-abi/verify.py",
         "app/proguard-benchmark-test-reflection.pro",

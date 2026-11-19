@@ -10,15 +10,18 @@ import android.graphics.RectF
 import android.graphics.Region
 import android.net.Uri
 import android.os.Build
+import androidx.exifinterface.media.ExifInterface
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.color.ColorProfile
 import com.artflow.studio.core.color.IccProfile
 import com.artflow.studio.core.export.JpegIcc
 import com.artflow.studio.core.export.PngCodec
+import com.artflow.studio.core.pixels.ImportPreparation
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
 import java.io.InputStream
 import java.nio.ByteBuffer
 
@@ -144,6 +147,29 @@ object BitmapPixelBridge {
         }
     }
 
+    /** Metadata only: model preparation admits every source before allocating the first bitmap. */
+    fun encodedDimensions(bytes: ByteArray): Pair<Int, Int>? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        return if (bounds.outWidth > 0 && bounds.outHeight > 0) bounds.outWidth to bounds.outHeight else null
+    }
+
+    /** Full texture samples keep their UV interpretation; reject pressure rather than silently resizing a plane. */
+    fun decodeModelTexture(bytes: ByteArray): PixelBuffer? =
+        withImportMemory {
+            val (width, height) = encodedDimensions(bytes) ?: return@withImportMemory null
+            val plan = ImageDecodeBudget.plan(width, height, CanvasOperations.MAX_DIMENSION, ImageDecodeBudget.currentBytes() - bytes.size)
+            require(plan.sampleSize == 1) { "This model texture needs too much memory; use smaller textures" }
+            val options =
+                BitmapFactory.Options().apply {
+                    inPremultiplied = false
+                    inPreferredConfig = Bitmap.Config.ARGB_8888
+                    inScaled = false
+                }
+            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) ?: return@withImportMemory null
+            importedPixels(bitmap, plan)
+        }
+
     private fun decodeJvmFallback(bytes: ByteArray): PixelBuffer? =
         runCatching {
             val imageIOClass = Class.forName("javax.imageio.ImageIO")
@@ -219,8 +245,9 @@ object BitmapPixelBridge {
         withImportMemory {
             val file = File(path)
             if (!file.isFile) return@withImportMemory null
-            val bytes = file.inputStream().use { ImageDecodeBudget.readEncoded(it, memoryBudgetBytes) }
-            decodeSampledBytes(bytes, maxDimension, memoryBudgetBytes)
+            val budget = minOf(memoryBudgetBytes, ImageDecodeBudget.currentBytes())
+            val bytes = file.inputStream().use { ImageDecodeBudget.readEncoded(it, budget) }
+            decodeSampledBytes(bytes, maxDimension, budget)
         }
 
     private fun decodeSampledBytes(
@@ -231,7 +258,9 @@ object BitmapPixelBridge {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-        val plan = ImageDecodeBudget.plan(bounds.outWidth, bounds.outHeight, maxDimension, memoryBudgetBytes - bytes.size * 3L)
+        val orientation = photoOrientation(bytes)
+        val (width, height) = ImageOrientation.dimensions(bounds.outWidth, bounds.outHeight, orientation)
+        val plan = ImageDecodeBudget.plan(width, height, maxDimension, memoryBudgetBytes - bytes.size * 3L)
         val options =
             BitmapFactory.Options().apply {
                 inSampleSize = plan.sampleSize
@@ -239,11 +268,19 @@ object BitmapPixelBridge {
                 inScaled = false
             }
         val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) ?: return null
-        return importedPixels(bitmap, plan)
+        return ImageOrientation.apply(importedPixels(bitmap, plan), orientation).also { plan.checkDecodedSize(it.width, it.height) }
     }
 
+    private fun photoOrientation(bytes: ByteArray): Int =
+        try {
+            bytes.inputStream().use { ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL) }
+        } catch (_: IOException) {
+            // Unsupported or unreadable optional metadata keeps the encoded row/column order.
+            ExifInterface.ORIENTATION_NORMAL
+        }
+
     /**
-     * Decodes a picked image (honouring EXIF rotation on Android 9+), downsampled so its longest
+     * Decodes a picked image (honouring EXIF rotation and mirroring on every supported API), downsampled so its longest
      * side stays within [maxDimension] and its simultaneous rasters fit the import heap budget.
      * A bounded encoded snapshot makes metadata and pixels consistent even if a provider changes
      * what it returns between opens. The metadata pass chooses a sample before allocating pixels.
@@ -262,11 +299,12 @@ object BitmapPixelBridge {
         memoryBudgetBytes: Long,
     ): PixelBuffer? =
         withImportMemory {
-            val bytes = openStream()?.use { ImageDecodeBudget.readEncoded(it, memoryBudgetBytes) } ?: return@withImportMemory null
+            val budget = minOf(memoryBudgetBytes, ImageDecodeBudget.currentBytes())
+            val bytes = openStream()?.use { ImageDecodeBudget.readEncoded(it, budget) } ?: return@withImportMemory null
             if (Build.VERSION.SDK_INT <
                 Build.VERSION_CODES.P
             ) {
-                return@withImportMemory decodeSampledBytes(bytes, maxDimension, memoryBudgetBytes)
+                return@withImportMemory decodeSampledBytes(bytes, maxDimension, budget)
             }
             var plan: ImageDecodeBudget.Plan? = null
             val bitmap =
@@ -276,7 +314,7 @@ object BitmapPixelBridge {
                             info.size.width,
                             info.size.height,
                             maxDimension,
-                            memoryBudgetBytes - bytes.size * 3L,
+                            budget - bytes.size * 3L,
                         )
                     plan = target
                     decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
@@ -289,11 +327,13 @@ object BitmapPixelBridge {
 
     /** Decoder-internal/native allocations and other app work can exceed the metadata estimate. */
     private fun withImportMemory(decode: () -> PixelBuffer?): PixelBuffer? =
-        try {
-            decode()
-        } catch (error: OutOfMemoryError) {
-            // Stream/bitmap owners unwind first. Report a failed import without publishing pixels.
-            throw IllegalArgumentException(ImageDecodeBudget.MEMORY_MESSAGE, error)
+        ImportPreparation.withAdmission {
+            try {
+                decode()
+            } catch (error: OutOfMemoryError) {
+                // Stream/bitmap owners unwind first. Report a failed import without publishing pixels.
+                throw IllegalArgumentException(ImageDecodeBudget.MEMORY_MESSAGE, error)
+            }
         }
 
     private fun importedPixels(

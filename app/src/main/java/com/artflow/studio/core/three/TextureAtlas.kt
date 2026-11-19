@@ -21,6 +21,33 @@ object TextureAtlas {
         val image: PixelBuffer,
     )
 
+    internal data class Layout(
+        val columns: Int,
+        val rows: Int,
+        val cellWidth: Int,
+        val cellHeight: Int,
+    ) {
+        val width: Int get() = columns * cellWidth
+        val height: Int get() = rows * cellHeight
+    }
+
+    /** The same allocation geometry is used by metadata admission and by the actual packer. */
+    internal fun layout(
+        materialCount: Int,
+        widest: Int,
+        tallest: Int,
+        maxSize: Int,
+    ): Layout {
+        require(materialCount in 2..MAX_MATERIALS && widest > 0 && tallest > 0 && maxSize > 0)
+        val columns = ceil(sqrt(materialCount.toDouble())).toInt()
+        val rows = (materialCount + columns - 1) / columns
+        require(maxSize >= maxOf(columns, rows)) { "The texture size is too small for this model's material atlas" }
+        val scale = min(1f, maxSize.toFloat() / max(widest * columns, tallest * rows))
+        val cellWidth = max(1, (widest * scale).toInt())
+        val cellHeight = max(1, (tallest * scale).toInt())
+        return Layout(columns, rows, cellWidth, cellHeight)
+    }
+
     /** The materials [objText] assigns to faces (`usemtl`), in order of first use; "" for faces before any. */
     fun materials(objText: String): List<String> {
         val used = LinkedHashSet<String>()
@@ -44,13 +71,13 @@ object TextureAtlas {
     ): Packed? {
         val materials = materials(objText)
         if (materials.size < 2 || materials.size > MAX_MATERIALS) return null
-        val columns = ceil(sqrt(materials.size.toDouble())).toInt()
-        val rows = (materials.size + columns - 1) / columns
         val widest = textures.values.maxOfOrNull { it.width } ?: maxSize
         val tallest = textures.values.maxOfOrNull { it.height } ?: maxSize
-        val scale = min(1f, maxSize.toFloat() / max(widest * columns, tallest * rows))
-        val cellWidth = max(1, (widest * scale).toInt())
-        val cellHeight = max(1, (tallest * scale).toInt())
+        val layout = layout(materials.size, widest, tallest, maxSize)
+        val columns = layout.columns
+        val rows = layout.rows
+        val cellWidth = layout.cellWidth
+        val cellHeight = layout.cellHeight
         val image = PixelBuffer(cellWidth * columns, cellHeight * rows)
         materials.forEachIndexed { index, name ->
             val left = (index % columns) * cellWidth

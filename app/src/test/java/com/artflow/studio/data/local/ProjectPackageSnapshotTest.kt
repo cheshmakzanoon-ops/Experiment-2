@@ -22,6 +22,7 @@ import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
 
 class ProjectPackageSnapshotTest {
     @get:Rule val temporary = TemporaryFolder()
@@ -130,12 +131,15 @@ class ProjectPackageSnapshotTest {
         runBlocking {
             val raster = storage.writeRaster(PROJECT, 1, 1, byteArrayOf(1, 2, 3, 4))
             storage.saveDocument(PROJECT, document(raster))
+            storage.saveModel(PROJECT, "retained model")
             val ready = CompletableDeferred<Unit>()
+            lateinit var modelStream: InputStream
 
             withTimeout(TEST_TIMEOUT_MS) {
                 val export =
                     launch {
-                        storage.withPackageSnapshot(PROJECT) {
+                        storage.withPackageSnapshot(PROJECT) { snapshot ->
+                            modelStream = snapshot.sources.single { it.path == ProjectStorage.MODEL_NAME }.openStream()
                             ready.complete(Unit)
                             awaitCancellation()
                         }
@@ -148,6 +152,45 @@ class ProjectPackageSnapshotTest {
 
             assertEquals(1, storage.pruneRasters(PROJECT, emptySet()))
             assertFalse(storage.rasterExists(PROJECT, raster))
+            assertTrue(runCatching { modelStream.read() }.exceptionOrNull() is IOException)
+        }
+
+    @Test
+    fun `model and previews retain their acquired bytes across atomic replacement`() =
+        runBlocking {
+            storage.saveDocument(PROJECT, document(null))
+            val oldModel = "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"
+            val newModel = oldModel.replace("v 1 0 0", "v 2 0 0")
+            val oldComposite = byteArrayOf(1, 2, 3)
+            val oldThumbnail = byteArrayOf(4, 5, 6)
+            storage.saveModel(PROJECT, oldModel)
+            storage.saveFlattened(PROJECT, oldComposite)
+            storage.saveThumbnail(PROJECT, oldThumbnail)
+            val output = File(temporary.newFolder("assets-export"), "snapshot.artflow")
+
+            storage.withPackageSnapshot(PROJECT) { snapshot ->
+                storage.saveModel(PROJECT, newModel)
+                storage.saveFlattened(PROJECT, byteArrayOf(7, 8, 9))
+                storage.saveThumbnail(PROJECT, byteArrayOf(10, 11, 12))
+                // Inspection may open a source before the writer does; each open needs its own cursor.
+                assertEquals(
+                    oldModel,
+                    snapshot.sources
+                        .single { it.path == ProjectStorage.MODEL_NAME }
+                        .openStream()
+                        .use { it.readBytes().decodeToString() },
+                )
+                ArtflowPackage.writeToFile("Acquired assets", output, snapshot.sources)
+            }
+
+            ArtflowPackage.openFile(output).use { opened ->
+                assertEquals(oldModel, opened.readBytes(ProjectStorage.MODEL_NAME).decodeToString())
+                assertArrayEquals(oldComposite, opened.readBytes(ProjectStorage.FLATTENED_NAME))
+                assertArrayEquals(oldThumbnail, opened.readBytes(ProjectStorage.THUMBNAIL_NAME))
+            }
+            assertEquals(newModel, storage.loadModel(PROJECT))
+            assertArrayEquals(byteArrayOf(7, 8, 9), storage.loadFlattenedBytes(PROJECT))
+            assertArrayEquals(byteArrayOf(10, 11, 12), storage.thumbnailFile(PROJECT).readBytes())
         }
 
     @Test

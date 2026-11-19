@@ -125,11 +125,12 @@ from the exact R8 JAR bundled with the selected AGP. The generator performs thes
    definitions within one owner fail the build.
 3. Trace test bytecode into application classes and members, including inherited member
    definitions, using Android's boot classpath to resolve platform types.
-4. Ask R8 for exact keep rules with obfuscation allowed. The tool emits
-   `-keep,allowobfuscation` for classes/interfaces and exact `-keep enum` rules for enums whose
-   names it preserves. These prevent removal or incompatible rewriting of the external ABI
-   while allowing other app renaming and optimization outside the boundary. No wildcard keep
-   or global optimization switch is added.
+4. Ask R8 for exact keep rules with stable external names. The tool emits `-keep` for the
+   traced classes/interfaces/enums and their exact referenced members. These prevent removal,
+   incompatible rewriting, and renaming of the external test ABI while allowing app shrinking,
+   renaming, and optimization outside that boundary. No wildcard keep or global optimization
+   switch is added. The report explicitly records `allowObfuscation: false`; the reason for
+   this constraint is the reproduced mapping failure below.
 5. Fail if the test bytecode refers to a missing member of an app-owned class. Record unresolved
    references outside the app separately for audit; this extractor does not replace the normal
    app/test R8 diagnostics or device execution. It adds no warning suppressions.
@@ -147,6 +148,13 @@ app/test ownership separation, exact-rule syntax, symbol counts, and inclusion o
 rules in R8's actual `configuration.txt`. The release dependency inventory also fingerprints
 the helper, its executable fixture, and the reflection rule file as build support inputs.
 
+The mandatory fixture task consumes that same `app-input.jar`. It retains the exact `kotlin/`
+and `org/jetbrains/annotations/` class subsets under `test-abi-fixtures/`, together with the
+application-input hash, subset hashes, R8 tool identity, and actual unskipped test result counts.
+Qualification verifies these subset bytes against the traced application archive, checks the
+same R8 tool identity, and rejects absent, failed, skipped, substituted, or incomplete fixtures.
+There is no independently downloaded Kotlin test implementation or optional fixture bypass.
+
 The first local generation diagnostic completed successfully against 31,007 app input classes
 and 2,592 test input classes. It retained 893 classes, 241 fields, and 1,993 methods, including
 the runner's three calls to `Trace`. R8 preserved the names of 54 of those classes as enums and
@@ -154,7 +162,36 @@ two exact package names needed for access. These are diagnostic counts from the 
 tree; the final exact-revision report remains authoritative. The 20 unresolved external
 references are Android hidden/legacy test APIs, Hamcrest JavaBeans APIs, and the two audited
 compile annotation dependencies. They remain visible in the report and are not converted into
-new suppression rules.
+new suppression rules. Those counts predate stable-name retention; later reports remain the
+source of truth for the exact boundary in each APK pair.
+
+## Kotlin method mapping failure and repair
+
+Optimized run
+[44549867524](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44549867524)
+started instrumentation but failed after two of 43 selected cases. In the actual app DEX,
+`ContinuationInterceptor.DefaultImpls.releaseInterceptedContinuation` was present as
+`n3.e$a.c(n3.e, n3.d)`. The separately remapped test wrapper instead called
+`n3.e$a.releaseInterceptedContinuation(n3.e, n3.d)`, causing `NoSuchMethodError`. The sibling
+`get` and `minusKey` calls were correctly remapped. This was a member-name mismatch, not a
+missing method caused by shrinking.
+
+The bundled R8 8.10.24 mapping represented this method with a repackaged synthetic original
+identity. Applying that mapping to a separately compiled caller did not find the original
+Kotlin-qualified static method. A reduced executable JVM reproduction using actual
+Kotlin 2.1.20 bytecode reproduced the same `NoSuchMethodError`; preserving the exact traced
+boundary names made the same caller execute successfully. The mandatory regression now uses
+the actual app's Kotlin class bytes and executes the separately optimized app/test pair.
+It also requires unreferenced Kotlin methods to disappear and an internal Kotlin helper to
+be obfuscated. A separate Java fixture verifies that an untraced helper and unused API are
+removed while the stable external call still works.
+
+The repair applies only to the generated benchmark boundary. It does not add publisher R8
+rules or turn off application minification, resource shrinking, or optimization globally.
+The [normal release payload UI lane](release-payload-ui.md) separately tests the actual
+release optimization output without application instrumentation ABI keeps. This failed run
+and the host reproducer do not establish a successful later Android execution; the final
+APK pair still needs its complete one-attempt device qualification.
 
 ## Reflection boundary
 
@@ -178,7 +215,8 @@ reflection file and records its exact digest alongside the generated boundary ev
 The schema 2 build contract explicitly distinguishes the optimized benchmark from the publisher
 release. The benchmark remains non-debuggable, minified, resource-shrunk, and signed with the
 disposable debug key. It inherits the publisher's base R8 rules, then adds the generated test
-ABI and two reflection fields. The publisher `release` variant receives neither addition.
+ABI with stable external names and two reflection fields. The publisher `release` variant
+receives neither addition. `testAbiAllowsObfuscation` is explicitly false in the build contract.
 Both the configured rule lists and the resulting R8 configuration are checked.
 
 Consequently, a passing benchmark run validates an optimized instrumented artifact with those
@@ -188,11 +226,10 @@ The existing requirements for renamed production classes, resource-shrinker outp
 APK hashes, a complete first attempt with no skips, and real paint/save/reopen/export evidence
 remain in force. The workflow also retains the instrumentation's R8 mapping/configuration.
 
-`verifyBenchmarkTestAbiGenerator` executes a separate JVM fixture with the real bundled R8. It
+`verifyBenchmarkTestAbiGenerator` executes six JVM fixtures with the real bundled R8. It
 checks app-owned duplicates, conflicting definitions, inherited fields/methods, and rejection
-of missing app members without stale success evidence. Its central test optimizes and renames
-an app API called only by an external test, removes an unrelated unused member, applies the
-app mapping to the separately compiled test through R8's classpath input, and executes the
-resulting pair. All five standalone fixture cases passed with the pinned R8 8.10.24. This
-fixture checks linkage mechanics; actual Android runtime execution of the final APK pair is
-still required.
+of missing app members without stale success evidence. The Java and actual-Kotlin fixtures
+retain only the traced external names, require shrinking and internal obfuscation outside that
+boundary, apply the app mapping to the separately compiled test through R8's classpath input,
+and execute the resulting pairs. These fixtures check linkage mechanics; actual Android runtime
+execution of the final APK pair is still required.

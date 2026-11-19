@@ -3,7 +3,8 @@
 
 This does not measure pen latency, run workloads, verify publisher signatures, or certify a
 release. A complete reviewed campaign qualifies only its exact artifacts and declared workloads.
-Empty, missing, synthetic, failed, or unknown evidence never qualifies.
+Missing or invalid required records fail closed. Hashes and named decisions establish record
+consistency, not authenticity: physical observations and raw origins need independent review.
 """
 from __future__ import annotations
 
@@ -473,6 +474,7 @@ def validate_measurement(root: Path, measurement: dict, criterion: dict, duratio
     # Uncertainty is accounted for conservatively at the decision boundary, not silently discarded.
     uncertainty = measurement.get("uncertaintyMs", 0) if domain == "input_to_photon" else 0
     comparison = result + uncertainty if criterion["operator"] in {"<", "<="} else result - uncertainty
+    require(math.isfinite(result) and math.isfinite(comparison), "Derived statistic or uncertainty adjustment is not finite")
     limit, operator = criterion["limit"], criterion["operator"]
     passed = {"<": comparison < limit, "<=": comparison <= limit,
               ">": comparison > limit, ">=": comparison >= limit}[operator]
@@ -485,6 +487,7 @@ def validate_measurement(root: Path, measurement: dict, criterion: dict, duratio
 def verify(plan_path: Path, campaign_path: Path, revision: str) -> dict:
     report = {"schemaVersion": 1, "revision": revision, "status": "UNQUALIFIED", "qualified": False,
               "publisherSignatureQualified": False, "releaseApproved": False,
+              "provenanceAuthenticated": False,
               "scope": "Exact recorded APK set, physical devices, workloads and owner-approved criteria only",
               "problems": [], "failures": [], "devices": {}, "runs": {}}
     try:
@@ -598,7 +601,9 @@ def verify(plan_path: Path, campaign_path: Path, revision: str) -> dict:
             report["failures"].append("Reviewer rejected the retained physical campaign")
         require(review.get("decision") == "accepted" and nonblank(review.get("reviewer")),
                 "Named reviewer must accept raw capture provenance, metric derivation, and observed hardware")
-        require(timestamp(review.get("reviewedAtUtc")) >= max(ends), "Review predates measured work")
+        last_capture = max(timestamp(item["postCaptureCompletedAtUtc"]) for item in measured.values())
+        require(timestamp(review.get("reviewedAtUtc")) >= max(max(ends), last_capture),
+                "Review predates measured work or completed post-run identity captures")
         decision = load_json(checked_reference(root, review.get("evidence")))
         require(type(decision.get("schemaVersion")) is int and decision["schemaVersion"] == 1
                 and decision.get("reviewer") == review["reviewer"]
@@ -699,10 +704,12 @@ def main() -> None:
         print(json.dumps(reference(args.root, args.file), indent=2))
         return
     report = verify(args.plan, args.campaign, args.revision)
+    serialized = json.dumps(report, indent=2, allow_nan=False) + "\n"
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    # Verification output must not replace either input or retained evidence.
-    require(not args.output.exists(), "Choose a new verification output path; existing evidence is immutable")
-    args.output.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
+    # Exclusive creation also rejects broken symlinks and a concurrent creator. An exists()
+    # check followed by write_text() can follow a broken link or truncate intervening evidence.
+    with args.output.open("x", encoding="utf-8") as stream:
+        stream.write(serialized)
     print(json.dumps(report, indent=2, allow_nan=False))
     raise SystemExit(0 if report["qualified"] else 1)
 

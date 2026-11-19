@@ -19,6 +19,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -162,6 +163,55 @@ class AuthoritativeRecoveryTest {
             assertNotNull(savedPath)
             assertFalse(storage.hasUnsavedRecovery(projectId))
             assertFalse(repository.hasRecovery(projectId))
+        }
+
+    @Test
+    fun firstAutosaveWithoutASavedDocumentSurvivesSaveAndExportUntilExplicitRecovery() =
+        runTest {
+            repository.loadOrCreate(projectId, 64, 64, 72)
+            repository.addLayer("Only recoverable artwork")
+            repository.autosave(projectId)
+            assertFalse(storage.documentFile(projectId).exists())
+            val recovery = storage.autosaveFile(projectId)
+            val originalBytes = recovery.readBytes()
+            val originalTime = recovery.lastModified()
+
+            val reopened = CanvasRepositoryImpl(storage)
+            try {
+                reopened.loadOrCreate(projectId, 64, 64, 72)
+                assertTrue(reopened.hasRecovery(projectId))
+                assertTrue(reopened.hasUnresolvedRecovery(projectId))
+                val saveFailure = runCatching { reopened.saveCanvas(projectId) }.exceptionOrNull()
+                assertTrue(saveFailure is IllegalStateException)
+                reopened.autosave(projectId)
+                val exportState = MutableStateFlow<ExportUiState>(ExportUiState.Idle)
+                val controller =
+                    CanvasExportController(
+                        repository = reopened,
+                        exporter = exporter,
+                        recorder = recorder,
+                        state = exportState,
+                        scope = this,
+                        currentProject = { projectId to "First recovery" },
+                        onDocumentSaved = {},
+                    )
+                controller.export(ExportOptions(format = ExportFormat.ARTFLOW, area = ExportArea.FULL_CANVAS))
+                testScheduler.advanceUntilIdle()
+
+                assertTrue(exportState.value is ExportUiState.Failed)
+                assertTrue((exportState.value as ExportUiState.Failed).message.contains("Resolve recovery before exporting"))
+                assertFalse(storage.documentFile(projectId).exists())
+                assertArrayEquals(originalBytes, recovery.readBytes())
+                assertEquals(originalTime, recovery.lastModified())
+                assertTrue(reopened.hasUnresolvedRecovery(projectId))
+                reopened.recoverAutosave(projectId)
+                assertTrue(reopened.getAllLayers().any { it.name == "Only recoverable artwork" })
+                reopened.saveCanvas(projectId)
+                assertFalse(reopened.hasRecovery(projectId))
+                assertTrue(storage.loadDocument(projectId)!!.layers.any { it.name == "Only recoverable artwork" })
+            } finally {
+                reopened.dispose()
+            }
         }
 
     @Test

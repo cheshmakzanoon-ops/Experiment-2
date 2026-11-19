@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 import hashlib
 import io
 import json
+import math
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -81,7 +82,13 @@ def load_object(path: Path) -> dict:
             value[key] = item
         return value
 
-    value = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique_keys)
+    def finite_number(token):
+        value = float(token)
+        require(math.isfinite(value), f"Non-finite JSON number: {token}")
+        return value
+
+    value = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique_keys,
+                       parse_constant=finite_number, parse_float=finite_number)
     require(isinstance(value, dict), f"Expected a JSON object: {path}")
     return value
 
@@ -123,7 +130,7 @@ class Tools:
         record = {"command": command, "exitCode": None, "log": None}
         self.commands.append(record)
         env = {**os.environ, "LC_ALL": "C", "LANG": "C"}
-        with path.open("w", encoding="utf-8") as stream:
+        with path.open("x", encoding="utf-8") as stream:
             try:
                 result = subprocess.run(command, stdout=stream, stderr=subprocess.STDOUT,
                                         env=env, timeout=120, check=False)
@@ -381,8 +388,17 @@ def verify_provenance(path: Path | None, artifact: Path, revision: str) -> dict:
 
 def qualify(options: argparse.Namespace) -> dict:
     output = options.output_dir
+    require(not output.is_symlink(), "A linked output directory is not accepted")
     output.mkdir(parents=True, exist_ok=True)
+    require(not output.is_symlink(), "A linked output directory is not accepted")
     require(not any(output.iterdir()), "Use an empty output directory; prior qualification evidence must not be overwritten")
+    # Empty-directory inspection alone does not prevent two concurrent attempts.
+    # Retain this exclusive claim even when an attempt fails or is interrupted.
+    with (output / "qualification-attempt.json").open("x", encoding="utf-8") as stream:
+        json.dump({"schemaVersion": 1, "documentType": "publisher_artifact_attempt",
+                   "revision": options.revision, "startedAt": datetime.now(timezone.utc).isoformat()},
+                  stream, indent=2, allow_nan=False)
+        stream.write("\n")
     report = {"schemaVersion": 1, "documentType": "publisher_artifact_qualification", "revision": options.revision,
               "artifact": None,
               "qualified": False, "publisherArtifactQualified": False, "publicReleaseQualified": False,
@@ -436,7 +452,8 @@ def qualify(options: argparse.Namespace) -> dict:
     else:
         report["problems"].append("No package, signature, or retained provenance could be checked without an artifact")
     report["qualified"] = report["publisherArtifactQualified"] = not report["problems"]
-    (output / "verification.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    with (output / "verification.json").open("x", encoding="utf-8") as stream:
+        stream.write(json.dumps(report, indent=2, allow_nan=False) + "\n")
     return report
 
 

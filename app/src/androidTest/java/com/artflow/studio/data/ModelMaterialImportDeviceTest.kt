@@ -185,7 +185,12 @@ class ModelMaterialImportDeviceTest {
             val prefix = "material-import-retry"
             val expected = authoredPlanes()
             val bytes = authoredZip(expected)
-            val prepared = PreparedModelImport.prepare(ModelPackage.read(bytes), BitmapPixelBridge::fromEncodedBytes)
+            val prepared =
+                PreparedModelImport.prepare(
+                    ModelPackage.read(bytes),
+                    BitmapPixelBridge::decodeModelTexture,
+                    BitmapPixelBridge::encodedDimensions,
+                )
             val metadata = JSONObject().put("fixtureSha256", sha256(bytes)).put("width", WIDTH).put("height", HEIGHT)
             File(TestEvidence.directory(), "$prefix-source.zip").writeBytes(bytes)
             repository.loadOrCreate(PROJECT, prepared.width, prepared.height, 72)
@@ -279,7 +284,12 @@ class ModelMaterialImportDeviceTest {
         prefix: String,
         metadata: JSONObject,
     ): Long {
-        val prepared = PreparedModelImport.prepare(ModelPackage.read(bytes), BitmapPixelBridge::fromEncodedBytes)
+        val prepared =
+            PreparedModelImport.prepare(
+                ModelPackage.read(bytes),
+                BitmapPixelBridge::decodeModelTexture,
+                BitmapPixelBridge::encodedDimensions,
+            )
         assertEquals(model, prepared.objText)
         val color = expected.getValue(MaterialChannel.COLOR)
         assertEquals(color.width, prepared.width)

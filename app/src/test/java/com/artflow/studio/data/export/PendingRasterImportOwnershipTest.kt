@@ -172,6 +172,22 @@ class PendingRasterImportOwnershipTest {
         }
 
     @Test
+    fun aStaleInstallerCannotClaimItsReplacementAndPreventOwnerCleanup() =
+        runTest {
+            val pending = PendingRasterImports()
+            val owner = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
+            val original = ModelImportFixture.prepared()
+            val replacement = ModelImportFixture.prepared()
+            pending.putModel(1, original, backgroundScope)
+            pending.putModel(1, replacement, owner)
+            assertNull(pending.claimModel(1, original))
+            assertSame(replacement, pending.model(1))
+            owner.cancel()
+            runCurrent()
+            assertNull(pending.model(1))
+        }
+
+    @Test
     fun admissionRejectsNewImportsWithoutEvictingAnUnsavedModel() =
         runTest {
             val pending = PendingRasterImports(maxEntries = 1)

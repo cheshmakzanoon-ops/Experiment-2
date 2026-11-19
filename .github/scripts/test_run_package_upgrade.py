@@ -41,6 +41,16 @@ class ApkCompatibilityTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     upgrade.validate_apks(modified)
 
+    def test_old_ui_driver_must_match_the_old_target_and_signer(self):
+        self.apks["seed"] = copy.deepcopy(self.apks["tests"])
+        upgrade.validate_apks(self.apks)
+        for key, value in (("signerSha256", ["d" * 64]), ("targetPackage", "other.app"),
+                           ("runner", "other.Runner"), ("packageName", "other.test")):
+            changed = copy.deepcopy(self.apks)
+            changed["seed"][key] = value
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                upgrade.validate_apks(changed)
+
     def test_certificate_parser_does_not_accept_source_stamp_or_public_key_digest(self):
         valid = "Signer #1 certificate SHA-256 digest: " + "AB" * 32
         self.assertEqual(["ab" * 32], upgrade.parse_certificates(valid))
@@ -104,6 +114,13 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual({"type": "real", "value": "3fc0000000000000"}, brush[1])
         self.assertEqual({"type": "blob", "value": "00ff"}, brush[2])
 
+    def test_actual_stopped_v1_database_is_admitted_for_migration(self):
+        with sqlite3.connect(self.db) as connection:
+            connection.execute("PRAGMA user_version=1")
+        value = upgrade.read_snapshot(self.archive())
+        self.assertEqual(1, value["database"]["version"])
+        self.assertEqual(5000000000, upgrade.validate_seed(value, "seed"))
+
     def test_uncheckpointed_wal_rows_are_read_from_the_actual_snapshot(self):
         connection = sqlite3.connect(self.db)
         self.addCleanup(connection.close)
@@ -144,7 +161,7 @@ class SnapshotTests(unittest.TestCase):
             if row[0]["value"] == "brush.savedLibrary.v1":
                 row[1]["value"] = "[]"
         wrong_version = copy.deepcopy(original)
-        wrong_version["database"]["version"] = 1
+        wrong_version["database"]["version"] = 3
         for value in (missing, not_newer, empty_library, wrong_version):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 upgrade.validate_seed(value, "seed")
@@ -230,17 +247,65 @@ class CampaignEvidenceTests(unittest.TestCase):
 
     def test_success_requires_nonce_artifact_phase_and_every_assertion(self):
         campaign = {"token": "49ab616e-0ce0-4e1e-9e72-67fd6658e97d", "projectId": 5000000000,
+                    "seed": {"database": {"version": 1}},
                     "apks": {"old": {"sha256": "a" * 64}, "candidate": {"sha256": "b" * 64}}}
         report = {"schemaVersion": 1, "campaignToken": campaign["token"], "phase": "reopen", "baselineSha256": "c" * 64,
                   "candidateApkSha256": "b" * 64, "oldApkSha256": "a" * 64, "projectId": 5000000000,
                   "packageName": upgrade.PACKAGE, "success": True, "pid": 123,
+                  "oldDatabaseVersion": 1, "databaseVersion": 2,
                   "assertions": {key: True for key in ("freshProcess", "editedPixelsReopened", "settingsPreserved", "otherProjectsPreserved", "recoveryResolved")}}
         upgrade.verify_probe_report(report, campaign, "reopen", "c" * 64)
         for key, value in (("campaignToken", "old-token"), ("candidateApkSha256", "a" * 64), ("phase", "edit"),
                            ("baselineSha256", "d" * 64), ("success", False), ("success", 1), ("schemaVersion", True),
+                           ("oldDatabaseVersion", 2), ("databaseVersion", 1), ("oldDatabaseVersion", True),
                            ("assertions", {}), ("assertions", {key: 1 for key in report["assertions"]}), ("pid", 0), ("pid", True)):
             with self.subTest(key=key), self.assertRaises(ValueError):
                 upgrade.verify_probe_report({**report, key: value}, campaign, "reopen", "c" * 64)
+
+    def test_automatic_seed_proof_cannot_be_replaced_by_attestation_or_old_report(self):
+        campaign = {"token": "49ab616e-0ce0-4e1e-9e72-67fd6658e97d", "projectName": "Package upgrade 49ab616e",
+                    "apks": {"old": {"sha256": "a" * 64}}}
+        report = {"schemaVersion": 1, "mode": "automated-old-app-ui", "campaignToken": campaign["token"],
+                  "packageName": upgrade.PACKAGE, "oldSource": upgrade.PINNED_V1_SOURCE,
+                  "oldApkSha256": "a" * 64, "projectName": campaign["projectName"], "projectId": 5000000000,
+                  "databaseVersion": 1, "success": True, "pid": 234,
+                  "assertions": {key: True for key in upgrade.SEED_ATTESTATIONS}}
+        upgrade.verify_seed_report(report, campaign)
+        for key, value in (("campaignToken", "another"), ("oldApkSha256", "b" * 64), ("oldSource", "c" * 40),
+                           ("mode", "operator"), ("success", 1), ("projectId", True), ("pid", 0),
+                           ("assertions", {}), ("assertions", {key: 1 for key in upgrade.SEED_ATTESTATIONS})):
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                upgrade.verify_seed_report({**report, key: value}, campaign)
+
+    def test_seed_instrumentation_requires_exact_one_passing_test(self):
+        upgrade.require_one_test("OK (1 test)\nINSTRUMENTATION_CODE: -1\n", "seed")
+        for text in ("OK (2 tests)\nINSTRUMENTATION_CODE: -1", "OK (1 test)",
+                     "OK (1 test)\nINSTRUMENTATION_CODE: -1\nINSTRUMENTATION_FAILED: crash", "FAILURES!!!"):
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                upgrade.require_one_test(text, "seed")
+
+    def test_automatic_freeze_rejects_modified_original_seed_report_before_snapshot(self):
+        report = self.root / "old-app-seed-report.json"
+        report.write_text("{}")
+        campaign = {"phase": "old-app-ui-seeded", "apks": {"old": {}},
+                    "automatedOldAppSeed": {"report": {"path": str(report), "sha256": "a" * 64}}}
+        args = mock.Mock(seed_record=None)
+        with mock.patch.object(upgrade, "installed_apk"), mock.patch.object(upgrade, "snapshot") as snapshot, self.assertRaises(ValueError):
+            upgrade.freeze(args, campaign, mock.Mock())
+        snapshot.assert_not_called()
+
+    def test_old_driver_is_verified_and_replaced_without_uninstall(self):
+        commands = mock.Mock()
+        campaign = {"phase": "seed-frozen", "apks": {"old": {}, "candidate": {}, "tests": {}, "seed": {"sha256": "d" * 64}},
+                    "seed": {"files": {}, "database": {}}}
+        with mock.patch.object(upgrade, "validate_apks"), mock.patch.object(upgrade, "installed_apk") as installed, \
+                mock.patch.object(upgrade, "require_absent") as absent, \
+                mock.patch.object(upgrade, "snapshot", return_value={"files": {"changed": {}}, "database": {}}), \
+                mock.patch.object(upgrade, "install") as install, self.assertRaises(ValueError):
+            upgrade.upgrade(mock.Mock(), campaign, commands)
+        absent.assert_not_called()
+        self.assertEqual("old-ui-driver-before-replacement", installed.call_args_list[-1].args[-1])
+        install.assert_not_called()
 
 
 if __name__ == "__main__":

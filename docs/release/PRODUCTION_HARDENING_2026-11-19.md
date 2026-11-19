@@ -33,12 +33,12 @@ Planned later assignments may be refined to address concrete review findings or 
 | 07 | PSD channel/color semantics; device texture limits; optimized test R8 integration | Implemented/reviewed; optimized APKs build successfully |
 | 08 | Physical-performance evidence tooling; signed artifact validation; upgrade execution tooling | Implemented/reviewed; host tests and Android compilation passed |
 | 09 | Image allocation bounds; preview-failure input handling; PSD compatibility and color notices | Implemented/reviewed; compilation/analysis passed, fixture repaired and rerun |
-| 10 | Remaining import lifetimes; optimized test linkage; independent save/recovery audit | Implemented/reviewed; isolated integrated verification pending |
-| 11 | Release/version claims; model/photo decoding; installed historical-app upgrade | Contract review complete; decoder and upgrade work in progress |
-| 12 | Recovery ordering and export snapshots; publisher-binary workflow; import acceptance | Recovery review started; other assignments planned |
-| 13 | Release evidence validation; performance evidence validation; dependency evidence validation | Planned |
-| 14 | Hostile archive review; project-lifecycle review; release artifact review | Planned |
-| 15 | Capability claim review; user-facing failure review; support/workload contract review | Planned |
+| 10 | Remaining import lifetimes; optimized test linkage; independent save/recovery audit | Integrated verification exposed six ownership failures and a runtime mapping failure; follow-ups in waves 12–13 |
+| 11 | Release/version claims; model/photo decoding; installed historical-app upgrade | Implemented/reviewed; historical application and test APKs built |
+| 12 | Recovery ordering and export snapshots; publisher-binary workflow; import acceptance | Implemented; focused checks passed, integrated verification continuing |
+| 13 | Physical-evidence review; publisher-evidence review; optimized ABI mapping review | Implemented/reviewed; focused checks passed, Android runtime acceptance pending |
+| 14 | Hostile model/archive review; project-lifecycle review; installed-upgrade evidence review | In progress |
+| 15 | USD allocation review; capability/user-message review; committed-save metadata consistency | Planned |
 | 16 | Independent data integrity review; independent optimized-build review; independent CI gate review | Planned |
 | 17 | Final source safety review; final test adequacy review; release decision review | Planned |
 | 18 | Exact-revision CI review: legacy; Android 15; Android 16/tablet | Planned |
@@ -286,14 +286,79 @@ Update this record with completed wave assignments, fixes, test outcomes, and re
   335 passed and the five separately required Gradle provenance fixtures were explicitly skipped.
   The final verifier added three more adversarial cases afterward; frozen-checkout discovery is due.
 
-### Wave 11 (in progress)
+### Wave 11
 
 - `w11_release_contract`: reconciled eight current/historical documents, preserving earlier failure
   records while removing absolute data-loss/determinism and every-edit timelapse promises. Checked
   107 local Markdown links. Root designated the maintenance candidate 1.1.1/code4, following known
   code3 builds; publisher-used codes and signing identity still require actual account evidence.
-- `w11_model_decode`: reviewing color-only model texture allocations and Android8 EXIF orientation.
-- `w11_installed_upgrade`: automating old-app UI seeding and installed replacement. The real Room-v1
+- `w11_model_decode`: preflights every retained texture and the actual atlas geometry before pixel
+  allocation, budgets simultaneous decode/copy/atlas/install buffers, and refuses invalid or oversized
+  referenced textures instead of silently dropping them. File and Android 8 URI photo decoding honor
+  all eight EXIF orientations from the same bounded source; model UV images retain raw orientation.
+  Forty-four focused pure tests passed and four new platform tests await Android execution. Exif
+  1.4.2 is explicitly resolved and locked; native artwork decoding keeps exact dimensions.
+- `w11_installed_upgrade`: added automatic real-old-app UI seeding and increasing-version installed
+  replacement with source/APK/overlay hashes, frozen stopped storage, and recovery/edit/save/reopen
+  checks. Thirty host cases passed. The real Room-v1
   source ca9ce535c09d35ceca6aba9f686c60f58f93bc09 has the same committed schema1 SHA-256
-  afbdb33dcf9e2e6f2610560ca1adf4cd876c5241a3f56b62a162361c5c493dde. No installed-v1 execution
-  is claimed yet; its future build must be labeled rebuilt pinned source rather than a distributed APK.
+  afbdb33dcf9e2e6f2610560ca1adf4cd876c5241a3f56b62a162361c5c493dde. Root built its unchanged
+  production source and the test-only seed overlay with the authentic SDK Build Tools 35.0.0.
+  Both APKs compiled successfully. No installed-v1 execution is claimed yet; this is rebuilt pinned
+  source with disposable signing, not proof about an originally distributed publisher APK.
+
+### Wave 12
+
+- `w12_recovery_ordering`: established checked saved/autosave timestamp ordering on the temporary
+  inode before fsync/rename; retained captured model/preview inodes for deferred export reads;
+  and blocked blank-fallback save/export when a first autosave is the only surviving document.
+  Fifty-eight focused JVM cases passed, including fifteen new cases. Snapshot protection assumes
+  cooperative atomic writers and does not claim a transaction across independent external writes.
+- `w12_import_acceptance`: reproduced the six integrated failures, then repaired model ownership
+  before the first asynchronous lookup/preparation. The same seventeen original tests passed with
+  production-only repairs. Added identity-safe stale-claim and cancellation/deletion regressions.
+  A controlled three-decoder probe also demonstrated overlapping headroom spending without
+  allocating texture arrays. Photo/model preparation now has a synchronous, reentrant, fail-fast
+  admission boundary before source reads; a second operation receives a retry message. All 104
+  focused cases passed. Geometry/archive expansion and other import families remain separate.
+- `w12_release_payload_ui`: added a separate Java/UIAutomator test module which observes the normal
+  release APK through visible UI and a real FileProvider share recipient. The workflow compares
+  all 4,096 exported pixels before/after a force-stop and new app process, verifies unchanged release
+  payload when applying a disposable signature, and retains the exact source/artifact identity.
+  Sixteen host regressions, 28 dependency checks and three workflow-pin checks passed. Root built
+  both APKs, including normal release R8/resource shrinking and release lint. The actual packaged
+  manifest targets only the separate test package. APK inspection confirms code4/1.1.1, API26–36,
+  non-debuggable/non-testOnly application flags, 1,751 renamed application classes and no benchmark
+  retention rules in normal release. These are local build facts, not Android runtime acceptance.
+- Frozen checkpoint `af7ff79` built both optimized APKs and passed ktlint/detekt with unchanged
+  baselines. Its complete JVM run had 1,901 cases: 1,893 passed, six ownership failures and two
+  explicit external-corpus skips. The same six failed in Actions 44549867769 and are repaired above.
+  Frozen Python discovery ran 343 cases: 338 passed and five separately required Gradle provenance
+  fixtures were explicit opt-in skips. Failed runs remain failed; newer source needs full execution.
+- Optimized Actions 44549867524 progressed to two completed cases, then failed on a Kotlin
+  `ContinuationInterceptor.DefaultImpls` call whose class was remapped but method name was not.
+  It does not qualify any of the required 43-case optimized inventory; wave 13 owns the repair.
+
+### Wave 13
+
+- `w13_physical_evidence_review`: rejected reviews preceding required post-capture completion,
+  exclusive-output collisions/symlinks, and nonfinite derived uncertainty. All 44 host cases passed,
+  with three new failures reproduced against the previous implementation. Reports explicitly
+  identify caller-supplied evidence as unauthenticated. No actual hardware campaign is claimed.
+- `w13_publisher_evidence_review`: rejected linked evidence outputs, concurrent first-attempt
+  overwrite, preexisting logs/reports and nonfinite JSON evidence. All 27 cases passed with required
+  official JDK/Android tools and disposable test certificates. The offline verifier does not
+  authenticate caller-supplied workflow/artifact-role metadata; publisher review remains required.
+- `w13_optimized_abi_review`: confirmed the mismatched method call in both actual APK DEX files
+  and reproduced it with actual Kotlin 2.1.20/bundled R8 bytecode. Exact traced external ABI names
+  now stay stable in benchmark; publisher rules and all global application optimization remain
+  intact. Six real-R8 fixtures passed, requiring internal helper obfuscation and unused-code
+  removal, plus 37 qualification, 28 dependency and eight harness cases. Required fixture evidence
+  is bound to the actual application input bytes and R8 tool hash. The 43-case Android run remains
+  required; a passing host fixture cannot replace it.
+- Frozen wave-12 host discovery executed 380 cases: 375 passed and five opt-in Gradle fixtures
+  were explicitly skipped for their separate required invocation. An earlier local invocation
+  incorrectly replaced PATH and hid the primary Python executable; its 19 harness failures are
+  retained. Restoring inherited PATH made the unchanged suite pass. Normal release APK inspection
+  also required local `-XX:-UsePerfData` to avoid a shared-/tmp PID-namespace JVM warning on stdout;
+  the XML parser was not weakened or changed. Full frozen JVM/instrumentation checks are running.

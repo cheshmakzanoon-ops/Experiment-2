@@ -178,10 +178,16 @@ internal class PendingRasterImports(
 
     fun model(projectId: Long): PreparedModelImport? = synchronized(lock) { (entries[projectId]?.payload as? Payload.Model)?.value }
 
-    fun claimModel(projectId: Long): PreparedModelImport? =
+    fun claimModel(projectId: Long): PreparedModelImport? = claimModel(projectId, null)
+
+    fun claimModel(
+        projectId: Long,
+        expected: PreparedModelImport?,
+    ): PreparedModelImport? =
         synchronized(lock) {
             val pending = entries[projectId] ?: return@synchronized null
             val model = pending.payload as? Payload.Model ?: return@synchronized null
+            if (expected != null && model.value !== expected) return@synchronized null
             pending.claimed = true
             pending.expiry.cancel()
             model.value

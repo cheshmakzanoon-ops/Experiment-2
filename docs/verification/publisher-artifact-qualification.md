@@ -113,7 +113,10 @@ This is an **evidence linkage**, not independent reproducible-build proof. The t
 does not authenticate retained metadata online, validate a signed build attestation,
 or rebuild source to compare outputs. Its report always says
 `sourceToBinaryReproduced: false`. Original provider metadata and the identity of its
-trusted retrieval process must remain reviewable with the signed candidate.
+trusted retrieval process must remain reviewable with the signed candidate. The
+release reviewer must also verify that the workflow/job and retained build artifact
+are approved for production release. A caller's `buildType: release` declaration and
+matching payload do not independently establish that workflow or artifact role.
 
 ## Run the gate
 
@@ -128,7 +131,7 @@ python .github/scripts/qualify_publisher_artifact.py /publisher/app-release.aab 
   --output-dir /publisher/evidence/artifact-qualification \
   --revision "${FINAL_SOURCE_SHA:?required}" \
   --expected-package com.artflow.studio \
-  --expected-version-code 3 --expected-version-name 1.1.0 \
+  --expected-version-code 4 --expected-version-name 1.1.1 \
   --expected-min-sdk 26 --expected-target-sdk 36 \
   --certificate-role upload \
   --approved-cert-sha256 "${APPROVED_UPLOAD_CERT_SHA256:?required}" \
@@ -137,11 +140,19 @@ python .github/scripts/qualify_publisher_artifact.py /publisher/app-release.aab 
   --bundletool /publisher/tools/bundletool-all.jar
 ```
 
-The output directory must be empty so a previous successful report cannot be
-mistaken for a new result. Missing inputs, tools, approval facts, evidence, or failed
-checks produce `UNQUALIFIED`, exit status 1, and `verification.json` with the reasons
-when the output directory is writable and empty. No tool absence becomes a passing
-skip. The parser also offers explicit tool paths (`--apksigner`, `--apkanalyzer`,
+The output directory must be empty and must not itself be a symbolic link. Each
+attempt exclusively creates `qualification-attempt.json` before checking evidence,
+so concurrent verifier attempts cannot share an initially empty directory. Command
+logs and `verification.json` also use exclusive creation: an existing file or
+symbolic link is never overwritten or followed. Keep the claim and any logs if an
+attempt fails or is interrupted; use a new empty directory for the next attempt.
+
+Missing inputs, tools, approval facts, evidence, or failed checks produce
+`UNQUALIFIED`, exit status 1, and `verification.json` with the reasons when output
+creation succeeds. An output collision also exits 1 and preserves the existing
+entry instead of replacing it with a new report. JSON evidence rejects duplicate
+keys and non-finite numbers, including numeric overflow. No tool absence becomes a
+passing skip. The parser also offers explicit tool paths (`--apksigner`, `--apkanalyzer`,
 `--java`, `--jarsigner`, `--keytool`). For APK use `--certificate-role app-signing`
 and its approval; bundletool is then unnecessary.
 
@@ -155,7 +166,7 @@ identity/declarations, prelaunch review, and staged rollout remain external work
 
 ## Verification of this tooling
 
-The implementation run executed **22 tests with 22 passes and no skips** using JDK 17
+The follow-up verification executed **27 tests with 27 passes and no skips** using JDK 17
 and Android SDK 36 tools. Tests generated disposable fixture certificates in temporary
 directories; no existing signing material was searched or opened. Actual JDK checks
 rejected unsigned/tampered bundles, unsigned payload and non-signing `META-INF`
@@ -163,7 +174,11 @@ entries, wrong fingerprints, expired certificates, and Android debug certificate
 An actual `aapt2`/D8 fixture APK passed the complete gate with synthetic approval and
 provider metadata, and real `apksigner` rejected subsequent tampering. Bundle module
 manifest routing uses a controlled fixture; no real publisher AAB was qualified.
-The reused native/ZIP preflight suite still passed **15/15** tests.
+The additional cases cover non-finite JSON, linked output directories, report and
+command-log collisions (including broken symbolic links), and concurrent attempts.
+These regressions failed against the original implementation before the fixes.
+The initial implementation also ran the reused native/ZIP preflight suite with
+**15/15** passes; the follow-up did not modify that verifier.
 
 ```bash
 python -m unittest discover -s .github/scripts -p 'test_qualify_publisher_artifact.py' -v

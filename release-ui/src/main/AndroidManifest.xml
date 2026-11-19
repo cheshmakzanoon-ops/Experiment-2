@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <queries>
+        <package android:name="com.artflow.studio" />
+    </queries>
+    <application android:label="ArtFlow release qualification" android:allowBackup="false">
+        <activity
+            android:name=".PngReceiptActivity"
+            android:exported="true"
+            android:label="Qualification PNG receiver"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/png" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

@@ -1,0 +1,118 @@
+name: Normal release payload UI qualification
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: release-payload-ui-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release-payload-api-36:
+    name: Release APK paint, save, process death and PNG share — API 36
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+
+      - name: Set up evidence verification Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11'
+
+      - name: Test evidence rejection and record source before building
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s .github/scripts -p 'test_release_payload_ui.py'
+          python .github/scripts/release_payload_ui.py record-source \
+            --output "${RUNNER_TEMP}/artflow-release-payload-ui"
+
+      # This is the ordinary release task: no benchmark selection, additional keep rules,
+      # instrumentation host in the app, or test Application replaces the production process.
+      - name: Build normal release and separate self-instrumenting UI driver
+        timeout-minutes: 35
+        run: |
+          set -euo pipefail
+          ./gradlew :app:assembleRelease :release-ui:assembleRelease --stacktrace 2>&1 \
+            | tee "${RUNNER_TEMP}/artflow-release-payload-ui/build.log"
+
+      - name: Copy sign with a disposable key and verify unchanged release payload
+        run: |
+          set -euo pipefail
+          python .github/scripts/release_payload_ui.py prepare \
+            --output "${RUNNER_TEMP}/artflow-release-payload-ui" \
+            --apkanalyzer "${ANDROID_HOME}/cmdline-tools/latest/bin/apkanalyzer" \
+            --apksigner "${ANDROID_HOME}/build-tools/36.0.0/apksigner"
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run exactly one UI attempt on a fresh disposable emulator
+        timeout-minutes: 20
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 36
+          arch: x86_64
+          target: google_apis
+          cores: 2
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -memory 4096 -no-snapshot
+          script: python .github/scripts/release_payload_ui.py run --output "${RUNNER_TEMP}/artflow-release-payload-ui" --serial emulator-5554 --disposable-emulator
+
+      - name: Require complete unchanged-payload and UI evidence
+        if: always()
+        run: |
+          set -uo pipefail
+          status=0
+          if [[ -d "${RUNNER_TEMP}/artflow-release-payload-ui" ]]; then
+            python .github/scripts/release_payload_ui.py verify \
+              --output "${RUNNER_TEMP}/artflow-release-payload-ui" || status=$?
+            if [[ -f "${RUNNER_TEMP}/artflow-release-payload-ui/verification.md" ]]; then
+              cat "${RUNNER_TEMP}/artflow-release-payload-ui/verification.md" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          else
+            echo 'No release payload evidence was produced.' >> "$GITHUB_STEP_SUMMARY"
+            status=1
+          fi
+          exit "$status"
+
+      - name: Preserve original attempt, binaries, mapping, screenshots and PNG bytes
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-payload-ui-api-36-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/artflow-release-payload-ui/
+            app/build/outputs/apk/release/
+            app/build/outputs/mapping/release/
+            release-ui/build/outputs/apk/release/
+          if-no-files-found: error
+          retention-days: 14

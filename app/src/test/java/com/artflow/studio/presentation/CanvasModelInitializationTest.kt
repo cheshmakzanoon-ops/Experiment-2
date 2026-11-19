@@ -19,9 +19,12 @@ import com.artflow.studio.presentation.ui.viewmodel.CanvasUiState
 import com.artflow.studio.presentation.ui.viewmodel.CanvasViewModel
 import com.artflow.studio.presentation.ui.viewmodel.ModelController
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
@@ -191,10 +194,61 @@ class CanvasModelInitializationTest {
             }
         }
 
+    @Test
+    fun openingClaimsTheBundleBeforeLookupSuspendsAndTheGalleryOwnerEnds() =
+        runTest {
+            Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+            val galleryOwner = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
+            val fixture = Fixture(temporary.newFolder("files"), galleryOwner)
+            try {
+                fixture.pauseLookup = true
+                fixture.release.complete(Unit)
+                fixture.viewModel.open(PROJECT_ID)
+                fixture.awaitLookupEntered()
+                assertTrue(fixture.viewModel.uiState.value is CanvasUiState.Loading)
+                galleryOwner.cancel()
+                advanceTimeBy(10 * 60 * 1000L + 1)
+                runCurrent()
+                assertSame(fixture.prepared, PendingImports.modelBundle(PROJECT_ID))
+                fixture.lookupRelease.complete(Unit)
+                fixture.awaitState { it is CanvasUiState.Ready }
+                assertEquals(4, fixture.document.getAllLayers().size)
+                assertEquals(1, fixture.imports)
+                assertEquals(1, fixture.successfulSaves)
+                assertNull(PendingImports.modelBundle(PROJECT_ID))
+            } finally {
+                galleryOwner.cancel()
+                fixture.close()
+                Dispatchers.resetMain()
+            }
+        }
+
+    @Test
+    fun aConfirmedDeletedProjectReleasesItsEarlyClaimWithoutImporting() =
+        runTest {
+            Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+            val fixture = Fixture(temporary.newFolder("files"))
+            try {
+                fixture.missingProject = true
+                fixture.viewModel.open(PROJECT_ID)
+                val failed = fixture.awaitState { it is CanvasUiState.Error } as CanvasUiState.Error
+                assertTrue(failed.message.contains("no longer exists"))
+                assertNull(PendingImports.modelBundle(PROJECT_ID))
+                assertEquals(0, fixture.imports)
+                assertEquals(0, fixture.saveAttempts)
+            } finally {
+                fixture.close()
+                Dispatchers.resetMain()
+            }
+        }
+
     private class Fixture(
         files: File,
+        galleryOwner: CoroutineScope? = null,
     ) {
         val prepared = ModelImportFixture.prepared()
+        private val lookupEntered = CompletableDeferred<Unit>()
+        val lookupRelease = CompletableDeferred<Unit>()
         private val entered = CompletableDeferred<Unit>()
         private val saveEntered = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
@@ -202,6 +256,8 @@ class CanvasModelInitializationTest {
         var failPublication = false
         var failInitialSave = false
         var pauseInitialSave = false
+        var pauseLookup = false
+        var missingProject = false
         var autosaves = 0
         var imports = 0
         var saveAttempts = 0
@@ -247,14 +303,29 @@ class CanvasModelInitializationTest {
                 }
             }
         private val projects =
-            mock(ProjectRepository::class.java) { call ->
-                when (call.method.name) {
-                    "getProjectById" -> Project(PROJECT_ID, "Material package", "", null, prepared.width, prepared.height, 72, 1, 1)
-                    "updateProject" -> {
-                        savedProject = call.getArgument(0)
-                        Unit
+            object : ProjectRepository by mock(ProjectRepository::class.java) {
+                override suspend fun getProjectById(projectId: Long): Project? {
+                    lookupEntered.complete(Unit)
+                    if (pauseLookup) lookupRelease.await()
+                    return if (missingProject) {
+                        null
+                    } else {
+                        Project(
+                            projectId,
+                            "Material package",
+                            "",
+                            null,
+                            prepared.width,
+                            prepared.height,
+                            72,
+                            1,
+                            1,
+                        )
                     }
-                    else -> error("Unexpected project call: ${call.method.name}")
+                }
+
+                override suspend fun updateProject(project: Project) {
+                    savedProject = project
                 }
             }
         private val settings =
@@ -265,8 +336,13 @@ class CanvasModelInitializationTest {
             CanvasViewModel(repository, projects, settings, mock(ArtworkExporter::class.java), mock(TimelapseRecorder::class.java))
 
         init {
-            PendingImports.putModelBundle(PROJECT_ID, prepared, viewModel.viewModelScope)
+            PendingImports.putModelBundle(PROJECT_ID, prepared, galleryOwner ?: viewModel.viewModelScope)
         }
+
+        suspend fun awaitLookupEntered() =
+            withContext(Dispatchers.Default) {
+                withTimeout(5_000) { lookupEntered.await() }
+            }
 
         suspend fun awaitEntered() =
             withContext(Dispatchers.Default) {
@@ -284,6 +360,7 @@ class CanvasModelInitializationTest {
             }
 
         suspend fun close() {
+            lookupRelease.complete(Unit)
             release.complete(Unit)
             saveRelease.complete(Unit)
             viewModel.viewModelScope.coroutineContext[Job]?.cancelAndJoin()

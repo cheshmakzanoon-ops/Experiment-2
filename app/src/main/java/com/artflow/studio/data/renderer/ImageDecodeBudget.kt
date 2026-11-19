@@ -1,6 +1,7 @@
 package com.artflow.studio.data.renderer
 
 import com.artflow.studio.core.canvas.CanvasOperations
+import com.artflow.studio.core.pixels.ImportMemoryBudget
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 
@@ -32,27 +33,14 @@ internal object ImageDecodeBudget {
         }
     }
 
-    fun currentBytes(): Long {
-        val runtime = Runtime.getRuntime()
-        val maximum = runtime.maxMemory()
-        val firstCommitted = runtime.totalMemory()
-        val free = runtime.freeMemory()
-        // GC/heap expansion can occur between these reads. The larger committed snapshot avoids
-        // treating a newly grown heap's free bytes as though they belonged to the earlier heap.
-        val committed = maxOf(firstCommitted, runtime.totalMemory()).coerceIn(0, maximum)
-        return availableBytes(maximum, committed, free.coerceIn(0, committed))
-    }
+    fun currentBytes(): Long = ImportMemoryBudget.currentBytes()
 
     /** No more than a third of the heap or half of its presently available headroom. */
     fun availableBytes(
         maximum: Long,
         committed: Long,
         free: Long,
-    ): Long {
-        require(maximum > 0 && committed in 0..maximum && free in 0..committed) { "Invalid image decode memory limits" }
-        val used = committed - free
-        return minOf(maximum / 3, (maximum - used) / 2)
-    }
+    ): Long = ImportMemoryBudget.availableBytes(maximum, committed, free)
 
     /**
      * Bounds and pixels must come from the same bytes, including non-seekable content providers.

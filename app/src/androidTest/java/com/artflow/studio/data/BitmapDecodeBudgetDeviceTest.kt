@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.graphics.Bitmap
 import android.net.Uri
-import android.os.Build
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artflow.studio.core.export.PngCodec
@@ -202,16 +201,56 @@ class BitmapDecodeBudgetDeviceTest {
     @Test
     fun metadataOrientationRemainsCorrectAfterBoundedDecode() {
         val file = File(directory, "rotated.jpg")
-        file.writeBytes(rotatedJpeg())
+        file.writeBytes(orientedJpeg(6))
         val decoded = requireNotNull(BitmapPixelBridge.decodeUri(context.contentResolver, Uri.fromFile(file), 8, 8 * MIB))
-        // Android 9+'s ImageDecoder honors EXIF. The API26 BitmapFactory path keeps encoded
-        // orientation, matching the documented preexisting platform boundary without a skip.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            assertEquals(4, decoded.width)
-            assertEquals(8, decoded.height)
-        } else {
-            assertEquals(8, decoded.width)
-            assertEquals(4, decoded.height)
+        assertEquals(4, decoded.width)
+        assertEquals(8, decoded.height)
+    }
+
+    @Test
+    fun allExifRotationsAndMirrorsMatchForFileAndUriOnEverySupportedApi() {
+        val expected =
+            listOf(
+                intArrayOf(RED, GREEN, BLUE, YELLOW),
+                intArrayOf(GREEN, RED, YELLOW, BLUE),
+                intArrayOf(YELLOW, BLUE, GREEN, RED),
+                intArrayOf(BLUE, YELLOW, RED, GREEN),
+                intArrayOf(RED, BLUE, GREEN, YELLOW),
+                intArrayOf(BLUE, RED, YELLOW, GREEN),
+                intArrayOf(YELLOW, GREEN, BLUE, RED),
+                intArrayOf(GREEN, YELLOW, RED, BLUE),
+            )
+        expected.forEachIndexed { index, corners ->
+            val orientation = index + 1
+            val source = File(directory, "orientation-$orientation.jpg")
+            val bytes = orientedJpeg(orientation, quadrants = true)
+            source.writeBytes(bytes)
+            val picked = requireNotNull(BitmapPixelBridge.decodeUri(context.contentResolver, Uri.fromFile(source), 16, 8 * MIB))
+            val file = requireNotNull(BitmapPixelBridge.decodeFile(source.path, 16, 8 * MIB))
+            listOf(picked, file).forEach { decoded ->
+                assertEquals(if (orientation >= 5) 8 else 16, decoded.width)
+                assertEquals(if (orientation >= 5) 16 else 8, decoded.height)
+                assertCorners(decoded, corners, "EXIF $orientation")
+            }
+            assertArrayEquals(bytes, source.readBytes())
+        }
+    }
+
+    @Test
+    fun permittedJpegFillBytesDoNotHideTheOrientationTag() {
+        val tagged = orientedJpeg(6, quadrants = true)
+        for (fillCount in listOf(1, 3)) {
+            // JPEG permits additional FF fill bytes before a marker; ExifInterface 1.4.2 fixes this parse boundary.
+            val bytes = tagged.copyOfRange(0, 2) + ByteArray(fillCount) { 0xFF.toByte() } + tagged.copyOfRange(2, tagged.size)
+            val source = File(directory, "fill-$fillCount.jpg").apply { writeBytes(bytes) }
+            val picked = requireNotNull(BitmapPixelBridge.decodeUri(context.contentResolver, Uri.fromFile(source), 16, 8 * MIB))
+            val file = requireNotNull(BitmapPixelBridge.decodeFile(source.path, 16, 8 * MIB))
+            listOf(picked, file).forEach { decoded ->
+                assertEquals(8, decoded.width)
+                assertEquals(16, decoded.height)
+                assertCorners(decoded, intArrayOf(BLUE, RED, YELLOW, GREEN), "JPEG fill count $fillCount")
+            }
+            assertArrayEquals(bytes, source.readBytes())
         }
     }
 
@@ -231,18 +270,44 @@ class BitmapDecodeBudgetDeviceTest {
         height: Int,
     ): File = File(directory, "source.png").apply { writeBytes(PngCodec.encode(PixelBuffer.filled(width, height, RED))) }
 
-    private fun rotatedJpeg(): ByteArray {
-        val bitmap = Bitmap.createBitmap(16, 8, Bitmap.Config.ARGB_8888)
+    private fun assertCorners(
+        decoded: PixelBuffer,
+        expected: IntArray,
+        label: String,
+    ) {
+        expected.forEachIndexed { corner, color ->
+            val x = if (corner % 2 == 0) decoded.width / 4 else decoded.width * 3 / 4
+            val y = if (corner < 2) decoded.height / 4 else decoded.height * 3 / 4
+            val actual = decoded.getSafe(x, y)
+            for (shift in intArrayOf(0, 8, 16)) {
+                assertTrue(
+                    "$label corner $corner",
+                    kotlin.math.abs((actual ushr shift and 255) - (color ushr shift and 255)) <= 8,
+                )
+            }
+        }
+    }
+
+    private fun orientedJpeg(
+        orientation: Int,
+        quadrants: Boolean = false,
+    ): ByteArray {
+        val bitmap = Bitmap.createBitmap(32, 16, Bitmap.Config.ARGB_8888)
         val output = ByteArrayOutputStream()
         val encoded =
             try {
                 bitmap.eraseColor(RED)
+                if (quadrants) {
+                    val colors = intArrayOf(RED, GREEN, BLUE, YELLOW)
+                    val pixels = IntArray(32 * 16) { colors[(if (it / 32 < 8) 0 else 2) + if (it % 32 < 16) 0 else 1] }
+                    bitmap.setPixels(pixels, 0, 32, 0, 0, 32, 16)
+                }
                 check(bitmap.compress(Bitmap.CompressFormat.JPEG, 100, output))
                 output.toByteArray()
             } finally {
                 bitmap.recycle()
             }
-        // JPEG APP1 EXIF: little-endian TIFF, one SHORT Orientation=6 entry (90 degrees CW).
+        // Independently constructed JPEG APP1 EXIF: little-endian TIFF, one SHORT Orientation entry.
         val exif =
             byteArrayOf(
                 0x45,
@@ -269,7 +334,7 @@ class BitmapDecodeBudgetDeviceTest {
                 0,
                 0,
                 0,
-                6,
+                orientation.toByte(),
                 0,
                 0,
                 0,
@@ -286,5 +351,7 @@ class BitmapDecodeBudgetDeviceTest {
         const val MIB = 1024 * 1024L
         val RED = 0xFFFF0000.toInt()
         val BLUE = 0xFF0000FF.toInt()
+        val GREEN = 0xFF00FF00.toInt()
+        val YELLOW = 0xFFFFFF00.toInt()
     }
 }

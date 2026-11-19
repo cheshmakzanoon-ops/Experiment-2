@@ -288,7 +288,10 @@ class ModelMaterialImportRepositoryTest {
             assertEquals(MaterialChannel.COLOR, repository.getActiveLayer()?.materialChannel)
             assertArrayEquals(requireNotNull(prepared.color).pixels, pixels(repository.getActiveLayerId()))
             repository.createCanvas(4, 4, 72)
-            val plain = PreparedModelImport.prepare(ModelPackage.Contents(ModelImportFixture.OBJ), { null }, defaultSize = 4)
+            val plain =
+                PreparedModelImport.prepare(ModelPackage.Contents(ModelImportFixture.OBJ), {
+                    null
+                }, defaultSize = 4, inspect = TestPng::dimensions)
             val layers = repository.getAllLayers()
             val undo = repository.undoDepth
             assertTrue(ModelImports.install(repository, plain))
@@ -394,7 +397,11 @@ internal object ModelImportFixture {
         val metal = PixelBuffer(width, height, IntArray(width * height) { MaterialChannel.gray(it.toFloat() / (width * height)) })
         val rough = PixelBuffer(width, height, IntArray(width * height) { MaterialChannel.gray(1f - it.toFloat() / (width * height)) })
         val scalars = if (materials) ModelPackage.ScalarMaps(PngCodec.encode(metal), PngCodec.encode(rough)) else null
-        return PreparedModelImport.prepare(ModelPackage.Contents(OBJ, PngCodec.encode(color), scalarMaps = scalars), TestPng::decode)
+        return PreparedModelImport.prepare(
+            ModelPackage.Contents(OBJ, PngCodec.encode(color), scalarMaps = scalars),
+            TestPng::decode,
+            inspect = TestPng::dimensions,
+        )
     }
 
     fun planes(prepared: PreparedModelImport): Map<MaterialChannel, PixelBuffer> =

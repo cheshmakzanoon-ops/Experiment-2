@@ -177,6 +177,12 @@ object PendingImports {
     /** Transfers lifetime from the gallery to the unsaved editor retry, before any suspending work. */
     fun claimModelBundle(projectId: Long): PreparedModelImport? = rasters.claimModel(projectId)
 
+    /** A direct installer may claim only its own handoff, never a later replacement for the same project. */
+    internal fun claimModelBundle(
+        projectId: Long,
+        prepared: PreparedModelImport,
+    ): PreparedModelImport? = rasters.claimModel(projectId, prepared)
+
     internal fun reserveModelBundle(
         prepared: PreparedModelImport,
         owner: CoroutineScope,

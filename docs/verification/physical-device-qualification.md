@@ -10,7 +10,8 @@ This protocol implements the physical performance portion of
 artifact, upgrade/data-preservation, complete emulator matrix and publisher/store gates still
 apply. A physical report covers only its exact installed APK set, devices and approved workloads.
 It always reports `publisherSignatureQualified: false` and `releaseApproved: false` because those
-decisions belong to their separate gates.
+decisions belong to their separate gates. It also reports `provenanceAuthenticated: false`:
+local record validation does not authenticate the origin of a measurement or a person's identity.
 
 ## What the tool does
 
@@ -30,6 +31,14 @@ hashing from the existing installed-APK provenance tool; it does not build or in
 `captureComplete: true` means identity files were collected, not that physical qualification
 succeeded. Every capture explicitly says `qualified: false`. Existing capture directories and
 verification outputs cannot be overwritten by these commands.
+
+The verifier checks the consistency of submitted records, measured values, hashes and named
+decisions. It cannot establish that a raw recording came from the claimed hardware, that a named
+person made the decision, or that a submitted wall-clock timestamp is genuine. A well-formed
+synthetic dataset can satisfy those structural checks, as the explicitly synthetic positive unit
+fixture demonstrates. The observer and reviewer must independently establish the actual physical
+observations, measurement derivation and approval trail. A qualified report is conditional on that
+real provenance; generating local records or hashes cannot replace it.
 
 ## 1. Define and approve the campaign before collection
 
@@ -246,7 +255,8 @@ qualify. Synthetic device tests remain valuable engineering evidence but cannot 
 The actual reviewer checks physical provenance, artifact identity, full workload execution,
 GL-surface coverage, optical endpoints/calibration, sampling completeness, metric extraction,
 stylus behavior and every failure. Fill `review.reviewer`, `review.reviewedAtUtc` and
-`review.decision` with that person's real decision. The review time must follow all measured runs.
+`review.decision` with that person's real decision. The review time must follow all measured runs
+and completion of every post-run identity capture, including its installed APK snapshots.
 
 ```bash
 python3 .github/scripts/physical_qualification.py review-digest --campaign /path/to/new-campaign/campaign.json
@@ -294,6 +304,7 @@ python3 -m unittest discover -s .github/scripts -p 'test_physical_qualification.
 The suite covers coherent synthetic campaigns and rejects missing/changed artifacts, wrong source,
 dirty-build identity, unknown/emulated hardware, ABI/page-size/version mismatches, stale approvals,
 synthetic stylus input, software timers substituted for optical latency, omitted roles/attempts,
-bad sample counts/durations, non-finite data, missing raw evidence, path escape/symlinks,
-unaccounted optical uncertainty, failed measurements and stale review decisions. Those checks
+bad sample counts/durations, non-finite data or derived arithmetic, missing raw evidence, path
+escape/symlinks, broken output links, unaccounted optical uncertainty, failed measurements,
+premature review timestamps and stale review decisions. Those checks
 validate the tooling's behavior; none establishes physical performance of ArtFlow.

@@ -2,8 +2,8 @@
 """One retained, opt-in package replacement on an explicitly disposable Android device.
 
 prepare installs the old debug APK only on a device with neither package registered.
-The operator seeds artwork/settings through that old app. freeze preserves the stopped
-app's real data. upgrade uses install -r, then runs the candidate's existing UI workflow
+seed drives the pinned old application's real UI, or an operator may seed it manually.
+freeze preserves the stopped app's real data. upgrade uses install -r, then runs its UI workflow
 in its separately evidenced campaign mode. No command clears data or uninstalls a package.
 """
 from __future__ import annotations
@@ -25,10 +25,14 @@ import tempfile
 import uuid
 import xml.etree.ElementTree as ET
 
+import package_upgrade_build
+
 PACKAGE = "com.artflow.studio"
 TEST_PACKAGE = PACKAGE + ".test"
 RUNNER = TEST_PACKAGE + "/com.artflow.studio.HiltTestRunner"
 METHOD = PACKAGE + ".OptimizedArtworkWorkflowTest#realPointerPaintSurvivesSaveFreshActivityReopenAndUiPngExport"
+SEED_METHOD = PACKAGE + ".InstalledUpgradeSeedTest#seedSavedArtworkNewerRecoveryAndPreferencesThroughOldUi"
+PINNED_V1_SOURCE = "ca9ce535c09d35ceca6aba9f686c60f58f93bc09"
 ANDROID = "{http://schemas.android.com/apk/res/android}"
 SHA = re.compile(r"[0-9a-f]{64}")
 TOKEN = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
@@ -111,6 +115,9 @@ class Commands:
         self.adb_command("final-probe-evidence", "pull",
                          f"/sdcard/Android/data/{PACKAGE}/files/upgrade-{token}/test-evidence",
                          str(self.root / "final-probe-evidence"), required=False, timeout=30)
+        self.adb_command("final-old-ui-evidence", "pull",
+                         f"/sdcard/Android/data/{PACKAGE}/files/upgrade-{token}-old/test-evidence",
+                         str(self.root / "final-old-ui-evidence"), required=False, timeout=30)
 
 
 def parse_apk_manifest(text: str) -> dict:
@@ -157,6 +164,12 @@ def validate_apks(apks: dict) -> str:
         raise ValueError("A version-code downgrade is forbidden")
     if old["sha256"] == candidate["sha256"]:
         raise ValueError("Old and candidate APKs are identical; this is not a replacement campaign")
+    if "seed" in apks:
+        seed = apks["seed"]
+        if (seed["packageName"] != TEST_PACKAGE or seed["targetPackage"] != PACKAGE
+                or seed["runner"] != "com.artflow.studio.HiltTestRunner"
+                or seed["signerSha256"] != old["signerSha256"]):
+            raise ValueError("The old UI seed APK must target the old application with the same test signer")
     return "increasing-version-test-update" if candidate["versionCode"] > old["versionCode"] else "same-version-engineering-replacement"
 
 
@@ -283,8 +296,8 @@ def rows(database: dict, table: str) -> list[dict]:
 
 
 def validate_seed(seed: dict, name: str) -> int:
-    if seed["database"]["version"] != 2:
-        raise ValueError("This campaign's identified historical app uses Room v2; it cannot qualify an installed v1 migration")
+    if seed["database"]["version"] not in (1, 2):
+        raise ValueError("Only actual Room v1-to-v2 migration and v2 continuity are supported")
     projects = [row for row in rows(seed["database"], "projects") if row["name"] == name]
     if len(projects) != 1 or (projects[0]["width"], projects[0]["height"], projects[0]["dpi"]) != (64, 64, 72):
         raise ValueError(f"Create exactly one old-app artwork named {name} at 64 x 64 pixels, 72 dpi")
@@ -307,6 +320,27 @@ def validate_seed(seed: dict, name: str) -> int:
            for key in ("color.palettes", "brush.savedLibrary.v1")):
         raise ValueError("Create a custom palette and a saved brush in the old app")
     return project_id
+
+
+def verify_seed_report(value: dict, campaign: dict) -> None:
+    expected = {"schemaVersion": 1, "mode": "automated-old-app-ui", "campaignToken": campaign["token"],
+                "packageName": PACKAGE, "oldSource": PINNED_V1_SOURCE,
+                "oldApkSha256": campaign["apks"]["old"]["sha256"], "projectName": campaign["projectName"],
+                "databaseVersion": 1, "success": True}
+    if any(value.get(key) != item or type(value.get(key)) is not type(item) for key, item in expected.items()):
+        raise ValueError("Missing, stale or mismatched old-app UI seed proof")
+    for key in ("pid", "projectId"):
+        if type(value.get(key)) is not int or value[key] <= 0:
+            raise ValueError("The UI seed must identify its real process and project")
+    assertions = value.get("assertions")
+    if not isinstance(assertions, dict) or set(assertions) != set(SEED_ATTESTATIONS) or any(v is not True for v in assertions.values()):
+        raise ValueError("The old-app UI seed must prove every required UI step")
+
+
+def require_one_test(output: str, phase: str) -> None:
+    if (not re.search(r"OK \(1 test\)", output) or "INSTRUMENTATION_CODE: -1" not in output
+            or re.search(r"FAILURES!!!|INSTRUMENTATION_FAILED|INSTRUMENTATION_STATUS_CODE: -[234]", output)):
+        raise ValueError(f"The first {phase} instrumentation invocation did not pass exactly one test")
 
 
 def assert_same_data(before: dict, after: dict) -> None:
@@ -339,6 +373,28 @@ def prepare(args, campaign: dict, commands: Commands) -> None:
         target = args.campaign / "inputs" / (name + ".apk")
         retain(source, target, pin)
         campaign["apks"][name] = inspect_apk(commands, target, name, campaign["tools"])
+    if bool(args.seed_apk) != bool(args.seed_sha256):
+        raise ValueError("Automated seeding requires both a seed APK and its pinned hash")
+    if bool(args.build_record) != bool(args.build_record_sha256):
+        raise ValueError("A build record and its pinned hash must be supplied together")
+    if args.seed_apk:
+        if args.old_source != PINNED_V1_SOURCE or args.baseline_origin != "rebuilt-pinned-source":
+            raise ValueError("The automatic old-app UI driver is audited for the exact pinned Room-v1 source only")
+        target = args.campaign / "inputs" / "seed.apk"
+        retain(args.seed_apk, target, args.seed_sha256)
+        campaign["apks"]["seed"] = inspect_apk(commands, target, "seed", campaign["tools"])
+        if args.build_record is None or args.build_record_sha256 is None:
+            raise ValueError("Automated seeding needs the measured pinned-source/test-overlay build record")
+    if args.build_record is not None:
+        receipt = retain(args.build_record, args.campaign / "inputs" / "build-provenance.json", args.build_record_sha256)
+        measured = json.loads(Path(receipt["path"]).read_text())
+        package_upgrade_build.validate(measured)
+        if (measured["oldSource"] != args.old_source or measured["candidateSource"] != args.candidate_source
+                or set(measured["apks"]) != set(campaign["apks"])
+                or any(measured["apks"][role]["sha256"] != apk["sha256"] for role, apk in campaign["apks"].items())):
+            raise ValueError("The measured build record does not identify these source revisions and APKs")
+        campaign["buildRecord"] = receipt
+        campaign["sourceProvenance"] = "measured pinned-source/test-overlay build record; no independent remote attestation"
     campaign["replacementScope"] = validate_apks(campaign["apks"])
     if any(apk["minSdk"] > campaign["device"]["api"] for apk in campaign["apks"].values()):
         raise ValueError("The designated device is below an APK's minimum SDK")
@@ -352,21 +408,68 @@ def prepare(args, campaign: dict, commands: Commands) -> None:
     campaign["phase"] = "awaiting-old-app-ui-seed"
 
 
+def seed(args, campaign: dict, commands: Commands) -> None:
+    if campaign["phase"] != "awaiting-old-app-ui-seed" or "seed" not in campaign["apks"]:
+        raise ValueError("seed requires the prepared pinned old-app UI driver")
+    validate_apks(campaign["apks"])
+    installed_apk(commands, PACKAGE, campaign["apks"]["old"], "old-before-seed")
+    require_absent(commands, TEST_PACKAGE)
+    commands.shell("stop-old-before-ui-seed", "am", "force-stop", PACKAGE)
+    install(commands, campaign["apks"]["seed"], "install-old-ui-driver", "-t")
+    installed_apk(commands, TEST_PACKAGE, campaign["apks"]["seed"], "installed-old-ui-driver")
+    external = f"/sdcard/Android/data/{PACKAGE}/files/upgrade-{campaign['token']}-old"
+    output = commands.shell(
+        "instrumentation-old-ui-seed", "am", "instrument", "-w", "-r", "-e", "class", SEED_METHOD,
+        "-e", "artflowPackageUpgradeToken", campaign["token"],
+        "-e", "artflowOldApkSha256", campaign["apks"]["old"]["sha256"],
+        "-e", "artflowOldSource", campaign["oldSource"], "-e", "additionalTestOutputDir", external,
+        RUNNER, timeout=240,
+    ).read_text()
+    # Retain the first invocation's device evidence even if instrumentation failed.
+    destination = args.campaign / "old-ui-evidence"
+    commands.adb_command("pull-old-ui-evidence", "pull", external + "/test-evidence", str(destination), timeout=60, required=False)
+    require_one_test(output, "old UI seed")
+    reports = list(destination.rglob("old-app-ui-seed.json"))
+    if len(reports) != 1:
+        raise ValueError("The old application did not retain exactly one UI seed report")
+    value = json.loads(reports[0].read_text())
+    verify_seed_report(value, campaign)
+    campaign["automatedOldAppSeed"] = {"report": retain(reports[0], args.campaign / "old-app-seed-report.json"), "proof": value}
+    campaign["phase"] = "old-app-ui-seeded"
+
+
 def freeze(args, campaign: dict, commands: Commands) -> None:
-    if campaign["phase"] != "awaiting-old-app-ui-seed":
+    if campaign["phase"] not in ("awaiting-old-app-ui-seed", "old-app-ui-seeded"):
         raise ValueError("freeze requires the single prepared old-app campaign")
     installed_apk(commands, PACKAGE, campaign["apks"]["old"], "old-before-freeze")
-    record = retain(args.seed_record, args.campaign / "old-app-seed-record.json")
-    seed_record = json.loads(Path(record["path"]).read_text())
-    if (seed_record.get("schemaVersion") != 1 or any(seed_record.get(key) is not True for key in SEED_ATTESTATIONS)
-            or not isinstance(seed_record.get("operator"), str) or not seed_record["operator"].strip()):
-        raise ValueError("A named operator must attest each bounded old-app UI seed step")
-    campaign["manualOldAppSeed"] = record
+    if campaign["phase"] == "old-app-ui-seeded":
+        if args.seed_record is not None:
+            raise ValueError("Do not substitute a manual attestation for the measured automatic UI seed")
+        recorded = campaign["automatedOldAppSeed"]["report"]
+        if sha256(Path(recorded["path"])) != recorded["sha256"]:
+            raise ValueError("The first old-app UI seed report changed")
+        proof = json.loads(Path(recorded["path"]).read_text())
+        verify_seed_report(proof, campaign)
+        if proof != campaign["automatedOldAppSeed"]["proof"]:
+            raise ValueError("The cached old-app UI proof changed")
+    else:
+        if args.seed_record is None:
+            raise ValueError("Manual seeding requires a named operator's --seed-record")
+        record = retain(args.seed_record, args.campaign / "old-app-seed-record.json")
+        seed_record = json.loads(Path(record["path"]).read_text())
+        if (seed_record.get("schemaVersion") != 1 or any(seed_record.get(key) is not True for key in SEED_ATTESTATIONS)
+                or not isinstance(seed_record.get("operator"), str) or not seed_record["operator"].strip()):
+            raise ValueError("A named operator must attest each bounded old-app UI seed step")
+        campaign["manualOldAppSeed"] = record
     commands.adb_command("old-seed-screen", "exec-out", "screencap -p", suffix=".png")
     commands.shell("old-seed-activity", "dumpsys", "activity", "top")
     commands.shell("stop-old-for-snapshot", "am", "force-stop", PACKAGE)
     seed = snapshot(commands, "old-app-data")
     project_id = validate_seed(seed, campaign["projectName"])
+    if "automatedOldAppSeed" in campaign:
+        proof = campaign["automatedOldAppSeed"]["proof"]
+        if seed["database"]["version"] != proof["databaseVersion"] or project_id != proof["projectId"]:
+            raise ValueError("The stopped actual seed does not match the old-app UI proof")
     campaign["seed"] = seed
     campaign["projectId"] = project_id
     campaign["phase"] = "seed-frozen"
@@ -376,7 +479,8 @@ def verify_probe_report(value: dict, campaign: dict, phase: str, baseline_hash: 
     expected = {"schemaVersion": 1, "campaignToken": campaign["token"], "phase": phase,
                 "baselineSha256": baseline_hash, "candidateApkSha256": campaign["apks"]["candidate"]["sha256"],
                 "oldApkSha256": campaign["apks"]["old"]["sha256"], "projectId": campaign["projectId"],
-                "packageName": PACKAGE, "success": True}
+                "packageName": PACKAGE, "success": True,
+                "oldDatabaseVersion": campaign["seed"]["database"]["version"], "databaseVersion": 2}
     if (any(value.get(key) != item or type(value.get(key)) is not type(item) for key, item in expected.items())):
         raise ValueError(f"Missing, stale or incomplete {phase} campaign proof")
     if type(value.get("pid")) is not int or value["pid"] <= 0:
@@ -395,7 +499,10 @@ def upgrade(args, campaign: dict, commands: Commands) -> None:
         raise ValueError("upgrade requires a frozen seed and permits only one replacement attempt")
     validate_apks(campaign["apks"])
     installed_apk(commands, PACKAGE, campaign["apks"]["old"], "old-before-replacement")
-    require_absent(commands, TEST_PACKAGE)
+    if "seed" in campaign["apks"]:
+        installed_apk(commands, TEST_PACKAGE, campaign["apks"]["seed"], "old-ui-driver-before-replacement")
+    else:
+        require_absent(commands, TEST_PACKAGE)
     commands.shell("stop-old-before-replacement", "am", "force-stop", PACKAGE)
     assert_same_data(campaign["seed"], snapshot(commands, "immediately-before-replacement"))
     campaign["phase"] = "replacement-started"
@@ -407,7 +514,7 @@ def upgrade(args, campaign: dict, commands: Commands) -> None:
     launch(commands, "launch-real-candidate")
     commands.adb_command("candidate-real-launch-screen", "exec-out", "screencap -p", suffix=".png")
     commands.shell("stop-candidate-before-probe", "am", "force-stop", PACKAGE)
-    install(commands, campaign["apks"]["tests"], "install-candidate-test-apk", "-t")
+    install(commands, campaign["apks"]["tests"], "install-candidate-test-apk", "-r", "-t")
     installed_apk(commands, TEST_PACKAGE, campaign["apks"]["tests"], "installed-tests")
     baseline = {"schemaVersion": 1, "campaignToken": campaign["token"], "packageName": PACKAGE,
                 "projectId": campaign["projectId"], "projectName": campaign["projectName"],
@@ -434,9 +541,7 @@ def upgrade(args, campaign: dict, commands: Commands) -> None:
             "-e", "artflowPackageUpgradeBaselineSha256", baseline_hash,
             "-e", "additionalTestOutputDir", external, RUNNER, timeout=180,
         ).read_text()
-        if (not re.search(r"OK \(1 test\)", output) or "INSTRUMENTATION_CODE: -1" not in output
-                or re.search(r"FAILURES!!!|INSTRUMENTATION_FAILED|INSTRUMENTATION_STATUS_CODE: -[234]", output)):
-            raise ValueError(f"The first {phase} instrumentation invocation did not pass exactly one test")
+        require_one_test(output, phase)
         destination = args.campaign / ("probe-" + phase)
         commands.adb_command("pull-" + phase + "-evidence", "pull", external + "/test-evidence", str(destination), timeout=60)
         paths = list(destination.rglob("package-upgrade-" + phase + ".json"))
@@ -452,12 +557,13 @@ def upgrade(args, campaign: dict, commands: Commands) -> None:
     campaign["postCampaignData"] = snapshot(commands, "after-edit-save-reopen")
     campaign["phase"] = "passed-scoped-package-campaign"
     campaign["qualified"] = True
+    campaign["installedV1MigrationQualified"] = campaign["seed"]["database"]["version"] == 1
 
 
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
     sub = result.add_subparsers(dest="action", required=True)
-    for action in ("prepare", "freeze", "upgrade"):
+    for action in ("prepare", "seed", "freeze", "upgrade"):
         command = sub.add_parser(action)
         command.add_argument("--campaign", type=Path, required=True)
         command.add_argument("--serial", required=True)
@@ -473,8 +579,12 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("--old-source", required=True)
             command.add_argument("--candidate-source", required=True)
             command.add_argument("--baseline-origin", choices=("archived-apk", "rebuilt-pinned-source"), required=True)
+            command.add_argument("--seed-apk", type=Path)
+            command.add_argument("--seed-sha256")
+            command.add_argument("--build-record", type=Path)
+            command.add_argument("--build-record-sha256")
         elif action == "freeze":
-            command.add_argument("--seed-record", type=Path, required=True)
+            command.add_argument("--seed-record", type=Path)
     return result
 
 
@@ -512,7 +622,7 @@ def main(argv=None) -> int:
             current_device = device(commands)
             if current_device != campaign["device"]:
                 raise ValueError("Device identity changed since preparation")
-        {"prepare": prepare, "freeze": freeze, "upgrade": upgrade}[args.action](args, campaign, commands)
+        {"prepare": prepare, "seed": seed, "freeze": freeze, "upgrade": upgrade}[args.action](args, campaign, commands)
     except (OSError, ValueError, KeyError, TypeError, ET.ParseError, tarfile.TarError, sqlite3.Error) as error:
         campaign["qualified"] = False
         campaign["firstFailure"] = {"phase": args.action, "atUtc": now(), "error": str(error)}

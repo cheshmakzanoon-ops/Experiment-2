@@ -5,6 +5,7 @@ import math
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -208,6 +209,7 @@ class PhysicalQualificationTest(unittest.TestCase):
     def test_complete_synthetic_fixture_qualifies_only_defined_campaign(self):
         report = self.verify()
         self.assertTrue(report["qualified"], report)
+        self.assertFalse(report["provenanceAuthenticated"])
         self.assertEqual(report["status"], "QUALIFIED_FOR_RECORDED_PHYSICAL_CAMPAIGN")
         self.assertFalse(report["publisherSignatureQualified"])
         self.assertFalse(report["releaseApproved"])
@@ -349,6 +351,17 @@ class PhysicalQualificationTest(unittest.TestCase):
         self.campaign["runs"][3]["measurements"][2]["calibration"] = "unknown"
         self.rejected("calibration")
 
+    def test_finite_inputs_cannot_publish_an_infinite_uncertainty_adjustment(self):
+        measurement = self.campaign["runs"][3]["measurements"][2]
+        relative = measurement["samples"]["path"]
+        self.write(relative, "sample_id,elapsed_seconds,value\n1,0,1e308\n2,30,1e308\n3,60,1e308\n4,90,1e308\n")
+        measurement["samples"] = self.ref(relative)
+        measurement["uncertaintyMs"] = 1e308
+        report = self.rejected("uncertainty adjustment is not finite")
+        self.assertEqual(report["status"], "UNQUALIFIED")
+        # Invalid arithmetic must remain a retained JSON failure, not abort report serialization.
+        json.dumps(report, allow_nan=False)
+
     def test_sample_count_and_duration_are_enforced(self):
         self.plan["acceptance"]["criteria"][0]["minSamples"] = 5
         self.rejected("Insufficient")
@@ -418,6 +431,36 @@ class PhysicalQualificationTest(unittest.TestCase):
         self.campaign["runs"][0]["environment"]["powerMode"] = "Fixture"
         self.campaign["review"]["reviewedAtUtc"] = "2026-11-19T10:00:00Z"
         self.rejected("Review predates")
+
+    def test_review_must_follow_completion_of_every_post_capture(self):
+        device = self.campaign["devices"][0]
+        relative = device["postCapture"]["path"]
+        record = json.loads((self.root / relative).read_text())
+        record["completedAtUtc"] = "2026-11-19T10:17:00Z"
+        self.write_json(relative, record)
+        device["postCapture"] = self.ref(relative)
+        # All work is over and the final capture has started, but its APK/runtime evidence
+        # does not exist in full yet. A digest-bound review cannot precede its completion.
+        self.campaign["review"]["reviewedAtUtc"] = "2026-11-19T10:16:00Z"
+        self.rejected("completed post-run identity captures")
+        self.campaign["review"]["reviewedAtUtc"] = "2026-11-19T10:17:00Z"
+        self.assertTrue(self.verify()["qualified"])
+
+    def test_verification_output_cannot_follow_an_existing_broken_link(self):
+        forms = self.root / "empty-forms"
+        initialize(forms)
+        target = self.root / "not-created.json"
+        output = forms / "verification.json"
+        output.symlink_to(target)
+        result = subprocess.run(
+            [sys.executable, str(Path(__file__).with_name("physical_qualification.py")), "verify",
+             "--plan", str(forms / "plan.json"), "--campaign", str(forms / "campaign.json"),
+             "--revision", REVISION, "--output", str(output)],
+            capture_output=True, text=True, timeout=30,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue(output.is_symlink())
+        self.assertFalse(target.exists(), "An existing output entry must not create a target through its link")
 
     def test_unreviewed_campaign_is_not_qualified(self):
         self.campaign["review"]["decision"] = "unknown"

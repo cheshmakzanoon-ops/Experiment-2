@@ -1,6 +1,8 @@
 package com.artflow.studio.core.three
 
 import com.artflow.studio.core.canvas.CanvasOperations
+import com.artflow.studio.core.pixels.ImportMemoryBudget
+import com.artflow.studio.core.pixels.ImportPreparation
 import com.artflow.studio.core.pixels.PixelBuffer
 import java.nio.ByteBuffer
 import java.util.zip.CRC32
@@ -16,26 +18,29 @@ class PreparedModelImport private constructor(
 ) {
     companion object {
         /**
-         * Decoding is supplied by the platform. Scalar maps are accepted only through the bounded
-         * OBJ contract; existing color-only OBJ/glTF/USD imports retain their shared-atlas behavior.
+         * Metadata inspection must not allocate decoded pixels. All live texture planes and the
+         * atlas are admitted before the first decode; scalar maps retain their bounded OBJ contract.
          */
         fun prepare(
             contents: ModelPackage.Contents,
             decode: (ByteArray) -> PixelBuffer?,
+            inspect: (ByteArray) -> Pair<Int, Int>?,
             maxSize: Int = DEFAULT_MAX_SIZE,
             defaultSize: Int = DEFAULT_SIZE,
-            memoryBudgetBytes: Long = Runtime.getRuntime().maxMemory() * 3 / 5,
-        ): PreparedModelImport {
-            require(maxSize in 1..CanvasOperations.MAX_DIMENSION) { "Invalid model texture size limit" }
-            require(defaultSize in 1..CanvasOperations.MAX_DIMENSION) { "Invalid default model texture size" }
-            require(memoryBudgetBytes > 0) { "Invalid model import memory budget" }
-            ObjParser.parse(contents.objText)
-            return if (contents.scalarMaps != null) {
-                scalar(contents, decode, maxSize, memoryBudgetBytes)
-            } else {
-                colorOnly(contents, decode, maxSize, defaultSize)
+            memoryBudgetBytes: Long = ImportMemoryBudget.currentBytes(),
+        ): PreparedModelImport =
+            ImportPreparation.withAdmission {
+                require(maxSize in 1..CanvasOperations.MAX_DIMENSION) { "Invalid model texture size limit" }
+                require(defaultSize in 1..CanvasOperations.MAX_DIMENSION) { "Invalid default model texture size" }
+                require(memoryBudgetBytes > 0) { "Invalid model import memory budget" }
+                val budget = minOf(memoryBudgetBytes, ImportMemoryBudget.currentBytes())
+                ObjParser.parse(contents.objText)
+                if (contents.scalarMaps != null) {
+                    scalar(contents, decode, maxSize, budget)
+                } else {
+                    colorOnly(contents, decode, inspect, maxSize, defaultSize, budget)
+                }
             }
-        }
 
         private fun scalar(
             contents: ModelPackage.Contents,
@@ -58,7 +63,7 @@ class PreparedModelImport private constructor(
                 }
             }
             val target = fittedSize(source, maxSize)
-            requireMemory(source, target, planes, memoryBudgetBytes)
+            requireMemory(source, target, planes, contents.objText, memoryBudgetBytes)
             // Each helper returns only the fitted plane. A full-size decoded source never remains
             // referenced while the next texture is decoded, and no plane changes the shared UVs.
             val color = plane(colorBytes, "Color", source, target, decode, scalar = false)
@@ -103,13 +108,17 @@ class PreparedModelImport private constructor(
             source: ImageSize,
             target: ImageSize,
             planes: List<ByteArray>,
+            objText: String,
             budget: Long,
         ) {
-            // Android decoding can hold both a Bitmap and its copied pixels. Installation retains
-            // prepared planes and private layer copies, with canvas/color-conversion temporaries.
-            val decodePeak = source.bytes * 2 + target.bytes * (planes.size - 1)
+            // An F16 bitmap, its ARGB conversion and copied IntArray can coexist (16 bytes/pixel).
+            // Earlier fitted planes remain live while the next source is decoded.
+            val decodePeak = source.bytes * 4 + target.bytes * (planes.size - 1)
+            val fittingPeak = source.bytes + target.bytes * planes.size
             val installPeak = target.bytes * maxOf(6, planes.size * 2 + 2)
-            val required = maxOf(decodePeak, installPeak) + planes.sumOf { it.size.toLong() }
+            val required =
+                maxOf(decodePeak, fittingPeak, installPeak) +
+                    sourceReserve(source) + planes.distinct().sumOf { it.size.toLong() } + objText.length.toLong() * Char.SIZE_BYTES
             require(required <= budget) { "This model's material maps need more memory than the import budget provides" }
         }
 
@@ -155,33 +164,101 @@ class PreparedModelImport private constructor(
         private fun colorOnly(
             contents: ModelPackage.Contents,
             decode: (ByteArray) -> PixelBuffer?,
+            inspect: (ByteArray) -> Pair<Int, Int>?,
             maxSize: Int,
             defaultSize: Int,
+            budget: Long,
         ): PreparedModelImport {
-            val textures =
-                contents.textures
-                    .mapNotNull { (name, bytes) ->
-                        decode(bytes)?.also(::requireSafe)?.let { name to it }
-                    }.toMap()
-            val atlas = if (textures.isNotEmpty()) TextureAtlas.pack(contents.objText, textures, maxSize) else null
-            val color =
-                atlas?.image ?: contents.texture
-                    ?.let(decode)
-                    ?.also(::requireSafe)
-                    ?.let { fitted(it, maxSize) }
+            val materials = TextureAtlas.materials(contents.objText)
+            require(contents.textures.isEmpty() || materials.size <= TextureAtlas.MAX_MATERIALS) {
+                "This model has too many materials for one editable texture atlas"
+            }
+            val packed = contents.textures.isNotEmpty() && materials.size >= 2
+            val declared = contents.textures.map { (name, bytes) -> inspected(bytes, name, inspect) }
+            val sources =
+                if (packed) {
+                    declared
+                } else {
+                    contents.texture?.let { listOf(inspected(it, "Color", inspect)) }.orEmpty()
+                }
+            val layout =
+                if (packed) {
+                    TextureAtlas.layout(materials.size, sources.maxOf { it.size.width }, sources.maxOf { it.size.height }, maxSize)
+                } else {
+                    null
+                }
+            val target =
+                layout?.let { ImageSize(it.width, it.height) }
+                    ?: sources.singleOrNull()?.let { fittedSize(it.size, maxSize) }
+                    ?: ImageSize(defaultSize, defaultSize)
+            require(CanvasOperations.isSizeSafe(target.width, target.height)) { "The model texture exceeds the canvas limits" }
+            requireColorMemory(contents, sources, target, layout, budget)
+            val atlas =
+                if (packed) {
+                    val textures = sources.associate { it.label to decoded(it, decode) }
+                    requireNotNull(TextureAtlas.pack(contents.objText, textures, maxSize)) { "The model atlas could not be prepared" }
+                } else {
+                    null
+                }
+            val color = atlas?.image ?: sources.singleOrNull()?.let { sized(decoded(it, decode), target.width, target.height) }
             val width = color?.width ?: defaultSize
             val height = color?.height ?: defaultSize
             require(CanvasOperations.isSizeSafe(width, height)) { "The model texture exceeds the canvas limits" }
             return PreparedModelImport(atlas?.objText ?: contents.objText, color, null, null, width, height)
         }
 
-        private fun fitted(
-            image: PixelBuffer,
-            maxSize: Int,
-        ): PixelBuffer {
-            val target = fittedSize(ImageSize(image.width, image.height), maxSize)
-            return sized(image, target.width, target.height)
+        private class TextureSource(
+            val bytes: ByteArray,
+            val size: ImageSize,
+            val label: String,
+        )
+
+        private fun inspected(
+            bytes: ByteArray,
+            label: String,
+            inspect: (ByteArray) -> Pair<Int, Int>?,
+        ): TextureSource {
+            val (width, height) = requireNotNull(inspect(bytes)) { "The $label texture could not be read" }
+            require(CanvasOperations.isSizeSafe(width, height)) { "The $label texture exceeds the canvas limits" }
+            return TextureSource(bytes, ImageSize(width, height), label)
         }
+
+        private fun decoded(
+            source: TextureSource,
+            decode: (ByteArray) -> PixelBuffer?,
+        ): PixelBuffer {
+            val image = requireNotNull(decode(source.bytes)) { "The " + source.label + " texture could not be decoded" }
+            require(image.width == source.size.width && image.height == source.size.height) {
+                "The decoded " + source.label + " texture size is inconsistent"
+            }
+            return image
+        }
+
+        private fun requireColorMemory(
+            contents: ModelPackage.Contents,
+            sources: List<TextureSource>,
+            target: ImageSize,
+            layout: TextureAtlas.Layout?,
+            budget: Long,
+        ) {
+            val retainedSources = sources.sumOf { it.size.bytes }
+            val largest = sources.maxByOrNull { it.size.bytes }?.size
+            val decodePeak = retainedSources + (largest?.bytes ?: 0) * 3
+            val cellBytes = layout?.let { it.cellWidth.toLong() * it.cellHeight * Int.SIZE_BYTES } ?: 0L
+            // Packing retains every original texture, the final atlas, and one resampled cell.
+            val packingPeak = retainedSources + target.bytes + cellBytes
+            val installPeak = target.bytes * 6
+            val encoded = (contents.textures.values + listOfNotNull(contents.texture)).distinct().sumOf { it.size.toLong() }
+            val textCopies = if (layout == null) 1 else 4
+            val required =
+                maxOf(decodePeak, packingPeak, installPeak) + encoded +
+                    contents.objText.length.toLong() * Char.SIZE_BYTES * textCopies +
+                    (largest?.let(::sourceReserve) ?: DECODER_RESERVE_BYTES)
+            require(required <= budget) { "This model's textures need more memory than the import budget provides; use smaller textures" }
+        }
+
+        private fun sourceReserve(source: ImageSize): Long =
+            DECODER_RESERVE_BYTES + maxOf(source.width, source.height).toLong() * BYTES_PER_SOURCE_ROW_PIXEL
 
         private fun fittedSize(
             image: ImageSize,
@@ -200,15 +277,13 @@ class PreparedModelImport private constructor(
             height: Int,
         ): PixelBuffer = if (image.width == width && image.height == height) image else image.scaled(width, height)
 
-        private fun requireSafe(image: PixelBuffer) {
-            require(CanvasOperations.isSizeSafe(image.width, image.height)) { "The model texture exceeds the canvas limits" }
-        }
-
         private fun isOpaqueGray(pixel: Int): Boolean =
             pixel ushr 24 == 255 && (pixel ushr 16 and 255) == (pixel ushr 8 and 255) && (pixel ushr 8 and 255) == (pixel and 255)
 
         private const val DEFAULT_MAX_SIZE = 4096
         private const val DEFAULT_SIZE = 2048
+        private const val DECODER_RESERVE_BYTES = 1024 * 1024L
+        private const val BYTES_PER_SOURCE_ROW_PIXEL = 16L
         private const val PNG_HEADER_BYTES = 33
         private const val PNG_CHUNK_OVERHEAD = 12
         private const val PNG_IHDR = 0x49484452

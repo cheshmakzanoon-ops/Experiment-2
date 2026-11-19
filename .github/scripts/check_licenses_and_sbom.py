@@ -27,6 +27,7 @@ HASH_RE = re.compile(r"[0-9a-f]{64}\Z")
 BUILD_INPUTS = (
     "build.gradle.kts", "settings.gradle.kts", "app/build.gradle.kts", "gradle.properties",
     "gradle/wrapper/gradle-wrapper.properties", "gradle/release-dependencies.gradle.kts",
+    "release-ui/build.gradle.kts",
     "tools/optimized-test-abi/src/artflow/build/TestAbiRules.java",
     "tools/optimized-test-abi/verify.py",
     "app/proguard-benchmark-test-reflection.pro",
