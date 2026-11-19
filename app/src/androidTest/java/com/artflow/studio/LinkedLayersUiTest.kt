@@ -81,7 +81,11 @@ class LinkedLayersUiTest {
         // The merged card includes the opacity slider; its centre is not the layer name's tap target.
         compose.onNodeWithText("Colour", useUnmergedTree = true).assertIsDisplayed().performClick()
         compose.onNodeWithText("Rename").assertIsDisplayed()
-        compose.onNodeWithText("Unlink layer").performScrollTo().assertIsDisplayed().performClick()
+        compose
+            .onNodeWithText("Unlink layer")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
         compose.waitUntil(5_000) { repository.getAllLayers().all { it.linkGroupId == null } }
         assertEquals(depth + 2, repository.undoDepth)
         runBlocking(Dispatchers.Main) {
