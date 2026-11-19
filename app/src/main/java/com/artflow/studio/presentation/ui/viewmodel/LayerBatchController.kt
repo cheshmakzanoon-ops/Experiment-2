@@ -40,8 +40,8 @@ class LayerBatchController(
 
     fun link(layerIds: List<Long>) =
         perform {
+            check(repository.linkLayers(layerIds)) { "Choose at least two visible, unlocked paint layers to link" }
             _picked.value = emptySet()
-            check(repository.linkLayers(layerIds)) { "At least two layers must be chosen to link" }
         }
 
     fun unlink(layerId: Long) =

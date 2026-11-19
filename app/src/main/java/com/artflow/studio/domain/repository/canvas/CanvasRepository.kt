@@ -1,11 +1,11 @@
 package com.artflow.studio.domain.repository.canvas
 
 import com.artflow.studio.core.animation.AnimationTimeline
+import com.artflow.studio.core.canvas.LayerTransform
 import com.artflow.studio.core.color.ColorProfile
 import com.artflow.studio.core.color.ColorProfiles
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.LayerMaskSource
-import com.artflow.studio.core.pixels.LayerTransform
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.three.MaterialChannel
@@ -103,9 +103,18 @@ interface CanvasRepository {
     /** The project this canvas belongs to, or 0 when unsaved. */
     fun projectId(): Long
 
+    /** Read-only preflight for an import's additional decoded raster/mask planes and layer slots. */
+    fun canImportLayers(
+        rasterPlanes: Int,
+        layers: Int,
+    ): Boolean = rasterPlanes >= 0 && layers >= 0
+
     // -----------------------------------------------------------------------------------------
     // Strokes
     // -----------------------------------------------------------------------------------------
+
+    /** Capacity explanation when [beginStroke] or [beginRasterEdit] rejects an edit; reset by the next attempt. */
+    val editRejectionReason: String? get() = null
 
     fun beginStroke(
         x: Float,
@@ -271,7 +280,7 @@ interface CanvasRepository {
     suspend fun cutSelection(): PixelBuffer
 
     /**
-     * Affine transform of the complete active layer and its editable mask, as one undo step.
+     * Affine transform of the active layer, its linked peers and all their masks, as one undo step.
      * Rejects selections, in-flight gestures and stale callers; never transforms another frame.
      * Geometry is about the canvas centre. Off-canvas content is clipped and recoverable by Undo.
      */

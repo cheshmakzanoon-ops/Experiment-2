@@ -13,6 +13,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.util.zip.CRC32
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
@@ -30,6 +31,7 @@ object ArtflowPackage {
     const val DOCUMENT = "canvas.artflow"
     const val DEPENDENCIES = "dependencies.json"
     const val GRAINS_DIR = "grains"
+    const val MAX_DOCUMENT_BYTES = 32L * 1024 * 1024
 
     @Serializable
     private data class Marker(
@@ -66,10 +68,7 @@ object ArtflowPackage {
         val name: String,
         val entries: Set<String>,
         private val zip: ZipFile,
-        private val maxTotalBytes: Long,
     ) : Closeable {
-        private var totalRead = 0L
-
         fun readBytes(
             path: String,
             maxBytes: Long = MAX_ENTRY_BYTES,
@@ -92,32 +91,13 @@ object ArtflowPackage {
             maxEntryBytes: Long,
             sink: (ByteArray, Int) -> Unit,
         ) {
+            require(path in entries) { "Unknown artwork entry: $path" }
             val entry = requireNotNull(zip.getEntry(path)) { "Missing artwork entry: $path" }
-            val limit = (maxTotalBytes - totalRead).coerceAtMost(maxEntryBytes)
-            val entryRead =
-                try {
-                    zip.getInputStream(entry).use { input -> copyZipEntry(input, limit, sink) }
-                } catch (damaged: IOException) {
-                    throw IllegalArgumentException("This artwork file is damaged", damaged)
-                }
-            totalRead += entryRead
-        }
-
-        private fun copyZipEntry(
-            input: java.io.InputStream,
-            limit: Long,
-            sink: (ByteArray, Int) -> Unit,
-        ): Long {
-            val buffer = ByteArray(BUFFER)
-            var entryRead = 0L
-            while (true) {
-                val count = input.read(buffer)
-                if (count < 0) break
-                entryRead += count
-                require(entryRead <= limit) { "This artwork is too large to import" }
-                sink(buffer, count)
+            try {
+                copyZipEntry(zip, entry, minOf(maxEntryBytes, entryLimit(path)), sink)
+            } catch (damaged: IOException) {
+                throw IllegalArgumentException("This artwork file is damaged", damaged)
             }
-            return entryRead
         }
 
         override fun close() {
@@ -231,6 +211,9 @@ object ArtflowPackage {
         zip.closeEntry()
     }
 
+    /** Recognises a generic ZIP without inflating any payload; [openFile] performs full package validation. */
+    fun isPackageFile(file: File): Boolean = ZipFile(file).use { it.getEntry(MARKER) != null }
+
     /** Opens an `.artflow` zip file on disk, validates every entry path, count, and header without loading payloads into heap. */
     fun openFile(
         file: File,
@@ -256,16 +239,23 @@ object ArtflowPackage {
         zip: ZipFile,
         maxTotalBytes: Long,
     ): StreamContents {
+        require(maxTotalBytes > 0) { "The import size limit must be positive" }
         val entries = linkedSetOf<String>()
         var hasMarker = false
+        var count = 0
+        var declaredBytes = 0L
         val enumeration = zip.entries()
         while (enumeration.hasMoreElements()) {
             val entry = enumeration.nextElement()
-            require(entries.size < MAX_ENTRIES) { "This artwork has too many files" }
+            require(++count <= MAX_ENTRIES) { "This artwork has too many files" }
             val path = entry.name
             require(!entry.isDirectory && (path == MARKER || ALLOWED.matches(path))) {
                 "This is not an ArtFlow artwork"
             }
+            require(entry.size in 0..minOf(entryLimit(path), maxTotalBytes - declaredBytes)) {
+                "This artwork is too large to import"
+            }
+            declaredBytes += entry.size
             if (path == MARKER) {
                 require(!hasMarker) { "This artwork lists a file twice" }
                 hasMarker = true
@@ -287,25 +277,46 @@ object ArtflowPackage {
                 .trim()
                 .take(MAX_NAME)
                 .ifBlank { "Imported artwork" }
-        return StreamContents(safeName, entries, zip, maxTotalBytes)
+        return StreamContents(safeName, entries, zip)
     }
 
     private fun readMarkerBytes(zip: ZipFile): ByteArray {
         val entry = requireNotNull(zip.getEntry(MARKER)) { "This is not an ArtFlow artwork" }
         val out = ByteArrayOutputStream()
+        copyZipEntry(zip, entry, MAX_METADATA_BYTES) { buffer, count -> out.write(buffer, 0, count) }
+        return out.toByteArray()
+    }
+
+    /** ZipFile streams do not check CRCs; verify payload identity as well as the advertised and actual size. */
+    private fun copyZipEntry(
+        zip: ZipFile,
+        entry: ZipEntry,
+        limit: Long,
+        sink: (ByteArray, Int) -> Unit,
+    ) {
+        require(entry.size in 0..limit) { "This artwork is too large to import" }
         val buffer = ByteArray(BUFFER)
+        val checksum = CRC32()
         var read = 0L
         zip.getInputStream(entry).use { input ->
             while (true) {
                 val count = input.read(buffer)
                 if (count < 0) break
                 read += count
-                require(read <= MAX_METADATA_BYTES) { "This artwork is too large to import" }
-                out.write(buffer, 0, count)
+                require(read <= entry.size) { "This artwork entry has an invalid size" }
+                checksum.update(buffer, 0, count)
+                sink(buffer, count)
             }
         }
-        return out.toByteArray()
+        require(read == entry.size && checksum.value == entry.crc) { "This artwork entry is damaged" }
     }
+
+    private fun entryLimit(path: String): Long =
+        when (path) {
+            MARKER, DEPENDENCIES -> MAX_METADATA_BYTES
+            DOCUMENT -> MAX_DOCUMENT_BYTES
+            else -> MAX_ENTRY_BYTES
+        }
 
     /** Reads and checks a package: only known file names, bounded sizes, and a document inside. */
     fun read(
@@ -330,15 +341,16 @@ object ArtflowPackage {
     ): Pair<String?, Map<String, ByteArray>> {
         var name: String? = null
         val files = linkedMapOf<String, ByteArray>()
+        val seen = HashSet<String>()
         var total = 0L
         ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
             while (true) {
                 val entry = zip.nextEntry ?: break
-                require(files.size < MAX_ENTRIES) { "This artwork has too many files" }
+                require(seen.size < MAX_ENTRIES) { "This artwork has too many files" }
                 val path = entry.name
                 require(!entry.isDirectory && (path == MARKER || ALLOWED.matches(path))) { "This is not an ArtFlow artwork" }
-                require(path !in files) { "This artwork lists a file twice" }
-                val data = readBounded(zip, (maxTotalBytes - total).coerceAtMost(MAX_ENTRY_BYTES))
+                require(seen.add(path)) { "This artwork lists a file twice" }
+                val data = readBounded(zip, (maxTotalBytes - total).coerceAtMost(entryLimit(path)))
                 total += data.size
                 if (path == MARKER) {
                     val marker = json.decodeFromString(Marker.serializer(), data.decodeToString())

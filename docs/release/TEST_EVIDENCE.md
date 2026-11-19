@@ -1,26 +1,37 @@
-# Test & Build Verification Evidence — ArtFlow Studio (Experiment-2)
+# Test and build evidence
 
-## Baseline `main` Reference (`d340bc6f777e9444a07df97760aa4ae290c7c7c1`)
+## November 18 integration
 
-- GitHub Actions Run [`43189321650`](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/43189321650) on `d340bc6`: **7/8 jobs passed**; `Device tests (API 35 independent 16 KB repeat)` failed Attempt 1 (`system_server` died / `StudioControlsTest.pageStripSelectsAddsAndProtectsTheLastPage`) and Attempt 2 (`118 passed, 1 failed` in `ReferenceEditorUiTest.referenceAndFocusExitRemainReachableWithEitherTouchTargetSize`, `MarkCompact::ScanObject<true>` SIGSEGV in SystemUI & ArtFlow, plus Python 3.10 nanosecond timestamp `ValueError` in `collect_native_tombstones.py`).
-- Historical GitHub Actions Run [`43176819261`](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/43176819261) on `541a6c1`: **8/8 jobs passed** (belongs to preceding commit `541a6c1`, not `d340bc6`).
+Implementation is being validated on the branch containing PR #40. New build/emulator results
+must be recorded below with the source revision and workflow URL before claiming qualification.
+Local Android builds are unavailable in this session; actual Gradle and emulator execution uses
+GitHub Actions. Pending checks are not passes.
 
-## Current Branch Local Verification (`fix/production-readiness-certification`)
+## Historical evidence, independently inspected
 
-| Check / Suite | Command | Result | Verified Metrics / Notes |
-| --- | --- | :---: | --- |
-| Python `.github/scripts` suite | `python3 -m unittest discover -s .github/scripts -p 'test_*.py'` | **PASS** | `166` tests ran in `24.040s`, `0` failures |
-| Python `tools` suite | `python3 -m unittest discover -s tools -p 'test_*.py'` | **PASS** | `76` tests ran in `2.885s`, `0` failures |
-| Workflow SHA-pin audit | `python3 .github/scripts/verify_workflow_pins.py .github/workflows` | **PASS** | All third-party `uses:` across `14` `.github/workflows/*.yml` files pinned to 40-char commit SHAs |
-| Secret & keystore hygiene scan | `python3 .github/scripts/scan_secrets.py .` | **PASS** | Zero secrets or tracked keystore artifacts detected |
-| Gradle license check & CycloneDX SBOM | `python3 .github/scripts/check_licenses_and_sbom.py . --revision "$(git rev-parse HEAD)" --sbom-out /tmp/artflow-sbom.cdx.json` | **PASS** | `42` Gradle components verified with zero GPL/AGPL-conflict or unknown licenses |
-| JVM unit tests | `./gradlew testDebugUnitTest --offline --stacktrace` | **PASS** | `284` suites, `1,706` tests, `2` skipped (pre-existing external-corpora assumptions: `RealProcreateFilesTest`, `ReferenceBrushCorpusTest`), `0` failures, `0` errors |
-| Kotlin formatting (`ktlint`) | `./gradlew ktlintCheck --offline` | **PASS** | `0` violations across `main`, `test`, `androidTest`, and Kotlin scripts |
-| Static analysis (`detekt`) | `./gradlew detekt --offline` | **PASS** | `0` new issues; `config/detekt/baseline.xml` shrunk from `82` -> `67` `<ID>` entries |
-| Android Lint (Debug & Release) | `./gradlew lintDebug lintRelease --offline` | **PASS** | `0 Fatal`, `0 Error` |
-| Instrumentation compile & inventory | `./gradlew compileDebugAndroidTestKotlin --offline` | **PASS** | `270` `@Test` identities declared and compiled cleanly |
-| Release signing negative guard | `! ./gradlew help -PrequireReleaseSigning=true --offline` | **PASS** | Fails closed at `app/build.gradle.kts:49` without private `keystore.properties` |
+| Source | Run | Result and limits |
+| --- | --- | --- |
+| `main` `d340bc6` | [43189321650](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/43189321650) | 7/8 jobs; independent API35/16 KB failed. |
+| hardening `0ce19d7` | [43350635499](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/43350635499) | 7/8 jobs; independent API35/16 KB failed. |
+| hardening `0ce19d7` | [43366683593](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/43366683593) | 8/8 jobs; independent API35/16 KB required an internal framework recovery after 43 passes, 1 failure, and 226 missing identities. |
+| hardening `0ce19d7` | [43372211871](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/43372211871) | 8/8 jobs; all seven device configurations completed on their first instrumentation invocation. |
 
-## Exact-SHA Multi-Run CI Certification Log
+The last historical run's downloaded verification artifact contains 284 JVM suites, 1,706 tests,
+zero failures/errors/skips. Device results contain 1,888 passing executions of 270 distinct tests
+across seven environments; the API26 lane has two permitted API-specific skips. Actual process
+page size and minified launch passed in each lane. These counts describe `0ce19d7`, not later code.
 
-*(Populated in PR & final release report once `fix/production-readiness-certification` is pushed and exact-SHA `Android CI` runs complete.)*
+Historical Android Lint reports contain 154 debug / 152 release warnings and five hints in each,
+with no errors/fatals. The detekt baseline was reduced from 82 to 67 entries. These are not zero
+historical findings. Packaged native objects were only `libandroidx.graphics.path.so` across four
+ABIs, with alignment verified.
+
+During the November 18 audit, the unchanged candidate's Python suites passed: 166 CI-script tests
+and 76 tools tests. Workflow pins and the selected-pattern secret scanner passed. The direct
+Gradle-declaration CycloneDX inventory is not a resolved transitive dependency certification.
+
+## Evidence policy
+
+Keep first failures, recovery invocations, exact source SHA, complete case inventory, runtime
+identity, and minified launch together. GitHub `run_attempt: 1` does not exclude retries inside a
+job. Do not claim physical performance or store release acceptance from emulator results.

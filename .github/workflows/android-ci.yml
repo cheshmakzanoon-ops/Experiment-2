@@ -166,10 +166,10 @@ jobs:
             --out "$reports/layer-blend-contracts.json"
           python tools/ipa_native_document_contracts.py "$ARTFLOW_REFERENCE_IPA" --out "$reports/native-document-contracts.json"
 
-      - name: Run JVM unit tests
+      - name: Run JVM unit tests and compile instrumentation
         run: |
           set -o pipefail
-          ./gradlew testDebugUnitTest --stacktrace 2>&1 | tee "${RUNNER_TEMP}/unit-tests.log"
+          ./gradlew testDebugUnitTest compileDebugAndroidTestKotlin --stacktrace 2>&1 | tee "${RUNNER_TEMP}/unit-tests.log"
 
       - name: Report on the Procreate sample documents
         if: always()

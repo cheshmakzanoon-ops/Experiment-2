@@ -40,6 +40,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -148,6 +149,7 @@ import com.artflow.studio.presentation.ui.components.editor.StudioTopBar
 import com.artflow.studio.presentation.ui.components.editor.TextSheet
 import com.artflow.studio.presentation.ui.components.editor.TimelapseReplay
 import com.artflow.studio.presentation.ui.components.editor.TransformOverlay
+import com.artflow.studio.presentation.ui.components.editor.TransformSheet
 import com.artflow.studio.presentation.ui.components.editor.TransformToolbar
 import com.artflow.studio.presentation.ui.components.editor.TransformToolbarActions
 import com.artflow.studio.presentation.ui.components.editor.VanishingPointEditor
@@ -678,6 +680,7 @@ fun CanvasScreen(
                             onGroupLayers = viewModel.layerBatch::group,
                             onDeleteLayers = viewModel.layerBatch::delete,
                             onMergeLayers = viewModel.layerBatch::merge,
+                            onLinkLayers = viewModel.layerBatch::link,
                             background =
                                 BackgroundControls(
                                     color = ready?.backgroundColor ?: 0xFFFFFFFF.toInt(),
@@ -719,6 +722,7 @@ fun CanvasScreen(
                             onDrawingAssist = viewModel::setLayerDrawingAssist,
                             onPrivate = viewModel::setLayerPrivate,
                             onEffects = { effectsLayerId = it.id },
+                            onUnlink = viewModel.layerBatch::unlink,
                             onMask = { viewModel.createLayerMask(LayerMaskSource.REVEAL_ALL) },
                             onCombineDown = viewModel::groupWithLayerBelow,
                             onEditText = { layer ->
@@ -2199,7 +2203,28 @@ private fun TransformOptions(
     input: EditorInput,
     canvasView: ArtFlowCanvasView?,
 ) {
+    var precisionTarget by remember { mutableStateOf<Pair<Layer, Long>?>(null) }
+    val layers by viewModel.layers.collectAsState()
+    val activeId by viewModel.activeLayerId.collectAsState()
+    val selection by viewModel.selection.collectAsState()
+    val active = layers.firstOrNull { it.id == activeId }
+    precisionTarget?.let { (layer, revision) ->
+        Dialog(onDismissRequest = { precisionTarget = null }) {
+            Surface(shape = MaterialTheme.shapes.large, modifier = Modifier.heightIn(max = 620.dp)) {
+                TransformSheet(
+                    layerName = if (layer.linkGroupId == null) layer.name else "${layer.name} + linked layers",
+                    hasSelection = selection != null,
+                    onApply = { viewModel.transformLayer(layer.id, revision, it) },
+                    onClose = { precisionTarget = null },
+                )
+            }
+        }
+    }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(
+            enabled = active != null,
+            onClick = { active?.let { precisionTarget = it to viewModel.transformRevision() } },
+        ) { Text(stringResource(R.string.layer_whole_transform)) }
         Text(stringResource(R.string.canvasscreen_drag_mode), style = MaterialTheme.typography.labelMedium)
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp),

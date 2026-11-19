@@ -3,97 +3,135 @@
 [![Android CI](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/workflows/android-ci.yml/badge.svg?branch=main)](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/workflows/android-ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-An offline painting and illustration studio built with Kotlin, Jetpack Compose, an **OpenGL ES 2.0** presentation surface ([`OpenGLCanvasRenderer`](app/src/main/java/com/artflow/studio/data/renderer/opengl/OpenGLCanvasRenderer.kt)), and **CPU virtual tile compositing** ([`VirtualTileCanvas`](app/src/main/java/com/artflow/studio/data/renderer/gpu/VirtualTileCanvas.kt)). ArtFlow provides pressure-sensitive brushes with wet-mix dynamics, 3D PBR surface painting, non-destructive vector typography, recovery state protection, analytical ICC-referenced CMYK separation, and `.procreate` / `.psd` / `.psb` / streaming `.artflow` interchange.
+ArtFlow is an offline painting and illustration application for Android 8 and later. Kotlin and
+Jetpack Compose provide the editor; a Kotlin CPU painting/compositing engine supplies artwork to
+an OpenGL ES 2.0 display surface. It includes pressure-sensitive brushes, layers and masks,
+selections and transforms, animation, reference images, and 3D texture painting.
 
-> **Release Qualification & Honest Scope Notice**:
-> - **Historical vs Baseline `main`**: Preceding `main` commit `541a6c1` passed 8/8 jobs in historical Run [43176819261](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/43176819261), while baseline `main` commit `d340bc6` failed 1/8 jobs (`Device tests (API 35 independent 16 KB repeat)`) in Run [43189321650](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/43189321650).
-> - **Production Sign-Off Decision**: **NO-GO for unconditional public Play production rollout** from repository artifacts alone. Engineering CI, data safety, streaming packaging, codec hardening, and supply-chain checks are verified in repository/CI gates, while **private publisher upload signing (`keystore.properties`), physical Android 8/15/16 + stylus + 16 KB hardware campaigns, upgrade-from-prior-build testing, and Play Console Data Safety/privacy URL/store compliance** remain **OPEN** external publisher deliverables.
-> - See [`docs/PRODUCTION_READINESS_AUDIT.md`](docs/PRODUCTION_READINESS_AUDIT.md), [`docs/RELEASE_READINESS.md`](docs/RELEASE_READINESS.md), and [`docs/release/RELEASE_SIGNOFF.md`](docs/release/RELEASE_SIGNOFF.md).
+**Release status:** engineering candidate. Build and emulator results are recorded by commit in
+[Test evidence](docs/release/TEST_EVIDENCE.md). Publisher signing, physical-device/stylus acceptance,
+upgrade testing, and store submission remain separate gates in
+[Release sign-off](docs/release/RELEASE_SIGNOFF.md). A helper's unit test or green emulator run does
+not establish physical performance, complete format compatibility, or Procreate parity.
 
----
+## Current development
 
-## Key Features & Architecture
+The November 18 integration milestone addresses practical gaps traced through the running editor:
 
-### 1. Recovery & Storage Integrity
-- **Authoritative Recovery State Machine**: Decouples UI dialog visibility from authoritative snapshot state ([`CanvasRecoveryController`](app/src/main/java/com/artflow/studio/presentation/ui/viewmodel/CanvasRecoveryController.kt) & [`ProjectStorage`](app/src/main/java/com/artflow/studio/data/local/ProjectStorage.kt)). Dismissing a recovery prompt never authorizes overwriting recovery data.
-- **Repository-Level Recovery Guard**: `unresolvedRecoveryProjects` in [`CanvasRepositoryImpl`](app/src/main/java/com/artflow/studio/data/repository/canvas/CanvasRepositoryImpl.kt) blocks periodic autosaves, background saves, and manual saves synchronously in memory when unresolved crash snapshots exist.
-- **Atomic Document Persistence & Non-Symlink Storage**: Internal documents (`.artflow` storage format up to `CURRENT_VERSION = 7`) and immutable layer raster generations are staged and moved atomically with SHA-256 verification and `NOFOLLOW_LINKS` path guards ([`StorageFileTree`](app/src/main/java/com/artflow/studio/data/local/StorageFileTree.kt)).
-- **Atomic Font Staging & Portable Font IDs**: [`FontLibrary`](app/src/main/java/com/artflow/studio/data/local/FontLibrary.kt) validates imported `.ttf`/`.otf` streams in isolated staging files before atomic promotion with non-destructive suffix collision handling (`Name (2).ttf`), preventing invalid uploads from deleting existing fonts. Fonts use portable `font:<filename>` IDs (with backward compatibility for legacy `file:` paths) and expose in-editor missing-font warnings.
-- **Backup & Portable Streaming `.artflow` Packages**: [`backup_rules.xml`](app/src/main/res/xml/backup_rules.xml) and [`data_extraction_rules.xml`](app/src/main/res/xml/data_extraction_rules.xml) cover `filesDir/fonts/` and `filesDir/grains/` alongside projects and Room databases (~25 MB Android Auto Backup cloud quota vs unlimited local device-to-device transfer documented in [`privacy-policy.md`](docs/privacy-policy.md)). [`ArtflowPackage`](app/src/main/java/com/artflow/studio/data/export/ArtflowPackage.kt) streams packages via temporary files and `ZipFile`, bundling referenced custom `.grain` files and `dependencies.json` font metadata (`id`/`label`) **without redistributing third-party font binaries**.
+1. Apply a consistent raster-memory budget while editing and reopening saved documents; reject
+   capacity-increasing edits before they change the artwork or undo history.
+2. Route native artwork imports through bounded disk staging and ZIP streaming, with temporary
+   file cleanup and missing-font/grain notices.
+3. Connect persistent layer linking and precision transforms to actual editor controls.
 
-### 2. Graphics Presentation & Virtual Tile Canvas
-- **OpenGL ES 2.0 Display + CPU Tile Compositing**: [`ArtFlowCanvasView`](app/src/main/java/com/artflow/studio/presentation/ui/components/canvas/ArtFlowCanvasView.kt) configures `setEGLContextClientVersion(2)` and presents canvas textures through [`OpenGLCanvasRenderer`](app/src/main/java/com/artflow/studio/data/renderer/opengl/OpenGLCanvasRenderer.kt) (`GLES20`), while [`VirtualTileCanvas`](app/src/main/java/com/artflow/studio/data/renderer/gpu/VirtualTileCanvas.kt) and [`Compositor`](app/src/main/java/com/artflow/studio/core/pixels/Compositor.kt) composite $128 \times 128$ / $256 \times 256$ copy-on-write tiles on CPU within an 8,192 $\times$ 8,192 (40 MP) ceiling.
-- **Honest Backend Abstraction**: [`RenderBackendFactory`](app/src/main/java/com/artflow/studio/data/renderer/gpu/RenderBackendFactory.kt) defaults to `RenderBackendType.GLES2` (`GlesRenderBackend`), returns [`SoftwareRenderBackend`](app/src/main/java/com/artflow/studio/data/renderer/gpu/SoftwareRenderBackend.kt) for `SOFTWARE`, and labels [`VulkanRenderBackend`](app/src/main/java/com/artflow/studio/data/renderer/gpu/VulkanRenderBackend.kt) accurately as an experimental CPU-composited preview path.
-- **Unwired Native C++ Prototype**: `app/src/main/jni` retains an unintegrated C++20 NDK prototype (`CMakeLists.txt` is not wired in `app/build.gradle.kts`). The only native shared object packaged in debug APK / release AAB artifacts is `libandroidx.graphics.path.so`, verified ELF 16 KB page-size aligned across all ABIs by [`verify_android_artifacts.py`](.github/scripts/verify_android_artifacts.py).
+See [V1 integration](docs/release/V1_INTEGRATION_2026-11-18.md) for implementation, regression
+coverage, verification status, and next tasks. This milestone incorporates the earlier font,
+backup, codec, and CI hardening from [PR #40](https://github.com/cheshmakzanoon-ops/Experiment-2/pull/40).
 
-### 3. Hardened Import/Export & Binary Codecs
-- **Bounded Stream Reading & ZIP Hardening**: [`GalleryImports`](app/src/main/java/com/artflow/studio/presentation/ui/screens/gallery/GalleryImports.kt), [`ProcreateImport`](app/src/main/java/com/artflow/studio/data/export/ProcreateImport.kt), [`ArtflowPackage`](app/src/main/java/com/artflow/studio/data/export/ArtflowPackage.kt), and [`ModelPackage`](app/src/main/java/com/artflow/studio/core/three/ModelPackage.kt) enforce byte, entry, and path traversal bounds.
-- **Codec Bounds & Overflow Guards**: Hardened `ApngEncoder`, `GltfReader`, `AbrReader`, `KeyedArchive`/`BinaryPlist`, `UsdReader`, `Lz4`, `Lzo1x`, `PsdCodec` (including PSB 64-bit section/channel lengths and 32-bit RLE row tables), and `ModelPackage` against negative sizes, integer overflows, forged trailer counts, and cyclic path/chunk loops with deterministic fuzz and malformed-input unit tests in [`CodecHardeningTest`](app/src/test/java/com/artflow/studio/core/export/CodecHardeningTest.kt).
+## Implemented workflows
 
-### 4. Brush Engine, Analytical ICC Color, 3D PBR & Editing
-- **Wet Mix & Dual Brush**: 6-parameter wet-mix dynamics (`WetBrushPickup`), `COMBINE` / `INTENSE_BLEND` / `DISPLACE` dual-brush modes, and 35 auxiliary pressure/speed/tilt curves ([`BrushParams`](app/src/main/java/com/artflow/studio/domain/model/brush/BrushParams.kt)).
-- **Analytical ICC-Referenced CMYK Separation**: `CmykBuffer` and analytical `IccColorEngine` supporting FOGRA39, SWOP v2, Japan Color 2001, GRACoL 2006, Display P3, and sRGB profiles with soft-proofing and out-of-gamut overlay (analytical model, not LittleCMS native bindings).
-- **3D PBR Surface Painting**: `PbrMaterialAtlas` (BaseColor, Metallic, Roughness) with Cook-Torrance specular shader (`ModelRenderer`) and OBJ/glTF/USDZ material import/export.
-- **Typography, Selections & Liquify**: Non-destructive vector [`TextLayerContent`](app/src/main/java/com/artflow/studio/core/text/TextLayerContent.kt), multi-layer linking (`LayerBatchController`), Liquify with freeze/thaw masks, and hardware touch-major palm rejection (`PalmRejection`).
-
----
-
-## Capability Matrix
-
-| Subsystem | Verified Implementation |
+| Area | Running application |
 | --- | --- |
-| **Data Safety & Backup** | Authoritative recovery state machine (`CanvasRecoveryController`); atomic crash-safe storage (`ProjectStorage`); atomic staged font imports (`FontLibrary`); `backup_rules.xml` & `data_extraction_rules.xml` covering `projects/`, `fonts/`, `grains/`, Room DBs; documented 25 MB cloud quota vs D2D transfer. |
-| **Canvas & GPU** | OpenGL ES 2.0 `GLSurfaceView` presentation (`OpenGLCanvasRenderer`); CPU `VirtualTileCanvas` compositing ($128 \times 128$ / $256 \times 256$, $\le 40$ MP safe bounds); `GLES2` / `SOFTWARE` / experimental `VULKAN` factory; verified 16 KB ELF alignment for `libandroidx.graphics.path.so`. |
-| **File Formats** | Streaming ZIP `.artflow` packages (custom `.grain` bundle + font metadata in `dependencies.json`, zero third-party font binary redistribution); `.procreate` (v5/v6 group blends, animation metadata, guides, LZ4 tiles); `.psd`/`.psb` (8/16-bit, masks, folders, 64-bit PSB lengths, 32-bit RLE row tables); PNG, JPEG, WebP, PDF, GIF, APNG, MP4. |
-| **Brush, Color, 3D** | 6-parameter wet-mix; dual-brush modes; 35 auxiliary curves; analytical ICC-referenced CMYK (`FOGRA39`, `SWOP v2`, `Japan Color 2001`, `GRACoL 2006`, `Display P3`, `sRGB`); 3D PBR (`BaseColor`, `Metallic`, `Roughness`) + Cook-Torrance shader. |
-| **CI & Supply Chain** | All 14 `.github/workflows/*.yml` pinned to 40-char commit SHAs (`verify_workflow_pins.py`); tracked secret/keystore scan (`scan_secrets.py`); 42-component Gradle license/GPLv3 check & CycloneDX 1.5 SBOM (`check_licenses_and_sbom.py`); Python 3.11 tombstone collection & nanosecond timestamp support. |
+| Painting | Pressure/tilt response, smoothing, textured and dual brushes, wet pickup, eraser, smudge, clone/heal, fill, gradients, symmetry, and perspective assistance. Imported brush settings have varying rendering coverage. |
+| Layers | Raster layers, blending, nested groups, clipping, independent masks, adjustment/filter layers, selections, transforms, multi-selection, and undo/redo. |
+| Storage | Version-7 documents, checksum-first legacy migration, atomic manifests, immutable raster generations, autosave/recovery, independent duplication, and gallery management. |
+| Portable artworks | Native packages contain layers, frames, masks, document settings, custom grains, and font dependency metadata. Third-party font binaries are not automatically redistributed. |
+| Text | Editable text, platform/imported fonts, wrapping, alignment, letter spacing, and styling. Pixel transforms, crop, and canvas resize can rasterize text; full affine vector typography remains unfinished. |
+| Color | sRGB and Display P3 documents, conversion/tagging, palettes, harmonies, and an approximate fixed-ink CMYK preview. This is not printer-profile-managed CMYK editing. |
+| Animation | Frames, duration/role controls, onion skins, playback, GIF/APNG/MP4 and frame-sequence export, and timelapse recording. Device encoder and memory limits apply. |
+| 3D | Model import, UV-based painting, selected color/metallic/roughness channels, and a GLES model shader. Simultaneous three-channel stamping is not integrated. |
+| Interchange | Image/video formats, raster PDF, PSD/PSB parsing, supported Procreate document/brush formats, and model packages, within the boundaries below. |
 
----
+## Runtime architecture
 
-## Build, Verification & Supply-Chain Commands
+- **Painting and composition:** `CanvasRepositoryImpl`, `StrokeRasterizer`, and
+  [`Compositor`](app/src/main/java/com/artflow/studio/core/render/Compositor.kt) operate on
+  [`PixelBuffer`](app/src/main/java/com/artflow/studio/core/pixels/PixelBuffer.kt) ARGB arrays.
+  Dirty regions, copy-on-write snapshots, caches, and bounded undo reduce work and memory.
+- **Display:** [`ArtFlowCanvasView`](app/src/main/java/com/artflow/studio/presentation/ui/components/canvas/ArtFlowCanvasView.kt)
+  creates a GLES2 context; `OpenGLCanvasRenderer` presents the CPU-composited image. The active
+  `TileCache` retains a full-sized buffer and tracks computed regions.
+- **Storage:** [`ProjectStorage`](app/src/main/java/com/artflow/studio/data/local/ProjectStorage.kt)
+  publishes a manifest after its raster generations are durable. Recovery protection is independent
+  of whether its dialog is visible. Packages have separate bounded archive handling.
+- **Unintegrated modules:** `data/renderer/gpu/RenderBackendFactory`, `VirtualTileCanvas`, and the
+  GLES/software/Vulkan abstractions are not the editor's active rendering pipeline. `IccColorEngine`,
+  `CmykBuffer`, and simultaneous `PbrMaterialAtlas` stamping are not connected to the editor.
+- **Native prototype:** `app/src/main/jni` is excluded from the Gradle app build. Current artifact
+  checks identify `libandroidx.graphics.path.so` as the packaged native library and verify its ELF
+  alignment across packaged ABIs.
 
-### Prerequisites
-- **JDK 17**
-- **Android SDK Platform 36** (Build-Tools 36.0.0)
-- **Gradle 8.14.3** / Android Gradle Plugin 8.10.1
+## Capability boundaries
 
-### Local Verification Commands
+- **Large canvases:** the dimension ceiling is 8,192 pixels per edge and 40 million pixels total.
+  Device heap limits are stricter. One 40 MP ARGB plane alone needs 160 MB before masks, history,
+  preview, and exports. These ceilings are not certified interactive workloads.
+- **Performance:** `StrokeTimingDeviceTest` records repository timings and excludes input delivery,
+  GL upload/draw, and physical display latency. It has no speed threshold. The `benchmark` build
+  type provides a minified launch smoke test, not a performance benchmark suite.
+- **Procreate:** supported rasters, hierarchy, layer masks, and blends have independent fixture
+  coverage. Application-level animation/guide interchange and some group/effect semantics remain
+  incomplete. Some exports use a rendered appearance layer with hidden sources. Self-roundtrips
+  do not prove that the reference application accepts the exports.
+- **Photoshop:** PSD/PSB parsing includes supported raster layers, folders, and masks. Imported
+  16-bit channels are reduced to 8-bit. Full editable Photoshop text, adjustments, smart objects,
+  and all color modes are outside the implemented contract.
+- **PDF:** pages contain raster artwork; vector typography/shapes and PDF/A remain unimplemented.
+- **Brush/input fidelity:** some imported auxiliary curves remain unused. The physical touch-major
+  palm helper is separate from active contact-size/hover filtering. Physical stylus qualification
+  remains necessary.
+- **Future scope:** cloud synchronization, smart objects, sparse document storage, GPU painting,
+  print-profile CMYK, full non-destructive typography, and expanded 3D materials are separate
+  milestones. An offline first release does not require analytics or a developer service.
+
+## Build and verification
+
+Use JDK 17, Android SDK Platform 36 / Build Tools 36.0.0, and the committed wrapper (Gradle 8.14.3 /
+Android Gradle Plugin 8.10.1). The normal application does not require the NDK.
 
 ```bash
-# 1. Gradle JVM unit tests (1,706 tests / 284 suites locally; 2 corpora-gated tests execute in CI)
-./gradlew testDebugUnitTest --stacktrace
-
-# 2. Formatting, detekt (passes against 67-entry reduced baseline.xml, down from 82), and Android Lint
-./gradlew ktlintCheck detekt lintDebug lintRelease --stacktrace
-
-# 3. Offline check helpers
-bash tools/offline-check/unit.sh
-bash tools/offline-check/lint.sh
-
-# 4. Python test suites & supply-chain security checks
+./gradlew testDebugUnitTest
+./gradlew ktlintCheck detekt lintDebug lintRelease
+./gradlew assembleDebug bundleRelease
+./gradlew connectedDebugAndroidTest
 python3 -m unittest discover -s .github/scripts -p 'test_*.py'
 python3 -m unittest discover -s tools -p 'test_*.py'
 python3 .github/scripts/verify_workflow_pins.py .github/workflows
 python3 .github/scripts/scan_secrets.py .
-python3 .github/scripts/check_licenses_and_sbom.py . --revision "$(git rev-parse HEAD)"
-
-# 5. Unsigned CI build checks & fail-closed signing guard
-./gradlew assembleDebug bundleRelease --stacktrace
-python3 .github/scripts/verify_android_artifacts.py app/build/outputs/apk/debug/*.apk app/build/outputs/bundle/release/*.aab
-./gradlew bundleRelease -PrequireReleaseSigning=true   # Expected to fail unless keystore.properties is provided
 ```
 
----
+GitHub Actions runs the full declared device-test inventory on API 26, Android 15 4 KB and two
+independent 16 KB lanes, and Android 16 phone/16 KB/tablet configurations. Original failures and
+narrowly permitted framework-recovery attempts are retained. A recovered pass must be disclosed
+separately from a clean first invocation. Android 15 16 KB emulator runtime mitigations are not
+substitutes for stock ARM64 device acceptance.
 
-## Technical Audits & Release Documentation
+`detekt` passes against an existing baseline; historical findings remain. Android Lint warnings
+remain visible. CI pins actions and scans for signing material and selected secret patterns. The
+current CycloneDX report inventories direct Gradle declarations; it is not a resolved transitive
+dependency/license or vulnerability certification.
 
-- [`docs/PRODUCTION_READINESS_AUDIT.md`](docs/PRODUCTION_READINESS_AUDIT.md): Architecture audit, security hardening, and capability reconciliation.
-- [`docs/RELEASE_READINESS.md`](docs/RELEASE_READINESS.md): Longitudinal release qualification evidence, historical CI run log, and open publisher gates.
-- [`docs/release/READINESS_MATRIX.md`](docs/release/READINESS_MATRIX.md), [`docs/release/RISK_REGISTER.md`](docs/release/RISK_REGISTER.md), [`docs/release/TEST_EVIDENCE.md`](docs/release/TEST_EVIDENCE.md), [`docs/release/RELEASE_SIGNOFF.md`](docs/release/RELEASE_SIGNOFF.md): Gate matrix, risk register, executed evidence, and formal Go/No-Go checklist.
+### Signed releases
 
----
+CI builds unsigned candidate bundles. A publisher configures private, git-ignored
+`keystore.properties` and runs:
 
-## Privacy & License
+```bash
+./gradlew bundleRelease -PrequireReleaseSigning=true
+```
 
-- **Offline-Only Architecture**: No `android.permission.INTERNET`, analytics, or telemetry SDKs. See [`docs/privacy-policy.md`](docs/privacy-policy.md).
-- **License**: GNU General Public License v3.0 ([`LICENSE`](LICENSE)). Third-party Gradle components are checked for GPLv3 compatibility and exported to CycloneDX 1.5 JSON in CI.
+This fails without valid signing inputs. Never commit signing keys or describe a debug-signed
+minified launch APK as a publisher-signed production artifact.
+
+## Development and release records
+
+- [Development plan](agent.md) and [contributing](CONTRIBUTING.md).
+- [Current audit](docs/PRODUCTION_READINESS_AUDIT.md) and [historical release evidence](docs/RELEASE_READINESS.md).
+- [Readiness matrix](docs/release/READINESS_MATRIX.md), [test evidence](docs/release/TEST_EVIDENCE.md),
+  [risk register](docs/release/RISK_REGISTER.md), and [release sign-off](docs/release/RELEASE_SIGNOFF.md).
+
+## Privacy and license
+
+The manifest does not request `android.permission.INTERNET`; developer networking, advertising,
+and analytics are absent. Android backup and user-selected document providers follow the device's
+configuration. See [privacy policy](docs/privacy-policy.md). Licensed under [GPLv3](LICENSE).

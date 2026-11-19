@@ -290,6 +290,37 @@ class AuthoritativeRecoveryTest {
         }
 
     @Test
+    fun failedDiscardKeepsRepositoryProtectionUntilDeletionSucceeds() =
+        runTest {
+            repository.loadOrCreate(projectId, 64, 64, 72)
+            repository.saveCanvas(projectId)
+            repository.addLayer("Recoverable")
+            repository.autosave(projectId)
+            repository.loadCanvas(projectId)
+            assertTrue(repository.hasUnresolvedRecovery(projectId))
+            val autosave = storage.autosaveFile(projectId)
+            val bytes = autosave.readBytes()
+            val timestamp = autosave.lastModified()
+            assertTrue(autosave.delete())
+            assertTrue(autosave.mkdir())
+            val child = java.io.File(autosave, "keep")
+            child.writeText("A non-empty directory makes deletion fail on every platform")
+            assertTrue(autosave.setLastModified(timestamp))
+            val failure = runCatching { repository.discardRecovery(projectId) }.exceptionOrNull()
+            assertTrue(failure is IllegalStateException)
+            // Restore the valid file after the fault. The failed operation must not clear its guard.
+            assertTrue(child.delete())
+            assertTrue(autosave.delete())
+            autosave.writeBytes(bytes)
+            assertTrue(autosave.setLastModified(timestamp))
+            assertTrue(repository.hasUnresolvedRecovery(projectId))
+            assertTrue(runCatching { repository.saveCanvas(projectId) }.exceptionOrNull() is IllegalStateException)
+            repository.discardRecovery(projectId)
+            assertFalse(repository.hasUnresolvedRecovery(projectId))
+            assertFalse(autosave.exists())
+        }
+
+    @Test
     fun art013_atomicWriteProtectsAgainstFailedWrites() =
         runTest {
             repository.loadOrCreate(projectId, 64, 64, 72)

@@ -6,7 +6,7 @@ inventory in [`README.md`](README.md).
 
 ## Before you start
 
-- Read the ["Current development"](README.md#current-development--24-october-2026) and ["Capability boundaries"](README.md#capability-boundaries)
+- Read the ["Current development"](README.md#current-development) and ["Capability boundaries"](README.md#capability-boundaries)
   sections first. They list exactly which features exist and which do not, so you do not spend time
   rebuilding something that is already shipped.
 - Anything listed as *not implemented* there is a welcome target.
@@ -37,7 +37,9 @@ Allow at least 6 GB RAM for builds and additional memory for an emulator.
 Without the Android SDK (a sandbox, say), `python3 tools/jvm_check.py` downloads a bare Kotlin
 compiler and JUnit, compiles every source file that does not import Android and runs the unit tests
 that resolve against them (pixel, render, export, colour, canvas and brush logic; `--test Name`
-narrows it). It is a quick check, not a substitute for the Gradle tasks above.
+narrows it). It is a quick check, not a substitute for the Gradle tasks above. If dependency
+downloads are unavailable, run the Python checks locally and use GitHub Actions for the real
+Gradle build and emulator suite. Do not describe an unexecuted local build as a pass.
 
 Release builds need signing credentials in a git-ignored `keystore.properties` at the repository
 root; without it `./gradlew assembleRelease` produces an unsigned APK. See
@@ -91,6 +93,13 @@ Adds four presets to SymmetryEngine and exposes them in the guides sheet.
 4. Make sure `./gradlew testDebugUnitTest` and `./gradlew assembleDebug` pass locally — CI runs
    both on every pull request.
 5. Update `README.md`/`agent.md` if your change alters what the app actually does.
+
+For release integration, test the actual caller path, including save/reopen and failed/cancelled
+operations. A model or codec helper test alone does not establish that an editor feature is wired.
+Preserve the full declared device-test inventory and original failed-attempt evidence. Do not
+remove coverage, enlarge static-analysis baselines, or hide retries to achieve a green result.
+Record the tested commit and workflow URL in the release evidence. Keep physical-device and
+public-store sign-off separate from source publication and emulator qualification.
 
 ## Reporting bugs
 

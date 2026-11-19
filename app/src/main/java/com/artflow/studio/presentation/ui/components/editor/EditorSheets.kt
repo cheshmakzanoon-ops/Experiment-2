@@ -41,6 +41,7 @@ import com.artflow.studio.core.animation.AnimationTimeline
 import com.artflow.studio.core.animation.PlayMode
 import com.artflow.studio.core.animation.withPlayMode
 import com.artflow.studio.core.canvas.CanvasOperations
+import com.artflow.studio.core.canvas.LayerLinks
 import com.artflow.studio.core.canvas.TwoFingerLayerGesture
 import com.artflow.studio.core.perspective.GuideLineStyle
 import com.artflow.studio.core.perspective.PerspectiveGuide
@@ -77,6 +78,7 @@ data class LayerOptionActions(
     val onDrawingAssist: (Long, Boolean) -> Unit = { _, _ -> },
     val onPrivate: (Long, Boolean) -> Unit = { _, _ -> },
     val onEffects: (Layer) -> Unit = {},
+    val onUnlink: (Long) -> Unit = {},
 )
 
 /**
@@ -123,6 +125,7 @@ data class LayerStackActions(
     val onGroupLayers: (List<Long>) -> Unit = {},
     val onDeleteLayers: (List<Long>) -> Unit = {},
     val onMergeLayers: (List<Long>) -> Unit = {},
+    val onLinkLayers: (List<Long>) -> Unit = {},
     val background: BackgroundControls? = null,
 )
 
@@ -181,6 +184,8 @@ fun LayersSheet(
                 onMerge = { stackActions.onMergeLayers(chosen) },
                 onDelete = { stackActions.onDeleteLayers(chosen) },
                 onClear = { onPicked(emptySet()) },
+                onLink = { stackActions.onLinkLayers(chosen) },
+                canLink = LayerLinks.canLink(layers, chosen.toSet()),
             )
         }
 
@@ -378,7 +383,7 @@ private fun LayersHeader(
     }
 }
 
-/** Shown while layers are multi-selected: group or delete them together. */
+/** Wrapping actions keep multi-layer controls reachable on narrow phones and large text sizes. */
 @Composable
 private fun MultiLayerBar(
     count: Int,
@@ -386,20 +391,18 @@ private fun MultiLayerBar(
     onMerge: () -> Unit,
     onDelete: () -> Unit,
     onClear: () -> Unit,
+    onLink: () -> Unit,
+    canLink: Boolean,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            stringResource(R.string.editorsheets_layers_selected, count),
-            style = MaterialTheme.typography.labelLarge,
-            modifier = Modifier.weight(1f),
-        )
-        TextButton(onClick = onGroup) { Text(stringResource(R.string.editorsheets_group)) }
-        TextButton(onClick = onMerge) { Text(stringResource(R.string.editorsheets_merge)) }
-        TextButton(onClick = onDelete) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
-        TextButton(onClick = onClear) { Text(stringResource(R.string.layeropacityoverlay_done)) }
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+        Text(stringResource(R.string.editorsheets_layers_selected, count), style = MaterialTheme.typography.labelLarge)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            TextButton(onClick = onLink, enabled = canLink) { Text(stringResource(R.string.layer_link_selected)) }
+            TextButton(onClick = onGroup) { Text(stringResource(R.string.editorsheets_group)) }
+            TextButton(onClick = onMerge) { Text(stringResource(R.string.editorsheets_merge)) }
+            TextButton(onClick = onDelete) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
+            TextButton(onClick = onClear) { Text(stringResource(R.string.layeropacityoverlay_done)) }
+        }
     }
 }
 

@@ -1,5 +1,12 @@
 # Release readiness and evidence
 
+> **Current checkpoint — November 18, 2026:** See [V1 integration](release/V1_INTEGRATION_2026-11-18.md),
+> [test evidence](release/TEST_EVIDENCE.md), and [release sign-off](release/RELEASE_SIGNOFF.md).
+> The records below are chronological historical evidence, not current feature certification.
+> The earlier GPU/sparse-canvas, integrated ICC/CMYK, non-destructive typography, and complete
+> Procreate metadata claims are superseded by the actual runtime boundaries in README.
+
+
 ## Current emulator acceptance contract — 24 October 2026
 
 [Emulator acceptance and parity corrections](EMULATOR_PARITY_2026-10-24.md) records the current

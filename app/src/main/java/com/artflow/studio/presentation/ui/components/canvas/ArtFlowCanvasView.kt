@@ -1027,12 +1027,16 @@ class ArtFlowCanvasView
             val layerId = activeLayerId
             val revision = canvasRepository.contentRevision
             coroutineScope.launch {
-                val base = canvasRepository.layerPixels(layerId) ?: return@launch
-                canvasRepository.applyRasterEdit(layerId, "Move layer") { target ->
-                    target.clear()
-                    drawShifted(target, base, dx.roundToInt(), dy.roundToInt())
+                try {
+                    val parameters = com.artflow.studio.core.canvas.LayerTransform.Parameters(translationX = dx, translationY = dy)
+                    if (canvasRepository.transformLayer(layerId, parameters, revision)) {
+                        reportHistory()
+                    } else {
+                        onStatusMessage?.invoke("A layer or linked peer cannot be moved")
+                    }
+                } catch (error: IllegalArgumentException) {
+                    onStatusMessage?.invoke(error.message ?: "These layers cannot be moved")
                 }
-                reportHistory()
             }
         }
 
@@ -1162,6 +1166,12 @@ class ArtFlowCanvasView
                 val pixels = canvasRepository.layerPixels(layerId) ?: return@launch
                 val revision = canvasRepository.contentRevision
                 val extra = companions.load(canvasRepository, layerId, selection)
+                if (extra == null) {
+                    clearTransformSession()
+                    onStatusMessage?.invoke("Unlock and show all linked layers. For masks, use Whole-layer transform in Tool options.")
+                    return@launch
+                }
+                if (revision != canvasRepository.contentRevision || activeLayerId != layerId) return@launch
                 val bounds =
                     withContext(Dispatchers.Default) {
                         TransformCompanions.bounds(LayerTransform.floatingBounds(pixels, selection), extra)
@@ -1188,7 +1198,7 @@ class ArtFlowCanvasView
             var current = transformSession?.takeIf { it.isCurrent(layerId, selection) }
             if (current == null) {
                 val base = rasterBase ?: return false
-                val extra = companions.load(canvasRepository, layerId, selection)
+                val extra = companions.load(canvasRepository, layerId, selection) ?: return false
                 val bounds =
                     withContext(Dispatchers.Default) {
                         TransformCompanions.bounds(LayerTransform.floatingBounds(base, selection), extra)
@@ -1201,7 +1211,7 @@ class ArtFlowCanvasView
                 current = TransformSession(layerId, base, selection, bounds, Quad.fromBounds(bounds), revision, extra)
                 transformSession = current
             }
-            companions.open(canvasRepository, current.companions)
+            if (!companions.open(canvasRepository, current.companions)) return false
             transformStartQuad = current.quad
             if (warping) {
                 val mesh = current.meshOrBox(meshSide())
@@ -1257,6 +1267,10 @@ class ArtFlowCanvasView
                 transformCommitting = true
                 coroutineScope.launch {
                     try {
+                        if (!session.isCurrent(activeLayerId, canvasRepository.selection())) {
+                            clearTransformSession()
+                            return@launch
+                        }
                         val ids = listOf(session.layerId) + session.companions.map { it.layerId }
                         val placed =
                             canvasRepository.applyRasterEdits(ids, "Transform") { id, buffer ->
@@ -2218,7 +2232,11 @@ class ArtFlowCanvasView
                 )
             drawing = currentStrokeId != 0L
             clearPrediction()
-            if (!drawing) onStatusMessage?.invoke("Choose an unlocked, visible layer with an editable destination")
+            if (!drawing) {
+                onStatusMessage?.invoke(
+                    canvasRepository.editRejectionReason ?: "Choose an unlocked, visible layer with an editable destination",
+                )
+            }
             // The string keeps the same length on screen whatever the zoom.
             val string = input.pulledString.coerceIn(0f, 1f) * MAX_STRING_DP * resources.displayMetrics.density / scale
             stabilizer =
@@ -2542,8 +2560,8 @@ class ArtFlowCanvasView
             cancelPixelInteraction()
             if (tool == ToolType.MOVE || tool == ToolType.TRANSFORM) {
                 val layer = canvasRepository.getActiveLayer()
-                if (canvasRepository.selection() != null || layer?.hasMask() == true || layer?.linkGroupId != null) {
-                    onStatusMessage?.invoke("Use Transform options for masked layers. Deselect before moving the whole layer.")
+                if (canvasRepository.selection() != null || layer?.hasMask() == true) {
+                    onStatusMessage?.invoke("Deselect before moving whole layers. For masks, use Whole-layer transform in Tool options.")
                     return
                 }
             }
@@ -2577,7 +2595,7 @@ class ArtFlowCanvasView
                     val session = canvasRepository.beginRasterEdit(layerId)
                     if (session == null) {
                         pixelTool = null
-                        onStatusMessage?.invoke("This layer cannot be edited")
+                        onStatusMessage?.invoke(canvasRepository.editRejectionReason ?: "This layer cannot be edited")
                         return@launch
                     }
                     rasterSession = session
@@ -2588,6 +2606,20 @@ class ArtFlowCanvasView
                         rasterBase = null
                         pixelTool = null
                         return@launch
+                    }
+                    if (tool == ToolType.MOVE) {
+                        val extra = companions.load(canvasRepository, layerId, gestureSelection)
+                        if (extra == null || !companions.open(canvasRepository, extra)) {
+                            canvasRepository.cancelRasterEdit(session)
+                            rasterSession = null
+                            rasterBase = null
+                            pixelTool = null
+                            onStatusMessage?.invoke(
+                                canvasRepository.editRejectionReason
+                                    ?: "Show and unlock linked layers; use Whole-layer transform for masks",
+                            )
+                            return@launch
+                        }
                     }
                     if (tool == ToolType.LIQUIFY && !prepareLiquifyReference(session, gestureInput)) {
                         canvasRepository.cancelRasterEdit(session)
@@ -2787,6 +2819,7 @@ class ArtFlowCanvasView
                     if (selection == null) {
                         buffer.clear()
                         drawShifted(buffer, base, dx, dy)
+                        companions.move(dx, dy)
                     } else {
                         // With a selection, only the selected pixels move; the rest of the layer stays put.
                         val params = LayerTransform.Params(moveOriginX(), moveOriginY(), dx.toFloat(), dy.toFloat())
@@ -2945,8 +2978,9 @@ class ArtFlowCanvasView
                         val group = listOf(session) + companions.sessions
                         val changed =
                             original == null ||
-                                group.size > 1 ||
-                                withContext(Dispatchers.Default) { !original.pixels.contentEquals(session.buffer.pixels) }
+                                withContext(Dispatchers.Default) {
+                                    !original.pixels.contentEquals(session.buffer.pixels) || companions.hasChanges()
+                                }
                         if (changed) {
                             if (canvasRepository.commitRasterEdits(group, description)) {
                                 if (transform != null) {
@@ -3115,7 +3149,7 @@ class ArtFlowCanvasView
             coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
                 val session = canvasRepository.beginRasterEdit(layerId)
                 if (session == null) {
-                    onStatusMessage?.invoke("This layer cannot be edited right now")
+                    onStatusMessage?.invoke(canvasRepository.editRejectionReason ?: "This layer cannot be edited right now")
                     return@launch
                 }
                 try {
@@ -3333,7 +3367,7 @@ class ArtFlowCanvasView
             coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
                 val session = canvasRepository.beginRasterEdit(layerId)
                 if (session == null) {
-                    onStatusMessage?.invoke("This layer cannot be edited right now")
+                    onStatusMessage?.invoke(canvasRepository.editRejectionReason ?: "This layer cannot be edited right now")
                     return@launch
                 }
                 try {

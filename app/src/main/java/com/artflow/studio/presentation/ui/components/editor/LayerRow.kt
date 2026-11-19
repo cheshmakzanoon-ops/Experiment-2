@@ -293,6 +293,7 @@ private fun LayerStatus(layer: Layer) {
             if (layer.effects != null) add("effects")
             if (layer.textContent != null) add("text")
             if (layer.hasMask()) add("mask")
+            if (layer.linkGroupId != null) add("linked")
         }
     if (status.isNotEmpty()) {
         Text(
@@ -328,6 +329,12 @@ private fun LayerMenu(
         }
     DropdownMenu(expanded = expanded, onDismissRequest = dismiss) {
         DropdownMenuItem(text = { Text(stringResource(R.string.layer_rename)) }, onClick = item(onRename))
+        if (options != null && layer.linkGroupId != null) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.layer_unlink)) },
+                onClick = item { options.onUnlink(layer.id) },
+            )
+        }
         if (options != null && layer.textContent != null) {
             DropdownMenuItem(text = { Text(stringResource(R.string.layer_edit_text)) }, onClick = item { options.onEditText(layer) })
         }

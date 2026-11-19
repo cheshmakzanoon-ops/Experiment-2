@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.gallery.GalleryOrder
+import com.artflow.studio.data.export.PendingImports
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.domain.model.Project
 import com.artflow.studio.domain.model.settings.AccentChoice
@@ -280,23 +281,12 @@ class MainViewModel
             }
         }
 
-        /** Streams an `.artflow` file on disk into the gallery and cleans up temporary staging afterwards. */
-        fun importPackageFile(
-            file: java.io.File,
-            deleteAfter: Boolean = true,
-            onImported: (ProjectRepository.ImportedPackage) -> Unit,
-        ) {
-            viewModelScope.launch(galleryErrors) {
-                try {
-                    val result = projectRepository.importPackageFile(file)
-                    storageBytes = withContext(Dispatchers.IO) { storage.totalStorageBytes() }
-                    onImported(result)
-                } finally {
-                    if (deleteAfter && file.exists()) {
-                        withContext(Dispatchers.IO) { file.delete() }
-                    }
-                }
-            }
+        /** The caller owns its staged file until this suspend operation finishes; no coroutine handoff can lose it. */
+        suspend fun importPackageFile(file: java.io.File): ProjectRepository.ImportedPackage {
+            val result = projectRepository.importPackageFile(file)
+            PendingImports.putDependencyNotice(result.projectId, result.missingFonts, result.missingGrains)
+            storageBytes = withContext(Dispatchers.IO) { storage.totalStorageBytes() }
+            return result
         }
 
         /** Saves colours as a new custom palette, for a swatch file opened from another app. */

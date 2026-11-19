@@ -57,7 +57,7 @@ class AdjustmentSessionController(
             closeSession()
             val opened = repository.beginRasterEdit(repository.getActiveLayerId())
             if (opened == null) {
-                notify("Choose a visible, unlocked layer to adjust")
+                notify(repository.editRejectionReason ?: "Choose a visible, unlocked layer to adjust")
                 return@launch
             }
             session = opened

@@ -126,23 +126,21 @@ class ProjectRepositoryImpl
             }
         }
 
-        override suspend fun importPackageFile(file: java.io.File): ProjectRepository.ImportedPackage {
-            val contents = withContext(Dispatchers.IO) { ArtflowPackage.openFile(file) }
-            contents.use { stream ->
-                val document =
-                    withContext(Dispatchers.Default) {
-                        storage.decodePackagedDocument(stream.readBytes(ArtflowPackage.DOCUMENT))
-                    }
-                return insertImportedPackage(
-                    name = stream.name,
-                    width = document.width,
-                    height = document.height,
-                    dpi = document.dpi,
-                    layerCount = document.layers.size,
-                    stream = stream,
-                )
+        override suspend fun importPackageFile(file: java.io.File): ProjectRepository.ImportedPackage =
+            withContext(Dispatchers.IO) {
+                // Open and close in one scope: dispatcher cancellation must not orphan an open ZipFile.
+                ArtflowPackage.openFile(file).use { stream ->
+                    val document = storage.decodePackagedDocument(stream.readBytes(ArtflowPackage.DOCUMENT))
+                    insertImportedPackage(
+                        name = stream.name,
+                        width = document.width,
+                        height = document.height,
+                        dpi = document.dpi,
+                        layerCount = document.layers.size,
+                        stream = stream,
+                    )
+                }
             }
-        }
 
         private suspend fun insertImportedPackage(
             name: String,

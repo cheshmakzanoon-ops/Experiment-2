@@ -5,12 +5,15 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
@@ -104,11 +107,8 @@ class ArtflowPackageTest {
             files.map { (path, bytes) -> ArtflowPackage.EntrySource(path) { ByteArrayInputStream(bytes) } },
         )
 
-        ArtflowPackage.openFile(destination, maxTotalBytes = 8).use { contents ->
-            assertEquals("{}", contents.readBytes(ArtflowPackage.DOCUMENT).decodeToString())
-            assertThrows(IllegalArgumentException::class.java) {
-                contents.readBytes("model.obj")
-            }
+        assertThrows(IllegalArgumentException::class.java) {
+            ArtflowPackage.openFile(destination, maxTotalBytes = 8)
         }
 
         val corrupt = File(temporary.newFolder("corrupt"), "damaged.artflow")
@@ -116,5 +116,57 @@ class ArtflowPackageTest {
         assertThrows(IllegalArgumentException::class.java) {
             ArtflowPackage.openFile(corrupt)
         }
+    }
+
+    @Test fun genericZipRecognitionDoesNotReadOrAcceptTheDocumentPayload() {
+        val destination = File(temporary.root, "generic.zip")
+        destination.writeBytes(ArtflowPackage.write("Recognise", mapOf(ArtflowPackage.DOCUMENT to byteArrayOf(1))))
+        assertTrue(ArtflowPackage.isPackageFile(destination))
+        patchCentralField(destination, ArtflowPackage.DOCUMENT, 24, (ArtflowPackage.MAX_DOCUMENT_BYTES + 1).toInt())
+        assertTrue(ArtflowPackage.isPackageFile(destination))
+        assertThrows(IllegalArgumentException::class.java) { ArtflowPackage.openFile(destination) }
+    }
+
+    @Test fun repeatedDocumentReadsDoNotConsumeTheAggregateArchiveBudgetTwice() {
+        val destination = File(temporary.root, "repeat.artflow")
+        destination.writeBytes(ArtflowPackage.write("Repeat", files))
+        val expanded = java.util.zip.ZipFile(destination).use { zip -> zip.entries().toList().sumOf { it.size } }
+        ArtflowPackage.openFile(destination, maxTotalBytes = expanded).use { contents ->
+            repeat(3) { assertArrayEquals(files.getValue(ArtflowPackage.DOCUMENT), contents.readBytes(ArtflowPackage.DOCUMENT)) }
+            files.forEach { (path, expected) -> assertArrayEquals(expected, contents.readBytes(path)) }
+        }
+    }
+
+    @Test fun metadataAndActualPayloadIntegrityAreCheckedBeforeImportSuccess() {
+        val destination = File(temporary.root, "dependencies.artflow")
+        destination.writeBytes(
+            ArtflowPackage.write(
+                "Large metadata",
+                files + (ArtflowPackage.DEPENDENCIES to ByteArray(1024 * 1024 + 1) { ' '.code.toByte() }),
+            ),
+        )
+        assertThrows(IllegalArgumentException::class.java) { ArtflowPackage.openFile(destination) }
+        destination.writeBytes(ArtflowPackage.write("Corrupt checksum", files))
+        patchCentralField(destination, "model.obj", 16, 0)
+        ArtflowPackage.openFile(destination).use { contents ->
+            assertThrows(IllegalArgumentException::class.java) { contents.readBytes("model.obj") }
+        }
+    }
+
+    private fun patchCentralField(
+        file: File,
+        name: String,
+        offset: Int,
+        value: Int,
+    ) {
+        val bytes = file.readBytes()
+        val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        val position =
+            (0..bytes.size - 46).first { index ->
+                buffer.getInt(index) == 0x02014B50 &&
+                    String(bytes, index + 46, buffer.getShort(index + 28).toInt() and 0xFFFF, Charsets.UTF_8) == name
+            }
+        buffer.putInt(position + offset, value)
+        file.writeBytes(bytes)
     }
 }
