@@ -108,7 +108,7 @@ internal class GalleryImports(
                             bytes to metadata
                         }
                     val id = viewModel.createImportedProject("Imported PSD", document.width, document.height, document.dpi)
-                    PendingImports.putPsd(id, bytes)
+                    PendingImports.putPsd(id, bytes, viewModel.viewModelScope)
                     var navigated = false
                     try {
                         openArtwork(id)

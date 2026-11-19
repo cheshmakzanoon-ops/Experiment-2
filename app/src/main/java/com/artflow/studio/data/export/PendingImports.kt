@@ -31,23 +31,52 @@ object PendingImports {
 
     fun take(projectId: Long): PendingImage? = images.remove(projectId)
 
-    private val documents = ConcurrentHashMap<Long, ByteArray>()
+    private class PsdHandoff(
+        val bytes: ByteArray,
+    ) {
+        lateinit var expiry: Job
+    }
+
+    private val documents = ConcurrentHashMap<Long, PsdHandoff>()
+    private const val IMPORT_CLAIM_TIMEOUT_MS = 10 * 60 * 1000L
 
     /** A layered Photoshop document whose layers fill the new canvas. */
     fun putPsd(
         projectId: Long,
         bytes: ByteArray,
+        owner: CoroutineScope,
     ) {
-        documents[projectId] = bytes
+        val pending = PsdHandoff(bytes)
+        pending.expiry =
+            owner.launch(start = CoroutineStart.LAZY) {
+                delay(IMPORT_CLAIM_TIMEOUT_MS)
+                expirePsd(projectId, pending)
+            }
+        documents.put(projectId, pending)?.expiry?.cancel()
+        pending.expiry.invokeOnCompletion { cause -> if (cause != null) expirePsd(projectId, pending) }
+        pending.expiry.start()
     }
 
-    fun takePsd(projectId: Long): ByteArray? = documents.remove(projectId)
+    fun takePsd(projectId: Long): ByteArray? {
+        val pending = documents.remove(projectId) ?: return null
+        pending.expiry.cancel()
+        return pending.bytes
+    }
 
     fun discardPsd(
         projectId: Long,
         bytes: ByteArray,
     ) {
-        documents.remove(projectId, bytes)
+        val pending = documents[projectId]?.takeIf { it.bytes === bytes } ?: return
+        if (documents.remove(projectId, pending)) pending.expiry.cancel()
+    }
+
+    private fun expirePsd(
+        projectId: Long,
+        pending: PsdHandoff,
+    ) {
+        if (!documents.remove(projectId, pending)) return
+        putNotice(projectId, "The file import was cancelled before the editor opened. Import the original file again.")
     }
 
     private class ProcreateHandoff(
@@ -57,7 +86,6 @@ object PendingImports {
     }
 
     private val procreate = ConcurrentHashMap<Long, ProcreateHandoff>()
-    private const val PROCREATE_CLAIM_TIMEOUT_MS = 10 * 60 * 1000L
 
     /**
      * The editor takes ownership on claim. An abandoned navigation is bounded by the gallery
@@ -71,7 +99,7 @@ object PendingImports {
         val pending = ProcreateHandoff(document)
         pending.expiry =
             owner.launch(start = CoroutineStart.LAZY) {
-                delay(PROCREATE_CLAIM_TIMEOUT_MS)
+                delay(IMPORT_CLAIM_TIMEOUT_MS)
                 expireProcreate(projectId, pending)
             }
         val replaced = procreate.put(projectId, pending)

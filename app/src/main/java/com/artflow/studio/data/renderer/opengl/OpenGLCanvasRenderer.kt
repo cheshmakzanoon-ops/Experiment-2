@@ -11,6 +11,7 @@ import android.opengl.GLUtils
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.data.renderer.BitmapPixelBridge
+import timber.log.Timber
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -32,10 +33,16 @@ import kotlin.math.sin
  * must look the same before and after the artist lifts the stylus.
  *
  * Onion-skin frames are drawn with the same textured-quad program in a tinted, alpha-blended pass.
+ * The injectable constructor uses the device's texture cap; [previewTextureLimit] can impose a
+ * smaller preview budget without changing the document, including in GLES capability regressions.
  */
 class OpenGLCanvasRenderer
-    @Inject
-    constructor() : GLSurfaceView.Renderer {
+    internal constructor(
+        private val previewTextureLimit: Int,
+    ) : GLSurfaceView.Renderer {
+        @Inject
+        constructor() : this(Int.MAX_VALUE)
+
         // --- Canvas / viewport state ---------------------------------------------------------------
 
         private var viewWidth = 0
@@ -98,11 +105,18 @@ class OpenGLCanvasRenderer
         // --- Textures ------------------------------------------------------------------------------
 
         private var compositeTexture = 0
+        private var compositeTextureSize: CanvasTextureSize? = null
         private var checkerTexture = 0
+
+        private class UploadedTexture(
+            val handle: Int,
+            val size: CanvasTextureSize,
+        )
 
         /** Onion-skin frame textures, rebuilt whenever the ghost frames change. */
         private val onionTextures = mutableListOf<Int>()
         private val onionAlphas = mutableListOf<Float>()
+        private var onionTexturesReady = false
 
         // --- Data staged from other threads ---------------------------------------------------------
 
@@ -124,8 +138,13 @@ class OpenGLCanvasRenderer
         // GL-thread-owned images survive EGL context loss and can be reuploaded into the new context.
         private var retainedComposite: Bitmap? = null
         private var retainedOnions: List<Pair<Bitmap, Float>> = emptyList()
-        private var maxTextureSize = 2048
+        private var maxTextureSize = 0
         private var isInitialized = false
+        private var reportedUploadFailure = false
+
+        /** Called on the GL thread; the view forwards this to its existing status UI on main. */
+        @Volatile
+        var onStatusMessage: ((String) -> Unit)? = null
 
         private val quadVertexBuffer: FloatBuffer =
             ByteBuffer
@@ -148,12 +167,15 @@ class OpenGLCanvasRenderer
             // Texture/program names from a previous EGL context are invalid, even if their numeric
             // values happen to be reused. Keep CPU images, but allocate all GL objects anew.
             compositeTexture = 0
+            compositeTextureSize = null
             checkerTexture = 0
             onionTextures.clear()
             onionAlphas.clear()
+            onionTexturesReady = false
             val textureLimit = IntArray(1)
             GLES20.glGetIntegerv(GLES20.GL_MAX_TEXTURE_SIZE, textureLimit, 0)
-            maxTextureSize = textureLimit[0].coerceAtLeast(2048)
+            maxTextureSize = minOf(textureLimit[0], previewTextureLimit)
+            reportedUploadFailure = false
             GLES20.glDisable(GLES20.GL_DEPTH_TEST)
             GLES20.glEnable(GLES20.GL_BLEND)
             GLES20.glBlendFunc(GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_ALPHA) // premultiplied
@@ -249,14 +271,19 @@ class OpenGLCanvasRenderer
             retainedComposite?.let { bitmap ->
                 val partial = applyRegions(bitmap, regions)
                 if (compositeTexture == 0) {
-                    compositeTexture = uploadBitmap(bitmap)
+                    val uploaded = uploadBitmap(bitmap)
+                    compositeTexture = uploaded?.handle ?: 0
+                    compositeTextureSize = uploaded?.size
                 } else if (incoming != null || !partial) {
-                    updateBitmap(compositeTexture, bitmap)
+                    compositeTextureSize = updateBitmap(compositeTexture, bitmap)
                 }
-                GLES20.glUniform4f(quadTintHandle, 1f, 1f, 1f, 1f)
-                GLES20.glUniform1f(quadAlphaHandle, primaryAlpha)
-                drawQuad(compositeTexture, textureRepeat = false)
-                GLES20.glUniform1f(quadAlphaHandle, 1f)
+                if (compositeTextureSize != null) {
+                    reportedUploadFailure = false
+                    GLES20.glUniform4f(quadTintHandle, 1f, 1f, 1f, 1f)
+                    GLES20.glUniform1f(quadAlphaHandle, primaryAlpha)
+                    drawQuad(compositeTexture, textureRepeat = false)
+                    GLES20.glUniform1f(quadAlphaHandle, 1f)
+                }
             }
             prediction?.let { drawPrediction(it, matrix) }
         }
@@ -326,13 +353,16 @@ class OpenGLCanvasRenderer
                 retainedOnions.forEach { it.first.recycle() }
                 retainedOnions = incoming
             }
-            if (incoming == null && onionTextures.size == retainedOnions.size) return
+            if (incoming == null && onionTexturesReady) return
+            onionTexturesReady = true
             onionTextures.forEach { GLES20.glDeleteTextures(1, intArrayOf(it), 0) }
             onionTextures.clear()
             onionAlphas.clear()
             retainedOnions.forEach { (bitmap, alpha) ->
-                onionTextures += uploadBitmap(bitmap)
-                onionAlphas += alpha
+                uploadBitmap(bitmap)?.let { uploaded ->
+                    onionTextures += uploaded.handle
+                    onionAlphas += alpha
+                }
             }
         }
 
@@ -385,15 +415,26 @@ class OpenGLCanvasRenderer
             if (regions.isEmpty()) return true
             val canvas = Canvas(retained)
             val copy = Paint().apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC) }
-            val direct = compositeTexture != 0 && max(retained.width, retained.height) <= maxTextureSize
+            var direct = compositeTexture != 0 && compositeTextureSize == CanvasTextureSize(retained.width, retained.height)
             if (direct) GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, compositeTexture)
             regions.forEach { region ->
                 canvas.drawBitmap(region.bitmap, region.left.toFloat(), region.top.toFloat(), copy)
-                if (direct) GLUtils.texSubImage2D(GLES20.GL_TEXTURE_2D, 0, region.left, region.top, region.bitmap)
+                if (direct) {
+                    direct = uploadRegion(region)
+                }
                 region.bitmap.recycle()
             }
             return direct
         }
+
+        private fun uploadRegion(region: RegionUpdate): Boolean =
+            try {
+                GLUtils.texSubImage2D(GLES20.GL_TEXTURE_2D, 0, region.left, region.top, region.bitmap)
+                GLES20.glGetError() == GLES20.GL_NO_ERROR
+            } catch (error: IllegalArgumentException) {
+                Timber.w(error, "Canvas region upload rejected; resending full preview")
+                false
+            }
 
         /** Animation Assist's Blend Primary Frame: the frame being drawn shows the ghosts through it. */
         @Volatile
@@ -480,10 +521,12 @@ class OpenGLCanvasRenderer
             // EGL already owns destruction of context objects. Calling glDelete* here on the main
             // thread would act on no context (or the wrong context).
             compositeTexture = 0
+            compositeTextureSize = null
             checkerTexture = 0
             quadProgram = 0
             onionTextures.clear()
             onionAlphas.clear()
+            onionTexturesReady = false
             pendingComposite.getAndSet(null)?.recycle()
             synchronized(pendingRegions) {
                 pendingRegions.forEach { it.bitmap.recycle() }
@@ -567,7 +610,7 @@ class OpenGLCanvasRenderer
             return m
         }
 
-        private fun uploadBitmap(bitmap: Bitmap): Int {
+        private fun uploadBitmap(bitmap: Bitmap): UploadedTexture? {
             val handles = IntArray(1)
             GLES20.glGenTextures(1, handles, 0)
             val texture = handles[0]
@@ -576,39 +619,74 @@ class OpenGLCanvasRenderer
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
-            uploadPixels(bitmap)
-            return texture
+            val size = uploadPixels(bitmap)
+            if (texture != 0 && size != null) return UploadedTexture(texture, size)
+            GLES20.glDeleteTextures(1, handles, 0)
+            reportUploadFailure()
+            return null
         }
 
         /** Re-uploads into an existing texture, avoiding a texture object per frame. */
         private fun updateBitmap(
             textureId: Int,
             bitmap: Bitmap,
-        ) {
+        ): CanvasTextureSize? {
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureId)
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
-            uploadPixels(bitmap)
+            return uploadPixels(bitmap)
         }
 
-        private fun uploadPixels(bitmap: Bitmap) {
-            val longest = maxOf(bitmap.width, bitmap.height)
-            val upload =
-                if (longest <= maxTextureSize) {
-                    bitmap
-                } else {
-                    val ratio = maxTextureSize.toFloat() / longest
-                    Bitmap.createScaledBitmap(
-                        bitmap,
-                        (bitmap.width * ratio).toInt().coerceAtLeast(1),
-                        (bitmap.height * ratio).toInt().coerceAtLeast(1),
-                        true,
-                    )
+        private fun uploadPixels(bitmap: Bitmap): CanvasTextureSize? {
+            val requested = CanvasTextureUpload.fit(bitmap.width, bitmap.height, maxTextureSize)
+            val uploaded =
+                CanvasTextureUpload.upload(bitmap.width, bitmap.height, maxTextureSize) { size ->
+                    uploadPixelsAtSize(bitmap, size)
                 }
+            if (uploaded == null) {
+                reportUploadFailure()
+            } else if (uploaded != requested) {
+                // Keep the working preview budget for this EGL context instead of retrying the
+                // rejected allocation on every stroke. A new context queries its capability anew.
+                maxTextureSize = minOf(maxTextureSize, uploaded.longest)
+                onStatusMessage?.invoke(
+                    "Canvas preview reduced to ${uploaded.width} × ${uploaded.height} to fit this device. " +
+                        "Artwork and exports keep their full resolution.",
+                )
+            }
+            return uploaded
+        }
+
+        private fun uploadPixelsAtSize(
+            bitmap: Bitmap,
+            size: CanvasTextureSize,
+        ): Boolean {
+            var upload: Bitmap? = null
             try {
+                upload =
+                    if (size.width == bitmap.width && size.height == bitmap.height) {
+                        bitmap
+                    } else {
+                        Bitmap.createScaledBitmap(bitmap, size.width, size.height, true)
+                    }
                 GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, upload, 0)
+                val error = GLES20.glGetError()
+                if (error != GLES20.GL_NO_ERROR) Timber.w("Canvas texture upload failed: GL %s at %sx%s", error, size.width, size.height)
+                return error == GLES20.GL_NO_ERROR
+            } catch (error: IllegalArgumentException) {
+                Timber.w(error, "Canvas texture upload rejected")
+            } catch (error: OutOfMemoryError) {
+                Timber.w(error, "Insufficient memory for canvas preview texture")
             } finally {
-                if (upload !== bitmap) upload.recycle()
+                if (upload !== bitmap) upload?.recycle()
+            }
+            return false
+        }
+
+        private fun reportUploadFailure() {
+            if (!reportedUploadFailure) {
+                reportedUploadFailure = true
+                onStatusMessage?.invoke("This device could not display the canvas preview. Save your artwork, then reopen the editor.")
             }
         }
 
@@ -625,7 +703,7 @@ class OpenGLCanvasRenderer
                 }
             }
             val bitmap = Bitmap.createBitmap(pixels, size, size, Bitmap.Config.ARGB_8888)
-            val texture = uploadBitmap(bitmap)
+            val texture = uploadBitmap(bitmap)?.handle ?: 0
             bitmap.recycle()
             return texture
         }

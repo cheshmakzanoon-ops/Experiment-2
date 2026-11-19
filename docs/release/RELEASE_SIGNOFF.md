@@ -26,6 +26,9 @@ exact-revision evidence in [TEST_EVIDENCE.md](TEST_EVIDENCE.md).
 1. Build the publisher-signed bundle using private, git-ignored signing configuration and
    `./gradlew bundleRelease -PrequireReleaseSigning=true`; verify its signature, application/version
    identity, and SHA-256 digest. CI unsigned bundles and debug-signed smoke APKs are not production.
+   Use the [publisher artifact gate](../verification/publisher-artifact-qualification.md) with the
+   explicitly approved upload certificate and retained exact-revision CI source/build evidence;
+   APK app-signing approval is separate from AAB upload-signing approval.
 2. Test representative physical low-memory Android8, Android15/16 phones, a tablet and active
    pressure/tilt stylus, and applicable ARM64 16 KB hardware. Record drawing latency/performance,
    process death, storage exhaustion, revoked URIs, long sessions, and reinstall/upgrade preservation

@@ -21,10 +21,19 @@ object LayerImports {
         repository: CanvasRepository,
         image: PixelBuffer,
         isPrivate: Boolean = false,
+    ): Long = insertImage(repository, isPrivate) { image }
+
+    /** Captures the destination before loading pixels; neither overload takes ownership of the source. */
+    suspend fun insertImage(
+        repository: CanvasRepository,
+        isPrivate: Boolean = false,
+        decode: suspend () -> PixelBuffer,
     ): Long =
         repository
             .importLayers { destination ->
                 destination.requireCapacity(1, 1)
+                val image = decode()
+                coroutineContext.ensureActive()
                 val plane = destination.width.toLong() * destination.height * BYTES_PER_PIXEL
                 check(image.pixels.size.toLong() * BYTES_PER_PIXEL + plane * WORKING_COPIES <= importBudget()) { MEMORY_MESSAGE }
                 val fit = minOf(1f, destination.width.toFloat() / image.width, destination.height.toFloat() / image.height)
@@ -53,9 +62,17 @@ object LayerImports {
     suspend fun importPsd(
         repository: CanvasRepository,
         bytes: ByteArray,
+    ): Int = importPsd(repository) { bytes }
+
+    /** File-provider reads belong to the same destination-bound preparation as PSD decoding. */
+    suspend fun importPsd(
+        repository: CanvasRepository,
+        read: suspend () -> ByteArray,
     ): Int =
         repository
             .importLayers { destination ->
+                val bytes = read()
+                coroutineContext.ensureActive()
                 val info = PsdCodec.inspect(bytes) ?: error("This file is not a supported PSD document")
                 check(info.requiredMemoryBytes <= importBudget()) { MEMORY_MESSAGE }
                 val document = PsdCodec.read(bytes, importBudget()) ?: error("This file is not a supported PSD document")

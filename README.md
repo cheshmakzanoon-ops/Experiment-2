@@ -66,6 +66,11 @@ backup, codec, and CI hardening from [PR #40](https://github.com/cheshmakzanoon-
 - **Large canvases:** the dimension ceiling is 8,192 pixels per edge and 40 million pixels total.
   Device heap limits are stricter. One 40 MP ARGB plane alone needs 160 MB before masks, history,
   preview, and exports. These ceilings are not certified interactive workloads.
+  The display preview fits the current device's queried GLES texture limit and can reduce further
+  if a texture allocation fails. Zoom can therefore reveal a lower-resolution preview; editing
+  coordinates, document pixels, saves, and exports retain the original artwork resolution.
+  Exhausted preview uploads report an editor error. This fallback does not remove CPU memory
+  limits or qualify large canvases for interactive performance.
 - **Performance:** `StrokeTimingDeviceTest` records repository timings and excludes input delivery,
   GL upload/draw, and physical display latency. It has no speed threshold. The `benchmark` build
   type supports minified launch smoke and selected workflow qualification; it has no performance

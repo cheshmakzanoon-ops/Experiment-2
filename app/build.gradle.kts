@@ -116,6 +116,8 @@ android {
             isDebuggable = false
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
+            // Only the instrumentation APK needs these absent compile-time annotation types.
+            testProguardFiles("proguard-android-test.pro")
         }
     }
 
@@ -183,6 +185,16 @@ dependencies {
 
     // Portable MP4 container writing; no player, networking, or native codec dependency.
     implementation("androidx.media3:media3-muxer:1.10.1")
+    constraints {
+        implementation("com.google.guava:guava:33.8.0-android") {
+            // Media3 otherwise selects 33.3.1-android; keep its Android-compatible flavor.
+            because("Fix CVE-2026-102554 deserialization allocation and CVE-2026-118042 hash flooding")
+        }
+        implementation("com.squareup.okhttp3:okhttp:4.12.1") {
+            // Coil uses local files today; keep its dormant HTTP dependency maintained.
+            because("Block compromised eMudhra intermediates on devices without the Play Services trust update")
+        }
+    }
     // Update the transitive path library for current 16 KB native alignment.
     implementation("androidx.graphics:graphics-path:1.1.0")
 
@@ -315,6 +327,15 @@ detekt {
 tasks.named("check") {
     dependsOn(tasks.matching { it.name in setOf("ktlintKotlinScriptCheck", "ktlintMainSourceSetCheck", "ktlintTestSourceSetCheck") })
     dependsOn("detekt")
+}
+
+// Freeze the resolved release runtime graph. Generate/review lock changes separately from
+// inventory publication: :app:dependencies --configuration releaseRuntimeClasspath --write-locks.
+configurations.matching { it.name == "releaseRuntimeClasspath" }.configureEach {
+    resolutionStrategy.activateDependencyLocking()
+}
+dependencyLocking {
+    lockMode.set(org.gradle.api.artifacts.dsl.LockMode.STRICT)
 }
 
 apply(from = rootProject.file("gradle/release-dependencies.gradle.kts"))

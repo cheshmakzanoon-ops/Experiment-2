@@ -353,16 +353,70 @@ class ProcreateImportOwnershipTest {
     }
 
     @Test
-    fun failedPsdNavigationCannotDiscardANewerOrClaimedPayload() {
-        val original = byteArrayOf(1)
-        val replacement = byteArrayOf(2)
-        PendingImports.putPsd(8L, original)
-        PendingImports.putPsd(8L, replacement)
-        PendingImports.discardPsd(8L, original)
-        assertSame(replacement, PendingImports.takePsd(8L))
-        PendingImports.discardPsd(8L, replacement)
-        assertNull(PendingImports.takePsd(8L))
-    }
+    fun failedPsdNavigationCannotDiscardANewerOrClaimedPayload() =
+        runTest {
+            val original = byteArrayOf(1)
+            val replacement = byteArrayOf(2)
+            PendingImports.putPsd(8L, original, backgroundScope)
+            PendingImports.putPsd(8L, replacement, backgroundScope)
+            PendingImports.discardPsd(8L, original)
+            assertSame(replacement, PendingImports.takePsd(8L))
+            PendingImports.discardPsd(8L, replacement)
+            assertNull(PendingImports.takePsd(8L))
+            assertNull(PendingImports.takeNotice(8L))
+        }
+
+    @Test
+    fun anUnclaimedPsdPayloadExpiresEvenAfterNavigationReportsSuccess() =
+        runTest {
+            PendingImports.putPsd(9L, byteArrayOf(1), backgroundScope)
+            runCurrent()
+            advanceTimeBy(10 * 60 * 1000L + 1)
+            runCurrent()
+            assertNull(PendingImports.takePsd(9L))
+            assertTrue(PendingImports.takeNotice(9L).orEmpty().contains("Import the original file again"))
+        }
+
+    @Test
+    fun clearingTheGalleryOwnerReleasesOnlyItsUnclaimedPsdPayloads() =
+        runTest {
+            val owner = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
+            val claimed = byteArrayOf(1)
+            PendingImports.putPsd(10L, claimed, owner)
+            PendingImports.putPsd(11L, byteArrayOf(2), owner)
+            assertSame(claimed, PendingImports.takePsd(10L))
+            owner.cancel()
+            runCurrent()
+            assertNull(PendingImports.takePsd(10L))
+            assertNull(PendingImports.takeNotice(10L))
+            assertNull(PendingImports.takePsd(11L))
+            assertNotNull(PendingImports.takeNotice(11L))
+            assertEquals(1, claimed.single().toInt())
+        }
+
+    @Test
+    fun anOldGalleryOwnerCannotExpireAReplacementPsdPayload() =
+        runTest {
+            val owner = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
+            val replacement = byteArrayOf(2)
+            PendingImports.putPsd(12L, byteArrayOf(1), owner)
+            PendingImports.putPsd(12L, replacement, backgroundScope)
+            owner.cancel()
+            runCurrent()
+            assertSame(replacement, PendingImports.takePsd(12L))
+            assertNull(PendingImports.takeNotice(12L))
+        }
+
+    @Test
+    fun anAlreadyCancelledGalleryOwnerCannotRetainAPsdPayload() =
+        runTest {
+            val owner = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
+            owner.cancel()
+            PendingImports.putPsd(13L, byteArrayOf(1), owner)
+            runCurrent()
+            assertNull(PendingImports.takePsd(13L))
+            assertNotNull(PendingImports.takeNotice(13L))
+        }
 
     private fun source(): ByteArrayInputStream = ByteArrayInputStream(bytes())
 

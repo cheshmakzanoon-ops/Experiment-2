@@ -56,6 +56,7 @@ import com.artflow.studio.core.color.ViewFilter
 import com.artflow.studio.core.export.readAtMost
 import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.LiveAdjustments
+import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.Quad
 import com.artflow.studio.core.pixels.WarpMesh
 import com.artflow.studio.core.text.TextLayerContent
@@ -161,6 +162,7 @@ import com.artflow.studio.presentation.ui.components.editor.isWideLayout
 import com.artflow.studio.presentation.ui.components.editor.studioButton
 import com.artflow.studio.presentation.ui.components.export.ExportSheet
 import com.artflow.studio.presentation.ui.components.export.rememberExportActions
+import com.artflow.studio.presentation.ui.viewmodel.CanvasImportController
 import com.artflow.studio.presentation.ui.viewmodel.CanvasUiState
 import com.artflow.studio.presentation.ui.viewmodel.CanvasViewModel
 import kotlinx.coroutines.launch
@@ -326,31 +328,52 @@ fun CanvasScreen(
         }
     val context = androidx.compose.ui.platform.LocalContext.current
     // Picked or dropped pictures become a new layer.
-    var insertPrivately by remember { mutableStateOf(false) }
+    // Keep each launcher's token until its own result arrives, even after navigation cancels it.
+    var photoRequest by remember { mutableStateOf<CanvasImportController.Request<PixelBuffer>?>(null) }
+    var psdRequest by remember { mutableStateOf<CanvasImportController.Request<ByteArray>?>(null) }
+    var cameraRequest by remember { mutableStateOf<CanvasImportController.Request<PixelBuffer>?>(null) }
+    DisposableEffect(viewModel, projectId) {
+        onDispose { viewModel.imports.cancel() }
+    }
     val insertImageFrom = { uri: android.net.Uri ->
-        val private = insertPrivately
-        insertPrivately = false
-        scope.launch {
-            val image =
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    runCatching {
-                        com.artflow.studio.data.renderer.BitmapPixelBridge
-                            .decodeUri(context.contentResolver, uri)
-                    }.getOrNull()
-                }
-            when {
-                image == null -> viewModel.notify("That image could not be opened")
-                private -> viewModel.insertPrivateImageLayer(image)
-                else -> viewModel.insertImageLayer(image)
-            }
+        canvasView?.cancelActiveGesture()
+        viewModel.imports.beginImage().complete {
+            BitmapPixelBridge.decodeUri(context.contentResolver, uri)
         }
-        Unit
     }
     val photoPicker =
         rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-            if (uri != null) insertImageFrom(uri)
+            val request = photoRequest
+            photoRequest = null
+            if (uri == null) {
+                request?.cancel()
+            } else {
+                request?.complete { BitmapPixelBridge.decodeUri(context.contentResolver, uri) }
+            }
         }
-    val takePhoto = rememberCameraCapture(onImage = viewModel::insertImageLayer, onError = viewModel::notify)
+    val capturePhoto =
+        rememberCameraCapture(
+            onImage = { image ->
+                cameraRequest?.complete { image }
+                cameraRequest = null
+            },
+            onError = { message ->
+                cameraRequest?.cancel()
+                cameraRequest = null
+                viewModel.notify(message)
+            },
+            onCancelled = {
+                cameraRequest?.cancel()
+                cameraRequest = null
+            },
+        )
+    val takePhoto = {
+        if (cameraRequest == null) {
+            canvasView?.cancelActiveGesture()
+            cameraRequest = viewModel.imports.beginImage()
+            capturePhoto()
+        }
+    }
     val paletteImports = rememberPaletteImports(onPalette = viewModel.paletteActions::addFromColors, onError = viewModel::notify)
     var importedFonts by remember { mutableStateOf(FontLibrary.families(context)) }
     val fontPicker =
@@ -382,39 +405,56 @@ fun CanvasScreen(
     }
     val psdPicker =
         rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-            if (uri == null) return@rememberLauncherForActivityResult
-            scope.launch {
-                val bytes =
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        runCatching {
-                            context.contentResolver.openInputStream(uri)?.use { stream ->
-                                stream.readAtMost(MAX_PSD_IMPORT_BYTES)
-                            }
-                        }.getOrNull()
-                    }
-                if (bytes == null) viewModel.notify("That PSD could not be opened (maximum 256 MB)") else viewModel.importPsd(bytes)
+            val request = psdRequest
+            psdRequest = null
+            if (uri == null) {
+                request?.cancel()
+            } else {
+                request?.complete {
+                    context.contentResolver.openInputStream(uri)?.use { it.readAtMost(MAX_PSD_IMPORT_BYTES) }
+                }
             }
         }
+
+    @Suppress("TooGenericExceptionCaught") // Activity-result providers can fail at launch; always retire their request.
     val importPsd = {
-        canvasView?.cancelActiveGesture()
-        try {
-            psdPicker.launch("*/*")
-        } catch (missing: ActivityNotFoundException) {
-            viewModel.notify("No file picker is available on this device")
+        if (psdRequest == null) {
+            canvasView?.cancelActiveGesture()
+            psdRequest = viewModel.imports.beginPsd()
+            try {
+                psdPicker.launch("*/*")
+            } catch (missing: ActivityNotFoundException) {
+                psdRequest?.cancel()
+                psdRequest = null
+                viewModel.notify("No file picker is available on this device")
+            } catch (error: Exception) {
+                psdRequest?.cancel()
+                psdRequest = null
+                viewModel.notify("The file picker could not be opened")
+            }
         }
     }
-    val insertPhoto = {
-        canvasView?.cancelActiveGesture()
-        try {
-            photoPicker.launch("image/*")
-        } catch (missing: ActivityNotFoundException) {
-            viewModel.notify("No image picker is available on this device")
+
+    @Suppress("TooGenericExceptionCaught") // Activity-result providers can fail at launch; always retire their request.
+    val launchPhoto = { isPrivate: Boolean ->
+        if (photoRequest == null) {
+            canvasView?.cancelActiveGesture()
+            photoRequest = viewModel.imports.beginImage(isPrivate)
+            try {
+                photoPicker.launch("image/*")
+            } catch (missing: ActivityNotFoundException) {
+                photoRequest?.cancel()
+                photoRequest = null
+                viewModel.notify("No image picker is available on this device")
+            } catch (error: Exception) {
+                photoRequest?.cancel()
+                photoRequest = null
+                viewModel.notify("The image picker could not be opened")
+            }
         }
     }
-    val insertPrivatePhoto = {
-        insertPrivately = true
-        insertPhoto()
-    }
+    val insertPhoto = { launchPhoto(false) }
+    val insertPrivatePhoto = { launchPhoto(true) }
     val importReference = {
         canvasView?.cancelActiveGesture()
         referenceImportProject = projectId

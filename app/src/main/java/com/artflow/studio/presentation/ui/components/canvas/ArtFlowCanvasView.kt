@@ -576,6 +576,7 @@ class ArtFlowCanvasView
 
         override fun onAttachedToWindow() {
             super.onAttachedToWindow()
+            renderer.onStatusMessage = { message -> post { if (isAttachedToWindow) onStatusMessage?.invoke(message) } }
             if (!rendererAttached) {
                 setRenderer(renderer)
                 renderMode = RENDERMODE_WHEN_DIRTY
@@ -680,6 +681,7 @@ class ArtFlowCanvasView
             coroutineScope.cancel()
             observingInvalidations = false
             super.onDetachedFromWindow() // waits for the GL thread to stop
+            renderer.onStatusMessage = null
             renderer.dispose()
         }
 

@@ -288,6 +288,7 @@ class CanvasViewModel
 
         fun open(projectId: Long) {
             if (currentProjectId == projectId && _uiState.value is CanvasUiState.Ready) return
+            imports.cancel()
             cancelText()
             loadJob?.cancel()
             autosaveJob?.cancel()
@@ -906,14 +907,10 @@ class CanvasViewModel
         }
 
         /** Adds [image] as a new layer, centred and scaled down to fit the canvas if needed. */
-        fun insertImageLayer(image: PixelBuffer) = layerOp { LayerImports.insertImage(canvasRepository, image) }
+        fun insertImageLayer(image: PixelBuffer) = imports.insertImage(image)
 
         /** Procreate's Insert a private photo: a photo layer the time-lapse never shows. */
-        fun insertPrivateImageLayer(image: PixelBuffer) =
-            layerOp {
-                LayerImports.insertImage(canvasRepository, image, isPrivate = true)
-                notify("Private photo added: it is part of the artwork but stays out of the time-lapse")
-            }
+        fun insertPrivateImageLayer(image: PixelBuffer) = imports.insertImage(image, isPrivate = true)
 
         fun setLayerPrivate(
             layerId: Long,
@@ -927,6 +924,7 @@ class CanvasViewModel
 
         /** Cut, copy, paste, clear and fill (Copy & Paste menu and layer options). */
         val clipboard = ClipboardController(canvasRepository, ::layerOp)
+        val imports = CanvasImportController(canvasRepository, viewModelScope + editorErrors, ::notify, ::refreshLayers)
         val savedSelections = SavedSelections(canvasRepository) { refreshSelection() }
         val textLayers = TextLayerController(canvasRepository, ::layerOp)
         val layerBatch = LayerBatchController(canvasRepository, ::layerOp)
@@ -958,8 +956,7 @@ class CanvasViewModel
         fun duplicateActiveLayer() = duplicateLayer(canvasRepository.getActiveLayerId())
 
         /** Adds every layer of a Photoshop document as new layers, centred on the canvas. */
-        fun importPsd(bytes: ByteArray) =
-            layerOp { notify("Imported ${LayerImports.importPsd(canvasRepository, bytes)} layer(s) from PSD") }
+        fun importPsd(bytes: ByteArray) = imports.importPsd(bytes)
 
         /** Rebuilds a Procreate document's layers in this (new) canvas, then lets the file go. */
         private fun importProcreate(document: ProcreateImport) {
@@ -1609,6 +1606,7 @@ class CanvasViewModel
 
         override fun onCleared() {
             super.onCleared()
+            imports.cancel()
             loadJob?.cancel()
             observationJob?.cancel()
             autosaveJob?.cancel()

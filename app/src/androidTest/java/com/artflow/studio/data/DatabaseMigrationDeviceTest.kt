@@ -100,7 +100,7 @@ class DatabaseMigrationDeviceTest {
 
             val failure = openingFailure(requireNotNull(database))
             assertTrue("Missing migration must fail explicitly: $failure", failure is IllegalStateException)
-            assertTrue(failure?.message.orEmpty().contains("migration", ignoreCase = true))
+            assertTrue(failure?.message.orEmpty().contains("A migration from 1 to 2 was required but not found"))
             closeDatabase()
             assertEquals("A rejected open must leave version 1 and every row intact", before, fixture.databaseSnapshot())
             assertEquals(filesBefore, fixture.filesSnapshot())
@@ -122,7 +122,11 @@ class DatabaseMigrationDeviceTest {
 
             val failure = openingFailure(openProductionDatabase())
             assertTrue("An incompatible schema must fail validation: $failure", failure is IllegalStateException)
-            assertTrue(failure?.message.orEmpty().contains("migration", ignoreCase = true))
+            assertTrue(
+                "The registered migration must run and reach project-schema validation: $failure",
+                failure?.message.orEmpty().contains("Migration didn't properly handle: projects("),
+            )
+            assertTrue(failure?.message.orEmpty().contains("incompatible"))
             closeDatabase()
             assertEquals(
                 "The failed ALTER/validation transaction must restore version, identity, schema, rows, and sequences",
@@ -142,7 +146,7 @@ class DatabaseMigrationDeviceTest {
 
             val failure = openingFailure(openProductionDatabase())
             assertTrue("The production provider must refuse an unsupported downgrade: $failure", failure is IllegalStateException)
-            assertTrue(failure?.message.orEmpty().contains("migration", ignoreCase = true))
+            assertTrue(failure?.message.orEmpty().contains("A migration from 3 to 2 was required but not found"))
             closeDatabase()
             assertEquals(
                 "The production provider must never replace an unknown database with empty tables",
@@ -165,6 +169,11 @@ class DatabaseMigrationDeviceTest {
     private suspend fun assertDatabaseValid(opened: ArtFlowDatabase) =
         withContext(Dispatchers.IO) {
             val sqlite = opened.openHelper.writableDatabase
+            assertEquals(
+                "The production provider must open the fixture's isolated database",
+                fixture.context.getDatabasePath(ArtFlowDatabase.DATABASE_NAME).canonicalPath,
+                File(sqlite.path).canonicalPath,
+            )
             assertEquals(2, sqlite.version)
             sqlite.query("PRAGMA quick_check").use { cursor ->
                 assertTrue(cursor.moveToFirst())

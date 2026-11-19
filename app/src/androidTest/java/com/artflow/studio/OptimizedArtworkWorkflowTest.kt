@@ -10,6 +10,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artflow.studio.data.local.ProjectStorage
+import com.artflow.studio.data.local.database.ArtFlowDatabase
 import com.artflow.studio.domain.model.settings.ThemeMode
 import com.artflow.studio.domain.repository.ProjectRepository
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
@@ -54,6 +55,8 @@ class OptimizedArtworkWorkflowTest {
 
     @Inject lateinit var storage: ProjectStorage
 
+    @Inject lateinit var database: ArtFlowDatabase
+
     @Before
     fun setup() {
         hilt.inject()
@@ -61,6 +64,7 @@ class OptimizedArtworkWorkflowTest {
 
     @Test
     fun realPointerPaintSurvivesSaveFreshActivityReopenAndUiPngExport() {
+        if (PackageUpgradeWorkflow(compose, projects, canvas, settings, storage, database).runIfRequested()) return
         val originalSettings = runBlocking { settings.settings.first() }
         val name = "Optimized-workflow-${System.nanoTime()}"
         runBlocking {
@@ -131,6 +135,14 @@ class OptimizedArtworkWorkflowTest {
         compose.onNodeWithText("Share").performScrollTo().performClick()
         compose.onNodeWithText("Share or export artwork…").performScrollTo().performClick()
         compose.onNodeWithText("PNG").performScrollTo().performClick()
+        // The editor composite includes its white paper. PNG defaults to transparent export;
+        // select the matching opaque mode through the UI before comparing every decoded pixel.
+        compose
+            .onNode(isToggleable() and hasAnySibling(hasText("Flatten onto white")), useUnmergedTree = true)
+            .performScrollTo()
+            .assertIsOff()
+            .performClick()
+            .assertIsOn()
         compose.onNodeWithText("File name (optional)").performScrollTo().performTextReplacement("optimized-reopen")
         compose.onNodeWithText("Export PNG").performScrollTo().performClick()
         val exported = File(storage.exportsDir(projectId), "optimized-reopen.png")

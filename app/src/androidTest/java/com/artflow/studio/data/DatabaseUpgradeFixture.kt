@@ -2,6 +2,7 @@ package com.artflow.studio.data
 
 import android.content.Context
 import android.content.ContextWrapper
+import android.database.Cursor
 import android.database.DatabaseErrorHandler
 import android.database.sqlite.SQLiteDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
@@ -343,11 +344,23 @@ internal class DatabaseUpgradeFixture(
     private fun rows(
         db: SQLiteDatabase,
         sql: String,
-    ): List<List<String?>> =
+    ): List<List<Any?>> =
         db.rawQuery(sql, null).use { cursor ->
             buildList {
                 while (cursor.moveToNext()) {
-                    add(List(cursor.columnCount) { if (cursor.isNull(it)) null else cursor.getString(it) })
+                    add(
+                        List(cursor.columnCount) { column ->
+                            // Text coercion can hide changed storage classes or round a REAL value.
+                            when (cursor.getType(column)) {
+                                Cursor.FIELD_TYPE_NULL -> null
+                                Cursor.FIELD_TYPE_INTEGER -> cursor.getLong(column)
+                                Cursor.FIELD_TYPE_FLOAT -> cursor.getDouble(column)
+                                Cursor.FIELD_TYPE_STRING -> cursor.getString(column)
+                                Cursor.FIELD_TYPE_BLOB -> cursor.getBlob(column).toList()
+                                else -> error("Unknown SQLite value type in column $column")
+                            }
+                        },
+                    )
                 }
             }
         }
@@ -357,8 +370,8 @@ internal class DatabaseUpgradeFixture(
 
     data class DatabaseSnapshot(
         val version: Int,
-        val schema: List<List<String?>>,
-        val tables: Map<String, List<List<String?>>>,
+        val schema: List<List<Any?>>,
+        val tables: Map<String, List<List<Any?>>>,
     )
 
     companion object {

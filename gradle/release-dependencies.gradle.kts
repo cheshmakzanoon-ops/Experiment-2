@@ -66,6 +66,31 @@ fun dependencyParentPom(file: File): String? {
     return parts.takeIf { values -> values.all { it.matches(Regex("[A-Za-z0-9_.-]+")) } }?.joinToString(":")
 }
 
+val dependencyInputPaths =
+    listOf(
+        "build.gradle.kts",
+        "settings.gradle.kts",
+        "app/build.gradle.kts",
+        "gradle.properties",
+        "gradle/wrapper/gradle-wrapper.properties",
+        "gradle/release-dependencies.gradle.kts",
+        "gradle/libs.versions.toml",
+        "gradle/verification-metadata.xml",
+        "gradle.lockfile",
+        "app/gradle.lockfile",
+    )
+
+fun dependencyBuildInputs(): Map<String, String> =
+    dependencyInputPaths
+        .filter { rootProject.file(it).isFile }
+        .associateWith { dependencySha256(rootProject.file(it)) }
+        .toSortedMap()
+
+// Capture while the build script is being applied, before task execution/resolution. Reading
+// these only after the POM queries would falsely attribute an earlier graph to files edited
+// during the task. The checks below also catch optional inputs being added or removed.
+val configuredDependencyBuildInputs = dependencyBuildInputs()
+
 tasks.register("writeReleaseDependencyInventory") {
     group = "verification"
     description = "Record the resolved release runtime graph, artifact SHA-256s and raw Maven POM evidence."
@@ -81,6 +106,18 @@ tasks.register("writeReleaseDependencyInventory") {
     doLast {
         val output = reportFile.get().asFile
         output.delete()
+        fun verifyBuildInputsUnchanged() {
+            val current = dependencyBuildInputs()
+            val changed =
+                (configuredDependencyBuildInputs.keys + current.keys)
+                    .filter { configuredDependencyBuildInputs[it] != current[it] }
+                    .sorted()
+            check(changed.isEmpty()) {
+                "Dependency build inputs changed after configuration: ${changed.joinToString()}. " +
+                    "Rerun writeReleaseDependencyInventory with stable build inputs."
+            }
+        }
+        verifyBuildInputsUnchanged()
         val pomOutput = pomDirectory.get().asFile
         pomOutput.deleteRecursively()
         check(pomOutput.mkdirs()) { "Cannot create POM evidence directory" }
@@ -189,32 +226,19 @@ tasks.register("writeReleaseDependencyInventory") {
                     )
                 }.distinct()
                 .sortedBy { "${it["from"]}:${it["to"]}:${it["requested"]}:${it["constraint"]}" }
-        val inputPaths =
-            listOf(
-                "build.gradle.kts",
-                "settings.gradle.kts",
-                "app/build.gradle.kts",
-                "gradle.properties",
-                "gradle/wrapper/gradle-wrapper.properties",
-                "gradle/release-dependencies.gradle.kts",
-                "gradle/libs.versions.toml",
-                "gradle/verification-metadata.xml",
-                "gradle.lockfile",
-                "app/gradle.lockfile",
-            )
-        val buildInputs = inputPaths.filter { rootProject.file(it).isFile }.associateWith { dependencySha256(rootProject.file(it)) }
         val inventory =
             mapOf(
                 "schemaVersion" to 1,
                 "configuration" to configuration.name,
                 "project" to project.path,
                 "root" to rootRef,
-                "buildInputs" to buildInputs.toSortedMap(),
+                "buildInputs" to configuredDependencyBuildInputs,
                 "components" to components,
                 "edges" to edges,
                 "poms" to poms.values.toList(),
                 "unresolved" to emptyList<String>(),
             )
+        verifyBuildInputsUnchanged()
         output.writeText(JsonOutput.prettyPrint(JsonOutput.toJson(inventory)) + "\n", Charsets.UTF_8)
         logger.lifecycle("Recorded ${components.size} release components and ${artifacts.values.sumOf { it.size }} artifacts in $output")
     }

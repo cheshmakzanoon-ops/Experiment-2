@@ -260,10 +260,17 @@ object BitmapPixelBridge {
                     }
                 resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
             } ?: return null
-        val software = if (bitmap.config == Bitmap.Config.ARGB_8888) bitmap else bitmap.copy(Bitmap.Config.ARGB_8888, false)
-        val decoded = fromBitmap(software)
-        if (software !== bitmap) software.recycle()
-        bitmap.recycle()
+        val decoded =
+            try {
+                val software = if (bitmap.config == Bitmap.Config.ARGB_8888) bitmap else bitmap.copy(Bitmap.Config.ARGB_8888, false)
+                try {
+                    fromBitmap(software)
+                } finally {
+                    if (software !== bitmap) software.recycle()
+                }
+            } finally {
+                bitmap.recycle()
+            }
         return if (decoded.width > maxDimension || decoded.height > maxDimension) {
             val scale = maxDimension.toFloat() / maxOf(decoded.width, decoded.height)
             decoded.scaled((decoded.width * scale).toInt().coerceAtLeast(1), (decoded.height * scale).toInt().coerceAtLeast(1))

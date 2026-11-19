@@ -20,7 +20,8 @@ import kotlin.math.min
  * correctly flattened composite. Disabled masks retain their editable coverage.
  * Supported on read: raw, RLE and ZIP-compressed channel data, 8- and 16-bit depth (16-bit is
  * downsampled to 8), grayscale/RGB/CMYK colour modes, layer groups (flattened into their layers),
- * and the composite image data when layers are missing.
+ * and the composite image data when layers are missing. CMYK conversion is an unprofiled
+ * approximation; embedded ICC profiles and spot-color appearance are not reproduced.
  */
 object PsdCodec {
     const val SIGNATURE = "8BPS"
@@ -35,6 +36,8 @@ object PsdCodec {
 
     /** The most channels a PSD may have (the format's limit), which bounds every per-channel allocation. */
     private const val MAX_CHANNELS = 56
+    private val PSB_WIDE_BLOCKS =
+        setOf("LMsk", "Lr16", "Lr32", "Layr", "Mt16", "Mt32", "Mtrn", "Alph", "FMsk", "lnk2", "FEid", "FXid", "PxSD")
 
     private const val COMPRESSION_RAW = 0
     private const val COMPRESSION_RLE = 1
@@ -452,6 +455,8 @@ object PsdCodec {
         val dpi: Int,
         /** Includes the supplied bytes, retained rasters/masks and the largest decoding workspace. */
         val requiredMemoryBytes: Long,
+        /** Only explicit PSD transparency metadata identifies an extra channel as image alpha. */
+        val hasMergedTransparency: Boolean = false,
     )
 
     /** Leaves room for the open artwork, undo, rendering and the rest of the application. */
@@ -494,25 +499,8 @@ object PsdCodec {
         val sectionLength = if (isPsb) reader.readLong() else reader.readInt().toLong()
         if (sectionLength !in 0L..reader.remaining().toLong()) return null
         val sectionEnd = reader.position + sectionLength.toInt()
-        val pending = mutableListOf<PendingLayer>()
-        if (sectionLength > 0L) {
-            if (sectionLength < if (isPsb) 8 else 4) return null
-            val layerLength = if (isPsb) reader.readLong() else reader.readInt().toLong()
-            if (layerLength !in 0L..(sectionEnd - reader.position).toLong()) return null
-            if (layerLength > 0L) {
-                if (layerLength < 2) return null
-                val layerEnd = reader.position + layerLength.toInt()
-                val count = kotlin.math.abs(reader.readShort().toShort().toInt())
-                if (count > 1024) return null
-                repeat(count) { index ->
-                    if (reader.position >= layerEnd) return null
-                    pending += readSingleLayerPending(reader, index, isPsb) ?: return null
-                    if (reader.position > layerEnd) return null
-                }
-                val channelBytes = pending.sumOf { record -> record.channels.sumOf { it.second.toLong() } }
-                if (channelBytes > layerEnd - reader.position) return null
-            }
-        }
+        val (pending, hasMergedTransparency) = inspectLayerMetadata(reader, sectionEnd, depth, isPsb)
+        require(!hasMergedTransparency || channels > colorChannelCount(colorMode)) { "Missing PSD merged transparency channel" }
         reader.position = sectionEnd
         var retained = bytes.size.toLong()
         var workspace = 0L
@@ -527,9 +515,48 @@ object PsdCodec {
             // ZIP holds a whole merged stream plus per-channel copies; 16-bit reduction
             // temporarily retains both sample depths. The bound also covers raw/RLE paths.
             val raw = pixels * channels * (depth / 8)
-            workspace = maxOf(workspace, raw * 4 + reader.remaining() + width.toLong() * 2 + 8192)
+            val rowTable = height.toLong() * channels * 4
+            workspace = maxOf(workspace, raw * 4 + reader.remaining() + rowTable + width.toLong() * 2 + 8192)
         }
-        return ReadInfo(width, height, dpi, retained + workspace)
+        return ReadInfo(width, height, dpi, retained + workspace, hasMergedTransparency)
+    }
+
+    private data class LayerReadMetadata(
+        val layers: List<PendingLayer>,
+        val hasMergedTransparency: Boolean,
+    )
+
+    /** Inspects layer metadata and all declared channel extents without allocating pixel planes. */
+    private fun inspectLayerMetadata(
+        reader: PsdReader,
+        sectionEnd: Int,
+        depth: Int,
+        isPsb: Boolean,
+    ): LayerReadMetadata {
+        if (reader.position == sectionEnd) return LayerReadMetadata(emptyList(), false)
+        require(sectionEnd - reader.position >= if (isPsb) 8 else 4) { "Truncated PSD layer info length" }
+        val layerLength = if (isPsb) reader.readLong() else reader.readInt().toLong()
+        require(layerLength in 0L..(sectionEnd - reader.position).toLong()) { "Invalid PSD layer info length" }
+        val pending = mutableListOf<PendingLayer>()
+        var hasMergedTransparency = false
+        if (layerLength > 0L) {
+            require(layerLength >= 2L) { "Truncated PSD layer count" }
+            val layerEnd = reader.position + layerLength.toInt()
+            val signedCount = reader.readShort().toShort().toInt()
+            hasMergedTransparency = signedCount < 0
+            val count = kotlin.math.abs(signedCount)
+            require(count <= 1024) { "Too many PSD layers" }
+            repeat(count) { index ->
+                require(reader.position < layerEnd) { "Truncated PSD layer record" }
+                pending += requireNotNull(readSingleLayerPending(reader, index, isPsb)) { "Truncated PSD layer record" }
+                require(reader.position <= layerEnd) { "PSD layer record exceeds layer info" }
+            }
+            val channelBytes = pending.sumOf { record -> record.channels.sumOf { it.second.toLong() } }
+            require(channelBytes <= layerEnd - reader.position) { "PSD channel payload exceeds layer info" }
+            reader.position = layerEnd
+        }
+        hasMergedTransparency = readMergedTransparencyMarker(reader, sectionEnd, depth, isPsb) || hasMergedTransparency
+        return LayerReadMetadata(pending, hasMergedTransparency)
     }
 
     private fun isSupportedReadHeader(
@@ -540,9 +567,68 @@ object PsdCodec {
         colorMode: Int,
     ): Boolean =
         CanvasOperations.isSizeSafe(width, height) &&
-            channels in 1..MAX_CHANNELS &&
+            channels in colorChannelCount(colorMode)..MAX_CHANNELS &&
             (depth == DEPTH_8 || depth == DEPTH_16) &&
             colorMode in setOf(COLOR_MODE_RGB, COLOR_MODE_GRAYSCALE, COLOR_MODE_CMYK)
+
+    private fun colorChannelCount(colorMode: Int): Int =
+        when (colorMode) {
+            COLOR_MODE_GRAYSCALE -> 1
+            COLOR_MODE_RGB -> 3
+            COLOR_MODE_CMYK -> 4
+            else -> MAX_CHANNELS + 1
+        }
+
+    /** Mtrn/Mt16 identify merged transparency even when the primary layer count is zero. */
+    private fun readMergedTransparencyMarker(
+        reader: PsdReader,
+        sectionEnd: Int,
+        depth: Int,
+        isPsb: Boolean,
+    ): Boolean {
+        // Older writers omit the empty global-mask field entirely.
+        if (reader.position == sectionEnd) return false
+        require(sectionEnd - reader.position >= 4) { "Truncated PSD global mask length" }
+        val firstField = reader.readAscii(4)
+        reader.position -= 4
+        if (firstField != "8BIM" && firstField != "8B64") {
+            val maskLength = reader.readInt()
+            require(maskLength in 0..(sectionEnd - reader.position)) { "Invalid PSD global mask length" }
+            reader.skip(maskLength)
+        }
+        var hasTransparency = false
+        while (reader.position < sectionEnd) {
+            // Adobe specifies even padding; Photoshop global blocks also use four-byte padding.
+            var padding = 0
+            while (reader.position < sectionEnd && padding < 3) {
+                if (reader.readByte() != 0) {
+                    reader.position--
+                    break
+                }
+                padding++
+            }
+            if (reader.position == sectionEnd) break
+            require(sectionEnd - reader.position >= 12) { "Truncated PSD global tagged block" }
+            val signature = reader.readAscii(4)
+            require(signature == "8BIM" || signature == "8B64") { "Invalid PSD global tagged block signature" }
+            val key = reader.readAscii(4)
+            val wideLength = signature == "8B64" || (isPsb && key in PSB_WIDE_BLOCKS)
+            require(sectionEnd - reader.position >= if (wideLength) 8 else 4) { "Truncated PSD global tagged block length" }
+            val length = if (wideLength) reader.readLong() else reader.readInt().toLong()
+            require(length in 0L..(sectionEnd - reader.position).toLong()) { "Invalid PSD global tagged block length" }
+            val blockEnd = reader.position + length.toInt()
+            if (key == if (depth == DEPTH_16) "Mt16" else "Mtrn") {
+                require(length == 0L) { "Invalid PSD merged transparency marker" }
+                hasTransparency = true
+            } else if (key == if (depth == DEPTH_16) "Lr16" else "Layr") {
+                // Deep documents may move their layer info out of the primary section.
+                require(length >= 2L) { "Truncated PSD alternate layer count" }
+                hasTransparency = (reader.readShort().toShort() < 0) || hasTransparency
+            }
+            reader.position = blockEnd
+        }
+        return hasTransparency
+    }
 
     private fun layerReadMemory(
         record: PendingLayer,
@@ -583,10 +669,8 @@ object PsdCodec {
         if (bytes.size.toLong() > memoryBudgetBytes) return null
         val info = inspect(bytes) ?: return null
         if (info.requiredMemoryBytes > memoryBudgetBytes) return null
-        if (bytes.size < 26) return null
-        val sig = String(bytes, 0, 4, Charsets.US_ASCII)
-        if (sig != SIGNATURE && sig != SIGNATURE_PSB) return null
 
+        // Metadata inspection has already validated the complete header and signature.
         val reader = PsdReader(bytes)
         reader.position = 4
         val version = reader.readShort()
@@ -598,9 +682,7 @@ object PsdCodec {
         val width = reader.readInt()
         val depth = reader.readShort()
         val colorMode = reader.readShort()
-        if (!CanvasOperations.isSizeSafe(width, height)) return null
-        if (channelCount !in 1..MAX_CHANNELS) return null
-        if (colorMode !in setOf(COLOR_MODE_RGB, COLOR_MODE_GRAYSCALE, COLOR_MODE_CMYK)) return null
+        if (!isSupportedReadHeader(width, height, channelCount, depth, colorMode)) return null
 
         // Colour mode data.
         val colorModeLength = reader.readInt()
@@ -621,16 +703,12 @@ object PsdCodec {
         val layerAndMaskLength = if (isPsb) reader.readLong() else reader.readInt().toLong()
         if (layerAndMaskLength < 0 || layerAndMaskLength > reader.remaining()) return null
         val layers = mutableListOf<PsdLayer>()
-        var hasMergedTransparency = false
         if (layerAndMaskLength > 0) {
             val sectionEnd = (reader.position + layerAndMaskLength).toInt().coerceAtMost(reader.position + reader.remaining())
             val layerInfoLength = if (isPsb) reader.readLong() else reader.readInt().toLong()
             if (layerInfoLength < 0 || layerInfoLength > reader.remaining()) return null
             if (layerInfoLength > 0) {
                 val layerInfoEnd = (reader.position + layerInfoLength).toInt().coerceAtMost(sectionEnd)
-                val recordsStart = reader.position
-                hasMergedTransparency = reader.readShort().toShort() < 0
-                reader.position = recordsStart
                 // A damaged layer record is a damaged file: the document reads as not a PSD, as documented.
                 layers +=
                     try {
@@ -644,9 +722,14 @@ object PsdCodec {
         }
 
         // Image data (composite).
+        if (reader.remaining() == 1) return null
         val composite =
             if (reader.remaining() >= 2) {
-                readImageData(reader, width, height, channelCount, depth, colorMode, hasMergedTransparency, isPsb)
+                try {
+                    readImageData(reader, width, height, channelCount, depth, colorMode, info.hasMergedTransparency, isPsb) ?: return null
+                } catch (_: IllegalArgumentException) {
+                    return null
+                }
             } else {
                 null
             }
@@ -1055,13 +1138,15 @@ object PsdCodec {
         isPsb: Boolean = false,
     ): PixelBuffer? {
         val compression = reader.readShort()
-        val planes = readMergedPlanes(reader, compression, channelCount, width, height, depth, colorMode, isPsb) ?: return null
+        val planes = readMergedPlanes(reader, compression, channelCount, width, height, depth, isPsb) ?: return null
 
         val buffer = PixelBuffer(width, height)
         val red = planes[CHANNEL_RED]
         val green = planes[CHANNEL_GREEN]
         val blue = planes[CHANNEL_BLUE]
-        val alpha = planes[CHANNEL_ALPHA]
+        // PSD stores base color channels first, then transparency (when explicitly marked),
+        // then arbitrary saved selections/spot channels. Those extras must never replace alpha.
+        val alpha = if (hasMergedTransparency) planes[colorChannelCount(colorMode)] else null
         if (colorMode == COLOR_MODE_CMYK) {
             val c = planes[0]
             val m = planes[1]
@@ -1069,9 +1154,10 @@ object PsdCodec {
             val k = planes[3]
             for (index in buffer.pixels.indices) {
                 val kk = k?.getOrNull(index)?.toInt()?.and(0xFF) ?: 0
+                val a = alpha?.getOrNull(index)?.toInt()?.and(0xFF) ?: 255
                 buffer.pixels[index] =
                     Channels.argb(
-                        255,
+                        a,
                         cmykToRgb(c, index, kk),
                         cmykToRgb(m, index, kk),
                         cmykToRgb(y, index, kk),
@@ -1086,7 +1172,7 @@ object PsdCodec {
             val b = if (colorMode == COLOR_MODE_GRAYSCALE) r else channelValue(blue, index, colorMode)
             val a = alpha?.getOrNull(index)?.toInt()?.and(0xFF) ?: 255
             buffer.pixels[index] =
-                if (hasMergedTransparency && colorMode == COLOR_MODE_RGB) {
+                if (hasMergedTransparency) {
                     Channels.argb(a, removeWhiteMatte(r, a), removeWhiteMatte(g, a), removeWhiteMatte(b, a))
                 } else {
                     Channels.argb(a, r, g, b)
@@ -1095,20 +1181,20 @@ object PsdCodec {
         return buffer
     }
 
-    /** Inverse of the merged RGB white matte, with the expected 8-bit quantization at low alpha. */
+    /** Inverse of the merged RGB/grayscale white matte, with 8-bit quantization at low alpha. */
     private fun removeWhiteMatte(
         value: Int,
         alpha: Int,
     ): Int = if (alpha in 1..254) ((255 * (value + alpha - 255) + alpha / 2) / alpha).coerceIn(0, 255) else value
 
-    /** One CMYK component (0..255 inverted) to an 8-bit RGB channel. */
+    /** Unprofiled CMYK approximation: PSD stores 255 for no ink and 0 for full ink. */
     private fun cmykToRgb(
         plane: ByteArray?,
         index: Int,
         black: Int,
     ): Int {
         val component = plane?.getOrNull(index)?.toInt()?.and(0xFF) ?: 0
-        return (255 - min(255, component + black)).coerceIn(0, 255)
+        return (component * black + 127) / 255
     }
 
     /**
@@ -1152,7 +1238,7 @@ object PsdCodec {
                     // A 16-bit row holds two bytes per pixel, so it is decoded at its full width before downsampling.
                     val out = ByteArray(planeBytes)
                     for (row in 0 until height) {
-                        val decoded = decodeChannelRleRow(reader, rowBytes, reader.position + rowLengths[row])
+                        val decoded = decodeRleRow(reader, rowBytes, reader.position + rowLengths[row])
                         System.arraycopy(decoded, 0, out, row * rowBytes, rowBytes)
                     }
                     downsample(out, width, height, depth)
@@ -1172,35 +1258,6 @@ object PsdCodec {
             }
         reader.position = channelEnd
         return plane
-    }
-
-    /** A layer row is bounded by its byte count, including any trailing PackBits no-ops. */
-    private fun decodeChannelRleRow(
-        reader: PsdReader,
-        width: Int,
-        rowEnd: Int,
-    ): ByteArray {
-        val out = ByteArray(width)
-        var written = 0
-        while (reader.position < rowEnd) {
-            val control = reader.readByte()
-            when {
-                control <= 127 -> {
-                    val count = control + 1
-                    require(count <= rowEnd - reader.position && count <= width - written) { "Invalid PSD literal run" }
-                    repeat(count) { out[written++] = reader.readByte().toByte() }
-                }
-
-                control != 128 -> {
-                    val count = 257 - control
-                    require(reader.position < rowEnd && count <= width - written) { "Invalid PSD repeat run" }
-                    val value = reader.readByte().toByte()
-                    repeat(count) { out[written++] = value }
-                }
-            }
-        }
-        require(written == width) { "Incomplete PSD row" }
-        return out
     }
 
     private fun downsample(
@@ -1388,70 +1445,32 @@ object PsdCodec {
         width: Int,
         height: Int,
         depth: Int,
-        colorMode: Int,
         isPsb: Boolean = false,
     ): HashMap<Int, ByteArray>? {
         val planes = HashMap<Int, ByteArray>()
-        val channelIds =
-            (0 until channelCount).map { index ->
-                when (colorMode) {
-                    COLOR_MODE_GRAYSCALE -> {
-                        if (index == 0) CHANNEL_RED else CHANNEL_ALPHA
-                    }
-
-                    COLOR_MODE_CMYK -> {
-                        index
-                    }
-
-                    else -> {
-                        when (index) {
-                            0 -> CHANNEL_RED
-                            1 -> CHANNEL_GREEN
-                            2 -> CHANNEL_BLUE
-                            else -> CHANNEL_ALPHA
-                        }
-                    }
-                }
-            }
+        val channelIds = (0 until channelCount).toList()
 
         val bytesPerSample = if (depth == 16) 2 else 1
+        val planeBytesLong = width.toLong() * height * bytesPerSample
+        if (planeBytesLong !in 0L..Int.MAX_VALUE.toLong()) return null
+        val planeBytes = planeBytesLong.toInt()
         when (compression) {
             COMPRESSION_RAW -> {
-                val sizeLong = width.toLong() * height * bytesPerSample
-                if (sizeLong !in 0L..Int.MAX_VALUE.toLong()) return null
-                val size = sizeLong.toInt()
+                // Merged planes are the last file section and contain no padding.
+                if (planeBytesLong * channelCount != reader.remaining().toLong()) return null
                 channelIds.forEach { id ->
-                    planes[id] = reader.readBytes(min(size, reader.remaining()))
+                    planes[id] = reader.readBytes(planeBytes)
                 }
             }
 
             COMPRESSION_RLE -> {
-                // The byte-count table lists every row of every channel, then the row data follows.
-                // In PSB (v2), each entry is a 4-byte int instead of a 2-byte short.
-                val rowBytesLong = width.toLong() * bytesPerSample
-                val planeBytesLong = rowBytesLong * height
-                if (planeBytesLong !in 0L..Int.MAX_VALUE.toLong()) return null
-                val countBytes = if (isPsb) 4L else 2L
-                if (reader.remaining().toLong() < channelCount.toLong() * height * countBytes) return null
-                repeat(channelCount * height) { if (isPsb) reader.readInt() else reader.readShort() }
-                val rowBytes = rowBytesLong.toInt()
-                val planeBytes = planeBytesLong.toInt()
-                channelIds.forEach { id ->
-                    val out = ByteArray(planeBytes)
-                    for (row in 0 until height) {
-                        val decoded = decodeRleRow(reader, rowBytes)
-                        System.arraycopy(decoded, 0, out, row * rowBytes, min(rowBytes, decoded.size))
-                    }
-                    planes[id] = out
-                }
+                planes.putAll(readMergedRlePlanes(reader, channelIds, width * bytesPerSample, height, isPsb))
             }
 
             COMPRESSION_ZIP, COMPRESSION_ZIP_PREDICTION -> {
                 // The merged image is one zlib stream: each channel's whole plane follows the one before it.
-                val planeBytesLong = width.toLong() * height * bytesPerSample
                 val totalBytesLong = planeBytesLong * channelIds.size
                 if (totalBytesLong !in 0L..Int.MAX_VALUE.toLong()) return null
-                val planeBytes = planeBytesLong.toInt()
                 val totalBytes = totalBytesLong.toInt()
                 val stream = inflate(reader.readBytes(reader.remaining()), totalBytes)
                 if (stream.size < totalBytes) return null
@@ -1473,11 +1492,6 @@ object PsdCodec {
         }
         return planes
     }
-
-    private fun decodeRleRow(
-        reader: PsdReader,
-        width: Int,
-    ): ByteArray = unpackBits(reader, width)
 
     /** Keeps the high byte of each 16-bit sample. */
     private fun highBytes(samples: ByteArray): ByteArray = ByteArray(samples.size / 2) { samples[it * 2] }
@@ -1646,6 +1660,63 @@ object PsdCodec {
         write((value shr 8) and 0xFF)
         write(value and 0xFF)
     }
+}
+
+/** Each merged scanline is bounded by its declared byte count, including PackBits no-ops. */
+private fun readMergedRlePlanes(
+    reader: PsdCodec.PsdReader,
+    channelIds: List<Int>,
+    rowBytes: Int,
+    height: Int,
+    isPsb: Boolean,
+): HashMap<Int, ByteArray> {
+    val rowCount = channelIds.size * height
+    val countBytes = if (isPsb) 4L else 2L
+    require(reader.remaining().toLong() >= rowCount.toLong() * countBytes) { "Truncated merged PSD row-length table" }
+    val rowLengths = IntArray(rowCount) { if (isPsb) reader.readInt() else reader.readShort() }
+    require(rowLengths.all { it >= 0 } && rowLengths.sumOf { it.toLong() } == reader.remaining().toLong()) {
+        "Merged PSD row lengths do not match the payload"
+    }
+    val planes = HashMap<Int, ByteArray>()
+    channelIds.forEachIndexed { channel, id ->
+        val out = ByteArray(rowBytes * height)
+        for (row in 0 until height) {
+            val rowEnd = reader.position + rowLengths[channel * height + row]
+            val decoded = decodeRleRow(reader, rowBytes, rowEnd)
+            System.arraycopy(decoded, 0, out, row * rowBytes, rowBytes)
+        }
+        planes[id] = out
+    }
+    return planes
+}
+
+/** A row may neither borrow the next row's bytes nor pad or truncate decoded samples. */
+private fun decodeRleRow(
+    reader: PsdCodec.PsdReader,
+    width: Int,
+    rowEnd: Int,
+): ByteArray {
+    val out = ByteArray(width)
+    var written = 0
+    while (reader.position < rowEnd) {
+        val control = reader.readByte()
+        when {
+            control <= 127 -> {
+                val count = control + 1
+                require(count <= rowEnd - reader.position && count <= width - written) { "Invalid PSD literal run" }
+                repeat(count) { out[written++] = reader.readByte().toByte() }
+            }
+
+            control != 128 -> {
+                val count = 257 - control
+                require(reader.position < rowEnd && count <= width - written) { "Invalid PSD repeat run" }
+                val value = reader.readByte().toByte()
+                repeat(count) { out[written++] = value }
+            }
+        }
+    }
+    require(written == width) { "Incomplete PSD row" }
+    return out
 }
 
 /**
