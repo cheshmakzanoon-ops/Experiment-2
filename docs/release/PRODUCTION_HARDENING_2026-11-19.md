@@ -32,10 +32,10 @@ Planned later assignments may be refined to address concrete review findings or 
 | 06 | Cancellation/concurrency review; memory-budget boundaries; dependency/artifact integrity | Implemented/reviewed; expanded runtime verification continuing |
 | 07 | PSD channel/color semantics; device texture limits; optimized test R8 integration | Implemented/reviewed; optimized APKs build successfully |
 | 08 | Physical-performance evidence tooling; signed artifact validation; upgrade execution tooling | Implemented/reviewed; host tests and Android compilation passed |
-| 09 | Image allocation bounds; preview-failure input handling; PSD compatibility and color notices | In progress |
-| 10 | Integrated compile/analysis findings; regression completeness; release documentation reconciliation | Planned |
-| 11 | CI findings: storage/import; UI/release; build/tooling | Planned |
-| 12 | Import transaction acceptance; recovery/upgrade acceptance; optimized workflow acceptance | Planned |
+| 09 | Image allocation bounds; preview-failure input handling; PSD compatibility and color notices | Implemented/reviewed; compilation/analysis passed, fixture repaired and rerun |
+| 10 | Remaining import lifetimes; optimized test linkage; independent save/recovery audit | Implemented/reviewed; isolated integrated verification pending |
+| 11 | Release/version claims; model/photo decoding; installed historical-app upgrade | Contract review complete; decoder and upgrade work in progress |
+| 12 | Recovery ordering and export snapshots; publisher-binary workflow; import acceptance | Recovery review started; other assignments planned |
 | 13 | Release evidence validation; performance evidence validation; dependency evidence validation | Planned |
 | 14 | Hostile archive review; project-lifecycle review; release artifact review | Planned |
 | 15 | Capability claim review; user-facing failure review; support/workload contract review | Planned |
@@ -223,3 +223,77 @@ Update this record with completed wave assignments, fixes, test outcomes, and re
   composite versus default transparent export). The test now explicitly operates the visible
   flatten-white switch and retains the full pixel comparison. Failed attempts remain failed;
   subsequent complete device runs must validate the repair.
+
+### Wave 09
+
+- `w09_image_decode_budget`: fixed just-under-double-edge sampling, pre-array dimension checks,
+  simultaneous decoder/copy allocations and changing-provider reads. Photo URI/file decoding uses
+  one bounded immutable source and a heap/headroom-aware allocation plan; native artwork remains
+  exact-size. Eleven pure JVM cases passed; nine real-platform cases compiled but need execution.
+- `w09_preview_availability`: added typed primary-preview availability, generation/interruption
+  guards, upload recovery and attachment-bound callbacks. Failed previews cancel/block canvas
+  pointer edits while preserving save/navigation. Provisional shape rollback is guarded by exact
+  destination/revision/history identity. Ten affected pure cases passed; six new GLES/view cases
+  need device execution. Existing helpers now wait for an actual displayed preview.
+- `w09_psd_compatibility`: bounded all image-resource records and padding; added conservative
+  layerless Alpha Identifiers handling and post-commit notices for approximate CMYK, unapplied ICC,
+  unused extra channels and flattened alternate-layer fallback. Ninety-six PSD/PSB cases passed.
+  A pinned independent producer-file probe inspected seven supported files and exactly matched
+  143,600 pixels in an explicitly derived layerless fixture. Four controller cases await Gradle.
+
+- Root traced the Android 15/4 KB failure in run 44534277777 to concurrent export-directory
+  initialization: `mkdirs()` can return false because the other caller just created the directory.
+  Project/export/atomic-write directory setup now accepts a verified existing directory after that
+  race and rechecks linked-path guards. Eighteen storage-tree tests passed, including deterministic
+  competing creation, existing-file preservation and a late symbolic-link rejection. Assigned-file
+  ktlint and detekt passed without baseline changes. Complete Android validation remains pending.
+- Wave 08's optimized run 44540625809 built both APKs, then the actual runner failed before
+  executing any of 43 cases with `NoClassDefFoundError: androidx.tracing.Trace`. This is recorded
+  as failed qualification. Wave 10 is inspecting the app/test dependency boundary and R8 output;
+  application optimization and full case accounting remain required.
+- Frozen wave 09 production and all instrumentation sources compiled. Full ktlint and detekt
+  passed with unchanged baselines. The full JVM run executed 1,864 cases: 1,861 passed, two
+  external-corpus skips and one new-test failure because both retained/imported layers were named
+  `Background`. The fixture now identifies the added layer by ID, asserts original IDs survive,
+  and retains every pixel/history assertion. All four controller cases passed on the focused rerun.
+
+
+### Wave 10
+
+- `w10_import_lifecycle`: added shared retained photo/model admission and reserve-before-create
+  handoffs, owner/deadline expiry, explicit model claims that preserve retryable unsaved work,
+  deletion cleanup after successful row deletion, and guarded camera orphan cleanup. All 32 new
+  tests and 19 existing Procreate ownership cases passed standalone. Changed Android callers and
+  instrumentation compiled; existing model suites still need the normal Gradle test runtime.
+- `w10_save_recovery_audit`: reproduced mixed-revision native exports and overlapping pin loss.
+  Scoped package snapshots now capture exact committed manifest bytes and retain referenced raster
+  generations until archive completion. Counted leases and acquisition/pruning synchronization
+  protect overlapping exports; cancellation/error cleanup releases ownership. Thirty-four storage
+  cases passed, including five new snapshot regressions and the 18 directory-tree cases.
+- `w10_optimized_test_linkage`: uses AGP's public pre-R8 class artifacts and bundled R8
+  TraceReferences to retain the exact application ABI called by separately packaged instrumentation.
+  Publisher rules are unchanged; benchmark-specific constraints are explicitly recorded. Five real
+  R8 execution fixtures, 33 qualification tests, 28 dependency-evidence tests and eight harness
+  tests passed. Root's real-project generation compiled both source sets and passed in 3m34s,
+  tracing 893 classes, 241 fields and 1,993 methods from 2,592 test classes. This is build evidence,
+  not a successful optimized Android execution.
+- API26 in run 44540625922 completed 297 declared identities: 294 passed, one failed and two
+  permitted API-specific skips. The new flatten-white test matcher saw both unlabeled switches.
+  The switches now have accessible names and the test selects the exact visible control, retaining
+  off/on and complete exported-pixel assertions. Other lanes and a new revision must be evaluated.
+- The first root Python discovery lacked ANDROID_HOME for its required real-APK fixture and failed
+  that environment precondition. With the configured SDK, the intermediate discovery ran 340 cases:
+  335 passed and the five separately required Gradle provenance fixtures were explicitly skipped.
+  The final verifier added three more adversarial cases afterward; frozen-checkout discovery is due.
+
+### Wave 11 (in progress)
+
+- `w11_release_contract`: reconciled eight current/historical documents, preserving earlier failure
+  records while removing absolute data-loss/determinism and every-edit timelapse promises. Checked
+  107 local Markdown links. Root designated the maintenance candidate 1.1.1/code4, following known
+  code3 builds; publisher-used codes and signing identity still require actual account evidence.
+- `w11_model_decode`: reviewing color-only model texture allocations and Android8 EXIF orientation.
+- `w11_installed_upgrade`: automating old-app UI seeding and installed replacement. The real Room-v1
+  source ca9ce535c09d35ceca6aba9f686c60f58f93bc09 has the same committed schema1 SHA-256
+  afbdb33dcf9e2e6f2610560ca1adf4cd876c5241a3f56b62a162361c5c493dde. No installed-v1 execution
+  is claimed yet; its future build must be labeled rebuilt pinned source rather than a distributed APK.

@@ -286,7 +286,10 @@ internal class PackageUpgradeWorkflow(
     private fun awaitCanvas(scenario: ActivityScenario<MainActivity>) {
         compose.waitUntil(TIMEOUT_MS) {
             var ready = false
-            scenario.onActivity { ready = findCanvas(it.window.decorView)?.let { view -> view.width > 0 && view.height > 0 } == true }
+            scenario.onActivity {
+                val view = findCanvas(it.window.decorView)
+                ready = view != null && view.width > 0 && view.height > 0 && view.isPreviewAvailable
+            }
             ready
         }
         compose.waitForIdle()

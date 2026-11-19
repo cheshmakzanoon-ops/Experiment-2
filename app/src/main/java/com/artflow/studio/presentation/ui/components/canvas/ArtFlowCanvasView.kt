@@ -62,6 +62,7 @@ import com.artflow.studio.core.tool.LiquifyTool
 import com.artflow.studio.core.tool.PixelBrushes
 import com.artflow.studio.core.tool.ToolType
 import com.artflow.studio.data.renderer.BitmapPixelBridge
+import com.artflow.studio.data.renderer.opengl.CanvasPreviewAvailability
 import com.artflow.studio.data.renderer.opengl.OpenGLCanvasRenderer
 import com.artflow.studio.domain.model.animation.AnimationSettings
 import com.artflow.studio.domain.model.brush.BrushParams
@@ -423,6 +424,7 @@ class ArtFlowCanvasView
 
         private var drawing = false
         private var currentStrokeId = 0L
+        private var strokePreviewContext: PreviewEditContext? = null
         private var stabilizer: StrokeStabilizer? = null
         private var motionFilter: MotionFilter? = null
         private var pressureSmoother: PressureSmoother? = null
@@ -440,6 +442,29 @@ class ArtFlowCanvasView
         private var editingShape = false
         private var draggedNode = -1
         private var shapeStrokeOpen = false
+        private var shapeRollback: ShapeRollback? = null
+
+        private data class PreviewEditContext(
+            val projectId: Long,
+            val frameId: Long?,
+            val layerId: Long,
+            val revision: Long,
+        )
+
+        private data class ShapeRollback(
+            val context: PreviewEditContext,
+            val historyMark: Long,
+        )
+
+        private fun previewEditContext(): PreviewEditContext =
+            PreviewEditContext(
+                canvasRepository.projectId(),
+                canvasRepository.timeline.value.activeFrame
+                    ?.id,
+                canvasRepository.getActiveLayerId(),
+                canvasRepository.contentRevision,
+            )
+
         private var holdAnchorX = 0f
         private var holdAnchorY = 0f
         private val quickShapeCheck = Runnable { applyQuickShape() }
@@ -560,6 +585,14 @@ class ArtFlowCanvasView
         // --- Lifecycle ----------------------------------------------------------------------------
 
         private var rendererAttached = false
+        private var rendererAttachment = 0L
+        private var renderingPaused = false
+        private var blockedPointerStream = false
+        private var gesturePreviewInterruption = 0L
+
+        /** True only after this surface has displayed the primary artwork successfully. */
+        val isPreviewAvailable: Boolean
+            get() = isAttachedToWindow && !renderingPaused && renderer.previewAvailability == CanvasPreviewAvailability.AVAILABLE
 
         /** Set when the renderer has no image to patch, so the next frame publishes the whole composite. */
         private var fullCompositeNeeded = true
@@ -576,7 +609,21 @@ class ArtFlowCanvasView
 
         override fun onAttachedToWindow() {
             super.onAttachedToWindow()
-            renderer.onStatusMessage = { message -> post { if (isAttachedToWindow) onStatusMessage?.invoke(message) } }
+            val attachment = ++rendererAttachment
+            renderingPaused = false
+            renderer.onStatusMessage = { message ->
+                post { if (isAttachedToWindow && attachment == rendererAttachment) onStatusMessage?.invoke(message) }
+            }
+            renderer.onPreviewAvailabilityChanged = { availability ->
+                if (availability != CanvasPreviewAvailability.AVAILABLE) {
+                    val interruption = renderer.previewInterruptions
+                    post {
+                        if (isAttachedToWindow && attachment == rendererAttachment && gesturePreviewInterruption < interruption) {
+                            blockCanvasInput()
+                        }
+                    }
+                }
+            }
             if (!rendererAttached) {
                 setRenderer(renderer)
                 renderMode = RENDERMODE_WHEN_DIRTY
@@ -593,12 +640,17 @@ class ArtFlowCanvasView
         }
 
         fun pauseRendering() {
-            cancelActiveGesture()
+            val previewWasAvailable = !renderingPaused && renderer.previewAvailability == CanvasPreviewAvailability.AVAILABLE
+            renderingPaused = true
+            blockedPointerStream = true
+            if (previewWasAvailable) cancelActiveGesture() else blockCanvasInput()
             if (rendererAttached) onPause()
+            renderer.awaitPrimaryPreview()
         }
 
         fun resumeRendering() {
             if (rendererAttached) {
+                renderingPaused = false
                 onResume()
                 requestRender()
             }
@@ -622,6 +674,7 @@ class ArtFlowCanvasView
         }
 
         fun cancelActiveGesture() {
+            removeCallbacks(rapidHistory)
             clearPrediction()
             pointerRouter.suppress()
             resetNavigation()
@@ -674,14 +727,18 @@ class ArtFlowCanvasView
         }
 
         override fun onDetachedFromWindow() {
+            val previewWasAvailable = !renderingPaused && renderer.previewAvailability == CanvasPreviewAvailability.AVAILABLE
+            rendererAttachment++
+            renderingPaused = true
+            renderer.onStatusMessage = null
+            renderer.onPreviewAvailabilityChanged = null
             removeCallbacks(rapidHistory)
             viewAnimator?.cancel()
             resetLiquifyReference()
-            cancelActiveGesture()
+            if (previewWasAvailable) cancelActiveGesture() else blockCanvasInput()
             coroutineScope.cancel()
             observingInvalidations = false
             super.onDetachedFromWindow() // waits for the GL thread to stop
-            renderer.onStatusMessage = null
             renderer.dispose()
         }
 
@@ -963,6 +1020,7 @@ class ArtFlowCanvasView
             windowX: Float,
             windowY: Float,
         ): Boolean {
+            if (!isPreviewAvailable) return false
             val origin = IntArray(2)
             getLocationInWindow(origin)
             val localX = windowX - origin[0]
@@ -1371,12 +1429,16 @@ class ArtFlowCanvasView
                 reportCompositeFailure(error)
             } catch (error: OutOfMemoryError) {
                 fullCompositeNeeded = true
+                renderer.invalidatePrimaryPreview()
+                blockCanvasInput()
                 Timber.e(error, "Insufficient memory for canvas preview")
                 onStatusMessage?.invoke("Not enough memory to render this canvas. Save your artwork and reduce its size.")
             }
         }
 
         private fun reportCompositeFailure(error: Exception) {
+            renderer.invalidatePrimaryPreview()
+            blockCanvasInput()
             Timber.e(error, "Composite failed")
             onStatusMessage?.invoke("Could not update the canvas: ${error.message}")
         }
@@ -1463,7 +1525,67 @@ class ArtFlowCanvasView
             return true
         }
 
+        private fun blockCanvasInput() {
+            blockedPointerStream = true
+            discardUnseenShapeEdit()
+            // Stroke identifiers may be reused after a document reload. A queued GL callback
+            // must never cancel a different document's new stroke with the same numeric id.
+            if (drawing && strokePreviewContext != previewEditContext()) drawing = false
+            cancelActiveGesture()
+        }
+
+        private fun discardUnseenShapeEdit() {
+            if (!shapeStrokeOpen) return
+            draggedNode = -1
+            shapeStrokeOpen = false
+            val context = previewEditContext()
+            if (strokePreviewContext == context) canvasRepository.cancelStroke(currentStrokeId)
+            drawing = false
+            // Node editing temporarily undoes the original shape; restore only that untouched
+            // history position, never a different action that happened while the preview failed.
+            val original = shapeRollback
+            if (original != null &&
+                original.context == context &&
+                canvasRepository.historyMark == original.historyMark
+            ) {
+                canvasRepository.redo()
+            }
+            shapeRollback = null
+            shapeEdit = null
+            editingShape = false
+            onShapeEditChanged?.invoke(null)
+            reportHistory()
+        }
+
+        /** A recovered preview requires a fresh DOWN; an old trailing pen/finger cannot commit. */
+        private fun acceptPreviewInput(event: MotionEvent): Boolean {
+            val preview = renderer.previewStatus
+            if (!isAttachedToWindow || renderingPaused || preview.availability != CanvasPreviewAvailability.AVAILABLE) {
+                blockCanvasInput()
+                return false
+            }
+            if (gesturePreviewInterruption != preview.interruptions) blockCanvasInput()
+            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                gesturePreviewInterruption = preview.interruptions
+                blockedPointerStream = false
+            }
+            if (renderer.previewStatus != preview) {
+                blockCanvasInput()
+                return false
+            }
+            if (blockedPointerStream) {
+                if (event.actionMasked == MotionEvent.ACTION_UP ||
+                    event.actionMasked == MotionEvent.ACTION_CANCEL
+                ) {
+                    blockedPointerStream = false
+                }
+                return false
+            }
+            return true
+        }
+
         override fun onTouchEvent(event: MotionEvent): Boolean {
+            if (!acceptPreviewInput(event)) return true
             val action =
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> PointerGestureRouter.Event.DOWN
@@ -2240,6 +2362,7 @@ class ArtFlowCanvasView
                     timestamp = time,
                 )
             drawing = currentStrokeId != 0L
+            strokePreviewContext = if (drawing) previewEditContext() else null
             clearPrediction()
             if (!drawing) {
                 onStatusMessage?.invoke(
@@ -2436,9 +2559,12 @@ class ArtFlowCanvasView
             val edit = shapeEdit ?: return
             if (shapeStrokeOpen) {
                 canvasRepository.cancelStroke(currentStrokeId)
-            } else if (!edit.isLatest() || !canvasRepository.undo()) {
-                draggedNode = -1
-                return dismissShapeEdit()
+            } else {
+                if (!edit.isLatest() || !canvasRepository.undo()) {
+                    draggedNode = -1
+                    return dismissShapeEdit()
+                }
+                shapeRollback = ShapeRollback(previewEditContext(), canvasRepository.historyMark)
             }
             val moved = QuickShape.moveNode(edit.shape, draggedNode, viewToCanvas(viewX, viewY))
             shapeEdit = ShapeEdit(moved, edit.pressure, edit.tool, edit.layerId, edit.mark)
@@ -2446,6 +2572,7 @@ class ArtFlowCanvasView
             if (!shapeStrokeOpen) {
                 // The layer can no longer take the stroke: put the original back.
                 canvasRepository.redo()
+                shapeRollback = null
                 draggedNode = -1
                 dismissShapeEdit()
             }
@@ -2471,6 +2598,7 @@ class ArtFlowCanvasView
             draggedNode = -1
             if (!shapeStrokeOpen) return
             shapeStrokeOpen = false
+            shapeRollback = null
             drawing = false
             canvasRepository.endStroke(currentStrokeId)
             shapeEdit = shapeEdit?.let { ShapeEdit(it.shape, it.pressure, it.tool, it.layerId, canvasRepository.historyMark) }

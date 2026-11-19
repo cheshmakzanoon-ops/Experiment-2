@@ -20,6 +20,7 @@ import com.artflow.studio.data.export.ModelImports
 import com.artflow.studio.data.export.PendingImports
 import com.artflow.studio.data.export.ProcreateImport
 import com.artflow.studio.data.export.StagedImport
+import com.artflow.studio.data.export.importFailureMessage
 import com.artflow.studio.data.local.BrushArchives
 import com.artflow.studio.data.local.BrushImports
 import com.artflow.studio.data.renderer.BitmapPixelBridge
@@ -75,18 +76,29 @@ internal class GalleryImports(
     /** Opens a photo from the device as a new canvas of the same size. */
     fun photo(uri: Uri) {
         scope.launch {
-            val image =
-                withContext(Dispatchers.IO) {
-                    runCatching { BitmapPixelBridge.decodeUri(context.contentResolver, uri) }.getOrNull()
-                }
-            if (image == null) {
-                say(context.getString(R.string.galleryscreen_image_could_not_be_opened))
-                return@launch
-            }
-            viewModel.createProject("Imported photo", null, image.width, image.height, 72) { id ->
-                PendingImports.put(id, image)
-                scope.launch { openArtwork(id) }
-            }
+            val failure =
+                runCatching {
+                    val image =
+                        withContext(Dispatchers.IO) {
+                            requireNotNull(BitmapPixelBridge.decodeUri(context.contentResolver, uri)) {
+                                context.getString(R.string.galleryscreen_image_could_not_be_opened)
+                            }
+                        }
+                    PendingImports.reserveImage(image, viewModel.viewModelScope).use { pending ->
+                        val id = viewModel.createImportedProject("Imported photo", image.width, image.height, 72)
+                        pending.publish(id)
+                        var navigated = false
+                        try {
+                            openArtwork(id)
+                            navigated = true
+                        } finally {
+                            if (!navigated) PendingImports.discardImage(id, image)
+                        }
+                    }
+                }.exceptionOrNull() ?: return@launch
+            val message = importFailureMessage(failure, context.getString(R.string.galleryscreen_image_could_not_be_opened))
+            Timber.e(failure, "Photo import failed")
+            say(message)
         }
     }
 
@@ -221,18 +233,24 @@ internal class GalleryImports(
     /** Opens a 3D model (OBJ, glTF, USD, or a zip with the model, its materials and textures) as an artwork that is its texture. */
     fun model(uri: Uri) {
         scope.launch {
-            val read = withContext(Dispatchers.IO) { runCatching { readModel(uri) } }
-            read.onFailure { failure ->
-                // Our own checks explain themselves; anything else means a damaged or unusual file.
-                val explained =
-                    (failure is IllegalArgumentException || failure is IllegalStateException) && failure !is NumberFormatException
-                say(failure.message?.takeIf { explained } ?: "That 3D model could not be read")
-            }
-            val prepared = read.getOrNull() ?: return@launch
-            viewModel.createProject("3D model", null, prepared.width, prepared.height, MODEL_DPI) { id ->
-                PendingImports.putModelBundle(id, prepared)
-                scope.launch { openArtwork(id) }
-            }
+            val failure =
+                runCatching {
+                    val prepared = withContext(Dispatchers.IO) { readModel(uri) }
+                    PendingImports.reserveModelBundle(prepared, viewModel.viewModelScope).use { pending ->
+                        val id = viewModel.createImportedProject("3D model", prepared.width, prepared.height, MODEL_DPI)
+                        pending.publish(id)
+                        var navigated = false
+                        try {
+                            openArtwork(id)
+                            navigated = true
+                        } finally {
+                            if (!navigated) PendingImports.discardModelBundle(id, prepared)
+                        }
+                    }
+                }.exceptionOrNull() ?: return@launch
+            val message = importFailureMessage(failure, "That 3D model could not be imported")
+            Timber.e(failure, "Model import failed")
+            say(message)
         }
     }
 

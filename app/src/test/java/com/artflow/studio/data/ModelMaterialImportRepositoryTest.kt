@@ -235,7 +235,7 @@ class ModelMaterialImportRepositoryTest {
                 fixture()
                 val projectId = repository.projectId()
                 val prepared = ModelImportFixture.prepared()
-                PendingImports.putModelBundle(projectId, prepared)
+                PendingImports.putModelBundle(projectId, prepared, backgroundScope)
                 try {
                     assertTrue(ModelImports.install(repository, prepared))
                     val metal = repository.getAllLayers().last { it.materialChannel == MaterialChannel.METALLIC }
@@ -260,7 +260,7 @@ class ModelMaterialImportRepositoryTest {
             fixture()
             val projectId = repository.projectId()
             val prepared = ModelImportFixture.prepared()
-            PendingImports.putModelBundle(projectId, prepared)
+            PendingImports.putModelBundle(projectId, prepared, backgroundScope)
             try {
                 assertTrue(ModelImports.install(repository, prepared))
                 assertTrue(repository.undo())

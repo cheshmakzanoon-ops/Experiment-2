@@ -1,6 +1,12 @@
+import com.android.build.api.artifact.ScopedArtifact
+import com.android.build.api.variant.ApplicationAndroidComponentsExtension
+import com.android.build.api.variant.ScopedArtifacts
 import org.gradle.api.tasks.PathSensitivity
+import org.gradle.api.tasks.compile.JavaCompile
 import org.gradle.api.tasks.testing.Test
+import org.gradle.process.ExecOperations
 import java.util.Properties
+import javax.inject.Inject
 
 plugins {
     id("com.android.application")
@@ -77,8 +83,8 @@ android {
         minSdk = 26
         // Google Play requires new apps and updates to target Android 16 (API 36) as of 2026-08-31.
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.1.0"
+        versionCode = 4
+        versionName = "1.1.1"
 
         testInstrumentationRunner = "com.artflow.studio.HiltTestRunner"
     }
@@ -235,6 +241,127 @@ dependencies {
     add("benchmarkImplementation", "androidx.compose.ui:ui-test-manifest")
 }
 
+/** Inputs come from AGP's public pre-R8 class artifact API, including test library callers. */
+abstract class GenerateBenchmarkTestAbiRules : DefaultTask() {
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val appJars: ListProperty<RegularFile>
+
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val appDirectories: ListProperty<Directory>
+
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val testJars: ListProperty<RegularFile>
+
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val testDirectories: ListProperty<Directory>
+
+    @get:Classpath
+    abstract val libraries: ListProperty<RegularFile>
+
+    @get:Classpath
+    abstract val generatorClasspath: ConfigurableFileCollection
+
+    @get:OutputDirectory
+    abstract val outputDirectory: DirectoryProperty
+
+    @get:Inject
+    abstract val execOperations: ExecOperations
+
+    @TaskAction
+    fun generate() {
+        val arguments = mutableListOf("--output", outputDirectory.get().asFile.absolutePath)
+
+        fun add(
+            option: String,
+            inputs: List<File>,
+        ) {
+            inputs.sortedBy { it.absolutePath }.forEach { file ->
+                check(!file.absolutePath.contains('\n') && !file.absolutePath.contains('\r')) { "Invalid bytecode input path" }
+                arguments.addAll(listOf(option, file.absolutePath))
+            }
+        }
+        add("--app-input", appJars.get().map { it.asFile } + appDirectories.get().map { it.asFile })
+        add("--test-input", testJars.get().map { it.asFile } + testDirectories.get().map { it.asFile })
+        add("--library", libraries.get().map { it.asFile })
+        val argumentFile = temporaryDir.resolve("arguments.txt")
+        argumentFile.writeText(arguments.joinToString("\n", postfix = "\n"))
+        execOperations
+            .javaexec {
+                classpath = generatorClasspath
+                mainClass.set("artflow.build.TestAbiRules")
+                args("--arguments", argumentFile.absolutePath)
+                maxHeapSize = "2g"
+            }.assertNormalExitValue()
+    }
+}
+
+val components = extensions.getByType<ApplicationAndroidComponentsExtension>()
+components.onVariants(components.selector().withBuildType("benchmark")) { variant ->
+    // No test boundary is introduced into a publisher release or an unselected benchmark variant.
+    val androidTest = variant.androidTest ?: return@onVariants
+    val r8Jar =
+        File(
+            Class
+                .forName("com.android.tools.r8.tracereferences.TraceReferences")
+                .protectionDomain.codeSource.location
+                .toURI(),
+        )
+    val compileGenerator =
+        tasks.register<JavaCompile>("compileBenchmarkTestAbiGenerator") {
+            source(rootProject.file("tools/optimized-test-abi/src"))
+            classpath = files(r8Jar)
+            destinationDirectory.set(layout.buildDirectory.dir("intermediates/benchmark-test-abi-generator"))
+            options.release.set(17)
+            options.encoding = "UTF-8"
+        }
+    tasks.register<Exec>("verifyBenchmarkTestAbiGenerator") {
+        group = "verification"
+        description = "Exercise boundary extraction and separate app/test R8 rewriting with executable fixtures"
+        dependsOn(compileGenerator)
+        commandLine(
+            "python3",
+            rootProject.file("tools/optimized-test-abi/verify.py"),
+            "--java-home",
+            System.getProperty("java.home"),
+            "--r8-tool",
+            r8Jar,
+            "--generator-classes",
+            compileGenerator.flatMap { it.destinationDirectory }.get().asFile,
+        )
+    }
+    val generate =
+        tasks.register<GenerateBenchmarkTestAbiRules>("generateBenchmarkTestAbiRules") {
+            group = "verification"
+            description = "Trace exact external instrumentation references into the optimized benchmark app"
+            libraries.set(components.sdkComponents.bootClasspath)
+            generatorClasspath.from(compileGenerator.flatMap { it.destinationDirectory }, r8Jar)
+            outputDirectory.set(layout.buildDirectory.dir("reports/release-qualification/test-abi"))
+        }
+    variant.artifacts
+        .forScope(ScopedArtifacts.Scope.ALL)
+        .use(generate)
+        .toGet(ScopedArtifact.CLASSES, GenerateBenchmarkTestAbiRules::appJars, GenerateBenchmarkTestAbiRules::appDirectories)
+    androidTest.artifacts
+        .forScope(ScopedArtifacts.Scope.ALL)
+        .use(generate)
+        .toGet(ScopedArtifact.CLASSES, GenerateBenchmarkTestAbiRules::testJars, GenerateBenchmarkTestAbiRules::testDirectories)
+    variant.proguardFiles.add(generate.flatMap { it.outputDirectory.file("keep-rules.pro") })
+    variant.proguardFiles.add(layout.projectDirectory.file("proguard-benchmark-test-reflection.pro"))
+}
+
+val qualificationVariantRules = objects.listProperty(RegularFile::class.java)
+val publisherVariantRules = objects.listProperty(RegularFile::class.java)
+androidComponents.onVariants { variant ->
+    when (variant.buildType) {
+        "benchmark" -> qualificationVariantRules.set(variant.proguardFiles)
+        "release" -> publisherVariantRules.set(variant.proguardFiles)
+    }
+}
+
 tasks.register("verifyReleaseQualificationBuildType") {
     group = "verification"
     description = "Rejects non-optimized or publisher-signed instrumentation qualification variants"
@@ -242,6 +369,7 @@ tasks.register("verifyReleaseQualificationBuildType") {
     outputs.file(report)
     // This contract inspects live configuration, including calls made by an applied build script.
     outputs.upToDateWhen { false }
+    if (instrumentationBuildType == "benchmark") dependsOn("generateBenchmarkTestAbiRules", "verifyBenchmarkTestAbiGenerator")
     doLast {
         val selected = android.buildTypes.getByName("benchmark")
         val production = android.buildTypes.getByName("release")
@@ -250,19 +378,33 @@ tasks.register("verifyReleaseQualificationBuildType") {
             "Qualification requires release R8, resource shrinking and a non-debuggable application"
         }
         check(selected.signingConfig?.name == "debug") { "Qualification must use the disposable test signing configuration" }
-        check(selected.proguardFiles == production.proguardFiles) { "Qualification must retain the release R8 rules unchanged" }
+        check(selected.proguardFiles == production.proguardFiles) { "Qualification must inherit the publisher's base R8 rules" }
+        val testAbiRules =
+            layout.buildDirectory
+                .file("reports/release-qualification/test-abi/keep-rules.pro")
+                .get()
+                .asFile
+        val reflectionRules = file("proguard-benchmark-test-reflection.pro")
+        val expectedRules = publisherVariantRules.get().map { it.asFile } + listOf(testAbiRules, reflectionRules)
+        check(qualificationVariantRules.get().map { it.asFile } == expectedRules) {
+            "Benchmark may add only the generated test ABI and the audited reflection fields to publisher rules"
+        }
+        check(testAbiRules.isFile && testAbiRules.length() > 0) { "Missing traced instrumentation ABI rules" }
         val destination = report.get().asFile
         destination.parentFile.mkdirs()
         destination.writeText(
             """
             {
-              "schemaVersion": 1,
+              "schemaVersion": 2,
               "buildType": "benchmark",
               "minifyEnabled": true,
               "shrinkResources": true,
               "debuggable": false,
               "signingConfig": "debug",
-              "releaseRulesUnchanged": true,
+              "publisherReleaseRulesUnchanged": true,
+              "benchmarkAddsGeneratedTestAbiRules": true,
+              "benchmarkAddsAuditedReflectionFields": true,
+              "testAbiAllowsObfuscation": true,
               "publisherQualified": false
             }
             """.trimIndent() + "\n",

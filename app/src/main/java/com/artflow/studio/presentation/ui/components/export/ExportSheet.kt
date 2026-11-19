@@ -20,6 +20,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.artflow.studio.R
 import com.artflow.studio.core.canvas.CanvasOperations
@@ -103,16 +105,26 @@ fun ExportSheet(
             color = if (safe) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
         )
         FormatControls(options, onChange = { options = it })
+        val includeHiddenLabel = stringResource(R.string.export_include_hidden)
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Switch(options.includeHiddenLayers, onCheckedChange = { options = options.copy(includeHiddenLayers = it) })
+            Switch(
+                options.includeHiddenLayers,
+                onCheckedChange = { options = options.copy(includeHiddenLayers = it) },
+                modifier = Modifier.semantics { contentDescription = includeHiddenLabel },
+            )
             Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.export_include_hidden), style = MaterialTheme.typography.bodySmall)
+            Text(includeHiddenLabel, style = MaterialTheme.typography.bodySmall)
         }
         if (options.format != ExportFormat.JPEG && options.format != ExportFormat.MP4) {
+            val flattenWhiteLabel = stringResource(R.string.export_flatten_white)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Switch(options.flattenOntoBackground, onCheckedChange = { options = options.copy(flattenOntoBackground = it) })
+                Switch(
+                    options.flattenOntoBackground,
+                    onCheckedChange = { options = options.copy(flattenOntoBackground = it) },
+                    modifier = Modifier.semantics { contentDescription = flattenWhiteLabel },
+                )
                 Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.export_flatten_white), style = MaterialTheme.typography.bodySmall)
+                Text(flattenWhiteLabel, style = MaterialTheme.typography.bodySmall)
             }
         } else {
             Text(stringResource(R.string.export_opaque_background), style = MaterialTheme.typography.bodySmall)

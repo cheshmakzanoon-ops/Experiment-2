@@ -1,7 +1,7 @@
 # Google Play store listing — ArtFlow
 
 Draft listing for the implemented offline editor. Publish only after the release gates in
-[RELEASE_READINESS.md](RELEASE_READINESS.md) are satisfied. The development goals in `agent.md`
+[release sign-off](release/RELEASE_SIGNOFF.md) are satisfied. The development goals in `agent.md`
 remain goals, not a claim that every phase has been delivered.
 
 ## App details
@@ -50,7 +50,7 @@ MP4 video or a ZIP of PNG frames. MP4 needs a compatible device encoder and uses
 background; unsupported dimensions or encoder failures are reported rather than silently saved.
 
 SAVE AND EXPORT
-Every edit is recorded automatically; export a time-lapse replay of the artwork as an MP4 video.
+With time-lapse recording enabled, captured drawing frames can be exported as an MP4 replay.
 Projects are stored privately with autosave and recovery. Duplicate creates independent project
 files. Export PNG, JPEG, WebP, PDF, PSD, GIF, MP4 or PNG sequences. Save an export using the Android
 file picker, share it with another app, or publish an image or video to the gallery.
@@ -59,7 +59,11 @@ PNG and PSD support transparency; JPEG and MP4 use an opaque background. PDF kee
 aspect ratio on the chosen page. PSD preserves raster layers where possible, with masks and
 filters baked into pixels. Unsupported adjustment stacks use a visible composite plus hidden
 source layers and show a warning. PSD import brings in raster layers with their names, offsets,
-opacity, blend modes and visibility; Photoshop adjustment-layer editing is not included.
+opacity, blend modes and visibility where supported. Sixteen-bit channels are reduced to 8-bit;
+32-bit PSD channels and editable Photoshop adjustments/smart objects are unsupported. CMYK
+conversion is approximate and embedded ICC profiles are not applied. Auxiliary alpha/spot
+channels are not retained, and some alternate layer records use a flattened image; applicable
+import notices explain these limitations.
 
 Undo and redo are available through buttons and two- and three-finger taps. Settings include
 themes, brush preferences and an offline privacy policy.

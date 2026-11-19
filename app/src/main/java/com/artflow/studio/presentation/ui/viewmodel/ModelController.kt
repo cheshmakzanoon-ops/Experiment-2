@@ -56,7 +56,7 @@ class ModelController(
         projectId: Long,
         onSaved: suspend (String) -> Unit = {},
     ) {
-        val bundle = PendingImports.modelBundle(projectId)
+        val bundle = PendingImports.claimModelBundle(projectId)
         if (bundle != null) {
             val parsed = withContext(Dispatchers.Default) { prepared(bundle.objText) }
             check(repository.projectId() == projectId && ModelImports.install(repository, bundle)) {
@@ -71,8 +71,7 @@ class ModelController(
             PendingImports.completeModelBundle(projectId, bundle)
             if (repository.projectId() == projectId) _mesh.value = parsed
         } else {
-            val legacy = PendingImports.takeModel(projectId)
-            if (legacy != null) attachAwaited(legacy) else loadAwaited()
+            loadAwaited()
         }
     }
 

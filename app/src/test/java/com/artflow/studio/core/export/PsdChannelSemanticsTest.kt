@@ -2,8 +2,10 @@ package com.artflow.studio.core.export
 
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
@@ -163,6 +165,143 @@ class PsdChannelSemanticsTest {
         }
     }
 
+    @Test
+    fun layerlessAlphaIdentifierZeroSelectsItsExactTrailingChannelAcrossEncodings() {
+        val examples =
+            listOf(
+                Triple(3, rgb, intArrayOf(0x80123456.toInt(), 0xFF654321.toInt(), 0x00FFFFFF, 0x400080FF)),
+                Triple(1, gray, intArrayOf(0x80121212.toInt(), 0xFF656565.toInt(), 0x00FFFFFF, 0x40000000)),
+                Triple(4, cmyk, intArrayOf(0x80FFFFFF.toInt(), 0xFF00FFFF.toInt(), 0x00000000, 0x40804000)),
+            )
+        for ((mode, planes, expected) in examples) {
+            forEachEncoding { depth, compression, psb ->
+                val extras = listOf(auxiliary[0], alpha, auxiliary[1])
+                val bytes =
+                    psd(mode, planes + extras, depth, compression, psb, resources = resource(1053, identifiers(7, 0, 8)))
+                assertComposite(expected, bytes)
+                val info = requireNotNull(PsdCodec.inspect(bytes))
+                assertEquals(planes.size + 1, info.mergedTransparencyChannel)
+                assertEquals(2, info.ignoredAuxiliaryChannels)
+            }
+        }
+    }
+
+    @Test
+    fun resourceIdentifiersDoNotOverridePrimaryOrAlternateLayerSemantics() {
+        val resource = resource(1053, identifiers(0))
+        val primary = psd(3, rgb + listOf(alpha), layerCount = 1, resources = resource)
+        val alternate =
+            psd(3, rgb + listOf(alpha), depth = 16, tags = taggedBlock("Lr16", layerInfo(1, emptyList(), 16, false)), resources = resource)
+        for (bytes in listOf(primary, alternate)) {
+            assertFalse(requireNotNull(PsdCodec.inspect(bytes)).hasMergedTransparency)
+            assertEquals(0xFF8899AA.toInt(), requireNotNull(PsdCodec.read(bytes)?.composite).pixels[0])
+        }
+        assertFalse(requireNotNull(PsdCodec.inspect(primary)).usesFlattenedAlternateLayers)
+        assertTrue(requireNotNull(PsdCodec.inspect(alternate)).usesFlattenedAlternateLayers)
+        val marked = psd(3, rgb + listOf(alpha) + auxiliary, layerCount = -1, resources = resource(1053, identifiers(7, 8)))
+        assertEquals(0x80123456.toInt(), requireNotNull(PsdCodec.read(marked)?.composite).pixels[0])
+    }
+
+    @Test
+    fun identifiersCannotTurnBaseColorOrUnmarkedSavedSelectionIntoTransparency() {
+        val staleZero = psd(3, rgb, resources = resource(1053, identifiers(0)))
+        val selection = psd(3, rgb + auxiliary, resources = resource(1053, identifiers(7, 8)))
+        for (bytes in listOf(staleZero, selection)) {
+            assertFalse(requireNotNull(PsdCodec.inspect(bytes)).hasMergedTransparency)
+            assertEquals(0xFF8899AA.toInt(), requireNotNull(PsdCodec.read(bytes)?.composite).pixels[0])
+        }
+    }
+
+    @Test
+    fun oddAndEmptyUnknownResourcesDoNotHideResolutionProfilesOrTransparency() {
+        val resolution =
+            bytes {
+                it.writeInt(300 shl 16)
+                it.writeShort(1)
+                it.write(ByteArray(10))
+            }
+        val resources =
+            resource(2000, byteArrayOf(42), "odd") + resource(2001, ByteArray(0), "even") +
+                resource(1005, resolution) + resource(1039, byteArrayOf(1, 2, 3)) + resource(1053, identifiers(0))
+        val document = psd(3, rgb + listOf(alpha), resources = resources)
+        val info = requireNotNull(PsdCodec.inspect(document))
+        assertEquals(300, info.dpi)
+        assertTrue(info.hasEmbeddedIccProfile)
+        assertTrue(info.hasMergedTransparency)
+        assertEquals(300, requireNotNull(PsdCodec.read(document)).dpi)
+        assertEquals(0x80123456.toInt(), requireNotNull(PsdCodec.read(document)?.composite).pixels[0])
+    }
+
+    @Test
+    fun partialOversizedOrAmbiguousIdentifierResourcesAreRejectedBeforeDecoding() {
+        val resources =
+            listOf(
+                resource(1053, byteArrayOf(0, 0, 0)),
+                resource(1053, identifiers(*IntArray(57) { it + 1 })),
+                resource(1053, identifiers(0, 0)),
+                resource(1053, identifiers(0)) + resource(1053, identifiers(7)),
+            )
+        for (resource in resources) {
+            val bytes = psd(3, rgb + auxiliary, resources = resource)
+            assertNull(PsdCodec.inspect(bytes))
+            assertNull(PsdCodec.read(bytes))
+        }
+    }
+
+    @Test
+    fun resourceNamesPayloadsAndPaddingCannotBorrowTheLayerOrCompositeSections() {
+        val alphaResource = resource(1053, identifiers(0))
+        val resources =
+            listOf(
+                alphaResource.copyOf(11),
+                alphaResource.copyOf().also { it[11] = 8 },
+                alphaResource.copyOf().also { it[8] = 0x7F },
+                alphaResource.copyOf().also { it[6] = 120 },
+                resource(2000, byteArrayOf(42)).dropLast(1).toByteArray(),
+                resource(1005, ByteArray(8)),
+            )
+        for (resource in resources) {
+            val bytes = psd(3, rgb + listOf(alpha), resources = resource)
+            assertNull(PsdCodec.inspect(bytes))
+            assertNull(PsdCodec.read(bytes))
+        }
+    }
+
+    @Test
+    fun colorLimitationsAreMeasuredWithoutRetainingOrApplyingTheEmbeddedProfile() {
+        val bytes = psd(4, cmyk + auxiliary, resources = resource(1039, ByteArray(4097) { 42 }))
+        val info = requireNotNull(PsdCodec.inspect(bytes))
+        assertTrue(info.isCmyk)
+        assertTrue(info.hasEmbeddedIccProfile)
+        assertEquals(2, info.ignoredAuxiliaryChannels)
+        assertArrayEquals(
+            intArrayOf(-1, 0xFF00FFFF.toInt(), 0xFF000000.toInt(), 0xFF804000.toInt()),
+            requireNotNull(PsdCodec.read(bytes)?.composite).pixels,
+        )
+        val ordinary = requireNotNull(PsdCodec.inspect(psd(3, rgb)))
+        assertFalse(ordinary.isCmyk)
+        assertFalse(ordinary.hasEmbeddedIccProfile)
+        assertEquals(0, ordinary.ignoredAuxiliaryChannels)
+    }
+
+    private fun identifiers(vararg ids: Int): ByteArray = bytes { out -> ids.forEach(out::writeInt) }
+
+    private fun resource(
+        id: Int,
+        data: ByteArray,
+        name: String = "",
+    ): ByteArray =
+        bytes { out ->
+            out.writeBytes("8BIM")
+            out.writeShort(id)
+            out.writeByte(name.length)
+            out.writeBytes(name)
+            if ((name.length + 1) % 2 != 0) out.writeByte(0)
+            out.writeInt(data.size)
+            out.write(data)
+            if (data.size % 2 != 0) out.writeByte(0)
+        }
+
     private fun forEachEncoding(check: (Int, Int, Boolean) -> Unit) {
         for (depth in listOf(8, 16)) {
             for (compression in 0..3) {
@@ -191,6 +330,7 @@ class PsdChannelSemanticsTest {
         layerChannels: List<Pair<Int, IntArray>> = emptyList(),
         tags: ByteArray = ByteArray(0),
         globalMaskField: Boolean = true,
+        resources: ByteArray = ByteArray(0),
     ): ByteArray =
         bytes { out ->
             out.writeBytes("8BPS")
@@ -202,7 +342,8 @@ class PsdChannelSemanticsTest {
             out.writeShort(depth)
             out.writeShort(mode)
             out.writeInt(0)
-            out.writeInt(0)
+            out.writeInt(resources.size)
+            out.write(resources)
             val section =
                 if (layerCount != null || tags.isNotEmpty()) {
                     bytes { data ->

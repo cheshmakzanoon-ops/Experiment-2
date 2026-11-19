@@ -177,6 +177,25 @@ class CheckLicensesAndSbomTest(unittest.TestCase):
         with self.assertRaisesRegex(InventoryError, "Stale"):
             validate_inventory(self.inventory, self.root)
 
+    def test_benchmark_build_support_inputs_are_fingerprinted_when_present(self):
+        for relative in (
+            "tools/optimized-test-abi/src/artflow/build/TestAbiRules.java",
+            "tools/optimized-test-abi/verify.py",
+            "app/proguard-benchmark-test-reflection.pro",
+        ):
+            with self.subTest(relative=relative):
+                path = self.root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("original build support input\n")
+                with self.assertRaisesRegex(InventoryError, "build input set differs"):
+                    validate_inventory(self.inventory, self.root)
+                self.inventory["buildInputs"][relative] = sha256(path.read_bytes())
+                validate_inventory(self.inventory, self.root)
+                path.write_text("changed after graph resolution\n")
+                with self.assertRaisesRegex(InventoryError, "Stale dependency inventory"):
+                    validate_inventory(self.inventory, self.root)
+                path.write_text("original build support input\n")
+
     def test_new_version_catalog_invalidates_inventory(self):
         (self.root / "gradle/libs.versions.toml").write_text("[versions]\n")
         with self.assertRaisesRegex(InventoryError, "input set"):

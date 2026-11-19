@@ -14,6 +14,45 @@ import java.nio.file.LinkOption
 class StorageFileTreeTest {
     @get:Rule val temporary = TemporaryFolder()
 
+    @Test fun directoryCreatedBetweenCheckAndMkdirsIsAccepted() {
+        val path = File(temporary.root, "exports/7")
+        val competingCreate =
+            object : File(path.path) {
+                override fun mkdirs(): Boolean {
+                    assertTrue(path.mkdirs())
+                    // File.mkdirs returns false when another caller has just created its path.
+                    return false
+                }
+            }
+        StorageFileTree.requireDirectory(competingCreate, temporary.root, "Directory unavailable")
+        assertTrue(path.isDirectory)
+    }
+
+    @Test fun directoryCreationCannotReplaceARegularFile() {
+        val existing = temporary.newFile("export-record")
+        existing.writeText("retain this content")
+        try {
+            StorageFileTree.requireDirectory(existing, temporary.root, "Directory unavailable")
+            throw AssertionError("A regular file cannot serve as the export directory")
+        } catch (_: IllegalStateException) {
+            assertEquals("retain this content", existing.readText())
+        }
+    }
+
+    @Test fun aLinkCreatedDuringDirectoryInitializationIsRejected() {
+        val outside = temporary.newFolder()
+        val path = File(temporary.root, "late-link")
+        val competingLink =
+            object : File(path.path) {
+                override fun mkdirs(): Boolean {
+                    Files.createSymbolicLink(path.toPath(), outside.toPath())
+                    return false
+                }
+            }
+        expectIo { StorageFileTree.requireDirectory(competingLink, temporary.root, "Directory unavailable") }
+        assertTrue(Files.isSymbolicLink(path.toPath()))
+    }
+
     @Test fun missingRootsAreNotCreated() {
         val missing = File(temporary.root, "absent")
         assertEquals(0L, StorageFileTree.sizeBytes(missing))

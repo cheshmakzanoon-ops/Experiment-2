@@ -138,7 +138,7 @@ class OptimizedArtworkWorkflowTest {
         // The editor composite includes its white paper. PNG defaults to transparent export;
         // select the matching opaque mode through the UI before comparing every decoded pixel.
         compose
-            .onNode(isToggleable() and hasAnySibling(hasText("Flatten onto white")), useUnmergedTree = true)
+            .onNodeWithContentDescription("Flatten onto white")
             .performScrollTo()
             .assertIsOff()
             .performClick()
@@ -195,7 +195,7 @@ class OptimizedArtworkWorkflowTest {
             var ready = false
             scenario.onActivity {
                 val view = findCanvas(it.window.decorView)
-                ready = view != null && view.width > 0 && view.height > 0
+                ready = view != null && view.width > 0 && view.height > 0 && view.isPreviewAvailable
             }
             ready
         }

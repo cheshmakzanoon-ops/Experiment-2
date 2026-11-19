@@ -1,15 +1,15 @@
 # Release readiness and evidence
 
-> **Current checkpoint — November 18, 2026:** See [V1 integration](release/V1_INTEGRATION_2026-11-18.md),
+> **Current work — November 19, 2026:** See the [hardening record](release/PRODUCTION_HARDENING_2026-11-19.md),
 > [test evidence](release/TEST_EVIDENCE.md), and [release sign-off](release/RELEASE_SIGNOFF.md).
 > The records below are chronological historical evidence, not current feature certification.
 > The earlier GPU/sparse-canvas, integrated ICC/CMYK, non-destructive typography, and complete
 > Procreate metadata claims are superseded by the actual runtime boundaries in README.
 
 
-## Current emulator acceptance contract — 24 October 2026
+## Emulator acceptance record — 24 October 2026
 
-[Emulator acceptance and parity corrections](EMULATOR_PARITY_2026-10-24.md) records the current
+[Emulator acceptance and parity corrections](EMULATOR_PARITY_2026-10-24.md) records that checkpoint's
 changes and their compatibility boundaries. Each of the seven device jobs must account for every
 declared instrumentation case, pass its permitted API-specific skip rules, measure its requested
 runtime and complete the minified launch. Its artifact includes `verification.json` and
@@ -18,7 +18,7 @@ historical status statements below; code or workflow presence does not constitut
 The standard Android 15 / 4 KB default-runtime lane is additional coverage. It does not replace
 either existing Android 15 / 16 KB lane or erase their preserved failures.
 
-The app now writes `.artflow` v5 so isolated Normal groups, corrected secondary Grain Blend and
+At this checkpoint, the app wrote `.artflow` v5 so isolated Normal groups, corrected secondary Grain Blend and
 the distinct imported native Darken contract cannot be silently replayed with older semantics.
 Existing v1–v4 documents migrate after
 verification of the original checksum when present; historical unsigned documents retain their
@@ -631,7 +631,12 @@ physical devices, hosted privacy policy, screenshots and Play Console forms) sti
 
 ## Production-readiness audit resolution and release qualification candidate — November 2026
 
-This release qualification candidate establishes complete resolution of the audit findings, eliminates all identified artwork data-loss risks, restores complete CI determinism, hardens all file interchange streaming paths, provides true 64-bit Photoshop PSB parsing with 32-bit RLE row-length tables, decomposes high-complexity components, and honestly scopes the production graphics and color architectures.
+This historical candidate addressed the recovery, bounded streaming, PSB parsing and architecture
+description findings recorded below. It did not establish absence of all artwork data-loss risks,
+universal parser coverage or deterministic CI on every device. The November 19 review found
+additional import, allocation and export races; their fixes and actual verification belong to the
+[current hardening record](release/PRODUCTION_HARDENING_2026-11-19.md). Keep the observed failures
+and remaining publisher/physical gates when assessing a later release.
 
 ### 1. Priority Zero: Authoritative Recovery and Data-Loss Prevention
 
@@ -645,7 +650,7 @@ Investigating the previous audit baseline and CI run `43155272076` revealed a cr
 1. **Isolated Authoritative State Machine:** Extracted `CanvasRecoveryController` (`com.artflow.studio.presentation.ui.viewmodel.CanvasRecoveryController`), which holds `activeProjectId` and `hasUnresolvedRecovery` independently from `CanvasUiState.Ready.recoveryAvailable`. Dismissing the UI prompt via `dismissRecovery()` dismisses only the visual banner while preserving `hasUnresolvedRecovery = true`.
 2. **Repository-Level In-Memory Recovery Set:** Replaced coarse storage checks with `unresolvedRecoveryProjects`. A project enters this set exclusively when `loadCanvas` discovers an unrecovered crash autosave on disk. Active session autosaves do not enter this set. When `saveCanvas` or `autosave` is invoked, `projectId !in unresolvedRecoveryProjects` is checked synchronously in memory without suspending, ensuring `captureSave` runs immediately and undispatched.
 3. **Persistence Guards:** Synchronously guarded `CanvasViewModel.save()` and `saveRecoveryOnBackground()` to reject writes while `recoveryController.hasUnresolvedRecovery` is true. The periodic autosave loop checks the in-memory controller state synchronously without dispatcher hopping.
-4. **Monotonic Timestamp Forward-Stepping:** `ProjectStorage.saveAutosave` guarantees monotonic forward timestamp advancement:
+4. **Timestamp Forward-Stepping:** `ProjectStorage.saveAutosave` attempts to make a colliding autosave timestamp newer than the document; this historical snippet does not verify that the filesystem accepted `setLastModified`:
    ```kotlin
    val file = autosaveFile(projectId)
    val doc = documentFile(projectId)
@@ -654,11 +659,15 @@ Investigating the previous audit baseline and CI run `43155272076` revealed a cr
    }
    ```
 5. **Dispatcher Injection:** Injected `CoroutineDispatcher` (`ioDispatcher: CoroutineDispatcher = Dispatchers.IO`) across all `ProjectStorage` constructors and Hilt bindings (`RepositoryModule.kt`), ensuring tests inject `testDispatcher` for deterministic single-threaded execution.
-6. **Deterministic Verification:** All 8 regression test cases in `AuthoritativeRecoveryTest` (`art006` through `art013`) and all persistence regression tests (`PersistenceRegressionTest`) execute with 100% determinism.
+6. **Regression Coverage:** `AuthoritativeRecoveryTest` (`art006` through `art013`) and
+   `PersistenceRegressionTest` cover the repaired recovery and persistence paths. Passing executions
+   establish their recorded outcomes, not a guarantee that later runs or all devices are deterministic.
 
 ### 2. Stream Bounding and Import/Export Hardening
 
-Unbounded `InputStream.readBytes()` calls on untrusted Android content URIs were eliminated to prevent heap exhaustion (OOM), decompression bombs, and denial-of-service:
+This checkpoint added bounded reads to the following input paths. Encoded-byte limits alone do
+not bound decoded bitmap/texture allocation or prove that every interchange path is bounded;
+the November 19 hardening record documents subsequent decode and lifetime corrections:
 - **Bounded Stream Reading:** Implemented `InputStream.readAtMost(limit: Long): ByteArray` across:
   - `GalleryImports.kt`: PSD (`MAX_PSD_BYTES = 256MB`), native `.artflow` packages (`MAX_PACKAGE_BYTES = 512MB`), 3D models (`MAX_MODEL_BYTES = 64MB`), small files (`64MB`).
   - `CanvasScreen.kt`: Canvas PSD import (`MAX_PSD_IMPORT_BYTES = 256MB`).
@@ -694,7 +703,7 @@ Following baseline `main` `d340bc6` (Run `43189321650`, 7/8 jobs passed, `Device
 - **Workflow SHA Pinning & Supply-Chain Security:** Pinned all `uses:` across all 14 `.github/workflows/*.yml` files to 40-char commit SHAs and added CI secret scanning, 42-component Gradle license/GPLv3 validation, and CycloneDX 1.5 SBOM emission.
 - **Open External Gates:** Publisher upload keystore (`-PrequireReleaseSigning=true`), Play Console Data Safety/listing/privacy URL, and physical Android 8/15/16 + stylus + 16 KB hardware tests remain **OPEN** external deliverables.
 
-| Suite / Gate (Current Branch Local Run) | Measured Coverage | Failures | Status |
+| Suite / Gate (Historical November 12 Local Run) | Measured Coverage | Failures | Status |
 | --- | --- | --- | --- |
 | JVM Unit Tests (`./gradlew testDebugUnitTest`) | `1,706` tests across `284` suites (`2` CI-corpora skipped locally) | `0` | **PASS** |
 | ktlint (`./gradlew ktlintCheck`) | Full Kotlin & Gradle script tree | `0` violations | **PASS** |

@@ -47,7 +47,20 @@ class CanvasImportController(
 
     fun beginPsd(): Request<ByteArray> =
         begin("That PSD could not be opened (maximum 256 MB)") { read ->
-            notify("Imported ${LayerImports.importPsd(repository, read)} layer(s) from PSD")
+            val imported = LayerImports.importPsdWithReport(repository, read)
+            val limitations =
+                buildList {
+                    if (imported.sourceInfo.isCmyk) add("CMYK colors were approximated in sRGB.")
+                    if (imported.sourceInfo.hasEmbeddedIccProfile) add("The embedded ICC profile was not applied; colors may differ.")
+                    if (imported.sourceInfo.ignoredAuxiliaryChannels > 0) add("Extra alpha/spot channels were not imported.")
+                    if (imported.sourceInfo.usesFlattenedAlternateLayers) {
+                        add(
+                            "This PSD's alternate layer records were imported as one flattened image.",
+                        )
+                    }
+                }
+            val note = if (limitations.isEmpty()) "" else ". ${limitations.joinToString(" ")}"
+            notify("Imported ${imported.layers} layer(s) from PSD$note")
         }
 
     fun insertImage(

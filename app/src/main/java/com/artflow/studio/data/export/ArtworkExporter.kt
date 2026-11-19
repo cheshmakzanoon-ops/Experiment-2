@@ -332,39 +332,29 @@ class ArtworkExporter
             options: ExportOptions,
         ): Result<ExportResult> =
             withContext(Dispatchers.IO) {
-                var pinned: List<String> = emptyList()
                 try {
-                    val document =
-                        requireNotNull(storage.loadDocument(projectId)) { "Save the artwork before sharing it" }
-                    pinned = storage.referencedFiles(document)
-                    if (pinned.isNotEmpty()) {
-                        storage.pinRasters(projectId, pinned)
+                    storage.withPackageSnapshot(projectId) { snapshot ->
+                        val fileName = ExportNaming.fileName(projectName, options)
+                        val file =
+                            storage.saveExportFromTempFile(projectId, fileName) { destination ->
+                                ArtflowPackage.writeToFile(projectName, destination, snapshot.sources)
+                            }
+                        Result.success(
+                            ExportResult(
+                                format = ExportFormat.ARTFLOW,
+                                filePath = file.absolutePath,
+                                fileName = fileName,
+                                byteCount = file.length(),
+                                width = snapshot.document.width,
+                                height = snapshot.document.height,
+                            ),
+                        )
                     }
-                    val sources = storage.packageSources(projectId)
-                    val fileName = ExportNaming.fileName(projectName, options)
-                    val file =
-                        storage.saveExportFromTempFile(projectId, fileName) { destination ->
-                            ArtflowPackage.writeToFile(projectName, destination, sources)
-                        }
-                    Result.success(
-                        ExportResult(
-                            format = ExportFormat.ARTFLOW,
-                            filePath = file.absolutePath,
-                            fileName = fileName,
-                            byteCount = file.length(),
-                            width = document.width,
-                            height = document.height,
-                        ),
-                    )
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (e: Exception) {
                     Timber.e(e, "Artwork package export failed")
                     Result.failure(ExportFailure(ExportError.EncodingFailed(e.message ?: "unknown").message))
-                } finally {
-                    if (pinned.isNotEmpty()) {
-                        storage.unpinRasters(projectId, pinned)
-                    }
                 }
             }
 

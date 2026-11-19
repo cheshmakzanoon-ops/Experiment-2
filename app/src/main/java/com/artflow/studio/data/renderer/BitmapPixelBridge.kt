@@ -18,6 +18,9 @@ import com.artflow.studio.core.export.PngCodec
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
 import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.InputStream
+import java.nio.ByteBuffer
 
 /**
  * Adapter between [PixelBuffer] (the pure-Kotlin pixel representation all tools operate on) and
@@ -42,6 +45,7 @@ object BitmapPixelBridge {
     fun fromBitmap(bitmap: Bitmap): PixelBuffer {
         val width = bitmap.width
         val height = bitmap.height
+        require(CanvasOperations.isSizeSafe(width, height)) { "Decoded image exceeds the canvas limits" }
         val pixels = IntArray(width * height)
         bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
         return PixelBuffer(width, height, pixels)
@@ -204,96 +208,121 @@ object BitmapPixelBridge {
         }.getOrDefault(false)
 
     /**
-     * Decodes an image file, downsampling so a 50 megapixel import cannot exhaust memory.
-     * The returned buffer keeps the image's aspect ratio.
+     * Decodes an imported image file within the edge and heap budgets before allocating pixels.
+     * The power-of-two sample can be smaller than [maxDimension] on memory-constrained devices.
      */
     fun decodeFile(
         path: String,
         maxDimension: Int = 4096,
+        memoryBudgetBytes: Long = ImageDecodeBudget.currentBytes(),
+    ): PixelBuffer? =
+        withImportMemory {
+            val file = File(path)
+            if (!file.isFile) return@withImportMemory null
+            val bytes = file.inputStream().use { ImageDecodeBudget.readEncoded(it, memoryBudgetBytes) }
+            decodeSampledBytes(bytes, maxDimension, memoryBudgetBytes)
+        }
+
+    private fun decodeSampledBytes(
+        bytes: ByteArray,
+        maxDimension: Int,
+        memoryBudgetBytes: Long,
     ): PixelBuffer? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(path, bounds)
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-
+        val plan = ImageDecodeBudget.plan(bounds.outWidth, bounds.outHeight, maxDimension, memoryBudgetBytes - bytes.size * 3L)
         val options =
             BitmapFactory.Options().apply {
-                inSampleSize = calculateSampleSize(bounds.outWidth, bounds.outHeight, maxDimension)
+                inSampleSize = plan.sampleSize
                 inPreferredConfig = Bitmap.Config.ARGB_8888
+                inScaled = false
             }
-        val bitmap = BitmapFactory.decodeFile(path, options) ?: return null
-        val decoded = fromBitmap(bitmap)
-        bitmap.recycle()
-        return if (decoded.width > maxDimension || decoded.height > maxDimension) {
-            val scale = maxDimension.toFloat() / maxOf(decoded.width, decoded.height)
-            decoded.scaled(
-                (decoded.width * scale).toInt().coerceAtLeast(1),
-                (decoded.height * scale).toInt().coerceAtLeast(1),
-            )
-        } else {
-            decoded
-        }
+        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) ?: return null
+        return importedPixels(bitmap, plan)
     }
 
     /**
      * Decodes a picked image (honouring EXIF rotation on Android 9+), downsampled so its longest
-     * side stays within [maxDimension].
+     * side stays within [maxDimension] and its simultaneous rasters fit the import heap budget.
+     * A bounded encoded snapshot makes metadata and pixels consistent even if a provider changes
+     * what it returns between opens. The metadata pass chooses a sample before allocating pixels.
      */
     fun decodeUri(
         resolver: ContentResolver,
         uri: Uri,
         maxDimension: Int = 4096,
-    ): PixelBuffer? {
-        val bitmap =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                ImageDecoder.decodeBitmap(ImageDecoder.createSource(resolver, uri)) { decoder, info, _ ->
-                    decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-                    decoder.setTargetSampleSize(calculateSampleSize(info.size.width, info.size.height, maxDimension))
-                }
-            } else {
-                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-                if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-                val options =
-                    BitmapFactory.Options().apply {
-                        inSampleSize = calculateSampleSize(bounds.outWidth, bounds.outHeight, maxDimension)
-                        inPreferredConfig = Bitmap.Config.ARGB_8888
-                    }
-                resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
-            } ?: return null
-        val decoded =
-            try {
-                val software = if (bitmap.config == Bitmap.Config.ARGB_8888) bitmap else bitmap.copy(Bitmap.Config.ARGB_8888, false)
-                try {
-                    fromBitmap(software)
-                } finally {
-                    if (software !== bitmap) software.recycle()
-                }
-            } finally {
-                bitmap.recycle()
+        memoryBudgetBytes: Long = ImageDecodeBudget.currentBytes(),
+    ): PixelBuffer? = decodeImportedSource({ resolver.openInputStream(uri) }, maxDimension, memoryBudgetBytes)
+
+    /** The one-open source contract also covers providers whose content changes between opens. */
+    internal fun decodeImportedSource(
+        openStream: () -> InputStream?,
+        maxDimension: Int,
+        memoryBudgetBytes: Long,
+    ): PixelBuffer? =
+        withImportMemory {
+            val bytes = openStream()?.use { ImageDecodeBudget.readEncoded(it, memoryBudgetBytes) } ?: return@withImportMemory null
+            if (Build.VERSION.SDK_INT <
+                Build.VERSION_CODES.P
+            ) {
+                return@withImportMemory decodeSampledBytes(bytes, maxDimension, memoryBudgetBytes)
             }
-        return if (decoded.width > maxDimension || decoded.height > maxDimension) {
-            val scale = maxDimension.toFloat() / maxOf(decoded.width, decoded.height)
-            decoded.scaled((decoded.width * scale).toInt().coerceAtLeast(1), (decoded.height * scale).toInt().coerceAtLeast(1))
-        } else {
-            decoded
+            var plan: ImageDecodeBudget.Plan? = null
+            val bitmap =
+                ImageDecoder.decodeBitmap(ImageDecoder.createSource(ByteBuffer.wrap(bytes))) { decoder, info, _ ->
+                    val target =
+                        ImageDecodeBudget.plan(
+                            info.size.width,
+                            info.size.height,
+                            maxDimension,
+                            memoryBudgetBytes - bytes.size * 3L,
+                        )
+                    plan = target
+                    decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                    // Unlike targetSampleSize, the exact bounded size leaves no decoder-specific
+                    // rounding above the allocation plan. ImageDecoder handles EXIF orientation.
+                    decoder.setTargetSize(target.width, target.height)
+                }
+            importedPixels(bitmap, plan)
         }
-    }
+
+    /** Decoder-internal/native allocations and other app work can exceed the metadata estimate. */
+    private fun withImportMemory(decode: () -> PixelBuffer?): PixelBuffer? =
+        try {
+            decode()
+        } catch (error: OutOfMemoryError) {
+            // Stream/bitmap owners unwind first. Report a failed import without publishing pixels.
+            throw IllegalArgumentException(ImageDecodeBudget.MEMORY_MESSAGE, error)
+        }
+
+    private fun importedPixels(
+        bitmap: Bitmap,
+        plan: ImageDecodeBudget.Plan?,
+    ): PixelBuffer =
+        try {
+            requireNotNull(plan) { "The image decoder did not provide allocation metadata" }.checkDecodedSize(bitmap.width, bitmap.height)
+            val software =
+                if (bitmap.config == Bitmap.Config.ARGB_8888) {
+                    bitmap
+                } else {
+                    requireNotNull(bitmap.copy(Bitmap.Config.ARGB_8888, false)) { "Not enough memory to convert the imported image" }
+                }
+            try {
+                fromBitmap(software)
+            } finally {
+                if (software !== bitmap) software.recycle()
+            }
+        } finally {
+            bitmap.recycle()
+        }
 
     /** Power-of-two downsampling factor that keeps the longest side within [maxDimension]. */
     fun calculateSampleSize(
         width: Int,
         height: Int,
         maxDimension: Int,
-    ): Int {
-        require(width > 0 && height > 0 && maxDimension > 0) { "Image dimensions must be positive" }
-        var sampleSize = 1
-        var longest = maxOf(width, height)
-        while (longest / 2 >= maxDimension) {
-            longest /= 2
-            sampleSize *= 2
-        }
-        return sampleSize
-    }
+    ): Int = ImageDecodeBudget.sampleSize(width, height, maxDimension)
 
     /**
      * Rasterises a selection mask's outline into pixels, used for the marching-ants band when a

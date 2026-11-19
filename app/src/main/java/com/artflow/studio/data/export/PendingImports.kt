@@ -19,17 +19,31 @@ object PendingImports {
         val isPrivate: Boolean,
     )
 
-    private val images = ConcurrentHashMap<Long, PendingImage>()
+    private val rasters =
+        PendingRasterImports(onExpired = { projectId ->
+            putNotice(projectId, "The import was cancelled before the editor opened. Import the original file again.")
+        })
 
     fun put(
         projectId: Long,
         image: PixelBuffer,
         isPrivate: Boolean = false,
+        owner: CoroutineScope,
     ) {
-        images[projectId] = PendingImage(image, isPrivate)
+        rasters.putImage(projectId, image, isPrivate, owner)
     }
 
-    fun take(projectId: Long): PendingImage? = images.remove(projectId)
+    fun take(projectId: Long): PendingImage? = rasters.takeImage(projectId)
+
+    fun discardImage(
+        projectId: Long,
+        image: PixelBuffer,
+    ) = rasters.discardImage(projectId, image)
+
+    internal fun reserveImage(
+        image: PixelBuffer,
+        owner: CoroutineScope,
+    ): PendingRasterImports.Reservation = rasters.reserveImage(image, isPrivate = false, owner)
 
     private class PsdHandoff(
         val bytes: ByteArray,
@@ -148,58 +162,57 @@ object PendingImports {
         }
     }
 
-    private val models = ConcurrentHashMap<Long, String>()
-
-    /** A 3D model (OBJ text) whose texture the new canvas becomes. */
-    fun putModel(
-        projectId: Long,
-        objText: String,
-    ) {
-        models[projectId] = objText
-    }
-
-    fun takeModel(projectId: Long): String? = models.remove(projectId)
-
-    private class ModelBundle(
-        val prepared: PreparedModelImport,
-    ) {
-        @Volatile var receipt: ModelImports.Receipt? = null
-    }
-
-    private val modelBundles = ConcurrentHashMap<Long, ModelBundle>()
-
     /** All model planes are prepared before the gallery creates their destination project. */
     fun putModelBundle(
         projectId: Long,
         prepared: PreparedModelImport,
+        owner: CoroutineScope,
     ) {
-        modelBundles[projectId] = ModelBundle(prepared)
+        rasters.putModel(projectId, prepared, owner)
     }
 
     /** Keep the payload available until an awaited installation succeeds, including after a retryable I/O failure. */
-    fun modelBundle(projectId: Long): PreparedModelImport? = modelBundles[projectId]?.prepared
+    fun modelBundle(projectId: Long): PreparedModelImport? = rasters.model(projectId)
+
+    /** Transfers lifetime from the gallery to the unsaved editor retry, before any suspending work. */
+    fun claimModelBundle(projectId: Long): PreparedModelImport? = rasters.claimModel(projectId)
+
+    internal fun reserveModelBundle(
+        prepared: PreparedModelImport,
+        owner: CoroutineScope,
+    ): PendingRasterImports.Reservation = rasters.reserveModel(prepared, owner)
 
     fun completeModelBundle(
         projectId: Long,
         prepared: PreparedModelImport,
-    ): Boolean {
-        val bundle = modelBundles[projectId]?.takeIf { it.prepared === prepared } ?: return false
-        return modelBundles.remove(projectId, bundle)
-    }
+    ): Boolean = rasters.completeModel(projectId, prepared)
+
+    fun discardModelBundle(
+        projectId: Long,
+        prepared: PreparedModelImport,
+    ) = rasters.discardModel(projectId, prepared)
 
     internal fun modelReceipt(
         projectId: Long,
         prepared: PreparedModelImport,
-    ): ModelImports.Receipt? = modelBundles[projectId]?.takeIf { it.prepared === prepared }?.receipt
+    ): ModelImports.Receipt? = rasters.receipt(projectId, prepared)
 
     internal fun recordModelReceipt(
         projectId: Long,
         prepared: PreparedModelImport,
         receipt: ModelImports.Receipt,
-    ) {
-        modelBundles.computeIfPresent(projectId) { _, bundle ->
-            bundle.also { if (it.prepared === prepared) it.receipt = receipt }
+    ) = rasters.recordReceipt(projectId, prepared, receipt)
+
+    /** A successful gallery deletion releases even a claimed model whose initial save never finished. */
+    fun discardProject(projectId: Long) {
+        rasters.discardProject(projectId)
+        documents.remove(projectId)?.expiry?.cancel()
+        procreate.remove(projectId)?.let {
+            it.expiry.cancel()
+            closeProcreate(it.document)
         }
+        profiles.remove(projectId)
+        notices.remove(projectId)
     }
 
     private val profiles = ConcurrentHashMap<Long, ColorProfile>()

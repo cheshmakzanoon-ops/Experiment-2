@@ -74,6 +74,9 @@ val dependencyInputPaths =
         "gradle.properties",
         "gradle/wrapper/gradle-wrapper.properties",
         "gradle/release-dependencies.gradle.kts",
+        "tools/optimized-test-abi/src/artflow/build/TestAbiRules.java",
+        "tools/optimized-test-abi/verify.py",
+        "app/proguard-benchmark-test-reflection.pro",
         "gradle/libs.versions.toml",
         "gradle/verification-metadata.xml",
         "gradle.lockfile",
@@ -106,6 +109,7 @@ tasks.register("writeReleaseDependencyInventory") {
     doLast {
         val output = reportFile.get().asFile
         output.delete()
+
         fun verifyBuildInputsUnchanged() {
             val current = dependencyBuildInputs()
             val changed =

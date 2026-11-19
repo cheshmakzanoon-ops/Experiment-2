@@ -265,7 +265,7 @@ class CanvasModelInitializationTest {
             CanvasViewModel(repository, projects, settings, mock(ArtworkExporter::class.java), mock(TimelapseRecorder::class.java))
 
         init {
-            PendingImports.putModelBundle(PROJECT_ID, prepared)
+            PendingImports.putModelBundle(PROJECT_ID, prepared, viewModel.viewModelScope)
         }
 
         suspend fun awaitEntered() =

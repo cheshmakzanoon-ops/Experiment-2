@@ -94,8 +94,9 @@ class ProjectStoragePackageTest {
             sourceStorage.saveDocument(projectId, doc)
 
             val packageFile = File(temporary.newFolder("share"), "artwork.artflow")
-            val sources = sourceStorage.packageSources(projectId)
-            ArtflowPackage.writeToFile("Artwork", packageFile, sources)
+            sourceStorage.withPackageSnapshot(projectId) { snapshot ->
+                ArtflowPackage.writeToFile("Artwork", packageFile, snapshot.sources)
+            }
 
             // Verify no font binary is bundled, while dependencies and grain asset are included.
             ArtflowPackage.openFile(packageFile).use { opened ->

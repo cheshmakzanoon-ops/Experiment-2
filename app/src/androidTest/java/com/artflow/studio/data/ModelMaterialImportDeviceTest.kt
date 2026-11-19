@@ -210,7 +210,7 @@ class ModelMaterialImportDeviceTest {
                         throw IOException("Injected failure after durable model save")
                     }
                 }
-            PendingImports.putModelBundle(PROJECT, prepared)
+            PendingImports.putModelBundle(PROJECT, prepared, this)
             try {
                 val failed = runCatching { ModelController(failingSave, this) {}.initialize(PROJECT) }.exceptionOrNull()
                 val installedLayers = repository.getAllLayers()

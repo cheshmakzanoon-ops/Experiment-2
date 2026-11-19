@@ -1,5 +1,20 @@
 # Test and build evidence
 
+## November 19 production hardening
+
+The current repair and verification campaign starts from main
+`54fa5e0a9d8ef8502d637192c9dc9748c2000dfe`. Its per-wave implementation, local verification and
+failed CI checkpoints are retained in the [hardening record](PRODUCTION_HARDENING_2026-11-19.md).
+[PR #41](https://github.com/cheshmakzanoon-ops/Experiment-2/pull/41) is the current integration and
+exact-revision verification index. The older PR #40 records below remain the evidence for that
+earlier integration; they do not qualify this candidate's later changes.
+
+The seven-lane debug matrix, selected optimized workflow lane, installed-package campaign,
+physical-device campaign and publisher-artifact gate have different scopes. Record actual
+execution and retained artifact identities for each. A newly configured gate, a host test of its
+verifier or a successful APK build does not establish that the corresponding device campaign ran.
+The [release sign-off](RELEASE_SIGNOFF.md) defines final-SHA repeat acceptance and external gates.
+
 ## November 19 CI repair follow-up
 
 The [kernel comparison record](../ANDROID15_KERNEL_REPAIR_2026-11-19.md) documents two

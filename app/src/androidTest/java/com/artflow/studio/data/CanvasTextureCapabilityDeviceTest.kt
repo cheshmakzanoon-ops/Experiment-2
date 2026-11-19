@@ -7,6 +7,7 @@ import android.opengl.GLES20
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.data.renderer.opengl.CanvasPreviewAvailability
 import com.artflow.studio.data.renderer.opengl.OpenGLCanvasRenderer
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -14,6 +15,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.nio.ByteBuffer
+import java.util.concurrent.atomic.AtomicInteger
 
 /** Real GLES2 rendering with a deliberately smaller preview budget than the retained document. */
 @RunWith(AndroidJUnit4::class)
@@ -29,6 +31,7 @@ class CanvasTextureCapabilityDeviceTest {
                 initialize(renderer)
                 renderer.setComposite(source)
                 renderer.onDrawFrame(null)
+                assertEquals(CanvasPreviewAvailability.AVAILABLE, renderer.previewAvailability)
                 assertEquals(Color.RED, pixel(96, 8))
                 assertArrayEquals(IntArray(512 * 128) { Color.RED }, source.pixels)
 
@@ -64,9 +67,95 @@ class CanvasTextureCapabilityDeviceTest {
                 initialize(renderer)
                 renderer.setComposite(source)
                 repeat(3) { renderer.onDrawFrame(null) }
+                assertEquals(CanvasPreviewAvailability.UNAVAILABLE, renderer.previewAvailability)
                 assertEquals(1, failures.size)
                 assertTrue(failures.single().contains("could not display"))
                 assertArrayEquals(IntArray(512 * 128) { Color.BLUE }, source.pixels)
+            } finally {
+                renderer.dispose()
+            }
+        }
+    }
+
+    @Test
+    fun anUnrelatedGlErrorDoesNotRejectThePrimaryImageOrItsRegionUpdates() {
+        withGl {
+            val renderer = OpenGLCanvasRenderer(64)
+            val messages = mutableListOf<String>()
+            renderer.onStatusMessage = { messages += it }
+            try {
+                initialize(renderer)
+                GLES20.glBindTexture(-1, 0) // An earlier, unrelated GL_INVALID_ENUM must be drained.
+                val source = PixelBuffer.filled(64, 64, Color.BLUE)
+                renderer.setComposite(source)
+                renderer.onDrawFrame(null)
+                assertEquals(CanvasPreviewAvailability.AVAILABLE, renderer.previewAvailability)
+                assertEquals(Color.BLUE, pixel(96, 8))
+
+                GLES20.glBindTexture(-1, 0)
+                source.fill(Color.GREEN)
+                renderer.setCompositeRegion(source, IntBounds(0, 0, 63, 63))
+                renderer.onDrawFrame(null)
+                assertEquals(CanvasPreviewAvailability.AVAILABLE, renderer.previewAvailability)
+                assertEquals(Color.GREEN, pixel(96, 8))
+                assertEquals(GLES20.GL_NO_ERROR, GLES20.glGetError())
+                assertTrue(messages.toString(), messages.isEmpty())
+            } finally {
+                renderer.dispose()
+            }
+        }
+    }
+
+    @Test
+    fun aFailedCheckerboardDoesNotDisableAnOtherwiseValidPrimaryImage() {
+        withGl {
+            val budget = AtomicInteger(0)
+            val renderer = OpenGLCanvasRenderer { budget.get() }
+            val messages = mutableListOf<String>()
+            renderer.onStatusMessage = { messages += it }
+            try {
+                initialize(renderer)
+                assertEquals(CanvasPreviewAvailability.WAITING_FOR_FRAME, renderer.previewAvailability)
+                assertTrue(messages.isEmpty())
+                budget.set(64)
+                renderer.setCheckerboardVisible(true)
+                renderer.setComposite(PixelBuffer.filled(512, 128, Color.GREEN))
+                renderer.onDrawFrame(null)
+                assertEquals(CanvasPreviewAvailability.AVAILABLE, renderer.previewAvailability)
+                assertEquals(Color.GREEN, pixel(96, 8))
+                assertTrue(messages.toString(), messages.isEmpty())
+            } finally {
+                renderer.dispose()
+            }
+        }
+    }
+
+    @Test
+    fun failedExistingTextureIsRetriedOnRedrawAndRecoveryRetainsTheInputInterruption() {
+        withGl {
+            val budget = AtomicInteger(64)
+            val renderer = OpenGLCanvasRenderer { budget.get() }
+            val messages = mutableListOf<String>()
+            renderer.onStatusMessage = { messages += it }
+            try {
+                initialize(renderer)
+                renderer.setComposite(PixelBuffer.filled(512, 128, Color.BLUE))
+                renderer.onDrawFrame(null)
+                assertEquals(CanvasPreviewAvailability.AVAILABLE, renderer.previewAvailability)
+                val beforeFailure = renderer.previewInterruptions
+                budget.set(0)
+                renderer.setComposite(PixelBuffer.filled(512, 128, Color.GREEN))
+                renderer.onDrawFrame(null)
+                assertEquals(CanvasPreviewAvailability.UNAVAILABLE, renderer.previewAvailability)
+                assertEquals(beforeFailure + 1, renderer.previewInterruptions)
+                assertEquals(1, messages.size)
+
+                budget.set(64)
+                renderer.onDrawFrame(null) // No new image or dirty region: retry the failed retained image.
+                assertEquals(CanvasPreviewAvailability.AVAILABLE, renderer.previewAvailability)
+                assertEquals(beforeFailure + 1, renderer.previewInterruptions)
+                assertEquals(Color.GREEN, pixel(96, 8))
+                assertEquals(1, messages.size)
             } finally {
                 renderer.dispose()
             }

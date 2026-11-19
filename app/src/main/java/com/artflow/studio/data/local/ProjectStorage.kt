@@ -6,6 +6,8 @@ import com.artflow.studio.data.export.ArtflowPackage
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.ByteArrayInputStream
@@ -52,7 +54,7 @@ class ProjectStorage
         fun projectDir(projectId: Long): File {
             require(projectId > 0) { "Invalid project id" }
             return ownedPath("projects/$projectId").apply {
-                check(isDirectory || mkdirs()) { "Cannot create project directory" }
+                StorageFileTree.requireDirectory(this, context.filesDir, "Cannot create project directory")
             }
         }
 
@@ -72,7 +74,7 @@ class ProjectStorage
         fun exportsDir(projectId: Long): File {
             require(projectId > 0) { "Invalid project id" }
             return ownedPath("$EXPORTS_DIR/$projectId").apply {
-                check(isDirectory || mkdirs()) { "Cannot create export directory" }
+                StorageFileTree.requireDirectory(this, context.filesDir, "Cannot create export directory")
             }
         }
 
@@ -154,11 +156,25 @@ class ProjectStorage
         private fun decodeDocument(
             file: File,
             projectId: Long,
-        ): CanvasDocument {
+        ): CanvasDocument = decodeDocument(readDocumentBytes(file, projectId), projectId)
+
+        private fun readDocumentBytes(
+            file: File,
+            projectId: Long,
+        ): ByteArray {
             require(file.length() in 1..MAX_DOCUMENT_BYTES) { "Project $projectId metadata is empty or too large" }
+            return file.readBytes().also {
+                require(it.size in 1..MAX_DOCUMENT_BYTES) { "Project $projectId metadata is empty or too large" }
+            }
+        }
+
+        private fun decodeDocument(
+            bytes: ByteArray,
+            projectId: Long,
+        ): CanvasDocument {
             // Missing is different from corrupt. Propagate invalid data; callers must NEVER replace it
             // with a new blank canvas or silently discard a newer format's fields on the next save.
-            val document = CanvasDocumentCodec.decode(file.readText())
+            val document = CanvasDocumentCodec.decode(bytes.decodeToString())
             CanvasDocumentCodec.requireValidHeader(document)
             CanvasDocumentCodec.requireValidStructure(document)
             document.resolvedFrames().flatMap { it.layers }.forEach { layer ->
@@ -264,25 +280,36 @@ class ProjectStorage
             relativePath: String?,
         ): Boolean = relativePath != null && resolve(projectId, relativePath).exists()
 
-        private val pinnedRasters = ConcurrentHashMap<Long, MutableSet<String>>()
+        private val pinnedRasters = ConcurrentHashMap<Long, Map<String, Int>>()
+        private val rasterRetentionMutex = Mutex()
 
         fun pinRasters(
             projectId: Long,
             paths: Collection<String>,
         ) {
-            val projectPins = pinnedRasters.computeIfAbsent(projectId) { ConcurrentHashMap.newKeySet() }
-            projectPins.addAll(paths.map(::normalizeRelativePath))
+            val normalized = paths.map(::normalizeRelativePath).toSet()
+            if (normalized.isEmpty()) return
+            pinnedRasters.compute(projectId) { _, pins ->
+                pins.orEmpty().toMutableMap().apply {
+                    normalized.forEach { path -> this[path] = (this[path] ?: 0) + 1 }
+                }
+            }
         }
 
         fun unpinRasters(
             projectId: Long,
             paths: Collection<String>,
         ) {
-            pinnedRasters[projectId]?.let { pins ->
-                pins.removeAll(paths.map(::normalizeRelativePath).toSet())
-                if (pins.isEmpty()) {
-                    pinnedRasters.remove(projectId, pins)
-                }
+            val normalized = paths.map(::normalizeRelativePath).toSet()
+            pinnedRasters.computeIfPresent(projectId) { _, pins ->
+                pins
+                    .toMutableMap()
+                    .apply {
+                        normalized.forEach { path ->
+                            val remaining = (this[path] ?: 0) - 1
+                            if (remaining > 0) this[path] = remaining else remove(path)
+                        }
+                    }.takeIf { it.isNotEmpty() }
             }
         }
 
@@ -306,25 +333,27 @@ class ProjectStorage
             keep: Set<String>,
         ): Int =
             withContext(ioDispatcher) {
-                val layersDir = File(projectDir(projectId), LAYERS_DIR)
-                if (!layersDir.exists()) return@withContext 0
-                // Fail closed if either manifest is unreadable; never guess which artwork can be deleted.
-                val retained = keep.map(::normalizeRelativePath).toMutableSet()
-                pinnedRasters[projectId]?.let { retained.addAll(it) }
-                listOfNotNull(loadDocument(projectId), loadAutosave(projectId)).forEach { document ->
-                    document.resolvedFrames().flatMap { it.layers }.forEach { layer ->
-                        listOfNotNull(layer.rasterFile, layer.maskFile).forEach {
-                            retained.add(normalizeRelativePath(it))
+                rasterRetentionMutex.withLock {
+                    val layersDir = File(projectDir(projectId), LAYERS_DIR)
+                    if (!layersDir.exists()) return@withLock 0
+                    // Fail closed if either manifest is unreadable; never guess which artwork can be deleted.
+                    val retained = keep.map(::normalizeRelativePath).toMutableSet()
+                    pinnedRasters[projectId]?.let { retained.addAll(it.keys) }
+                    listOfNotNull(loadDocument(projectId), loadAutosave(projectId)).forEach { document ->
+                        document.resolvedFrames().flatMap { it.layers }.forEach { layer ->
+                            listOfNotNull(layer.rasterFile, layer.maskFile).forEach {
+                                retained.add(normalizeRelativePath(it))
+                            }
                         }
                     }
+                    val deleted =
+                        StorageFileTree.prune(layersDir, context.filesDir) { file ->
+                            val relative = normalizeRelativePath(file.relativeTo(projectDir(projectId)).path)
+                            file.extension == "png" && relative !in retained
+                        }
+                    if (deleted > 0) Timber.d("Pruned $deleted stale raster versions for project $projectId")
+                    deleted
                 }
-                val deleted =
-                    StorageFileTree.prune(layersDir, context.filesDir) { file ->
-                        val relative = normalizeRelativePath(file.relativeTo(projectDir(projectId)).path)
-                        file.extension == "png" && relative !in retained
-                    }
-                if (deleted > 0) Timber.d("Pruned $deleted stale raster versions for project $projectId")
-                deleted
             }
 
         /** IDs with orphaned files remain reserved after an interrupted database transaction. */
@@ -392,77 +421,89 @@ class ProjectStorage
 
         /** A saved project's files for an `.artflow` package: manifest, layer pixels, previews, and grain/dependency assets. */
         suspend fun packageFiles(projectId: Long): Map<String, ByteArray> =
-            withContext(ioDispatcher) {
-                val document = requireNotNull(loadDocument(projectId)) { "Save the artwork before sharing it" }
-                val files = linkedMapOf(DOCUMENT_NAME to documentFile(projectId).readBytes())
-                referencedFiles(document).forEach { relative -> files[relative] = requireNotNull(readRaster(projectId, relative)) }
-                listOf(FLATTENED_NAME, THUMBNAIL_NAME, MODEL_NAME).forEach { name ->
-                    val file = resolve(projectId, name)
-                    if (file.isFile) files[name] = file.readBytes()
+            withPackageSnapshot(projectId) { snapshot ->
+                snapshot.sources.associate { source ->
+                    source.path to source.openStream().use { it.readBytes() }
                 }
-                val dependencies = collectDependencies(document)
-                val grainDir = GrainStorage.directory(context.filesDir)
-                dependencies.grainIds.forEach { id ->
-                    val disk = GrainStorage.fileFor(grainDir, id)
-                    val grainBytes =
-                        when {
-                            disk != null &&
-                                Files.isRegularFile(disk.toPath(), LinkOption.NOFOLLOW_LINKS) &&
-                                disk.length() == (CustomGrains.TILE * CustomGrains.TILE).toLong() -> disk.readBytes()
-                            else -> CustomGrains.get(id)?.values
-                        }
-                    if (grainBytes != null) {
-                        files[ArtflowPackage.grainEntryPath(id)] = grainBytes
-                    }
-                }
-                if (dependencies.fonts.isNotEmpty() || dependencies.grainIds.isNotEmpty()) {
-                    files[ArtflowPackage.DEPENDENCIES] = ArtflowPackage.encodeDependencies(dependencies)
-                }
-                files
             }
 
-        /** Streaming entry sources for building an `.artflow` package without copying rasters into heap. */
-        suspend fun packageSources(projectId: Long): List<ArtflowPackage.EntrySource> =
+        class PackageSnapshot internal constructor(
+            val document: CanvasDocument,
+            val sources: List<ArtflowPackage.EntrySource>,
+        )
+
+        /**
+         * Keeps one committed manifest and its immutable rasters together for the entire export.
+         * Acquisition is serialized with pruning, but the archive callback never holds that lock.
+         * Sources belong to this scope; callers must finish reading them before returning.
+         */
+        suspend fun <T> withPackageSnapshot(
+            projectId: Long,
+            block: suspend (PackageSnapshot) -> T,
+        ): T =
             withContext(ioDispatcher) {
-                val document = requireNotNull(loadDocument(projectId)) { "Save the artwork before sharing it" }
-                val sources = mutableListOf<ArtflowPackage.EntrySource>()
-                val docFile = documentFile(projectId)
-                sources += ArtflowPackage.EntrySource(DOCUMENT_NAME) { FileInputStream(docFile) }
-                referencedFiles(document).forEach { relative ->
-                    val file = resolve(projectId, relative)
-                    require(file.isFile && file.length() in 1..MAX_RASTER_BYTES) {
-                        "Missing or invalid layer pixels: $relative"
-                    }
-                    sources += ArtflowPackage.EntrySource(relative) { FileInputStream(file) }
-                }
-                listOf(FLATTENED_NAME, THUMBNAIL_NAME, MODEL_NAME).forEach { name ->
-                    val file = resolve(projectId, name)
-                    if (file.isFile) {
-                        sources += ArtflowPackage.EntrySource(name) { FileInputStream(file) }
-                    }
-                }
-                val dependencies = collectDependencies(document)
-                val grainDir = GrainStorage.directory(context.filesDir)
-                dependencies.grainIds.forEach { id ->
-                    val disk = GrainStorage.fileFor(grainDir, id)
-                    val path = ArtflowPackage.grainEntryPath(id)
-                    when {
-                        disk != null &&
-                            Files.isRegularFile(disk.toPath(), LinkOption.NOFOLLOW_LINKS) &&
-                            disk.length() == (CustomGrains.TILE * CustomGrains.TILE).toLong() ->
-                            sources += ArtflowPackage.EntrySource(path) { FileInputStream(disk) }
-                        CustomGrains.get(id) != null -> {
-                            val bytes = CustomGrains.get(id)!!.values
-                            sources += ArtflowPackage.EntrySource(path) { ByteArrayInputStream(bytes) }
+                var pinned: List<String> = emptyList()
+                try {
+                    val snapshot =
+                        rasterRetentionMutex.withLock {
+                            val file = documentFile(projectId)
+                            require(file.exists()) { "Save the artwork before sharing it" }
+                            val bytes = readDocumentBytes(file, projectId)
+                            val document = decodeDocument(bytes, projectId)
+                            pinned = referencedFiles(document)
+                            pinRasters(projectId, pinned)
+                            PackageSnapshot(document, packageSources(projectId, document, bytes))
                         }
+                    block(snapshot)
+                } finally {
+                    // Synchronous release also runs when the archive or dispatcher return is cancelled.
+                    unpinRasters(projectId, pinned)
+                }
+            }
+
+        /** Preserves the exact committed metadata, including compatible fields unknown to this version. */
+        private fun packageSources(
+            projectId: Long,
+            document: CanvasDocument,
+            documentBytes: ByteArray,
+        ): List<ArtflowPackage.EntrySource> {
+            val sources = mutableListOf<ArtflowPackage.EntrySource>()
+            sources += ArtflowPackage.EntrySource(DOCUMENT_NAME) { ByteArrayInputStream(documentBytes) }
+            referencedFiles(document).forEach { relative ->
+                val file = resolve(projectId, relative)
+                require(file.isFile && file.length() in 1..MAX_RASTER_BYTES) {
+                    "Missing or invalid layer pixels: $relative"
+                }
+                sources += ArtflowPackage.EntrySource(relative) { FileInputStream(file) }
+            }
+            listOf(FLATTENED_NAME, THUMBNAIL_NAME, MODEL_NAME).forEach { name ->
+                val file = resolve(projectId, name)
+                if (file.isFile) {
+                    sources += ArtflowPackage.EntrySource(name) { FileInputStream(file) }
+                }
+            }
+            val dependencies = collectDependencies(document)
+            val grainDir = GrainStorage.directory(context.filesDir)
+            dependencies.grainIds.forEach { id ->
+                val disk = GrainStorage.fileFor(grainDir, id)
+                val path = ArtflowPackage.grainEntryPath(id)
+                when {
+                    disk != null &&
+                        Files.isRegularFile(disk.toPath(), LinkOption.NOFOLLOW_LINKS) &&
+                        disk.length() == (CustomGrains.TILE * CustomGrains.TILE).toLong() ->
+                        sources += ArtflowPackage.EntrySource(path) { FileInputStream(disk) }
+                    CustomGrains.get(id) != null -> {
+                        val bytes = CustomGrains.get(id)!!.values
+                        sources += ArtflowPackage.EntrySource(path) { ByteArrayInputStream(bytes) }
                     }
                 }
-                if (dependencies.fonts.isNotEmpty() || dependencies.grainIds.isNotEmpty()) {
-                    val encoded = ArtflowPackage.encodeDependencies(dependencies)
-                    sources += ArtflowPackage.EntrySource(ArtflowPackage.DEPENDENCIES) { ByteArrayInputStream(encoded) }
-                }
-                sources
             }
+            if (dependencies.fonts.isNotEmpty() || dependencies.grainIds.isNotEmpty()) {
+                val encoded = ArtflowPackage.encodeDependencies(dependencies)
+                sources += ArtflowPackage.EntrySource(ArtflowPackage.DEPENDENCIES) { ByteArrayInputStream(encoded) }
+            }
+            return sources
+        }
 
         /** The manifest of an `.artflow` package, checked before any project is created for it. */
         fun decodePackagedDocument(bytes: ByteArray): CanvasDocument {
@@ -794,7 +835,7 @@ class ProjectStorage
         ) {
             StorageFileTree.requireUnlinked(target, context.filesDir)
             val parent = requireNotNull(target.parentFile)
-            check(parent.isDirectory || parent.mkdirs()) { "Cannot create storage directory" }
+            StorageFileTree.requireDirectory(parent, context.filesDir, "Cannot create storage directory")
             val temp = File.createTempFile(".${target.name}-", ".tmp", parent)
             try {
                 FileOutputStream(temp).use { out ->

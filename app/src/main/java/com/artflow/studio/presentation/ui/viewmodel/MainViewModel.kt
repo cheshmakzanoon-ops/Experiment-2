@@ -321,6 +321,7 @@ class MainViewModel
         fun delete(project: Project) {
             viewModelScope.launch(galleryErrors) {
                 projectRepository.deleteProjectById(project.id)
+                PendingImports.discardProject(project.id)
                 withContext(Dispatchers.IO) { storage.deleteProjectFiles(project.id) }
                 storageBytes = withContext(Dispatchers.IO) { storage.totalStorageBytes() }
                 publish()

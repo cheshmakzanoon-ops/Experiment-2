@@ -68,30 +68,46 @@ object LayerImports {
     suspend fun importPsd(
         repository: CanvasRepository,
         read: suspend () -> ByteArray,
-    ): Int =
-        repository
-            .importLayers { destination ->
-                val bytes = read()
-                coroutineContext.ensureActive()
-                val info = PsdCodec.inspect(bytes) ?: error("This file is not a supported PSD document")
-                check(info.requiredMemoryBytes <= importBudget()) { MEMORY_MESSAGE }
-                val document = PsdCodec.read(bytes, importBudget()) ?: error("This file is not a supported PSD document")
-                val sources =
-                    document.layers.takeIf { layers -> layers.any { it.section == PsdCodec.Section.NONE } }
-                        ?: listOfNotNull(document.composite?.let { PsdCodec.PsdLayer("Background", it) })
-                check(sources.isNotEmpty()) { "The PSD document has no readable layers" }
-                val planes =
-                    sources.count { it.section == PsdCodec.Section.NONE } +
-                        sources.count { it.section != PsdCodec.Section.GROUP_END && it.mask != null }
-                destination.requireCapacity(planes, sources.count { it.section != PsdCodec.Section.GROUP_END })
-                val stagedBytes = destination.width.toLong() * destination.height * BYTES_PER_PIXEL * (planes + WORKING_COPIES)
-                check(info.requiredMemoryBytes <= importBudget() - stagedBytes) { MEMORY_MESSAGE }
-                val builder = ImportBuilder(destination)
-                val dx = (destination.width - document.width) / 2
-                val dy = (destination.height - document.height) / 2
-                psdNodes(sources).forEach { builder.psd(it, null, dx, dy) }
-                PreparedLayerImport(builder.layers)
-            }.count { !it.isGroup }
+    ): Int = importPsdWithReport(repository, read).layers
+
+    class PsdResult(
+        val layers: Int,
+        val sourceInfo: PsdCodec.ReadInfo,
+    )
+
+    /** Color/auxiliary limitations are reported only after the atomic import actually publishes. */
+    suspend fun importPsdWithReport(
+        repository: CanvasRepository,
+        read: suspend () -> ByteArray,
+    ): PsdResult {
+        var sourceInfo: PsdCodec.ReadInfo? = null
+        val imported =
+            repository
+                .importLayers { destination ->
+                    val bytes = read()
+                    coroutineContext.ensureActive()
+                    val info = PsdCodec.inspect(bytes) ?: error("This file is not a supported PSD document")
+                    sourceInfo = info
+                    check(info.requiredMemoryBytes <= importBudget()) { MEMORY_MESSAGE }
+                    val document = PsdCodec.read(bytes, importBudget()) ?: error("This file is not a supported PSD document")
+                    val sources =
+                        document.layers.takeIf { layers -> layers.any { it.section == PsdCodec.Section.NONE } }
+                            ?: listOfNotNull(document.composite?.let { PsdCodec.PsdLayer("Background", it) })
+                    check(sources.isNotEmpty()) { "The PSD document has no readable layers" }
+                    val planes =
+                        sources.count { it.section == PsdCodec.Section.NONE } +
+                            sources.count { it.section != PsdCodec.Section.GROUP_END && it.mask != null }
+                    destination.requireCapacity(planes, sources.count { it.section != PsdCodec.Section.GROUP_END })
+                    val stagedBytes = destination.width.toLong() * destination.height * BYTES_PER_PIXEL * (planes + WORKING_COPIES)
+                    check(info.requiredMemoryBytes <= importBudget() - stagedBytes) { MEMORY_MESSAGE }
+                    val builder = ImportBuilder(destination)
+                    val dx = (destination.width - document.width) / 2
+                    val dy = (destination.height - document.height) / 2
+                    psdNodes(sources).forEach { builder.psd(it, null, dx, dy) }
+                    PreparedLayerImport(builder.layers)
+                }.count { !it.isGroup }
+        return PsdResult(imported, checkNotNull(sourceInfo))
+    }
 
     class ProcreateResult(
         val layers: Int,

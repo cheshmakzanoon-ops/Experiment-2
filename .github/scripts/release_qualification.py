@@ -14,6 +14,7 @@ from pathlib import Path
 import re
 import struct
 import xml.etree.ElementTree as ET
+import zipfile
 
 from collect_installed_apks import inspect_apk, snapshot_file, snapshot_namespaces
 from summarize_device_results import read_results, read_runtime, source_inventory
@@ -34,6 +35,8 @@ CLASSES = {
 RESULTS = Path("app/build/outputs/androidTest-results/connected/benchmark")
 EVIDENCE = Path("app/build/outputs/connected_android_test_additional_output/benchmarkAndroidTest")
 BUILD_CONTRACT = Path("app/build/reports/release-qualification/build-contract.json")
+TEST_ABI = Path("app/build/reports/release-qualification/test-abi")
+REFLECTION_RULES = Path("app/proguard-benchmark-test-reflection.pro")
 APK_PATHS = {
     "com.artflow.studio": Path("app/build/outputs/apk/benchmark/app-benchmark.apk"),
     "com.artflow.studio.test": Path("app/build/outputs/apk/androidTest/benchmark/app-benchmark-androidTest.apk"),
@@ -66,14 +69,139 @@ def unique_file(root: Path, name: str) -> Path:
     return found[0]
 
 
+def normalized_rules(text: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"(?m)#.*$", "", text)).strip()
+
+
+def verify_test_abi(project: Path, configuration: str) -> dict:
+    """Bind the benchmark-only boundary to retained pre-R8 bytecode and applied exact rules."""
+    directory = project / TEST_ABI
+    report_path = directory / "report.json"
+    report_record = file_record(report_path)
+    report = json.loads(report_path.read_text())
+    if (not isinstance(report, dict) or report.get("schemaVersion") != 1
+            or report.get("generator") != "R8 TraceReferences"
+            or report.get("scope") != "benchmark-instrumentation-boundary"
+            or report.get("allowObfuscation") is not True
+            or report.get("publisherReleaseRulesModified") is not False
+            or not isinstance(report.get("r8Version"), str) or not report["r8Version"]):
+        raise ValueError("Malformed generated test ABI scope or obfuscation contract")
+    tool = report.get("r8Tool")
+    if (not isinstance(tool, dict) or set(tool) != {"file", "sizeBytes", "sha256"}
+            or not isinstance(tool["file"], str) or not tool["file"].endswith(".jar")
+            or type(tool["sizeBytes"]) is not int or tool["sizeBytes"] <= 0
+            or not isinstance(tool["sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", tool["sha256"])):
+        raise ValueError("Missing R8 tool identity for generated test ABI")
+    expected_files = {"appInput": "app-input.jar", "testInput": "test-input.jar", "rules": "keep-rules.pro"}
+    if not isinstance(report.get("files"), dict) or set(report["files"]) != set(expected_files):
+        raise ValueError("Missing generated test ABI input or rule records")
+    records = {}
+    for key, name in expected_files.items():
+        record = file_record(directory / name)
+        if report["files"][key] != {"file": name, "sizeBytes": record["sizeBytes"], "sha256": record["sha256"]}:
+            raise ValueError(f"Generated test ABI artifact hash mismatch: {name}")
+        records[key] = record
+    inputs = {}
+    for key, count_key in (("appInput", "appInputClasses"), ("testInput", "testInputClasses")):
+        try:
+            with zipfile.ZipFile(directory / expected_files[key]) as archive:
+                names = archive.namelist()
+        except zipfile.BadZipFile as error:
+            raise ValueError(f"Malformed generated test ABI bytecode archive: {key}") from error
+        if (not names or len(names) != len(set(names))
+                or any(not re.fullmatch(r"[A-Za-z0-9_$/-]+\.class", name) for name in names)
+                or any(name.startswith("/") or ".." in name for name in names)
+                or type(report.get(count_key)) is not int or report[count_key] != len(names)):
+            raise ValueError(f"Malformed generated test ABI class inventory: {key}")
+        inputs[key] = {name[:-6].replace("/", ".") for name in names}
+    if inputs["appInput"] & inputs["testInput"]:
+        raise ValueError("Test ABI source contains app-owned duplicate classes and can hide references")
+    boundary = report.get("boundary")
+    if not isinstance(boundary, dict) or set(boundary) != {"classes", "fields", "methods", "packages"}:
+        raise ValueError("Malformed generated test ABI boundary inventory")
+    for key, values in boundary.items():
+        if (not isinstance(values, list) or any(not isinstance(value, str) or not value for value in values)
+                or values != sorted(set(values))):
+            raise ValueError(f"Malformed generated test ABI symbol list: {key}")
+    if not boundary["classes"] or not set(boundary["classes"]) <= inputs["appInput"]:
+        raise ValueError("Generated test ABI retains classes outside its application input")
+    unresolved = report.get("externalUnresolvedReferences")
+    if (not isinstance(unresolved, list) or any(not isinstance(value, str) or not value for value in unresolved)
+            or unresolved != sorted(set(unresolved))):
+        raise ValueError("Malformed external reference audit in generated test ABI")
+    rules = (directory / "keep-rules.pro").read_text()
+    # TraceReferences emits exact members. No wildcard keep, warning suppression or global
+    # optimization switch is allowed in the generated boundary, including future tool changes.
+    if "*" in rules or "?" in rules:
+        raise ValueError("Generated test ABI contains a wildcard instead of an exact symbol")
+    kept_classes = []
+    kept_enum_names = []
+    members = {"fields": 0, "methods": 0}
+    block = False
+    for raw in rules.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        keep = re.fullmatch(r"-keep(?P<allow>,allowobfuscation)? (?P<kind>class|interface|@interface|enum) "
+                            r"(?P<name>[A-Za-z0-9_.$-]+)(?P<body> \{)?", line)
+        if keep and not block:
+            if not keep["allow"]:
+                if keep["kind"] != "enum":
+                    raise ValueError("Generated test ABI disables obfuscation for a non-enum class")
+                # TraceReferences retains names of enum constants even with allowobfuscation.
+                kept_enum_names.append(keep["name"])
+            kept_classes.append(keep["name"])
+            block = bool(keep["body"])
+        elif line == "}" and block:
+            block = False
+        elif block and not line.startswith("-") and line.endswith(";"):
+            members["methods" if "(" in line else "fields"] += 1
+        elif not block and re.fullmatch(r"-keeppackagenames [A-Za-z0-9_.$,-]+", line):
+            retained_packages = set(line.split(" ", 1)[1].split(","))
+            if not retained_packages <= set(boundary["packages"]):
+                raise ValueError("Generated test ABI package constraint was not traced")
+        else:
+            raise ValueError(f"Unexpected generated test ABI rule: {line}")
+    if (block or len(kept_classes) != len(set(kept_classes))
+            or set(kept_classes) != set(boundary["classes"])
+            or any(members[key] != len(boundary[key]) for key in members)):
+        raise ValueError("Generated test ABI rules do not match the retained symbol inventory")
+    reflection_path = project / REFLECTION_RULES
+    reflection_record = file_record(reflection_path)
+    reflection = reflection_path.read_text()
+    expected_reflection = """
+        -keepclassmembers class com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView {
+            kotlinx.coroutines.Job selectionJob;
+        }
+        -keepclassmembers class androidx.activity.OnBackPressedDispatcher {
+            kotlin.collections.ArrayDeque onBackPressedCallbacks;
+        }
+    """
+    if normalized_rules(reflection) != normalized_rules(expected_reflection):
+        raise ValueError("Benchmark reflection rules exceed the two audited private fields")
+    applied = normalized_rules(configuration)
+    if normalized_rules(rules) not in applied or normalized_rules(reflection) not in applied:
+        raise ValueError("R8 did not apply the recorded generated ABI and reflection rules")
+    return {"scope": report["scope"], "allowsObfuscation": True,
+            "publisherReleaseEquivalent": False, "report": report_record,
+            "r8Version": report["r8Version"], "r8Tool": tool, "artifacts": records,
+            "keptClasses": len(boundary["classes"]), "keptFields": len(boundary["fields"]),
+            "keptMethods": len(boundary["methods"]), "retainedPackages": boundary["packages"],
+            "enumNamesPreservedByR8": kept_enum_names,
+            "reflectionRules": reflection_record, "reflectionFields": 2,
+            "externalUnresolvedReferenceCount": len(unresolved)}
+
+
 def verify_build(project: Path, evidence: Path, token: str) -> dict:
     contract_path = project / BUILD_CONTRACT
     contract = json.loads(contract_path.read_text())
-    expected = {"schemaVersion": 1, "buildType": "benchmark", "minifyEnabled": True,
+    expected = {"schemaVersion": 2, "buildType": "benchmark", "minifyEnabled": True,
                 "shrinkResources": True, "debuggable": False, "signingConfig": "debug",
-                "releaseRulesUnchanged": True, "publisherQualified": False}
+                "publisherReleaseRulesUnchanged": True, "benchmarkAddsGeneratedTestAbiRules": True,
+                "benchmarkAddsAuditedReflectionFields": True, "testAbiAllowsObfuscation": True,
+                "publisherQualified": False}
     if contract != expected:
-        raise ValueError("Build contract does not require unchanged release optimization and test-only signing")
+        raise ValueError("Build contract does not declare benchmark test ABI constraints, optimization and test-only signing")
     observed_path = unique_file(evidence, "qualification-build.json")
     observed = json.loads(observed_path.read_text())
     if observed != {"schemaVersion": 1, "attemptToken": token, "packageName": "com.artflow.studio",
@@ -92,7 +220,7 @@ def verify_build(project: Path, evidence: Path, token: str) -> dict:
         raise ValueError("R8 configuration disables a required production optimization")
     return {"configured": contract, "installed": observed, "configuredEvidence": file_record(contract_path),
             "installedEvidence": file_record(observed_path), "r8AndResourceShrinker": shrinking,
-            "renamedProductionClasses": len(renamed)}
+            "renamedProductionClasses": len(renamed), "testAbi": verify_test_abi(project, configuration)}
 
 
 def verify_installed_apks(project: Path, evidence: Path, token: str) -> dict:
@@ -151,6 +279,7 @@ def verify(project: Path, output: Path, revision: str) -> dict:
     evidence = project / EVIDENCE
     report = {"schemaVersion": 1, "revision": revision, "buildType": "benchmark", "api": 36,
               "pageSize": 4096, "signingScope": "Disposable debug key; no publisher qualification",
+              "optimizationScope": "R8 enabled; traced instrumentation ABI and two reflection fields are preserved only in benchmark",
               "attemptsAllowed": 1, "skipsAllowed": 0, "expectedTests": [], "classes": CLASSES,
               "results": {}, "counts": {}, "problems": []}
     problems = report["problems"]
@@ -212,7 +341,9 @@ def verify(project: Path, output: Path, revision: str) -> dict:
              f"{len(expected)} declared cases, one attempt, zero permitted skips.", "",
              "Requested runtime: API 36, x86_64, 4096-byte process pages.", "",
              "This benchmark APK uses release R8/resource shrinking, test Compose/Android View hosts, Hilt test "
-             "application wiring, and a disposable debug signing key. Publisher signing, physical-device "
+             "application wiring, and a disposable debug signing key. It additionally preserves the exact traced "
+             "instrumentation ABI (with obfuscation allowed) and two audited reflection fields, so its optimization "
+             "constraints differ from the publisher release. Publisher signing, physical-device "
              "performance and the complete seven-lane debug matrix remain separate gates.", "",
              "| Test class | Scope |", "| --- | --- |"]
     lines += [f"| `{name}` | {scope} |" for name, scope in CLASSES.items()]

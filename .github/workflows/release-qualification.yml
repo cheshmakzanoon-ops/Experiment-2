@@ -55,8 +55,9 @@ jobs:
           python -m unittest discover -s .github/scripts -p 'test_release_qualification.py'
           python -m unittest discover -s .github/scripts -p 'test_run_release_qualification.py'
 
-      # This APK is signed only with the disposable Android debug key. The release publisher
-      # signature and physical-device qualification remain separate, required release gates.
+      # The benchmark retains only its generated external test ABI and audited reflection fields
+      # in addition to release rules. It remains minified/resource-shrunk and is signed only with
+      # the disposable Android debug key. Publisher-artifact and physical-device gates are separate.
       - name: Build release-optimized application and instrumentation
         timeout-minutes: 30
         run: |
@@ -122,5 +123,7 @@ jobs:
             app/build/outputs/apk/benchmark/
             app/build/outputs/apk/androidTest/benchmark/
             app/build/outputs/mapping/benchmark/
+            app/build/outputs/mapping/benchmarkAndroidTest/
+            app/proguard-benchmark-test-reflection.pro
           if-no-files-found: error
           retention-days: 14

@@ -3,8 +3,9 @@
 [![Android CI](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/workflows/android-ci.yml/badge.svg?branch=main)](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/workflows/android-ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-ArtFlow is an offline painting and illustration application for Android 8 and later. Kotlin and
-Jetpack Compose provide the editor; a Kotlin CPU painting/compositing engine supplies artwork to
+ArtFlow is an offline painting and illustration application for Android 8 (API 26) and later,
+with an OpenGL ES 2.0 capable device. Kotlin and Jetpack Compose provide the editor; a Kotlin
+CPU painting/compositing engine supplies artwork to
 an OpenGL ES 2.0 display surface. It includes pressure-sensitive brushes, layers and masks,
 selections and transforms, animation, reference images, and 3D texture painting.
 
@@ -16,7 +17,14 @@ not establish physical performance, complete format compatibility, or Procreate 
 
 ## Current development
 
-The November 18 integration milestone addresses practical gaps traced through the running editor:
+The [November 19 hardening record](docs/release/PRODUCTION_HARDENING_2026-11-19.md) tracks the
+current candidate in [PR #41](https://github.com/cheshmakzanoon-ops/Experiment-2/pull/41). The work
+covers bounded image/PSD decoding, document-bound atomic imports, import lifetime cleanup,
+consistent native-package export snapshots, preview failure handling, resolved dependency
+evidence, and executable optimized/upgrade/publisher/physical qualification gates. Implementation
+and local checks are recorded separately from completed exact-revision device acceptance.
+
+The preceding November 18 integration milestone addressed these connected editor paths:
 
 1. Apply a consistent raster-memory budget while editing and reopening saved documents; reject
    capacity-increasing edits before they change the artwork or undo history.
@@ -25,7 +33,7 @@ The November 18 integration milestone addresses practical gaps traced through th
 3. Connect persistent layer linking and precision transforms to actual editor controls.
 
 See [V1 integration](docs/release/V1_INTEGRATION_2026-11-18.md) for implementation, regression
-coverage, verification status, and next tasks. This milestone incorporates the earlier font,
+coverage and its historical verification status. That milestone incorporates the earlier font,
 backup, codec, and CI hardening from [PR #40](https://github.com/cheshmakzanoon-ops/Experiment-2/pull/40).
 
 ## Implemented workflows
@@ -69,8 +77,13 @@ backup, codec, and CI hardening from [PR #40](https://github.com/cheshmakzanoon-
   The display preview fits the current device's queried GLES texture limit and can reduce further
   if a texture allocation fails. Zoom can therefore reveal a lower-resolution preview; editing
   coordinates, document pixels, saves, and exports retain the original artwork resolution.
-  Exhausted preview uploads report an editor error. This fallback does not remove CPU memory
-  limits or qualify large canvases for interactive performance.
+  If no primary preview can be displayed, the editor reports the failure and cancels/blocks canvas
+  pointer edits until a preview is available again. Save and navigation remain available. This
+  fallback does not remove CPU memory limits or qualify large canvases for interactive performance.
+- **Photo insertion:** image picker and camera decoding can downsample to fit the requested size
+  and the device's available memory. A bounded copy supplies both metadata and decoding; oversized
+  or unreadable input is rejected with an import error. This sampling applies to inserted photos,
+  not to silently reducing the pixels of an existing editable native document.
 - **Performance:** `StrokeTimingDeviceTest` records repository timings and excludes input delivery,
   GL upload/draw, and physical display latency. It has no speed threshold. The `benchmark` build
   type supports minified launch smoke and selected workflow qualification; it has no performance
@@ -80,8 +93,12 @@ backup, codec, and CI hardening from [PR #40](https://github.com/cheshmakzanoon-
   incomplete. Some exports use a rendered appearance layer with hidden sources. Self-roundtrips
   do not prove that the reference application accepts the exports.
 - **Photoshop:** PSD/PSB parsing includes supported raster layers, folders, and masks. Imported
-  16-bit channels are reduced to 8-bit. Full editable Photoshop text, adjustments, smart objects,
-  and all color modes are outside the implemented contract.
+  16-bit channels are reduced to 8-bit; 32-bit channels are unsupported. CMYK uses approximate
+  sRGB conversion, embedded ICC profiles are not applied, and auxiliary alpha/spot channels are
+  not imported as editable channels. Some alternate layer records use one flattened composite.
+  Successful imports disclose those limitations when applicable. Full editable Photoshop text,
+  adjustments, smart objects, and all color modes are outside the implemented contract. See the
+  [resource/color boundary record](docs/verification/psd-image-resources.md).
 - **PDF:** pages contain raster artwork; vector typography/shapes and PDF/A remain unimplemented.
 - **Brush/input fidelity:** some imported auxiliary curves remain unused. The physical touch-major
   palm helper is separate from active contact-size/hover filtering. Physical stylus qualification
@@ -128,10 +145,14 @@ debug device matrix. Its verifier derives the selected test identities from the 
 and requires every case to pass on the original attempt, with no skips or recovery retries.
 
 The benchmark APK inherits the release R8 rules, minification and resource shrinking, and is
-non-debuggable. It uses a disposable debug signing key, test-only Compose and Android View host
-activities, and Hilt test application wiring. The shared View host is included in debug and
-benchmark only. These differences make this a scoped optimized test artifact; publisher signing,
-the actual publisher release APK/bundle, and physical-device acceptance remain separate gates.
+non-debuggable. It also retains the exact app-owned classes/members referenced by its separately
+compiled instrumentation, with generated rules that allow obfuscation, and two audited reflection
+fields. These rules protect the instrumentation's referenced entrypoints and constrain optimization
+beyond the publisher release rules. The [test ABI record](docs/verification/optimized-test-r8.md) explains the generated
+rules and retained evidence. The artifact uses a disposable debug signing key, test-only Compose
+and Android View host activities, and Hilt test application wiring. The shared View host is
+included in debug and benchmark only. Publisher signing, the actual publisher release APK/bundle,
+and physical-device acceptance remain separate gates.
 
 To build the tested variant, run:
 

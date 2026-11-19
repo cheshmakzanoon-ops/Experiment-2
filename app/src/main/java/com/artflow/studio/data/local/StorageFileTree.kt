@@ -12,6 +12,17 @@ import java.nio.file.attribute.BasicFileAttributes
 
 /** App-private housekeeping. Never follow symbolic links into another project's artwork. */
 internal object StorageFileTree {
+    /** A concurrent writer can create the directory after isDirectory but before mkdirs. */
+    fun requireDirectory(
+        directory: File,
+        boundary: File,
+        failureMessage: String,
+    ) {
+        requireUnlinked(directory, boundary)
+        check(directory.isDirectory || directory.mkdirs() || directory.isDirectory) { failureMessage }
+        requireUnlinked(directory, boundary)
+    }
+
     fun sizeBytes(
         root: File,
         boundary: File? = null,

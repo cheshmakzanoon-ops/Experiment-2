@@ -1303,7 +1303,7 @@ class CanvasInputDeviceTest {
             }
             runBlocking(Dispatchers.Main) {
                 val canvas = requireNotNull(view)
-                await { canvas.width > 0 && canvas.height > 0 }
+                await { canvas.width > 0 && canvas.height > 0 && canvas.isPreviewAvailable }
                 canvas.fitToView()
                 eventTime = SystemClock.uptimeMillis()
                 block(canvas)

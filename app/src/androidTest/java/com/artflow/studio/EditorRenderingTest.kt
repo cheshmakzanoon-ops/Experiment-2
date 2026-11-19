@@ -244,7 +244,7 @@ class EditorRenderingTest {
         val deadline = SystemClock.elapsedRealtime() + 20_000
         var color: Int? = null
         while (SystemClock.elapsedRealtime() < deadline) {
-            if (view.width > 0 && view.height > 0) {
+            if (view.width > 0 && view.height > 0 && view.isPreviewAvailable) {
                 color = centerPixel(view)
                 if (color == expected) return
             }

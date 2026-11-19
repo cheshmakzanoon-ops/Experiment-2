@@ -8,7 +8,7 @@ import unittest
 import xml.etree.ElementTree as ET
 import zipfile
 
-from release_qualification import APK_PATHS, BUILD_CONTRACT, CLASSES, EVIDENCE, RESULTS, selected_inventory, verify
+from release_qualification import APK_PATHS, BUILD_CONTRACT, CLASSES, EVIDENCE, REFLECTION_RULES, RESULTS, TEST_ABI, selected_inventory, verify
 
 
 TOKEN = "12345678-1234-1234-1234-123456789abc"
@@ -45,9 +45,11 @@ class ReleaseQualificationTest(unittest.TestCase):
         (self.evidence / "runtime-environment.txt").write_text(
             "sdk=36\npageSize=4096\nabis=x86_64\nfingerprint=fixture/device\n")
         self.write_json(self.project / BUILD_CONTRACT, {
-            "schemaVersion": 1, "buildType": "benchmark", "minifyEnabled": True,
+            "schemaVersion": 2, "buildType": "benchmark", "minifyEnabled": True,
             "shrinkResources": True, "debuggable": False, "signingConfig": "debug",
-            "releaseRulesUnchanged": True, "publisherQualified": False,
+            "publisherReleaseRulesUnchanged": True, "benchmarkAddsGeneratedTestAbiRules": True,
+            "benchmarkAddsAuditedReflectionFields": True, "testAbiAllowsObfuscation": True,
+            "publisherQualified": False,
         })
         self.installed = {"schemaVersion": 1, "attemptToken": TOKEN, "packageName": "com.artflow.studio",
                           "buildType": "benchmark", "debuggable": False}
@@ -59,6 +61,29 @@ class ReleaseQualificationTest(unittest.TestCase):
                               "usage.txt": "fixture.UnusedClass\n",
                               "resources.txt": "@drawable/removed : reachable=false\n"}.items():
             (self.mapping / name).write_text(content)
+        self.abi = self.project / TEST_ABI
+        self.abi.mkdir(parents=True)
+        for name, classes in (("app-input.jar", ["fixture/Library.class"]), ("test-input.jar", ["tests/Caller.class"])):
+            with zipfile.ZipFile(self.abi / name, "w") as archive:
+                for entry in classes:
+                    archive.writestr(entry, b"fixture class inventory; actual bytecode is exercised by the R8 fixture gate")
+        self.generated_rules = "-keep,allowobfuscation class fixture.Library {\n  public static int value();\n}\n"
+        (self.abi / "keep-rules.pro").write_text(self.generated_rules)
+        self.abi_report = {
+            "schemaVersion": 1, "generator": "R8 TraceReferences", "r8Version": "8.10.24",
+            "scope": "benchmark-instrumentation-boundary", "allowObfuscation": True,
+            "publisherReleaseRulesModified": False, "appInputClasses": 1, "testInputClasses": 1,
+            "r8Tool": {"file": "builder-8.10.1.jar", "sizeBytes": 10, "sha256": "a" * 64},
+            "boundary": {"classes": ["fixture.Library"], "fields": [], "methods": ["int fixture.Library.value()"], "packages": []},
+            "externalUnresolvedReferences": [],
+            "files": {key: self.abi_record(name) for key, name in (
+                ("appInput", "app-input.jar"), ("testInput", "test-input.jar"), ("rules", "keep-rules.pro"))},
+        }
+        self.save_abi()
+        reflection = Path(__file__).resolve().parents[2] / REFLECTION_RULES
+        (self.project / REFLECTION_RULES).write_text(reflection.read_text())
+        with (self.mapping / "configuration.txt").open("a") as configuration:
+            configuration.write(self.generated_rules + reflection.read_text())
         self.namespace = self.evidence / "apk-provenance" / TOKEN
         self.namespace.mkdir(parents=True)
         manifest = {"schemaVersion": 1, "attemptToken": TOKEN, "errors": [], "packages": {}}
@@ -94,6 +119,13 @@ class ReleaseQualificationTest(unittest.TestCase):
     def save_results(self):
         ET.ElementTree(self.results).write(self.xml)
 
+    def abi_record(self, name):
+        data = (self.abi / name).read_bytes()
+        return {"file": name, "sizeBytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+
+    def save_abi(self):
+        self.write_json(self.abi / "report.json", self.abi_report)
+
     def report(self):
         return verify(self.project, self.output, REVISION)
 
@@ -110,6 +142,9 @@ class ReleaseQualificationTest(unittest.TestCase):
         self.assertEqual(len(CLASSES), report["counts"]["passed"])
         self.assertEqual(set(APK_PATHS), set(report["installedApks"]["packages"]))
         self.assertIn("resources.txt", report["build"]["r8AndResourceShrinker"])
+        self.assertFalse(report["build"]["testAbi"]["publisherReleaseEquivalent"])
+        self.assertEqual(1, report["build"]["testAbi"]["keptMethods"])
+        self.assertEqual(2, report["build"]["testAbi"]["reflectionFields"])
 
     def test_missing_test_cannot_pass(self):
         self.results.remove(self.results[0])
@@ -201,6 +236,81 @@ class ReleaseQualificationTest(unittest.TestCase):
     def test_missing_resource_shrinker_output_cannot_qualify(self):
         (self.mapping / "resources.txt").unlink()
         self.assert_rejected("resources.txt")
+
+    def test_missing_traced_boundary_evidence_cannot_qualify(self):
+        (self.abi / "report.json").unlink()
+        self.assert_rejected("report.json")
+
+    def test_exact_annotation_interface_rules_are_supported(self):
+        rules = self.generated_rules.replace("class fixture.Library", "@interface fixture.Library")
+        (self.abi / "keep-rules.pro").write_text(rules)
+        self.abi_report["files"]["rules"] = self.abi_record("keep-rules.pro")
+        self.save_abi()
+        config = self.mapping / "configuration.txt"
+        config.write_text(config.read_text().replace(self.generated_rules, rules))
+        result = self.report()
+        self.assertTrue(result["passed"], result["problems"])
+
+    def test_r8_enum_name_preservation_is_explicit(self):
+        rules = self.generated_rules.replace("-keep,allowobfuscation class", "-keep enum")
+        (self.abi / "keep-rules.pro").write_text(rules)
+        self.abi_report["files"]["rules"] = self.abi_record("keep-rules.pro")
+        self.save_abi()
+        config = self.mapping / "configuration.txt"
+        config.write_text(config.read_text().replace(self.generated_rules, rules))
+        result = self.report()
+        self.assertTrue(result["passed"], result["problems"])
+        self.assertEqual(["fixture.Library"], result["build"]["testAbi"]["enumNamesPreservedByR8"])
+
+    def test_generated_non_enum_classes_must_allow_obfuscation(self):
+        (self.abi / "keep-rules.pro").write_text(self.generated_rules.replace(",allowobfuscation", ""))
+        self.abi_report["files"]["rules"] = self.abi_record("keep-rules.pro")
+        self.save_abi()
+        self.assert_rejected("disables obfuscation for a non-enum class")
+
+    def test_mutated_generated_rules_cannot_reuse_a_successful_trace(self):
+        with (self.abi / "keep-rules.pro").open("a") as rules:
+            rules.write("-keep class ** { *; }\n")
+        self.assert_rejected("artifact hash mismatch")
+
+    def test_wildcard_keep_cannot_be_certified_by_updating_its_hash(self):
+        with (self.abi / "keep-rules.pro").open("a") as rules:
+            rules.write("-keep class ** { *; }\n")
+        self.abi_report["files"]["rules"] = self.abi_record("keep-rules.pro")
+        self.save_abi()
+        self.assert_rejected("wildcard instead of an exact symbol")
+
+    def test_external_class_cannot_be_added_to_the_traced_boundary(self):
+        self.abi_report["boundary"]["classes"].append("other.Library")
+        self.save_abi()
+        self.assert_rejected("outside its application input")
+
+    def test_shared_source_copy_cannot_hide_app_owned_references(self):
+        with zipfile.ZipFile(self.abi / "test-input.jar", "a") as archive:
+            archive.writestr("fixture/Library.class", b"same app-owned name")
+        self.abi_report["files"]["testInput"] = self.abi_record("test-input.jar")
+        self.abi_report["testInputClasses"] = 2
+        self.save_abi()
+        self.assert_rejected("app-owned duplicate")
+
+    def test_trace_must_be_applied_to_the_application_r8_configuration(self):
+        (self.mapping / "configuration.txt").write_text("-keep class fixture.MainActivity\n")
+        self.assert_rejected("did not apply the recorded")
+
+    def test_reflection_contract_cannot_expand_to_additional_private_fields(self):
+        with (self.project / REFLECTION_RULES).open("a") as rules:
+            rules.write("-keepclassmembers class fixture.Library { int other; }\n")
+        self.assert_rejected("exceed the two audited private fields")
+
+    def test_retained_member_counts_must_match_actual_rules(self):
+        self.abi_report["boundary"]["methods"].append("void fixture.Library.extra()")
+        self.save_abi()
+        self.assert_rejected("do not match the retained symbol inventory")
+
+    def test_obfuscation_cannot_be_disabled_on_the_generated_boundary(self):
+        self.abi_report["allowObfuscation"] = False
+        self.save_abi()
+        self.assert_rejected("scope or obfuscation contract")
 
     def test_wrong_runtime_cannot_qualify(self):
         (self.evidence / "runtime-environment.txt").write_text(

@@ -456,8 +456,16 @@ object PsdCodec {
         /** Includes the supplied bytes, retained rasters/masks and the largest decoding workspace. */
         val requiredMemoryBytes: Long,
         /** Only explicit PSD transparency metadata identifies an extra channel as image alpha. */
-        val hasMergedTransparency: Boolean = false,
-    )
+        val mergedTransparencyChannel: Int? = null,
+        val isCmyk: Boolean = false,
+        val hasEmbeddedIccProfile: Boolean = false,
+        /** Saved selections and spot channels are decoded safely but are not imported as artwork. */
+        val ignoredAuxiliaryChannels: Int = 0,
+        /** Alternate layer records are currently represented by the merged image, not editable layers. */
+        val usesFlattenedAlternateLayers: Boolean = false,
+    ) {
+        val hasMergedTransparency: Boolean get() = mergedTransparencyChannel != null
+    }
 
     /** Leaves room for the open artwork, undo, rendering and the rest of the application. */
     fun defaultReadBudgetBytes(): Long = Runtime.getRuntime().maxMemory() / 3
@@ -493,14 +501,18 @@ object PsdCodec {
         val resourcesLength = reader.readInt()
         if (resourcesLength !in 0..reader.remaining()) return null
         val resourcesEnd = reader.position + resourcesLength
-        val dpi = if (resourcesLength > 0) parseResolution(reader) ?: 72 else 72
-        reader.position = resourcesEnd
+        val resources = PsdImageResources.read(reader, resourcesEnd, channels, colorChannelCount(colorMode))
         if (reader.remaining() < if (isPsb) 8 else 4) return null
         val sectionLength = if (isPsb) reader.readLong() else reader.readInt().toLong()
         if (sectionLength !in 0L..reader.remaining().toLong()) return null
         val sectionEnd = reader.position + sectionLength.toInt()
-        val (pending, hasMergedTransparency) = inspectLayerMetadata(reader, sectionEnd, depth, isPsb)
-        require(!hasMergedTransparency || channels > colorChannelCount(colorMode)) { "Missing PSD merged transparency channel" }
+        val metadata = inspectLayerMetadata(reader, sectionEnd, depth, isPsb)
+        val (pending, hasMergedTransparency) = metadata
+        val colorChannels = colorChannelCount(colorMode)
+        require(!hasMergedTransparency || channels > colorChannels) { "Missing PSD merged transparency channel" }
+        // Explicit layer/global markers have precedence. The zero-identifier fallback applies
+        // only to layerless composites, never to a positive-count stack's saved selections.
+        val transparency = if (hasMergedTransparency) colorChannels else resources.transparencyChannel.takeIf { !metadata.hasLayers }
         reader.position = sectionEnd
         var retained = bytes.size.toLong()
         var workspace = 0L
@@ -518,12 +530,28 @@ object PsdCodec {
             val rowTable = height.toLong() * channels * 4
             workspace = maxOf(workspace, raw * 4 + reader.remaining() + rowTable + width.toLong() * 2 + 8192)
         }
-        return ReadInfo(width, height, dpi, retained + workspace, hasMergedTransparency)
+        return ReadInfo(
+            width,
+            height,
+            resources.dpi,
+            retained + workspace,
+            transparency,
+            colorMode == COLOR_MODE_CMYK,
+            resources.hasEmbeddedIccProfile,
+            channels - colorChannels - if (transparency == null) 0 else 1,
+            metadata.hasLayers && pending.isEmpty(),
+        )
     }
 
     private data class LayerReadMetadata(
         val layers: List<PendingLayer>,
         val hasMergedTransparency: Boolean,
+        val hasLayers: Boolean = layers.isNotEmpty(),
+    )
+
+    private data class MergedImageMetadata(
+        val hasTransparency: Boolean = false,
+        val hasLayers: Boolean = false,
     )
 
     /** Inspects layer metadata and all declared channel extents without allocating pixel planes. */
@@ -555,8 +583,8 @@ object PsdCodec {
             require(channelBytes <= layerEnd - reader.position) { "PSD channel payload exceeds layer info" }
             reader.position = layerEnd
         }
-        hasMergedTransparency = readMergedTransparencyMarker(reader, sectionEnd, depth, isPsb) || hasMergedTransparency
-        return LayerReadMetadata(pending, hasMergedTransparency)
+        val merged = readMergedTransparencyMarker(reader, sectionEnd, depth, isPsb)
+        return LayerReadMetadata(pending, merged.hasTransparency || hasMergedTransparency, pending.isNotEmpty() || merged.hasLayers)
     }
 
     private fun isSupportedReadHeader(
@@ -585,9 +613,9 @@ object PsdCodec {
         sectionEnd: Int,
         depth: Int,
         isPsb: Boolean,
-    ): Boolean {
+    ): MergedImageMetadata {
         // Older writers omit the empty global-mask field entirely.
-        if (reader.position == sectionEnd) return false
+        if (reader.position == sectionEnd) return MergedImageMetadata()
         require(sectionEnd - reader.position >= 4) { "Truncated PSD global mask length" }
         val firstField = reader.readAscii(4)
         reader.position -= 4
@@ -597,6 +625,7 @@ object PsdCodec {
             reader.skip(maskLength)
         }
         var hasTransparency = false
+        var hasLayers = false
         while (reader.position < sectionEnd) {
             // Adobe specifies even padding; Photoshop global blocks also use four-byte padding.
             var padding = 0
@@ -623,11 +652,13 @@ object PsdCodec {
             } else if (key == if (depth == DEPTH_16) "Lr16" else "Layr") {
                 // Deep documents may move their layer info out of the primary section.
                 require(length >= 2L) { "Truncated PSD alternate layer count" }
-                hasTransparency = (reader.readShort().toShort() < 0) || hasTransparency
+                val count = reader.readShort().toShort().toInt()
+                hasTransparency = (count < 0) || hasTransparency
+                hasLayers = (count != 0) || hasLayers
             }
             reader.position = blockEnd
         }
-        return hasTransparency
+        return MergedImageMetadata(hasTransparency, hasLayers)
     }
 
     private fun layerReadMemory(
@@ -689,15 +720,10 @@ object PsdCodec {
         if (colorModeLength < 0 || colorModeLength > reader.remaining()) return null
         reader.skip(colorModeLength)
 
-        // Image resources: pull the resolution out and skip the rest.
+        // The metadata pass has already validated every resource boundary and extracted its facts.
         val resourcesLength = reader.readInt()
         if (resourcesLength < 0 || resourcesLength > reader.remaining()) return null
-        var dpi = 72
-        if (resourcesLength > 0) {
-            val resourcesEnd = reader.position + resourcesLength
-            dpi = parseResolution(reader) ?: 72
-            reader.position = resourcesEnd
-        }
+        reader.skip(resourcesLength)
 
         // Layer and mask information.
         val layerAndMaskLength = if (isPsb) reader.readLong() else reader.readInt().toLong()
@@ -726,7 +752,8 @@ object PsdCodec {
         val composite =
             if (reader.remaining() >= 2) {
                 try {
-                    readImageData(reader, width, height, channelCount, depth, colorMode, info.hasMergedTransparency, isPsb) ?: return null
+                    readImageData(reader, width, height, channelCount, depth, colorMode, info.mergedTransparencyChannel, isPsb)
+                        ?: return null
                 } catch (_: IllegalArgumentException) {
                     return null
                 }
@@ -739,32 +766,8 @@ object PsdCodec {
             height = height,
             layers = layers,
             composite = composite,
-            dpi = dpi,
+            dpi = info.dpi,
         )
-    }
-
-    private fun parseResolution(reader: PsdReader): Int? {
-        // Walk image resource blocks looking for id 1005 (ResolutionInfo).
-        var result: Int? = null
-        while (reader.remaining() > 12) {
-            val signature = reader.readAscii(4)
-            if (signature != "8BIM" && signature != "8B64") break
-            val id = reader.readShort()
-            val nameLength = reader.readByte()
-            val namePadding = if ((nameLength + 1) % 2 == 0) 0 else 1
-            reader.skip(nameLength + namePadding)
-            val dataLength = reader.readInt()
-            if (dataLength <= 0 || reader.remaining() < dataLength) break
-            if (id == 1005 && dataLength >= 8) {
-                val horizontal = reader.readInt()
-                val value = horizontal / 65536f
-                if (value > 1f) result = value.toInt()
-                reader.skip(dataLength - 4)
-            } else {
-                reader.skip(dataLength)
-            }
-        }
-        return result
     }
 
     private data class PendingLayer(
@@ -1134,7 +1137,7 @@ object PsdCodec {
         channelCount: Int,
         depth: Int,
         colorMode: Int,
-        hasMergedTransparency: Boolean,
+        transparencyChannel: Int?,
         isPsb: Boolean = false,
     ): PixelBuffer? {
         val compression = reader.readShort()
@@ -1144,9 +1147,9 @@ object PsdCodec {
         val red = planes[CHANNEL_RED]
         val green = planes[CHANNEL_GREEN]
         val blue = planes[CHANNEL_BLUE]
-        // PSD stores base color channels first, then transparency (when explicitly marked),
-        // then arbitrary saved selections/spot channels. Those extras must never replace alpha.
-        val alpha = if (hasMergedTransparency) planes[colorChannelCount(colorMode)] else null
+        // The metadata pass resolved explicit transparency to one exact channel. Arbitrary saved
+        // selections/spot channels must never replace it, including those before an identified ID.
+        val alpha = transparencyChannel?.let { planes[it] }
         if (colorMode == COLOR_MODE_CMYK) {
             val c = planes[0]
             val m = planes[1]
@@ -1172,7 +1175,7 @@ object PsdCodec {
             val b = if (colorMode == COLOR_MODE_GRAYSCALE) r else channelValue(blue, index, colorMode)
             val a = alpha?.getOrNull(index)?.toInt()?.and(0xFF) ?: 255
             buffer.pixels[index] =
-                if (hasMergedTransparency) {
+                if (alpha != null) {
                     Channels.argb(a, removeWhiteMatte(r, a), removeWhiteMatte(g, a), removeWhiteMatte(b, a))
                 } else {
                     Channels.argb(a, r, g, b)

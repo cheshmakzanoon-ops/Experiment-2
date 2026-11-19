@@ -365,7 +365,7 @@ class SelectionGestureDeviceTest {
             }
             runBlocking(Dispatchers.Main) {
                 val canvas = requireNotNull(view)
-                withTimeout(10_000) { while (canvas.width == 0 || canvas.height == 0) delay(10) }
+                withTimeout(10_000) { while (canvas.width == 0 || canvas.height == 0 || !canvas.isPreviewAvailable) delay(10) }
                 canvas.fitToView()
                 block(canvas)
             }

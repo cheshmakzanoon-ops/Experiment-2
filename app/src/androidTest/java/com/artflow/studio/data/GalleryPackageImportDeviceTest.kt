@@ -228,14 +228,16 @@ class GalleryPackageImportDeviceTest {
                 fonts = listOf(ArtflowPackage.PackagedFont("font:UnavailableTestFont.ttf", "UnavailableTestFont")),
                 grainIds = listOf(grainId, missingGrain),
             )
-        val sources =
-            original.packageSources(7).filterNot { it.path == ArtflowPackage.DEPENDENCIES } +
-                listOf(
-                    ArtflowPackage.EntrySource(ArtflowPackage.DEPENDENCIES) {
-                        ByteArrayInputStream(ArtflowPackage.encodeDependencies(dependencies))
-                    },
-                    ArtflowPackage.EntrySource(ArtflowPackage.grainEntryPath(grainId)) { ByteArrayInputStream(grainBytes) },
-                )
-        return File(directory, "portable.artflow").also { ArtflowPackage.writeToFile("Portable artwork", it, sources) }
+        return original.withPackageSnapshot(7) { snapshot ->
+            val sources =
+                snapshot.sources.filterNot { it.path == ArtflowPackage.DEPENDENCIES } +
+                    listOf(
+                        ArtflowPackage.EntrySource(ArtflowPackage.DEPENDENCIES) {
+                            ByteArrayInputStream(ArtflowPackage.encodeDependencies(dependencies))
+                        },
+                        ArtflowPackage.EntrySource(ArtflowPackage.grainEntryPath(grainId)) { ByteArrayInputStream(grainBytes) },
+                    )
+            File(directory, "portable.artflow").also { ArtflowPackage.writeToFile("Portable artwork", it, sources) }
+        }
     }
 }
