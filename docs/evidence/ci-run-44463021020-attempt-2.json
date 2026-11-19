@@ -1,0 +1,242 @@
+{
+  "schemaVersion": 1,
+  "documentType": "summary_of_retained_workflow_artifacts",
+  "scope": "The single newly executed API35/16 KB job in workflow attempt 2. This summary preserves both interrupted instrumentation invocations and the intervening bounded recovery; carried-forward jobs are not new executions.",
+  "repository": "cheshmakzanoon-ops/Experiment-2",
+  "source": {
+    "headSha": "384095da6b0feec12736fa54fe7d245777e1c37e",
+    "testedPrMergeSha": "2b857405a05dcefa19cc8f6c43102ae55668f5a9",
+    "testedSourceUrl": "https://github.com/cheshmakzanoon-ops/Experiment-2/tree/2b857405a05dcefa19cc8f6c43102ae55668f5a9",
+    "unchangedFromWorkflowAttempt1": true
+  },
+  "workflow": {
+    "id": 44463021020,
+    "attempt": 2,
+    "attemptUrl": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44463021020/attempts/2",
+    "conclusion": "failure",
+    "onlyFreshJobId": 135372972887,
+    "jobUrl": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44463021020/job/135372972887",
+    "jobLogSha256": "145c1b0ae0653b6d2fcd28c9c3b49d4a7108ba65019943b024cde8bce034b1d2",
+    "acceptedCompleteMatrix": false,
+    "carriedForwardJobs": {
+      "build": 1,
+      "successfulDeviceLanes": 6,
+      "countAsNewExecutions": false
+    }
+  },
+  "artifact": {
+    "id": 14504109062,
+    "name": "device-test-results-api-35",
+    "url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44463021020/artifacts/14504109062",
+    "sha256": "5de220f1dc6269c075f826820eb21da21522436d68d51f174f6d69c03b1c1e1b",
+    "sizeBytes": 59137927,
+    "downloadSizeAndDigestIndependentlyVerified": true,
+    "createdAt": "2026-11-19T06:18:25Z"
+  },
+  "deviceAcceptance": {
+    "sourceIdentitiesRequiredPerInvocation": 283,
+    "connectedTestInvocations": 2,
+    "internalFrameworkRecoveries": 1,
+    "recovery": {
+      "recoveryStarted": "1",
+      "bootIdBefore": "3f09ab64-11bb-42f7-ac16-b15ec00ff2a9",
+      "bootIdAfter": "26f8cad7-46fd-4367-a147-2b3c477de400",
+      "recoveryStatus": "PASS"
+    },
+    "normalRuntimeAcceptanceReportPresent": false,
+    "pageSizeProvedByBothMatchedTombstones": 16384,
+    "minifiedLaunch": "not_reached",
+    "laneAccepted": false
+  },
+  "instrumentationInvocations": [
+    {
+      "instrumentationAttempt": 1,
+      "runnerPid": 6647,
+      "runnerStartedAtUtc": "2026-11-19T06:09:50.280777Z",
+      "counts": {
+        "passed": 154,
+        "processInterruptionRecords": 1
+      },
+      "recordedXmlIdentities": 155,
+      "missingSourceIdentities": 128,
+      "interruptedCases": [
+        {
+          "identity": "com.artflow.studio.StudioWorkspaceUiTest#workflowPanelsAreReachableFromTheTopBarActions",
+          "xmlFailureDetail": "Empty failure node; no assertion message."
+        }
+      ],
+      "apkProvenance": {
+        "com.artflow.studio": {
+          "sha256": "73e4c1e31a496454a6eaaf253fb799f416f9f81ff4c7854ee412c40889e479c7",
+          "bytes": 24498247,
+          "retainedApkIndependentlyRehashed": true,
+          "matchesBuilt": true,
+          "dexEntries": 18,
+          "allDexBytesIndependentlyRehashed": true,
+          "dexMatchesPassingSameRevisionIndependent16kLane": true
+        },
+        "com.artflow.studio.test": {
+          "sha256": "9ee67ad4b3f034b57e04d83be22e4dbc10f32cbbada855a3b79d2d5ae72d830d",
+          "bytes": 1889035,
+          "retainedApkIndependentlyRehashed": true,
+          "matchesBuilt": true,
+          "dexEntries": 7,
+          "allDexBytesIndependentlyRehashed": true,
+          "dexMatchesPassingSameRevisionIndependent16kLane": true
+        }
+      },
+      "nativeCrashes": [
+        {
+          "archiveMember": "_temp/artflow-device/native-tombstones/attempt-1/files/tombstone_05",
+          "sha256": "0467a21103030b2b794d5f3c90dd5cbc3009ca5f4c1d0ba4c4b5c65f8b613873",
+          "bytes": 836143,
+          "captureStatus": "captured",
+          "independentlyRehashed": true,
+          "identityMatchesAttempt": true,
+          "pid": 6647,
+          "timestamp": "2026-11-19 06:14:28.140171590+0000",
+          "pageSize": 16384,
+          "signal": "signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0000000000000010",
+          "cause": "Cause: null pointer dereference",
+          "topFrames": [
+            "      #00 pc 00000000006e8007  /apex/com.android.art/lib64/libart.so (bool art::interpreter::DoCall<false>(art::ArtMethod*, art::Thread*, art::ShadowFrame&, art::Instruction const*, unsigned short, bool, art::JValue*)+183) (BuildId: e4a3c6c284a8b17d09fd84d661cf181b)",
+            "      #01 pc 0000000000233101  /apex/com.android.art/lib64/libart.so (void art::interpreter::ExecuteSwitchImplCpp<false>(art::interpreter::SwitchImplContext*)+14913) (BuildId: e4a3c6c284a8b17d09fd84d661cf181b)",
+            "      #02 pc 000000000022d2e5  /apex/com.android.art/lib64/libart.so (ExecuteSwitchImplAsm+5) (BuildId: e4a3c6c284a8b17d09fd84d661cf181b)",
+            "      #03 pc 0000000000006b94  <anonymous:7738e5cd0000> (com.artflow.studio.data.repository.BrushLibraryStore.<init>+0)"
+          ]
+        }
+      ]
+    },
+    {
+      "instrumentationAttempt": 2,
+      "runnerPid": 5137,
+      "runnerStartedAtUtc": "2026-11-19T06:15:59.113372Z",
+      "counts": {
+        "passed": 31,
+        "processInterruptionRecords": 1
+      },
+      "recordedXmlIdentities": 32,
+      "missingSourceIdentities": 251,
+      "interruptedCases": [
+        {
+          "identity": "com.artflow.studio.BrushStudioUiTest#practiceStrokesSurviveTabChangesButNeverApplyBrushSettingsByThemselves",
+          "xmlFailureDetail": "Empty failure node; no assertion message."
+        }
+      ],
+      "apkProvenance": {
+        "com.artflow.studio": {
+          "sha256": "73e4c1e31a496454a6eaaf253fb799f416f9f81ff4c7854ee412c40889e479c7",
+          "bytes": 24498247,
+          "retainedApkIndependentlyRehashed": true,
+          "matchesBuilt": true,
+          "dexEntries": 18,
+          "allDexBytesIndependentlyRehashed": true,
+          "dexMatchesPassingSameRevisionIndependent16kLane": true
+        },
+        "com.artflow.studio.test": {
+          "sha256": "9ee67ad4b3f034b57e04d83be22e4dbc10f32cbbada855a3b79d2d5ae72d830d",
+          "bytes": 1889035,
+          "retainedApkIndependentlyRehashed": true,
+          "matchesBuilt": true,
+          "dexEntries": 7,
+          "allDexBytesIndependentlyRehashed": true,
+          "dexMatchesPassingSameRevisionIndependent16kLane": true
+        }
+      },
+      "nativeCrashes": [
+        {
+          "archiveMember": "_temp/artflow-device/native-tombstones/attempt-2/files/tombstone_07",
+          "sha256": "6bd1b318ee67b00510b6d04d8a44ea19c76604bc1db2035680e57b328787378a",
+          "bytes": 798013,
+          "captureStatus": "captured",
+          "independentlyRehashed": true,
+          "identityMatchesAttempt": true,
+          "pid": 5137,
+          "timestamp": "2026-11-19 06:17:48.193161108+0000",
+          "pageSize": 16384,
+          "signal": "signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0000000000000010",
+          "cause": "Cause: null pointer dereference",
+          "topFrames": [
+            "      #00 pc 00000000006e8007  /apex/com.android.art/lib64/libart.so (bool art::interpreter::DoCall<false>(art::ArtMethod*, art::Thread*, art::ShadowFrame&, art::Instruction const*, unsigned short, bool, art::JValue*)+183) (BuildId: e4a3c6c284a8b17d09fd84d661cf181b)",
+            "      #01 pc 0000000000233101  /apex/com.android.art/lib64/libart.so (void art::interpreter::ExecuteSwitchImplCpp<false>(art::interpreter::SwitchImplContext*)+14913) (BuildId: e4a3c6c284a8b17d09fd84d661cf181b)",
+            "      #02 pc 000000000022d2e5  /apex/com.android.art/lib64/libart.so (ExecuteSwitchImplAsm+5) (BuildId: e4a3c6c284a8b17d09fd84d661cf181b)",
+            "      #03 pc 00000000003f7698  <anonymous:75058c0f4000> (com.artflow.studio.presentation.ui.components.brush.AdvancedBrushSettingsPanelKt.rememberImageImport+0)"
+          ]
+        }
+      ]
+    }
+  ],
+  "interpretation": "Both failures are native ART null-pointer SIGSEGVs at DoCall<false>+183 while executing different managed call sites. XML failure nodes are empty process-interruption markers, not identified assertion errors. Exact underlying runtime mechanism is unproven; this lane remains failed and device acceptance incomplete.",
+  "officialRuntimeReview": {
+    "dateUtc": "2026-11-19",
+    "scope": "Bounded public-source package-metadata and release-note check. No emulator binary or system-image archive was downloaded, and no new runtime experiment was performed.",
+    "metadata": [
+      {
+        "url": "https://dl.google.com/android/repository/sys-img/google_apis/sys-img2-3.xml",
+        "retrievedAtUtc": "2026-11-19T06:23:21.335400Z",
+        "lastModified": "Tue, 17 Nov 2026 00:26:11 GMT",
+        "bytes": 240650,
+        "sha256": "f46a7c36aba029eba520189f731901a95c8f423bc446d16c326bf351efd8855e"
+      },
+      {
+        "url": "https://dl.google.com/android/repository/repository2-3.xml",
+        "retrievedAtUtc": "2026-11-19T06:23:26.072686Z",
+        "lastModified": "Tue, 17 Nov 2026 00:26:11 GMT",
+        "bytes": 436016,
+        "sha256": "8db7cc1bd65bf8c9dffc3678a70d6dc98b02781a24d1ef0d31ecf111a55cc2d5"
+      }
+    ],
+    "matchingSystemImage": {
+      "package": "system-images;android-35;google_apis_ps16k;x86_64",
+      "matchingPackageRecords": 1,
+      "revision": 5,
+      "channel": "channel-0",
+      "archive": "x86_64-ps16k-35_r05.zip",
+      "sizeBytes": 1696342085,
+      "declaredSha1": "d709cf26b375abecfbbf5803afd20749ddfa2865",
+      "sameArchiveAsOctober24Review": true
+    },
+    "availableLinuxEmulators": [
+      {
+        "version": "37.2.13",
+        "channel": "channel-0",
+        "build": 16740729,
+        "archive": "emulator-linux_x64-16740729.zip"
+      },
+      {
+        "version": "37.3.9",
+        "channel": "channel-1",
+        "build": 16863232,
+        "archive": "emulator-linux_x64-16863232.zip"
+      },
+      {
+        "version": "37.4.1",
+        "channel": "channel-2",
+        "build": 16916650,
+        "archive": "emulator-linux_x64-16916650.zip"
+      }
+    ],
+    "failedJobUsedStableEmulator": {
+      "version": "37.2.13.0",
+      "build": 16740729,
+      "jobLogTimestampUtc": "2026-11-19T06:08:14.0299203Z"
+    },
+    "releaseNotes": [
+      {
+        "url": "https://developer.android.com/studio/releases/emulator",
+        "finding": "The October 28, 2026 stable 37.2.13 fix addresses a host OpenGL ES resource leak. The failed job already used this version."
+      },
+      {
+        "url": "https://developer.android.com/studio/releases/fixed-bugs/emulator/37",
+        "finding": "37.3.9 Beta lists minor fixes/improvements; 37.4.1 Canary lists API35 tablet orientation issue 476026968. Neither entry identifies the observed ART Build ID or matching interpreter null-pointer repair."
+      }
+    ],
+    "conclusion": "No matching documented repair was found in the reviewed official public sources. The matching image remains revision 5, and the current stable emulator is already the failed job version. Newer preview versions exist, but these sources do not establish a fix for this signature. This does not rule out private or unindexed fixes."
+  },
+  "qualificationLimits": [
+    "Both incomplete instrumentation invocations remain failed; their counts cannot be combined into a passing inventory.",
+    "The manual job rerun and the one internal framework recovery are separate events, both retained.",
+    "Observed ART frames identify the crash site, not a proven underlying mechanism or an identified application assertion defect.",
+    "Attempt 1 and its failed startup remain preserved. No final-SHA multi-run requirement, mandatory lane, retry rule, or external release gate is waived."
+  ]
+}

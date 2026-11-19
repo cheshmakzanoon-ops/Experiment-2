@@ -1383,7 +1383,7 @@ exact revision identified in their reports. The `benchmark` build type is not a 
 - **Language**: Kotlin 2.0.21
 - **UI**: Jetpack Compose
 - **Graphics**: OpenGL ES 2.0 through `GLSurfaceView` / `GLES20` (ES 3.x and Vulkan are aspirational)
-- **Native**: C++ via JNI/NDK — built, not called
+- **Native**: C++ source prototype excluded from the app build; the active renderer is Kotlin
 - **DI**: Hilt
 - **Async**: Coroutines + Flow
 - **Storage**: Room + kotlinx.serialization `.artflow` documents (no DataStore)

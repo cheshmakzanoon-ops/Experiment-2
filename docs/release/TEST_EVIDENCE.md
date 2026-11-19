@@ -2,10 +2,18 @@
 
 ## November 18 integration
 
-Implementation is being validated on the branch containing PR #40. New build/emulator results
-must be recorded below with the source revision and workflow URL before claiming qualification.
-Local Android builds are unavailable in this session; actual Gradle and emulator execution uses
-GitHub Actions. Pending checks are not passes.
+This record preserves the November integration's observed attempts, including failures and
+incomplete matrices. [PR #40](https://github.com/cheshmakzanoon-ops/Experiment-2/pull/40) is the live
+verification index for subsequent integration and main results, their exact source revisions,
+workflow attempts, and artifact references. Follow that index for results recorded after this
+document's snapshot; retain earlier attempts when appending verified results here.
+
+Qualification belongs to the tested revision and complete evidence, not to a branch name or an
+implementation-status row. Record the checked-out SHA and workflow URL; identify a PR merge
+revision separately from its branch head. A matching source tree is useful provenance but does
+not replace the final-SHA evidence required by the [release sign-off](RELEASE_SIGNOFF.md).
+During this integration session, local Android builds were unavailable; Gradle and emulator
+execution used GitHub Actions. Planned, running, or uninspected checks are not passes.
 
 | Integration revision | Run | Observed result |
 | --- | --- | --- |
@@ -13,6 +21,8 @@ GitHub Actions. Pending checks are not passes.
 | `bbdfee0` | [44452446543](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44452446543) | 1,751 JVM tests in 292 suites passed with zero failures/errors/skips; all 283 instrumentation tests compiled. Android Lint had no errors/fatals. The static-analysis gate failed on formatting and one staged-copy loop readability finding, so APK/AAB and emulator stages were not reached. |
 | `a9afcd3` | [44454662010](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44454662010) | All build gates passed: 1,751 JVM tests in 292 suites, instrumentation compilation, ktlint, detekt, debug/release Lint, APK/AAB integrity, and native alignment. Emulator execution exposed a linked-menu test targeting error and a separate API35/16 KB runtime field-resolution failure; see the retained attempt details below. |
 | `91c6714` | [44460714924](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44460714924) | JVM tests and instrumentation compilation passed. Static analysis stopped on four chain-continuation formatting findings for the corrected menu test's single four-call line. The next revision splits that chain across lines without changing any action or assertion. APK/AAB and emulator stages were not reached. |
+| Head `384095d`; tested PR merge `2b857405` | [44463021020, attempt 1](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44463021020/attempts/1) | All build gates passed, including 1,751 JVM tests in 292 suites with zero failures/errors/skips. Six device lanes completed all 283 identities, page-size/provenance checks, and minified launch on their first invocation. The primary API35/16 KB lane failed before app installation/test startup, executing zero tests. Original attempt: 7/8 jobs passed; not an accepted complete matrix. See the artifact summary and retained findings below. |
+| Head `384095d`; tested PR merge `2b857405` | [44463021020, attempt 2](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44463021020/attempts/2) | Manual rerun of the primary API35/16 KB job only, also failed. Its first instrumentation invocation stopped after 154 passes and one process-interruption record; one internal framework recovery ran, then the second invocation stopped after 31 passes and one process-interruption record. Both have matched native ART crash evidence. Other jobs were carried forward, not rerun. No complete matrix or final-SHA acceptance. |
 
 The first run passed Python checks, workflow/secret/dependency checks, signing rejection, and
 reference-corpus/native-contract verification before compilation failed. Its logs remain available.
@@ -24,6 +34,101 @@ The downloaded `bbdfee0` verification artifact confirms the JVM counts and uncha
 154 debug / 152 release warnings plus five hints in each. Formatting and the loop structure are
 corrected in the next candidate without expanding the baseline or excluding tests. A JVM pass
 does not substitute for the still-required emulator and packaged-artifact gates.
+
+### Retained `384095d` attempt-one results
+
+[Run 44463021020, attempt 1](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44463021020/attempts/1)
+checked out PR merge `2b857405a05dcefa19cc8f6c43102ae55668f5a9` for branch head
+`384095da6b0feec12736fa54fe7d245777e1c37e`. The
+[durable artifact summary](../evidence/ci-run-44463021020-attempt-1.json) records public job and
+artifact identities, digests, per-lane counts, runtime/provenance results, and startup diagnostics.
+It summarizes the retained artifacts; it does not replace their complete logs and test records.
+
+Build job `135354090452` passed JVM tests, instrumentation compilation, ktlint, detekt,
+debug/release Lint, APK/AAB builds, and packaged-integrity/native-alignment checks. Lint retained
+154 debug / 152 release warnings and five hints in each, with no errors/fatals.
+
+| Original device lane | Passed | Failed test cases | Allowed skips | Missing identities | Page size / minified launch |
+| --- | ---: | ---: | ---: | ---: | --- |
+| API26 | 281 | 0 | 2 | 0 | 4 KB / passed |
+| API35 standard 4 KB | 283 | 0 | 0 | 0 | 4 KB / passed |
+| API35 16 KB | 0 | 0 | 0 | 283 | Not measured / not reached |
+| API35 independent 16 KB | 283 | 0 | 0 | 0 | 16 KB / passed |
+| API36 standard phone | 283 | 0 | 0 | 0 | 4 KB / passed |
+| API36 16 KB | 283 | 0 | 0 | 0 | 16 KB / passed |
+| API36 tablet | 283 | 0 | 0 | 0 | 4 KB / passed |
+
+The six successful lanes each contain all 283 source identities, with no internal framework
+recovery and installed app/test APKs matching their corresponding builds. API26's two skips are
+the existing API-specific cancellation-flag and scoped-MediaStore cases. Across those lanes,
+there are 1,696 passing executions and two allowed skips. The linked-layer UI, brush-studio UI,
+and rendering cases all passed in the six completed lanes; this does not erase their earlier
+failures or establish the cause of the earlier runtime failures.
+
+The primary [API35/16 KB job 135359821087](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44463021020/job/135359821087)
+failed during APK installation, before any application test ran. Retained logs show
+`system_server` crashes and framework field-resolution errors before installation; app
+`install-create` then failed through a null `StorageManager.getVolumes` receiver. No app/test APK
+was installed, no test-runner snapshot was captured, and all 283 test identities are missing.
+The configured image was 16 KB, but there is no measured application page size or minified-launch
+acceptance for this invocation. The existing classifier rejected automatic recovery and was not
+changed. This pre-application system failure does not exercise or qualify application behavior.
+
+**Manual follow-up, separate from attempt one:** workflow attempt 2 reran only the primary
+API35/16 KB lane as fresh [job 135372972887](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44463021020/job/135372972887)
+and also failed. The original attempt-one artifact summary preserves its queued-at-recording
+snapshot; the completed result follows below. This manual job rerun is not a second complete
+matrix, and the final-SHA multi-run contract in [release sign-off](RELEASE_SIGNOFF.md) remains unmet.
+
+### Retained `384095d` manual-repeat failure
+
+[Workflow attempt 2](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44463021020/attempts/2)
+used the unchanged PR merge `2b857405a05dcefa19cc8f6c43102ae55668f5a9` for head
+`384095da6b0feec12736fa54fe7d245777e1c37e`. Its
+[artifact summary](../evidence/ci-run-44463021020-attempt-2.json) retains the failed job, ZIP digest,
+both instrumentation invocations, APK/DEX provenance, and the matched tombstones. The build and
+six successful device lanes carried forward from attempt one are not new executions.
+
+| Instrumentation invocation inside the manual rerun | Passed | Process-interruption records | Missing identities |
+| --- | ---: | ---: | ---: |
+| First invocation | 154 | 1 | 128 |
+| After one internal framework recovery | 31 | 1 | 251 |
+
+The first invocation stopped during
+`StudioWorkspaceUiTest.workflowPanelsAreReachableFromTheTopBarActions`; the second stopped during
+`BrushStudioUiTest.practiceStrokesSurviveTabChangesButNeverApplyBrushSettingsByThemselves`.
+Both XML records contain empty failure nodes. The matched process crashes, rather than assertion
+messages, explain the interrupted records. The bounded framework recovery completed and changed
+the boot identity, but the subsequent instrumentation run also failed. Counts from the two
+incomplete invocations must not be combined into a passing inventory.
+
+Both matched tombstones report an actual 16,384-byte page size and a null-pointer `SIGSEGV` at
+ART `DoCall<false>+183`, PC `0x6e8007`, fault address `0x10`, Build ID
+`e4a3c6c284a8b17d09fd84d661cf181b`. The managed callers differ:
+`BrushLibraryStore.<init>` and `AdvancedBrushSettingsPanelKt.rememberImageImport`.
+Installed app/test APKs match their builds, and all 18 app DEX entries and seven test DEX entries
+match the passing same-revision independent 16 KB lane. These facts identify the failing runtime
+instruction and rule out differing captured DEX contents; the underlying crash mechanism remains
+unproven. The normal runtime-acceptance report and minified-launch acceptance are absent, so the
+lane remains failed.
+
+#### Bounded official runtime review, November 19
+
+Fresh [Google system-image metadata](https://dl.google.com/android/repository/sys-img/google_apis/sys-img2-3.xml)
+still lists API35 `google_apis_ps16k;x86_64` revision 5 with the same archive digest as the
+[October repair review](../ANDROID15_OFFICIAL_REPAIR_REVIEW_2026-10-24.md).
+[SDK tool metadata](https://dl.google.com/android/repository/repository2-3.xml) now lists stable
+emulator 37.2.13, build 16740729, which the failed manual rerun already used. Its
+[documented October 28 fix](https://developer.android.com/studio/releases/emulator) concerns a
+host OpenGL ES resource leak. The available beta 37.3.9 and development/canary 37.4.1
+[release entries](https://developer.android.com/studio/releases/fixed-bugs/emulator/37) do not
+identify a matching API35 image or ART repair. No matching documented repair was found in this
+bounded public-source review; unindexed or private fixes are not ruled out. The artifact summary
+records retrieval times, index hashes, and package identities. This supplies no basis to repeat
+the retained [collector](../ANDROID15_COLLECTOR_CONTROL_2026-10-24.md),
+[core-count](../ANDROID15_CORE_COUNT_EXPERIMENT_2026-10-31.md), or
+[runtime/JIT controls](../ANDROID15_RUNTIME_COMPARISON_2026-10-24.md), broaden retry eligibility,
+or remove a required lane.
 
 ### Retained `a9afcd3` emulator findings
 
