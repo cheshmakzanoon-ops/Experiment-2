@@ -49,6 +49,9 @@ import com.artflow.studio.domain.repository.canvas.CanvasInvalidationEvent
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import com.artflow.studio.domain.repository.canvas.CanvasSize
 import com.artflow.studio.domain.repository.canvas.CanvasState
+import com.artflow.studio.domain.repository.canvas.LayerImportDestination
+import com.artflow.studio.domain.repository.canvas.PreparedImportLayer
+import com.artflow.studio.domain.repository.canvas.PreparedLayerImport
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -2560,6 +2563,105 @@ class CanvasRepositoryImpl
             val projectId = currentProjectId.takeIf { it > 0 } ?: return false
             storage.saveModel(projectId, objText)
             return true
+        }
+
+        override suspend fun importLayers(prepare: suspend (LayerImportDestination) -> PreparedLayerImport): List<Layer> =
+            withState {
+                check(importReady()) { "Finish the current gesture before importing layers" }
+                val project = currentProjectId
+                val frames = frameList
+                val frame = frameList[activeFrame]
+                val revision = editRevision
+                val active = activeLayerId()
+                val selection = activeSelection
+                val destination = importDestination()
+                // No importer receives the live state. All decoding, mask work and colour conversion
+                // finish before any layer or history entry is changed.
+                val prepared = withContext(clipboardDispatcher) { prepare(destination).also { it.validate(destination) } }
+                coroutineContext.ensureActive()
+                check(
+                    currentProjectId == project &&
+                        frameList === frames &&
+                        frameList.getOrNull(activeFrame) === frame &&
+                        editRevision == revision &&
+                        activeLayerId() == active &&
+                        activeSelection === selection &&
+                        importReady(),
+                ) { "The artwork changed while the file was being imported. Import it again." }
+                prepared.validate(importDestination())
+                val firstId = nextLayerId
+                val ids = prepared.layers.mapIndexed { index, item -> item.layer.id to (firstId + index) }.toMap()
+                val additions = prepared.layers.map { importedLayer(it, ids) }
+                val retained = if (prepared.replaceBlank) emptyList() else frame.layers.toList()
+                val combined = (retained + additions).toMutableList()
+                val activeImported = additions.last { !it.isGroup }.id
+                val replacement = FrameData(frame.id, frame.name, frame.durationMs, combined, frame.isKeyframe, activeImported)
+                val result = additions.mapIndexed { index, layer -> layer.toDomain(retained.size + index) }
+                val dirtyIds = additions.map { it.id }
+                // Everything that can decode, suspend or validate has completed. Publish the entire
+                // stack with one undo boundary; autosave/export sees either the old or new document.
+                coroutineContext.ensureActive()
+                pushUndo()
+                frameList[activeFrame] = replacement
+                nextLayerId += additions.size
+                prepared.colorProfile?.let { colorProfile = it }
+                prepared.backgroundColor?.let { backgroundColor = it }
+                dirtyRasters.addAll(dirtyIds)
+                dirty = true
+                syncTimeline()
+                emit(CanvasInvalidationEvent.Full)
+                result
+            }
+
+        private fun importReady(): Boolean = activeStrokes.isEmpty() && pendingEdits.isEmpty() && pendingSelection == null
+
+        private fun importDestination(): LayerImportDestination {
+            val planeBytes = canvasWidth.toLong() * canvasHeight * BYTES_PER_PIXEL
+            val availablePlanes = (rasterBudget.heapBytes / 3 / planeBytes - retainedRasterPlanes()).coerceIn(0, Int.MAX_VALUE.toLong())
+            val availableSlots =
+                minOf(
+                    ProjectStorage.MAX_LAYERS - allLayers().size,
+                    (Long.MAX_VALUE - nextLayerId).coerceIn(0, Int.MAX_VALUE.toLong()).toInt(),
+                )
+            val single = currentLayers().singleOrNull()
+            val blank =
+                !dirty &&
+                    undoStack.isEmpty() &&
+                    redoStack.isEmpty() &&
+                    frameList.size == 1 &&
+                    single != null &&
+                    !single.isGroup &&
+                    single.name == "Background" &&
+                    single.strokes.isEmpty() &&
+                    single.mask == null &&
+                    single.text == null &&
+                    single.raster?.pixels?.all { it == 0 } == true
+            return LayerImportDestination(canvasWidth, canvasHeight, colorProfile, availablePlanes.toInt(), availableSlots, blank)
+        }
+
+        private fun importedLayer(
+            prepared: PreparedImportLayer,
+            ids: Map<Long, Long>,
+        ): LayerData {
+            val source = prepared.layer
+            return LayerData(
+                id = ids.getValue(source.id),
+                name = source.name,
+                isVisible = source.isVisible,
+                opacity = source.opacity,
+                blendMode = source.blendMode,
+                isAlphaLocked = source.isAlphaLocked,
+                isClippingMask = source.isClippingMask,
+                maskEnabled = source.maskEnabled,
+            ).apply {
+                isGroup = source.isGroup
+                parentGroupId = source.parentGroupId?.let(ids::getValue)
+                blendContract = source.blendContract
+                materialChannel = MaterialChannel.COLOR
+                isPrivate = source.isPrivate
+                raster = prepared.pixels
+                mask = prepared.mask
+            }
         }
 
         override suspend fun importModel(prepared: PreparedModelImport): Boolean =

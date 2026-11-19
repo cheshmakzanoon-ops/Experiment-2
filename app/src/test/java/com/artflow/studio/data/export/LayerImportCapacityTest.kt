@@ -12,7 +12,10 @@ import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.repository.canvas.CanvasRasterBudget
 import com.artflow.studio.data.repository.canvas.CanvasRepositoryImpl
+import com.artflow.studio.domain.model.layer.Layer
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
+import com.artflow.studio.domain.repository.canvas.LayerImportDestination
+import com.artflow.studio.domain.repository.canvas.PreparedLayerImport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -63,11 +66,9 @@ class LayerImportCapacityTest {
             val before = repository.frames()
             val history = repository.historyMark
             val revision = repository.contentRevision
-            val requests = mutableListOf<Pair<Int, Int>>()
-            val checked = capacityRecorder(requests)
+            val checked = repository
             val failure = expectFailure { LayerImports.importPsd(checked, psd(twoPixels = true)) }
             assertTrue(failure.message.orEmpty().contains("memory or layer limit"))
-            assertEquals(listOf(4 to 3), requests)
             assertEquals(before, repository.frames())
             assertEquals(history, repository.historyMark)
             assertEquals(revision, repository.contentRevision)
@@ -92,31 +93,31 @@ class LayerImportCapacityTest {
             openCanvas()
             val rejected =
                 object : CanvasRepository by repository {
-                    override suspend fun applyRasterEdit(
-                        layerId: Long,
-                        description: String,
-                        edit: (PixelBuffer) -> Unit,
-                    ): Boolean = false
+                    override suspend fun importLayers(prepare: suspend (LayerImportDestination) -> PreparedLayerImport): List<Layer> =
+                        repository.importLayers { destination ->
+                            prepare(destination)
+                            error("Injected import publication failure")
+                        }
                 }
             val failure = expectFailure { LayerImports.importPsd(rejected, psd(twoPixels = false)) }
-            assertTrue(failure.message.orEmpty().contains("PSD layer \"Paint\" could not be imported"))
+            assertTrue(failure.message.orEmpty().contains("Injected import publication failure"))
+            assertEquals(1, repository.getAllLayers().size)
+            assertEquals(0, repository.undoDepth)
         }
 
     @Test
     fun procreateFallsBackWhenMasksExceedTheActualRemainingBudgetAndReopens() =
         runTest {
             openCanvas()
-            val requests = mutableListOf<Pair<Int, Int>>()
             val result =
                 LayerImports.importProcreate(
-                    capacityRecorder(requests),
+                    repository,
                     procreate(withMasks = true),
                     preserveDocumentProfile = true,
                     rasterBudgetBytes = Long.MAX_VALUE,
                 )
             assertTrue(result.flattened)
             assertEquals(1, result.layers)
-            assertEquals(listOf(4 to 3, 1 to 1), requests)
             assertEquals("Flattened", repository.getAllLayers().single().name)
             saveAndReopen()
             assertEquals(1, repository.getAllLayers().size)
@@ -127,15 +128,13 @@ class LayerImportCapacityTest {
     fun procreateIncludesGroupSlotsWhenDecidingWhetherTheLayeredImportFits() =
         runTest {
             openCanvas()
-            val requests = mutableListOf<Pair<Int, Int>>()
             val result =
                 LayerImports.importProcreate(
-                    capacityRecorder(requests, maxAddedLayers = 2),
+                    withLayerSlotLimit(2),
                     procreate(withMasks = false),
                     rasterBudgetBytes = Long.MAX_VALUE,
                 )
             assertTrue(result.flattened)
-            assertEquals(listOf(2 to 3, 1 to 1), requests)
             assertFalse(repository.getAllLayers().any { it.isGroup })
         }
 
@@ -145,17 +144,15 @@ class LayerImportCapacityTest {
             openCanvas()
             val document = procreate(withMasks = false, withLayers = false)
             assertTrue(document.layers().isEmpty())
-            val requests = mutableListOf<Pair<Int, Int>>()
             val result =
                 LayerImports.importProcreate(
-                    capacityRecorder(requests),
+                    repository,
                     document,
                     preserveDocumentProfile = true,
                     rasterBudgetBytes = Long.MAX_VALUE,
                 )
             assertTrue(result.flattened)
             assertEquals(1, result.layers)
-            assertEquals(listOf(1 to 1), requests)
             saveAndReopen()
             assertEquals("Flattened", repository.getAllLayers().single().name)
             assertEquals(PAINT, requireNotNull(repository.layerPixels(repository.getActiveLayerId())).pixels.first())
@@ -211,18 +208,12 @@ class LayerImportCapacityTest {
             assertEquals(history, repository.historyMark)
         }
 
-    private fun capacityRecorder(
-        requests: MutableList<Pair<Int, Int>>,
-        maxAddedLayers: Int = Int.MAX_VALUE,
-    ): CanvasRepository =
+    private fun withLayerSlotLimit(maxAddedLayers: Int): CanvasRepository =
         object : CanvasRepository by repository {
-            override fun canImportLayers(
-                rasterPlanes: Int,
-                layers: Int,
-            ): Boolean {
-                requests += rasterPlanes to layers
-                return layers <= maxAddedLayers && repository.canImportLayers(rasterPlanes, layers)
-            }
+            override suspend fun importLayers(prepare: suspend (LayerImportDestination) -> PreparedLayerImport): List<Layer> =
+                repository.importLayers { destination ->
+                    prepare(destination.copy(availableLayerSlots = minOf(maxAddedLayers, destination.availableLayerSlots)))
+                }
         }
 
     private fun newRepository(): CanvasRepositoryImpl =

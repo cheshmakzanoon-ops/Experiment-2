@@ -188,22 +188,7 @@ class MainViewModel
         ) {
             viewModelScope.launch(galleryErrors) {
                 try {
-                    val now = System.currentTimeMillis()
-                    val project =
-                        Project(
-                            name = name.ifBlank { "Untitled artwork" },
-                            filePath = "",
-                            thumbnailPath = null,
-                            width = preset?.width ?: width,
-                            height = preset?.height ?: height,
-                            dpi = preset?.dpi ?: dpi,
-                            createdAt = now,
-                            modifiedAt = now,
-                        )
-                    require(CanvasOperations.isSizeSafe(project.width, project.height)) { "This canvas is too large" }
-                    require(project.dpi in CanvasOperations.MIN_DPI..CanvasOperations.MAX_DPI) { "Invalid canvas DPI" }
-                    val id = projectRepository.saveProject(project)
-                    preset?.let { settingsRepository.setDefaultPreset(it.name) }
+                    val id = createProjectRecord(name, preset, width, height, dpi)
                     onCreated(id)
                 } catch (cancelled: CancellationException) {
                     throw cancelled
@@ -214,6 +199,40 @@ class MainViewModel
                     messages.send(error.message ?: "Could not create the project")
                 }
             }
+        }
+
+        /** Creates an import destination in the caller's job so failures and cancellation retain resource ownership. */
+        suspend fun createImportedProject(
+            name: String,
+            width: Int,
+            height: Int,
+            dpi: Int,
+        ): Long = createProjectRecord(name, null, width, height, dpi)
+
+        private suspend fun createProjectRecord(
+            name: String,
+            preset: CanvasOperations.Preset?,
+            width: Int,
+            height: Int,
+            dpi: Int,
+        ): Long {
+            val now = System.currentTimeMillis()
+            val project =
+                Project(
+                    name = name.ifBlank { "Untitled artwork" },
+                    filePath = "",
+                    thumbnailPath = null,
+                    width = preset?.width ?: width,
+                    height = preset?.height ?: height,
+                    dpi = preset?.dpi ?: dpi,
+                    createdAt = now,
+                    modifiedAt = now,
+                )
+            require(CanvasOperations.isSizeSafe(project.width, project.height)) { "This canvas is too large" }
+            require(project.dpi in CanvasOperations.MIN_DPI..CanvasOperations.MAX_DPI) { "Invalid canvas DPI" }
+            val id = projectRepository.saveProject(project)
+            preset?.let { settingsRepository.setDefaultPreset(it.name) }
+            return id
         }
 
         fun rename(

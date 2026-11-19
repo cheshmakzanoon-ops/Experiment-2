@@ -3,6 +3,7 @@ package com.artflow.studio.presentation.ui.screens.gallery
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.lifecycle.viewModelScope
 import com.artflow.studio.R
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.color.PaletteCodec
@@ -92,23 +93,35 @@ internal class GalleryImports(
     /** Opens a layered Photoshop document as a new artwork of the same size, keeping its layers. */
     fun psd(uri: Uri) {
         scope.launch {
-            val opened =
-                withContext(Dispatchers.IO) {
-                    runCatching {
-                        val bytes = requireNotNull(context.contentResolver.openInputStream(uri)?.use { it.readAtMost(MAX_PSD_BYTES) })
-                        val document = requireNotNull(PsdCodec.read(bytes))
-                        bytes to document
-                    }.getOrNull()
-                }
-            if (opened == null) {
-                say(context.getString(R.string.galleryscreen_not_a_photoshop_document))
-                return@launch
-            }
-            val (bytes, document) = opened
-            viewModel.createProject("Imported PSD", null, document.width, document.height, document.dpi) { id ->
-                PendingImports.putPsd(id, bytes)
-                scope.launch { openArtwork(id) }
-            }
+            val failure =
+                runCatching {
+                    val (bytes, document) =
+                        withContext(Dispatchers.IO) {
+                            val bytes =
+                                requireNotNull(context.contentResolver.openInputStream(uri)?.use { it.readAtMost(MAX_PSD_BYTES) }) {
+                                    "That PSD could not be opened (maximum 256 MB)"
+                                }
+                            val metadata = requireNotNull(PsdCodec.inspect(bytes)) { "That file is not a supported Photoshop document" }
+                            require(metadata.requiredMemoryBytes <= PsdCodec.defaultReadBudgetBytes()) {
+                                "This PSD needs too much memory. Reduce its dimensions or layers in the source application."
+                            }
+                            bytes to metadata
+                        }
+                    val id = viewModel.createImportedProject("Imported PSD", document.width, document.height, document.dpi)
+                    PendingImports.putPsd(id, bytes)
+                    var navigated = false
+                    try {
+                        openArtwork(id)
+                        navigated = true
+                    } finally {
+                        if (!navigated) PendingImports.discardPsd(id, bytes)
+                    }
+                }.exceptionOrNull() ?: return@launch
+            if (failure is CancellationException) throw failure
+            if (failure is Error) throw failure
+            Timber.e(failure, "PSD import failed")
+            val explained = failure is IllegalArgumentException || failure is IllegalStateException
+            say(failure.message?.takeIf { explained } ?: context.getString(R.string.galleryscreen_not_a_photoshop_document))
         }
     }
 
@@ -118,33 +131,34 @@ internal class GalleryImports(
      */
     fun procreate(uri: Uri) {
         scope.launch {
-            val opened =
-                withContext(Dispatchers.IO) {
-                    runCatching {
-                        requireNotNull(context.contentResolver.openInputStream(uri)) { "That file could not be opened" }.use { input ->
-                            ProcreateImport.open(input, context.cacheDir)
+            val failure =
+                runCatching {
+                    ProcreateImport.useOpened(context.cacheDir, { context.contentResolver.openInputStream(uri) }) { document, transfer ->
+                        val size = document.document
+                        require(CanvasOperations.isSizeSafe(size.width, size.height)) {
+                            context.getString(R.string.galleryscreen_procreate_too_large)
+                        }
+                        val name = size.name?.takeIf { it.isNotBlank() } ?: "Imported Procreate"
+                        val dpi = size.dpi.coerceIn(CanvasOperations.MIN_DPI, CanvasOperations.MAX_DPI)
+                        val id = viewModel.createImportedProject(name, size.width, size.height, dpi)
+                        PendingImports.putProcreate(id, document, viewModel.viewModelScope)
+                        transfer()
+                        var navigated = false
+                        try {
+                            // Navigate in this job: a cancelled child must not strand a pending archive.
+                            openArtwork(id)
+                            navigated = true
+                        } finally {
+                            if (!navigated) PendingImports.discardProcreate(id, document)
                         }
                     }
-                }
-            val document =
-                opened.getOrElse { failure ->
-                    // Our own checks explain themselves; anything else means a damaged or unusual file.
-                    val explained = failure is IllegalArgumentException && failure !is NumberFormatException
-                    say(failure.message?.takeIf { explained } ?: "That file is not a Procreate document ArtFlow can read")
-                    return@launch
-                }
-            val size = document.document
-            if (!CanvasOperations.isSizeSafe(size.width, size.height)) {
-                document.close()
-                say(context.getString(R.string.galleryscreen_procreate_too_large))
-                return@launch
-            }
-            val name = size.name?.takeIf { it.isNotBlank() } ?: "Imported Procreate"
-            val dpi = size.dpi.coerceIn(CanvasOperations.MIN_DPI, CanvasOperations.MAX_DPI)
-            viewModel.createProject(name, null, size.width, size.height, dpi) { id ->
-                PendingImports.putProcreate(id, document)
-                scope.launch { openArtwork(id) }
-            }
+                }.exceptionOrNull() ?: return@launch
+            if (failure is CancellationException) throw failure
+            if (failure is Error) throw failure
+            val explained =
+                (failure is IllegalArgumentException || failure is IllegalStateException) && failure !is NumberFormatException
+            Timber.e(failure, "Procreate import failed")
+            say(failure.message?.takeIf { explained } ?: "That Procreate document could not be imported")
         }
     }
 

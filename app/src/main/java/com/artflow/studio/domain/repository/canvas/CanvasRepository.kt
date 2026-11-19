@@ -109,6 +109,14 @@ interface CanvasRepository {
         layers: Int,
     ): Boolean = rasterPlanes >= 0 && layers >= 0
 
+    /**
+     * Captures the destination before [prepare], then publishes its complete result as one undo
+     * step only if that same artwork/frame/revision remains open. Failure never publishes a prefix.
+     * Returns the imported layers with their actual repository identifiers.
+     */
+    suspend fun importLayers(prepare: suspend (LayerImportDestination) -> PreparedLayerImport): List<Layer> =
+        error("This canvas does not support atomic layer imports")
+
     // -----------------------------------------------------------------------------------------
     // Strokes
     // -----------------------------------------------------------------------------------------

@@ -962,27 +962,18 @@ class CanvasViewModel
             layerOp { notify("Imported ${LayerImports.importPsd(canvasRepository, bytes)} layer(s) from PSD") }
 
         /** Rebuilds a Procreate document's layers in this (new) canvas, then lets the file go. */
-        private fun importProcreate(document: ProcreateImport) =
-            layerOp {
-                document.use {
-                    val result = LayerImports.importProcreate(canvasRepository, it.document, preserveDocumentProfile = true)
-                    // The document's background colour is part of the canvas state.
-                    refreshUiStateFrames()
-                    val summary =
-                        if (result.flattened) {
-                            "This Procreate document has too many layers for this device's memory, so it came in flattened"
-                        } else {
-                            "Imported ${result.layers} layer(s) from Procreate"
-                        }
-                    notify(
-                        if (result.hasUnsupportedColorProfile) {
-                            "$summary. The embedded colour profile is unsupported, so its colours were interpreted as sRGB"
-                        } else {
-                            summary
-                        },
-                    )
+        private fun importProcreate(document: ProcreateImport) {
+            val importJob =
+                launchLayerOp {
+                    document.use {
+                        val result = LayerImports.importProcreate(canvasRepository, it.document, preserveDocumentProfile = true)
+                        // The document's background colour is part of the canvas state.
+                        refreshUiStateFrames()
+                        notify(procreateImportSummary(result))
+                    }
                 }
-            }
+            document.closeWhenCompleted(importJob)
+        }
 
         /** Groups [layerId] with the layer directly beneath it (or groups it alone at the bottom). */
         fun groupWithLayerBelow(layerId: Long) =
@@ -1163,6 +1154,10 @@ class CanvasViewModel
             }
 
         private fun layerOp(block: suspend () -> Unit) {
+            launchLayerOp(block)
+        }
+
+        private fun launchLayerOp(block: suspend () -> Unit): Job =
             viewModelScope.launch(editorErrors) {
                 try {
                     block()
@@ -1174,7 +1169,6 @@ class CanvasViewModel
                     notify(error.message ?: "The layer operation failed")
                 }
             }
-        }
 
         // -----------------------------------------------------------------------------------------
         // Adjustments and filters
@@ -1632,3 +1626,17 @@ class CanvasViewModel
             private const val MAX_FILL_GAP = 16
         }
     }
+
+private fun procreateImportSummary(result: LayerImports.ProcreateResult): String {
+    val summary =
+        if (result.flattened) {
+            "This Procreate document has too many layers for this device's memory, so it came in flattened"
+        } else {
+            "Imported ${result.layers} layer(s) from Procreate"
+        }
+    return if (result.hasUnsupportedColorProfile) {
+        "$summary. The embedded colour profile is unsupported, so its colours were interpreted as sRGB"
+    } else {
+        summary
+    }
+}

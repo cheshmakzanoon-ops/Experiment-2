@@ -3,6 +3,13 @@ package com.artflow.studio.data.export
 import com.artflow.studio.core.color.ColorProfile
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.three.PreparedModelImport
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import timber.log.Timber
+import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 
 /** Hands an imported picture or document from the gallery to the editor that opens its new canvas. */
@@ -36,17 +43,82 @@ object PendingImports {
 
     fun takePsd(projectId: Long): ByteArray? = documents.remove(projectId)
 
-    private val procreate = ConcurrentHashMap<Long, ProcreateImport>()
+    fun discardPsd(
+        projectId: Long,
+        bytes: ByteArray,
+    ) {
+        documents.remove(projectId, bytes)
+    }
 
-    /** An opened Procreate document whose layers fill the new canvas; the taker closes it. */
+    private class ProcreateHandoff(
+        val document: ProcreateImport,
+    ) {
+        lateinit var expiry: Job
+    }
+
+    private val procreate = ConcurrentHashMap<Long, ProcreateHandoff>()
+    private const val PROCREATE_CLAIM_TIMEOUT_MS = 10 * 60 * 1000L
+
+    /**
+     * The editor takes ownership on claim. An abandoned navigation is bounded by the gallery
+     * ViewModel lifetime and a claim deadline; claimed imports are never closed by this owner.
+     */
     fun putProcreate(
         projectId: Long,
         document: ProcreateImport,
+        owner: CoroutineScope,
     ) {
-        procreate.put(projectId, document)?.close()
+        val pending = ProcreateHandoff(document)
+        pending.expiry =
+            owner.launch(start = CoroutineStart.LAZY) {
+                delay(PROCREATE_CLAIM_TIMEOUT_MS)
+                expireProcreate(projectId, pending)
+            }
+        val replaced = procreate.put(projectId, pending)
+        replaced?.let {
+            it.expiry.cancel()
+            closeProcreate(it.document)
+        }
+        pending.expiry.invokeOnCompletion { cause -> if (cause != null) expireProcreate(projectId, pending) }
+        pending.expiry.start()
     }
 
-    fun takeProcreate(projectId: Long): ProcreateImport? = procreate.remove(projectId)
+    fun takeProcreate(projectId: Long): ProcreateImport? {
+        val pending = procreate.remove(projectId) ?: return null
+        pending.expiry.cancel()
+        return pending.document
+    }
+
+    /** Releases only this navigation's unclaimed archive, without closing an editor-owned import. */
+    fun discardProcreate(
+        projectId: Long,
+        document: ProcreateImport,
+    ) {
+        val pending = procreate[projectId]?.takeIf { it.document === document } ?: return
+        if (procreate.remove(projectId, pending)) {
+            pending.expiry.cancel()
+            closeProcreate(document)
+        }
+    }
+
+    private fun expireProcreate(
+        projectId: Long,
+        pending: ProcreateHandoff,
+    ) {
+        if (!procreate.remove(projectId, pending)) return
+        closeProcreate(pending.document)
+        putNotice(projectId, "The file import was cancelled before the editor opened. Import the original file again.")
+    }
+
+    private fun closeProcreate(document: ProcreateImport) {
+        try {
+            document.close()
+        } catch (error: IOException) {
+            Timber.e(error, "Could not clean up an abandoned Procreate import")
+        } catch (error: SecurityException) {
+            Timber.e(error, "Could not access an abandoned Procreate import")
+        }
+    }
 
     private val models = ConcurrentHashMap<Long, String>()
 
