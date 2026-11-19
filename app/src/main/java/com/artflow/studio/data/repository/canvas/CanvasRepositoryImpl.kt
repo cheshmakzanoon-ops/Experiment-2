@@ -2022,7 +2022,8 @@ class CanvasRepositoryImpl
             val ids = block.associate { it.id to nextLayerId++ }
             val usedLinks = currentLayers().mapNotNull { it.linkGroupId }.toMutableSet()
             val links =
-                block.groupBy { it.linkGroupId }
+                block
+                    .groupBy { it.linkGroupId }
                     .filter { (id, members) -> id != null && members.size > 1 }
                     .mapValues { newLinkGroupId(usedLinks) }
             return block.map { layer ->
@@ -3966,7 +3967,9 @@ class CanvasRepositoryImpl
             layers: Int,
         ): Boolean {
             val retained = retainedRasterPlanes()
-            return layers >= 0 && hasLayerCapacity(layers) && rasterPlanes in 0..(Int.MAX_VALUE - retained) &&
+            return layers >= 0 &&
+                hasLayerCapacity(layers) &&
+                rasterPlanes in 0..(Int.MAX_VALUE - retained) &&
                 rasterBudget.allows(canvasWidth, canvasHeight, retained + rasterPlanes)
         }
 

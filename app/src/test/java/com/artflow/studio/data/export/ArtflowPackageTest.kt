@@ -15,6 +15,7 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 
 class ArtflowPackageTest {
@@ -130,7 +131,13 @@ class ArtflowPackageTest {
     @Test fun repeatedDocumentReadsDoNotConsumeTheAggregateArchiveBudgetTwice() {
         val destination = File(temporary.root, "repeat.artflow")
         destination.writeBytes(ArtflowPackage.write("Repeat", files))
-        val expanded = java.util.zip.ZipFile(destination).use { zip -> zip.entries().toList().sumOf { it.size } }
+        val expanded =
+            ZipFile(destination).use { zip ->
+                zip
+                    .entries()
+                    .toList()
+                    .sumOf { it.size }
+            }
         ArtflowPackage.openFile(destination, maxTotalBytes = expanded).use { contents ->
             repeat(3) { assertArrayEquals(files.getValue(ArtflowPackage.DOCUMENT), contents.readBytes(ArtflowPackage.DOCUMENT)) }
             files.forEach { (path, expected) -> assertArrayEquals(expected, contents.readBytes(path)) }

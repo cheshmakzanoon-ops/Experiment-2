@@ -10,11 +10,17 @@ GitHub Actions. Pending checks are not passes.
 | Integration revision | Run | Observed result |
 | --- | --- | --- |
 | `d2d407a` | [44451621348](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44451621348) | Build stopped at unit-test compilation: a legacy model-publication fixture's trailing lambda bound to the new budget argument. Fixed by naming the callback; no assertions removed. JVM tests, static analysis, and emulator execution were not reached. |
+| `bbdfee0` | [44452446543](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44452446543) | 1,751 JVM tests in 292 suites passed with zero failures/errors/skips; all 283 instrumentation tests compiled. Android Lint had no errors/fatals. The static-analysis gate failed on formatting and one staged-copy loop readability finding, so APK/AAB and emulator stages were not reached. |
 
 The first run passed Python checks, workflow/secret/dependency checks, signing rejection, and
 reference-corpus/native-contract verification before compilation failed. Its logs remain available.
 The next integration revision also includes reviewed shared-grain rollback, layered-import
 preflight, composite-only fallback, and empty-linked-layer regressions; it needs its own full run.
+
+The downloaded `bbdfee0` verification artifact confirms the JVM counts and unchanged Lint totals:
+154 debug / 152 release warnings plus five hints in each. Formatting and the loop structure are
+corrected in the next candidate without expanding the baseline or excluding tests. A JVM pass
+does not substitute for the still-required emulator and packaged-artifact gates.
 
 ## Historical evidence, independently inspected
 

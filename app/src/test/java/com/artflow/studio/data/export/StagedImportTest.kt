@@ -44,7 +44,12 @@ class StagedImportTest {
                 }
             assertEquals(17, result)
             assertFalse(requireNotNull(staged).exists())
-            assertTrue(temporary.root.listFiles().orEmpty().isEmpty())
+            assertTrue(
+                temporary.root
+                    .listFiles()
+                    .orEmpty()
+                    .isEmpty(),
+            )
         }
 
     @Test
@@ -66,7 +71,12 @@ class StagedImportTest {
             assertTrue(failure is IllegalArgumentException)
             assertEquals(9, read)
             assertFalse(consumed)
-            assertTrue(temporary.root.listFiles().orEmpty().isEmpty())
+            assertTrue(
+                temporary.root
+                    .listFiles()
+                    .orEmpty()
+                    .isEmpty(),
+            )
         }
 
     @Test
@@ -102,7 +112,12 @@ class StagedImportTest {
             assertTrue(worker.isCancelled)
             assertTrue(closed)
             assertFalse(consumed)
-            assertTrue(temporary.root.listFiles().orEmpty().isEmpty())
+            assertTrue(
+                temporary.root
+                    .listFiles()
+                    .orEmpty()
+                    .isEmpty(),
+            )
         }
 
     @Test
@@ -120,7 +135,12 @@ class StagedImportTest {
             assertTrue(file.isFile)
             worker.cancelAndJoin()
             assertFalse(file.exists())
-            assertTrue(temporary.root.listFiles().orEmpty().isEmpty())
+            assertTrue(
+                temporary.root
+                    .listFiles()
+                    .orEmpty()
+                    .isEmpty(),
+            )
         }
 
     @Test
@@ -138,6 +158,11 @@ class StagedImportTest {
                     }
                 }.exceptionOrNull()
             assertEquals("The package is invalid", failure?.message)
-            assertTrue(temporary.root.listFiles().orEmpty().isEmpty())
+            assertTrue(
+                temporary.root
+                    .listFiles()
+                    .orEmpty()
+                    .isEmpty(),
+            )
         }
 }

@@ -99,6 +99,7 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
+import com.artflow.studio.core.canvas.LayerTransform as AffineLayerTransform
 
 /** Shape kinds the shape tool can draw. */
 enum class ShapeKind(
@@ -1028,7 +1029,7 @@ class ArtFlowCanvasView
             val revision = canvasRepository.contentRevision
             coroutineScope.launch {
                 try {
-                    val parameters = com.artflow.studio.core.canvas.LayerTransform.Parameters(translationX = dx, translationY = dy)
+                    val parameters = AffineLayerTransform.Parameters(translationX = dx, translationY = dy)
                     if (canvasRepository.transformLayer(layerId, parameters, revision)) {
                         reportHistory()
                     } else {

@@ -48,18 +48,19 @@ object GrainStorage {
         } == true
 
     /** Registers every stored tile; damaged files are skipped. */
-    fun loadAll(directory: File) = synchronized(importLock) {
-        directory.listFiles { file -> file.name.endsWith(EXTENSION) }?.forEach { file ->
-            if (pendingFiles[file.absoluteFile.normalize()]?.retained == false) return@forEach
-            val id = file.name.removeSuffix(EXTENSION)
-            if (!CustomGrains.isCustom(id) || file.length() != (CustomGrains.TILE * CustomGrains.TILE).toLong()) return@forEach
-            try {
-                CustomGrains.register(id, CustomGrains.Tile(CustomGrains.TILE, file.readBytes()))
-            } catch (error: IOException) {
-                Timber.w(error, "Skipping unreadable grain %s", id)
+    fun loadAll(directory: File) =
+        synchronized(importLock) {
+            directory.listFiles { file -> file.name.endsWith(EXTENSION) }?.forEach { file ->
+                if (pendingFiles[file.absoluteFile.normalize()]?.retained == false) return@forEach
+                val id = file.name.removeSuffix(EXTENSION)
+                if (!CustomGrains.isCustom(id) || file.length() != (CustomGrains.TILE * CustomGrains.TILE).toLong()) return@forEach
+                try {
+                    CustomGrains.register(id, CustomGrains.Tile(CustomGrains.TILE, file.readBytes()))
+                } catch (error: IOException) {
+                    Timber.w(error, "Skipping unreadable grain %s", id)
+                }
             }
         }
-    }
 
     /** Stores and registers [tile], returning its identity. */
     fun save(
@@ -143,26 +144,27 @@ object GrainStorage {
 
         override fun close() = finish(retain = false)
 
-        private fun finish(retain: Boolean) = synchronized(importLock) {
-            if (finished) return@synchronized
-            finished = true
-            files.forEach { claim ->
-                claim.retained = claim.retained || retain
-                if (--claim.users == 0) {
-                    pendingFiles.remove(claim.file, claim)
-                    if (!claim.retained) removeImportedFile(claim)
+        private fun finish(retain: Boolean) =
+            synchronized(importLock) {
+                if (finished) return@synchronized
+                finished = true
+                files.forEach { claim ->
+                    claim.retained = claim.retained || retain
+                    if (--claim.users == 0) {
+                        pendingFiles.remove(claim.file, claim)
+                        if (!claim.retained) removeImportedFile(claim)
+                    }
                 }
-            }
-            tiles.forEach { claim ->
-                claim.retained = claim.retained || retain
-                if (--claim.users == 0) {
-                    pendingTiles.remove(claim.id, claim)
-                    if (!claim.retained) CustomGrains.removeIfSame(claim.id, claim.tile)
+                tiles.forEach { claim ->
+                    claim.retained = claim.retained || retain
+                    if (--claim.users == 0) {
+                        pendingTiles.remove(claim.id, claim)
+                        if (!claim.retained) CustomGrains.removeIfSame(claim.id, claim.tile)
+                    }
                 }
+                files.clear()
+                tiles.clear()
             }
-            files.clear()
-            tiles.clear()
-        }
     }
 
     private fun sameTile(
@@ -175,7 +177,8 @@ object GrainStorage {
         bytes: ByteArray,
     ): Boolean =
         Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS) &&
-            file.length() == bytes.size.toLong() && file.readBytes().contentEquals(bytes)
+            file.length() == bytes.size.toLong() &&
+            file.readBytes().contentEquals(bytes)
 
     private fun removeImportedFile(claim: ImportedFile) {
         try {

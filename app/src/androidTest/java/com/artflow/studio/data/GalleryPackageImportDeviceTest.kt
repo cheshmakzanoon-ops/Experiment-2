@@ -126,7 +126,12 @@ class GalleryPackageImportDeviceTest {
             importer.artwork(Uri.fromFile(damaged))
             assertTrue(withTimeout(20_000) { failure.await() }.isNotBlank())
             assertTrue(projects.getAllProjects().first().isEmpty())
-            assertTrue(context.cacheDir.listFiles().orEmpty().isEmpty())
+            assertTrue(
+                context.cacheDir
+                    .listFiles()
+                    .orEmpty()
+                    .isEmpty(),
+            )
         }
 
     @Test
@@ -142,7 +147,12 @@ class GalleryPackageImportDeviceTest {
             )
             assertEquals(1, stagedPaths.size)
             assertFalse(stagedPaths.single().exists())
-            assertTrue(context.cacheDir.listFiles().orEmpty().isEmpty())
+            assertTrue(
+                context.cacheDir
+                    .listFiles()
+                    .orEmpty()
+                    .isEmpty(),
+            )
             assertTrue(projects.getAllProjects().first().isEmpty())
         }
 
@@ -160,10 +170,21 @@ class GalleryPackageImportDeviceTest {
         scope.coroutineContext[Job]?.join()
         assertEquals(1, stagedPaths.size)
         assertTrue(stagedPaths.none { it.exists() })
-        assertTrue(context.cacheDir.listFiles().orEmpty().isEmpty())
+        assertTrue(
+            context.cacheDir
+                .listFiles()
+                .orEmpty()
+                .isEmpty(),
+        )
         assertNotNull(projects.getProjectById(id))
         val document = requireNotNull(storage.loadDocument(id))
-        assertEquals("Portable text", document.layers.single().textContent?.text)
+        assertEquals(
+            "Portable text",
+            document.layers
+                .single()
+                .textContent
+                ?.text,
+        )
         assertArrayEquals(rasterBytes, storage.readRaster(id, requireNotNull(document.layers.single().rasterFile)))
         assertArrayEquals(grainBytes, requireNotNull(GrainStorage.fileFor(GrainStorage.directory(context.filesDir), grainId)).readBytes())
         val notice = requireNotNull(PendingImports.takeNotice(id))

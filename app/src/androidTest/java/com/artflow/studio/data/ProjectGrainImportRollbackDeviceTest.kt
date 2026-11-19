@@ -65,12 +65,10 @@ class ProjectGrainImportRollbackDeviceTest {
     }
 
     @Test
-    fun failedDatabasePublicationRollsBackNewGrainsAndCanBeRetried() =
-        runBlocking { verifyRollback(cancel = false) }
+    fun failedDatabasePublicationRollsBackNewGrainsAndCanBeRetried() = runBlocking { verifyRollback(cancel = false) }
 
     @Test
-    fun cancelledDatabasePublicationRollsBackNewGrainsAndCanBeRetried() =
-        runBlocking { verifyRollback(cancel = true) }
+    fun cancelledDatabasePublicationRollsBackNewGrainsAndCanBeRetried() = runBlocking { verifyRollback(cancel = true) }
 
     private suspend fun verifyRollback(cancel: Boolean) {
         val existing = newId()

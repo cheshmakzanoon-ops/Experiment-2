@@ -51,10 +51,11 @@ object StagedImport {
                 val requested = minOf(buffer.size.toLong(), maxBytes - total).toInt().coerceAtLeast(1)
                 val count = input.read(buffer, 0, requested)
                 if (count < 0) break
-                if (count == 0) continue
-                total += count
-                require(total <= maxBytes) { "This artwork file is too large to import" }
-                output.write(buffer, 0, count)
+                if (count > 0) {
+                    total += count
+                    require(total <= maxBytes) { "This artwork file is too large to import" }
+                    output.write(buffer, 0, count)
+                }
             }
         }
     }

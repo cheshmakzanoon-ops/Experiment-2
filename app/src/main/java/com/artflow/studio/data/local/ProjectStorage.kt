@@ -591,8 +591,7 @@ class ProjectStorage
                             "Invalid brush grain in artwork package: $path"
                         }
                         id to CustomGrains.Tile(CustomGrains.TILE, bytes)
-                    }
-                    .toMap()
+                    }.toMap()
             val documentDeps = collectDependencies(document)
             val fonts =
                 ((packagedDeps?.fonts ?: emptyList()) + documentDeps.fonts)

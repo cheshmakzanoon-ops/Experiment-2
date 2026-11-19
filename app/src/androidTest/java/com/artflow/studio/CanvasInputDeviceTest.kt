@@ -523,10 +523,11 @@ class CanvasInputDeviceTest {
     fun linkedEmptyLayersAreTransparentPeersAndCanOwnTheTransformControls() =
         withCanvas(94) { canvas ->
             val painted = repository.getActiveLayerId()
-            val original = PixelBuffer(64, 64).apply {
-                setUnchecked(20, 20, Color.RED)
-                setUnchecked(40, 40, Color.BLUE)
-            }
+            val original =
+                PixelBuffer(64, 64).apply {
+                    setUnchecked(20, 20, Color.RED)
+                    setUnchecked(40, 40, Color.BLUE)
+                }
             assertTrue(repository.setLayerPixels(painted, original, "Linked empty-layer fixture"))
             val empty = repository.addLayer("Empty linked peer").id
             assertNull(repository.layerPixels(empty))

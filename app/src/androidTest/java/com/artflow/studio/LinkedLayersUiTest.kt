@@ -104,14 +104,15 @@ class LinkedLayersUiTest {
         compose.setContent {
             var layers by remember { mutableStateOf(repository.getAllLayers()) }
             val scope = rememberCoroutineScope()
-            batch = remember {
-                LayerBatchController(repository) { action ->
-                    scope.launch {
-                        action()
-                        layers = repository.getAllLayers()
-                    }
-                }.apply { pick(setOf(first)) }
-            }
+            batch =
+                remember {
+                    LayerBatchController(repository) { action ->
+                        scope.launch {
+                            action()
+                            layers = repository.getAllLayers()
+                        }
+                    }.apply { pick(setOf(first)) }
+                }
             val picked by batch.picked.collectAsState()
             ArtFlowTheme(AppSettings()) {
                 Surface(Modifier.fillMaxSize()) {

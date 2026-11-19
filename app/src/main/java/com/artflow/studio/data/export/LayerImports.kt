@@ -136,7 +136,8 @@ object LayerImports {
         val planes = layers.size + layers.count { it.maskUuid != null }
         val bytes = maxOf(document.width.toLong() * document.height, size.width.toLong() * size.height) * BYTES_PER_PIXEL
         val flattened =
-            layers.isEmpty() || (planes + WORKING_COPIES) * bytes > rasterBudgetBytes ||
+            layers.isEmpty() ||
+                (planes + WORKING_COPIES) * bytes > rasterBudgetBytes ||
                 !repository.canImportLayers(planes, countNodes(document.nodes))
         val composite =
             if (flattened) {

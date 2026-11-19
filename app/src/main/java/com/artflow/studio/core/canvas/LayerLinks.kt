@@ -20,10 +20,12 @@ object LayerLinks {
         members: List<Layer>,
     ): Boolean {
         val groups = layers.filter { it.isGroup }.associateBy { it.id }
-        return members.isNotEmpty() && members.all { layer ->
-            layer.acceptsPaint() && !layer.isInternal &&
-                LayerGroups.ancestors(layer, groups).all { it.isVisible && !it.isLocked && !it.isReference }
-        }
+        return members.isNotEmpty() &&
+            members.all { layer ->
+                layer.acceptsPaint() &&
+                    !layer.isInternal &&
+                    LayerGroups.ancestors(layer, groups).all { it.isVisible && !it.isLocked && !it.isReference }
+            }
     }
 
     fun canLink(
