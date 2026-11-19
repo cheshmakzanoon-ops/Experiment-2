@@ -30,6 +30,7 @@ import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.data.repository.canvas.CanvasRepositoryImpl
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
+import com.artflow.studio.domain.repository.canvas.SavedCanvas
 import com.artflow.studio.presentation.ui.components.canvas.ModelView
 import com.artflow.studio.presentation.ui.viewmodel.ModelController
 import com.artflow.studio.presentation.ui.viewmodel.renderedExport
@@ -199,8 +200,11 @@ class ModelMaterialImportDeviceTest {
             val firstRepository = repository
             val failingSave =
                 object : CanvasRepository by firstRepository {
-                    override suspend fun saveCanvas(projectId: Long): String? {
-                        val thumbnail = firstRepository.saveCanvas(projectId)
+                    override suspend fun saveCanvasSnapshot(
+                        projectId: Long,
+                        onSaved: suspend (SavedCanvas) -> Unit,
+                    ): SavedCanvas? {
+                        val saved = firstRepository.saveCanvasSnapshot(projectId, onSaved)
                         preservePlanes(prefix, "saved-before-failure", planes())
                         storage
                             .documentFile(
@@ -208,10 +212,10 @@ class ModelMaterialImportDeviceTest {
                             ).copyTo(File(TestEvidence.directory(), "$prefix-document-before-failure.json"), overwrite = true)
                         record(
                             prefix,
-                            metadata.put("savedThumbnailPresent", thumbnail != null),
+                            metadata.put("savedThumbnailPresent", saved != null),
                             "real save completed before injected failure",
                         )
-                        checkNotNull(thumbnail) { "The real initial save did not finish" }
+                        checkNotNull(saved) { "The real initial save did not finish" }
                         throw IOException("Injected failure after durable model save")
                     }
                 }

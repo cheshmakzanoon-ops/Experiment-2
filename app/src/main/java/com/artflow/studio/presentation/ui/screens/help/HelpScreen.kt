@@ -131,18 +131,19 @@ object Tutorials {
                 "PNG, JPEG, WebP, TIFF, PDF, layered PSD and layers as PNG files for stills; GIF, animated PNG, " +
                     "MP4, a zipped PNG sequence and a multi-page PDF for animations and pages. Display P3 canvases " +
                     "keep their colour profile in PNG and JPEG and are converted to sRGB for other formats. " +
-                    "Actions > Video replays and exports your drawing's timelapse.",
+                    "Actions > Video controls recording, replay and export of captured timelapse frames. " +
+                    "Quick edits can share a frame, and long recordings retain fewer frames.",
                 "flow.export",
             ),
             TutorialStep(
                 "Gallery and saving",
-                "Import brings in a photo, a layered PSD, a Procreate document (its layers, groups, blend modes and masks) " +
-                    "or a 3D model (OBJ, glTF/GLB, USDZ or USD with texture coordinates, or a zip with its textures) " +
+                "Import brings in a photo, supported PSD or Procreate layers, groups, blend modes and masks, " +
+                    "or a supported 3D model (OBJ, glTF/GLB, USDZ or USD with texture coordinates, or a zip with its textures) " +
                     "to paint on it in the 3D window: Paint mode paints " +
                     "the model with the current brush, Turn mode or two fingers spin and zoom it. " +
                     "Touch and hold an artwork and drop it on another to make a stack, or use Select to stack, " +
-                    "duplicate or delete several at once. ArtFlow autosaves as you work; if the app is killed, " +
-                    "reopening the artwork offers to recover the autosaved version.",
+                    "duplicate or delete several at once. With Autosave enabled, ArtFlow periodically keeps a recovery copy. " +
+                    "Reopening an artwork offers recovery when an unsaved copy is available.",
                 "flow.saving",
             ),
         )

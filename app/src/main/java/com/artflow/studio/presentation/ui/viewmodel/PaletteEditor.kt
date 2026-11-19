@@ -20,7 +20,7 @@ class PaletteEditor(
     fun create(name: String) {
         val label = name.trim().take(MAX_NAME).ifEmpty { "Palette" }
         scope.launch(errors) {
-            settings.updatePalette(Palette(id = nextId(), name = label, colors = emptyList(), category = CUSTOM), makeDefault = true)
+            settings.addPalette(Palette(id = nextId(), name = label, colors = emptyList(), category = CUSTOM), makeDefault = true)
         }
     }
 
@@ -37,13 +37,18 @@ class PaletteEditor(
     fun duplicate(palette: Palette) {
         scope.launch(errors) {
             val copy = palette.renamed("${palette.name} copy".take(MAX_NAME)).copy(id = nextId(), category = CUSTOM)
-            settings.updatePalette(copy, makeDefault = true)
+            settings.addPalette(copy, makeDefault = true)
         }
     }
 
     fun setDefault(paletteId: Long) {
-        val palette = custom(paletteId) ?: return
-        scope.launch(errors) { settings.updatePalette(palette, makeDefault = true) }
+        if (custom(paletteId) == null) return
+        scope.launch(errors) {
+            settings.update { stored ->
+                val palette = stored.customPalettes.firstOrNull { it.id == paletteId && it.category == CUSTOM } ?: return@update stored
+                stored.copy(customPalettes = listOf(palette) + stored.customPalettes.filterNot { it.id == paletteId })
+            }
+        }
     }
 
     fun delete(paletteId: Long) {
@@ -60,24 +65,37 @@ class PaletteEditor(
         paletteId: Long,
         index: Int,
         color: Int,
-    ) = edit(paletteId) { it.withColorAt(index, color) }
+    ) = edit(paletteId, requireUnchangedSwatches = true) { it.withColorAt(index, color) }
 
     fun removeSwatch(
         paletteId: Long,
         index: Int,
-    ) = edit(paletteId) { it.withoutColor(index) }
+    ) = edit(paletteId, requireUnchangedSwatches = true) { it.withoutColor(index) }
 
     private fun custom(paletteId: Long): Palette? = palettes().firstOrNull { it.id == paletteId && it.category == CUSTOM }
 
     private fun edit(
         paletteId: Long,
+        requireUnchangedSwatches: Boolean = false,
         change: (Palette) -> Palette,
     ) {
-        val palette = custom(paletteId) ?: return
-        scope.launch(errors) { settings.updatePalette(change(palette)) }
+        val displayed = custom(paletteId) ?: return
+        val displayedColors = displayed.colors.toList()
+        scope.launch(errors) {
+            settings.update { stored ->
+                val palette = stored.customPalettes.firstOrNull { it.id == paletteId && it.category == CUSTOM } ?: return@update stored
+                // Appending is safe against the latest list. A positional edit must still refer to
+                // the swatches the artist saw, or it could change a different color after a removal.
+                check(!requireUnchangedSwatches || palette.colors == displayedColors) {
+                    "The palette changed. Choose the swatch again; your saved colors are intact."
+                }
+                val changed = change(palette)
+                stored.copy(customPalettes = stored.customPalettes.map { if (it.id == paletteId) changed else it })
+            }
+        }
     }
 
-    /** An id no stored palette has: the clock, or one past the highest in the rare case two arrive in a millisecond. */
+    /** A preferred id only; the repository resolves collisions against the latest stored collection. */
     private fun nextId(): Long = maxOf(System.currentTimeMillis(), (palettes().maxOfOrNull { it.id } ?: 0L) + 1L)
 
     private companion object {

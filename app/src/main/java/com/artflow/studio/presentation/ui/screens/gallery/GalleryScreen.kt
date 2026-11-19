@@ -28,6 +28,8 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -42,6 +44,8 @@ import com.artflow.studio.presentation.ui.IncomingFiles
 import com.artflow.studio.presentation.ui.viewmodel.BrushLibraryViewModel
 import com.artflow.studio.presentation.ui.viewmodel.MainUiState
 import com.artflow.studio.presentation.ui.viewmodel.MainViewModel
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
@@ -102,7 +106,11 @@ fun GalleryScreen(
     val packageImport = rememberDocumentPicker(arrayOf("application/octet-stream", "application/zip"), imports::artwork)
     val modelImport = rememberDocumentPicker(arrayOf("*/*"), imports::model)
     // Files other apps open or share with ArtFlow are imported here, as the pickers' files are.
-    LaunchedEffect(imports) { IncomingFiles.files.collect { imports.open(it) } }
+    LaunchedEffect(imports) {
+        // Await each import. Navigation ends this visit immediately; later files remain queued
+        // until the artist returns, even before Compose disposes the gallery's coroutine scope.
+        IncomingFiles.files.takeWhile { !imports.open(it) }.collect()
+    }
 
     LaunchedEffect(Unit) {
         viewModel.messageFlow.collect { snackbarHostState.showSnackbar(it) }
@@ -179,10 +187,12 @@ fun GalleryScreen(
             }
         },
         floatingActionButton = {
+            val newArtworkLabel = stringResource(R.string.galleryscreen_new_artwork)
             ExtendedFloatingActionButton(
                 onClick = { showNewProjectDialog = true },
+                modifier = Modifier.semantics { contentDescription = newArtworkLabel },
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text(stringResource(R.string.galleryscreen_new_artwork)) },
+                text = { Text(newArtworkLabel) },
             )
         },
     ) { padding ->
@@ -417,7 +427,7 @@ private fun EmptyGallery(searching: Boolean) {
                 if (searching) {
                     "Try a different name."
                 } else {
-                    "Tap New artwork to start a canvas. Everything is stored on this device."
+                    "Tap New artwork to start a canvas. ArtFlow saves your artwork in its private storage."
                 },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

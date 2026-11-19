@@ -29,25 +29,40 @@ object ModelPackage {
         val roughness: ByteArray? = null,
     )
 
-    fun read(bytes: ByteArray): Contents {
+    fun read(bytes: ByteArray): Contents = read(bytes, ModelReadBudget())
+
+    internal fun read(
+        bytes: ByteArray,
+        memoryBudgetBytes: Long,
+    ): Contents = read(bytes, ModelReadBudget(memoryBudgetBytes))
+
+    private fun read(
+        bytes: ByteArray,
+        budget: ModelReadBudget,
+    ): Contents {
         require(bytes.size <= MAX_BYTES) { "This 3D model is too large" }
-        if (GltfReader.isGlb(bytes) || isGltfText(bytes)) return gltf(bytes, emptyMap())
-        if (UsdReader.isUsd(bytes)) return contents(UsdReader.read(bytes))
-        if (!isZip(bytes)) return Contents(bytes.decodeToString())
+        budget.reserve(bytes.size.toLong())
+        if (GltfReader.isGlb(bytes) || isGltfText(bytes)) return gltf(bytes, emptyMap(), budget)
+        if (UsdReader.isUsd(bytes)) return contents(UsdReader.read(bytes, emptyMap(), budget))
+        if (!isZip(bytes)) return Contents(budget.text(bytes))
         val duplicates = HashSet<String>()
         val files =
             try {
-                unzip(bytes, duplicates)
+                unzip(bytes, duplicates, budget)
             } catch (damaged: java.io.IOException) {
                 // A damaged archive, such as a CRC mismatch or a cut-off entry, is a refusal like any other.
                 throw IllegalArgumentException("The 3D model package is damaged", damaged)
             }
         // A .usdz is a zip whose first USD file is the scene.
         files.keys.firstOrNull { it.endsWith(".usdc") || it.endsWith(".usda") || it.endsWith(".usd") }?.let { name ->
-            return contents(UsdReader.read(requireNotNull(files[name]), files))
+            return contents(UsdReader.read(requireNotNull(files[name]), files, budget))
         }
         files.keys.firstOrNull { it.endsWith(".obj") }?.let { name ->
-            val objText = requireNotNull(files[name]).decodeToString()
+            val objText = budget.text(requireNotNull(files[name]))
+            files.filterKeys { it.endsWith(".mtl") }.values.forEach { material ->
+                // Material definitions retain maps/lists and copied keys/values in addition to text.
+                budget.reserve(material.size * 8L + (material.count { it == '\n'.code.toByte() } + 1L) * 384L)
+            }
             scalarMaterial(objText, files, duplicates)?.let { material ->
                 return Contents(objText, material.color, mapOf(material.name to material.color), material.maps)
             }
@@ -56,13 +71,14 @@ object ModelPackage {
         }
         val scene = files.keys.firstOrNull { it.endsWith(".glb") } ?: files.keys.firstOrNull { it.endsWith(".gltf") }
         val name = scene ?: throw IllegalArgumentException("The zip has no OBJ or glTF model in it")
-        return gltf(requireNotNull(files[name]), files)
+        return gltf(requireNotNull(files[name]), files, budget)
     }
 
     private fun gltf(
         bytes: ByteArray,
         files: Map<String, ByteArray>,
-    ): Contents = contents(GltfReader.read(bytes, files))
+        budget: ModelReadBudget,
+    ): Contents = contents(GltfReader.read(bytes, files, budget))
 
     private fun contents(result: GltfReader.Result) = Contents(result.objText, result.texture, result.textures)
 
@@ -255,21 +271,25 @@ object ModelPackage {
     private fun unzip(
         bytes: ByteArray,
         duplicates: MutableSet<String>,
+        budget: ModelReadBudget,
     ): Map<String, ByteArray> {
         val files = LinkedHashMap<String, ByteArray>()
         var total = 0L
+        budget.reserve(BUFFER.toLong())
+        val buffer = ByteArray(BUFFER)
         ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
             var entries = 0
             var entry = zip.nextEntry
             while (entry != null) {
                 require(++entries <= MAX_ENTRIES) { "The zip has too many files" }
+                budget.reserve(entry.name.length * 2L + 128L)
                 if (entry.isDirectory) {
                     entry = zip.nextEntry
                     continue
                 }
                 val name = baseName(entry.name)
                 require(name.isNotEmpty()) { "The 3D model package contains an invalid entry name" }
-                val data = readEntry(zip, MAX_BYTES - total)
+                val data = readEntry(zip, MAX_BYTES - total, budget, buffer)
                 total += data.size
                 if (files.putIfAbsent(name, data) != null) duplicates += name
                 entry = zip.nextEntry
@@ -281,13 +301,16 @@ object ModelPackage {
     /** The current entry's bytes; fails once more than [budget] bytes would be read. */
     private fun readEntry(
         zip: ZipInputStream,
-        budget: Long,
+        remaining: Long,
+        budget: ModelReadBudget,
+        buffer: ByteArray,
     ): ByteArray {
         val out = ByteArrayOutputStream()
-        val buffer = ByteArray(BUFFER)
         var read = zip.read(buffer)
         while (read >= 0) {
-            require(budget - out.size() >= read) { "This 3D model is too large" }
+            require(remaining - out.size() >= read) { "This 3D model is too large" }
+            // Capacity growth and the final exact copy can coexist with all previously retained entries.
+            budget.reserve(read.toLong() * 3)
             out.write(buffer, 0, read)
             read = zip.read(buffer)
         }

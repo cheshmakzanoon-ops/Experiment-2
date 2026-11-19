@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Run each real installed-v1 campaign phase once; retain and fail on its first error."""
 import argparse
-import json
 from pathlib import Path
 
 import package_upgrade_build
@@ -13,7 +12,7 @@ def main() -> int:
     parser.add_argument("--build-record", type=Path, required=True)
     parser.add_argument("--serial", required=True)
     args = parser.parse_args()
-    value = json.loads(args.build_record.read_text())
+    value = package_upgrade_build.load(args.build_record)
     package_upgrade_build.validate(value)
     campaign = args.build_record.resolve().parent / "campaign"
     common = ["--campaign", str(campaign), "--serial", args.serial, "--disposable-device", args.serial,
@@ -27,8 +26,12 @@ def main() -> int:
         result = run_package_upgrade.main(arguments)
         if result:
             return result
-    result = json.loads((campaign / "campaign.json").read_text())
-    if result.get("installedV1MigrationQualified") is not True or result.get("replacementScope") != "increasing-version-test-update":
+    result = package_upgrade_build.load(campaign / "campaign.json")
+    expected = {"phase": "passed-scoped-package-campaign", "qualified": True, "installedV1MigrationQualified": True,
+                "replacementScope": "increasing-version-test-update", "oldSource": value["oldSource"],
+                "candidateSource": value["candidateSource"], "publisherQualified": False, "storeReleaseQualified": False}
+    if (any(result.get(key) != item or type(result.get(key)) is not type(item) for key, item in expected.items())
+            or "firstFailure" in result or "automatedOldAppSeed" not in result or "manualOldAppSeed" in result):
         raise ValueError("The required actual v1 and increasing-version update scope did not pass")
     return 0
 

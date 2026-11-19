@@ -52,6 +52,7 @@ import com.artflow.studio.domain.repository.canvas.CanvasState
 import com.artflow.studio.domain.repository.canvas.LayerImportDestination
 import com.artflow.studio.domain.repository.canvas.PreparedImportLayer
 import com.artflow.studio.domain.repository.canvas.PreparedLayerImport
+import com.artflow.studio.domain.repository.canvas.SavedCanvas
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -354,8 +355,14 @@ class CanvasRepositoryImpl
 
         override suspend fun recoverAutosave(projectId: Long): CanvasState? =
             withState {
+                check(currentProjectId == projectId) { "The artwork selected for recovery is no longer open" }
+                val revision = editRevision
                 val document = storage.loadAutosave(projectId) ?: return@withState null
-                applyDocument(projectId, document)
+                applyDocument(projectId, document) {
+                    check(currentProjectId == projectId && editRevision == revision && activeStrokes.isEmpty() && pendingEdits.isEmpty()) {
+                        "The artwork changed during recovery. Your edits are intact; choose Recover again to replace them."
+                    }
+                }
                 dirty = true
                 unresolvedRecoveryProjects.remove(projectId)
                 Timber.d("Recovered autosave for project $projectId")
@@ -365,9 +372,9 @@ class CanvasRepositoryImpl
         private suspend fun applyDocument(
             projectId: Long,
             document: CanvasDocument,
+            beforePublication: () -> Unit = {},
         ) {
             val frames = document.resolvedFrames()
-            frameClipboard = null
             requireCanvasMemory(document.width, document.height)
             val rasterCount = frames.sumOf { frame -> frame.layers.sumOf { listOfNotNull(it.rasterFile, it.maskFile).size } }
             require(rasterBudget.allows(document.width, document.height, rasterCount)) {
@@ -396,6 +403,8 @@ class CanvasRepositoryImpl
                         )
                     }.toMutableList()
             coroutineContext.ensureActive()
+            beforePublication()
+            frameClipboard = null
             editRevision++
             currentProjectId = projectId
             canvasWidth = document.width
@@ -544,7 +553,12 @@ class CanvasRepositoryImpl
             return snapshot.document.copy(layers = savedFrames.first().layers, frames = savedFrames)
         }
 
-        override suspend fun saveCanvas(projectId: Long): String? =
+        override suspend fun saveCanvas(projectId: Long): String? = saveCanvasSnapshot(projectId)?.thumbnailPath
+
+        override suspend fun saveCanvasSnapshot(
+            projectId: Long,
+            onSaved: suspend (SavedCanvas) -> Unit,
+        ): SavedCanvas =
             saveMutex.withLock {
                 check(projectId !in unresolvedRecoveryProjects) {
                     "Cannot save project $projectId: unresolved recovery exists"
@@ -584,7 +598,18 @@ class CanvasRepositoryImpl
                     }
                 }
                 pruneCommittedRasters(projectId)
-                path
+                val saved =
+                    SavedCanvas(
+                        projectId = snapshot.projectId,
+                        revision = snapshot.revision,
+                        thumbnailPath = path,
+                        size = CanvasSize(document.width, document.height, document.dpi),
+                        activeFrameIndex = document.activeFrameIndex,
+                        layerCount = document.frames[document.activeFrameIndex].layers.size,
+                        savedAt = document.savedAt,
+                    )
+                onSaved(saved)
+                saved
             }
 
         override suspend fun autosave(projectId: Long) =

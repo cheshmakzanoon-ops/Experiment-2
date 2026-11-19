@@ -39,12 +39,22 @@ object UsdReader {
         bytes: ByteArray,
         files: Map<String, ByteArray> = emptyMap(),
     ): GltfReader.Result {
+        val budget = ModelReadBudget()
+        budget.reserve(bytes.size.toLong())
+        return read(bytes, files, budget)
+    }
+
+    internal fun read(
+        bytes: ByteArray,
+        files: Map<String, ByteArray>,
+        budget: ModelReadBudget,
+    ): GltfReader.Result {
         require(isUsd(bytes)) { "This USD file is not supported" }
         val scene =
             if (isUsdc(bytes)) {
-                Crate(bytes).let { Scene(it.specs(), it) }
+                Crate(bytes, budget).let { Scene(it.specs(), it, budget) }
             } else {
-                Scene(UsdaParser.parse(bytes.decodeToString()), UsdaParser)
+                Scene(UsdaParser.parse(budget.text(bytes), budget), UsdaParser.values(budget), budget)
             }
         val out = StringBuilder()
         var vertices = 0
@@ -54,8 +64,9 @@ object UsdReader {
             // Each mesh's faces carry its bound material, so models with several can share one artwork.
             val material = scene.boundMaterial(mesh) ?: "unassigned"
             materials += material
+            budget.reserve(material.length.toLong() * 8)
             out.append("usemtl ").append(material).append('\n')
-            val added = scene.writeMesh(mesh, out, vertices)
+            val added = scene.writeMesh(mesh, out, vertices, ObjParser.MAX_TRIANGLES - triangles)
             vertices += added.first
             triangles += added.second
             require(triangles <= ObjParser.MAX_TRIANGLES) { "This model has too many triangles" }
@@ -80,8 +91,13 @@ object UsdReader {
     private class Scene<F>(
         private val specs: Map<String, Map<String, F>>,
         private val layer: Values<F>,
+        private val budget: ModelReadBudget,
     ) {
         private val zUp = layer.token(specs["/"]?.get("upAxis")) == "Z"
+
+        init {
+            budget.reserve(specs.size.toLong() * 128)
+        }
 
         fun meshes(): List<String> =
             specs.keys.filter { path -> !path.contains('.') && layer.token(specs[path]?.get("typeName")) == "Mesh" }.sorted()
@@ -101,10 +117,17 @@ object UsdReader {
             prim: String,
             out: StringBuilder,
             offset: Int,
+            remainingTriangles: Int,
         ): Pair<Int, Int> {
             val points = value(prim, "points")?.let(layer::floats) ?: return 0 to 0
             val counts = value(prim, "faceVertexCounts")?.let(layer::ints) ?: return 0 to 0
             val indices = value(prim, "faceVertexIndices")?.let(layer::ints) ?: return 0 to 0
+            require(points.size % 3 == 0 && points.all(Float::isFinite)) { "The USD points are damaged" }
+            checkFaces(counts, indices.size, remainingTriangles)
+            require(indices.size.toLong() + offset <= Int.MAX_VALUE) { "This model has too many face corners" }
+            // Per-corner expanded arrays, formatted OBJ text, StringBuilder growth and the final
+            // String coexist. Charge before primvar expansion or writing any mesh output.
+            budget.reserve(indices.size.toLong() * OUTPUT_CORNER_BYTES)
             val uvs = primvar(prim, uvName(prim) ?: return 0 to 0, indices, 2) ?: return 0 to 0
             val normals = primvar(prim, "normals", indices, 3)
             val world = worldMatrix(prim)
@@ -139,6 +162,22 @@ object UsdReader {
                 }
             }
             return indices.size to writeFaces(counts, indices.size, offset, normals != null, out)
+        }
+
+        private fun checkFaces(
+            counts: IntArray,
+            corners: Int,
+            remainingTriangles: Int,
+        ) {
+            var consumed = 0L
+            var triangles = 0L
+            for (count in counts) {
+                require(count >= 3) { "The USD mesh contains a face with fewer than three corners" }
+                consumed += count
+                triangles += count - 2
+                require(consumed <= corners && triangles <= remainingTriangles) { "The USD mesh has invalid or too many faces" }
+            }
+            require(consumed == corners.toLong()) { "The mesh faces do not match its vertices" }
         }
 
         private fun appendCorner(
@@ -195,14 +234,17 @@ object UsdReader {
         ): FloatArray? {
             val values = value(prim, name)?.let(layer::floats) ?: return null
             val lookup = value(prim, "$name:indices")?.let(layer::ints)
+            require(values.size % width == 0 && values.all(Float::isFinite)) { "The USD primvar values are damaged" }
             val interpolation = layer.token(attribute(prim, name)?.get("interpolation")) ?: "vertex"
             val faceVarying = interpolation == "faceVarying"
             if (!faceVarying && interpolation != "vertex" && interpolation != "varying") return null
+            require(corners.size.toLong() * width <= Int.MAX_VALUE) { "The USD primvar is too large" }
+            budget.reserve(corners.size.toLong() * width * Float.SIZE_BYTES)
             val out = FloatArray(corners.size * width)
             for (corner in corners.indices) {
                 val element = if (faceVarying) corner else corners[corner]
-                val index = lookup?.getOrNull(element) ?: element
-                if (index < 0 || (index + 1).toLong() * width > values.size.toLong()) return null
+                val index = if (lookup == null) element else requireNotNull(lookup.getOrNull(element)) { "A USD primvar index is missing" }
+                require(index >= 0 && (index.toLong() + 1) * width <= values.size) { "A USD primvar refers to a missing value" }
                 System.arraycopy(values, index * width, out, corner * width, width)
             }
             return out
@@ -216,6 +258,7 @@ object UsdReader {
             var path = prim
             while (path.isNotEmpty() && path != "/") {
                 val order = value(path, "xformOpOrder")?.let(layer::tokens).orEmpty()
+                budget.reserve(order.size.toLong() * 256 + path.length.toLong() * Char.SIZE_BYTES)
                 world = Matrix4.multiply(local(path, order), world)
                 if ("!resetXformStack!" in order) break
                 path = path.substringBeforeLast('/')
@@ -290,6 +333,8 @@ object UsdReader {
          * the first texture at all.
          */
         fun diffuseTexture(material: String?): String? {
+            budget.reserve(specs.size.toLong() * 64)
+
             fun inside(path: String) = material == null || path.startsWith("$material/")
             val textures =
                 specs.keys
@@ -309,6 +354,7 @@ object UsdReader {
         }
 
         private companion object {
+            const val OUTPUT_CORNER_BYTES = 1024L
             const val MATRIX = 16
             val NO_ROTATION = floatArrayOf(0f, 0f, 0f, 1f)
             val ONES = floatArrayOf(1f, 1f, 1f)
@@ -344,12 +390,14 @@ object UsdReader {
      */
     private class Crate(
         val data: ByteArray,
+        private val budget: ModelReadBudget,
     ) : Values<Long> {
         private val buffer = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
 
         // Read without a bounds failure here, so that a file too short for its header is refused by init below.
         private val minor = data.getOrNull(MAGIC.size + 1)?.toInt() ?: 0
         private val sections = HashMap<String, Int>()
+        private val sectionEnds = HashMap<String, Int>()
         val tokens: List<String>
         private val fieldNames: IntArray
         private val fieldValues: LongArray
@@ -363,40 +411,75 @@ object UsdReader {
             var at = position(longAt(TOC_OFFSET))
             val sectionCount = count(longAt(at))
             require(at.toLong() + 8L + sectionCount.toLong() * SECTION_ENTRY <= data.size.toLong()) { "The USD file is damaged" }
+            budget.reserve(sectionCount.toLong() * 128)
             repeat(sectionCount) { index ->
                 val entry = at + 8 + index * SECTION_ENTRY
                 val name = String(data, entry, SECTION_NAME).trimEnd('\u0000')
-                sections[name] = position(longAt(entry + SECTION_NAME))
+                val start = position(longAt(entry + SECTION_NAME))
+                val length = longAt(entry + SECTION_NAME + 8)
+                require(length >= 0 && length <= data.size.toLong() - start && name !in sections) { "The USD section is damaged" }
+                sections[name] = start
+                sectionEnds[name] = start + length.toInt()
             }
-            at = section("TOKENS")
+            at = section("TOKENS", 24)
             val tokenCount = count(longAt(at))
-            val raw = decompress(at + 24, count(longAt(at + 16)), count(longAt(at + 8)))
-            tokens = String(raw, Charsets.UTF_8).split('\u0000').take(tokenCount)
+            budget.reserve(tokenCount.toLong() * 64)
+            val raw = decompress(at + 24, count(longAt(at + 16)), count(longAt(at + 8)), limit = end("TOKENS"))
+            tokens = readTokens(raw, tokenCount)
             at = section("FIELDS")
             val fields = count(longAt(at))
             at += 8
-            fieldNames = ints(at, fields).also { at = it.second }.first
+            fieldNames = ints(at, fields, end("FIELDS")).also { at = it.second }.first
             val fieldsBytesLong = fields.toLong() * 8L
             require(fieldsBytesLong <= MAX_DECODED.toLong()) { "The USD fields section is too large" }
-            val repBytes = decompress(at + 8, count(longAt(at)), fieldsBytesLong.toInt())
-            require(repBytes.size.toLong() >= fieldsBytesLong) { "The USD fields section is damaged" }
-            fieldValues = LongArray(fields) { ByteBuffer.wrap(repBytes).order(ByteOrder.LITTLE_ENDIAN).getLong(it * 8) }
+            budget.reserve(fieldsBytesLong)
+            val repBytes = decompress(at + 8, count(longAt(at)), fieldsBytesLong.toInt(), limit = end("FIELDS"))
+            val reps = ByteBuffer.wrap(repBytes).order(ByteOrder.LITTLE_ENDIAN)
+            fieldValues = LongArray(fields) { reps.getLong(it * 8) }
             at = section("FIELDSETS")
-            fieldSets = ints(at + 8, count(longAt(at))).first
+            fieldSets = ints(at + 8, count(longAt(at)), end("FIELDSETS")).first
             pathNames = paths(section("PATHS"))
         }
 
-        private fun section(name: String): Int = requireNotNull(sections[name]) { "The USD file is missing its $name" }
+        private fun section(
+            name: String,
+            headerBytes: Int = 8,
+        ): Int {
+            val start = requireNotNull(sections[name]) { "The USD file is missing its $name" }
+            require(start.toLong() + headerBytes <= end(name)) { "The USD section is cut short" }
+            return start
+        }
+
+        private fun end(name: String): Int = requireNotNull(sectionEnds[name]) { "The USD file is missing its $name" }
+
+        private fun readTokens(
+            raw: ByteArray,
+            count: Int,
+        ): List<String> {
+            require(count <= raw.size) { "The USD token table is damaged" }
+            val found = ArrayList<String>(count)
+            var start = 0
+            for (index in raw.indices) {
+                if (raw[index] != 0.toByte()) continue
+                require(found.size < count) { "The USD token table is damaged" }
+                budget.reserve((index - start).toLong() * Char.SIZE_BYTES)
+                found += String(raw, start, index - start, Charsets.UTF_8)
+                start = index + 1
+            }
+            require(found.size == count && start == raw.size) { "The USD token table is damaged" }
+            return found
+        }
 
         /** Prims and properties by path, each with its fields by name. */
         fun specs(): Map<String, Map<String, Long>> {
             val at = section("SPECS")
             val count = count(longAt(at))
-            val (paths, afterPaths) = ints(at + 8, count)
-            val (sets, _) = ints(afterPaths, count)
+            val (paths, afterPaths) = ints(at + 8, count, end("SPECS"))
+            val (sets, _) = ints(afterPaths, count, end("SPECS"))
+            budget.reserve(count.toLong() * 128)
             val result = HashMap<String, Map<String, Long>>()
             for (spec in 0 until count) {
-                val path = pathNames.getOrNull(paths[spec]) ?: continue
+                val path = requireNotNull(pathNames.getOrNull(paths[spec])) { "The USD spec refers to a missing path" }
                 result[path] = readSpecFields(sets[spec])
             }
             return result
@@ -405,24 +488,28 @@ object UsdReader {
         private fun readSpecFields(startIndex: Int): Map<String, Long> {
             val fields = HashMap<String, Long>()
             var index = startIndex
+            require(index in fieldSets.indices) { "The USD field set is damaged" }
             while (index in fieldSets.indices && fieldSets[index] >= 0) {
                 val field = fieldSets[index++]
                 val nameIndex = fieldNames.getOrElse(field) { -1 }
-                val fieldName = tokens.getOrNull(nameIndex)
-                if (field in fieldValues.indices && fieldName != null) {
-                    fields[fieldName] = fieldValues[field]
-                }
+                val fieldName = requireNotNull(tokens.getOrNull(nameIndex)) { "The USD field name is damaged" }
+                require(field in fieldValues.indices) { "The USD field value is damaged" }
+                budget.reserve(128)
+                fields[fieldName] = fieldValues[field]
             }
+            require(index in fieldSets.indices && fieldSets[index] == -1) { "The USD field set is cut short" }
             return fields
         }
 
         private fun paths(start: Int): Array<String?> {
+            require(start.toLong() + 16 <= end("PATHS")) { "The USD path table is cut short" }
             val total = count(longAt(start))
             val encoded = count(longAt(start + 8))
-            val (indexes, a) = ints(start + 16, encoded)
-            val (elements, b) = ints(a, encoded)
-            val (jumps, _) = ints(b, encoded)
+            val (indexes, a) = ints(start + 16, encoded, end("PATHS"))
+            val (elements, b) = ints(a, encoded, end("PATHS"))
+            val (jumps, _) = ints(b, encoded, end("PATHS"))
             require(total.toLong() <= data.size.toLong() * MAX_EXPANSION + EXPANSION_SLACK) { "The USD path table is too large" }
+            budget.reserve(total.toLong() * 8 + encoded.toLong() * 64)
             val names = arrayOfNulls<String>(total)
             val seen = BooleanArray(encoded)
             val pending = ArrayDeque<Pair<Int, String?>>()
@@ -434,7 +521,9 @@ object UsdReader {
                     require(index in 0 until encoded && !seen[index]) { "The USD path table is damaged" }
                     seen[index] = true
                     val element = elements[index]
-                    val token = tokens.getOrElse(abs(element)) { "" }
+                    require(element != Int.MIN_VALUE) { "The USD path token is damaged" }
+                    val token = requireNotNull(tokens.getOrNull(abs(element))) { "The USD path token is damaged" }
+                    budget.reserve(((parent?.length ?: 0).toLong() + token.length + 1) * Char.SIZE_BYTES + 32)
                     val path =
                         when {
                             parent == null -> "/"
@@ -442,7 +531,8 @@ object UsdReader {
                             parent == "/" -> "/$token"
                             else -> "$parent/$token"
                         }
-                    if (indexes[index] in names.indices) names[indexes[index]] = path
+                    require(indexes[index] in names.indices) { "The USD path index is damaged" }
+                    names[indexes[index]] = path
                     val jump = jumps[index]
                     val child = jump > 0 || jump == -1
                     val sibling = jump >= 0
@@ -471,6 +561,7 @@ object UsdReader {
             val startLong = at.toLong() + if (tokenArray && minor < ARRAY_COUNT_64) 4L else 8L
             require(startLong + count.toLong() * 4L <= data.size.toLong()) { "The USD file is damaged" }
             val start = startLong.toInt()
+            budget.reserve(count.toLong() * 16)
             return List(count) { tokens.getOrElse(intAt(start + it * 4)) { "" } }
         }
 
@@ -492,6 +583,7 @@ object UsdReader {
                 if (header and bit == 0) continue
                 val count = count(longAt(at))
                 require(at.toLong() + 8L + count.toLong() * 4L <= data.size.toLong()) { "The USD file is damaged" }
+                budget.reserve(count.toLong() * 16)
                 repeat(count) { pathNames.getOrNull(intAt(at + 8 + it * 4))?.let(found::add) }
                 at += 8 + count * 4
             }
@@ -507,6 +599,7 @@ object UsdReader {
             val start = startLong.toInt()
             if (compressed(rep)) return ints(start, count).first
             require(startLong + count.toLong() * 4L <= data.size.toLong()) { "The USD file is damaged" }
+            budget.reserve(count.toLong() * Int.SIZE_BYTES)
             return IntArray(count) { intAt(start + it * 4) }
         }
 
@@ -532,9 +625,10 @@ object UsdReader {
             require(count.toLong() * width <= (MAX_DECODED / 4).toLong()) { "The USD data is too large" }
             require(startLong + count.toLong() * width * size <= data.size.toLong()) { "The USD data is cut short" }
             val start = startLong.toInt()
+            budget.reserve(count.toLong() * width * Float.SIZE_BYTES)
             return FloatArray(count * width) { i ->
                 if (double) buffer.getDouble(start + i * 8).toFloat() else buffer.getFloat(start + i * 4)
-            }
+            }.also { values -> require(values.all(Float::isFinite)) { "The USD geometry contains a nonfinite value" } }
         }
 
         /** Small whole-number vectors are stored inside the value itself as signed bytes. */
@@ -544,11 +638,12 @@ object UsdReader {
             width: Int,
         ): FloatArray {
             val bits = payload(rep)
+            budget.reserve(width.toLong() * Float.SIZE_BYTES)
             return when (type) {
                 FLOAT, DOUBLE -> floatArrayOf(java.lang.Float.intBitsToFloat(bits.toInt()))
                 MATRIX4D -> FloatArray(16).also { m -> for (i in 0 until 4) m[i * 5] = (bits shr (i * 8)).toByte().toFloat() }
                 else -> FloatArray(width) { (bits shr (it * 8)).toByte().toFloat() }
-            }
+            }.also { values -> require(values.all(Float::isFinite)) { "The USD geometry contains a nonfinite value" } }
         }
 
         private fun arrayCount(at: Int): Int =
@@ -564,11 +659,14 @@ object UsdReader {
         private fun ints(
             at: Int,
             count: Int,
+            limit: Int = data.size,
         ): Pair<IntArray, Int> {
+            require(at.toLong() + 8 <= limit) { "The USD integer table is cut short" }
             val size = count(longAt(at))
             val capacityLong = 4L + (count.toLong() * 2L + 7L) / 8L + count.toLong() * 4L
             require(capacityLong <= MAX_DECODED.toLong()) { "The USD integer table is too large" }
-            val coded = decompress(at + 8, size, capacityLong.toInt())
+            budget.reserve(count.toLong() * Int.SIZE_BYTES)
+            val coded = decompress(at + 8, size, capacityLong.toInt(), exact = false, limit = limit)
             require(coded.size >= 4 + (count * 2 + 7) / 8) { "The USD integer table is damaged" }
             val codes = ByteBuffer.wrap(coded).order(ByteOrder.LITTLE_ENDIAN)
             val common = codes.getInt(0)
@@ -595,6 +693,7 @@ object UsdReader {
                         }
                     previous
                 }
+            require(value == coded.size) { "The USD integer table has trailing data" }
             return result to at + 8 + size
         }
 
@@ -603,30 +702,39 @@ object UsdReader {
             at: Int,
             size: Int,
             capacity: Int,
+            exact: Boolean = true,
+            limit: Int = data.size,
         ): ByteArray {
-            require(at >= 0 && size >= 1 && at.toLong() + size <= data.size.toLong() && capacity in 0..MAX_DECODED) {
+            require(at >= 0 && size >= 1 && at.toLong() + size <= limit && capacity in 0..MAX_DECODED) {
                 "The USD data is cut short"
             }
             // LZ4 expands its input by at most about 255 times, so a larger declared size cannot be honest. Refusing it
             // here stops a small file from making the reader allocate hundreds of megabytes.
             require(capacity.toLong() <= size.toLong() * MAX_EXPANSION + EXPANSION_SLACK) { "The USD data is cut short" }
+            // Integer tables supply a maximum, then retain only actual bytes. Their exact copy
+            // can coexist with the capacity buffer; tokens/field values require the exact size.
+            budget.reserve(capacity.toLong() * if (exact) 1 else 2)
             val out = ByteArray(capacity)
             val end = at + size
             val chunks = data[at].toInt() and 0xFF
-            if (chunks == 0) {
-                Lz4.decompress(data, at + 1, size - 1, out, 0)
-            } else {
-                var source = at + 1
-                var written = 0
-                repeat(chunks) {
-                    require(source + 4 <= end) { "The USD data is cut short" }
-                    val length = intAt(source)
-                    require(length > 0 && source.toLong() + 4L + length <= end.toLong()) { "The USD data is damaged" }
-                    written += Lz4.decompress(data, source + 4, length, out, written)
-                    source += 4 + length
+            val written =
+                if (chunks == 0) {
+                    Lz4.decompress(data, at + 1, size - 1, out, 0)
+                } else {
+                    var source = at + 1
+                    var total = 0
+                    repeat(chunks) {
+                        require(source + 4 <= end) { "The USD data is cut short" }
+                        val length = intAt(source)
+                        require(length > 0 && source.toLong() + 4L + length <= end.toLong()) { "The USD data is damaged" }
+                        total += Lz4.decompress(data, source + 4, length, out, total)
+                        source += 4 + length
+                    }
+                    require(source == end) { "The USD compressed data has trailing chunks" }
+                    total
                 }
-            }
-            return out
+            require(!exact || written == capacity) { "The USD decoded data is cut short" }
+            return if (written == capacity) out else out.copyOf(written)
         }
 
         private fun position(value: Long): Int = value.also { require(it in 0 until data.size) { "The USD file is damaged" } }.toInt()

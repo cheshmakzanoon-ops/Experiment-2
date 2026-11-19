@@ -77,7 +77,9 @@ class ArtworkWorkflowTest {
             val projectId = createdProjects.single { it.name == name }.id
             val blank = pixels()
             paint(scenario, 0.45f)
-            compose.waitUntil(15_000) { runBlocking(Dispatchers.Main) { canvas.hasUnsavedChanges() } }
+            awaitOrReport("The first pointer stroke did not make the canvas dirty") {
+                runBlocking(Dispatchers.Main) { canvas.hasUnsavedChanges() }
+            }
             val painted = pixels()
             assertFalse("Input through the editor must change real artwork", blank.contentEquals(painted))
             inspectReachablePanels(scenario, painted)
@@ -119,6 +121,12 @@ class ArtworkWorkflowTest {
             awaitCanvas(scenario)
             assertArrayEquals("Discarding must not replace the last saved artwork", painted, pixels())
             assertFalse(runBlocking { storage.hasUnsavedRecovery(projectId) })
+        } catch (failure: Throwable) {
+            // Preserve the actual editor before closing the Activity or deleting this test's artwork.
+            runCatching { TestEvidence.screenshot("artwork-workflow-first-failure.png") }
+                .exceptionOrNull()
+                ?.let(failure::addSuppressed)
+            throw failure
         } finally {
             scenario.close()
             runBlocking {
@@ -500,7 +508,9 @@ class ArtworkWorkflowTest {
             var ready = false
             scenario.onActivity { activity ->
                 val view = findCanvas(activity.window.decorView)
-                ready = view != null && view.width > 0 && view.height > 0
+                // Laid-out SurfaceViews can still be waiting for their first GL frame. Input is
+                // intentionally blocked until the artwork is visible, so only then send DOWN.
+                ready = view != null && view.width > 0 && view.height > 0 && view.isPreviewAvailable
             }
             ready
         }

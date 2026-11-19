@@ -134,6 +134,12 @@ def markdown(report: dict) -> str:
     for name, values in sorted(report["classes"].items()):
         lines.append(f"| {name.removeprefix('com.artflow.studio.')} | {values.get('passed', 0)} | "
                      f"{values.get('skipped', 0)} | {values.get('failure', 0) + values.get('error', 0)} |")
+    if "apkProvenance" in report:
+        provenance = report["apkProvenance"]
+        lines += ["", "Installed APK identity: " + ("verified against current builds." if provenance else "not verified.")]
+        if provenance:
+            lines += ["", "Instrumentation: " + ("passed after one disclosed framework recovery; not a clean first invocation."
+                      if provenance["frameworkRecovery"] else "passed on its first invocation; no framework recovery.")]
     for skip in report["skips"]:
         lines += ["", f"Skip: `{skip['test']}` — {skip['reason']}."]
     for problem in report["problems"]:
@@ -153,6 +159,8 @@ def main() -> int:
     parser.add_argument("--page-size", type=int, choices=(4096, 16384), required=True)
     parser.add_argument("--revision", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--device-run", type=Path, help="Require invocation receipts and installed APK provenance from this run")
+    parser.add_argument("--project", type=Path, default=Path.cwd())
     args = parser.parse_args()
     report = {"schemaVersion": 1, "revision": args.revision, "expectedApi": args.api,
               "expectedPageSize": args.page_size, "expectedTests": 0, "counts": {}, "classes": {},
@@ -178,6 +186,16 @@ def main() -> int:
             report["problems"].append("No successful minified launch evidence")
     except (OSError, ValueError, ET.ParseError) as error:
         report["problems"].append(str(error))
+    if args.device_run is not None:
+        # Inventory-only diagnostic callers import this module by path. Load the acceptance
+        # helper only for the required main-workflow invocation which supplies --device-run.
+        from verify_device_apk_provenance import verify_device_run
+
+        report["apkProvenance"] = None
+        try:
+            report["apkProvenance"] = verify_device_run(args.project, args.device_run, args.api, args.page_size)
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            report["problems"].append(f"Installed APK provenance: {error}")
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / "verification.json").write_text(json.dumps(report, indent=2) + "\n")
     (args.output / "verification.md").write_text(markdown(report))

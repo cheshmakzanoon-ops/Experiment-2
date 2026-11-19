@@ -1,8 +1,11 @@
 import hashlib
+import io
 import json
 from pathlib import Path
 import struct
+import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
 from unittest import mock
@@ -62,6 +65,37 @@ class ReleasePayloadUiTests(unittest.TestCase):
         path = self.root / name
         path.write_text(json.dumps(data))
         return path
+
+    def source_fixture(self):
+        checkout = self.root / "checkout"
+        checkout.mkdir()
+        subprocess.run(["git", "init", "-q", str(checkout)], check=True)
+        (checkout / "app").mkdir()
+        (checkout / "app/build.gradle.kts").write_text('versionCode = 4\nversionName = "1.1.1"\n')
+        executable = checkout / "gradlew"
+        executable.write_text("#!/bin/sh\nexit 0\n")
+        executable.chmod(0o755)
+        (checkout / "unicode-\u00e9.txt").write_text("retained source\n")
+        subprocess.run(["git", "-C", str(checkout), "add", "."], check=True)
+        subprocess.run(["git", "-C", str(checkout), "-c", "user.name=Qualification fixture", "-c",
+                        "user.email=fixture@example.invalid", "commit", "-qm", "Source fixture"], check=True)
+        output = self.root / "source-evidence"
+        return checkout, output, qualification.record_source(checkout, output)
+
+    def mutate_source_archive(self, source, mutation):
+        archive = Path(source["sourceArchive"]["path"])
+        entries = []
+        with tarfile.open(archive, "r:gz") as original:
+            headers = original.pax_headers.copy()
+            for member in original:
+                content = original.extractfile(member).read() if member.isfile() else None
+                entries.append((member, content))
+        with tarfile.open(archive, "w:gz", format=tarfile.PAX_FORMAT, pax_headers=headers) as replacement:
+            for member, content in entries:
+                if member.name == "gradlew":
+                    member, content = mutation(member, content)
+                replacement.addfile(member, io.BytesIO(content) if content is not None else None)
+        source["sourceArchive"] = qualification.publisher.file_record(archive)
 
     def fixture(self):
         attempt = {"token": "12345678-1234-1234-1234-123456789abc", "revision": "1" * 40,
@@ -257,6 +291,81 @@ class ReleasePayloadUiTests(unittest.TestCase):
         with mock.patch.object(qualification, "git", return_value="2" * 40):
             with self.assertRaisesRegex(ValueError, "revision changed"):
                 qualification.clean_source(self.root, "1" * 40)
+
+    def test_retained_source_reconstructs_real_git_commit_tree_and_executable_modes(self):
+        _, _, source = self.source_fixture()
+        qualification.validate_source(source)
+        self.assertEqual(len(source["revision"]), 40)
+        self.assertTrue(Path(source["commitObject"]["path"]).is_file())
+
+    def test_rehashed_source_content_cannot_claim_original_commit(self):
+        _, output, source = self.source_fixture()
+
+        def change_content(member, content):
+            content = b"#!/bin/sh\nexit 1\n"
+            member.size = len(content)
+            return member, content
+
+        self.mutate_source_archive(source, change_content)
+        (output / "source.json").write_text(json.dumps(source))
+        with self.assertRaisesRegex(ValueError, "committed Git tree"):
+            qualification.validate_source(source)
+        with mock.patch.object(qualification, "Commands") as commands:
+            with self.assertRaisesRegex(ValueError, "committed Git tree"):
+                qualification.prepare(output, "apkanalyzer", "apksigner", "keytool")
+            commands.assert_not_called()
+        self.assertFalse((output / "build").exists())
+        for name in ("prepared.json", "attempt.json", "run-result.json"):
+            (output / name).write_text("{}")
+        result = qualification.verify(output)
+        self.assertFalse(result["success"])
+        self.assertIn("committed Git tree", result["problems"][0])
+
+    def test_rehashed_source_file_mode_cannot_claim_original_commit(self):
+        _, _, source = self.source_fixture()
+
+        def change_mode(member, content):
+            member.mode = 0o644
+            return member, content
+
+        self.mutate_source_archive(source, change_mode)
+        with self.assertRaisesRegex(ValueError, "committed Git tree"):
+            qualification.validate_source(source)
+
+    def test_rehashed_commit_object_cannot_claim_original_revision(self):
+        _, _, source = self.source_fixture()
+        commit = Path(source["commitObject"]["path"])
+        commit.write_bytes(commit.read_bytes() + b"changed message\n")
+        source["commitObject"] = qualification.publisher.file_record(commit)
+        with self.assertRaisesRegex(ValueError, "Git commit does not bind"):
+            qualification.validate_source(source)
+
+    def test_verifier_rejects_a_different_self_consistent_source_receipt(self):
+        _, output, source = self.source_fixture()
+        other = output / "another-source.json"
+        other.write_text(json.dumps(source))
+        (output / "prepared.json").write_text(json.dumps({"source": qualification.publisher.file_record(other)}))
+        for name in ("attempt.json", "run-result.json"):
+            (output / name).write_text("{}")
+        result = qualification.verify(output)
+        self.assertFalse(result["success"])
+        self.assertIn("not bound to this source receipt", result["problems"][0])
+
+    def test_broken_output_symlink_is_rejected_before_git_or_creation(self):
+        destination = self.root / "destination"
+        link = self.root / "linked-evidence"
+        link.symlink_to(destination, target_is_directory=True)
+        with mock.patch.object(qualification, "git") as git:
+            with self.assertRaisesRegex(ValueError, "Linked input/output path"):
+                qualification.record_source(self.root / "checkout", link)
+            git.assert_not_called()
+        self.assertFalse(destination.exists())
+
+    def test_nonfinite_receipt_never_leaves_a_partial_output(self):
+        destination = self.root / "nonfinite.json"
+        with self.assertRaises(ValueError):
+            qualification.write_json(destination, {"value": float("nan")})
+        self.assertFalse(destination.exists())
 
     def test_missing_run_evidence_produces_failed_nonpublisher_report(self):
         result = qualification.verify(self.root)

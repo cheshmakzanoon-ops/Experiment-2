@@ -240,7 +240,7 @@ class MainViewModel
             name: String,
         ) {
             viewModelScope.launch(galleryErrors) {
-                projectRepository.updateProject(project.copy(name = name, modifiedAt = System.currentTimeMillis()))
+                projectRepository.renameProject(project.id, name, System.currentTimeMillis())
             }
         }
 
@@ -308,14 +308,12 @@ class MainViewModel
             return result
         }
 
-        /** Saves colours as a new custom palette, for a swatch file opened from another app. */
-        fun addPalette(
+        /** Awaits a new custom palette's durable write before the gallery reports an import. */
+        suspend fun addPalette(
             name: String,
             colors: List<Int>,
         ) {
-            viewModelScope.launch(galleryErrors) {
-                settingsRepository.addPalette(Palette(id = System.currentTimeMillis(), name = name, colors = colors, category = "Custom"))
-            }
+            settingsRepository.addPalette(Palette(id = System.currentTimeMillis(), name = name, colors = colors, category = "Custom"))
         }
 
         fun delete(project: Project) {

@@ -77,6 +77,9 @@ class InstalledUpgradeSeedTest {
         assertEquals(OLD_SOURCE, arguments.getString("artflowOldSource"))
         assertEquals(1, runBlocking(Dispatchers.IO) { database.openHelper.writableDatabase.version })
         assertTrue("The dedicated old-app UI seed must start with no projects", runBlocking { projects.getAllProjects().first().isEmpty() })
+        // Android creates the app-specific external root through Context. A configured
+        // output subdirectory cannot create that root itself on a fresh scoped-storage install.
+        check(requireNotNull(context.getExternalFilesDir(null)).isDirectory) { "The old app's external evidence root is unavailable" }
         val output = TestEvidence.directory()
         check(File(output, "old-ui-seed-started").createNewFile()) { "Retain the first seed attempt" }
         val scenario = ActivityScenario.launch(MainActivity::class.java)

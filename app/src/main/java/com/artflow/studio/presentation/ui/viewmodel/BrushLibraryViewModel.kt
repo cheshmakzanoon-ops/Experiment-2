@@ -112,22 +112,25 @@ class BrushLibraryViewModel
 
         fun importAll(brushes: List<SavedBrush>) = edit { store.importAll(brushes) }
 
-        /** Imports once the library has loaded and no other change is running; a file opened at launch can arrive first. */
+        /** Awaits both library readiness and its durable import; a file opened at launch can arrive first. */
         suspend fun importWhenReady(brushes: List<SavedBrush>) {
             state.first { !it.loading && !it.busy }
-            importAll(brushes)
+            mutableState.value = mutableState.value.copy(busy = true, error = null)
+            completeEdit { store.importAll(brushes) }
         }
 
         private fun edit(operation: suspend () -> Unit) {
             if (mutableState.value.loading || mutableState.value.busy) return
             mutableState.value = mutableState.value.copy(busy = true, error = null)
-            viewModelScope.launch(errors) {
-                try {
-                    operation()
-                    mutableState.value = mutableState.value.copy(revision = mutableState.value.revision + 1L)
-                } finally {
-                    mutableState.value = mutableState.value.copy(busy = false)
-                }
+            viewModelScope.launch(errors) { completeEdit(operation) }
+        }
+
+        private suspend fun completeEdit(operation: suspend () -> Unit) {
+            try {
+                operation()
+                mutableState.value = mutableState.value.copy(revision = mutableState.value.revision + 1L)
+            } finally {
+                mutableState.value = mutableState.value.copy(busy = false)
             }
         }
     }

@@ -9,9 +9,10 @@ failed CI checkpoints are retained in the [hardening record](PRODUCTION_HARDENIN
 exact-revision verification index. The older PR #40 records below remain the evidence for that
 earlier integration; they do not qualify this candidate's later changes.
 
-The seven-lane debug matrix, selected optimized workflow lane, installed-package campaign,
-physical-device campaign and publisher-artifact gate have different scopes. Record actual
-execution and retained artifact identities for each. A newly configured gate, a host test of its
+The seven-lane debug matrix, selected optimized workflow lane, ordinary release payload UI
+campaign, installed-package campaign, physical-device campaign and publisher-artifact gate have
+different scopes. Record actual execution and retained artifact identities for each. A newly
+configured gate, a host test of its
 verifier or a successful APK build does not establish that the corresponding device campaign ran.
 The [release sign-off](RELEASE_SIGNOFF.md) defines final-SHA repeat acceptance and external gates.
 

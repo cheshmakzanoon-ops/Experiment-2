@@ -389,7 +389,7 @@ def verify(project: Path, output: Path, revision: str) -> dict:
              "Requested runtime: API 36, x86_64, 4096-byte process pages.", "",
              "This benchmark APK uses release R8/resource shrinking, test Compose/Android View hosts, Hilt test "
              "application wiring, and a disposable debug signing key. It additionally preserves the exact traced "
-             "instrumentation ABI (with obfuscation allowed) and two audited reflection fields, so its optimization "
+             "instrumentation ABI names and two audited reflection fields, so its optimization "
              "constraints differ from the publisher release. Publisher signing, physical-device "
              "performance and the complete seven-lane debug matrix remain separate gates.", "",
              "| Test class | Scope |", "| --- | --- |"]

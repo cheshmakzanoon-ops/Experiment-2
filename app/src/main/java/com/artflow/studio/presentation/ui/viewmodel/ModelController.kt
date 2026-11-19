@@ -8,6 +8,7 @@ import com.artflow.studio.data.export.PendingImports
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.StrokePoint
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
+import com.artflow.studio.domain.repository.canvas.SavedCanvas
 import com.artflow.studio.presentation.ui.components.canvas.ModelPainter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -54,7 +55,7 @@ class ModelController(
     /** The canvas stays Loading until the entire pending bundle and its model file have committed. */
     suspend fun initialize(
         projectId: Long,
-        onSaved: suspend (String) -> Unit = {},
+        onSaved: suspend (SavedCanvas) -> Unit = {},
     ) {
         val bundle = PendingImports.claimModelBundle(projectId)
         if (bundle != null) {
@@ -64,10 +65,10 @@ class ModelController(
             }
             // The repository recorded a retry receipt with the plane commit. Cancellation or any
             // save failure keeps both it and the payload until the initial document is durable.
-            val thumbnail =
-                checkNotNull(repository.saveCanvas(projectId)) { "The model layers could not be saved; reopen the artwork to try again" }
+            checkNotNull(repository.saveCanvasSnapshot(projectId, onSaved)) {
+                "The model layers could not be saved; reopen the artwork to try again"
+            }
             check(repository.projectId() == projectId) { "The imported artwork is no longer open" }
-            onSaved(thumbnail)
             PendingImports.completeModelBundle(projectId, bundle)
             if (repository.projectId() == projectId) _mesh.value = parsed
         } else {

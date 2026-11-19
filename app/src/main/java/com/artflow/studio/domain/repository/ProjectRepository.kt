@@ -56,6 +56,19 @@ interface ProjectRepository {
      */
     suspend fun updateProject(project: Project)
 
+    /** Changes only the name and modification time, without replaying a stale gallery snapshot. */
+    suspend fun renameProject(
+        projectId: Long,
+        name: String,
+        modifiedAt: Long,
+    )
+
+    /**
+     * Publishes saved image metadata while preserving the current name, favorite, stack and identity.
+     * Returns the actual updated row; an artwork deleted while the editor was open is not recreated.
+     */
+    suspend fun updateSavedArtwork(project: Project): Project
+
     /**
      * Delete a project
      */

@@ -12,6 +12,7 @@ import com.artflow.studio.domain.model.Project
 import com.artflow.studio.domain.model.layer.Layer
 import com.artflow.studio.domain.repository.ProjectRepository
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
+import com.artflow.studio.domain.repository.canvas.SavedCanvas
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -38,24 +39,29 @@ object ModelImports {
 
     /** Keeps the gallery's thumbnail and layer count aligned with a completed document save. */
     suspend fun updateProject(
-        repository: CanvasRepository,
+        projects: ProjectRepository,
+        saved: SavedCanvas,
+    ): Project {
+        val existing = requireNotNull(projects.getProjectById(saved.projectId)) { "This artwork no longer exists" }
+        return updateProject(projects, existing, saved)
+    }
+
+    suspend fun updateProject(
         projects: ProjectRepository,
         project: Project,
-        thumbnail: String,
+        saved: SavedCanvas,
     ): Project {
-        check(repository.projectId() == project.id) { "The saved artwork is no longer open" }
-        val size = repository.getCanvasSize()
+        check(saved.projectId == project.id) { "The saved metadata belongs to another artwork" }
         val updated =
             project.copy(
-                thumbnailPath = thumbnail,
-                width = size.width,
-                height = size.height,
-                dpi = size.dpi,
-                layerCount = repository.getAllLayers().size,
-                modifiedAt = System.currentTimeMillis(),
+                thumbnailPath = saved.thumbnailPath,
+                width = saved.size.width,
+                height = saved.size.height,
+                dpi = saved.size.dpi,
+                layerCount = saved.layerCount,
+                modifiedAt = saved.savedAt,
             )
-        projects.updateProject(updated)
-        return updated
+        return projects.updateSavedArtwork(updated)
     }
 
     /** In-memory retry evidence; saved layer IDs and exact pixels survive a manifest reload without a schema change. */

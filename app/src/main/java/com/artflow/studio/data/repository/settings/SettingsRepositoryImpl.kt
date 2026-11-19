@@ -178,11 +178,21 @@ class SettingsRepositoryImpl
 
         override suspend fun clearRecentColors() = update { it.copy(recentColors = emptyList()) }
 
-        override suspend fun addPalette(palette: Palette) =
-            update { current ->
-                val without = current.customPalettes.filterNot { it.id == palette.id && palette.id != 0L }
-                current.copy(customPalettes = without + palette)
-            }
+        override suspend fun addPalette(palette: Palette) = addPalette(palette, makeDefault = false)
+
+        override suspend fun addPalette(
+            palette: Palette,
+            makeDefault: Boolean,
+        ) = update { current ->
+            // Clock values and UI snapshots are only preferred identities. Allocate while the
+            // settings mutex protects the latest durable collection, without replacing an owner.
+            val occupied = current.customPalettes.mapTo(HashSet()) { it.id }
+            var id = palette.id
+            while (id in occupied) id = if (id == Long.MAX_VALUE) 1L else id + 1L
+            val created = palette.copy(id = id)
+            val stored = current.customPalettes
+            current.copy(customPalettes = if (makeDefault) listOf(created) + stored else stored + created)
+        }
 
         override suspend fun removePalette(paletteId: Long) =
             update { current ->

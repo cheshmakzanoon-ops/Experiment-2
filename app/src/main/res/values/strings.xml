@@ -33,7 +33,7 @@
     <string name="export_png_frames_zip">Export PNG frames (zip)</string>
     <string name="export_format_action">Export %1$s</string>
     <string name="export_timelapse_title">Time-lapse replay</string>
-    <string name="export_timelapse_body">Every edit is recorded automatically. Export a short MP4 replay of how this artwork was made.</string>
+    <string name="export_timelapse_body">Export an MP4 replay of recorded snapshots. Time-lapse Recording must be on to capture new frames. Quick edits can share a frame, and long recordings keep fewer frames.</string>
     <string name="export_timelapse_action">Export time-lapse</string>
     <string name="export_timelapse_clear">Clear recording</string>
     <string name="export_preview_description">Export preview</string>
@@ -312,7 +312,7 @@
     <string name="modelcompanion_paint">Paint</string>
     <string name="modelcompanion_light">Light</string>
     <string name="timelapsereplay_time_lapse_replay">Time-lapse Replay</string>
-    <string name="timelapsereplay_nothing_recorded_yet_every_edit_is">Nothing recorded yet. Every edit is recorded automatically.</string>
+    <string name="timelapsereplay_nothing_recorded_yet_every_edit_is">No recorded frames yet. Check Time-lapse Recording in Actions &gt; Video, then draw.</string>
     <string name="radialquickmenu_more">More</string>
     <string name="referencecompanion_image">Image</string>
     <string name="referencecompanion_choose_image">Choose image</string>
@@ -380,7 +380,7 @@
     <string name="galleryscreen_display_p3_colour_profile">Display P3 colour profile</string>
     <string name="canvasscreen_guides_on">Guides on</string>
     <string name="canvasscreen_autosave_found">Autosave found</string>
-    <string name="canvasscreen_artflow_closed_unexpectedly_the_last">ArtFlow closed unexpectedly the last time this project was open. Recover the autosaved version?</string>
+    <string name="canvasscreen_artflow_closed_unexpectedly_the_last">An autosaved version is available for this artwork. Recover it?</string>
     <string name="canvasscreen_recover">Recover</string>
     <string name="canvasscreen_discard">Discard</string>
     <string name="canvasscreen_save_changes">Save changes?</string>
@@ -419,7 +419,7 @@
     <string name="canvasscreen_liquify_distortion">Distortion %1$d%%</string>
     <string name="canvasscreen_color_drop_threshold">ColorDrop threshold %1$d%%</string>
     <string name="helpscreen_welcome_to_artflow_step">Welcome to ArtFlow (%1$d/%2$d)</string>
-    <string name="helpscreen_artflow_is_an_offline_studio">ArtFlow Studio is an offline painting and animation studio. Artwork, layers, masks, animation frames and exports stay on this device; there is no account and no upload.</string>
+    <string name="helpscreen_artflow_is_an_offline_studio">ArtFlow Studio is an offline painting and animation studio with no account or developer uploads. Artwork is saved in private app storage. Android backup and exports to apps or document providers follow your choices and device settings.</string>
     <string name="helpscreen_in_the_editor_the_actions_panel">In the editor, the Actions panel holds Add, Canvas, Share, Video, Prefs and Help, and the quick menu holds view, history, canvas and selection actions in one place.</string>
     <string name="paletterecoverynotice_your_artwork_is_available">Your artwork and other settings are available. The unreadable palette data is preserved, but custom palettes cannot be edited until it has been backed up and reset.</string>
     <string name="paletterecoverynotice_choose_a_file_for_the_original">Choose a file for the exact original palette text. Only after that file has been saved will the unreadable custom-palette list be reset. Artwork and other preferences are not changed. Cancelling or a failed backup leaves the stored data untouched. This does not repair the backup\'s contents.</string>

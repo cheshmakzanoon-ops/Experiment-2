@@ -10,9 +10,12 @@ editing, saving and reopen in a separate application process.
 
 The automatic path is wired into [Installed application upgrade](../../.github/workflows/installed-package-upgrade.yml)
 on pull requests, main pushes and manual dispatch. Host regression tests and source checks validate
-the harness only. **Actual execution of the new installed-v1 campaign is still pending at this
-implementation checkpoint.** A green build or another artwork test cannot substitute for this
-campaign's exact nonce, source, artifact, original-data and process evidence.
+the harness only. **A complete passing campaign bound to the final source revision is required.**
+The [hardening record](../release/PRODUCTION_HARDENING_2026-11-19.md) and
+[verification index](https://github.com/cheshmakzanoon-ops/Experiment-2/pull/41) retain actual
+attempt outcomes; an earlier partial or failed attempt does not qualify a later candidate.
+A green build or another artwork test cannot substitute for this campaign's exact nonce,
+source, artifact, original-data and process evidence.
 
 The campaign supports single-base, **debuggable test APKs** and uses `run-as` for stopped-data
 preservation. All old, candidate and instrumentation APKs must have the same measured current
@@ -47,9 +50,20 @@ sources and build files stay unchanged; the only allowed old-source overlay is t
 [The build collector](../../.github/scripts/package_upgrade_build.py) checks both source revisions,
 rejects tracked edits and unexpected untracked inputs, verifies the schema digest, archives both
 exact source trees, and retains the driver plus all four APK hashes. It checks again after builds.
+Each source archive is bound to its retained raw Git commit object: the commit object's Git SHA
+must equal the declared revision, its tree must equal the declared tree, and a streamed hash of
+every archived path, executable mode and file must reconstruct that tree. The archive's commit
+header, actual schema bytes, and candidate's committed seed driver must also agree. A fresh
+SHA-256 receipt for substituted archive bytes cannot satisfy this chain. Source archive links,
+conflicting paths, excessive entry counts and excessive decoded bytes are rejected without
+extracting archive paths. The seed driver receipt identifies the retained copy, not a mutable
+working-tree path.
+
 The campaign rechecks these source/input/output receipts and uses official `apkanalyzer` and
 `apksigner` before any install. These are measured workflow records, not an independent remote
-attestation or a reproducible-build claim. Build/tool versions, logs, source archives, overlay,
+attestation or a reproducible-build claim. The Git-object checks establish internal source identity;
+they do not authenticate who ran the workflow or prove that an APK was produced from those sources.
+Build/tool versions, logs, source archives, raw commit objects, overlay,
 APK bytes/certificates and every campaign command remain in the job artifact.
 
 On one fresh API 36 emulator, the workflow then runs these phases once:
@@ -223,9 +237,11 @@ comparison. The automatic old-app driver independently asserts its own saved/reo
 the seed screenshots; manual campaigns retain the operator's explicit save/reopen observation.
 These two evidence boundaries are labeled separately.
 
-The script requires exactly one passing test per invocation **and** the complete phase report,
+The script requires exactly one matching test-start/test-pass pair, the selected class/method,
+one declared/current test, and one successful instrumentation termination **and** the complete phase report,
 matching token, baseline hash, old/candidate APK hashes, project ID and assertion set. A normal
-workflow pass, stale JSON, omitted assertion or instrumentation timeout cannot qualify the run.
+workflow pass, summary-only success, duplicated/extra/skipped test, stale JSON, omitted assertion
+or instrumentation timeout cannot qualify the run.
 It then preserves the stopped post-edit data. The complete campaign directory, including APKs,
 private test data, command logs, screenshots and reports, is the review artifact.
 
@@ -236,6 +252,14 @@ Each phase additionally captures logcat, package state, the screen and any probe
 clearing logs. There are no automatic reruns, uninstall commands, database deletion, package data
 clearing, or cleanup of the original evidence. A refused repeat leaves the first outcome intact.
 Use a new disposable device and output directory for another campaign; retain the failed one.
+An exclusive campaign-wide active-phase claim also prevents different phases from overlapping.
+An interrupted process retains this claim, so another phase cannot continue a half-completed
+attempt. It is released only after an orderly phase finishes and its diagnostics are captured.
+Immutable command/manifest/build reports are created exclusively. Mutable campaign state is
+replaced atomically through an unpredictable private staging file, without following linked
+outputs or reusing a predictable partial file. Nonfinite JSON evidence is rejected. Workflow
+artifact names include the run and attempt, retaining earlier attempts rather than colliding
+with or replacing their artifact.
 
 Host regression checks:
 
@@ -243,7 +267,7 @@ Host regression checks:
 python3 -m unittest discover -s .github/scripts -p 'test_run_package_upgrade.py' -v
 ```
 
-The extended host checks pass 23 campaign cases and seven build-provenance cases. Run the latter
+The extended host checks pass 26 campaign cases and 14 build-provenance cases. Run the latter
 with `python3 -m unittest discover -s .github/scripts -p 'test_package_upgrade_build.py' -v`.
 These checks establish host-tool behavior only; Android compilation and the actual installed-v1
 workflow must pass separately. No host fixture establishes hardware execution, a publisher

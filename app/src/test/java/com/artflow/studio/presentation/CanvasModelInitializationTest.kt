@@ -14,6 +14,7 @@ import com.artflow.studio.domain.model.Project
 import com.artflow.studio.domain.model.settings.AppSettings
 import com.artflow.studio.domain.repository.ProjectRepository
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
+import com.artflow.studio.domain.repository.canvas.SavedCanvas
 import com.artflow.studio.domain.repository.settings.SettingsRepository
 import com.artflow.studio.presentation.ui.viewmodel.CanvasUiState
 import com.artflow.studio.presentation.ui.viewmodel.CanvasViewModel
@@ -293,13 +294,27 @@ class CanvasModelInitializationTest {
 
                 // Android PNG persistence is covered by the fresh-repository device case. This
                 // controlled boundary verifies that editor initialization really awaits saving.
-                override suspend fun saveCanvas(projectId: Long): String {
+                override suspend fun saveCanvasSnapshot(
+                    projectId: Long,
+                    onSaved: suspend (SavedCanvas) -> Unit,
+                ): SavedCanvas {
+                    val saved =
+                        SavedCanvas(
+                            projectId,
+                            document.contentRevision,
+                            "saved-thumbnail.png",
+                            document.getCanvasSize(),
+                            document.activeFrameIndex(),
+                            document.getAllLayers().size,
+                            System.currentTimeMillis(),
+                        )
                     saveAttempts++
                     saveEntered.complete(Unit)
                     if (pauseInitialSave) saveRelease.await()
                     if (failInitialSave) throw IOException("Injected initial save failure")
                     successfulSaves++
-                    return "saved-thumbnail.png"
+                    onSaved(saved)
+                    return saved
                 }
             }
         private val projects =
@@ -324,8 +339,9 @@ class CanvasModelInitializationTest {
                     }
                 }
 
-                override suspend fun updateProject(project: Project) {
+                override suspend fun updateSavedArtwork(project: Project): Project {
                     savedProject = project
+                    return project
                 }
             }
         private val settings =

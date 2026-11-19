@@ -63,9 +63,13 @@ class CanvasPreviewFailureDeviceTest {
             val depth = repository.undoDepth
             send(canvas, MotionEvent.ACTION_DOWN, 10f, 20f)
             send(canvas, MotionEvent.ACTION_MOVE, 48f, 20f)
-            assertFalse(original.contentEquals(requireNotNull(repository.compositeBuffer()).pixels))
+            // A pointer stroke remains provisional until UP. Observe the same pixels the
+            // renderer receives, while separately protecting the committed artwork.
+            assertFalse(original.contentEquals(requireNotNull(repository.compositePreview()).pixels))
+            assertArrayEquals(original, requireNotNull(repository.compositeBuffer()).pixels)
             failPreview(canvas, budget)
-            await { !canvas.isPreviewAvailable && image().pixels.contentEquals(original) }
+            await { !canvas.isPreviewAvailable && requireNotNull(repository.compositePreview()).pixels.contentEquals(original) }
+            assertArrayEquals(original, image().pixels)
             assertEquals(depth, repository.undoDepth)
 
             send(canvas, MotionEvent.ACTION_UP, 48f, 20f)

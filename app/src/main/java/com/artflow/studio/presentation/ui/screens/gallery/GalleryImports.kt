@@ -52,91 +52,107 @@ internal class GalleryImports(
     /** Opens an artwork that has just been created. */
     private val openArtwork: (Long) -> Unit,
 ) {
-    /** Works out what [uri] is from its name, its type and its first bytes, then imports it. */
-    fun open(uri: Uri) {
-        scope.launch {
+    /** Awaits one complete incoming import; true means the collector must stop for artwork navigation. */
+    suspend fun open(uri: Uri): Boolean =
+        runCatching {
             val name = displayName(uri)
             val head = withContext(Dispatchers.IO) { readHead(uri) }
             if (head == null) {
                 say(context.getString(R.string.incoming_file_unreadable))
-                return@launch
+                return false
             }
             val type = runCatching { context.contentResolver.getType(uri) }.getOrNull()
             when (val kind = FileKinds.classify(name, type, head)) {
-                FileKind.IMAGE -> photo(uri)
-                FileKind.PSD -> psd(uri)
-                FileKind.PROCREATE_DOCUMENT -> procreate(uri)
-                FileKind.ARTFLOW_ARTWORK -> artwork(uri)
-                FileKind.MODEL -> model(uri)
-                FileKind.BRUSH_FILE, FileKind.PALETTE_FILE -> smallFile(uri, kind, name)
+                FileKind.IMAGE -> importPhoto(uri)
+                FileKind.PSD -> importPsd(uri)
+                FileKind.PROCREATE_DOCUMENT -> importProcreate(uri)
+                FileKind.ARTFLOW_ARTWORK -> importArtwork(uri)
+                FileKind.MODEL -> importModel(uri)
+                FileKind.BRUSH_FILE, FileKind.PALETTE_FILE -> {
+                    smallFile(uri, kind, name)
+                    false
+                }
                 FileKind.ZIP -> archive(uri, name)
-                FileKind.UNKNOWN -> say(context.getString(R.string.incoming_file_unknown))
+                FileKind.UNKNOWN -> {
+                    say(context.getString(R.string.incoming_file_unknown))
+                    false
+                }
             }
+        }.getOrElse { failure ->
+            val message = importFailureMessage(failure, context.getString(R.string.galleryscreen_file_could_not_be_read))
+            Timber.e(failure, "Incoming gallery import failed")
+            say(message)
+            false
         }
-    }
 
     /** Opens a photo from the device as a new canvas of the same size. */
     fun photo(uri: Uri) {
-        scope.launch {
-            val failure =
-                runCatching {
-                    val image =
-                        withContext(Dispatchers.IO) {
-                            requireNotNull(BitmapPixelBridge.decodeUri(context.contentResolver, uri)) {
-                                context.getString(R.string.galleryscreen_image_could_not_be_opened)
-                            }
-                        }
-                    PendingImports.reserveImage(image, viewModel.viewModelScope).use { pending ->
-                        val id = viewModel.createImportedProject("Imported photo", image.width, image.height, 72)
-                        pending.publish(id)
-                        var navigated = false
-                        try {
-                            openArtwork(id)
-                            navigated = true
-                        } finally {
-                            if (!navigated) PendingImports.discardImage(id, image)
-                        }
-                    }
-                }.exceptionOrNull() ?: return@launch
-            val message = importFailureMessage(failure, context.getString(R.string.galleryscreen_image_could_not_be_opened))
-            Timber.e(failure, "Photo import failed")
-            say(message)
-        }
+        scope.launch { importPhoto(uri) }
     }
 
-    /** Opens a layered Photoshop document as a new artwork of the same size, keeping its layers. */
-    fun psd(uri: Uri) {
-        scope.launch {
-            val failure =
-                runCatching {
-                    val (bytes, document) =
-                        withContext(Dispatchers.IO) {
-                            val bytes =
-                                requireNotNull(context.contentResolver.openInputStream(uri)?.use { it.readAtMost(MAX_PSD_BYTES) }) {
-                                    "That PSD could not be opened (maximum 256 MB)"
-                                }
-                            val metadata = requireNotNull(PsdCodec.inspect(bytes)) { "That file is not a supported Photoshop document" }
-                            require(metadata.requiredMemoryBytes <= PsdCodec.defaultReadBudgetBytes()) {
-                                "This PSD needs too much memory. Reduce its dimensions or layers in the source application."
-                            }
-                            bytes to metadata
+    private suspend fun importPhoto(uri: Uri): Boolean {
+        val failure =
+            runCatching {
+                val image =
+                    withContext(Dispatchers.IO) {
+                        requireNotNull(BitmapPixelBridge.decodeUri(context.contentResolver, uri)) {
+                            context.getString(R.string.galleryscreen_image_could_not_be_opened)
                         }
-                    val id = viewModel.createImportedProject("Imported PSD", document.width, document.height, document.dpi)
-                    PendingImports.putPsd(id, bytes, viewModel.viewModelScope)
+                    }
+                PendingImports.reserveImage(image, viewModel.viewModelScope).use { pending ->
+                    val id = viewModel.createImportedProject("Imported photo", image.width, image.height, 72)
+                    pending.publish(id)
                     var navigated = false
                     try {
                         openArtwork(id)
                         navigated = true
                     } finally {
-                        if (!navigated) PendingImports.discardPsd(id, bytes)
+                        if (!navigated) PendingImports.discardImage(id, image)
                     }
-                }.exceptionOrNull() ?: return@launch
-            if (failure is CancellationException) throw failure
-            if (failure is Error) throw failure
-            Timber.e(failure, "PSD import failed")
-            val explained = failure is IllegalArgumentException || failure is IllegalStateException
-            say(failure.message?.takeIf { explained } ?: context.getString(R.string.galleryscreen_not_a_photoshop_document))
-        }
+                }
+            }.exceptionOrNull() ?: return true
+        val message = importFailureMessage(failure, context.getString(R.string.galleryscreen_image_could_not_be_opened))
+        Timber.e(failure, "Photo import failed")
+        say(message)
+        return false
+    }
+
+    /** Opens a layered Photoshop document as a new artwork of the same size, keeping its layers. */
+    fun psd(uri: Uri) {
+        scope.launch { importPsd(uri) }
+    }
+
+    private suspend fun importPsd(uri: Uri): Boolean {
+        val failure =
+            runCatching {
+                val (bytes, document) =
+                    withContext(Dispatchers.IO) {
+                        val bytes =
+                            requireNotNull(context.contentResolver.openInputStream(uri)?.use { it.readAtMost(MAX_PSD_BYTES) }) {
+                                "That PSD could not be opened (maximum 256 MB)"
+                            }
+                        val metadata = requireNotNull(PsdCodec.inspect(bytes)) { "That file is not a supported Photoshop document" }
+                        require(metadata.requiredMemoryBytes <= PsdCodec.defaultReadBudgetBytes()) {
+                            "This PSD needs too much memory. Reduce its dimensions or layers in the source application."
+                        }
+                        bytes to metadata
+                    }
+                val id = viewModel.createImportedProject("Imported PSD", document.width, document.height, document.dpi)
+                PendingImports.putPsd(id, bytes, viewModel.viewModelScope)
+                var navigated = false
+                try {
+                    openArtwork(id)
+                    navigated = true
+                } finally {
+                    if (!navigated) PendingImports.discardPsd(id, bytes)
+                }
+            }.exceptionOrNull() ?: return true
+        if (failure is CancellationException) throw failure
+        if (failure is Error) throw failure
+        Timber.e(failure, "PSD import failed")
+        val explained = failure is IllegalArgumentException || failure is IllegalStateException
+        say(failure.message?.takeIf { explained } ?: context.getString(R.string.galleryscreen_not_a_photoshop_document))
+        return false
     }
 
     /**
@@ -144,53 +160,65 @@ internal class GalleryImports(
      * modes, masks and background colour.
      */
     fun procreate(uri: Uri) {
-        scope.launch {
-            val failure =
-                runCatching {
-                    ProcreateImport.useOpened(context.cacheDir, { context.contentResolver.openInputStream(uri) }) { document, transfer ->
-                        val size = document.document
-                        require(CanvasOperations.isSizeSafe(size.width, size.height)) {
-                            context.getString(R.string.galleryscreen_procreate_too_large)
-                        }
-                        val name = size.name?.takeIf { it.isNotBlank() } ?: "Imported Procreate"
-                        val dpi = size.dpi.coerceIn(CanvasOperations.MIN_DPI, CanvasOperations.MAX_DPI)
-                        val id = viewModel.createImportedProject(name, size.width, size.height, dpi)
-                        PendingImports.putProcreate(id, document, viewModel.viewModelScope)
-                        transfer()
-                        var navigated = false
-                        try {
-                            // Navigate in this job: a cancelled child must not strand a pending archive.
-                            openArtwork(id)
-                            navigated = true
-                        } finally {
-                            if (!navigated) PendingImports.discardProcreate(id, document)
-                        }
+        scope.launch { importProcreate(uri) }
+    }
+
+    private suspend fun importProcreate(uri: Uri): Boolean {
+        val failure =
+            runCatching {
+                ProcreateImport.useOpened(context.cacheDir, { context.contentResolver.openInputStream(uri) }) { document, transfer ->
+                    val size = document.document
+                    require(CanvasOperations.isSizeSafe(size.width, size.height)) {
+                        context.getString(R.string.galleryscreen_procreate_too_large)
                     }
-                }.exceptionOrNull() ?: return@launch
-            if (failure is CancellationException) throw failure
-            if (failure is Error) throw failure
-            val explained =
-                (failure is IllegalArgumentException || failure is IllegalStateException) && failure !is NumberFormatException
-            Timber.e(failure, "Procreate import failed")
-            say(failure.message?.takeIf { explained } ?: "That Procreate document could not be imported")
-        }
+                    val name = size.name?.takeIf { it.isNotBlank() } ?: "Imported Procreate"
+                    val dpi = size.dpi.coerceIn(CanvasOperations.MIN_DPI, CanvasOperations.MAX_DPI)
+                    val id = viewModel.createImportedProject(name, size.width, size.height, dpi)
+                    PendingImports.putProcreate(id, document, viewModel.viewModelScope)
+                    transfer()
+                    var navigated = false
+                    try {
+                        // Navigate in this job: a cancelled child must not strand a pending archive.
+                        openArtwork(id)
+                        navigated = true
+                    } finally {
+                        if (!navigated) PendingImports.discardProcreate(id, document)
+                    }
+                }
+            }.exceptionOrNull() ?: return true
+        if (failure is CancellationException) throw failure
+        if (failure is Error) throw failure
+        val explained =
+            (failure is IllegalArgumentException || failure is IllegalStateException) && failure !is NumberFormatException
+        Timber.e(failure, "Procreate import failed")
+        say(failure.message?.takeIf { explained } ?: "That Procreate document could not be imported")
+        return false
     }
 
     /** Opens an `.artflow` file as a new artwork with all its layers, frames and settings. */
     fun artwork(uri: Uri) {
-        scope.launch {
-            stagedArchive(uri) { file -> importArtwork(file) }
+        scope.launch { importArtwork(uri) }
+    }
+
+    private suspend fun importArtwork(uri: Uri): Boolean {
+        var navigated = false
+        stagedArchive(uri) { file ->
+            importArtwork(file)
+            navigated = true
         }
+        return navigated
     }
 
     /** Unlabelled ZIPs are classified on disk before the small-file parsers may allocate their payloads. */
     private suspend fun archive(
         uri: Uri,
         name: String?,
-    ) {
+    ): Boolean {
+        var navigated = false
         stagedArchive(uri) { file ->
             if (withContext(Dispatchers.IO) { ArtflowPackage.isPackageFile(file) }) {
                 importArtwork(file)
+                navigated = true
             } else {
                 val bytes =
                     withContext(Dispatchers.IO) {
@@ -201,11 +229,12 @@ internal class GalleryImports(
                 when (withContext(Dispatchers.IO) { zipKind(bytes) }) {
                     FileKind.BRUSH_FILE -> brushes(bytes)
                     FileKind.PALETTE_FILE -> palette(bytes, name?.substringBeforeLast('.'))
-                    FileKind.MODEL -> model(uri)
+                    FileKind.MODEL -> navigated = importModel(uri)
                     else -> say(context.getString(R.string.incoming_file_unknown))
                 }
             }
         }
+        return navigated
     }
 
     private suspend fun stagedArchive(
@@ -234,26 +263,29 @@ internal class GalleryImports(
 
     /** Opens a 3D model (OBJ, glTF, USD, or a zip with the model, its materials and textures) as an artwork that is its texture. */
     fun model(uri: Uri) {
-        scope.launch {
-            val failure =
-                runCatching {
-                    val prepared = withContext(Dispatchers.IO) { readModel(uri) }
-                    PendingImports.reserveModelBundle(prepared, viewModel.viewModelScope).use { pending ->
-                        val id = viewModel.createImportedProject("3D model", prepared.width, prepared.height, MODEL_DPI)
-                        pending.publish(id)
-                        var navigated = false
-                        try {
-                            openArtwork(id)
-                            navigated = true
-                        } finally {
-                            if (!navigated) PendingImports.discardModelBundle(id, prepared)
-                        }
+        scope.launch { importModel(uri) }
+    }
+
+    private suspend fun importModel(uri: Uri): Boolean {
+        val failure =
+            runCatching {
+                val prepared = withContext(Dispatchers.IO) { readModel(uri) }
+                PendingImports.reserveModelBundle(prepared, viewModel.viewModelScope).use { pending ->
+                    val id = viewModel.createImportedProject("3D model", prepared.width, prepared.height, MODEL_DPI)
+                    pending.publish(id)
+                    var navigated = false
+                    try {
+                        openArtwork(id)
+                        navigated = true
+                    } finally {
+                        if (!navigated) PendingImports.discardModelBundle(id, prepared)
                     }
-                }.exceptionOrNull() ?: return@launch
-            val message = importFailureMessage(failure, "That 3D model could not be imported")
-            Timber.e(failure, "Model import failed")
-            say(message)
-        }
+                }
+            }.exceptionOrNull() ?: return true
+        val message = importFailureMessage(failure, "That 3D model could not be imported")
+        Timber.e(failure, "Model import failed")
+        say(message)
+        return false
     }
 
     private fun readModel(uri: Uri): PreparedModelImport =

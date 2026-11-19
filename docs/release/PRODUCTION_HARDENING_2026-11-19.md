@@ -21,6 +21,8 @@ open; engineering checks cannot manufacture it or substitute an emulator for a p
 Each numbered wave has three distinct agent assignments. The integrator reviews their combined
 changes, preserves existing tests and static-analysis baselines, and records actual execution.
 Planned later assignments may be refined to address concrete review findings or CI failures.
+Early row statuses describe their implementation checkpoints. The dated execution entries below
+record subsequent integrated checks; final exact-revision acceptance remains a separate gate.
 
 | Wave | Three assignments | Status |
 | --- | --- | --- |
@@ -37,12 +39,12 @@ Planned later assignments may be refined to address concrete review findings or 
 | 11 | Release/version claims; model/photo decoding; installed historical-app upgrade | Implemented/reviewed; historical application and test APKs built |
 | 12 | Recovery ordering and export snapshots; publisher-binary workflow; import acceptance | Implemented; focused checks passed, integrated verification continuing |
 | 13 | Physical-evidence review; publisher-evidence review; optimized ABI mapping review | Implemented/reviewed; focused checks passed, Android runtime acceptance pending |
-| 14 | Hostile model/archive review; project-lifecycle review; installed-upgrade evidence review | In progress |
-| 15 | USD allocation review; capability/user-message review; committed-save metadata consistency | Planned |
-| 16 | Independent data integrity review; independent optimized-build review; independent CI gate review | Planned |
-| 17 | Final source safety review; final test adequacy review; release decision review | Planned |
-| 18 | Exact-revision CI review: legacy; Android 15; Android 16/tablet | Planned |
-| 19 | Regression follow-through; artifact/evidence cross-check; documentation cross-check | Planned |
+| 14 | Hostile model/archive review; project-lifecycle review; installed-upgrade evidence review | Implemented/reviewed; focused checks passed |
+| 15 | USD allocation review; capability/user-message review; committed-save metadata consistency | Implemented/reviewed; 102 core 3D and 38 save/recovery-focused cases passed |
+| 16 | Independent data integrity review; independent optimized-build review; independent CI gate review | Implemented/reviewed; focused regressions passed, integrated execution pending |
+| 17 | Final source safety review; final test adequacy review; release decision review | Implemented/reviewed; 105 import/library and 19 harness cases passed |
+| 18 | Palette identity and legacy upgrade; Android 15 acceptance; Android 16/tablet and release acceptance | Repairs and independent evidence reviews complete; new-source Android execution pending |
+| 19 | Regression follow-through; artifact/evidence cross-check; documentation cross-check | Documentation complete; regression and artifact reviews in progress |
 | 20 | Final data safety acceptance; final engineering acceptance; final release-status acceptance | Planned |
 
 ## Findings to close
@@ -57,11 +59,12 @@ Planned later assignments may be refined to address concrete review findings or 
 7. Physical performance, stylus behavior, publisher signing, and store acceptance remain external
    release gates unless actual evidence is obtained.
 
-## Verification log
+## Initial verification log (historical)
 
 - Starting audit: 191 CI-script Python tests and 76 tooling Python tests passed locally.
 - Build environment: JDK available; Android SDK and Gradle distribution not configured at start.
-- New code verification: pending. See subsequent records; never infer a pass from implementation.
+- New code had not been verified at this initial checkpoint. See subsequent records; never infer
+  a pass from implementation.
 
 ## Continuation rules
 
@@ -361,4 +364,162 @@ Update this record with completed wave assignments, fixes, test outcomes, and re
   incorrectly replaced PATH and hid the primary Python executable; its 19 harness failures are
   retained. Restoring inherited PATH made the unchanged suite pass. Normal release APK inspection
   also required local `-XX:-UsePerfData` to avoid a shared-/tmp PID-namespace JVM warning on stdout;
-  the XML parser was not weakened or changed. Full frozen JVM/instrumentation checks are running.
+  the XML parser was not weakened or changed. Frozen `66752d0` subsequently passed full Gradle
+  JVM/debug-instrumentation compilation/APK assembly and ktlint/detekt: 1,938 tests in 313 suites,
+  1,936 passed, no failures/errors, and two explicit external-corpus skips.
+- Frozen `253466d` built both optimized APKs and passed all six mandatory real-R8 fixtures plus
+  ktlint. The generated boundary retained 894 exact external classes, 241 fields and 1,997 methods;
+  the ordinary publisher rules stayed separate. Its resolved release SBOM contains 150 components
+  with the required POM license evidence. This is dependency provenance, not a vulnerability or
+  legal certification.
+- Actions 44555384195 reached all 43 optimized identities: 42 passed, no skips, and one artwork
+  workflow timed out. The prior Kotlin linkage failure did not recur. The failed original run is
+  retained and wave 16 investigates the remaining timeout. Actions 44555384282 reached the
+  normal-release gallery but failed before painting because the New artwork FAB lacked an
+  accessible label; wave 16 owns its production semantics repair and a new execution is required.
+- Installed-upgrade Actions 44555383994 failed during old-app evidence-folder setup before UI
+  seeding. Android's app-specific external root had not been initialized on the fresh install.
+  The test-only historical overlay now initializes it through `Context.getExternalFilesDir`;
+  compilation against unchanged pinned historical production source passed. The failed original
+  campaign remains failed, and no installed-upgrade runtime acceptance is claimed.
+
+### Wave 14
+
+- `w14_project_lifecycle`: reproduced stale gallery rename/save writes overwriting newer project
+  metadata. Rename now updates only name/time, and saved artwork updates read the latest Room row
+  and patch only committed artwork fields. Missing rows are refused without recreating deleted
+  projects. Thirty-three focused JVM cases passed; four new real-Room preservation/order/deletion
+  cases compiled and await Android execution. The changes are committed in `a83940f`.
+- `w14_hostile_model_inputs`: reproduced glTF buffer-view overread, silently ignored sparse edits
+  and incomplete triangle acceptance. Added a cumulative preallocation budget for model archives,
+  JSON/embedded buffers, OBJ workspaces and repeated geometry; enforced complete geometry, declared
+  texture availability and finite normalization. All 95 core 3D cases passed, including 14 new
+  regressions. Existing static-analysis baselines remained unchanged. See
+  [model allocation evidence](../verification/model-input-allocation.md) for bounds and limitations.
+- `w14_upgrade_evidence_review`: bound retained archives to raw Git commit objects and reconstructed
+  trees, file contents and modes; validated the historical schema and exact test overlay. Added
+  finite immutable evidence, exclusive campaign phases and exact single-test instrumentation
+  accounting. Forty host cases and three workflow-pin checks passed. Actual source archives for
+  historical `ca9ce53` and local `a83940f` reconstructed their declared trees. This establishes
+  internal evidence consistency, not remote source authenticity or publisher binary identity.
+
+### Wave 15
+
+- `w15_usd_input_budget`: extended cumulative admission through USD crate/USDA expansion, checked
+  decompression lengths and finite integral topology, and refused missing indexed UV data. Five
+  previous false acceptances were reproduced; seven new regressions were added. An existing
+  oversized-token fixture needed its overlapping binary layout repaired while retaining its
+  original refusal assertion. After that repair, root compiled and ran all 102 core 3D tests
+  successfully, including independent producer fixtures. Changed-file ktlint/detekt passed.
+- `w15_capability_messages`: corrected unconditional timelapse/autosave/crash-recovery claims,
+  described the supported model subset and memory limits, and made normal-release payload UI
+  execution an explicit engineering gate. Resource XML/names, 60 local documentation links,
+  HelpScreen ktlint and scoped diff checks passed. No runtime qualification is inferred from copy.
+- `w15_committed_save_metadata`: reproduced a race that committed an 8x6 document while a later
+  live resize supplied 12x10 gallery metadata. Immutable `SavedCanvas` metadata now governs
+  manual/model saves and native export. Gallery writes stay ordered under the existing save
+  mutex, while Main-thread UI completion and navigation occur after release. Six new races and
+  32 existing model/metadata/recovery cases passed, including complete thumbnail pixel agreement,
+  active-frame/revision accounting, newer edit preservation, two-save ordering and postcommit
+  callback failure/cancellation. Changed production/JVM/Android sources compiled; ktlint/detekt
+  passed without baseline changes. See [save evidence](../verification/committed-save-metadata.md).
+- Frozen `3e77fde` passed full integrated Gradle validation in 6m9s: 1,968 JVM cases in 317 suites,
+  1,966 passed, no failures/errors, and two explicit external-corpus skips. The debug instrumentation
+  APK and full ktlint/detekt checks also passed. These results precede the wave-16 recovery/UI fixes.
+- A local full host invocation failed one publisher fixture because the integrator's
+  `JAVA_TOOL_OPTIONS` setting printed a startup banner into combined manifest output. A direct
+  probe retained the failure and showed tool-specific `APKANALYZER_OPTS` produces valid XML with
+  identical APK bytes; the parser was unchanged. The corrected 394-case discovery passed that
+  fixture but encountered a 10-second child-shell timeout in one settings-readiness harness
+  subcase. That failure is retained and assigned to wave 17; no full-host pass is claimed here.
+
+### Wave 16
+
+- `w16_data_integrity_review`: reproduced delayed recovery replacing a different open artwork or
+  erasing edits made after recovery started. Recovery now checks project/revision and pending
+  edits immediately before publication; opening invalidates the old recovery operation before
+  lookup suspends. Session-bound callbacks cannot clear a different project's guard. Four new
+  regressions and 41 existing save/recovery/model cases passed. Background recovery scheduling
+  moved into its controller without changing the class-size threshold. Existing ktlint/detekt
+  passed. See [recovery session evidence](../verification/recovery-session-safety.md).
+- `w16_optimized_acceptance_review`: diagnosed the retained normal-release accessibility failure
+  and optimized first-stroke timeout. Added the localized New artwork FAB description and waited
+  for actual preview availability before injected input, retaining all pixel/dirty assertions
+  and deadlines. Added first-failure diagnostics before cleanup. Normal-release source archives
+  now reconstruct their raw commit/tree and bind to the prepared receipt. Twenty-three normal
+  payload and 37 optimized verifier cases passed, Java driver compilation/ktlint passed, and a
+  real `3e77fde` source archive reconstructed correctly. New Android execution is still required.
+- `w16_ci_gate_review`: reproduced a green coverage summary with absent installed-APK identity.
+  A separate required gate now binds original invocation token/status receipts, raw runner and
+  collector manifests, and freshly hashed app/test build outputs. Failed-attempt APK bytes remain
+  required; framework recovery stays explicit and classifier-limited. All 126 focused host cases
+  passed, including 12 new acceptance regressions. The seven device configurations and 320 debug /
+  43 optimized declared identities remain intact. See [CI review](../verification/ci-acceptance-review.md).
+- The earlier checkpoint's Android Actions 44555384021 build job 135669942396 passed all required
+  host suites, five Gradle provenance fixtures, JVM/instrumentation compilation, static checks,
+  release/debug builds and official publisher-tool fixtures. Its device matrix is separate and
+  does not qualify the newer source.
+
+### Wave 17
+
+- `w17_source_safety_review`: reproduced detached incoming-file collection and four premature
+  library-completion/error cases. Gallery imports now await classification, preparation and
+  persistence; artwork navigation ends the current incoming collection while later files stay
+  queued for the next visit. Palette and brush imports await durable writes before announcing
+  success. Picker entry points and ordinary brush-edit wrappers retain their UI contracts.
+  Eight new cases and 97 existing safety cases passed; the existing gallery package device caller
+  compiled. Ktlint/detekt passed unchanged. See [incoming lifecycle](../verification/incoming-import-lifecycle.md).
+  A repeated-clock palette identity collision was identified separately and assigned to wave 18.
+- `w17_test_adequacy_review`: traced the retained settings-readiness timeout to 180 Python stub
+  launches inside a 10-second fixture. A controlled 40ms interpreter-startup delay reproduced
+  the timeout; shell replies for those simple probes completed in 2.347s with all 45 readiness
+  attempts and 198 logged adb calls. The production script, 90-second readiness deadline,
+  10-second test deadline and refusal assertions are unchanged. All 19 harness cases passed.
+  No original Kotlin test method/file was removed; substantive capacity/fixture adaptations
+  retain real state/pixel/refusal assertions. See [test adequacy](../verification/test-adequacy-review.md).
+- `w17_release_decision_review`: corrected the Help/gallery promise that all data remains on-device
+  to reflect enabled Android backup and selected export recipients. Existing privacy policies
+  already described those behaviors. Resource XML/unique names and 47 documentation links passed.
+  The existing engineering/publisher/physical/store gates remain explicit; no store/account or
+  physical evidence was fabricated. See [release decision](../verification/release-decision-review.md).
+- Frozen `d481b23` passed full Gradle validation in 6m20s: 1,980 JVM cases in 320 suites,
+  1,978 passed, no failures/errors, and two external-corpus skips. The debug instrumentation and
+  ordinary-release UI driver APKs built; full ktlint/detekt passed. Full host discovery then passed
+  489 cases: 484 passed and five separately required Gradle fixtures were explicit opt-in skips.
+  Official publisher-tool fixtures were required and executed. The prior fixture/environment
+  failures remain retained; this pass belongs to the repaired source and corrected local setup.
+
+### Wave 18
+
+- `w18_palette_identity_upgrade`: reproduced four creation and four stale-edit failures. New
+  palettes now receive unused identities under the settings mutex; create/duplicate remain
+  distinct from intentional replacement. Appends/default selection use current stored values,
+  deleted palettes cannot be revived, and positional edits refuse a changed displayed swatch list.
+  All 74 focused cases passed, including successful edits after refreshing stale state. Ktlint
+  and detekt passed unchanged. MainViewModel's awaited import contract is preserved. See
+  [palette identity evidence](../verification/palette-identity-safety.md). This cannot restore
+  palettes overwritten by an older application. Installed-upgrade/API26 follow-through remains
+  required on the newly published source.
+- `w18_android15_acceptance`: independently verified the old checkpoint's API35/4KB artifact,
+  measured runtime and original APK captures: 314 passed, two failed, no skips or recovery out of
+  316 identities. Both failures matched the owned readiness/preview-observation repairs. Reviewed
+  the primary and independent 16KB kernel pins, per-invocation runtime checks and current 320-case
+  inventory without finding another gate defect. The old build's debug APK/release AAB native
+  preflight passed across four ABIs; this does not qualify new source or physical ARM64 hardware.
+- `w18_android16_acceptance`: independently verified the same two failures on old API36/16KB and
+  standard lanes. A real-repository probe showed an unfinished stroke changes 260 preview pixels
+  while committed pixels correctly stay unchanged. The preview-failure device test now observes
+  the provisional preview and separately protects committed pixels before/after GL cancellation,
+  retaining all input/save/recovery assertions and deadlines. Four focused cases, Android test
+  compilation and ktlint passed. See [Android16/release review](../verification/android16-release-review.md).
+  The ordinary release driver retains its complete UI/process/share/pixel checks, which still
+  require actual execution on the next source.
+
+### Wave 19
+
+- `w19_documentation_crosscheck`: checked 29 Markdown files, 106 local links/anchors, 20 CLI help
+  invocations and 16 documented option sets. Added the omitted ordinary-release UI scope to the
+  evidence introduction and replaced an unnamed pending-upgrade checkpoint with the final-source
+  acceptance requirement. No unexecuted pass or additional release gate was introduced.
+- `w19_artifact_crosscheck` and `w19_regression_followthrough` are in progress. Their final
+  findings and the three wave-20 handoffs must be recorded before claiming all 60 assignments.

@@ -7,6 +7,7 @@ import com.artflow.studio.core.export.ExportResult
 import com.artflow.studio.data.export.ArtworkExporter
 import com.artflow.studio.data.export.TimelapseRecorder
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
+import com.artflow.studio.domain.repository.canvas.SavedCanvas
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,7 +23,8 @@ internal class CanvasExportController(
     private val state: MutableStateFlow<ExportUiState>,
     private val scope: CoroutineScope,
     private val currentProject: () -> Pair<Long, String>,
-    private val onDocumentSaved: () -> Unit,
+    private val onDocumentSaved: suspend (SavedCanvas) -> Unit,
+    private val onSaveFinished: suspend (SavedCanvas) -> Unit = {},
 ) {
     fun reset() {
         state.value = ExportUiState.Idle
@@ -53,8 +55,8 @@ internal class CanvasExportController(
             val resolved = options.copy(format = format, colorProfile = repository.getColorProfile())
             if (resolved.format == ExportFormat.ARTFLOW) {
                 // The package references saved document files; the save must finish first.
-                checkNotNull(repository.saveCanvas(projectId)) { "The artwork could not be saved" }
-                onDocumentSaved()
+                val saved = checkNotNull(repository.saveCanvasSnapshot(projectId, onDocumentSaved)) { "The artwork could not be saved" }
+                onSaveFinished(saved)
                 exporter.exportPackage(projectId, name, resolved)
             } else {
                 renderedExport(repository, exporter, projectId, name, resolved)

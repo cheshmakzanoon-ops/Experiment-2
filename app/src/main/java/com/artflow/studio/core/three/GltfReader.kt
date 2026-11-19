@@ -12,7 +12,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.util.Base64
 
 /**
  * Reads glTF 2.0 models (binary .glb, or .gltf with embedded or accompanying buffers) into the OBJ
@@ -47,13 +46,27 @@ object GltfReader {
     fun read(
         bytes: ByteArray,
         files: Map<String, ByteArray> = emptyMap(),
+    ): Result = read(bytes, files, ModelReadBudget())
+
+    internal fun read(
+        bytes: ByteArray,
+        files: Map<String, ByteArray>,
+        budget: ModelReadBudget,
     ): Result {
-        val (text, bin) = if (isGlb(bytes)) chunks(bytes) else bytes.decodeToString() to null
+        val (text, bin) = if (isGlb(bytes)) chunks(bytes, budget) else budget.text(bytes) to null
+        budget.json(text)
         val root = json.parseToJsonElement(text).jsonObject
-        val document = Document(root, buffers(root, bin, files), files)
-        val out = ObjWriter()
+        val document = Document(root, buffers(root, bin, files, budget), files, budget)
+        val out = ObjWriter(budget)
         val textures = LinkedHashMap<String, ByteArray>()
-        for ((meshIndex, matrix) in meshInstances(root)) {
+        val instances = meshInstances(root)
+        // Account for every instance before allocating any accessor arrays or expanded OBJ text.
+        for ((meshIndex, _) in instances) {
+            for (primitive in array(document.mesh(meshIndex)["primitives"])) {
+                document.geometry(primitive.jsonObject)?.let(out::reserve)
+            }
+        }
+        for ((meshIndex, matrix) in instances) {
             for (primitive in array(document.mesh(meshIndex)["primitives"])) {
                 val material = addPrimitive(document, primitive.jsonObject, matrix, out)
                 if (material != null && material !in textures) remember(textures, material, document.baseColour(material))
@@ -96,8 +109,12 @@ object GltfReader {
     }
 
     /** The JSON text and binary chunk of a .glb file. */
-    private fun chunks(bytes: ByteArray): Pair<String, ByteArray?> {
+    private fun chunks(
+        bytes: ByteArray,
+        budget: ModelReadBudget,
+    ): Pair<String, ByteArray?> {
         val data = little(bytes)
+        require(data.getInt(4) == 2 && data.getInt(8) == bytes.size) { "This GLB file has an invalid header" }
         var offset = GLB_HEADER
         var text: String? = null
         var bin: ByteArray? = null
@@ -105,13 +122,23 @@ object GltfReader {
             val length = data.getInt(offset)
             val type = data.getInt(offset + 4)
             val start = offset + CHUNK_HEADER
-            require(length >= 0 && length.toLong() <= (bytes.size - start).toLong()) { "This GLB file is damaged" }
+            require(length >= 0 && length % 4 == 0 && length.toLong() <= (bytes.size - start).toLong()) { "This GLB file is damaged" }
+            require(offset != GLB_HEADER || type == CHUNK_JSON) { "The GLB scene description must be first" }
             when (type) {
-                CHUNK_JSON -> text = String(bytes, start, length, Charsets.UTF_8)
-                CHUNK_BIN -> bin = bytes.copyOfRange(start, start + length)
+                CHUNK_JSON -> {
+                    require(text == null) { "The GLB file repeats its scene description" }
+                    budget.reserve(length.toLong() * Char.SIZE_BYTES)
+                    text = String(bytes, start, length, Charsets.UTF_8)
+                }
+                CHUNK_BIN -> {
+                    require(bin == null) { "The GLB file repeats its binary data" }
+                    budget.reserve(length.toLong())
+                    bin = bytes.copyOfRange(start, start + length)
+                }
             }
             offset = start + length
         }
+        require(offset == bytes.size) { "The GLB file ends inside a chunk header" }
         return requireNotNull(text) { "This GLB file has no scene description" } to bin
     }
 
@@ -119,14 +146,19 @@ object GltfReader {
         root: JsonObject,
         bin: ByteArray?,
         files: Map<String, ByteArray>,
+        budget: ModelReadBudget,
     ): List<ByteArray> =
         array(root["buffers"]).map { element ->
             val uri = element.jsonObject["uri"]?.jsonPrimitive?.content
-            when {
-                uri == null -> requireNotNull(bin) { "The model's binary data is missing" }
-                uri.startsWith("data:") -> Base64.getDecoder().decode(uri.substringAfter(','))
-                else -> requireNotNull(files[baseName(uri)]) { "The model needs $uri; pick a zip with all its files" }
-            }
+            val data =
+                when {
+                    uri == null -> requireNotNull(bin) { "The model's binary data is missing" }
+                    uri.startsWith("data:") -> budget.embedded(uri)
+                    else -> requireNotNull(files[baseName(uri)]) { "The model needs $uri; pick a zip with all its files" }
+                }
+            val length = requireNotNull(element.jsonObject["byteLength"]?.jsonPrimitive?.intOrNull) { "Missing buffer length" }
+            require(length >= 0 && length <= data.size) { "The model's buffer is cut short" }
+            data
         }
 
     /** Every mesh in the default scene with its world transform (column-major 4 × 4). */
@@ -134,13 +166,14 @@ object GltfReader {
         val nodes = array(root["nodes"]).map { it.jsonObject }
         val scenes = array(root["scenes"])
         val sceneIndex = root["scene"]?.jsonPrimitive?.intOrNull ?: 0
+        val children = nodes.flatMap { ints(it["children"]) }.toHashSet()
         val roots =
             scenes
                 .getOrNull(sceneIndex)
                 ?.jsonObject
                 ?.get("nodes")
                 ?.let { ints(it) }
-                ?: nodes.indices.filter { index -> nodes.none { node -> index in ints(node["children"]) } }
+                ?: nodes.indices.filter { index -> index !in children }
         val found = mutableListOf<Pair<Int, FloatArray>>()
         // A valid node has one parent. A node shared by several parents is walked once, not once per path.
         val visited = HashSet<Int>()
@@ -154,6 +187,7 @@ object GltfReader {
             if (!visited.add(index)) return
             require(depth < MAX_DEPTH) { "The model's node tree is too deep" }
             val world = Matrix4.multiply(parent, local(node))
+            require(world.all { it.isFinite() }) { "Invalid number in the model transform" }
             node["mesh"]?.jsonPrimitive?.intOrNull?.let { found += it to world }
             ints(node["children"]).forEach { visit(it, world, depth + 1) }
         }
@@ -185,10 +219,27 @@ object GltfReader {
     }
 
     /** Typed access to the document's accessors, materials and images. */
+    private class Geometry(
+        val vertices: Int,
+        val indices: Int,
+    )
+
+    private class AccessorLayout(
+        val data: ByteBuffer?,
+        val count: Int,
+        val components: Int,
+        val start: Int,
+        val stride: Int,
+        val size: Int,
+    ) {
+        fun position(index: Int): Int = start + (index / components) * stride + (index % components) * size
+    }
+
     private class Document(
         val root: JsonObject,
         val buffers: List<ByteArray>,
         val files: Map<String, ByteArray>,
+        val budget: ModelReadBudget,
     ) {
         fun mesh(index: Int): JsonObject =
             requireNotNull(array(root["meshes"]).getOrNull(index)) { "A node refers to a missing mesh" }.jsonObject
@@ -197,17 +248,60 @@ object GltfReader {
 
         private fun view(index: Int) = requireNotNull(array(root["bufferViews"]).getOrNull(index)) { "Missing buffer view" }.jsonObject
 
+        fun geometry(primitive: JsonObject): Geometry? {
+            val attributes = primitive["attributes"]?.jsonObject ?: return null
+            val mode = primitive["mode"]?.jsonPrimitive?.intOrNull ?: TRIANGLES
+            val position = attributes["POSITION"]?.jsonPrimitive?.intOrNull
+            val uv = attributes["TEXCOORD_0"]?.jsonPrimitive?.intOrNull
+            if (mode != TRIANGLES || position == null || uv == null) return null
+            val count = vertexAccessor(position, "VEC3", setOf(FLOAT))
+            require(vertexAccessor(uv, "VEC2", setOf(FLOAT, UNSIGNED_BYTE, UNSIGNED_SHORT)) == count) {
+                "The model's vertex data does not line up"
+            }
+            attributes["NORMAL"]?.jsonPrimitive?.intOrNull?.let {
+                require(vertexAccessor(it, "VEC3", setOf(FLOAT)) == count) { "The model's vertex data does not line up" }
+            }
+            val indices =
+                primitive["indices"]?.jsonPrimitive?.intOrNull?.let { index ->
+                    val accessor = accessor(index)
+                    require(accessor["type"]?.jsonPrimitive?.content == "SCALAR") { "The model indices must be scalar values" }
+                    require(
+                        int(accessor, "componentType") in setOf(UNSIGNED_BYTE, UNSIGNED_SHORT, UNSIGNED_INT),
+                    ) { "Unsupported model indices" }
+                    layout(accessor, 1).count
+                } ?: count
+            require(indices >= 3 && indices % 3 == 0) { "The model's triangle indices are incomplete" }
+            return Geometry(count, indices)
+        }
+
+        private fun vertexAccessor(
+            index: Int,
+            expected: String,
+            types: Set<Int>,
+        ): Int {
+            val accessor = accessor(index)
+            val type = int(accessor, "componentType")
+            require(accessor["type"]?.jsonPrimitive?.content == expected && type in types) { "Unsupported model vertex type" }
+            require(type == FLOAT || accessor["normalized"]?.jsonPrimitive?.booleanOrNull == true) {
+                "Integer texture coordinates must be normalized"
+            }
+            return layout(accessor, components(expected)).count
+        }
+
         fun floats(index: Int): FloatArray {
             val accessor = accessor(index)
             val components = components(accessor["type"]?.jsonPrimitive?.content)
             val type = int(accessor, "componentType")
-            val normalized = accessor["normalized"]?.jsonPrimitive?.booleanOrNull ?: (type != FLOAT)
-            return read(accessor, components) { data, at ->
+            val normalized = accessor["normalized"]?.jsonPrimitive?.booleanOrNull ?: false
+            val layout = layout(accessor, components)
+            return FloatArray(layout.count * components) { i ->
+                val data = layout.data ?: return@FloatArray 0f
+                val at = layout.position(i)
                 when (type) {
                     FLOAT -> data.getFloat(at)
                     UNSIGNED_BYTE -> (data.get(at).toInt() and 0xFF).let { if (normalized) it / BYTE_MAX else it.toFloat() }
                     UNSIGNED_SHORT -> (data.getShort(at).toInt() and 0xFFFF).let { if (normalized) it / SHORT_MAX else it.toFloat() }
-                    else -> error("Unsupported vertex data in the model")
+                    else -> throw IllegalArgumentException("Unsupported vertex data in the model")
                 }
             }.also { values -> require(values.all { it.isFinite() }) { "Invalid number in the model" } }
         }
@@ -215,80 +309,79 @@ object GltfReader {
         fun ints(index: Int): IntArray {
             val accessor = accessor(index)
             val type = int(accessor, "componentType")
-            return read(accessor, 1) { data, at ->
+            val layout = layout(accessor, 1)
+            return IntArray(layout.count) { i ->
+                val data = layout.data ?: return@IntArray 0
+                val at = layout.position(i)
                 when (type) {
-                    UNSIGNED_BYTE -> (data.get(at).toInt() and 0xFF).toFloat()
-                    UNSIGNED_SHORT -> (data.getShort(at).toInt() and 0xFFFF).toFloat()
-                    UNSIGNED_INT -> data.getInt(at).toFloat()
-                    else -> error("Unsupported index data in the model")
+                    UNSIGNED_BYTE -> data.get(at).toInt() and 0xFF
+                    UNSIGNED_SHORT -> data.getShort(at).toInt() and 0xFFFF
+                    UNSIGNED_INT -> data.getInt(at).also { require(it >= 0) { "A model index exceeds the supported range" } }
+                    else -> throw IllegalArgumentException("Unsupported index data in the model")
                 }
-            }.let { values -> IntArray(values.size) { values[it].toInt() } }
+            }
         }
 
-        private fun read(
+        private fun layout(
             accessor: JsonObject,
             components: Int,
-            value: (ByteBuffer, Int) -> Float,
-        ): FloatArray {
+        ): AccessorLayout {
             val count = int(accessor, "count")
-            // Checked before the early return below, which allocates count * components floats.
+            require("sparse" !in accessor) { "Sparse glTF accessors are not supported; export a dense model" }
             require(count in 0..MAX_ELEMENTS && count.toLong() * components <= MAX_ELEMENTS.toLong()) { "This model is too large" }
-            val viewIndex = accessor["bufferView"]?.jsonPrimitive?.intOrNull ?: return FloatArray(count * components)
+            val viewIndex = accessor["bufferView"]?.jsonPrimitive?.intOrNull ?: return AccessorLayout(null, count, components, 0, 0, 0)
             val view = view(viewIndex)
-            val buffer = requireNotNull(buffers.getOrNull(int(view, "buffer"))) { "Missing buffer" }
+            val bufferIndex = int(view, "buffer")
+            val buffer = requireNotNull(buffers.getOrNull(bufferIndex)) { "Missing buffer" }
+            val bufferLength = int(array(root["buffers"])[bufferIndex].jsonObject, "byteLength")
+            val viewLength = int(view, "byteLength")
             val size = componentSize(int(accessor, "componentType"))
             val minStride = size * components
             val stride = view["byteStride"]?.jsonPrimitive?.intOrNull ?: minStride
             val viewOffset = view["byteOffset"]?.jsonPrimitive?.intOrNull ?: 0
             val accessorOffset = accessor["byteOffset"]?.jsonPrimitive?.intOrNull ?: 0
-            require(viewOffset >= 0 && accessorOffset >= 0 && stride >= minStride) { "The model's data layout is invalid" }
+            require(viewOffset >= 0 && accessorOffset >= 0 && stride >= minStride && stride % size == 0) {
+                "The model's data layout is invalid"
+            }
             val startLong = viewOffset.toLong() + accessorOffset.toLong()
             require(
-                startLong <= buffer.size.toLong() &&
-                    (count == 0 || startLong + (count - 1).toLong() * stride + minStride <= buffer.size.toLong()),
+                viewLength >= 0 &&
+                    viewOffset.toLong() + viewLength <= bufferLength &&
+                    accessorOffset <= viewLength &&
+                    startLong % size == 0L &&
+                    (count == 0 || accessorOffset.toLong() + (count - 1).toLong() * stride + minStride <= viewLength),
             ) { "The model's data is cut short" }
-            val start = startLong.toInt()
-            val data = little(buffer)
-            return FloatArray(count * components) { i -> value(data, start + (i / components) * stride + (i % components) * size) }
+            return AccessorLayout(little(buffer), count, components, startLong.toInt(), stride, size)
         }
 
         /** Encoded image bytes of [name]'s ("material" and its index) base colour texture, if it has one. */
         fun baseColour(name: String): ByteArray? {
             val material = name.removePrefix("material").toIntOrNull() ?: return null
+            val definition = requireNotNull(array(root["materials"]).getOrNull(material)) { "The model refers to a missing material" }
             val pbr =
-                array(root["materials"])
-                    .getOrNull(material)
-                    ?.jsonObject
-                    ?.get("pbrMetallicRoughness")
-                    ?.jsonObject
-            val textureIndex =
-                pbr
-                    ?.get("baseColorTexture")
-                    ?.jsonObject
-                    ?.get("index")
-                    ?.jsonPrimitive
-                    ?.intOrNull ?: return null
-            val source =
-                array(root["textures"])
-                    .getOrNull(textureIndex)
-                    ?.jsonObject
-                    ?.get("source")
-                    ?.jsonPrimitive
-                    ?.intOrNull ?: return null
-            val image = array(root["images"]).getOrNull(source)?.jsonObject ?: return null
+                definition.jsonObject["pbrMetallicRoughness"]?.jsonObject ?: return null
+            val reference = pbr["baseColorTexture"]?.jsonObject ?: return null
+            val textureIndex = int(reference, "index")
+            val texture = requireNotNull(array(root["textures"]).getOrNull(textureIndex)) { "The model refers to a missing texture" }
+            val source = int(texture.jsonObject, "source")
+            val image = requireNotNull(array(root["images"]).getOrNull(source)) { "The model refers to a missing image" }.jsonObject
             image["bufferView"]?.jsonPrimitive?.intOrNull?.let { index ->
                 val view = view(index)
-                val buffer = buffers.getOrNull(int(view, "buffer")) ?: return null
+                val bufferIndex = int(view, "buffer")
+                val buffer = requireNotNull(buffers.getOrNull(bufferIndex)) { "The model texture buffer is missing" }
+                val bufferLength = int(array(root["buffers"])[bufferIndex].jsonObject, "byteLength")
                 val offset = view["byteOffset"]?.jsonPrimitive?.intOrNull ?: 0
                 val length = int(view, "byteLength")
-                return if (offset >= 0 && length >= 0 && offset.toLong() + length <= buffer.size.toLong()) {
-                    buffer.copyOfRange(offset, offset + length)
-                } else {
-                    null
-                }
+                require(offset >= 0 && length >= 0 && offset.toLong() + length <= bufferLength) { "The model texture is cut short" }
+                budget.reserve(length.toLong())
+                return buffer.copyOfRange(offset, offset + length)
             }
-            val uri = image["uri"]?.jsonPrimitive?.content ?: return null
-            return if (uri.startsWith("data:")) Base64.getDecoder().decode(uri.substringAfter(',')) else files[baseName(uri)]
+            val uri = requireNotNull(image["uri"]?.jsonPrimitive?.content) { "The model texture has no image data" }
+            return if (uri.startsWith("data:")) {
+                budget.embedded(uri)
+            } else {
+                requireNotNull(files[baseName(uri)]) { "The model needs $uri; pick a zip with all its files" }
+            }
         }
 
         private fun int(
@@ -298,11 +391,22 @@ object GltfReader {
     }
 
     /** Collects triangles as OBJ text: one vertex record per glTF vertex, faces in world space. */
-    private class ObjWriter {
+    private class ObjWriter(
+        private val budget: ModelReadBudget,
+    ) {
         private val text = StringBuilder()
         private var vertices = 0
+        private var plannedTriangles = 0L
         var triangles = 0
             private set
+
+        fun reserve(geometry: Geometry) {
+            plannedTriangles += geometry.indices / 3
+            require(plannedTriangles <= ObjParser.MAX_TRIANGLES) { "This model has too many triangles" }
+            // Worst-case float/index strings, StringBuilder growth + final string, accessor arrays,
+            // and the subsequent OBJ mesh workspace. Shared mesh instances each expand into text.
+            budget.reserve(geometry.vertices * OUTPUT_VERTEX_BYTES + geometry.indices * OUTPUT_INDEX_BYTES)
+        }
 
         fun add(
             positions: FloatArray,
@@ -314,8 +418,10 @@ object GltfReader {
         ) {
             val count = positions.size / 3
             require(uvs.size / 2 >= count && (normals == null || normals.size / 3 >= count)) { "The model's vertex data does not line up" }
+            require(indices.all { it in 0 until count }) { "A face refers to a missing vertex" }
             for (v in 0 until count) {
                 val p = Matrix4.point(matrix, positions[v * 3], positions[v * 3 + 1], positions[v * 3 + 2])
+                require(p.x.isFinite() && p.y.isFinite() && p.z.isFinite()) { "Invalid transformed vertex in the model" }
                 text
                     .append("v ")
                     .append(p.x)
@@ -333,6 +439,7 @@ object GltfReader {
                     .append('\n')
                 if (normals != null) {
                     val n = Matrix4.direction(matrix, normals[v * 3], normals[v * 3 + 1], normals[v * 3 + 2])
+                    require(n.x.isFinite() && n.y.isFinite() && n.z.isFinite()) { "Invalid transformed normal in the model" }
                     text
                         .append("vn ")
                         .append(n.x)
@@ -365,6 +472,11 @@ object GltfReader {
         }
 
         fun text(): String = text.toString()
+
+        private companion object {
+            const val OUTPUT_VERTEX_BYTES = 1280L
+            const val OUTPUT_INDEX_BYTES = 192L
+        }
     }
 
     private fun components(type: String?): Int =

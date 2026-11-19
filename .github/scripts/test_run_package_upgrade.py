@@ -8,6 +8,7 @@ import sqlite3
 import subprocess
 import tarfile
 import tempfile
+import threading
 import unittest
 from unittest import mock
 
@@ -278,11 +279,90 @@ class CampaignEvidenceTests(unittest.TestCase):
                 upgrade.verify_seed_report({**report, key: value}, campaign)
 
     def test_seed_instrumentation_requires_exact_one_passing_test(self):
-        upgrade.require_one_test("OK (1 test)\nINSTRUMENTATION_CODE: -1\n", "seed")
+        test_class, method = upgrade.SEED_METHOD.split("#")
+        fields = f"INSTRUMENTATION_STATUS: class={test_class}\nINSTRUMENTATION_STATUS: test={method}\n" \
+                 "INSTRUMENTATION_STATUS: current=1\nINSTRUMENTATION_STATUS: numtests=1\n"
+        valid = fields + "INSTRUMENTATION_STATUS_CODE: 1\n" + fields + "INSTRUMENTATION_STATUS_CODE: 0\n" \
+                "OK (1 test)\nINSTRUMENTATION_CODE: -1\n"
+        upgrade.require_one_test(valid, "old UI seed")
         for text in ("OK (2 tests)\nINSTRUMENTATION_CODE: -1", "OK (1 test)",
-                     "OK (1 test)\nINSTRUMENTATION_CODE: -1\nINSTRUMENTATION_FAILED: crash", "FAILURES!!!"):
+                     "OK (1 test)\nINSTRUMENTATION_CODE: -1", valid + valid,
+                     valid.replace("numtests=1", "numtests=2"), valid.replace(method, "wrongMethod"),
+                     valid.replace("STATUS_CODE: 0", "STATUS_CODE: -3"),
+                     valid + "INSTRUMENTATION_FAILED: crash", "FAILURES!!!"):
             with self.subTest(text=text), self.assertRaises(ValueError):
-                upgrade.require_one_test(text, "seed")
+                upgrade.require_one_test(text, "old UI seed")
+
+    def test_existing_reports_and_partial_links_cannot_redirect_or_overwrite_evidence(self):
+        outside = self.root / "outside.json"
+        outside.write_text("original outside")
+        report = self.root / "report.json"
+        report.write_text("first report")
+        with self.assertRaises(FileExistsError):
+            upgrade.write_json(report, {"changed": True})
+        self.assertEqual("first report", report.read_text())
+        linked = self.root / "linked.json"
+        linked.symlink_to(outside)
+        with self.assertRaises(ValueError):
+            upgrade.write_json(linked, {"changed": True}, replace=True)
+        destination = self.root / "new-report.json"
+        destination.with_suffix(".json.partial").symlink_to(outside)
+        upgrade.write_json(destination, {"new": True})
+        self.assertEqual({"new": True}, json.loads(destination.read_text()))
+        self.assertEqual("original outside", outside.read_text())
+
+    def test_different_campaign_phases_cannot_overlap_or_overwrite_each_other(self):
+        campaign = self.root / "campaign"
+        campaign.mkdir()
+        value = {"schemaVersion": 1, "token": "12345678-1234-1234-1234-123456789abc", "serial": "emulator-5554",
+                 "phase": "awaiting-old-app-ui-seed", "tools": {"adb": "unused"}, "device": {}, "qualified": False}
+        path = campaign / "campaign.json"
+        path.write_text(json.dumps(value))
+        common = ["--campaign", str(campaign), "--serial", "emulator-5554", "--disposable-device", "emulator-5554",
+                  "--allow-package", upgrade.PACKAGE]
+        entered, resume = threading.Event(), threading.Event()
+        results = []
+        def held_seed(args, record, commands):
+            entered.set()
+            if not resume.wait(10):
+                raise ValueError("Host fixture was not released")
+            record["phase"] = "old-app-ui-seeded"
+        def freeze(args, record, commands):
+            record["phase"] = "seed-frozen"
+        with mock.patch.object(upgrade, "Commands"), mock.patch.object(upgrade, "device", return_value={}), \
+                mock.patch.object(upgrade, "seed", side_effect=held_seed), mock.patch.object(upgrade, "freeze", side_effect=freeze) as freezing:
+            worker = threading.Thread(target=lambda: results.append(upgrade.main(["seed", *common])))
+            worker.start()
+            try:
+                self.assertTrue(entered.wait(5))
+                before = path.read_bytes()
+                self.assertEqual(2, upgrade.main(["freeze", *common]))
+                freezing.assert_not_called()
+                self.assertEqual(before, path.read_bytes())
+                self.assertFalse((campaign / "freeze.claimed").exists())
+            finally:
+                resume.set()
+                worker.join(10)
+            self.assertFalse(worker.is_alive())
+            self.assertEqual([0], results)
+            self.assertEqual("old-app-ui-seeded", json.loads(path.read_text())["phase"])
+            self.assertEqual(0, upgrade.main(["freeze", *common]))
+            self.assertEqual("seed-frozen", json.loads(path.read_text())["phase"])
+            self.assertFalse((campaign / "active-phase.claimed").exists())
+
+    def test_interrupted_phase_claim_and_linked_campaign_are_preserved(self):
+        campaign = self.root / "interrupted"
+        campaign.mkdir()
+        (campaign / "active-phase.claimed").write_text("interrupted seed")
+        outside = self.root / "linked-campaign"
+        outside.symlink_to(campaign, target_is_directory=True)
+        for target in (campaign, outside):
+            with self.subTest(target=target), mock.patch.object(upgrade, "Commands") as commands:
+                result = upgrade.main(["freeze", "--campaign", str(target), "--serial", "emulator-5554",
+                                       "--disposable-device", "emulator-5554", "--allow-package", upgrade.PACKAGE])
+                self.assertEqual(2, result)
+                commands.assert_not_called()
+        self.assertEqual("interrupted seed", (campaign / "active-phase.claimed").read_text())
 
     def test_automatic_freeze_rejects_modified_original_seed_report_before_snapshot(self):
         report = self.root / "old-app-seed-report.json"

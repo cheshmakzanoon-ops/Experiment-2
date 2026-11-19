@@ -59,33 +59,52 @@ class DeviceHarnessTest(unittest.TestCase):
             (root / 'fixture-tombstone').write_bytes(NATIVE_TEXT)
             # No getconf is provided. The API 26 image does not have one either.
             stubs = {
-                'adb': f'#!{sys.executable}\n' + '''import hashlib
+                # These probes run up to 180 times in one readiness case. Keep their replies
+                # in the shell so the test's 10-second bound measures harness behavior, not
+                # hundreds of Python interpreter startups. Preserve all 45 production checks.
+                'adb': '''#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "$CALLS"
+probe_failure="$READINESS_FAILURE"
+if [[ -f "$RUNNER_TEMP/recovered" ]]; then probe_failure="$RECOVERY_READINESS_FAILURE"; fi
+case "$*" in
+  'shell getprop sys.boot_completed')
+    probe_count="$RUNNER_TEMP/boot-check-count"
+    probe_checked=0
+    if [[ -f "$probe_count" ]]; then read -r probe_checked < "$probe_count"; fi
+    printf '%s\\n' "$((probe_checked + 1))" > "$probe_count"
+    if [[ "$probe_failure" == boot || ( "$probe_failure" == boot-twice && "$probe_checked" -lt 2 ) ]]; then
+      printf '0\\n'
+    else
+      printf '1\\n'
+    fi
+    ;;
+  'shell cmd package list packages android')
+    if [[ "$probe_failure" == packages ]]; then exit 1; fi
+    printf 'package:android\\n'
+    ;;
+  'shell service check activity'|'shell service check settings')
+    if [[ "$probe_failure" == "$4" ]]; then
+      printf 'Service %s: not found\\n' "$4"
+    else
+      printf 'Service %s: found\\n' "$4"
+    fi
+    ;;
+  *) exec "$0-fixture" "$@" ;;
+esac
+''',
+                'adb-fixture': f'#!{sys.executable}\n' + '''import hashlib
 import os
 from pathlib import Path
 import re
 import sys
 args = sys.argv[1:]
-with Path(os.environ["CALLS"]).open("a") as log:
-    log.write(" ".join(args) + "\\n")
 data = Path("fixture-tombstone").read_bytes()
-recovered = (Path(os.environ["RUNNER_TEMP"]) / "recovered").exists()
-readiness_failure = os.environ["RECOVERY_READINESS_FAILURE" if recovered else "READINESS_FAILURE"]
 if any("getconf" in arg for arg in args):
     raise SystemExit(127)
 if args[:3] == ["shell", "am", "start"]:
     print("Status: ok")
 elif args[:3] == ["shell", "am", "wait-for-broadcast-idle"]:
     print("All broadcast queues are idle!")
-elif args[:2] == ["shell", "service"] and len(args) >= 4 and args[2] == "check":
-    print(f"Service {args[3]}: " + ("not found" if readiness_failure == args[3] else "found"))
-elif args == ["shell", "cmd", "package", "list", "packages", "android"]:
-    if readiness_failure == "packages": raise SystemExit(1)
-    print("package:android")
-elif args == ["shell", "getprop", "sys.boot_completed"]:
-    count = Path(os.environ["RUNNER_TEMP"]) / "boot-check-count"
-    checked = int(count.read_text()) if count.exists() else 0
-    count.write_text(str(checked + 1))
-    print("0" if readiness_failure == "boot" or (readiness_failure == "boot-twice" and checked < 2) else "1")
 elif args[:2] == ["shell", "pidof"]:
     print(42)
 elif args[:2] == ["pull", "/sdcard/artflow-window.xml"]:
@@ -183,6 +202,8 @@ if sys.argv[1] == "connectedDebugAndroidTest":
                                     for path in (root / 'artflow-device/native-tombstones').glob('*/files/*')}
             self.kernel_records = {path.parent.name: json.loads(path.read_text()) for path in
                                    (root / 'artflow-device/kernel-runtime').glob('*/verification.json')}
+            self.attempt_receipts = {path.name: path.read_text().strip() for path in
+                                     (root / 'artflow-device/instrumentation-attempts').glob('*.txt')}
             return result, log.read_text() if log.exists() else '', manifests
 
     def test_failed_runtime_configuration_prevents_instrumentation(self):
@@ -328,6 +349,8 @@ wait_for_system_settle
                 self.assertEqual(status, result.returncode, result.stderr)
                 self.assertIn('APK provenance capture failed', result.stderr)
                 self.assertEqual(status == 0, 'assembleBenchmark' in calls)
+                self.assertEqual(str(status), self.attempt_receipts['attempt-1-exit-code.txt'])
+                self.assertIn('artflowApkEvidenceToken=' + self.attempt_receipts['attempt-1-token.txt'], calls)
 
     def test_first_attempt_is_captured_before_classification_and_recovery(self):
         result, calls, manifests = self.run_harness('16384', gradle_status=37,
@@ -348,6 +371,10 @@ wait_for_system_settle
         for manifest in manifests.values():
             self.assertIn('artflowApkEvidenceToken=' + manifest['attemptToken'], calls)
             self.assertTrue(manifest['runnerCaptures'][0]['accepted'])
+        for number in (1, 2):
+            manifest = manifests[f'attempt-{number}']
+            self.assertEqual(manifest['attemptToken'], self.attempt_receipts[f'attempt-{number}-token.txt'])
+            self.assertEqual(str(manifest['instrumentationStatus']), self.attempt_receipts[f'attempt-{number}-exit-code.txt'])
 
     def test_failed_retry_is_captured_and_preserves_its_exit_status(self):
         result, calls, manifests = self.run_harness('16384', gradle_status=37,

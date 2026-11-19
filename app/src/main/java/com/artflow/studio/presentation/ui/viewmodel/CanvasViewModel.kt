@@ -58,7 +58,6 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -288,6 +287,7 @@ class CanvasViewModel
 
         fun open(projectId: Long) {
             if (currentProjectId == projectId && _uiState.value is CanvasUiState.Ready) return
+            recoveryController.onProjectOpening(projectId)
             imports.cancel()
             cancelText()
             loadJob?.cancel()
@@ -317,9 +317,8 @@ class CanvasViewModel
                         val recoveryAvailable = canvasRepository.hasRecovery(projectId)
                         recoveryController.onProjectOpened(projectId, recoveryAvailable)
                         PendingImports.takeProfile(projectId)?.let { canvasRepository.setColorProfile(it, undoable = false) }
-                        model.initialize(projectId) { thumbnail ->
-                            project = ModelImports.updateProject(canvasRepository, projectRepository, existing, thumbnail)
-                        }
+                        model.initialize(projectId) { ModelImports.updateProject(projectRepository, it) }
+                        refreshAfterSave(projectId)
                         _uiState.value =
                             CanvasUiState.Ready(
                                 projectId = projectId,
@@ -1382,12 +1381,10 @@ class CanvasViewModel
                         notify("Recover or discard the autosaved version before saving")
                         return@launch
                     }
-                    val thumbnail = requireNotNull(canvasRepository.saveCanvas(projectId)) { "No artwork was saved" }
-                    val existing = project ?: projectRepository.getProjectById(projectId)
-                    if (existing != null) {
-                        project = ModelImports.updateProject(canvasRepository, projectRepository, existing, thumbnail)
+                    requireNotNull(canvasRepository.saveCanvasSnapshot(projectId) { ModelImports.updateProject(projectRepository, it) }) {
+                        "No artwork was saved"
                     }
-                    _dirty.value = canvasRepository.hasUnsavedChanges()
+                    refreshAfterSave(projectId)
                     notify(if (_dirty.value) "Saved snapshot; newer edits are still unsaved" else "Saved")
                     // Navigation is a post-commit action. Leaving immediately would cancel this
                     // ViewModel's coroutine, interrupting the document write or gallery update.
@@ -1403,22 +1400,18 @@ class CanvasViewModel
             }
         }
 
+        private suspend fun refreshAfterSave(projectId: Long) =
+            withContext(Dispatchers.Main.immediate) {
+                val latest = projectRepository.getProjectById(projectId)
+                if (currentProjectId == projectId && latest != null) project = latest
+                _dirty.value = canvasRepository.hasUnsavedChanges()
+            }
+
         fun saveRecoveryOnBackground() {
             stopPlayback()
             if (!allowAutosave || !_settings.value.autosaveEnabled) return
             val state = _uiState.value as? CanvasUiState.Ready ?: return
-            viewModelScope.launch(editorErrors) {
-                if (
-                    recoveryController.hasUnresolvedRecovery ||
-                    canvasRepository.hasUnresolvedRecovery(state.projectId) ||
-                    !canvasRepository.hasUnsavedChanges()
-                ) {
-                    return@launch
-                }
-                // The app can be closed as soon as it stops, which cancels this scope. The save must finish instead,
-                // or the work since the last autosave is lost.
-                withContext(NonCancellable) { canvasRepository.autosave(state.projectId) }
-            }
+            recoveryController.saveOnBackground(state.projectId)
         }
 
         fun discardChanges(onDiscarded: () -> Unit) {
@@ -1457,7 +1450,8 @@ class CanvasViewModel
                 _exportState,
                 viewModelScope + editorErrors,
                 { currentProjectId to (project?.name ?: "Artwork") },
-                { _dirty.value = canvasRepository.hasUnsavedChanges() },
+                { ModelImports.updateProject(projectRepository, it) },
+                { refreshAfterSave(it.projectId) },
             )
 
         /** Runs an export through the shared pipeline and keeps the result for the dialog. */

@@ -47,14 +47,14 @@ public final class ReleasePayloadWorkflowTest {
         try {
             launch();
             ui.text("Skip");
-            ui.await(By.pkg(VisibleUi.APP).text("New artwork"));
+            ui.await(By.pkg(VisibleUi.APP).desc("New artwork"));
             ui.description("Settings");
             ui.text("Light");
             ui.toggle("Stylus only", false, false);
             ui.toggle("Autosave", false, false);
             ui.description("Back");
             String name = "Release payload " + token.substring(0, 8);
-            ui.text("New artwork");
+            ui.description("New artwork");
             ui.field("Name", name);
             ui.text("Custom");
             ui.field("Width", "64");
@@ -70,7 +70,7 @@ public final class ReleasePayloadWorkflowTest {
             ui.text("Gallery");
             ui.await(By.pkg(VisibleUi.APP).text("Save changes?"));
             ui.text("Save and leave");
-            ui.await(By.pkg(VisibleUi.APP).text("New artwork"));
+            ui.await(By.pkg(VisibleUi.APP).desc("New artwork"));
             ui.text(name);
             ui.await(By.pkg(VisibleUi.APP).desc("Actions"));
             JSONObject first = export("saved");
@@ -79,7 +79,7 @@ public final class ReleasePayloadWorkflowTest {
             assertTrue("The previous application process must be gone",
                     ui.device.executeShellCommand("pidof " + VisibleUi.APP).trim().isEmpty());
             launch();
-            ui.await(By.pkg(VisibleUi.APP).text("New artwork"));
+            ui.await(By.pkg(VisibleUi.APP).desc("New artwork"));
             int secondPid = appPid();
             assertNotEquals("Reopen must use a new application process", firstPid, secondPid);
             ui.text(name);

@@ -55,10 +55,17 @@ run_instrumentation() {
   local attempt_status=0
   local attempt_token
   attempt_token="$(python -c 'import uuid; print(uuid.uuid4())')"
+  mkdir -p "$root/instrumentation-attempts" || exit $?
+  (set -o noclobber; printf '%s\n' "$attempt_token" > "$root/instrumentation-attempts/attempt-$instrumentation_attempt-token.txt") || exit $?
   ./gradlew connectedDebugAndroidTest \
     "-Pandroid.testInstrumentationRunnerArguments.expectedPageSize=${EXPECTED_PAGE_SIZE}" \
     "-Pandroid.testInstrumentationRunnerArguments.artflowApkEvidenceToken=${attempt_token}" \
     --stacktrace || attempt_status=$?
+  # Preserve the original invocation status independently of optional diagnostic collection.
+  # The separate required summary gate rejects missing/inconsistent receipts or APK identity.
+  if ! (set -o noclobber; printf '%s\n' "$attempt_status" > "$root/instrumentation-attempts/attempt-$instrumentation_attempt-exit-code.txt"); then
+    echo "Could not preserve instrumentation status receipt for attempt $instrumentation_attempt" >&2
+  fi
   # Verify the runner's pre-test snapshots before recovery or benchmark installation.
   # Diagnostic collection must never replace the instrumentation exit status.
   if ! python "$(dirname "${BASH_SOURCE[0]}")/collect_installed_apks.py" \

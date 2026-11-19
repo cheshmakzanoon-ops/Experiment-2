@@ -10,7 +10,11 @@ instrumentation lane, whose generated test ABI deliberately retains application 
 
 ## What a passing attempt establishes
 
-The job records the clean source revision/tree and a source archive before building.
+The job records the clean source revision/tree, raw Git commit object, and compressed
+source archive before building. Preparation and final verification rehash the commit
+and reconstruct the complete Git tree from every archived path, executable mode, and
+file's contents. Updating an archive's own SHA-256 cannot make different source bytes
+claim the recorded commit. The prepared build is bound to the exact source receipt.
 It retains the ordinary unsigned release, then signs a copy using a newly generated
 two-day disposable certificate. The private key is destroyed after signing and is
 excluded from uploaded evidence. Official `apksigner` verifies the copy, and the host

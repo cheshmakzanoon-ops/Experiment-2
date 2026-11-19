@@ -120,17 +120,18 @@ class UsdReaderTest {
     fun aSectionClaimingFarMoreTextThanItsBlockCanHoldIsRefusedBeforeItIsAllocated() {
         // A TOKENS section that declares 10 MB of text from a two-byte LZ4 block. LZ4 cannot expand that far,
         // so the reader refuses it before allocating. Without the check it reads on and fails at the missing FIELDS.
-        val crate = ByteArray(122)
+        val crate = ByteArray(130)
         "PXR-USDC".toByteArray().copyInto(crate)
         crate[9] = 4 // minor version
         val words = ByteBuffer.wrap(crate).order(ByteOrder.LITTLE_ENDIAN)
         words.putLong(16, 64L) // table of contents
         words.putLong(64, 1L) // one section
         "TOKENS".toByteArray().copyInto(crate, 72)
-        words.putLong(88, 96L) // TOKENS begins at 96
-        words.putLong(96, 0L) // token count
-        words.putLong(104, 10_000_000L) // uncompressed size
-        words.putLong(112, 2L) // compressed size: a chunk byte and one empty LZ4 token
+        words.putLong(88, 104L) // TOKENS follows the complete table-of-contents entry
+        words.putLong(96, 26L) // section byte length, including the two-byte block
+        words.putLong(104, 0L) // token count
+        words.putLong(112, 10_000_000L) // uncompressed size
+        words.putLong(120, 2L) // compressed size: a chunk byte and one empty LZ4 token
         val error = assertThrows(IllegalArgumentException::class.java) { UsdReader.read(crate) }
         assertEquals("The USD data is cut short", error.message)
     }

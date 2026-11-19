@@ -25,7 +25,35 @@ internal object UsdaParser : UsdReader.Values<Any> {
 
     fun isUsda(bytes: ByteArray): Boolean = bytes.size > MAGIC.size && MAGIC.indices.all { bytes[it] == MAGIC[it] }
 
-    fun parse(text: String): Map<String, Map<String, Any>> = Reader(Lexer(text)).layer()
+    fun parse(text: String): Map<String, Map<String, Any>> = parse(text, ModelReadBudget())
+
+    internal fun parse(
+        text: String,
+        budget: ModelReadBudget,
+    ): Map<String, Map<String, Any>> = Reader(Lexer(text, budget), budget).layer()
+
+    internal fun values(budget: ModelReadBudget): UsdReader.Values<Any> =
+        object : UsdReader.Values<Any> by UsdaParser {
+            override fun ints(rep: Any): IntArray? {
+                budget.reserve(((rep as? Numbers)?.values?.size ?: 0).toLong() * Int.SIZE_BYTES)
+                return UsdaParser.ints(rep)
+            }
+
+            override fun floats(rep: Any): FloatArray {
+                budget.reserve(((rep as? Numbers)?.values?.size ?: 1).toLong() * Float.SIZE_BYTES)
+                return UsdaParser.floats(rep)
+            }
+
+            override fun tokens(rep: Any): List<String> {
+                budget.reserve(((rep as? List<*>)?.size ?: 1).toLong() * LIST_ITEM_BYTES)
+                return UsdaParser.tokens(rep)
+            }
+
+            override fun paths(rep: Any): List<String> {
+                budget.reserve(((rep as? List<*>)?.size ?: 1).toLong() * LIST_ITEM_BYTES)
+                return UsdaParser.paths(rep)
+            }
+        }
 
     override fun token(rep: Any?): String? = rep as? String
 
@@ -40,12 +68,24 @@ internal object UsdaParser : UsdReader.Values<Any> {
             else -> emptyList()
         }
 
-    override fun ints(rep: Any): IntArray? = (rep as? Numbers)?.values?.let { values -> IntArray(values.size) { values[it].toInt() } }
+    override fun ints(rep: Any): IntArray? =
+        (rep as? Numbers)?.values?.let { values ->
+            require(values.all { it.isFinite() && it >= Int.MIN_VALUE.toDouble() && it <= Int.MAX_VALUE.toDouble() && it % 1.0 == 0.0 }) {
+                "The USD topology contains an invalid integer"
+            }
+            IntArray(values.size) { values[it].toInt() }
+        }
 
     override fun floats(rep: Any): FloatArray =
         when (rep) {
-            is Numbers -> FloatArray(rep.values.size) { rep.values[it].toFloat() }
-            is Double -> floatArrayOf(rep.toFloat())
+            is Numbers -> {
+                require(rep.values.all { it.toFloat().isFinite() }) { "The USD geometry contains a nonfinite value" }
+                FloatArray(rep.values.size) { rep.values[it].toFloat() }
+            }
+            is Double -> {
+                require(rep.toFloat().isFinite()) { "The USD geometry contains a nonfinite value" }
+                floatArrayOf(rep.toFloat())
+            }
             else -> throw IllegalArgumentException("The USD file has a value of an unexpected type")
         }
 
@@ -60,12 +100,14 @@ internal object UsdaParser : UsdReader.Values<Any> {
 
     private class Lexer(
         private val text: String,
+        private val budget: ModelReadBudget,
     ) {
         /** Where the next token starts; saved and restored to read a stretch again. */
         var at = 0
 
         fun next(): Token {
             skipBlank()
+            budget.reserve(TOKEN_BYTES)
             if (at >= text.length) return Token(Kind.END, "")
             val c = text[at]
             return when {
@@ -101,12 +143,14 @@ internal object UsdaParser : UsdReader.Values<Any> {
         private inline fun scan(accept: (Char) -> Boolean): String {
             val start = at++
             while (at < text.length && accept(text[at])) at++
+            budget.reserve((at - start).toLong() * Char.SIZE_BYTES)
             return text.substring(start, at)
         }
 
         private fun until(close: Char): String {
             val end = text.indexOf(close, at + 1)
             require(end > at) { "The USD text is damaged" }
+            budget.reserve((end - at).toLong() * Char.SIZE_BYTES)
             return text.substring(at + 1, end).also { at = end + 1 }
         }
 
@@ -114,6 +158,7 @@ internal object UsdaParser : UsdReader.Values<Any> {
             val fence = if (text.startsWith("@@@", at)) "@@@" else "@"
             val end = text.indexOf(fence, at + fence.length)
             require(end >= 0) { "The USD text is damaged" }
+            budget.reserve((end - at).toLong() * Char.SIZE_BYTES)
             return text.substring(at + fence.length, end).also { at = end + fence.length }
         }
 
@@ -122,12 +167,15 @@ internal object UsdaParser : UsdReader.Values<Any> {
             if (text.startsWith(triple, at)) {
                 val end = text.indexOf(triple, at + triple.length)
                 require(end >= 0) { "The USD text is damaged" }
+                budget.reserve((end - at).toLong() * Char.SIZE_BYTES)
                 return text.substring(at + triple.length, end).also { at = end + triple.length }
             }
             val out = StringBuilder()
             at++
             while (at < text.length && text[at] != quote) {
                 if (text[at] == '\\' && at + 1 < text.length) at++
+                // Builder growth and its final String can coexist with the original text.
+                budget.reserve(STRING_CHARACTER_BYTES)
                 out.append(text[at++])
             }
             require(at < text.length) { "The USD text is damaged" }
@@ -138,12 +186,13 @@ internal object UsdaParser : UsdReader.Values<Any> {
 
     private class Reader(
         private val lexer: Lexer,
+        private val budget: ModelReadBudget,
     ) {
         private val specs = LinkedHashMap<String, MutableMap<String, Any>>()
         private var peeked: Token? = null
 
         fun layer(): Map<String, Map<String, Any>> {
-            val root = specs.getOrPut("/") { HashMap() }
+            val root = fields("/")
             if (peek().isPunct("(")) metadata(root)
             body("/", root, depth = 0)
             return specs
@@ -158,6 +207,12 @@ internal object UsdaParser : UsdReader.Values<Any> {
         private fun word(): String = next().also { require(it.kind == Kind.WORD) { "The USD text is damaged" } }.text
 
         private fun accept(char: String): Boolean = peek().isPunct(char).also { if (it) next() }
+
+        private fun fields(path: String): MutableMap<String, Any> =
+            specs.getOrPut(path) {
+                budget.reserve(SPEC_BYTES + path.length.toLong() * Char.SIZE_BYTES)
+                HashMap()
+            }
 
         /** Prims and properties up to the closing brace (or the end, for the layer itself). */
         private fun body(
@@ -197,8 +252,9 @@ internal object UsdaParser : UsdReader.Values<Any> {
             require(depth < MAX_DEPTH) { "The USD text is nested too deeply" }
             val type = if (peek().kind == Kind.WORD) word() else null
             val name = next().also { require(it.kind == Kind.STRING) { "The USD text is damaged" } }.text
+            budget.reserve((parent.length.toLong() + name.length + 1) * Char.SIZE_BYTES)
             val path = if (parent == "/") "/$name" else "$parent/$name"
-            val fields = specs.getOrPut(path) { HashMap() }
+            val fields = fields(path)
             type?.let { fields["typeName"] = it }
             if (peek().isPunct("(")) metadata(fields)
             expect("{")
@@ -217,6 +273,7 @@ internal object UsdaParser : UsdReader.Values<Any> {
             fields: MutableMap<String, Any>,
             depth: Int,
         ) {
+            require(depth < MAX_DEPTH) { "The USD text is nested too deeply" }
             val set = next().text
             expect("=")
             expect("{")
@@ -237,7 +294,8 @@ internal object UsdaParser : UsdReader.Values<Any> {
             while (word in QUALIFIERS) word = word()
             if (word == "rel") {
                 val name = word()
-                val fields = specs.getOrPut("$prim.$name") { HashMap() }
+                budget.reserve((prim.length.toLong() + name.length + 1) * Char.SIZE_BYTES)
+                val fields = fields("$prim.$name")
                 if (accept("=")) targets(prim, value(0))?.let { fields["targetPaths"] = it }
                 if (peek().isPunct("(")) metadata(fields)
                 return
@@ -245,7 +303,8 @@ internal object UsdaParser : UsdReader.Values<Any> {
             val type = if (accept("[")) word.also { expect("]") } + "[]" else word
             val name = word()
             val attribute = name.substringBeforeLast('.').takeIf { name.endsWith(".connect") || name.endsWith(".timeSamples") } ?: name
-            val fields = specs.getOrPut("$prim.$attribute") { HashMap() }
+            budget.reserve((prim.length.toLong() + attribute.length + 1) * Char.SIZE_BYTES)
+            val fields = fields("$prim.$attribute")
             fields["typeName"] = type
             if (accept("=")) {
                 val value = value(0)
@@ -267,6 +326,7 @@ internal object UsdaParser : UsdReader.Values<Any> {
             val v = value.values
             // Whole quaternions only: a partial one has no real part to move to the front.
             require(v.size % QUAT == 0) { "The USD text is damaged" }
+            budget.reserve(v.size.toLong() * Double.SIZE_BYTES)
             return Numbers(DoubleArray(v.size) { v[(it - it % QUAT) + (it % QUAT + 1) % QUAT] })
         }
 
@@ -281,8 +341,13 @@ internal object UsdaParser : UsdReader.Values<Any> {
             prim: String,
             value: Any,
         ): List<Path>? {
+            budget.reserve(((value as? List<*>)?.size ?: 1).toLong() * LIST_ITEM_BYTES)
             val paths = (value as? List<*>)?.filterIsInstance<Path>() ?: listOfNotNull(value as? Path)
-            return paths.map { Path(resolve(prim, it.path)) }.takeIf { it.isNotEmpty() }
+            return paths
+                .map {
+                    budget.reserve((prim.length.toLong() + it.path.length + 1) * Char.SIZE_BYTES + LIST_ITEM_BYTES)
+                    Path(resolve(prim, it.path))
+                }.takeIf { it.isNotEmpty() }
         }
 
         /** `( key = value ... )`: keeps each key's value in [fields]; doc strings and list edits are passed over. */
@@ -305,7 +370,10 @@ internal object UsdaParser : UsdReader.Values<Any> {
         ) {
             if (!accept("=")) return
             val value = value(0)
-            if (value != NONE) fields[key] = value
+            if (value != NONE) {
+                budget.reserve(FIELD_BYTES)
+                fields[key] = value
+            }
         }
 
         private fun value(depth: Int): Any {
@@ -335,12 +403,13 @@ internal object UsdaParser : UsdReader.Values<Any> {
             // Mesh data is long runs of numbers, read straight into one array; anything else is read again.
             val start = lexer.at
             val ahead = peeked
-            val numbers = DoubleList()
+            val numbers = DoubleList(budget)
             if (numeric(close, numbers, depth)) return Numbers(numbers.toArray())
             lexer.at = start
             peeked = ahead
             val items = ArrayList<Any>()
             while (!accept(close)) {
+                budget.reserve(LIST_ITEM_BYTES)
                 items += value(depth + 1)
                 if (!peek().isPunct(close)) expect(",")
             }
@@ -388,6 +457,7 @@ internal object UsdaParser : UsdReader.Values<Any> {
                         if (accept("[")) expect("]")
                         next().text.also { expect("=") }
                     }
+                budget.reserve(FIELD_BYTES)
                 entries[key] = value(depth + 1)
             }
             return entries
@@ -412,7 +482,10 @@ internal object UsdaParser : UsdReader.Values<Any> {
                 when {
                     token.kind != Kind.PUNCT -> Unit
                     token.text == closers.last() -> closers.removeLast()
-                    token.text in OPENERS -> closers.addLast(OPENERS.getValue(token.text))
+                    token.text in OPENERS -> {
+                        require(closers.size < MAX_DEPTH) { "The USD text is nested too deeply" }
+                        closers.addLast(OPENERS.getValue(token.text))
+                    }
                 }
             }
         }
@@ -433,22 +506,41 @@ internal object UsdaParser : UsdReader.Values<Any> {
     }
 
     /** A growable array of doubles. */
-    private class DoubleList {
-        private var values = DoubleArray(INITIAL)
+    private class DoubleList(
+        private val budget: ModelReadBudget,
+    ) {
+        private var values = allocate(INITIAL)
         private var size = 0
 
+        private fun allocate(count: Int): DoubleArray {
+            budget.reserve(count.toLong() * Double.SIZE_BYTES)
+            return DoubleArray(count)
+        }
+
         fun add(value: Double) {
-            if (size == values.size) values = values.copyOf(size * 2)
+            if (size == values.size) {
+                require(size <= Int.MAX_VALUE / 2) { "The USD numeric array is too large" }
+                budget.reserve(size.toLong() * 2 * Double.SIZE_BYTES)
+                values = values.copyOf(size * 2)
+            }
             values[size++] = value
         }
 
-        fun toArray(): DoubleArray = values.copyOf(size)
+        fun toArray(): DoubleArray {
+            budget.reserve(size.toLong() * Double.SIZE_BYTES)
+            return values.copyOf(size)
+        }
     }
 
     private val NONE = Any()
     private const val INITIAL = 16
     private const val QUAT = 4
     private const val MAX_DEPTH = 64
+    private const val TOKEN_BYTES = 64L
+    private const val SPEC_BYTES = 256L
+    private const val FIELD_BYTES = 128L
+    private const val LIST_ITEM_BYTES = 32L
+    private const val STRING_CHARACTER_BYTES = 8L
     private const val PUNCTUATION = "()[]{}=,;:"
     private const val WORD_EXTRA = "_:."
     private const val NUMBER_START = "-+."

@@ -2,7 +2,8 @@
 
 ## Decision
 
-**Public production rollout: NO-GO until publisher and physical-device gates are completed.**
+**Public production rollout: NO-GO until the required engineering, publisher, physical-device and
+store evidence is complete.**
 Engineering changes may be published to main after their implementation and required verification;
 source publication is not a Play release. The current candidate is tracked in the
 [November 19 hardening record](PRODUCTION_HARDENING_2026-11-19.md) and
@@ -27,6 +28,12 @@ exact-revision evidence; historical results remain in [TEST_EVIDENCE.md](TEST_EV
   identities, R8/shrinker evidence and original results. The benchmark's additional test ABI keeps,
   test hosts and disposable signing differ from the publisher artifact; its success cannot qualify
   an untested publisher binary.
+- Pass the [normal release payload UI workflow](../verification/release-payload-ui.md) on the final
+  source revision. Require the ordinary release APK with its production Application and normal
+  optimization rules, unchanged payload after disposable copy signing, the separately instrumented
+  UI driver, and the complete original paint/save/fresh-process reopen/FileProvider-share result.
+  Retain installed APK hashes and every exported-pixel comparison. Building the driver or passing
+  the benchmark lane does not meet this gate; disposable signing does not qualify publisher identity.
 - Execute installed-package preservation with actual old-app data, matching test signers and
   retained before/after evidence. Room migration fixtures establish schema behavior; they do not
   prove that replacing an installed application preserves the full user workflow. Use the
@@ -69,6 +76,13 @@ recheck the applicable publishing policy at submission.
    with real artwork, fonts, and grains.
 3. Complete publisher/store requirements, including a public privacy-policy URL matching the app,
    truthful screenshots/listing, applicable declarations, prelaunch review, and staged rollout.
+   The [repository policy](../privacy-policy.md) and in-app policy already describe Android cloud
+   backup, device transfer, selected export recipients, and deletion of private versus external
+   copies. Confirm the actual listing's developer identity, contact, Data safety declaration and
+   policy URL against the final artifact. An offline app still needs this store disclosure;
+   Google's [User Data policy](https://support.google.com/googleplay/android-developer/answer/10144311)
+   requires an active, publicly accessible policy page and an in-app policy or link. The repository
+   text alone is not evidence that the publisher's Play Console declaration has been completed.
 
 No private signing material or publisher identity should be invented or committed. The remaining
 external evidence cannot be replaced with unit tests, screenshots of a mockup, or a renamed gate.

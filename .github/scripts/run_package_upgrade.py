@@ -12,6 +12,7 @@ import argparse
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 import re
 import shlex
@@ -49,10 +50,26 @@ def now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def write_json(path: Path, value: dict) -> None:
-    temporary = path.with_suffix(path.suffix + ".partial")
-    temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
-    temporary.replace(path)
+def write_json(path: Path, value: dict, *, replace: bool = False) -> None:
+    package_upgrade_build.require_unlinked(path)
+    data = json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n"
+    # Unpredictable, exclusively created staging prevents an existing partial or link from
+    # redirecting writes. Only campaign.json is mutable while its phase lock is held.
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", prefix="." + path.name + "-", suffix=".partial",
+                                         dir=path.parent, delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        if replace:
+            temporary.replace(path)
+        else:
+            os.link(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def sha256(path: Path) -> str:
@@ -338,8 +355,24 @@ def verify_seed_report(value: dict, campaign: dict) -> None:
 
 
 def require_one_test(output: str, phase: str) -> None:
-    if (not re.search(r"OK \(1 test\)", output) or "INSTRUMENTATION_CODE: -1" not in output
-            or re.search(r"FAILURES!!!|INSTRUMENTATION_FAILED|INSTRUMENTATION_STATUS_CODE: -[234]", output)):
+    statuses, block = [], {}
+    for line in output.splitlines():
+        field = re.fullmatch(r"INSTRUMENTATION_STATUS: ([^=]+)=(.*)", line)
+        if field:
+            if field[1] in block:
+                raise ValueError("Duplicate instrumentation status field")
+            block[field[1]] = field[2]
+        status = re.fullmatch(r"INSTRUMENTATION_STATUS_CODE: (-?\d+)", line)
+        if status:
+            statuses.append((int(status[1]), block))
+            block = {}
+    test_class, test_method = (SEED_METHOD if phase == "old UI seed" else METHOD).split("#")
+    if (block or [status[0] for status in statuses] != [1, 0]
+            or any(value.get("class") != test_class or value.get("test") != test_method
+                   or value.get("current") != "1" or value.get("numtests") != "1" for _, value in statuses)
+            or len(re.findall(r"(?m)^OK \(1 test\)\s*$", output)) != 1
+            or re.findall(r"(?m)^INSTRUMENTATION_CODE: (-?\d+)\s*$", output) != ["-1"]
+            or re.search(r"FAILURES!!!|INSTRUMENTATION_FAILED", output)):
         raise ValueError(f"The first {phase} instrumentation invocation did not pass exactly one test")
 
 
@@ -387,7 +420,7 @@ def prepare(args, campaign: dict, commands: Commands) -> None:
             raise ValueError("Automated seeding needs the measured pinned-source/test-overlay build record")
     if args.build_record is not None:
         receipt = retain(args.build_record, args.campaign / "inputs" / "build-provenance.json", args.build_record_sha256)
-        measured = json.loads(Path(receipt["path"]).read_text())
+        measured = package_upgrade_build.load(Path(receipt["path"]))
         package_upgrade_build.validate(measured)
         if (measured["oldSource"] != args.old_source or measured["candidateSource"] != args.candidate_source
                 or set(measured["apks"]) != set(campaign["apks"])
@@ -401,7 +434,7 @@ def prepare(args, campaign: dict, commands: Commands) -> None:
     require_absent(commands, PACKAGE)
     require_absent(commands, TEST_PACKAGE)
     # All compatibility and disposable-target checks precede the first device mutation.
-    write_json(args.campaign / "campaign.json", campaign)
+    write_json(args.campaign / "campaign.json", campaign, replace=True)
     install(commands, campaign["apks"]["old"], "install-old")
     campaign["installedOld"] = installed_apk(commands, PACKAGE, campaign["apks"]["old"], "installed-old")
     launch(commands, "launch-old-app")
@@ -432,7 +465,7 @@ def seed(args, campaign: dict, commands: Commands) -> None:
     reports = list(destination.rglob("old-app-ui-seed.json"))
     if len(reports) != 1:
         raise ValueError("The old application did not retain exactly one UI seed report")
-    value = json.loads(reports[0].read_text())
+    value = package_upgrade_build.load(reports[0])
     verify_seed_report(value, campaign)
     campaign["automatedOldAppSeed"] = {"report": retain(reports[0], args.campaign / "old-app-seed-report.json"), "proof": value}
     campaign["phase"] = "old-app-ui-seeded"
@@ -448,7 +481,7 @@ def freeze(args, campaign: dict, commands: Commands) -> None:
         recorded = campaign["automatedOldAppSeed"]["report"]
         if sha256(Path(recorded["path"])) != recorded["sha256"]:
             raise ValueError("The first old-app UI seed report changed")
-        proof = json.loads(Path(recorded["path"]).read_text())
+        proof = package_upgrade_build.load(Path(recorded["path"]))
         verify_seed_report(proof, campaign)
         if proof != campaign["automatedOldAppSeed"]["proof"]:
             raise ValueError("The cached old-app UI proof changed")
@@ -456,7 +489,7 @@ def freeze(args, campaign: dict, commands: Commands) -> None:
         if args.seed_record is None:
             raise ValueError("Manual seeding requires a named operator's --seed-record")
         record = retain(args.seed_record, args.campaign / "old-app-seed-record.json")
-        seed_record = json.loads(Path(record["path"]).read_text())
+        seed_record = package_upgrade_build.load(Path(record["path"]))
         if (seed_record.get("schemaVersion") != 1 or any(seed_record.get(key) is not True for key in SEED_ATTESTATIONS)
                 or not isinstance(seed_record.get("operator"), str) or not seed_record["operator"].strip()):
             raise ValueError("A named operator must attest each bounded old-app UI seed step")
@@ -506,7 +539,7 @@ def upgrade(args, campaign: dict, commands: Commands) -> None:
     commands.shell("stop-old-before-replacement", "am", "force-stop", PACKAGE)
     assert_same_data(campaign["seed"], snapshot(commands, "immediately-before-replacement"))
     campaign["phase"] = "replacement-started"
-    write_json(args.campaign / "campaign.json", campaign)
+    write_json(args.campaign / "campaign.json", campaign, replace=True)
     install(commands, campaign["apks"]["candidate"], "replace-with-candidate", "-r")
     campaign["installedCandidate"] = installed_apk(commands, PACKAGE, campaign["apks"]["candidate"], "installed-candidate")
     assert_same_data(campaign["seed"], snapshot(commands, "after-install-before-launch"))
@@ -547,7 +580,7 @@ def upgrade(args, campaign: dict, commands: Commands) -> None:
         paths = list(destination.rglob("package-upgrade-" + phase + ".json"))
         if len(paths) != 1:
             raise ValueError("Instrumentation did not retain exactly one campaign report")
-        value = json.loads(paths[0].read_text())
+        value = package_upgrade_build.load(paths[0])
         verify_probe_report(value, campaign, phase, baseline_hash)
         reports[phase] = value
     if reports["edit"]["pid"] == reports["reopen"]["pid"] or reports["reopen"].get("editPid") != reports["edit"]["pid"]:
@@ -590,12 +623,28 @@ def parser() -> argparse.ArgumentParser:
 
 def main(argv=None) -> int:
     args = parser().parse_args(argv)
-    args.campaign = args.campaign.resolve()
+    args.campaign = args.campaign.absolute()
     commands = None
     campaign = None
+    active = None
+    def release_phase():
+        if active is not None:
+            descriptor, path = active
+            try:
+                # Do not remove a different process's replacement lock entry.
+                if path.lstat().st_ino == os.fstat(descriptor).st_ino:
+                    path.unlink()
+            finally:
+                os.close(descriptor)
     try:
+        package_upgrade_build.require_unlinked(args.campaign)
         if args.action == "prepare":
             args.campaign.mkdir(parents=True, exist_ok=False)
+        active_path = args.campaign / "active-phase.claimed"
+        descriptor = os.open(active_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        active = (descriptor, active_path)
+        os.write(descriptor, (args.action + "\n").encode())
+        if args.action == "prepare":
             token = str(uuid.uuid4())
             campaign = {"schemaVersion": 1, "token": token, "createdAtUtc": now(), "serial": args.serial,
                         "projectName": "Package upgrade " + token[:8], "phase": "preflight", "qualified": False,
@@ -603,7 +652,7 @@ def main(argv=None) -> int:
                         "disposableDeviceAcknowledged": args.disposable_device, "packageAcknowledged": args.allow_package,
                         "tools": {name: getattr(args, name) for name in ("adb", "apkanalyzer", "apksigner")}}
         else:
-            campaign = json.loads((args.campaign / "campaign.json").read_text())
+            campaign = package_upgrade_build.load(args.campaign / "campaign.json")
             if campaign["serial"] != args.serial or not TOKEN.fullmatch(campaign["token"]):
                 raise ValueError("The campaign belongs to a different device or has an invalid token")
             if campaign.get("firstFailure") or campaign["phase"] == "passed-scoped-package-campaign":
@@ -613,6 +662,7 @@ def main(argv=None) -> int:
         phase_marker = args.campaign / (args.action + ".claimed")
         phase_marker.open("x").close()
     except (OSError, ValueError, KeyError) as error:
+        release_phase()
         print(f"Campaign not started: {error}", file=sys.stderr)
         return 2
     try:
@@ -635,10 +685,13 @@ def main(argv=None) -> int:
         if args.action == "prepare":
             print(f"Seed the OLD app through its UI. Artwork name: {campaign['projectName']}")
     finally:
-        campaign["updatedAtUtc"] = now()
-        write_json(args.campaign / "campaign.json", campaign)
-        if commands is not None:
-            commands.diagnostics(campaign["token"])
+        try:
+            campaign["updatedAtUtc"] = now()
+            write_json(args.campaign / "campaign.json", campaign, replace=True)
+            if commands is not None:
+                commands.diagnostics(campaign["token"])
+        finally:
+            release_phase()
     return return_code
 
 

@@ -395,6 +395,7 @@ jobs:
             --launch "${RUNNER_TEMP}/artflow-device/minified-launch.txt" \
             --api "$EXPECTED_API" --page-size "$EXPECTED_PAGE_SIZE" \
             --revision "$(git rev-parse HEAD)" \
+            --device-run "${RUNNER_TEMP}/artflow-device" --project "$PWD" \
             --output "${RUNNER_TEMP}/artflow-device" || status=$?
           cat "${RUNNER_TEMP}/artflow-device/verification.md" >> "$GITHUB_STEP_SUMMARY"
           exit "$status"

@@ -262,6 +262,32 @@ class ProjectRepositoryImpl
             projectDao.updateProject(project.toEntity())
         }
 
+        override suspend fun renameProject(
+            projectId: Long,
+            name: String,
+            modifiedAt: Long,
+        ) {
+            require(projectDao.renameProject(projectId, name, modifiedAt) == 1) { "This artwork no longer exists" }
+        }
+
+        override suspend fun updateSavedArtwork(project: Project): Project =
+            database.withTransaction {
+                val current = requireNotNull(projectDao.getProjectById(project.id)) { "This artwork no longer exists" }
+                // The editor may have opened before a rename, favorite change or stack move.
+                // Read and patch in one transaction so a save cannot restore those old fields.
+                val updated =
+                    current.copy(
+                        thumbnailPath = project.thumbnailPath,
+                        width = project.width,
+                        height = project.height,
+                        dpi = project.dpi,
+                        layerCount = project.layerCount,
+                        modifiedAt = maxOf(current.modifiedAt, project.modifiedAt),
+                    )
+                projectDao.updateProject(updated)
+                updated.toDomain()
+            }
+
         override suspend fun deleteProject(project: Project) {
             projectDao.deleteProject(project.toEntity())
         }

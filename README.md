@@ -21,7 +21,7 @@ The [November 19 hardening record](docs/release/PRODUCTION_HARDENING_2026-11-19.
 current candidate in [PR #41](https://github.com/cheshmakzanoon-ops/Experiment-2/pull/41). The work
 covers bounded image/PSD decoding, document-bound atomic imports, import lifetime cleanup,
 consistent native-package export snapshots, preview failure handling, resolved dependency
-evidence, and executable optimized/upgrade/publisher/physical qualification gates. Implementation
+evidence, and executable optimized/normal-release/upgrade/publisher/physical qualification gates. Implementation
 and local checks are recorded separately from completed exact-revision device acceptance.
 
 The preceding November 18 integration milestone addressed these connected editor paths:
@@ -99,6 +99,16 @@ backup, codec, and CI hardening from [PR #40](https://github.com/cheshmakzanoon-
   Successful imports disclose those limitations when applicable. Full editable Photoshop text,
   adjustments, smart objects, and all color modes are outside the implemented contract. See the
   [resource/color boundary record](docs/verification/psd-image-resources.md).
+- **Model import:** OBJ, glTF/GLB and USD/USDZ support is a subset aimed at UV painting. Models
+  need usable texture coordinates; geometry, texture and device-memory limits can require refusal.
+  The 300,000-triangle ceiling is an upper bound, not a certified interactive workload. Sparse
+  glTF accessors are refused with guidance to export dense accessors. Import extracts supported
+  geometry and textures; it does not preserve editable animation, rigs or complete material/scene
+  authoring structures. See the [model input boundary record](docs/verification/model-input-allocation.md).
+- **Timelapse:** recording captures downscaled JPEG snapshots while enabled. Quick edits can be
+  combined into one frame, repeated frames can be omitted, and long recordings are reduced to a
+  coarser sequence. Full-length export uses all retained frames; it is not a complete edit history
+  or a replacement for saving artwork. Private layers are excluded from captured composites.
 - **PDF:** pages contain raster artwork; vector typography/shapes and PDF/A remain unimplemented.
 - **Brush/input fidelity:** some imported auxiliary curves remain unused. The physical touch-major
   palm helper is separate from active contact-size/hover filtering. Physical stylus qualification
@@ -146,7 +156,7 @@ and requires every case to pass on the original attempt, with no skips or recove
 
 The benchmark APK inherits the release R8 rules, minification and resource shrinking, and is
 non-debuggable. It also retains the exact app-owned classes/members referenced by its separately
-compiled instrumentation, with generated rules that allow obfuscation, and two audited reflection
+compiled instrumentation, with generated rules that preserve their exact external names, and two audited reflection
 fields. These rules protect the instrumentation's referenced entrypoints and constrain optimization
 beyond the publisher release rules. The [test ABI record](docs/verification/optimized-test-r8.md) explains the generated
 rules and retained evidence. The artifact uses a disposable debug signing key, test-only Compose
@@ -170,6 +180,22 @@ results is refused; use a fresh output directory and clean build evidence for a 
 The Actions artifact retains the first attempt's binaries, mapping, reports and diagnostics even
 when compilation or instrumentation fails. A configured workflow is not passing execution evidence;
 use its exact-revision report to determine acceptance.
+
+### Normal release payload UI qualification
+
+The **Normal release payload UI qualification** workflow exercises the ordinary release APK
+through a separate UIAutomator driver with its own package, process and instrumentation target.
+The app uses its production Application and normal R8 rules. A disposable certificate signs a
+copy of the unsigned APK; the verifier requires unchanged application payload entries.
+
+The one-attempt workflow creates and paints artwork, saves and reopens it, shares a PNG through
+the real FileProvider, force-stops the app, and requires all exported pixels to survive a fresh
+process reopen. The final candidate needs its complete passing runtime report and retained APK
+identity; compiling either APK does not meet this gate. See the
+[release payload protocol](docs/verification/release-payload-ui.md). The separate
+[installed-upgrade campaign](docs/verification/installed-package-upgrade.md) must also pass using
+actual old-app data. Both use disposable signing and leave publisher, store and physical-device
+acceptance open.
 
 ### Signed releases
 

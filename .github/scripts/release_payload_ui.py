@@ -18,6 +18,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import tarfile
 import tempfile
 import uuid
 import xml.etree.ElementTree as ET
@@ -25,6 +26,7 @@ import zipfile
 import zlib
 
 import qualify_publisher_artifact as publisher
+import package_upgrade_build as source_evidence
 
 APP = "com.artflow.studio"
 DRIVER = "com.artflow.qualification"
@@ -56,9 +58,10 @@ def now() -> str:
 
 def write_json(path: Path, value: dict) -> None:
     # Receipts are immutable: an earlier failure or attempt cannot become a later success.
+    source_evidence.require_unlinked(path)
+    encoded = json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n"
     with path.open("x", encoding="utf-8") as stream:
-        json.dump(value, stream, indent=2, sort_keys=True)
-        stream.write("\n")
+        stream.write(encoded)
 
 
 def sha(path: Path) -> str:
@@ -121,19 +124,44 @@ def clean_source(root: Path, revision: str) -> None:
 
 
 def record_source(root: Path, output: Path) -> dict:
+    source_evidence.require_unlinked(output)
     root, output = root.resolve(), output.resolve()
     require(not output.is_relative_to(root), "Evidence must be outside the source checkout")
     output.mkdir(parents=True, exist_ok=False)
     revision = git(root, "rev-parse", "HEAD")
     clean_source(root, revision)
-    archive = output / "source.tar"
-    git(root, "archive", "--format=tar", "--output", str(archive), "HEAD")
+    archive = output / "source.tar.gz"
+    git(root, "archive", "--format=tar.gz", "--output", str(archive), "HEAD")
+    commit = output / "source.commit"
+    with commit.open("xb") as stream:
+        stream.write(subprocess.check_output(["git", "-C", str(root), "cat-file", "commit", revision], timeout=60))
     value = {"schemaVersion": 1, "revision": revision, "tree": git(root, "rev-parse", "HEAD^{tree}"),
              "sourceRoot": str(root), "sourceArchive": publisher.file_record(archive),
+             "commitObject": publisher.file_record(commit),
              "recordedAtUtc": now(), "publisherQualified": False,
              "provenanceScope": "Workflow source/build observation; not reproducible-build or remote attestation"}
+    validate_source(value)
     write_json(output / "source.json", value)
     return value
+
+
+def validate_source(value: dict) -> None:
+    """Bind retained source bytes and file modes to the recorded Git commit and tree."""
+    revision, tree = value.get("revision"), value.get("tree")
+    require(type(value.get("schemaVersion")) is int and value["schemaVersion"] == 1
+            and value.get("publisherQualified") is False, "Invalid source evidence scope")
+    require(isinstance(revision, str) and re.fullmatch(r"[0-9a-f]{40}", revision) is not None
+            and isinstance(tree, str) and re.fullmatch(r"[0-9a-f]{40}", tree) is not None,
+            "Invalid exact source commit/tree identity")
+    commit = source_evidence.verify_record(value["commitObject"])
+    require(commit.stat().st_size <= 1024 * 1024, "Oversized source Git commit object")
+    data = commit.read_bytes()
+    require(source_evidence.git_object("commit", data) == revision
+            and data.split(b"\n", 1)[0] == b"tree " + tree.encode(),
+            "Retained Git commit does not bind the recorded source and tree")
+    archive = source_evidence.verify_record(value["sourceArchive"])
+    actual, _ = source_evidence.archive_tree(archive, revision)
+    require(actual == tree, "Retained source archive differs from its committed Git tree")
 
 
 def expected_version(root: Path) -> dict:
@@ -209,9 +237,9 @@ def shrinker_evidence(root: Path, destination: Path) -> dict:
 
 def prepare(output: Path, apkanalyzer: str, apksigner: str, keytool: str) -> dict:
     source = publisher.load_object(output / "source.json")
+    validate_source(source)
     root = Path(source["sourceRoot"])
     clean_source(root, source["revision"])
-    require(sha(Path(source["sourceArchive"]["path"])) == source["sourceArchive"]["sha256"], "Source archive changed")
     build = output / "build"
     build.mkdir()
     commands = Commands(build / "commands")
@@ -499,6 +527,9 @@ def verify(output: Path) -> dict:
     try:
         source, prepared, attempt, run_result = (publisher.load_object(output / name) for name in
                                                 ("source.json", "prepared.json", "attempt.json", "run-result.json"))
+        validate_source(source)
+        require(prepared.get("source") == publisher.file_record(output / "source.json"),
+                "Prepared build is not bound to this source receipt")
         revision = source["revision"]
         require(bool(re.fullmatch(r"[0-9a-f]{40}", revision)), "Invalid pinned source")
         require(all(value.get("revision") == revision and value.get("publisherQualified") is False
@@ -516,7 +547,7 @@ def verify(output: Path) -> dict:
                 and prepared["application"]["manifests"]["base"].get("testOnly") is False, "App release flags differ")
         require(prepared["shrinker"].get("extraInstrumentationRules") is False
                 and prepared["shrinker"].get("renamedApplicationClasses", 0) > 0, "Missing release shrinker evidence")
-        for record in [source["sourceArchive"], prepared["source"], prepared["disposableCertificate"],
+        for record in [source["sourceArchive"], source["commitObject"], prepared["source"], prepared["disposableCertificate"],
                        *prepared["apks"].values(), *prepared["shrinker"]["files"].values()]:
             require(publisher.file_record(Path(record["path"])) == record, "A retained build/provenance file changed")
         require(set(prepared["shrinker"]["files"]) == set(SHRINKER_FILES), "Incomplete R8/resource evidence")
@@ -533,7 +564,7 @@ def verify(output: Path) -> dict:
         result["instrumentation"] = instrumentation_result(Path(run_result["instrumentationLog"]).read_text())
         result["workflow"] = verify_receipts(output / "device-evidence" / attempt["token"], attempt)
         result.update({"revision": revision, "token": attempt["token"], "device": run_result["device"], "success": True})
-    except (ValueError, OSError, KeyError, TypeError, ET.ParseError, zlib.error, zipfile.BadZipFile) as failure:
+    except (ValueError, OSError, KeyError, TypeError, ET.ParseError, zlib.error, zipfile.BadZipFile, tarfile.TarError) as failure:
         result["problems"].append(str(failure))
     write_json(output / "verification.json", result)
     with (output / "verification.md").open("x") as stream:
@@ -577,7 +608,7 @@ def main(argv=None) -> int:
             print(json.dumps(result, indent=2))
             return 0 if result["success"] else 1
         return 0
-    except (ValueError, OSError, KeyError, TypeError, ET.ParseError, subprocess.SubprocessError, zipfile.BadZipFile) as failure:
+    except (ValueError, OSError, KeyError, TypeError, ET.ParseError, subprocess.SubprocessError, zipfile.BadZipFile, tarfile.TarError) as failure:
         print(f"Release payload qualification failed: {failure}", file=sys.stderr)
         return 1
 

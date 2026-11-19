@@ -76,6 +76,16 @@ interface CanvasRepository {
      */
     suspend fun saveCanvas(projectId: Long): String?
 
+    /**
+     * Saves and returns metadata from that exact committed snapshot. [onSaved] runs after its
+     * document and previews are durable, while other saves are excluded, so metadata publication
+     * cannot be reordered behind a later save. It must not recursively start another save.
+     */
+    suspend fun saveCanvasSnapshot(
+        projectId: Long,
+        onSaved: suspend (SavedCanvas) -> Unit = {},
+    ): SavedCanvas?
+
     /** Writes the rolling autosave without touching the saved document. */
     suspend fun autosave(projectId: Long)
 

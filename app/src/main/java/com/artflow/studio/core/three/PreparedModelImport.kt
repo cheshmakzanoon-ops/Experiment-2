@@ -34,7 +34,7 @@ class PreparedModelImport private constructor(
                 require(defaultSize in 1..CanvasOperations.MAX_DIMENSION) { "Invalid default model texture size" }
                 require(memoryBudgetBytes > 0) { "Invalid model import memory budget" }
                 val budget = minOf(memoryBudgetBytes, ImportMemoryBudget.currentBytes())
-                ObjParser.parse(contents.objText)
+                ObjParser.parse(contents.objText, budget)
                 if (contents.scalarMaps != null) {
                     scalar(contents, decode, maxSize, budget)
                 } else {

@@ -9,10 +9,14 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.local.StorageFileTree
+import com.artflow.studio.data.local.dao.ProjectDao
 import com.artflow.studio.data.local.database.ArtFlowDatabase
+import com.artflow.studio.data.local.entity.ProjectEntity
 import com.artflow.studio.data.repository.ProjectRepositoryImpl
 import com.artflow.studio.data.repository.canvas.CanvasRepositoryImpl
 import com.artflow.studio.domain.model.Project
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -190,6 +194,87 @@ class ProjectDuplicationTest {
             assertEquals("Renamed", projects.getProjectById(id)!!.name)
             assertEquals("saved artwork", file.readText())
             assertEquals(1, projects.getAllProjects().first().size)
+        }
+
+    @Test
+    fun renameChangesOnlyTheNameAndNeverMovesModificationTimeBackward() =
+        runBlocking {
+            val id = create()
+            val latest =
+                projects.getProjectById(id)!!.copy(
+                    width = 64,
+                    height = 48,
+                    dpi = 300,
+                    layerCount = 3,
+                    thumbnailPath = "new-thumbnail.png",
+                    isFavorite = true,
+                    stack = "Finished",
+                    modifiedAt = 50,
+                )
+            projects.saveProject(latest)
+            projects.renameProject(id, "Renamed", 20)
+            assertEquals(latest.copy(name = "Renamed"), projects.getProjectById(id))
+        }
+
+    @Test
+    fun savedMetadataPreservesTheLatestGalleryOrganizationAndIdentity() =
+        runBlocking {
+            val id = create()
+            val stale = projects.getProjectById(id)!!
+            projects.renameProject(id, "Artist's new name", 50)
+            projects.toggleFavorite(id, true)
+            projects.setStack(listOf(id), "Finished")
+            val latest = projects.getProjectById(id)!!
+            val saved = stale.copy(width = 64, height = 48, dpi = 300, layerCount = 3, thumbnailPath = "saved.png", modifiedAt = 20)
+            val actual = projects.updateSavedArtwork(saved)
+            val expected = latest.copy(width = 64, height = 48, dpi = 300, layerCount = 3, thumbnailPath = "saved.png")
+            assertEquals(expected, actual)
+            assertEquals(expected, projects.getProjectById(id))
+        }
+
+    @Test
+    fun aRenameQueuedDuringASaveCannotBeOverwrittenByTheSaveTransaction() =
+        runBlocking {
+            val id = create()
+            val stale = projects.getProjectById(id)!!
+            val entered = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            val delegate = database.projectDao()
+            val pausedDao =
+                object : ProjectDao by delegate {
+                    override suspend fun getProjectById(projectId: Long): ProjectEntity? {
+                        val current = delegate.getProjectById(projectId)
+                        entered.complete(Unit)
+                        release.await()
+                        return current
+                    }
+                }
+            val saving = ProjectRepositoryImpl(pausedDao, storage, database)
+            val save = async(Dispatchers.Default) { saving.updateSavedArtwork(stale.copy(thumbnailPath = "saved.png", modifiedAt = 10)) }
+            entered.await()
+            val rename = async(start = CoroutineStart.UNDISPATCHED) { projects.renameProject(id, "Renamed concurrently", 20) }
+            release.complete(Unit)
+            save.await()
+            rename.await()
+            assertEquals(
+                stale.copy(name = "Renamed concurrently", thumbnailPath = "saved.png", modifiedAt = 20),
+                projects.getProjectById(id),
+            )
+        }
+
+    @Test
+    fun delayedMetadataOperationsCannotRecreateADeletedArtworkOrChangeItsFiles() =
+        runBlocking {
+            val id = create()
+            val stale = projects.getProjectById(id)!!
+            val marker = File(storage.projectDir(id), "preserve.bin").apply { writeText("retained recovery") }
+            projects.deleteProjectById(id)
+            val rename = runCatching { projects.renameProject(id, "Too late", 20) }.exceptionOrNull()
+            val save = runCatching { projects.updateSavedArtwork(stale.copy(thumbnailPath = "too-late.png")) }.exceptionOrNull()
+            assertEquals("This artwork no longer exists", rename?.message)
+            assertEquals("This artwork no longer exists", save?.message)
+            assertTrue(projects.getAllProjects().first().isEmpty())
+            assertEquals("retained recovery", marker.readText())
         }
 
     @Test

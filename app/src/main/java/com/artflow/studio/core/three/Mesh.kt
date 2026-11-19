@@ -25,13 +25,24 @@ class Mesh(
 object ObjParser {
     const val MAX_TRIANGLES = 300_000
 
-    fun parse(text: String): Mesh {
+    fun parse(text: String): Mesh = parse(text, ModelReadBudget())
+
+    internal fun parse(
+        text: String,
+        memoryBudgetBytes: Long,
+    ): Mesh = parse(text, ModelReadBudget(memoryBudgetBytes))
+
+    private fun parse(
+        text: String,
+        budget: ModelReadBudget,
+    ): Mesh {
+        ObjGeometryBudget.check(text, budget)
         val positions = ArrayList<Float>()
         val uvs = ArrayList<Float>()
         val normals = ArrayList<Float>()
         val corners = ArrayList<IntArray>()
         text.lineSequence().forEach { raw ->
-            val parts = raw.trim().split(WHITESPACE)
+            val parts = raw.substringBefore('#').trim().split(WHITESPACE)
             when (parts.firstOrNull()) {
                 "v" -> {
                     parts.drop(1).take(3).forEach { positions += number(it) }
@@ -78,8 +89,8 @@ object ObjParser {
             outUvs[index * 2 + 1] = uvs[t * 2 + 1]
             if (n >= 0) for (axis in 0 until 3) outNormals[index * 3 + axis] = normals[n * 3 + axis]
         }
-        if (corners.any { it[2] < 0 }) faceNormals(outPositions, outNormals)
         normalise(outPositions)
+        if (corners.any { it[2] < 0 }) faceNormals(outPositions, outNormals)
         return Mesh(outPositions, outNormals, outUvs)
     }
 
@@ -135,16 +146,16 @@ object ObjParser {
             min[i % 3] = minOf(min[i % 3], positions[i])
             max[i % 3] = maxOf(max[i % 3], positions[i])
         }
-        val centre = FloatArray(3) { (min[it] + max[it]) / 2f }
-        var radius = 0f
+        val centre = DoubleArray(3) { (min[it].toDouble() + max[it].toDouble()) / 2 }
+        var radius = 0.0
         for (i in positions.indices step 3) {
             val dx = positions[i] - centre[0]
             val dy = positions[i + 1] - centre[1]
             val dz = positions[i + 2] - centre[2]
             radius = max(radius, sqrt(dx * dx + dy * dy + dz * dz))
         }
-        val scale = if (radius > 0f) 1f / radius else 1f
-        for (i in positions.indices) positions[i] = (positions[i] - centre[i % 3]) * scale
+        val scale = if (radius > 0.0) 1.0 / radius else 1.0
+        for (i in positions.indices) positions[i] = ((positions[i] - centre[i % 3]) * scale).toFloat()
     }
 
     private val WHITESPACE = Regex("\\s+")

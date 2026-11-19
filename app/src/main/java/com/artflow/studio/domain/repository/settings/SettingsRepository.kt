@@ -81,7 +81,14 @@ interface SettingsRepository {
 
     suspend fun clearRecentColors()
 
+    /** Adds a separate palette, choosing an unused identity if the requested id already exists. */
     suspend fun addPalette(palette: Palette)
+
+    /** Creates and optionally moves the new palette to the front in the same durable update. */
+    suspend fun addPalette(
+        palette: Palette,
+        makeDefault: Boolean,
+    )
 
     suspend fun removePalette(paletteId: Long)
 
