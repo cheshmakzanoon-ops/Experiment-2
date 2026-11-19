@@ -1,20 +1,21 @@
-# Photo and model import admission and ownership
+# Photo, model and PSD source import admission and ownership
 
 ## Preparation boundary
 
-`ImportPreparation.withAdmission` permits one synchronous photo or model preparation at a time. It uses a nonblocking, reentrant admission: another worker receives an actionable retry error immediately, while nested texture decoders on the admitted worker can proceed. Its callback is non-inline and non-suspending, and admission is released in `finally` on success, ordinary errors, cancellation exceptions, or VM errors.
+`ImportPreparation.withAdmission` permits one synchronous photo/model preparation or PSD source read at a time. It uses a nonblocking, reentrant admission: another worker receives an actionable retry error immediately, while nested texture decoders on the admitted worker can proceed. Its callback is non-inline and non-suspending, and admission is released in `finally` on success, ordinary errors, cancellation exceptions, or VM errors.
 
 The admission covers:
 
 - Photo file and URI preparation in `BitmapPixelBridge`, beginning before opening the source and growing its encoded snapshot, through metadata inspection, bitmap decoding, pixel copying, and orientation correction.
 - Known model imports in `GalleryImports.readModel`, beginning before opening the source, through reading, package parsing, texture preparation, atlas construction, and size validation.
 - Direct `PreparedModelImport.prepare` callers and nested `BitmapPixelBridge.decodeModelTexture` calls. Direct callers remain responsible for bytes they allocated before calling these functions.
+- PSD source reads in `PsdImportSource`, called by the gallery and canvas picker before opening their full provider stream. This bounds encoded source growth and copying; PSD parsing and layer decoding retain their separate budgets. See [PSD source admission](psd-source-admission.md) for the later low-heap regression and caller evidence.
 
 Photo and model preparation refresh the current memory budget after admission. A model's initial encoded read is limited to the smaller of 64 MiB and one quarter of the current import budget, allowing space for stream-buffer growth and its returned copy before metadata exists. The model's existing texture estimates still check all retained sources, decoder copies, atlas/resampling work, and installation copies.
 
-A provider that never returns retains the single preparation admission. New photo/model attempts fail promptly instead of accumulating blocked jobs or additional snapshots. Document loading, saved-raster decoding, painting, and saving do not use this admission. Existing `fromEncodedBytes` artwork decoding keeps its exact dimensions.
+A provider that never returns retains the single preparation admission. New photo/model preparations and PSD source reads fail promptly instead of accumulating blocked jobs or additional snapshots. Document loading, saved-raster decoding, painting, and saving do not use this admission. Existing `fromEncodedBytes` artwork decoding keeps its exact dimensions.
 
-This boundary does not guarantee that the entire process cannot run out of memory. Native decoder allocations and unrelated application work can exceed Java-heap estimates. PSD/Procreate preparation and unclassified archive inspection have their own boundaries. Model archive expansion and geometry/parser allocations need their separate limits; the preparation admission serializes that work for known model imports but does not itself estimate its peak.
+This boundary does not guarantee that the entire process cannot run out of memory. Native decoder allocations and unrelated application work can exceed Java-heap estimates. PSD decoding, Procreate preparation and unclassified archive inspection have their own boundaries. Model archive expansion and geometry/parser allocations need their separate limits; the preparation admission serializes that work for known model imports but does not itself estimate its peak.
 
 ## Model handoff lifetime
 

@@ -73,6 +73,45 @@ production readiness. Source/build receipts are workflow observations, not remot
 attestation or proof of a reproducible build. Publisher-artifact, installed-upgrade,
 physical-device and other release gates remain separate.
 
+## Retained Settings-driver regression
+
+The first attempt in [run 44563685734](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44563685734)
+failed before artwork creation while finding **Stylus only**. The branch head was
+`628466ec0727c56317c8e4094a493f68dcf13e96`; the actual PR checkout recorded by the
+driver was `10b5a7b5ccb164dba841a630af261c1e09467425`. That attempt remains a failure.
+Its 30,005,120-byte artifact, `release-payload-ui-api-36-44563685734-attempt-1`
+(artifact ID `14550459363`), was downloaded and its SHA-256 independently matched
+the provider digest `c5e7aff108b012ca3e7e3677de2580bcc75c575ed327cb7fe0f215ac9cff6424`.
+
+The driver required label text and `checkable=true` on the same accessibility node.
+The retained Settings hierarchy exposes each visible switch as a checkable parent
+row with its label in a separate child TextView. The final capture is back at the
+top of Settings after the unsuccessful bounded scroll search. The common Settings
+`SwitchRow` also renders **Stylus only** and **Autosave** using this structure.
+
+The repair scrolls to the exact visible label, resolves its nearest checkable
+ancestor inside the visible application tree, and requires a unique enabled,
+clickable control. Multiple distinct matching controls fail; duplicate label nodes
+in one control resolve to the same control. After at most one click, the driver
+resolves the current control again and verifies its checked state within the
+unchanged deadline. Directly labeled export switches are supported by the same
+resolver. No coordinates, hidden app state, additional test attempts, or increased
+deadlines are introduced.
+
+The original hierarchy SHA-256 is
+`d310523ee74e6303d0123c154ca66adc54b41b16d8593aa643a3c867889f1d6d`;
+the original failure PNG SHA-256 is
+`54fccf3542b3aa4843ac655a33e527e05db0b683701f3662e972966ccd0d8f34`.
+The regression fixture at
+`.github/scripts/fixtures/release-ui/settings-checkable-rows.xml` retains the three
+visible switch-row subtrees without changing their attributes or descendants.
+Its wrapper is reduced to the scroll container. The host regression compiles and
+executes the same Java resolver used by the Android driver against those rows and
+tests direct descriptions, duplicate labels, ambiguous controls, unrelated siblings,
+package boundaries, hidden labels, and missing labels. These host checks establish
+the selection repair; the full ordinary-release workflow still requires a fresh
+passing attempt on the final source revision.
+
 For a clean checkout and a fresh local disposable emulator:
 
 ```bash

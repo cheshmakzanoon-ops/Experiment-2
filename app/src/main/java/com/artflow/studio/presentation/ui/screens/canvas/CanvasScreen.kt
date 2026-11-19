@@ -53,7 +53,7 @@ import com.artflow.studio.core.canvas.ShortcutAction
 import com.artflow.studio.core.color.CmykProof
 import com.artflow.studio.core.color.ColorProfile
 import com.artflow.studio.core.color.ViewFilter
-import com.artflow.studio.core.export.readAtMost
+import com.artflow.studio.core.export.PsdImportSource
 import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.LiveAdjustments
 import com.artflow.studio.core.pixels.PixelBuffer
@@ -411,7 +411,7 @@ fun CanvasScreen(
                 request?.cancel()
             } else {
                 request?.complete {
-                    context.contentResolver.openInputStream(uri)?.use { it.readAtMost(MAX_PSD_IMPORT_BYTES) }
+                    PsdImportSource.read { context.contentResolver.openInputStream(uri) }
                 }
             }
         }
@@ -662,12 +662,10 @@ fun CanvasScreen(
                     onSavePalette = viewModel.paletteActions::addFromColors,
                     sources = PaletteSources(paletteImports.fromFile, paletteImports.fromPhoto, paletteImports.fromCamera),
                     palettesEdit =
-                        PaletteEdits(
-                            viewModel.paletteActions::remove,
-                            viewModel.paletteActions::update,
-                            paletteImports.share,
-                            viewModel.paletteActions::toggleDefault,
-                            settings.defaultPaletteName,
+                        PaletteEdits.from(
+                            actions = viewModel.paletteActions,
+                            onShare = paletteImports.share,
+                            defaultName = settings.defaultPaletteName,
                         ),
                     secondary = SecondarySwatch(input.secondaryColor, viewModel::swapColors),
                 )
@@ -2048,8 +2046,6 @@ private fun toolHint(tool: ToolType): String =
             "Drag on the canvas to use this tool."
         }
     }
-
-private const val MAX_PSD_IMPORT_BYTES = 256L * 1024 * 1024
 
 /** After a ColorDrop, slide to fill more or less of the area, as with Procreate's drop threshold. */
 @Composable

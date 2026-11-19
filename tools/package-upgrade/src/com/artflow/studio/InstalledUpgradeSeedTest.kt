@@ -185,9 +185,15 @@ class InstalledUpgradeSeedTest {
             .performClick()
             .assertIsOff()
         toggle("Autosave").performScrollTo().assertIsOn()
+        // Both historical sliders share the autosave label's semantic siblings. The retained
+        // UI exposes this exact range only on the autosave interval, not the interface scale.
+        val autosaveRange =
+            SemanticsMatcher("historical autosave interval range 5000..300000 ms") {
+                it.config.getOrNull(SemanticsProperties.ProgressBarRangeInfo)?.range == 5_000f..300_000f
+            }
         compose
             .onNode(
-                SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress) and hasAnySibling(hasText("Autosave every", substring = true)),
+                SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress) and autosaveRange,
                 useUnmergedTree = true,
             ).performScrollTo()
             .performSemanticsAction(SemanticsActions.SetProgress) { it(5_000f) }
@@ -246,7 +252,10 @@ class InstalledUpgradeSeedTest {
     private fun saveBrushThroughUi() {
         compose.onNodeWithContentDescription("Paint").performClick()
         compose.onNodeWithText("Brush studio").assertIsDisplayed()
-        compose.onNodeWithText("Save a copy").performScrollTo().performClick()
+        // This historical button is in the fixed toolbar, outside every scrollable layout.
+        val saveCopy = hasText("Save a copy") and hasClickAction() and isEnabled()
+        compose.waitUntil(TIMEOUT) { compose.onAllNodes(saveCopy).fetchSemanticsNodes().size == 1 }
+        compose.onNode(saveCopy).assertIsDisplayed().performClick()
         compose.onNodeWithText("Brush name").performTextInput(BRUSH_NAME)
         compose.onNodeWithText("Save copy").performClick()
         compose.waitUntil(
@@ -263,7 +272,23 @@ class InstalledUpgradeSeedTest {
     private fun awaitCanvas(scenario: ActivityScenario<MainActivity>) {
         compose.waitUntil(TIMEOUT) {
             var ready = false
-            scenario.onActivity { ready = findCanvas(it.window.decorView)?.let { view -> view.width > 0 && view.height > 0 } == true }
+            scenario.onActivity { activity ->
+                ready =
+                    findCanvas(activity.window.decorView)?.let { view ->
+                        // The pinned view has no preview-ready signal; its first fit is posted
+                        // after layout. Observe the real transform before either seeded stroke.
+                        val center = view.viewToCanvas(view.width * 0.5f, view.height * 0.5f)
+                        val firstPoint = view.viewToCanvas(view.width * 0.43f, view.height * 0.5f)
+                        val lastPoint = view.viewToCanvas(view.width * 0.62f + 6f, view.height * 0.5f)
+                        view.width > 0 &&
+                            view.height > 0 &&
+                            view.isShown &&
+                            view.holder.surface.isValid &&
+                            abs(center.first - 32f) < 0.01f &&
+                            abs(center.second - 32f) < 0.01f &&
+                            listOf(firstPoint, lastPoint).all { (x, y) -> x in 0f..63f && y in 0f..63f }
+                    } == true
+            }
             ready
         }
         compose.waitForIdle()
@@ -275,6 +300,7 @@ class InstalledUpgradeSeedTest {
         scenario: ActivityScenario<MainActivity>,
         fraction: Float,
     ) {
+        awaitCanvas(scenario)
         scenario.onActivity {
             val view = requireNotNull(findCanvas(it.window.decorView))
             val down = SystemClock.uptimeMillis()

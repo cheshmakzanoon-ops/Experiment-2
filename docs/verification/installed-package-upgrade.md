@@ -99,6 +99,19 @@ The required workflow conclusion checks both the installed-v1 flag and increasin
 Failed initial attempts and all partial evidence are retained; a new attempt requires a new output
 and fresh disposable emulator.
 
+Historical seed selectors use the pinned application's actual semantics. The retained settings
+tree showed both the interface-scale and autosave sliders sharing the autosave label's semantic
+siblings, so sibling text alone was ambiguous. The driver selects the autosave slider's exact
+5,000–300,000 ms range, performs its real `SetProgress` action, and still waits for the persisted
+5,000 ms setting. The saved-brush button is in a fixed toolbar; the driver waits for its enabled,
+visible state and clicks it without requesting a nonexistent scrollable ancestor. The pinned view
+has no preview-ready signal, so before either stroke the driver observes its real coordinate
+transform and valid surface: the document center must be (32, 32), and both intended stroke paths
+must fall within the 64 × 64 artwork. The remaining selectors match the pinned UI, including the
+initially empty artwork and saved-brush name fields. These are test-overlay repairs only. They do
+not modify historical production source or turn a retained failed campaign into a passing one;
+a new complete runtime campaign remains required.
+
 ## Required artifacts and device
 
 Supply all of the following before `prepare` can install anything:

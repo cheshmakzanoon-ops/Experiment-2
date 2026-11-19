@@ -44,8 +44,8 @@ record subsequent integrated checks; final exact-revision acceptance remains a s
 | 16 | Independent data integrity review; independent optimized-build review; independent CI gate review | Implemented/reviewed; focused regressions passed, integrated execution pending |
 | 17 | Final source safety review; final test adequacy review; release decision review | Implemented/reviewed; 105 import/library and 19 harness cases passed |
 | 18 | Palette identity and legacy upgrade; Android 15 acceptance; Android 16/tablet and release acceptance | Repairs and independent evidence reviews complete; new-source Android execution pending |
-| 19 | Regression follow-through; artifact/evidence cross-check; documentation cross-check | Documentation complete; regression and artifact reviews in progress |
-| 20 | Final data safety acceptance; final engineering acceptance; final release-status acceptance | Planned |
+| 19 | Regression follow-through; artifact/evidence cross-check; documentation cross-check | All three complete; active palette callback and source-receipt regressions repaired |
+| 20 | Final data safety acceptance; final engineering acceptance; final release-status acceptance | All three complete; PSD source admission and ordinary-release driver repaired; exact-source runtime gates pending |
 
 ## Findings to close
 
@@ -521,5 +521,87 @@ Update this record with completed wave assignments, fixes, test outcomes, and re
   invocations and 16 documented option sets. Added the omitted ordinary-release UI scope to the
   evidence introduction and replaced an unnamed pending-upgrade checkpoint with the final-source
   acceptance requirement. No unexecuted pass or additional release gate was introduced.
-- `w19_artifact_crosscheck` and `w19_regression_followthrough` are in progress. Their final
-  findings and the three wave-20 handoffs must be recorded before claiming all 60 assignments.
+- `w19_artifact_crosscheck`: reproduced acceptance of unchanged optimized runtime evidence under
+  a different caller-supplied revision. Verification now requires the workflow's retained prebuild
+  `REVISION.txt` and hashes that receipt in the report. Two new missing/mismatched-receipt cases
+  retain the existing positive acceptance case. This checks receipt consistency; it does not
+  authenticate externally supplied evidence or establish a reproducible publisher build.
+- `w19_regression_followthrough`: traced the actual shipped `ColorPanel` callback, which still
+  sent stale whole-palette replacements after the wave-18 helper/store repair. Three before-fix
+  failures reproduced lost rapid additions, stale removal overwrites and absent deleted-palette
+  feedback. The panel now sends operations through a shared `PaletteEdits.from` binding; the
+  settings mutex reads the latest palette and rejects a stale positional selection. All 78
+  focused JVM cases passed, including four new cases. An actual Compose/Room gesture and snackbar
+  test compiled with the complete CanvasScreen and final PSD changes; device execution remains
+  required. The debug inventory is now 321 identities; the optimized inventory remains 43.
+
+### Wave 20
+
+- `w20_final_data_safety`: reproduced source-buffer exhaustion before PSD parser admission in
+  both actual import entry points. With a generated 96 MiB source and a 64 MiB heap, the original
+  helper failed with `OutOfMemoryError` after 16,842,752 bytes. The new admitted reader reserved
+  workspace and source-copy capacity, then refused after 5,330,262 bytes with a readable error,
+  closed stream and no OOM cause; a 1,024-byte control remained byte-exact. An actual gallery
+  regression also proves occupied admission prevents the full provider open and project creation.
+  All 42 focused cases passed; the repeated eight-case low-heap subset is not an additional count.
+  Caller compilation and unchanged-baseline ktlint/detekt passed. The remaining inspected save,
+  recovery, storage, handoff and deletion paths produced no further demonstrated blocker. See
+  [PSD source admission](../verification/psd-source-admission.md) for the concrete limits.
+- `w20_final_engineering`: independently investigated the optimized build's unresolved Guava
+  33.8.0-android and OkHttp 4.12.1 coordinates. All 12 POM/module/JAR requests from the two
+  official Maven hosts succeeded, and fresh artifact bytes matched the existing local cache.
+  The parallel Android build also resolved the same dependencies. The original CI log lacks an
+  HTTP status, so no definite network/cache root cause is claimed. One explicit unchanged-source
+  job rerun was requested; the failed first attempt stays retained. No version downgrade, source
+  workaround, baseline expansion or test-gate removal was made.
+- `w20_final_release_disposition`: diagnosed the actual ordinary-release Settings failure from
+  its retained accessibility hierarchy. The driver incorrectly required label text and checkable
+  state on one node; Compose exposes the label below its checkable row. It now resolves the
+  nearest visible application ancestor, requires one enabled/clickable control, clicks at most
+  once and verifies the current checked state within the unchanged 15-second deadline. Eight
+  retained-hierarchy regressions and all 23 release-evidence verifier cases passed; all four
+  driver Java sources compiled against the actual Android dependencies. All pixel, process-death,
+  URI-grant, identity and single-attempt checks remain. See
+  [ordinary-release evidence](../verification/release-payload-ui.md).
+
+### Integration and release disposition after the 60 assignments
+
+All 20 waves and their three assignments are complete. Completion records implementation and
+scoped review, not unconditional release certification. Existing assignments continue any actual
+runtime failure follow-through; this does not add a twenty-first wave or replace required gates.
+
+- Frozen `3ceb1af` passed integrated Gradle validation in 6m09s: 2,001 JVM cases in 323 suites,
+  1,999 passed, no failures/errors and two external-corpus skips. Debug instrumentation and the
+  ordinary-release driver APKs built, and full ktlint/detekt passed without baseline changes.
+  Host discovery executed 499 cases: 494 passed and the five separately required Gradle fixtures
+  were explicit opt-in skips. Official publisher-tool fixtures were required and executed.
+- The wave-18 remote checkpoint's build passed 1,988 JVM cases with no failures/errors/skips,
+  including the fetched external corpora. Its retained source archive reconstructed the declared
+  `10b5a7b5ccb164dba841a630af261c1e09467425` checkout tree. This does not qualify newer changes.
+- Optimized Actions 44563685630 attempt 2 built successfully and executed all 43 identities:
+  42 passed, one failed and none skipped. The failed Drawing pad interaction left Library selected;
+  the retained trace overlaps keyboard dismissal. The test now observes the actual dialog's IME
+  and layout readiness, checks preset/tab selection, and requires a practice stroke before its
+  unchanged artwork-isolation assertions. This is a targeted readiness repair, not proof of the
+  hypothesized platform race, and its next actual execution remains required.
+- That same screenshot exposed a separate narrow-screen defect: the saved-brush count was
+  squeezed beside three actions and wrapped into a thin vertical column. The count now has its
+  own line and whole action buttons can wrap. A new actual-toolbar regression covers the 296 dp
+  dialog interior at three font scales, minimum/contained touch targets and Save/Share dialogs.
+  Labels, fonts and callbacks remain unchanged. The resulting debug inventory is 322 cases;
+  the selected optimized inventory remains 43. Device screenshots must establish the result.
+- Installed-upgrade Actions 44563685594 progressed past the corrected external-directory setup
+  and failed when its historical autosave selector also matched the font-size slider. The retained
+  tree proves the original two matches and the corrected exact-range match. The test-only overlay
+  also removes an invalid scroll request on a fixed toolbar and observes the historical canvas's
+  actual transform before input. All UI writes and persisted artwork/recovery checks remain;
+  the pinned historical production source is unchanged. The failed campaign stays failed.
+
+The final frozen main revision still requires the repeated Android workflow and primary API35 /
+16KB executions specified in [release signoff](RELEASE_SIGNOFF.md), plus all 43 optimized cases,
+the ordinary-release UI workflow and an actual installed historical-app upgrade. Their final
+run identities and outcomes belong in the PR/release acceptance record so recording a result
+does not silently change the source revision being qualified. Physical stylus/performance,
+approved publisher signing and store delivery remain external gates. Public rollout remains
+**NO-GO** until those required records exist; emulator and disposable signing fixtures cannot
+stand in for them.

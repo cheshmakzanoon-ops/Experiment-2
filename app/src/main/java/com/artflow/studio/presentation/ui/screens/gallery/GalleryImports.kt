@@ -11,6 +11,7 @@ import com.artflow.studio.core.color.ProcreateSwatches
 import com.artflow.studio.core.export.FileKind
 import com.artflow.studio.core.export.FileKinds
 import com.artflow.studio.core.export.PsdCodec
+import com.artflow.studio.core.export.PsdImportSource
 import com.artflow.studio.core.export.readAtMost
 import com.artflow.studio.core.pixels.ImportMemoryBudget
 import com.artflow.studio.core.pixels.ImportPreparation
@@ -127,10 +128,7 @@ internal class GalleryImports(
             runCatching {
                 val (bytes, document) =
                     withContext(Dispatchers.IO) {
-                        val bytes =
-                            requireNotNull(context.contentResolver.openInputStream(uri)?.use { it.readAtMost(MAX_PSD_BYTES) }) {
-                                "That PSD could not be opened (maximum 256 MB)"
-                            }
+                        val bytes = PsdImportSource.read { context.contentResolver.openInputStream(uri) }
                         val metadata = requireNotNull(PsdCodec.inspect(bytes)) { "That file is not a supported Photoshop document" }
                         require(metadata.requiredMemoryBytes <= PsdCodec.defaultReadBudgetBytes()) {
                             "This PSD needs too much memory. Reduce its dimensions or layers in the source application."
@@ -394,7 +392,6 @@ internal class GalleryImports(
     private companion object {
         const val HEAD_BYTES = 64
         const val MAX_NAME = 40
-        const val MAX_PSD_BYTES = 256L * 1024 * 1024
         const val MAX_MODEL_BYTES = 64L * 1024 * 1024
         const val MODEL_TEXTURE = 2048
         const val MAX_MODEL_TEXTURE = 4096

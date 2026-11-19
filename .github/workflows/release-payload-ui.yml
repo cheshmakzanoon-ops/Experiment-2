@@ -49,6 +49,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m unittest discover -s .github/scripts -p 'test_release_payload_ui.py'
+          python -m unittest discover -s .github/scripts -p 'test_visible_ui_toggle.py'
           python .github/scripts/release_payload_ui.py record-source \
             --output "${RUNNER_TEMP}/artflow-release-payload-ui"
 

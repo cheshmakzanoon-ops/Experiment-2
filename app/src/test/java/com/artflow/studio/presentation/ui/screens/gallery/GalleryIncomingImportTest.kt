@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.lifecycle.viewModelScope
 import com.artflow.studio.R
 import com.artflow.studio.core.export.PsdCodec
+import com.artflow.studio.core.pixels.ImportPreparation
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.data.export.PendingImports
 import com.artflow.studio.presentation.ui.viewmodel.MainViewModel
@@ -32,9 +33,13 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.times
+import org.mockito.Mockito.verify
+import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.Mockito.`when`
 import java.io.ByteArrayInputStream
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -112,6 +117,39 @@ class GalleryIncomingImportTest {
                 PendingImports.discardProject(PROJECT_ID)
                 fixture.viewModel.viewModelScope.cancel()
                 Dispatchers.resetMain()
+            }
+        }
+
+    @Test
+    fun aBusyImportRejectsThePsdBeforeOpeningItsFullSourceOrCreatingAnArtwork() =
+        runTest {
+            val fixture = Fixture(this)
+            val uri = fixture.uri("queued.psd", "8BPS".toByteArray())
+            val entered = CountDownLatch(1)
+            val release = CountDownLatch(1)
+            val worker = Executors.newSingleThreadExecutor()
+            val admitted =
+                worker.submit {
+                    ImportPreparation.withAdmission {
+                        entered.countDown()
+                        check(release.await(5, TimeUnit.SECONDS))
+                    }
+                }
+            try {
+                assertTrue(entered.await(5, TimeUnit.SECONDS))
+                assertFalse(fixture.imports().open(uri))
+                // Classification reads its small header; PSD admission must precede a second provider open.
+                verify(fixture.resolver, times(1)).openInputStream(uri)
+                verifyNoInteractions(fixture.viewModel)
+                assertEquals(1, fixture.messages.size)
+                assertTrue(fixture.messages.single().contains("try again"))
+            } finally {
+                release.countDown()
+                try {
+                    admitted.get(5, TimeUnit.SECONDS)
+                } finally {
+                    worker.shutdownNow()
+                }
             }
         }
 

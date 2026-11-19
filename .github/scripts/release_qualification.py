@@ -339,6 +339,13 @@ def verify(project: Path, output: Path, revision: str) -> dict:
         except (OSError, ValueError, KeyError, TypeError, ET.ParseError) as error:
             problems.append(f"{name}: {error}")
 
+    def source_revision():
+        path = output / "REVISION.txt"
+        record = file_record(path)
+        if path.read_text(encoding="ascii").strip() != revision:
+            raise ValueError("Requested revision differs from the retained prebuild source revision")
+        return {"revision": revision, "receipt": record}
+
     def attempt():
         token = (output / "attempt-token.txt").read_text().strip()
         if not TOKEN_PATTERN.fullmatch(token):
@@ -357,6 +364,10 @@ def verify(project: Path, output: Path, revision: str) -> dict:
             raise ValueError("Executed class inventory does not match the exact source revision")
         return expected
 
+    # The workflow records HEAD before building. A caller cannot relabel unchanged runtime
+    # evidence by supplying a different valid SHA to this verifier. This is receipt consistency,
+    # not source-to-binary reproduction or authentication of externally supplied evidence.
+    check("sourceRevision", source_revision)
     check("attemptToken", attempt)
     check("instrumentationLog", lambda: file_record(output / "first-attempt-instrumentation.log"))
     check("expectedTests", inventory)

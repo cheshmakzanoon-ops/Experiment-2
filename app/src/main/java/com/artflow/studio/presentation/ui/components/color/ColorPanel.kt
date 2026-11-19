@@ -333,17 +333,6 @@ data class PaletteSources(
     val fromCamera: (() -> Unit)? = null,
 )
 
-/** Removing a custom palette, and saving one after a swatch is added or removed. */
-data class PaletteEdits(
-    val onRemove: (Long) -> Unit,
-    val onEdit: (Palette) -> Unit,
-    val onShare: (Palette) -> Unit = {},
-    /** Makes a palette (by name) the default shown under the pickers, or clears it when it already is. */
-    val onToggleDefault: (String) -> Unit = {},
-    /** The current default palette's name; empty for none. */
-    val defaultName: String = "",
-)
-
 /** Procreate's secondary colour swatch: its colour, and swapping it with the primary. */
 data class SecondarySwatch(
     val color: Int,
@@ -429,6 +418,7 @@ private fun PaletteList(
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         itemsIndexed(palette.colors) { index, entry ->
                             val closest = ColorHarmony.distance(entry, currentColor) < 24f
+                            val description = stringResource(R.string.palettes_swatch, ColorHarmony.toHex(entry))
                             Box(
                                 modifier =
                                     Modifier
@@ -438,9 +428,9 @@ private fun PaletteList(
                                         // In your own palettes, touch and hold a swatch to remove it.
                                         .combinedClickable(
                                             onClick = { onColorSelected(entry) },
-                                            onLongClick = if (editable) ({ edits.onEdit(palette.withoutColor(index)) }) else null,
+                                            onLongClick = if (editable) ({ edits.onRemoveColor(palette, index) }) else null,
                                             onLongClickLabel = if (editable) "Remove colour" else null,
-                                        ),
+                                        ).semantics { contentDescription = description },
                             )
                         }
                         if (editable) {
@@ -452,7 +442,7 @@ private fun PaletteList(
                                             .size(32.dp)
                                             .clip(RoundedCornerShape(6.dp))
                                             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(6.dp))
-                                            .clickable { edits.onEdit(palette.withColor(currentColor)) }
+                                            .clickable { edits.onAddColor(palette.id, currentColor) }
                                             .semantics { contentDescription = "Add the current colour to ${palette.name}" },
                                     contentAlignment = Alignment.Center,
                                 ) { Text("+", style = MaterialTheme.typography.titleMedium) }

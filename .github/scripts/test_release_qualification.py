@@ -22,6 +22,7 @@ class ReleaseQualificationTest(unittest.TestCase):
         self.project = Path(self.temporary.name)
         self.output = self.project / "qualification"
         self.output.mkdir()
+        (self.output / "REVISION.txt").write_text(REVISION + "\n")
         self.evidence = self.project / EVIDENCE / "connected/device/test-evidence"
         self.evidence.mkdir(parents=True)
         source = self.project / "app/src/androidTest/java"
@@ -165,6 +166,11 @@ class ReleaseQualificationTest(unittest.TestCase):
     def test_accepts_complete_first_attempt_with_identical_installed_apks(self):
         report = self.report()
         self.assertTrue(report["passed"], report["problems"])
+        self.assertEqual(REVISION, report["sourceRevision"]["revision"])
+        self.assertEqual(
+            hashlib.sha256((REVISION + "\n").encode("ascii")).hexdigest(),
+            report["sourceRevision"]["receipt"]["sha256"],
+        )
         self.assertEqual(len(CLASSES), report["counts"]["passed"])
         self.assertEqual(set(APK_PATHS), set(report["installedApks"]["packages"]))
         self.assertIn("resources.txt", report["build"]["r8AndResourceShrinker"])
@@ -173,6 +179,20 @@ class ReleaseQualificationTest(unittest.TestCase):
         self.assertEqual(6, report["build"]["testAbi"]["fixtures"]["tests"])
         self.assertEqual(1, report["build"]["testAbi"]["keptMethods"])
         self.assertEqual(2, report["build"]["testAbi"]["reflectionFields"])
+
+    def test_missing_prebuild_revision_receipt_cannot_qualify(self):
+        (self.output / "REVISION.txt").unlink()
+        self.assert_rejected("sourceRevision:")
+
+    def test_retained_evidence_cannot_be_relabelled_with_another_revision(self):
+        self.assertTrue(self.report()["passed"])
+        report = verify(self.project, self.output, "b" * 40)
+        self.assertFalse(report["passed"], report)
+        self.assertIn(
+            "sourceRevision: Requested revision differs from the retained prebuild source revision",
+            report["problems"],
+        )
+        self.assertEqual(REVISION + "\n", (self.output / "REVISION.txt").read_text())
 
     def test_missing_test_cannot_pass(self):
         self.results.remove(self.results[0])

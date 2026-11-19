@@ -14,7 +14,12 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.core.app.ActivityScenario
+import androidx.test.espresso.Espresso.onView
+import androidx.test.espresso.matcher.RootMatchers.isDialog
+import androidx.test.espresso.matcher.ViewMatchers
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.domain.model.settings.ThemeMode
@@ -146,10 +151,18 @@ class ArtworkWorkflowTest {
         // As in Procreate, tapping the active Smudge tool again opens the brush library.
         compose.onNodeWithContentDescription("Smudge").performClick()
         compose.onNodeWithText("Brush studio").assertIsDisplayed()
-        compose.onNodeWithText("Search brushes").performTextInput("fine liner")
-        compose.onNodeWithText("Fine liner").performClick()
-        compose.onNodeWithText("Drawing pad").performClick()
-        compose.onNodeWithTag("brush-practice-pad").performTouchInput { swipeLeft() }
+        selectFineLiner()
+        TestEvidence.screenshot("artwork-workflow-brush-studio-ready.png")
+        compose
+            .onNodeWithText("Drawing pad")
+            .assertIsDisplayed()
+            .performClick()
+            .assertIsSelected()
+        compose
+            .onNodeWithTag("brush-practice-pad")
+            .assertIsDisplayed()
+            .performTouchInput { swipeLeft() }
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "1 test strokes; not part of artwork"))
         assertArrayEquals("Practice must never paint the real document", expectedPixels, pixels())
         assertEquals(depth, runBlocking(Dispatchers.Main) { canvas.undoDepth })
         compose.onNodeWithContentDescription("Cancel brush changes").performClick()
@@ -157,12 +170,31 @@ class ArtworkWorkflowTest {
         assertArrayEquals(expectedPixels, pixels())
         assertEquals(depth, runBlocking(Dispatchers.Main) { canvas.undoDepth })
         compose.onNodeWithContentDescription("Smudge").performClick()
-        compose.onNodeWithText("Search brushes").performTextInput("fine liner")
-        compose.onNodeWithText("Fine liner").performClick()
-        compose.onNodeWithText("Use brush").performClick()
+        selectFineLiner()
+        compose.onNodeWithText("Use brush").assertIsDisplayed().performClick()
         compose.onNodeWithContentDescription("Paint").assertIsOn()
         assertArrayEquals(expectedPixels, pixels())
         assertEquals(depth, runBlocking(Dispatchers.Main) { canvas.undoDepth })
+    }
+
+    private fun selectFineLiner() {
+        compose.onNodeWithText("Search brushes").performTextInput("fine liner")
+        compose.onNode(hasText("Fine liner") and hasClickAction()).performClick().assertIsSelected()
+        compose.onNodeWithText("Search brushes").assertIsNotFocused()
+        // Selecting a preset dismisses the IME and repositions this Dialog on small phones.
+        // Compose idleness alone does not wait for that platform window transition: an immediate
+        // tab tap can use its old position and hit the search field instead. Keep the real click,
+        // but require the Dialog's own insets and layout to be ready before choosing the next tab.
+        awaitOrReport("Brush Studio did not finish dismissing the search keyboard") {
+            var ready = false
+            onView(ViewMatchers.isRoot()).inRoot(isDialog()).check { view, failure ->
+                failure?.let { throw it }
+                val insets = ViewCompat.getRootWindowInsets(view)
+                ready = insets != null && !insets.isVisible(WindowInsetsCompat.Type.ime()) && !view.isLayoutRequested
+            }
+            ready
+        }
+        compose.waitForIdle()
     }
 
     private fun inspectReachablePanels(

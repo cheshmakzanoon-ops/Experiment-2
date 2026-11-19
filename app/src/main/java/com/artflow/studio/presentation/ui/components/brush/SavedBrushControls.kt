@@ -5,7 +5,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -17,6 +16,7 @@ import com.artflow.studio.domain.model.brush.BrushLibraryCodec
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.SavedBrush
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SavedBrushToolbar(
     parameters: BrushParams,
@@ -27,12 +27,14 @@ fun SavedBrushToolbar(
     val state = controls.state
     val available = !state.loading && !state.busy && state.error == null
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                if (state.loading) "Loading saved brushes…" else "${state.brushes.size} saved brushes",
-                style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.weight(1f),
-            )
+        // The count needs its own line: three actions leave only a few pixels for a weighted
+        // label on a 320 dp phone. Wrap whole buttons when the user increases the font size.
+        Text(
+            if (state.loading) "Loading saved brushes…" else "${state.brushes.size} saved brushes",
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        FlowRow(Modifier.fillMaxWidth()) {
             TextButton(
                 onClick = { naming = true },
                 enabled = available && state.brushes.size < BrushLibraryCodec.MAX_BRUSHES,

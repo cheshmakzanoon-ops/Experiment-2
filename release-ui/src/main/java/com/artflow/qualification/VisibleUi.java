@@ -56,13 +56,27 @@ final class VisibleUi {
     }
 
     void toggle(String label, boolean desired, boolean description) {
-        UiObject2 node = scroll(description ? By.pkg(APP).desc(label) : By.pkg(APP).textContains(label).checkable(true));
-        if (!node.isCheckable()) throw new AssertionError("Control is not toggleable: " + label);
+        BySelector labeled = description ? By.pkg(APP).desc(label) : By.pkg(APP).text(label);
+        scroll(labeled);
+        UiObject2 node = toggleTarget(labeled);
+        if (node == null || !node.isEnabled() || !node.isClickable()) {
+            throw new AssertionError("No enabled, uniquely labeled toggle: " + label);
+        }
         if (node.isChecked() != desired) node.click();
-        if (!device.wait(Until.hasObject((description ? By.pkg(APP).desc(label)
-                : By.pkg(APP).textContains(label)).checked(desired)), TIMEOUT)) {
+        if (!device.wait(ignored -> {
+            UiObject2 current = toggleTarget(labeled);
+            return current != null && current.isEnabled() && current.isChecked() == desired;
+        }, TIMEOUT)) {
             throw new AssertionError("Toggle did not become " + desired + ": " + label);
         }
+    }
+
+    private UiObject2 toggleTarget(BySelector labeled) {
+        // Compose can expose the label as a TextView child of the checkable row.
+        // Walk only its visible application ancestors; never choose an unrelated switch.
+        return AccessibleToggle.resolve(device.findObjects(labeled), UiObject2::getParent,
+                node -> APP.equals(node.getApplicationPackage()) && !node.getVisibleBounds().isEmpty(),
+                UiObject2::isCheckable);
     }
 
     void field(String label, String value) {

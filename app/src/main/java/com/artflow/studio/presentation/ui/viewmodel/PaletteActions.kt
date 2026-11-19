@@ -30,7 +30,45 @@ class PaletteActions(
         }
     }
 
-    /** Replaces a custom palette with its edited version. */
+    /** Adds to the latest stored swatches, even when the panel has not recomposed yet. */
+    fun addColor(
+        paletteId: Long,
+        color: Int,
+    ) {
+        edit(paletteId) { it.withColor(color) }
+    }
+
+    /** A position is safe to remove only while it still identifies the displayed swatch. */
+    fun removeColor(
+        displayed: Palette,
+        index: Int,
+    ) {
+        val expectedColors = displayed.colors.toList()
+        edit(displayed.id) { latest ->
+            check(latest.colors == expectedColors && index in expectedColors.indices) {
+                "This palette changed. Please select the swatch again."
+            }
+            latest.withoutColor(index)
+        }
+    }
+
+    private fun edit(
+        paletteId: Long,
+        transform: (Palette) -> Palette,
+    ) {
+        scope.launch(errors) {
+            settingsRepository.update { settings ->
+                val latest =
+                    checkNotNull(settings.customPalettes.singleOrNull { it.id == paletteId && it.category == "Custom" }) {
+                        "This palette is no longer available. Please choose a palette again."
+                    }
+                val edited = transform(latest)
+                settings.copy(customPalettes = settings.customPalettes.map { if (it === latest) edited else it })
+            }
+        }
+    }
+
+    /** Explicit whole-palette replacement; incremental panel edits use [addColor] and [removeColor]. */
     fun update(palette: Palette) {
         scope.launch(errors) {
             settingsRepository.update { settings ->
