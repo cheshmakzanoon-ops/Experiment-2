@@ -2,12 +2,13 @@ package com.artflow.studio.data.renderer.gpu
 
 /**
  * Factory for creating the graphics rendering backend.
- * Uses the production-validated OpenGL ES 3.x renderer as the primary shipping backend,
- * with software fallback for tests and an experimental preview option for Vulkan development.
+ * Uses the OpenGL ES 2.0 backend as the primary shipping configuration,
+ * [SoftwareRenderBackend] for software-only fallback/tests, and an experimental preview option
+ * for Vulkan development on non-emulator hardware.
  */
 object RenderBackendFactory {
     fun createBackend(
-        preferredType: RenderBackendType = RenderBackendType.GLES3,
+        preferredType: RenderBackendType = RenderBackendType.GLES2,
         isEmulator: Boolean = false,
         supportsVulkan: Boolean = false,
     ): IRenderBackend =
@@ -16,7 +17,7 @@ object RenderBackendFactory {
                 VulkanRenderBackend()
             }
             preferredType == RenderBackendType.SOFTWARE -> {
-                GlesRenderBackend()
+                SoftwareRenderBackend()
             }
             else -> {
                 GlesRenderBackend()

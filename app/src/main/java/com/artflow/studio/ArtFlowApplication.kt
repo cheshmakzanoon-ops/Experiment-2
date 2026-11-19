@@ -1,6 +1,7 @@
 package com.artflow.studio
 
 import android.app.Application
+import com.artflow.studio.data.local.FontLibrary
 import com.artflow.studio.data.local.GrainStorage
 import dagger.hilt.android.HiltAndroidApp
 import timber.log.Timber
@@ -18,6 +19,8 @@ class ArtFlowApplication : Application() {
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
         }
+
+        FontLibrary.configure(filesDir)
 
         // Imported brush grains are small; load them off the main thread before the first stroke.
         thread(name = "grain-loader", isDaemon = true) { GrainStorage.loadAll(GrainStorage.directory(filesDir)) }

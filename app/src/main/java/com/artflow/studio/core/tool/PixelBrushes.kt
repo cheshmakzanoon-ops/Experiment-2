@@ -584,9 +584,8 @@ object PixelBrushes {
             val angle = (i / samples.toFloat()) * 2f * Math.PI.toFloat()
             val candidateX = x + kotlin.math.cos(angle) * distance
             val candidateY = y + kotlin.math.sin(angle) * distance
-            if (candidateX < 0 || candidateY < 0 || candidateX >= target.width || candidateY >= target.height) {
-                continue
-            }
+            if (candidateX < 0f || candidateX >= target.width) continue
+            if (candidateY < 0f || candidateY >= target.height) continue
             val candidate = meanRegion(target, candidateX, candidateY, radius)
             val score = colorDistance(candidate, surrounding)
             if (score < bestScore) {

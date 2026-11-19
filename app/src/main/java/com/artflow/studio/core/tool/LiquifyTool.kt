@@ -68,7 +68,7 @@ object LiquifyTool {
             dx: Float,
             dy: Float,
         ) {
-            if (x < 0 || y < 0 || x >= width || y >= height) return
+            if (x !in 0 until width || y !in 0 until height) return
             if (!dx.isFinite() || !dy.isFinite()) return
             if (dx == 0f && dy == 0f) return
             val index = y * width + x

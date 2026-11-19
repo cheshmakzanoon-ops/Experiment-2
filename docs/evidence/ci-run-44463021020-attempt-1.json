@@ -1,0 +1,424 @@
+{
+  "schemaVersion": 1,
+  "documentType": "summary_of_retained_workflow_artifacts",
+  "scope": "Attempt 1 only. This summary identifies retained artifacts and their findings; it does not replace the complete logs, XML, source archive, or APK provenance records.",
+  "repository": "cheshmakzanoon-ops/Experiment-2",
+  "source": {
+    "headSha": "384095da6b0feec12736fa54fe7d245777e1c37e",
+    "headUrl": "https://github.com/cheshmakzanoon-ops/Experiment-2/commit/384095da6b0feec12736fa54fe7d245777e1c37e",
+    "testedPrMergeSha": "2b857405a05dcefa19cc8f6c43102ae55668f5a9",
+    "testedSourceUrl": "https://github.com/cheshmakzanoon-ops/Experiment-2/tree/2b857405a05dcefa19cc8f6c43102ae55668f5a9",
+    "pullRequestUrl": "https://github.com/cheshmakzanoon-ops/Experiment-2/pull/40"
+  },
+  "workflow": {
+    "id": 44463021020,
+    "attempt": 1,
+    "url": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44463021020",
+    "attemptUrl": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44463021020/attempts/1",
+    "event": "pull_request",
+    "conclusion": "failure",
+    "createdAt": "2026-11-19T05:07:58Z",
+    "updatedAt": "2026-11-19T05:56:02Z",
+    "jobsPassed": 7,
+    "jobsFailed": 1,
+    "requiredDeviceLanes": 7,
+    "successfulDeviceLanes": 6,
+    "acceptedCompleteMatrix": false
+  },
+  "build": {
+    "jobId": 135354090452,
+    "jobUrl": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44463021020/job/135354090452",
+    "conclusion": "success",
+    "gates": {
+      "Run JVM unit tests and compile instrumentation": "success",
+      "Static analysis": "success",
+      "Assemble debug APK": "success",
+      "Assemble release bundle": "success",
+      "Check packaged artifact integrity and native alignment": "success",
+      "Verify production builds reject missing signing inputs": "success"
+    },
+    "jvm": {
+      "suites": 292,
+      "tests": 1751,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "instrumentationSourceIdentities": 283,
+    "ktlintErrors": 0,
+    "detektErrors": 0,
+    "lint": {
+      "lint-results-debug.xml": {
+        "Warning": 154,
+        "Hint": 5
+      },
+      "lint-results-release.xml": {
+        "Warning": 152,
+        "Hint": 5
+      }
+    },
+    "verificationArtifactId": 14501147860
+  },
+  "artifactDigestSource": "All 11 original attempt-one ZIPs were downloaded and their byte sizes and SHA-256 digests verified against GitHub artifact metadata before the manual rerun. The four build ZIPs were independently rechecked while preparing this summary.",
+  "artifactUrlTemplate": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44463021020/artifacts/{artifactId}",
+  "artifacts": [
+    {
+      "id": 14500298447,
+      "name": "artflow-source",
+      "jobId": 135354090452,
+      "sha256": "4458cfa4d045a2294949cf5686118f291d1ea767fd4386d52f90f7d71c4a0add",
+      "sizeBytes": 2281737,
+      "downloadDigestVerification": "verified_against_downloaded_archive"
+    },
+    {
+      "id": 14501147860,
+      "name": "verification-reports",
+      "jobId": 135354090452,
+      "sha256": "84b4052d40870180ad4b23538e2ce89839d942d323861333df70cbd1b5246013",
+      "sizeBytes": 871865,
+      "downloadDigestVerification": "verified_in_supplied_summary"
+    },
+    {
+      "id": 14501567166,
+      "name": "room-schemas",
+      "jobId": 135354090452,
+      "sha256": "b76694f5df00666d4546fae4da1e900322d52a5eb2fe48236521168f422bd577",
+      "sizeBytes": 2349,
+      "downloadDigestVerification": "verified_against_downloaded_archive"
+    },
+    {
+      "id": 14501667504,
+      "name": "device-test-results-api-35",
+      "jobId": 135359821087,
+      "sha256": "bd901c414954c943d4192bfaa93b491fad1fa9caec752418342a730b0ff35d99",
+      "sizeBytes": 1762033,
+      "downloadDigestVerification": "verified_in_supplied_summary"
+    },
+    {
+      "id": 14502312468,
+      "name": "device-test-results-api-35-standard-4k",
+      "jobId": 135359821134,
+      "sha256": "460f1e51c117bf1181b5fdc4063199cf9b7b8a0d9ed514d6d4d47c9bc16c8f1e",
+      "sizeBytes": 10508198,
+      "downloadDigestVerification": "verified_in_supplied_summary"
+    },
+    {
+      "id": 14502360127,
+      "name": "artflow-builds-unverified",
+      "jobId": 135354090452,
+      "sha256": "efa26c50f0d664b053400fd5b74f073d3923283797c47f078bbeed4f37d9a107",
+      "sizeBytes": 34715768,
+      "downloadDigestVerification": "verified_against_downloaded_archive"
+    },
+    {
+      "id": 14502506649,
+      "name": "device-test-results-api-36-16k",
+      "jobId": 135359821189,
+      "sha256": "28ca5b039879163dd5a437dc51886dce25e99cc31e87478797067b744eebf165",
+      "sizeBytes": 9050600,
+      "downloadDigestVerification": "verified_in_supplied_summary"
+    },
+    {
+      "id": 14502681337,
+      "name": "device-test-results-api-26",
+      "jobId": 135359821106,
+      "sha256": "6753f68a8105ac21a0e4994f402db9d6be90c38fd2a654aad893340728866831",
+      "sizeBytes": 3550450,
+      "downloadDigestVerification": "verified_in_supplied_summary"
+    },
+    {
+      "id": 14502826222,
+      "name": "device-test-results-api-36",
+      "jobId": 135359821140,
+      "sha256": "3c32cc87ef0bee9e481929436100403f588766521a88d548bb27dafd49384008",
+      "sizeBytes": 8564337,
+      "downloadDigestVerification": "verified_in_supplied_summary"
+    },
+    {
+      "id": 14502917349,
+      "name": "device-test-results-api-35-16k-repeat",
+      "jobId": 135359821184,
+      "sha256": "c8560ce7a147b44b2b4a781fa3ff48b869ac3eb3ce5123b71b3bb73b3011deab",
+      "sizeBytes": 11871979,
+      "downloadDigestVerification": "verified_in_supplied_summary"
+    },
+    {
+      "id": 14503270556,
+      "name": "device-test-results-api-36-tablet",
+      "jobId": 135359821112,
+      "sha256": "b46d140fe90ab4aa9e167713f83066d1ec4830f2d2bd9ce42e15183cb2897dc0",
+      "sizeBytes": 11802343,
+      "downloadDigestVerification": "verified_in_supplied_summary"
+    }
+  ],
+  "deviceLanes": [
+    {
+      "lane": "api26",
+      "jobId": 135359821106,
+      "jobUrl": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44463021020/job/135359821106",
+      "jobLogSha256": "951535aecc8443c53cceaf2ced6cb83d8e20e6e4c43f024dca46176bc974de91",
+      "conclusion": "success",
+      "artifactId": 14502681337,
+      "expectedSourceIdentities": 283,
+      "recordedXmlIdentities": 283,
+      "missingIdentities": 0,
+      "testCases": {
+        "passed": 281,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 2
+      },
+      "connectedTestInvocations": 1,
+      "internalFrameworkRecoveries": 0,
+      "runtime": {
+        "sdk": "26",
+        "abis": "x86_64, x86",
+        "pageSize": "4096",
+        "fingerprint": "Android/sdk_gphone_x86_64/generic_x86_64:8.0.0/OSR1.180418.026/6741039:userdebug/dev-keys"
+      },
+      "pageSizeCheck": "passed",
+      "minifiedLaunch": "passed",
+      "installedAppAndTestMatchBuiltApks": true,
+      "allowedSkips": [
+        {
+          "test": "com.artflow.studio.CanvasInputDeviceTest#cancelledPointerFlagsRejectPalmWithoutRejectingPen",
+          "reason": "Android reports FLAG_CANCELED from API 33"
+        },
+        {
+          "test": "com.artflow.studio.data.ExportDeviceTest#galleryPublishesPngAsImageAndMp4AsVideo",
+          "reason": "Scoped MediaStore publication requires API 29"
+        }
+      ]
+    },
+    {
+      "lane": "api35-4kb",
+      "jobId": 135359821134,
+      "jobUrl": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44463021020/job/135359821134",
+      "jobLogSha256": "41b77f0eeb1f3f82a9a7d74db74a36dc66ed122a4b78ba4e653ab78f79d141e6",
+      "conclusion": "success",
+      "artifactId": 14502312468,
+      "expectedSourceIdentities": 283,
+      "recordedXmlIdentities": 283,
+      "missingIdentities": 0,
+      "testCases": {
+        "passed": 283,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "connectedTestInvocations": 1,
+      "internalFrameworkRecoveries": 0,
+      "runtime": {
+        "sdk": "35",
+        "abis": "x86_64, arm64-v8a",
+        "pageSize": "4096",
+        "fingerprint": "google/sdk_gphone64_x86_64/emu64xa:15/AE3A.240806.043/12960925:userdebug/dev-keys"
+      },
+      "pageSizeCheck": "passed",
+      "minifiedLaunch": "passed",
+      "installedAppAndTestMatchBuiltApks": true
+    },
+    {
+      "lane": "api35-16kb",
+      "jobId": 135359821087,
+      "jobUrl": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44463021020/job/135359821087",
+      "jobLogSha256": "fc8c4ec1573f9cea4b21f86044aa8eb63835e98111a832417536266a7e7a4081",
+      "conclusion": "failure",
+      "artifactId": 14501667504,
+      "expectedSourceIdentities": 283,
+      "recordedXmlIdentities": 0,
+      "missingIdentities": 283,
+      "testCases": {
+        "passed": 0,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "connectedTestInvocations": 1,
+      "internalFrameworkRecoveries": 0,
+      "runtime": null,
+      "pageSizeCheck": "not_measured",
+      "minifiedLaunch": "not_reached",
+      "installedAppAndTestMatchBuiltApks": null
+    },
+    {
+      "lane": "api35-16kb-repeat",
+      "jobId": 135359821184,
+      "jobUrl": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44463021020/job/135359821184",
+      "jobLogSha256": "5b5702aae624e854b06ff56dfb7a27f06a36e0badbc8ed9ee626f0beafbdec10",
+      "conclusion": "success",
+      "artifactId": 14502917349,
+      "expectedSourceIdentities": 283,
+      "recordedXmlIdentities": 283,
+      "missingIdentities": 0,
+      "testCases": {
+        "passed": 283,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "connectedTestInvocations": 1,
+      "internalFrameworkRecoveries": 0,
+      "runtime": {
+        "sdk": "35",
+        "abis": "x86_64, arm64-v8a",
+        "pageSize": "16384",
+        "fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys"
+      },
+      "pageSizeCheck": "passed",
+      "minifiedLaunch": "passed",
+      "installedAppAndTestMatchBuiltApks": true
+    },
+    {
+      "lane": "api36-phone",
+      "jobId": 135359821140,
+      "jobUrl": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44463021020/job/135359821140",
+      "jobLogSha256": "c31687705f84accfdcb3915d205b46894938af2582ab78659d1f2f7a7dc50448",
+      "conclusion": "success",
+      "artifactId": 14502826222,
+      "expectedSourceIdentities": 283,
+      "recordedXmlIdentities": 283,
+      "missingIdentities": 0,
+      "testCases": {
+        "passed": 283,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "connectedTestInvocations": 1,
+      "internalFrameworkRecoveries": 0,
+      "runtime": {
+        "sdk": "36",
+        "abis": "x86_64, arm64-v8a",
+        "pageSize": "4096",
+        "fingerprint": "google/sdk_gphone64_x86_64/emu64xa:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys"
+      },
+      "pageSizeCheck": "passed",
+      "minifiedLaunch": "passed",
+      "installedAppAndTestMatchBuiltApks": true
+    },
+    {
+      "lane": "api36-16kb",
+      "jobId": 135359821189,
+      "jobUrl": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44463021020/job/135359821189",
+      "jobLogSha256": "3c951f932b3c2f113a6be06777da3845b98c9c07c23b0fe6a79c0d60f1063345",
+      "conclusion": "success",
+      "artifactId": 14502506649,
+      "expectedSourceIdentities": 283,
+      "recordedXmlIdentities": 283,
+      "missingIdentities": 0,
+      "testCases": {
+        "passed": 283,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "connectedTestInvocations": 1,
+      "internalFrameworkRecoveries": 0,
+      "runtime": {
+        "sdk": "36",
+        "abis": "x86_64, arm64-v8a",
+        "pageSize": "16384",
+        "fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys"
+      },
+      "pageSizeCheck": "passed",
+      "minifiedLaunch": "passed",
+      "installedAppAndTestMatchBuiltApks": true
+    },
+    {
+      "lane": "api36-tablet",
+      "jobId": 135359821112,
+      "jobUrl": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44463021020/job/135359821112",
+      "jobLogSha256": "fec8ee1cc56d9b1d3838543cf6fce2f3181e5fb75da63d0b71ad504f6b560b01",
+      "conclusion": "success",
+      "artifactId": 14503270556,
+      "expectedSourceIdentities": 283,
+      "recordedXmlIdentities": 283,
+      "missingIdentities": 0,
+      "testCases": {
+        "passed": 283,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "connectedTestInvocations": 1,
+      "internalFrameworkRecoveries": 0,
+      "runtime": {
+        "sdk": "36",
+        "abis": "x86_64, arm64-v8a",
+        "pageSize": "4096",
+        "fingerprint": "google/sdk_gphone64_x86_64/emu64xa:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys"
+      },
+      "pageSizeCheck": "passed",
+      "minifiedLaunch": "passed",
+      "installedAppAndTestMatchBuiltApks": true
+    }
+  ],
+  "startupFailure": {
+    "jobId": 135359821087,
+    "artifactId": 14501667504,
+    "phase": "App APK install-create; Android package installation service failure before test runner startup",
+    "configuration": "API35 Google 16K image; disposable debug emulator; JIT disabled verified; default collector",
+    "appTestCasesExecuted": 0,
+    "runnerSnapshots": 0,
+    "installedAppApks": 0,
+    "installedTestApks": 0,
+    "measuredPageSize": null,
+    "minifiedLaunch": "not_reached",
+    "dateUtc": "2026-11-19",
+    "timeline": [
+      {
+        "utc": "05:29:04.156",
+        "event": "First cold boot sys.boot_completed=1 observed"
+      },
+      {
+        "utc": "05:29:04.376",
+        "event": "run-device-tests.sh begins runtime preparation"
+      },
+      {
+        "utc": "05:29:04.450",
+        "event": "system_server SIGSEGV in ActivityManagerService (before any app installation)"
+      },
+      {
+        "utc": "05:29:21.216",
+        "event": "JIT disable runtime configuration reports PASS after service restart"
+      },
+      {
+        "utc": "05:29:25.288",
+        "event": "system_server services.jar NoSuchFieldError WM_DEBUG_SYNC_ENGINE_enabled then ART class-resolution SIGSEGV"
+      },
+      {
+        "utc": "05:29:35.820",
+        "event": "system_server services.jar NoSuchFieldError GENERIC_PERSISTENT_PREFERRED_ACTIVITY"
+      },
+      {
+        "utc": "05:29:52.421",
+        "event": "ArtFlow app APK install-create failed: null StorageManager.getVolumes"
+      },
+      {
+        "utc": "05:29:53.309",
+        "event": ":app:connectedDebugAndroidTest fails with zero testcase records"
+      },
+      {
+        "utc": "05:29:54.404",
+        "event": "Existing classifier rejects as not a retryable framework-only crash"
+      }
+    ],
+    "conclusion": "Pre-application emulator/system failure. No DatabaseModule or application behavior exercised. Does not establish device acceptance. No change to classifier or automatic retry justified by current evidence."
+  },
+  "manualFollowUpAtRecording": {
+    "workflowAttempt": 2,
+    "onlyFreshJobId": 135372972887,
+    "jobUrl": "https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44463021020/job/135372972887",
+    "lane": "api35-16kb",
+    "statusAtRecording": "queued",
+    "verifiedResultIncluded": false,
+    "scope": "A manual repeat of one device job, not an internal framework recovery or another complete matrix. Original attempt 1 remains failed."
+  },
+  "qualificationLimits": [
+    "The original eight-job attempt failed; six passing device lanes do not waive the seventh.",
+    "No application test, measured application page size, or minified-launch acceptance exists for the original primary API35/16 KB invocation.",
+    "No test identity, failure, automatic-recovery rule, final-SHA multi-run requirement, or external release gate is waived.",
+    "These are emulator/build results; they do not establish physical-device, stylus/performance, publisher-signing, or public-store acceptance."
+  ]
+}

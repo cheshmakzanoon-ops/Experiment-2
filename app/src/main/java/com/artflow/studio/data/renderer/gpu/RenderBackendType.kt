@@ -1,24 +1,29 @@
 package com.artflow.studio.data.renderer.gpu
 
 /**
- * Supported rendering backends for ArtFlow's GPU acceleration pipeline.
+ * Rendering backend identifiers for ArtFlow's viewport and tile compositing architecture.
+ *
+ * Production viewport presentation runs on OpenGL ES 2.0 (`OpenGLCanvasRenderer`,
+ * `ArtFlowCanvasView`, `ModelView`, and manifest `glEsVersion="0x00020000"`), while raster layer
+ * compositing executes on the CPU via [VirtualTileCanvas]. The experimental C++20 sources under
+ * `app/src/main/jni` are not wired into the Gradle build.
  */
 enum class RenderBackendType {
     /**
-     * OpenGL ES 3.1 compute / 3.0 FBO instanced quad pipeline.
-     * Production shipping hardware renderer providing hardware acceleration, low-latency drawing,
-     * and reliable compatibility across physical devices and CI environments.
+     * OpenGL ES 2.0 presentation backend (`GLES20` + EGL context version 2) paired with CPU
+     * [VirtualTileCanvas] compositing across physical Android devices and CI emulators.
      */
-    GLES3,
+    GLES2,
 
     /**
-     * Experimental Vulkan 1.2+ pipeline.
-     * Non-shipping preview architecture under active development for future releases.
+     * Experimental Vulkan preview backend identifier.
+     * Non-shipping preview implementation backed by CPU [VirtualTileCanvas] compositing.
      */
     VULKAN,
 
     /**
-     * Software-based CPU fallback pipeline for testing and environments without hardware acceleration.
+     * Software CPU-only pipeline for headless tests and environments without GPU surface
+     * presentation.
      */
     SOFTWARE,
 }

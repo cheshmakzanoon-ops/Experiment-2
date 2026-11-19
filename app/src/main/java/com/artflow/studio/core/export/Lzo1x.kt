@@ -11,6 +11,7 @@ object Lzo1x {
         source: ByteArray,
         size: Int,
     ): ByteArray {
+        require(size in 0..MAX_DECODED_SIZE) { DAMAGED }
         val out = ByteArray(size)
         val written = Decoder(source, out).run()
         return if (written == size) out else out.copyOf(written)
@@ -98,13 +99,15 @@ object Lzo1x {
             var zeros = 0
             while (ip < src.size && src[ip].toInt() == 0) {
                 ip++
-                require(++zeros <= MAX_ZEROS) { DAMAGED }
+                require(++zeros <= MAX_ZEROS && zeros * 255L <= dst.size.toLong()) { DAMAGED }
             }
-            return zeros * 255 + base + byte()
+            val total = zeros.toLong() * 255L + base + byte()
+            require(total in 0L..dst.size.toLong()) { DAMAGED }
+            return total.toInt()
         }
 
         private fun literals(count: Int) {
-            require(ip + count <= src.size && op + count <= dst.size) { DAMAGED }
+            require(count >= 0 && count <= src.size - ip && count <= dst.size - op) { DAMAGED }
             System.arraycopy(src, ip, dst, op, count)
             ip += count
             op += count
@@ -116,7 +119,7 @@ object Lzo1x {
             length: Int,
         ) {
             val from = op - distance
-            require(from >= 0 && op + length <= dst.size) { DAMAGED }
+            require(distance in 1..op && length >= 0 && length <= dst.size - op) { DAMAGED }
             for (k in 0 until length) dst[op + k] = dst[from + k]
             op += length
         }
@@ -132,4 +135,5 @@ object Lzo1x {
     private const val M2_RANGE = 0x800
     private const val M4_BASE = 0x4000
     private const val MAX_ZEROS = 1 shl 20
+    private const val MAX_DECODED_SIZE = 256 * 1024 * 1024
 }

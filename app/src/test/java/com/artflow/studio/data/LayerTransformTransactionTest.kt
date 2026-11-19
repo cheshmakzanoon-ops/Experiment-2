@@ -1,7 +1,7 @@
 package com.artflow.studio.data
 
 import android.content.Context
-import com.artflow.studio.core.pixels.LayerTransform
+import com.artflow.studio.core.canvas.LayerTransform
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.data.local.ProjectStorage
@@ -112,7 +112,7 @@ class LayerTransformTransactionTest {
             assertTrue(repository.transformLayer(id, move, repository.contentRevision))
         }
 
-    @Test fun lockedLinkedAndInFlightLayersCannotBeTransformed() =
+    @Test fun lockedAndInFlightLayersCannotBeTransformed() =
         runTest {
             val id = fixture()
             repository.setLayerLock(id, true)
@@ -123,10 +123,6 @@ class LayerTransformTransactionTest {
             assertFalse(repository.transformLayer(id, move, repository.contentRevision))
             assertEquals(depth, repository.undoDepth)
             repository.cancelRasterEdit(provisional)
-            val other = repository.addLayer("Linked").id
-            assertTrue(repository.linkLayers(listOf(id, other)))
-            repository.setActiveLayer(id)
-            assertFalse(repository.transformLayer(id, move, repository.contentRevision))
         }
 
     @Test fun otherLayersAndFramesAreNotTransformed() =

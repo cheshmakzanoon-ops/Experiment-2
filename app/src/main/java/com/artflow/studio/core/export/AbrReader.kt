@@ -40,24 +40,27 @@ object AbrReader {
         val tips = mutableListOf<Tip>()
         var at = HEADER
         repeat(count) {
+            require(at + 6 <= reader.size) { DAMAGED }
             val type = reader.short(at)
             val size = reader.int(at + 2)
+            require(size in 0..reader.size - at - 6) { DAMAGED }
             val next = at + 6 + size
             if (type == SAMPLED) {
                 var p = at + 6 + 4 + 2 // misc, spacing
                 var name: String? = null
                 if (version == 2) {
                     val characters = reader.int(p)
-                    require(characters in 0..MAX_NAME) { DAMAGED }
+                    require(characters in 0..MAX_NAME && p + 4L + characters.toLong() * 2L <= next) { DAMAGED }
                     name = reader.utf16(p + 4, characters)
                     p += 4 + characters * 2
                 }
                 p += 1 + 4 * 2 // antialiasing, short bounds
+                require(p + 16L <= next) { DAMAGED }
                 val top = reader.int(p)
                 val left = reader.int(p + 4)
                 val bottom = reader.int(p + 8)
                 val right = reader.int(p + 12)
-                tips += pixels(reader, p + 16, right - left, bottom - top, name)
+                tips += pixels(reader, p + 16, right.toLong() - left, bottom.toLong() - top, name)
             }
             at = next
         }
@@ -96,15 +99,20 @@ object AbrReader {
         while (at + 4 <= end && found.size < MAX_TIPS) {
             val size = reader.int(at)
             require(size in 0..end - at - 4) { DAMAGED }
-            val next = at + 4 + size + (4 - size % 4) % 4
+            val padded = size.toLong() + (4 - size % 4) % 4
+            val nextLong = at.toLong() + 4L + padded
+            require(nextLong <= end.toLong()) { DAMAGED }
+            val next = nextLong.toInt()
             val keyLength = reader.byte(at + 4)
             val key = reader.ascii(at + 5, keyLength)
-            val p = at + 4 + if (subversion == 1) V6_KEY_SHORT else V6_KEY_LONG
+            val pLong = at.toLong() + 4L + if (subversion == 1) V6_KEY_SHORT else V6_KEY_LONG
+            require(pLong + 16L <= nextLong) { DAMAGED }
+            val p = pLong.toInt()
             val top = reader.int(p)
             val left = reader.int(p + 4)
             val bottom = reader.int(p + 8)
             val right = reader.int(p + 12)
-            found += normalised(key) to pixels(reader, p + 16, right - left, bottom - top, null)
+            found += normalised(key) to pixels(reader, p + 16, right.toLong() - left, bottom.toLong() - top, null)
             at = next
         }
         return found
@@ -114,12 +122,15 @@ object AbrReader {
     private fun pixels(
         reader: Reader,
         start: Int,
-        width: Int,
-        height: Int,
+        widthLong: Long,
+        heightLong: Long,
         name: String?,
     ): Tip {
-        require(width in 1..MAX_SIDE && height in 1..MAX_SIDE) { "A brush tip has an unexpected size" }
+        require(widthLong in 1L..MAX_SIDE.toLong() && heightLong in 1L..MAX_SIDE.toLong()) { "A brush tip has an unexpected size" }
+        val width = widthLong.toInt()
+        val height = heightLong.toInt()
         reader.spend(width, height)
+        require(start >= 0 && start.toLong() + 3L <= reader.size) { DAMAGED }
         val depth = reader.short(start)
         require(depth == 8 || depth == 16) { "A brush tip has an unsupported depth" }
         val bytesPerSample = depth / 8
@@ -139,9 +150,13 @@ object AbrReader {
         rowBytes: Int,
         out: ByteArray,
     ) {
-        var at = start + rows * 2
+        val headerEndLong = start.toLong() + rows.toLong() * 2L
+        require(start >= 0 && headerEndLong <= reader.size) { DAMAGED }
+        var at = headerEndLong.toInt()
         for (row in 0 until rows) {
-            val end = at + reader.short(start + row * 2)
+            val rowLength = reader.short(start + row * 2)
+            require(rowLength <= reader.size - at) { DAMAGED }
+            val end = at + rowLength
             var d = row * rowBytes
             val rowEnd = d + rowBytes
             while (at < end) {
@@ -149,12 +164,13 @@ object AbrReader {
                 when {
                     n == -128 -> Unit
                     n < 0 -> {
+                        require(at < end) { DAMAGED }
                         val value = reader.byte(at++).toByte()
-                        require(d + 1 - n <= rowEnd) { DAMAGED }
+                        require(1 - n <= rowEnd - d) { DAMAGED }
                         repeat(1 - n) { out[d++] = value }
                     }
                     else -> {
-                        require(d + n + 1 <= rowEnd) { DAMAGED }
+                        require(n + 1 <= end - at && n + 1 <= rowEnd - d) { DAMAGED }
                         repeat(n + 1) { out[d++] = reader.byte(at++).toByte() }
                     }
                 }
@@ -239,9 +255,9 @@ object AbrReader {
 
         /** A descriptor's Unicode string: a character count, then UTF-16; null when it does not fit. */
         fun unicode(at: Int): String? {
-            if (at + 4 > size) return null
+            if (at.toLong() + 4L > size) return null
             val characters = int(at)
-            if (characters !in 0..MAX_NAME || at + 4 + characters * 2 > size) return null
+            if (characters !in 0..MAX_NAME || at.toLong() + 4L + characters.toLong() * 2L > size) return null
             return utf16(at + 4, characters).trim().takeIf { it.isNotEmpty() }
         }
 

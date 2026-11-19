@@ -18,15 +18,19 @@ import com.artflow.studio.data.export.ArtflowPackage
 import com.artflow.studio.data.export.ModelImports
 import com.artflow.studio.data.export.PendingImports
 import com.artflow.studio.data.export.ProcreateImport
+import com.artflow.studio.data.export.StagedImport
 import com.artflow.studio.data.local.BrushArchives
 import com.artflow.studio.data.local.BrushImports
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.brush.SavedBrush
 import com.artflow.studio.presentation.ui.viewmodel.MainViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import timber.log.Timber
+import java.io.File
 
 /**
  * Brings files into the gallery: pictures, Photoshop, Procreate and ArtFlow documents and 3D models become new
@@ -60,7 +64,8 @@ internal class GalleryImports(
                 FileKind.PROCREATE_DOCUMENT -> procreate(uri)
                 FileKind.ARTFLOW_ARTWORK -> artwork(uri)
                 FileKind.MODEL -> model(uri)
-                FileKind.BRUSH_FILE, FileKind.PALETTE_FILE, FileKind.ZIP -> smallFile(uri, kind, name)
+                FileKind.BRUSH_FILE, FileKind.PALETTE_FILE -> smallFile(uri, kind, name)
+                FileKind.ZIP -> archive(uri, name)
                 FileKind.UNKNOWN -> say(context.getString(R.string.incoming_file_unknown))
             }
         }
@@ -146,20 +151,57 @@ internal class GalleryImports(
     /** Opens an `.artflow` file as a new artwork with all its layers, frames and settings. */
     fun artwork(uri: Uri) {
         scope.launch {
-            val bytes =
-                withContext(Dispatchers.IO) {
-                    runCatching {
-                        context.contentResolver.openInputStream(uri)?.use { input ->
-                            input.readAtMost(MAX_PACKAGE_BYTES)
-                        }
-                    }.getOrNull()
-                }
-            if (bytes == null) {
-                say(context.getString(R.string.galleryscreen_file_could_not_be_read))
-                return@launch
-            }
-            viewModel.importPackage(bytes) { id -> scope.launch { openArtwork(id) } }
+            stagedArchive(uri) { file -> importArtwork(file) }
         }
+    }
+
+    /** Unlabelled ZIPs are classified on disk before the small-file parsers may allocate their payloads. */
+    private suspend fun archive(
+        uri: Uri,
+        name: String?,
+    ) {
+        stagedArchive(uri) { file ->
+            if (withContext(Dispatchers.IO) { ArtflowPackage.isPackageFile(file) }) {
+                importArtwork(file)
+            } else {
+                val bytes =
+                    withContext(Dispatchers.IO) {
+                        requireNotNull(file.inputStream().use { it.readAtMost(BrushImports.MAX_BYTES.toLong()) }) {
+                            "This brush, palette or model archive is too large to import"
+                        }
+                    }
+                when (withContext(Dispatchers.IO) { zipKind(bytes) }) {
+                    FileKind.BRUSH_FILE -> brushes(bytes)
+                    FileKind.PALETTE_FILE -> palette(bytes, name?.substringBeforeLast('.'))
+                    FileKind.MODEL -> model(uri)
+                    else -> say(context.getString(R.string.incoming_file_unknown))
+                }
+            }
+        }
+    }
+
+    private suspend fun stagedArchive(
+        uri: Uri,
+        consume: suspend (File) -> Unit,
+    ) {
+        val failure =
+            runCatching {
+                StagedImport.use(context.cacheDir, { context.contentResolver.openInputStream(uri) }, consume = consume)
+            }.exceptionOrNull() ?: return
+        // This UI boundary reports storage/provider failures, but cancellation and VM errors must propagate.
+        if (failure is CancellationException) throw failure
+        if (failure is Error) throw failure
+        if (failure is IllegalArgumentException || failure is IllegalStateException) {
+            say(failure.message ?: context.getString(R.string.galleryscreen_file_could_not_be_read))
+        } else {
+            Timber.e(failure, "Gallery archive import failed")
+            say(context.getString(R.string.galleryscreen_file_could_not_be_read))
+        }
+    }
+
+    private suspend fun importArtwork(file: File) {
+        val result = viewModel.importPackageFile(file)
+        openArtwork(result.projectId)
     }
 
     /** Opens a 3D model (OBJ, glTF, USD, or a zip with the model, its materials and textures) as an artwork that is its texture. */
@@ -187,7 +229,7 @@ internal class GalleryImports(
             .also(ModelImports::requireSupportedSize)
     }
 
-    /** Brush, palette and unlabelled zip files are small enough to read whole. */
+    /** Brush and palette payloads have their own small-file limits. Artwork ZIPs never enter this path. */
     private suspend fun smallFile(
         uri: Uri,
         kind: FileKind,
@@ -205,12 +247,9 @@ internal class GalleryImports(
             say(context.getString(R.string.incoming_file_unreadable))
             return
         }
-        val resolved = if (kind == FileKind.ZIP) withContext(Dispatchers.IO) { zipKind(bytes) } else kind
-        when (resolved) {
+        when (kind) {
             FileKind.BRUSH_FILE -> brushes(bytes)
             FileKind.PALETTE_FILE -> palette(bytes, name?.substringBeforeLast('.'))
-            FileKind.ARTFLOW_ARTWORK -> viewModel.importPackage(bytes) { id -> scope.launch { openArtwork(id) } }
-            FileKind.MODEL -> model(uri)
             else -> say(context.getString(R.string.incoming_file_unknown))
         }
     }
@@ -221,7 +260,6 @@ internal class GalleryImports(
             ProcreateSwatches.read(bytes).isNotEmpty() -> FileKind.PALETTE_FILE
             runCatching { BrushArchives.read(bytes, BitmapPixelBridge::fromEncodedBytes).isNotEmpty() }.getOrDefault(false) ->
                 FileKind.BRUSH_FILE
-            runCatching { ArtflowPackage.read(bytes) }.isSuccess -> FileKind.ARTFLOW_ARTWORK
             runCatching { ObjParser.parse(ModelPackage.read(bytes).objText) }.isSuccess -> FileKind.MODEL
             else -> FileKind.UNKNOWN
         }
@@ -276,7 +314,6 @@ internal class GalleryImports(
     private companion object {
         const val HEAD_BYTES = 64
         const val MAX_NAME = 40
-        const val MAX_PACKAGE_BYTES = 512L * 1024 * 1024
         const val MAX_PSD_BYTES = 256L * 1024 * 1024
         const val MAX_MODEL_BYTES = 64L * 1024 * 1024
         const val MODEL_TEXTURE = 2048

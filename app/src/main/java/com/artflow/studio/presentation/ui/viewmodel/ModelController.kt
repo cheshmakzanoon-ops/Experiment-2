@@ -146,7 +146,7 @@ class ModelController(
                 stroke = repository.beginStroke(x, y, pressure, current.params, current.layerId)
                 if (stroke == 0L) {
                     rejected = true
-                    notify("Choose an unlocked, visible layer to paint the model")
+                    notify(repository.editRejectionReason ?: "Choose an unlocked, visible layer to paint the model")
                 } else {
                     segments += Segment(stroke, requireNotNull(repository.activeStroke(stroke)).points.first())
                     onPreviewChanged(true)

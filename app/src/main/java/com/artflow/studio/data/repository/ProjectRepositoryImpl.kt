@@ -3,6 +3,7 @@ package com.artflow.studio.data.repository
 import androidx.room.withTransaction
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.data.export.ArtflowPackage
+import com.artflow.studio.data.local.GrainStorage
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.local.dao.ProjectDao
 import com.artflow.studio.data.local.database.ArtFlowDatabase
@@ -126,11 +127,82 @@ class ProjectRepositoryImpl
             }
         }
 
+        override suspend fun importPackageFile(file: java.io.File): ProjectRepository.ImportedPackage =
+            withContext(Dispatchers.IO) {
+                // Open and close in one scope: dispatcher cancellation must not orphan an open ZipFile.
+                ArtflowPackage.openFile(file).use { stream ->
+                    val document = storage.decodePackagedDocument(stream.readBytes(ArtflowPackage.DOCUMENT))
+                    insertImportedPackage(
+                        name = stream.name,
+                        width = document.width,
+                        height = document.height,
+                        dpi = document.dpi,
+                        layerCount = document.layers.size,
+                        stream = stream,
+                    )
+                }
+            }
+
+        private suspend fun insertImportedPackage(
+            name: String,
+            width: Int,
+            height: Int,
+            dpi: Int,
+            layerCount: Int,
+            stream: ArtflowPackage.StreamContents,
+        ): ProjectRepository.ImportedPackage {
+            var importedId: Long? = null
+            var completed = false
+            val grains = GrainStorage.ImportTransaction()
+            try {
+                val outcome =
+                    database.withTransaction {
+                        val now = System.currentTimeMillis()
+                        val project =
+                            Project(
+                                name = name,
+                                filePath = "",
+                                thumbnailPath = null,
+                                width = width,
+                                height = height,
+                                dpi = dpi,
+                                createdAt = now,
+                                modifiedAt = now,
+                                layerCount = layerCount,
+                            )
+                        val newId = insertNewProject(project.toEntity())
+                        check(!withContext(Dispatchers.IO) { storage.projectDirectoryExists(newId) }) {
+                            "The destination already contains project data"
+                        }
+                        importedId = newId
+                        val result = storage.importProjectStream(newId, stream, grains)
+                        projectDao.updateProject(
+                            project
+                                .copy(
+                                    id = newId,
+                                    filePath = storage.documentFile(newId).absolutePath,
+                                    thumbnailPath = storage.thumbnailPathIfExists(newId),
+                                ).toEntity(),
+                        )
+                        ProjectRepository.ImportedPackage(
+                            projectId = newId,
+                            missingFonts = result.missingFonts,
+                            missingGrains = result.missingGrains,
+                        )
+                    }
+                completed = true
+                return outcome
+            } finally {
+                finishImportedPackage(importedId, completed, grains)
+            }
+        }
+
         override suspend fun importPackage(bytes: ByteArray): Long {
             val contents = withContext(Dispatchers.Default) { ArtflowPackage.read(bytes) }
             val document = storage.decodePackagedDocument(requireNotNull(contents.files[ArtflowPackage.DOCUMENT]))
             var importedId: Long? = null
             var completed = false
+            val grains = GrainStorage.ImportTransaction()
             try {
                 val id =
                     database.withTransaction {
@@ -152,7 +224,7 @@ class ProjectRepositoryImpl
                             "The destination already contains project data"
                         }
                         importedId = newId
-                        storage.importProject(newId, contents.files)
+                        storage.importProject(newId, contents.files, grains)
                         projectDao.updateProject(
                             project
                                 .copy(
@@ -166,13 +238,23 @@ class ProjectRepositoryImpl
                 completed = true
                 return id
             } finally {
-                if (!completed) {
-                    importedId?.let { id ->
-                        withContext(NonCancellable + Dispatchers.IO) {
-                            if (projectDao.getProjectById(id) == null) storage.deleteProjectFiles(id)
-                        }
-                    }
-                }
+                finishImportedPackage(importedId, completed, grains)
+            }
+        }
+
+        private suspend fun finishImportedPackage(
+            projectId: Long?,
+            completed: Boolean,
+            grains: GrainStorage.ImportTransaction,
+        ) = withContext(NonCancellable + Dispatchers.IO) {
+            // Cancellation can arrive after Room commits. Retain assets for a committed row; if
+            // the query itself fails, leave them intact rather than guessing and breaking artwork.
+            var retain = true
+            try {
+                retain = completed || (projectId != null && projectDao.getProjectById(projectId) != null)
+                if (!retain && projectId != null) storage.deleteProjectFiles(projectId)
+            } finally {
+                if (retain) grains.commit() else grains.close()
             }
         }
 

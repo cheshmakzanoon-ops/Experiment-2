@@ -60,10 +60,23 @@ class Adb:
         return result.stdout or b""
 
 
+TIMESTAMP_PATTERN = re.compile(
+    r"^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2})"
+    r"(?:\.(\d+))?"
+    r"(Z|[+-]\d{2}:?\d{2})$"
+)
+
+
 def timestamp(value: object) -> datetime:
     if not isinstance(value, str):
         raise ValueError("Timestamp is not a string")
-    parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    match = TIMESTAMP_PATTERN.fullmatch(value.strip())
+    if match is None:
+        raise ValueError("Timestamp is invalid or lacks a timezone")
+    base, fraction, offset = match.groups()
+    micro = f".{fraction[:6].ljust(6, '0')}" if fraction else ""
+    tz = "+00:00" if offset == "Z" else (offset if ":" in offset else f"{offset[:3]}:{offset[3:]}")
+    parsed = datetime.fromisoformat(f"{base}{micro}{tz}")
     if parsed.tzinfo is None:
         raise ValueError("Timestamp lacks a timezone")
     return parsed.astimezone(timezone.utc)

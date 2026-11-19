@@ -5,9 +5,9 @@ import android.content.ContextWrapper
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artflow.studio.core.canvas.CanvasOperations
+import com.artflow.studio.core.canvas.LayerTransform
 import com.artflow.studio.core.export.ExportFormat
 import com.artflow.studio.core.export.ExportOptions
-import com.artflow.studio.core.pixels.LayerTransform
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.tool.LiquifyTool
@@ -91,7 +91,7 @@ class ResamplingDeviceTest {
             assertArrayEquals(row + row, exported.pixels)
         }
 
-    @Test fun affineLayerAndMaskSurviveUndoSaveReloadAndIndependentEditing() =
+    @Test fun linkedAffineLayersAndMaskSurviveUndoSaveReloadAndIndependentEditing() =
         runBlocking(Dispatchers.Main) {
             repository.loadOrCreate(2, 7, 5, 144)
             val id = repository.getActiveLayerId()
@@ -99,18 +99,27 @@ class ResamplingDeviceTest {
             val pixels = PixelBuffer(7, 5).apply { setUnchecked(2, 2, red) }
             assertTrue(repository.setLayerPixels(id, pixels, "Transform persistence fixture"))
             assertTrue(repository.addLayerMask(id, SelectionMask(7, 5).apply { coverage[2 * 7 + 2] = 255.toByte() }))
+            val peer = repository.addLayer("Linked colour").id
+            val blue = 0xFF0000FF.toInt()
+            assertTrue(repository.setLayerPixels(peer, PixelBuffer(7, 5).apply { setUnchecked(4, 2, blue) }, "Linked fixture"))
+            assertTrue(repository.linkLayers(listOf(id, peer)))
+            repository.setActiveLayer(id)
             val depth = repository.undoDepth
             assertTrue(repository.transformLayer(id, LayerTransform.Parameters(translationX = 1f), repository.contentRevision))
             assertEquals(depth + 1, repository.undoDepth)
             val transformed = requireNotNull(repository.compositeFrame(0, transparentBackground = true)).pixels
             assertEquals(red, transformed[2 * 7 + 3])
+            assertEquals(blue, transformed[2 * 7 + 5])
             assertEquals(0, transformed[2 * 7 + 2])
             assertTrue(repository.undo())
             assertEquals(red, requireNotNull(repository.compositeFrame(0, transparentBackground = true)).pixels[2 * 7 + 2])
+            assertEquals(blue, requireNotNull(repository.layerPixels(peer)).getSafe(4, 2))
             assertTrue(repository.redo())
             assertTrue(repository.saveCanvas(2) != null)
             assertTrue(repository.loadCanvas(2) != null)
             assertArrayEquals(transformed, requireNotNull(repository.compositeFrame(0, transparentBackground = true)).pixels)
+            val links = repository.getAllLayers().map { it.linkGroupId }
+            assertTrue(links.all { it != null && it == links.first() })
             assertTrue(requireNotNull(repository.getActiveLayer()).hasMask())
             assertTrue(repository.invertLayerMask(id))
             assertEquals(0, requireNotNull(repository.compositeFrame(0, transparentBackground = true)).pixels[2 * 7 + 3])

@@ -113,4 +113,35 @@ object PendingImports {
     }
 
     fun takeProfile(projectId: Long): ColorProfile? = profiles.remove(projectId)
+
+    private val notices = ConcurrentHashMap<Long, String>()
+
+    /** One-shot import warning (e.g., missing fonts) surfaced when the opened canvas becomes ready. */
+    fun putNotice(
+        projectId: Long,
+        message: String,
+    ) {
+        notices[projectId] = message
+    }
+
+    fun putDependencyNotice(
+        projectId: Long,
+        missingFonts: List<String>,
+        missingGrains: List<String>,
+    ) {
+        val warnings =
+            listOfNotNull(
+                missingFonts.distinct().takeIf { it.isNotEmpty() }?.let { names ->
+                    val shown = names.take(3).joinToString { it.take(60) }
+                    val remainder = if (names.size > 3) " and ${names.size - 3} more" else ""
+                    "Missing fonts: $shown$remainder. Import the original fonts before editing those text layers."
+                },
+                missingGrains.distinct().takeIf { it.isNotEmpty() }?.let {
+                    "${it.size} brush texture(s) are missing; restore them before continuing to paint."
+                },
+            )
+        if (warnings.isNotEmpty()) putNotice(projectId, warnings.joinToString(" "))
+    }
+
+    fun takeNotice(projectId: Long): String? = notices.remove(projectId)
 }

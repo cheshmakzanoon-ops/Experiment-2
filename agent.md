@@ -35,16 +35,22 @@ phase describes · **⛔ unreachable** — the code exists but nothing calls it 
 | 1–8 | Setup, DI, architecture, design system, canvas, input, brush, layers | ✅ The Gradle wrapper, build config, dark-first design system, GL canvas, stylus/gesture input, stroke engine and layer stack all work. Strokes are rasterised by `Compositor` + `StrokeRasterizer`; the live layer state is `CanvasRepositoryImpl`. ktlint and detekt are configured (see *Tooling gaps*). |
 | 9–16 | Advanced brush params, textures, colour dynamics, blend modes, selection, transform, alpha lock, masks | 🟡 Blend modes, jitter/scatter/taper dynamics, the selection engine and layer masks run in the app. Brush textures are 🟡 partial: paper/canvas/charcoal procedural grains are rendered, with scale/rotation controls; imported grains and dual brushes (Multiply, Subtract, Add) are wired, while a user texture library remains absent. The custom pressure response has three editable monotone control points. Transform covers move, scale, rotate, flip, distort, warp and snapping (see phase 14). Masks support reveal/hide painting, selection and layer-alpha sources, and horizontal/vertical/radial gradients, with transactional preview and undo. |
 | 17–24 | Smudge, liquify, clone stamp, healing, gradient, paint bucket, text, shapes | ✅ `PixelBrushes` (smudge/clone/heal) and `LiquifyTool` are driven from `ArtFlowCanvasView`, alongside paint bucket, gradient, text and shapes. Shape drawing lives in `ArtFlowCanvasView`; corner radius and boolean ops are ⬜. |
-| 25–30 | Adjustment layers, layer groups, reference layers, layer linking, filter layers, smart objects | 🟡 Adjustments (`AdjustmentProcessor`) and filter layers (`ImageFilters`, via `addFilterLayer` / `rasterizeFilterLayer`) are wired, and reference layers are set from the layer options. ✅ Layer groups (nested; explicit Normal and other non-Pass Through modes isolate; masked or faded groups also isolate). ⬜ Layer-linking UI, smart objects. |
-| 31–36 | Colour picker, palettes, symmetry, perspective guides, canvas properties, quick menu | ✅ `ColorPanel`, `Palette` with `PaletteCodec` for persistence, `ColorHarmony`, `SymmetryEngine`, `PerspectiveGuide`, `CanvasOperations` and the quick menu. ✅ A fixed hardware-keyboard shortcut table (`core/canvas/KeyboardShortcuts`, 41 bindings, offered to the editor by `MainActivity` before any view sees the key). ⬜ Shortcut remapping and stylus-button mapping. Palettes can be created, renamed, copied, extended and shared as Procreate `.swatches` (`PaletteEditor`, `ProcreateSwatches`). |
-| 37–42 | Save system, PNG/JPEG export, PSD, PDF, gallery, cloud sync | ✅ Wired: `.artflow` documents (v6: independent material channels, per-layer rasters, frames, timelapse metadata, distinct group scopes and corrected secondary-grain replay; checksum-first v1/v2/v3 migration), autosave with crash recovery, PNG/JPEG/WebP/PDF/PSD export and gallery publishing. ✅ PSD **import**, ⬜ cloud sync. |
+| 25–30 | Adjustment layers, layer groups, reference layers, layer linking, filter layers, smart objects | 🟡 Adjustments (`AdjustmentProcessor`) and filter layers (`ImageFilters`, via `addFilterLayer` / `rasterizeFilterLayer`) are wired, and reference layers are set from the layer options. ✅ Layer groups (nested; explicit Normal and other non-Pass Through modes isolate; masked or faded groups also isolate). 🟡 Persistent linking is part of the November integration; see its verification record. ⬜ Smart objects. |
+| 31–36 | Colour picker, palettes, symmetry, perspective guides, canvas properties, quick menu | ✅ `ColorPanel`, `Palette` with `PaletteCodec` for persistence, `ColorHarmony`, `SymmetryEngine`, `PerspectiveGuide`, `CanvasOperations` and the quick menu. ✅ A fixed hardware-keyboard shortcut table (`core/canvas/KeyboardShortcuts`, 41 bindings, offered to the editor by `MainActivity` before any view sees the key). ⬜ Shortcut remapping. Stylus-button assignments are wired; broad hardware qualification remains open. Palettes can be created, renamed, copied, extended and shared as Procreate `.swatches` (`PaletteEditor`, `ProcreateSwatches`). |
+| 37–42 | Save system, PNG/JPEG export, PSD, PDF, gallery, cloud sync | ✅ Wired: `.artflow` documents (v7: independent material channels, per-layer rasters, frames, timelapse metadata, distinct group scopes and corrected secondary-grain replay; checksum-first v1/v2/v3 migration), autosave with crash recovery, PNG/JPEG/WebP/PDF/PSD export and gallery publishing. ✅ PSD **import**, ⬜ cloud sync. |
 | 43–50 | Animation timeline, animation export, timelapse, performance, tutorials, settings, QA, release | 🟡 Timeline, onion skinning and GIF/MP4/frame-sequence export work; settings, help centre and onboarding exist, and device regressions cover storage, rendering, duplication, exports and selected UI flows. ⬜ analytics/crash reporting, ⬜ benchmark module (`benchmark` is used for a minified launch smoke test, not a performance benchmark), 🟡 broader physical-device and end-to-end coverage. ✅ Signing configuration is validated; production builds can require it with `-PrequireReleaseSigning=true`. CI can build unsigned candidates, which are not approved releases. |
 
 ### Current integration
 
+The [November 18 integration milestone](docs/release/V1_INTEGRATION_2026-11-18.md) supersedes
+older status summaries where they conflict. Follow its continuation instructions and check the
+latest exact-revision CI evidence before starting. Never count an unused helper as a running
+feature. The current document format is v7; keep legacy migration fixtures and checksums intact.
+Physical-device/performance and publisher gates remain separate from source publication.
+
 The [24 October follow-through](docs/PARITY_FOLLOW_THROUGH_2026-10-24.md) adds continuous Smudge
 input/dynamics, atomic clipboard transactions and independently paintable 3D material channels.
-Current `.artflow` storage is v6, with checksum-first migration of older color-only documents.
+Current `.artflow` storage is v7, with checksum-first migration of older color-only documents.
 See the implementation record and exact-revision Actions results for verification; these additions
 are not full Procreate parity or a repair for the unresolved Android 15 / 16 KB runtime crashes.
 
@@ -55,7 +61,7 @@ missing for Procreate parity are in [docs/DEVELOPMENT_LOG_2026-10-17.md](docs/DE
 The offline compile/ktlint/detekt harness described there is how this repository can now be checked
 without an Android SDK; CI remains the gate for Android unit tests and device tests.
 
-Some code in `app/src/main` is still unreachable: `CanvasOperations.resampleToDpi`, `rotateFree` and `straighten`, `TextLayout.layoutOnCurve`, and the layer-link wrappers in `CanvasViewModel` (see [docs/AUDIT_2026-10.md](docs/AUDIT_2026-10.md)). The prototype layer an earlier revision of
+Some code in `app/src/main` is still unreachable: `CanvasOperations.resampleToDpi`, `rotateFree`, `straighten`, and `TextLayout.layoutOnCurve` (see historical [docs/AUDIT_2026-10.md](docs/AUDIT_2026-10.md); the November integration adds the linked-layer workflow). The prototype layer an earlier revision of
 this document listed as dead code — `core/layer`, `core/selection`, `core/transform`,
 `core/shape`, `core/brush`, `domain/usecase`, `data/repository/texture`, `data/renderer/native`,
 `presentation/ui/components/texture`, the seven Hilt modules that only provided them, and the unused
@@ -64,7 +70,7 @@ this document listed as dead code — `core/layer`, `core/selection`, `core/tran
 
 - **Layer groups** — ✅ organisational groups (`Layer.isGroup`): group visibility/opacity cascade
   to members via `LayerGroups`; Normal groups composite their members against transparency. Only opaque, unmasked Pass Through groups let members blend with outside layers. Newly organized groups start as Pass Through, and existing v1/v2 files migrate to preserve their pictures. PSD retains the distinction; native `.procreate` group modes remain unverified.
-- **Layer-linking UI** — `CanvasRepositoryImpl` can set and clear `linkGroupId`; nothing calls it.
+- **Layer linking** — the November integration connects persistent membership and supported transactional transforms; verify current editor and persistence tests before claiming completion.
 - **Transform** — ✅ move, uniform/freeform scale, rotate and flip of a layer or selection
   (`LayerTransform`); distort, Bézier warp and snapping are implemented; a separate perspective mode is not, since distort covers it.
 - **Imported and dual textures** — procedural and imported grains and dual brushes are wired; a
@@ -1377,7 +1383,7 @@ exact revision identified in their reports. The `benchmark` build type is not a 
 - **Language**: Kotlin 2.0.21
 - **UI**: Jetpack Compose
 - **Graphics**: OpenGL ES 2.0 through `GLSurfaceView` / `GLES20` (ES 3.x and Vulkan are aspirational)
-- **Native**: C++ via JNI/NDK — built, not called
+- **Native**: C++ source prototype excluded from the app build; the active renderer is Kotlin
 - **DI**: Hilt
 - **Async**: Coroutines + Flow
 - **Storage**: Room + kotlinx.serialization `.artflow` documents (no DataStore)

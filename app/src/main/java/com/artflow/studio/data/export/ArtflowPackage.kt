@@ -2,19 +2,36 @@ package com.artflow.studio.data.export
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import java.io.BufferedOutputStream
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.Closeable
+import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.util.zip.CRC32
 import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
 /**
- * An `.artflow` file: a whole artwork (layers, frames, masks, settings and previews) in one zip,
- * so it can move to another device and open with everything intact, like a `.procreate` file.
+ * An `.artflow` file: a whole artwork (layers, frames, masks, settings, previews, and custom grain
+ * dependencies) in one zip, so it can move to another device and open with everything intact.
+ *
+ * External font binaries are never bundled automatically so third-party font licenses are respected;
+ * instead, `dependencies.json` records referenced font IDs/labels so an importing device can warn if
+ * an imported font is missing locally.
  */
 object ArtflowPackage {
     const val DOCUMENT = "canvas.artflow"
+    const val DEPENDENCIES = "dependencies.json"
+    const val GRAINS_DIR = "grains"
+    const val MAX_DOCUMENT_BYTES = 32L * 1024 * 1024
 
     @Serializable
     private data class Marker(
@@ -23,17 +40,90 @@ object ArtflowPackage {
         val name: String,
     )
 
-    /** A read package: the artwork's name and its project-relative files. */
+    @Serializable
+    data class PackagedFont(
+        val id: String,
+        val label: String,
+    )
+
+    @Serializable
+    data class Dependencies(
+        val fonts: List<PackagedFont> = emptyList(),
+        val grainIds: List<String> = emptyList(),
+    )
+
+    class EntrySource(
+        val path: String,
+        val openStream: () -> InputStream,
+    )
+
+    /** A read package held in memory (small packages and unit tests): the artwork's name and relative files. */
     class Contents(
         val name: String,
         val files: Map<String, ByteArray>,
     )
+
+    /** A streamed package backed by a temporary zip file on disk, keeping large archives off the heap. */
+    class StreamContents internal constructor(
+        val name: String,
+        val entries: Set<String>,
+        private val zip: ZipFile,
+    ) : Closeable {
+        fun readBytes(
+            path: String,
+            maxBytes: Long = MAX_ENTRY_BYTES,
+        ): ByteArray {
+            val out = ByteArrayOutputStream()
+            streamEntry(path, maxBytes) { buffer, count -> out.write(buffer, 0, count) }
+            return out.toByteArray()
+        }
+
+        fun copyTo(
+            path: String,
+            output: OutputStream,
+            maxBytes: Long = MAX_ENTRY_BYTES,
+        ) {
+            streamEntry(path, maxBytes) { buffer, count -> output.write(buffer, 0, count) }
+        }
+
+        private fun streamEntry(
+            path: String,
+            maxEntryBytes: Long,
+            sink: (ByteArray, Int) -> Unit,
+        ) {
+            require(path in entries) { "Unknown artwork entry: $path" }
+            val entry = requireNotNull(zip.getEntry(path)) { "Missing artwork entry: $path" }
+            try {
+                copyZipEntry(zip, entry, minOf(maxEntryBytes, entryLimit(path)), sink)
+            } catch (damaged: IOException) {
+                throw IllegalArgumentException("This artwork file is damaged", damaged)
+            }
+        }
+
+        override fun close() {
+            zip.close()
+        }
+    }
 
     private val json =
         Json {
             ignoreUnknownKeys = true
             encodeDefaults = true
         }
+
+    fun grainEntryPath(grainId: String): String {
+        val candidate = "$GRAINS_DIR/$grainId.grain"
+        require(GRAIN_ENTRY.matches(candidate)) { "Invalid grain package path: $candidate" }
+        return candidate
+    }
+
+    fun encodeDependencies(dependencies: Dependencies): ByteArray =
+        json.encodeToString(Dependencies.serializer(), dependencies).toByteArray()
+
+    fun decodeDependencies(bytes: ByteArray): Dependencies {
+        require(bytes.size <= MAX_METADATA_BYTES) { "Dependency manifest is too large" }
+        return json.decodeFromString(Dependencies.serializer(), bytes.decodeToString())
+    }
 
     fun write(
         name: String,
@@ -54,6 +144,179 @@ object ArtflowPackage {
         }
         return out.toByteArray()
     }
+
+    /** Streams an `.artflow` package directly to [destination] via an atomic temp file. */
+    fun writeToFile(
+        name: String,
+        destination: File,
+        sources: List<EntrySource>,
+    ) {
+        val seen = HashSet<String>(sources.size)
+        sources.forEach { source ->
+            require(ALLOWED.matches(source.path)) { "Unexpected file in an artwork: ${source.path}" }
+            require(seen.add(source.path)) { "Duplicate entry in artwork package: ${source.path}" }
+        }
+        require(DOCUMENT in seen) { "An artwork package needs its document" }
+        require(seen.size < MAX_ENTRIES) { "This artwork has too many files" }
+
+        val parent = requireNotNull(destination.parentFile) { "Export destination needs a parent directory" }
+        check(parent.isDirectory || parent.mkdirs()) { "Cannot create export directory" }
+        val temp = File.createTempFile(".${destination.name}-", ".tmp", parent)
+        try {
+            writeTempArchive(temp, name, sources)
+            Files.move(
+                temp.toPath(),
+                destination.toPath(),
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING,
+            )
+        } finally {
+            if (temp.exists()) temp.delete()
+        }
+    }
+
+    private fun writeTempArchive(
+        temp: File,
+        name: String,
+        sources: List<EntrySource>,
+    ) {
+        val buffer = ByteArray(BUFFER)
+        FileOutputStream(temp).use { fileOut ->
+            ZipOutputStream(BufferedOutputStream(fileOut)).use { zip ->
+                zip.putNextEntry(ZipEntry(MARKER))
+                zip.write(json.encodeToString(Marker.serializer(), Marker(name = name)).toByteArray())
+                zip.closeEntry()
+                sources.forEach { source -> writeZipEntry(zip, source, buffer) }
+                zip.finish()
+                zip.flush()
+                fileOut.flush()
+                fileOut.fd.sync()
+            }
+        }
+    }
+
+    private fun writeZipEntry(
+        zip: ZipOutputStream,
+        source: EntrySource,
+        buffer: ByteArray,
+    ) {
+        zip.putNextEntry(ZipEntry(source.path))
+        source.openStream().use { input ->
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                zip.write(buffer, 0, count)
+            }
+        }
+        zip.closeEntry()
+    }
+
+    /** Recognises a generic ZIP without inflating any payload; [openFile] performs full package validation. */
+    fun isPackageFile(file: File): Boolean = ZipFile(file).use { it.getEntry(MARKER) != null }
+
+    /** Opens an `.artflow` zip file on disk, validates every entry path, count, and header without loading payloads into heap. */
+    fun openFile(
+        file: File,
+        maxTotalBytes: Long = MAX_TOTAL_BYTES,
+    ): StreamContents {
+        val zip =
+            try {
+                ZipFile(file)
+            } catch (damaged: IOException) {
+                throw IllegalArgumentException("This artwork file is damaged", damaged)
+            }
+        var opened = false
+        try {
+            val contents = parseOpenFile(zip, maxTotalBytes)
+            opened = true
+            return contents
+        } finally {
+            if (!opened) zip.close()
+        }
+    }
+
+    private fun parseOpenFile(
+        zip: ZipFile,
+        maxTotalBytes: Long,
+    ): StreamContents {
+        require(maxTotalBytes > 0) { "The import size limit must be positive" }
+        val entries = linkedSetOf<String>()
+        var hasMarker = false
+        var count = 0
+        var declaredBytes = 0L
+        val enumeration = zip.entries()
+        while (enumeration.hasMoreElements()) {
+            val entry = enumeration.nextElement()
+            require(++count <= MAX_ENTRIES) { "This artwork has too many files" }
+            val path = entry.name
+            require(!entry.isDirectory && (path == MARKER || ALLOWED.matches(path))) {
+                "This is not an ArtFlow artwork"
+            }
+            require(entry.size in 0..minOf(entryLimit(path), maxTotalBytes - declaredBytes)) {
+                "This artwork is too large to import"
+            }
+            declaredBytes += entry.size
+            if (path == MARKER) {
+                require(!hasMarker) { "This artwork lists a file twice" }
+                hasMarker = true
+            } else {
+                require(entries.add(path)) { "This artwork lists a file twice" }
+            }
+        }
+        require(hasMarker && DOCUMENT in entries) { "This is not an ArtFlow artwork" }
+        val markerBytes =
+            try {
+                readMarkerBytes(zip)
+            } catch (damaged: IOException) {
+                throw IllegalArgumentException("This artwork file is damaged", damaged)
+            }
+        val marker = json.decodeFromString(Marker.serializer(), markerBytes.decodeToString())
+        require(marker.format == FORMAT && marker.version in 1..VERSION) { "Unsupported ArtFlow artwork version" }
+        val safeName =
+            marker.name
+                .trim()
+                .take(MAX_NAME)
+                .ifBlank { "Imported artwork" }
+        return StreamContents(safeName, entries, zip)
+    }
+
+    private fun readMarkerBytes(zip: ZipFile): ByteArray {
+        val entry = requireNotNull(zip.getEntry(MARKER)) { "This is not an ArtFlow artwork" }
+        val out = ByteArrayOutputStream()
+        copyZipEntry(zip, entry, MAX_METADATA_BYTES) { buffer, count -> out.write(buffer, 0, count) }
+        return out.toByteArray()
+    }
+
+    /** ZipFile streams do not check CRCs; verify payload identity as well as the advertised and actual size. */
+    private fun copyZipEntry(
+        zip: ZipFile,
+        entry: ZipEntry,
+        limit: Long,
+        sink: (ByteArray, Int) -> Unit,
+    ) {
+        require(entry.size in 0..limit) { "This artwork is too large to import" }
+        val buffer = ByteArray(BUFFER)
+        val checksum = CRC32()
+        var read = 0L
+        zip.getInputStream(entry).use { input ->
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                read += count
+                require(read <= entry.size) { "This artwork entry has an invalid size" }
+                checksum.update(buffer, 0, count)
+                sink(buffer, count)
+            }
+        }
+        require(read == entry.size && checksum.value == entry.crc) { "This artwork entry is damaged" }
+    }
+
+    private fun entryLimit(path: String): Long =
+        when (path) {
+            MARKER, DEPENDENCIES -> MAX_METADATA_BYTES
+            DOCUMENT -> MAX_DOCUMENT_BYTES
+            else -> MAX_ENTRY_BYTES
+        }
 
     /** Reads and checks a package: only known file names, bounded sizes, and a document inside. */
     fun read(
@@ -78,15 +341,16 @@ object ArtflowPackage {
     ): Pair<String?, Map<String, ByteArray>> {
         var name: String? = null
         val files = linkedMapOf<String, ByteArray>()
+        val seen = HashSet<String>()
         var total = 0L
         ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
             while (true) {
                 val entry = zip.nextEntry ?: break
-                require(files.size < MAX_ENTRIES) { "This artwork has too many files" }
+                require(seen.size < MAX_ENTRIES) { "This artwork has too many files" }
                 val path = entry.name
                 require(!entry.isDirectory && (path == MARKER || ALLOWED.matches(path))) { "This is not an ArtFlow artwork" }
-                require(path !in files) { "This artwork lists a file twice" }
-                val data = readBounded(zip, (maxTotalBytes - total).coerceAtMost(MAX_ENTRY_BYTES))
+                require(seen.add(path)) { "This artwork lists a file twice" }
+                val data = readBounded(zip, (maxTotalBytes - total).coerceAtMost(entryLimit(path)))
                 total += data.size
                 if (path == MARKER) {
                     val marker = json.decodeFromString(Marker.serializer(), data.decodeToString())
@@ -121,15 +385,19 @@ object ArtflowPackage {
     private const val VERSION = 1
     private const val MARKER = "artflow-package.json"
     private const val MAX_ENTRIES = 4_200
+    private const val MAX_METADATA_BYTES = 1024L * 1024
     private const val MAX_ENTRY_BYTES = 192L * 1024 * 1024
     private const val MAX_TOTAL_BYTES = 768L * 1024 * 1024
     private const val MAX_NAME = 120
     private const val BUFFER = 64 * 1024
 
-    /** The manifest, previews, and layer pixel and mask files; nothing else may be written. */
+    private val GRAIN_ENTRY = Regex("""grains/custom-[0-9a-f]{1,32}\.grain""")
+
+    /** The manifest, previews, dependencies, custom grains, and layer pixel/mask files; nothing else may be written. */
     private val ALLOWED =
         Regex(
-            """canvas\.artflow|canvas\.png|thumbnail\.png|model\.obj|""" +
-                """layers/\d{1,19}/[A-Za-z0-9_][A-Za-z0-9_.-]{0,120}\.png""",
+            """canvas\.artflow|canvas\.png|thumbnail\.png|model\.obj|dependencies\.json|""" +
+                """layers/\d{1,19}/[A-Za-z0-9_][A-Za-z0-9_.-]{0,120}\.png|""" +
+                """grains/custom-[0-9a-f]{1,32}\.grain""",
         )
 }

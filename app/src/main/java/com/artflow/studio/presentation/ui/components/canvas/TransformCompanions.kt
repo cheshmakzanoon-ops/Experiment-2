@@ -1,5 +1,6 @@
 package com.artflow.studio.presentation.ui.components.canvas
 
+import com.artflow.studio.core.canvas.LayerLinks
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.LayerTransform
 import com.artflow.studio.core.pixels.PixelBuffer
@@ -10,14 +11,16 @@ import com.artflow.studio.core.pixels.WarpMesh
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 
 /**
- * Layers that move with the active layer during a transform: the ones multi-selected in the
- * Layers panel, as in Procreate. Each gets its own edit session so the canvas previews it live,
+ * Layers that move with the active layer: multi-selected layers and all their persistent links.
+ * Each gets its own edit session so the canvas previews it live,
  * and all of them commit with the active layer as one undoable step.
  */
 internal class TransformCompanions {
     class Layer(
         val layerId: Long,
-        val base: PixelBuffer,
+        // A paintable layer can have no raster or strokes yet. Keep that transparent source
+        // implicit until beginRasterEdit has checked whether an edit buffer fits the budget.
+        val base: PixelBuffer?,
     )
 
     /** Layers chosen besides the active one. */
@@ -30,21 +33,41 @@ internal class TransformCompanions {
         repository: CanvasRepository,
         activeLayerId: Long,
         selection: SelectionMask?,
-    ): List<Layer> {
+    ): List<Layer>? {
         if (selection != null) return emptyList()
-        return ids.filter { it != activeLayerId }.mapNotNull { id -> repository.layerPixels(id)?.let { Layer(id, it) } }
+        val layers = repository.getAllLayers()
+        val members = LayerLinks.expand(layers, ids + activeLayerId) ?: return null
+        // Quad gestures only move pixel planes. Precision transforms also move editable masks.
+        if (!LayerLinks.editable(layers, members) || members.any { it.hasMask() }) return null
+        return members.filter { it.id != activeLayerId }.map { member ->
+            Layer(member.id, repository.layerPixels(member.id))
+        }
     }
 
     /** Opens an edit on each companion for a drag. */
     suspend fun open(
         repository: CanvasRepository,
         layers: List<Layer>,
-    ) {
+    ): Boolean {
         cancel(repository)
-        open = layers.mapNotNull { layer -> repository.beginRasterEdit(layer.layerId)?.let { layer to it } }
+        for (layer in layers) {
+            val session = repository.beginRasterEdit(layer.layerId)
+            if (session == null) {
+                cancel(repository)
+                return false
+            }
+            open = open + (layer to session)
+        }
+        return true
     }
 
     val sessions: List<CanvasRepository.RasterEditSession> get() = open.map { it.second }
+
+    fun hasChanges(): Boolean =
+        open.any { (layer, session) ->
+            val base = layer.base
+            if (base == null) session.buffer.pixels.any { it != 0 } else !base.pixels.contentEquals(session.buffer.pixels)
+        }
 
     /** Places every open companion the way the active layer is placed. */
     fun render(
@@ -54,7 +77,26 @@ internal class TransformCompanions {
         interpolation: TransformQuad.Interpolation,
     ) {
         open.forEach { (layer, session) ->
-            TransformQuad.renderShape(layer.base, session.buffer, bounds, quad, mesh, null, interpolation)
+            val base = layer.base
+            if (base == null) {
+                session.buffer.clear()
+            } else {
+                TransformQuad.renderShape(base, session.buffer, bounds, quad, mesh, null, interpolation)
+            }
+        }
+    }
+
+    fun move(
+        dx: Int,
+        dy: Int,
+    ) {
+        open.forEach { (layer, session) ->
+            val base = layer.base
+            if (base == null) {
+                session.buffer.clear()
+            } else {
+                LayerTransform.render(base, session.buffer, LayerTransform.Params(0f, 0f, dx.toFloat(), dy.toFloat()))
+            }
         }
     }
 
@@ -72,7 +114,8 @@ internal class TransformCompanions {
             layers: List<Layer>,
         ): IntBounds? =
             layers.fold(active) { union, layer ->
-                val own = LayerTransform.floatingBounds(layer.base, null) ?: return@fold union
+                val base = layer.base ?: return@fold union
+                val own = LayerTransform.floatingBounds(base, null) ?: return@fold union
                 union?.union(own) ?: own
             }
     }

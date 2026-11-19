@@ -61,6 +61,14 @@ if any("getconf" in arg for arg in args):
     raise SystemExit(127)
 if args[:3] == ["shell", "am", "start"]:
     print("Status: ok")
+elif args[:3] == ["shell", "am", "wait-for-broadcast-idle"]:
+    print("All broadcast queues are idle!")
+elif args[:2] == ["shell", "service"] and len(args) >= 4 and args[2] == "check":
+    print(f"Service {args[3]}: found")
+elif args == ["shell", "cmd", "package", "list", "packages", "android"]:
+    print("package:android")
+elif args == ["shell", "getprop", "sys.boot_completed"]:
+    print("1")
 elif args[:2] == ["shell", "pidof"]:
     print(42)
 elif args[:2] == ["pull", "/sdcard/artflow-window.xml"]:
@@ -210,9 +218,11 @@ if sys.argv[1] == "connectedDebugAndroidTest":
                                                     runtime_mode='disabled', retry_status=0)
         self.assertEqual(0, result.returncode, result.stderr)
         capture = 'capture --output'
+        self.assertLess(calls.index('shell am wait-for-broadcast-idle'), calls.index('connectedDebugAndroidTest'))
         self.assertLess(calls.index(capture), calls.index('classifier'))
         self.assertLess(calls.index('classifier'), calls.index('recover'))
-        self.assertLess(calls.index('recover'), calls.rindex('connectedDebugAndroidTest'))
+        self.assertLess(calls.index('recover'), calls.rindex('shell am wait-for-broadcast-idle'))
+        self.assertLess(calls.rindex('shell am wait-for-broadcast-idle'), calls.rindex('connectedDebugAndroidTest'))
         self.assertLess(calls.rindex('connectedDebugAndroidTest'), calls.rindex(capture))
         self.assertLess(calls.rindex(capture), calls.index('assembleBenchmark'))
         self.assertEqual({'attempt-1', 'attempt-2'}, set(manifests))

@@ -2,19 +2,24 @@
 <!--
   Android 12+ (cloud backup and device transfer).
 
-  Project pixels live in `filesDir/projects/<id>` and the project index lives in the Room database,
-  so both must be listed: backing up only the database would restore projects whose canvases are
-  missing. The former `./artwork` and `./cache` paths never existed in this layout.
+  Project pixels (`filesDir/projects/<id>`), imported fonts (`filesDir/fonts`), custom brush grains
+  (`filesDir/grains`), and the Room database must all be backed up together so restored text and
+  brushes retain fidelity. Android cloud backup enforces an app quota (~25 MB) and cannot guarantee
+  delivery for large libraries; direct device-to-device (D2D) transfer carries full local assets.
 -->
 <data-extraction-rules>
     <cloud-backup>
         <include domain="sharedpref" path="." />
         <include domain="database" path="artflow_database" />
         <include domain="file" path="projects" />
+        <include domain="file" path="fonts" />
+        <include domain="file" path="grains" />
     </cloud-backup>
     <device-transfer>
         <include domain="sharedpref" path="." />
         <include domain="database" path="artflow_database" />
         <include domain="file" path="projects" />
+        <include domain="file" path="fonts" />
+        <include domain="file" path="grains" />
     </device-transfer>
 </data-extraction-rules>

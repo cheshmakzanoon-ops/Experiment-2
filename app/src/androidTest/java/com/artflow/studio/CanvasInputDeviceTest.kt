@@ -10,6 +10,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
+import com.artflow.studio.core.pixels.TransformQuad
 import com.artflow.studio.core.text.TextLayerContent
 import com.artflow.studio.core.text.TextLayout
 import com.artflow.studio.core.tool.LiquifyTool
@@ -32,6 +33,8 @@ import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -433,6 +436,130 @@ class CanvasInputDeviceTest {
             assertEquals(0, image().getSafe(10, 15))
             assertTrue(repository.undo())
             assertArrayEquals(fixture.pixels, image().pixels)
+        }
+
+    @Test
+    fun persistentLinksMoveTogetherUndoTogetherAndSurviveReopening() =
+        withCanvas(91) { canvas ->
+            val (first, second) = linkedFixture(canvas)
+            val before = image().pixels
+            canvas.setEditorInput(brush.copy(tool = ToolType.MOVE))
+            val depth = repository.undoDepth
+            send(canvas, MotionEvent.ACTION_DOWN, Touch(1, 20f, 20f))
+            send(canvas, MotionEvent.ACTION_UP, Touch(1, 30f, 25f))
+            await { repository.undoDepth == depth + 1 }
+            assertEquals(Color.RED, image().getSafe(30, 25))
+            assertEquals(Color.BLUE, image().getSafe(50, 45))
+            val moved = image().pixels
+            assertTrue(repository.undo())
+            assertArrayEquals(before, image().pixels)
+            assertTrue(repository.redo())
+            assertArrayEquals(moved, image().pixels)
+            val project = repository.projectId()
+            assertNotNull(repository.saveCanvas(project))
+            assertNotNull(repository.loadCanvas(project))
+            assertArrayEquals(moved, image().pixels)
+            val group = repository.getAllLayers().first { it.id == first }.linkGroupId
+            assertNotNull(group)
+            assertEquals(group, repository.getAllLayers().first { it.id == second }.linkGroupId)
+            // A new link created after loading must not accidentally join the saved group.
+            val third = repository.addLayer("Other ink").id
+            val fourth = repository.addLayer("Other colour").id
+            assertTrue(repository.linkLayers(listOf(third, fourth)))
+            assertNotEquals(group, repository.getAllLayers().first { it.id == third }.linkGroupId)
+        }
+
+    @Test
+    fun persistentLinksRotateAndScaleThroughTheRealTransformToolbarPath() =
+        withCanvas(92) { canvas ->
+            linkedFixture(canvas)
+            canvas.setEditorInput(brush.copy(tool = ToolType.TRANSFORM, transformInterpolation = TransformQuad.Interpolation.NEAREST))
+            val before = image().pixels
+            val depth = repository.undoDepth
+            canvas.transformActiveLayer(rotation = 90f)
+            await { repository.undoDepth == depth + 1 }
+            assertEquals(Color.RED, image().getSafe(40, 20))
+            assertEquals(Color.BLUE, image().getSafe(20, 40))
+            assertTrue(repository.undo())
+            assertArrayEquals(before, image().pixels)
+            canvas.transformActiveLayer(scaleFactor = 2f)
+            await { repository.undoDepth == depth + 1 }
+            assertEquals(Color.RED, image().getSafe(10, 10))
+            assertEquals(Color.BLUE, image().getSafe(50, 50))
+            assertTrue(repository.undo())
+            assertArrayEquals(before, image().pixels)
+        }
+
+    @Test
+    fun linkedMoveCancellationNoOpAndProtectedPeerLeaveTheWholeDocumentUnchanged() =
+        withCanvas(93) { canvas ->
+            val (first, second) = linkedFixture(canvas)
+            val before = image().pixels
+            canvas.setEditorInput(brush.copy(tool = ToolType.MOVE))
+            var depth = repository.undoDepth
+            send(canvas, MotionEvent.ACTION_DOWN, Touch(1, 20f, 20f))
+            send(canvas, MotionEvent.ACTION_UP, Touch(1, 20f, 20f))
+            awaitRasterIdle(first)
+            assertEquals(depth, repository.undoDepth)
+            send(canvas, MotionEvent.ACTION_DOWN, Touch(1, 20f, 20f))
+            send(canvas, MotionEvent.ACTION_MOVE, Touch(1, 30f, 25f))
+            send(canvas, MotionEvent.ACTION_CANCEL, Touch(1, 30f, 25f))
+            awaitRasterIdle(first)
+            assertEquals(depth, repository.undoDepth)
+            assertArrayEquals(before, image().pixels)
+            repository.setLayerLock(second, true)
+            depth = repository.undoDepth
+            var rejected = false
+            canvas.onStatusMessage = { rejected = true }
+            send(canvas, MotionEvent.ACTION_DOWN, Touch(1, 20f, 20f))
+            send(canvas, MotionEvent.ACTION_UP, Touch(1, 30f, 25f))
+            await { rejected }
+            awaitRasterIdle(first)
+            assertEquals(depth, repository.undoDepth)
+            assertArrayEquals(before, image().pixels)
+        }
+
+    @Test
+    fun linkedEmptyLayersAreTransparentPeersAndCanOwnTheTransformControls() =
+        withCanvas(94) { canvas ->
+            val painted = repository.getActiveLayerId()
+            val original =
+                PixelBuffer(64, 64).apply {
+                    setUnchecked(20, 20, Color.RED)
+                    setUnchecked(40, 40, Color.BLUE)
+                }
+            assertTrue(repository.setLayerPixels(painted, original, "Linked empty-layer fixture"))
+            val empty = repository.addLayer("Empty linked peer").id
+            assertNull(repository.layerPixels(empty))
+            assertTrue(repository.linkLayers(listOf(painted, empty)))
+            repository.setActiveLayer(painted)
+            canvas.setActiveLayerId(painted)
+            canvas.setEditorInput(brush.copy(tool = ToolType.MOVE))
+            val depth = repository.undoDepth
+            send(canvas, MotionEvent.ACTION_DOWN, Touch(1, 20f, 20f))
+            send(canvas, MotionEvent.ACTION_UP, Touch(1, 30f, 25f))
+            await { repository.undoDepth == depth + 1 }
+            assertEquals(Color.RED, image().getSafe(30, 25))
+            assertEquals(Color.BLUE, image().getSafe(50, 45))
+            assertTrue(requireNotNull(repository.layerPixels(empty)).pixels.all { it == 0 })
+            assertTrue(repository.undo())
+            assertArrayEquals(original.pixels, image().pixels)
+            assertNull(repository.layerPixels(empty))
+
+            repository.setActiveLayer(empty)
+            canvas.setActiveLayerId(empty)
+            var ready = false
+            canvas.onTransformQuadChanged = { ready = it != null }
+            canvas.setEditorInput(brush.copy(tool = ToolType.TRANSFORM, transformInterpolation = TransformQuad.Interpolation.NEAREST))
+            await { ready }
+            canvas.transformActiveLayer(rotation = 90f)
+            await { repository.undoDepth == depth + 1 }
+            assertEquals(Color.RED, image().getSafe(40, 20))
+            assertEquals(Color.BLUE, image().getSafe(20, 40))
+            assertTrue(requireNotNull(repository.layerPixels(empty)).pixels.all { it == 0 })
+            assertTrue(repository.undo())
+            assertArrayEquals(original.pixels, image().pixels)
+            assertNull(repository.layerPixels(empty))
         }
 
     @Test
@@ -1135,6 +1262,19 @@ class CanvasInputDeviceTest {
                 kotlin.math.abs(((left.pixels[i] ushr shift) and 255) - ((right.pixels[i] ushr shift) and 255))
             }
         }
+
+    private suspend fun linkedFixture(canvas: ArtFlowCanvasView): Pair<Long, Long> {
+        val first = repository.getActiveLayerId()
+        repository.setLayerPixels(first, PixelBuffer(64, 64).apply { setUnchecked(20, 20, Color.RED) }, "Ink")
+        val second = repository.addLayer("Colour").id
+        repository.setLayerPixels(second, PixelBuffer(64, 64).apply { setUnchecked(40, 40, Color.BLUE) }, "Colour")
+        assertTrue(repository.linkLayers(listOf(first, second)))
+        repository.setActiveLayer(first)
+        canvas.setActiveLayerId(first)
+        // No temporary multi-selection: persisted membership alone drives these edits.
+        canvas.setTransformCompanions(emptySet())
+        return first to second
+    }
 
     private fun withCanvas(
         id: Int,

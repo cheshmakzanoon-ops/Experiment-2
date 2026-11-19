@@ -54,7 +54,7 @@ fun TransformSheet(
     ) {
         Text(layerName, style = MaterialTheme.typography.titleLarge)
         Text(
-            "Entire layer and mask · pivot at canvas centre. Off-canvas pixels are clipped; Undo restores them.",
+            "Whole layer and linked peers, including masks · pivot at canvas centre. Off-canvas pixels clip; Undo restores them.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

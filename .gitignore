@@ -6,6 +6,7 @@ app/build/
 .externalNativeBuild/
 captures/
 release/
+!docs/release/
 *.apk
 *.aab
 *.ap_

@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.artflow.studio.core.animation.AnimationTimeline
 import com.artflow.studio.core.animation.PlaybackStepper
 import com.artflow.studio.core.canvas.CanvasInformation
+import com.artflow.studio.core.canvas.LayerTransform
 import com.artflow.studio.core.canvas.StylusButtons
 import com.artflow.studio.core.color.ColorHarmony
 import com.artflow.studio.core.color.ColorProfile
@@ -17,7 +18,6 @@ import com.artflow.studio.core.export.ExportFormat
 import com.artflow.studio.core.export.ExportOptions
 import com.artflow.studio.core.export.ExportResult
 import com.artflow.studio.core.perspective.PerspectiveGuide
-import com.artflow.studio.core.pixels.LayerTransform
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionCombineMode
 import com.artflow.studio.core.pixels.SelectionMask
@@ -335,6 +335,7 @@ class CanvasViewModel
                         }
                         PendingImports.takePsd(projectId)?.let(::importPsd)
                         PendingImports.takeProcreate(projectId)?.let(::importProcreate)
+                        PendingImports.takeNotice(projectId)?.let(::notify)
                         Timber.d("Opened project $projectId (${state.width}x${state.height})")
                     } catch (cancelled: CancellationException) {
                         throw cancelled
@@ -779,7 +780,7 @@ class CanvasViewModel
                 refreshHistory()
                 _dirty.value = canvasRepository.hasUnsavedChanges()
             } else {
-                notify("The layer is locked, linked, or changed. Close Transform and reopen it on an editable layer.")
+                notify("A layer or its linked peer is locked, hidden, or changed. Reopen Transform on editable layers.")
             }
             return applied
         }

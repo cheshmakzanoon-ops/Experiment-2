@@ -1,7 +1,6 @@
 package com.artflow.studio.core.export
 
 import java.io.ByteArrayOutputStream
-import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.util.zip.CRC32
 
@@ -24,8 +23,10 @@ object ApngEncoder {
         loops: Int = 0,
     ): ByteArray {
         require(frames.isNotEmpty() && frames.size == delaysMs.size) { "Each frame needs a delay" }
+        require(loops >= 0) { "Loop count must not be negative" }
         val parsed = frames.map(::chunks)
-        val header = parsed.first().first { it.type == "IHDR" }
+        val header = requireNotNull(parsed.first().firstOrNull { it.type == "IHDR" }) { "PNG frame is missing IHDR" }
+        require(header.data.size >= 8) { "Invalid PNG IHDR chunk" }
         val size = header.data.copyOfRange(0, 8)
         require(parsed.all { frame -> sizeOf(frame).contentEquals(size) }) { "Animated PNG frames must share one size" }
         val out = ByteArrayOutputStream()
@@ -48,20 +49,31 @@ object ApngEncoder {
         return out.toByteArray()
     }
 
-    private fun sizeOf(frame: List<Chunk>): ByteArray = frame.first { it.type == "IHDR" }.data.copyOfRange(0, 8)
+    private fun sizeOf(frame: List<Chunk>): ByteArray {
+        val header = requireNotNull(frame.firstOrNull { it.type == "IHDR" }) { "PNG frame is missing IHDR" }
+        require(header.data.size >= 8) { "Invalid PNG IHDR chunk" }
+        return header.data.copyOfRange(0, 8)
+    }
 
     private fun chunks(png: ByteArray): List<Chunk> {
         require(png.size > SIGNATURE.size && png.copyOfRange(0, SIGNATURE.size).contentEquals(SIGNATURE)) { "Not a PNG frame" }
-        val input = DataInputStream(png.inputStream(SIGNATURE.size, png.size - SIGNATURE.size))
         val result = mutableListOf<Chunk>()
-        while (input.available() >= CHUNK_OVERHEAD) {
-            val length = input.readInt()
-            val type = ByteArray(4).also { input.readFully(it) }.decodeToString()
-            val body = ByteArray(length).also { input.readFully(it) }
-            input.readInt() // CRC, recomputed on output
+        var offset = SIGNATURE.size
+        while (offset + CHUNK_OVERHEAD <= png.size) {
+            val length =
+                ((png[offset].toInt() and 0xFF) shl 24) or
+                    ((png[offset + 1].toInt() and 0xFF) shl 16) or
+                    ((png[offset + 2].toInt() and 0xFF) shl 8) or
+                    (png[offset + 3].toInt() and 0xFF)
+            val remainingBody = png.size - offset - CHUNK_OVERHEAD
+            require(length >= 0 && length <= remainingBody) { "Truncated or malformed PNG chunk length" }
+            val type = String(png, offset + 4, 4, Charsets.US_ASCII)
+            val body = png.copyOfRange(offset + 8, offset + 8 + length)
+            offset += CHUNK_OVERHEAD + length
             result += Chunk(type, body)
             if (type == "IEND") break
         }
+        require(result.any { it.type == "IHDR" }) { "PNG frame is missing IHDR" }
         return result
     }
 
