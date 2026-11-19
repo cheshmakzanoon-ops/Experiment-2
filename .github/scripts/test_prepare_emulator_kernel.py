@@ -66,6 +66,19 @@ class PrepareKernelTest(unittest.TestCase):
                 kernel.prepare_kernel(self.write_pin(), self.root / "out")
         self.assertEqual(list((self.root / "out").iterdir()), [])
 
+    def test_optional_archive_sha256_pin_is_enforced_before_extraction(self):
+        self.pin["archive_sha256"] = hashlib.sha256(self.archive).hexdigest()
+        with patch.object(kernel, "urlopen", return_value=io.BytesIO(self.archive)):
+            report = kernel.prepare_kernel(self.write_pin(), self.root / "valid")
+        self.assertEqual(report["archive_sha256"], self.pin["archive_sha256"])
+        self.assertEqual(report["status"], "PASS")
+
+        self.pin["archive_sha256"] = "0" * 64
+        with patch.object(kernel, "urlopen", return_value=io.BytesIO(self.archive)):
+            with self.assertRaisesRegex(ValueError, "archive SHA-256"):
+                kernel.prepare_kernel(self.write_pin(), self.root / "wrong-digest")
+        self.assertEqual(list((self.root / "wrong-digest").iterdir()), [])
+
     def test_valid_archive_with_wrong_kernel_is_rejected(self):
         self.pin["kernel_sha256"] = "0" * 64
         with patch.object(kernel, "urlopen", return_value=io.BytesIO(self.archive)):

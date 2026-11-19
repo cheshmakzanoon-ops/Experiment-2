@@ -3,6 +3,7 @@
   "url": "https://dl.google.com/android/repository/sys-img/google_apis/x86_64-ps16k-36_r07.zip",
   "archive_bytes": 1849428145,
   "archive_sha1": "dd783282e84bf475a02eba6777c79fc5695e1583",
+  "archive_sha256": "56005e428f0d30105789bde96f60bbd32c5c62e710321abd7c10f9e591889ff7",
   "member": "x86_64/kernel-ranchu",
   "kernel_sha256": "3f2c91f26b27e7c3a6f4a158383d7fb9a4cc87a2c321fc3ad77dc833b9e61a86",
   "kernel_bytes": 20489216,

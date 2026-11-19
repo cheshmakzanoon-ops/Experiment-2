@@ -1,5 +1,15 @@
 # Test and build evidence
 
+## November 19 CI repair follow-up
+
+The [kernel comparison record](../ANDROID15_KERNEL_REPAIR_2026-11-19.md) documents two
+independent first-attempt API35 / 16 KB controls, each completing all 283 test identities and
+minified launch. The required workflow now applies that pinned same-family kernel update only
+to its two API35 / 16 KB lanes, retaining the Android 15 image and all existing acceptance gates.
+Those controls qualify the environment change, not the final main revision. The live verification
+index in PR #40 below records subsequent exact-main-SHA workflow attempts and their artifacts;
+earlier failed attempts remain part of the evidence.
+
 ## November 18 integration
 
 This record preserves the November integration's observed attempts, including failures and
