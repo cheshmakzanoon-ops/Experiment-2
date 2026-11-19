@@ -2,20 +2,19 @@ package com.artflow.qualification;
 
 import android.app.Instrumentation;
 import android.graphics.Bitmap;
+import android.graphics.Rect;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.util.Log;
-import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import androidx.test.uiautomator.By;
 import androidx.test.uiautomator.BySelector;
 import androidx.test.uiautomator.Direction;
 import androidx.test.uiautomator.UiDevice;
 import androidx.test.uiautomator.UiObject2;
-import androidx.test.uiautomator.Until;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeoutException;
 
 /** Bounded operations against the visible accessibility tree, without production classes or state. */
 final class VisibleUi {
@@ -30,17 +29,28 @@ final class VisibleUi {
     }
 
     UiObject2 await(BySelector selector) {
-        UiObject2 value = device.wait(Until.findObject(selector), TIMEOUT);
+        UiObject2 value = device.wait(ignored -> freshVisible(selector), TIMEOUT);
         if (value == null) throw new AssertionError("Missing visible UI: " + selector);
         return value;
+    }
+
+    private UiObject2 freshVisible(BySelector selector) {
+        // Compose filters UIAutomator out of its layout-event listeners. Cached descendants
+        // can therefore retain old labels/bounds after a successful scroll or recomposition.
+        // This ordinary-release qualification runs on API 36; use only the public cache API.
+        if (Build.VERSION.SDK_INT < 34 || !instrumentation.getUiAutomation().clearCache()) {
+            throw new AssertionError("A fresh visible tree requires a connected API 34+ accessibility cache");
+        }
+        UiObject2 value = device.findObject(selector);
+        return value != null && !value.getVisibleBounds().isEmpty() ? value : null;
     }
 
     void text(String value) { scroll(By.pkg(APP).text(value)).click(); }
     void description(String value) { scroll(By.pkg(APP).desc(value)).click(); }
 
     UiObject2 scroll(BySelector target) {
-        UiObject2 present = device.findObject(target);
-        if (present != null && !present.getVisibleBounds().isEmpty()) return present;
+        UiObject2 present = freshVisible(target);
+        if (present != null) return present;
         for (Direction direction : new Direction[]{Direction.DOWN, Direction.UP}) {
             for (int attempt = 0; attempt < 12; attempt++) {
                 List<UiObject2> candidates = device.findObjects(By.pkg(APP).scrollable(true));
@@ -60,8 +70,8 @@ final class VisibleUi {
                         (node, requested) -> scrollAndWait(node, requested, target));
                 device.waitForIdle(1_000);
                 logVisibleText(target);
-                present = device.findObject(target);
-                if (present != null && !present.getVisibleBounds().isEmpty()) return present;
+                present = freshVisible(target);
+                if (present != null) return present;
                 if (!more) break;
             }
         }
@@ -70,39 +80,29 @@ final class VisibleUi {
 
     private boolean scrollAndWait(UiObject2 container,
             AccessibilityNodeInfo.AccessibilityAction action, BySelector target) {
-        AccessibilityNodeInfo requestedContainer = container.getAccessibilityNodeInfo();
-        boolean[] accepted = {false};
-        try {
-            // Register before the action. A quiet accessibility stream before an asynchronous
-            // scroll starts is not evidence that the resulting screen has been observed.
-            AccessibilityEvent event = instrumentation.getUiAutomation().executeAndWaitForEvent(
-                    () -> {
-                        accepted[0] = requestedContainer.performAction(action.getId());
-                        Log.i("ArtFlowQualification", "Scroll action=" + action.getId()
-                                + "; accepted=" + accepted[0] + "; target=" + target);
-                    },
-                    candidate -> {
-                        if (candidate.getEventType() != AccessibilityEvent.TYPE_VIEW_SCROLLED
-                                || !APP.contentEquals(String.valueOf(candidate.getPackageName()))) return false;
-                        AccessibilityNodeInfo source = candidate.getSource();
-                        try {
-                            boolean matches = requestedContainer.equals(source);
-                            Log.i("ArtFlowQualification", "Scroll event for " + target + ": selectedContainer="
-                                    + matches + ", y=" + candidate.getScrollY() + "/" + candidate.getMaxScrollY());
-                            return matches;
-                        }
-                        finally { if (source != null) source.recycle(); }
-                    }, 1_000);
-            try {
-                Log.i("ArtFlowQualification", "Observed scroll for " + target + ": y=" + event.getScrollY()
-                        + "/" + event.getMaxScrollY() + ", x=" + event.getScrollX()
-                        + "/" + event.getMaxScrollX());
-                return accepted[0];
-            } finally { event.recycle(); }
-        } catch (TimeoutException failure) {
-            if (!accepted[0]) return false;
-            throw new AssertionError("Accepted scroll produced no matching container event for " + target, failure);
-        }
+        String before = visibleContainerContent(container);
+        boolean accepted = container.getAccessibilityNodeInfo().performAction(action.getId());
+        Log.i("ArtFlowQualification", "Scroll action=" + action.getId()
+                + "; accepted=" + accepted + "; target=" + target + "; before=" + before);
+        if (!accepted) return false;
+        // Compose deliberately omits TYPE_VIEW_SCROLLED for a UIAutomator-only connection.
+        // Observe the result of this one action instead of waiting for an event it does not send.
+        boolean changed = device.wait(ignored -> {
+            if (freshVisible(target) != null) return true;
+            return !before.equals(visibleContainerContent(container));
+        }, 1_000);
+        Log.i("ArtFlowQualification", "Observed target or changed viewport for " + target
+                + ": " + changed + "; after=" + visibleContainerContent(container));
+        return changed;
+    }
+
+    private String visibleContainerContent(UiObject2 container) {
+        // UiObject2 owns its cached node; recycle only this copy and the children we obtain.
+        AccessibilityNodeInfo root = AccessibilityNodeInfo.obtain(container.getAccessibilityNodeInfo());
+        StringBuilder content = new StringBuilder();
+        try { collectVisibleText(root, content); }
+        finally { root.recycle(); }
+        return content.toString();
     }
 
     private void logVisibleText(BySelector target) {
@@ -116,8 +116,13 @@ final class VisibleUi {
     private void collectVisibleText(AccessibilityNodeInfo node, StringBuilder text) {
         if (node == null) return;
         if (node.isVisibleToUser() && APP.contentEquals(String.valueOf(node.getPackageName()))) {
-            if (node.getText() != null) text.append('[').append(node.getText()).append("] ");
-            if (node.getHintText() != null) text.append("hint[").append(node.getHintText()).append("] ");
+            Rect bounds = new Rect();
+            node.getBoundsInScreen(bounds);
+            if (node.getText() != null) text.append('[').append(node.getText()).append('@').append(bounds).append("] ");
+            if (node.getHintText() != null) text.append("hint[").append(node.getHintText()).append('@').append(bounds).append("] ");
+            if (node.getContentDescription() != null) {
+                text.append("desc[").append(node.getContentDescription()).append('@').append(bounds).append("] ");
+            }
         }
         for (int i = 0; i < node.getChildCount(); i++) {
             AccessibilityNodeInfo child = node.getChild(i);

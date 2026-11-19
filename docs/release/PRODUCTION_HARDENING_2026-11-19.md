@@ -684,6 +684,57 @@ All original attempts and their failures remain retained. These follow-through r
 the existing assignments and do not add another wave. Current run outcomes and final exact-main
 acceptance are maintained in PR 41 after each source freeze.
 
+### Ordinary-release observation correction
+
+The next head `d601a7d6b3268ba7e195d4135d7b71cd43bac25d` was tested as checkout
+`c26152ec0c3afaeb002e98597bef3ce1ec9580d9`, tree
+`4ce620f08b889df58599f60c357d1438e125fae8`. Ordinary-release run 44584795362 failed its
+single original invocation because the new driver required a scroll event that Compose does
+not send to UIAutomator-only connections. The accepted scroll actually made Stylus only visible
+in the retained screenshot and hierarchy. Exact resolved Compose and Android/UiAutomator source
+confirm both event suppression and cached descendant queries. The driver now uses the public,
+checked accessibility-cache clear and observes the actual visible target or changed descendant
+labels/bounds after its one action. Original directional/timeout limits, toggle states, pointer
+painting, process boundaries, grants and pixel requirements remain. Source/payload/signature/
+installed-byte checks passed independently for the failed run; fresh full runtime remains required.
+
+Installed-upgrade run 44584795238 initially failed before compilation/runtime while resolving two
+unchanged pinned dependencies. Six fresh official Central POM/module/JAR downloads returned 200
+with hashes identical to prior verified bytes and local cache entries; the parallel same-source
+CI resolved the graph. One explicit infrastructure rerun was requested without source changes.
+Attempt 2 passed the actual campaign. Independent review of artifact 14562765070 validates both
+exact source trees, all four APKs with one signer, code 3-to-4 replacement, identical stopped-data
+snapshots, and one original passing seed/edit/reopen invocation per phase. Different edit and
+reopen processes produced identical 4,096-pixel exports, and the final saved document and metadata
+agree. The actual device is API36 with 4 KB pages. The original dependency failure remains retained;
+publisher/store qualification remains separate. The same-source Android build also passed all
+2,001 JVM cases without skips and its full host/static/lint/dependency/build gates. Its seven
+device lanes and the optimized/ordinary-release workflows still require their own acceptance.
+
+### Runtime parity and fresh accessibility geometry
+
+The same-source API26 artifact 14561817697 contains all 322 expected identities: 319 passed,
+one failed, and two retain their existing API-conditional skips. The toolbar and palette
+regressions passed. Independent image and line/touch measurements confirm the complete labels
+and containment of Import's 117.5 px touch bottom within the 118 px host at font scale 1.3.
+ArtworkWorkflow stopped before input because cached accessibility bounds were 18 px above the
+actual dialog. Its screenshot agrees with Compose's current screen coordinates. The helper now
+requires successful public node refreshes for the root, traversed descendants and owned ancestor
+copies before reading geometry; refresh outcomes are retained. Unique-target and one-pixel
+geometry checks remain strict, and there is still only one original OS DOWN/UP gesture.
+
+API36 artifact 14564097672 contains all 322 exact identities passing without failures or skips.
+Its original Drawing pad gesture has the same bounds and coordinates as optimized run
+44584795473, and both events reach the dialog. Debug selects the tab, paints the practice pad,
+and passes the artwork-isolation assertions; optimized executes all 43 cases but fails only
+because the tab remains unselected. Resolved APK metadata shows Foundation/Layout and
+Animation/Core 1.9.0 in debug but 1.7.3 in optimized/release, while both already use UI/Runtime
+1.9.0. Debug tooling causes the additional family upgrades. A single Foundation 1.9.0 constraint
+now aligns those input/layout implementations across variants. Legitimate Gradle lock generation
+changes exactly eight family entries from 1.7.3 to 1.9.0; BOM, Material3, shrinking, gesture and
+all assertions remain unchanged. This is a controlled runtime-parity repair whose optimized
+outcome must still be demonstrated by a fresh original execution, not an inferred pass.
+
 The final frozen main revision still requires the repeated Android workflow and primary API35 /
 16KB executions specified in [release signoff](RELEASE_SIGNOFF.md), plus all 43 optimized cases,
 the ordinary-release UI workflow and an actual installed historical-app upgrade. Their final

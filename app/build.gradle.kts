@@ -192,6 +192,11 @@ dependencies {
     // Portable MP4 container writing; no player, networking, or native codec dependency.
     implementation("androidx.media3:media3-muxer:1.10.1")
     constraints {
+        implementation("androidx.compose.foundation:foundation:1.9.0") {
+            // UI 1.9 is selected by Lifecycle; debug tooling also lifts Foundation/Animation.
+            // Keep the same input and layout implementations in optimized and publisher builds.
+            because("Align release Foundation and Animation with the Compose UI and debug runtime")
+        }
         implementation("com.google.guava:guava:33.8.0-android") {
             // Media3 otherwise selects 33.3.1-android; keep its Android-compatible flavor.
             because("Fix CVE-2026-102554 deserialization allocation and CVE-2026-118042 hash flooding")

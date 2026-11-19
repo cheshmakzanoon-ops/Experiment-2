@@ -177,15 +177,40 @@ both installed APKs and 1,770 renamed app classes passed the independent audit.
 The retained log shows accepted scroll actions in both directions, but the driver did not
 observe their corresponding events before querying the next screen. The pinned UiAutomator
 implementation delegates idle detection to the preceding accessibility event stream; an
-accepted asynchronous action can precede its first event. The driver now registers a
+accepted asynchronous action can precede its first event. The next diagnostic driver registered a
 [`UiAutomation.executeAndWaitForEvent`](https://developer.android.com/reference/android/app/UiAutomation#executeAndWaitForEvent(java.lang.Runnable,%20android.app.UiAutomation.AccessibilityEventFilter,%20long))
-filter before issuing that same single action. It requires a scroll event from the selected
-application container, then uses the existing idle wait and a fresh target lookup. Accepted
-actions without a matching event fail explicitly. Event coordinates and visible label text
-are retained to distinguish timing, page movement and selector failures in the next run.
-The container selection, action count and bounded search are preserved. This repairs an
-observable synchronization gap; only a new original runtime can establish whether it resolves
-the missed Autosave lookup. The earlier failed run remains failed.
+filter before issuing that same single action. It required a scroll event from the selected
+application container before the existing idle wait and fresh target lookup. That diagnostic
+requirement proved invalid in the next actual execution, as recorded below. The earlier failed
+run remains failed.
+
+### Fresh visible state without Compose scroll events
+
+[Run 44584795362](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44584795362)
+failed its sole original UI invocation at the first Stylus-only scroll. The actual checkout was
+`c26152ec0c3afaeb002e98597bef3ce1ec9580d9`, tree
+`4ce620f08b889df58599f60c357d1438e125fae8`. Artifact `14559389110` is 29,844,982 bytes,
+SHA-256 `3786f0ad1203f91ce89c6da824eda3e503bb49a8eb6fd194d7d0d84f05e6fd26`.
+The single advertised action was accepted, and the retained screenshot and hierarchy show
+Stylus only visibly on screen. The event wait nevertheless timed out with no events received.
+Independent source, 153-entry payload, official-signature, installed-byte and ordinary R8 checks
+passed; artwork creation and pixel preservation were not reached.
+
+Exact [Compose UI 1.9.0 source](https://dl.google.com/dl/android/maven2/androidx/compose/ui/ui-android/1.9.0/ui-android-1.9.0-sources.jar)
+explicitly excludes UIAutomator from its enabled accessibility-service list and suppresses these
+layout/scroll events. Android's accessibility cache can therefore retain old descendants after a
+successful action. The driver now checks and clears that cache using the public
+[`UiAutomation.clearCache()`](https://developer.android.com/reference/android/app/UiAutomation#clearCache())
+API before each target observation. This API requires Android 14/API34 or later; the existing
+ordinary-release lane remains API36. The application minimum SDK is unchanged.
+
+After one accepted scroll, the driver observes a fresh visible target or a changed snapshot of
+the selected container's visible descendant labels and screen bounds within the existing
+one-second observation timeout. A stationary viewport stops that direction; it does not replay
+the action. The 12-step directional limits, 15-second target wait, actual toggle states, pointer
+painting, save/process-death/reopen, FileProvider grant and complete pixel comparisons remain.
+Before/after visible content is retained in the trace. The corrected driver still requires a new
+complete original runtime on the final source; the diagnostic failure is not counted as a pass.
 
 For a clean checkout and a fresh local disposable emulator:
 

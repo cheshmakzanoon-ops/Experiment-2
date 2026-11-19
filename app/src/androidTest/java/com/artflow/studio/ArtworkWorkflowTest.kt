@@ -320,14 +320,17 @@ class ArtworkWorkflowTest {
         var labels: List<AccessibilityNodeInfo> = emptyList()
         val targets = mutableListOf<AccessibilityNodeInfo>()
         val observations = JSONArray()
+        val refreshes = JSONArray()
         receipt.put("accessibilityCandidates", observations)
+        receipt.put("accessibilityRefreshes", refreshes)
         try {
+            refreshAccessibilityNode(root, "activeRoot", refreshes)
             receipt.put("accessibilityRoot", accessibilityObservation(root))
-            labels = drawingPadLabels(root, receipt)
-            labels.forEach { label ->
+            labels = drawingPadLabels(root, receipt, refreshes)
+            labels.forEachIndexed { index, label ->
                 // Compose accessibility exposes unmerged text separately from the parent's OnClick.
                 // Resolve that actual clickable ancestor, never invoke the label's semantic action.
-                val target = nearestClickableAncestor(label, instrumentation.targetContext.packageName)
+                val target = nearestClickableAncestor(label, instrumentation.targetContext.packageName, "candidate/$index", refreshes)
                 val observation =
                     accessibilityObservation(label).put("labelClickable", label.isClickable).put(
                         "hasClickableAncestor",
@@ -357,6 +360,7 @@ class ArtworkWorkflowTest {
     private fun drawingPadLabels(
         root: AccessibilityNodeInfo,
         receipt: JSONObject,
+        refreshes: JSONArray,
     ): List<AccessibilityNodeInfo> {
         val observations = JSONArray()
         receipt.put("accessibilityTraversal", observations)
@@ -369,6 +373,7 @@ class ArtworkWorkflowTest {
             while (pending.isNotEmpty()) {
                 val (node, path) = pending.removeFirst()
                 try {
+                    refreshAccessibilityNode(node, path, refreshes)
                     val missingChildren = JSONArray()
                     observations.put(accessibilityObservation(node).put("path", path).put("missingChildIndices", missingChildren))
                     if (node.text?.toString() == "Drawing pad") labels.add(AccessibilityNodeInfo.obtain(node))
@@ -387,6 +392,20 @@ class ArtworkWorkflowTest {
         } finally {
             pending.forEach { (node, _) -> node.recycle() }
         }
+    }
+
+    private fun refreshAccessibilityNode(
+        node: AccessibilityNodeInfo,
+        path: String,
+        observations: JSONArray,
+    ) {
+        // Root, child and parent lookups may return cached geometry from before IME dismissal.
+        // refresh() bypasses that cache on every supported API; an obsolete node is a failure.
+        val observation = JSONObject().put("path", path).put("windowId", node.windowId)
+        observations.put(observation)
+        val refreshed = node.refresh()
+        observation.put("succeeded", refreshed)
+        assertTrue("Could not refresh accessibility node at $path", refreshed)
     }
 
     private fun accessibilityObservation(node: AccessibilityNodeInfo): JSONObject {
@@ -409,17 +428,23 @@ class ArtworkWorkflowTest {
     private fun nearestClickableAncestor(
         label: AccessibilityNodeInfo,
         packageName: String,
+        path: String,
+        refreshes: JSONArray,
     ): AccessibilityNodeInfo? {
         var node: AccessibilityNodeInfo? = AccessibilityNodeInfo.obtain(label)
+        var depth = 0
         while (node != null) {
-            if (node.isVisibleToUser && node.isClickable && node.packageName?.toString() == packageName) return node
-            val parent =
-                try {
-                    node.parent
-                } finally {
-                    node.recycle()
-                }
-            node = parent
+            val current = node
+            try {
+                refreshAccessibilityNode(current, "$path/ancestor/$depth", refreshes)
+                if (current.isVisibleToUser && current.isClickable && current.packageName?.toString() == packageName) return current
+                node = current.parent
+            } catch (failure: Throwable) {
+                current.recycle()
+                throw failure
+            }
+            current.recycle()
+            depth++
         }
         return null
     }
