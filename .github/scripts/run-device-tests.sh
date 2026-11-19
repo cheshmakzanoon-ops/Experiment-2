@@ -17,25 +17,41 @@ esac
 wait_for_system_settle() {
   local attempt=0
   local deadline=$((SECONDS + 90))
+  local ready=false
   while ((attempt < 45 && SECONDS < deadline)); do
     attempt=$((attempt + 1))
     if [[ "$(timeout 10 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == 1 ]] \
       && timeout 15 adb shell cmd package list packages android >/dev/null 2>&1 \
       && timeout 10 adb shell service check activity 2>/dev/null | grep -q ': found' \
-      && timeout 10 adb shell service check settings 2>/dev/null | grep -q ': found'; then
+      && timeout 10 adb shell service check settings 2>/dev/null | grep -q ': found' \
+      && ((SECONDS < deadline)); then
+      ready=true
       break
     fi
     sleep 2
   done
+  if [[ "$ready" != true ]]; then
+    echo 'Android services did not become ready within the bounded settle wait' >&2
+    return 1
+  fi
+  # Broadcast idleness remains advisory; the service checks above are the required
+  # readiness gate for every supported API level.
   timeout 45 adb shell am wait-for-broadcast-idle >/dev/null 2>&1 || true
   sleep 2
 }
 # Record default runtime settings, or explicitly configure and verify the debug-emulator mitigation.
 bash "$(dirname "${BASH_SOURCE[0]}")/configure-emulator-runtime.sh" || exit $?
-wait_for_system_settle
+wait_for_system_settle || exit $?
 instrumentation_attempt=0
 run_instrumentation() {
   instrumentation_attempt=$((instrumentation_attempt + 1))
+  if [[ -n "${ARTFLOW_KERNEL_MANIFEST:-}" ]]; then
+    # A failed preflight must stop before Gradle and cannot enter crash recovery
+    # using results left by an earlier invocation.
+    python "$(dirname "${BASH_SOURCE[0]}")/verify_emulator_kernel.py" \
+      --manifest "$ARTFLOW_KERNEL_MANIFEST" \
+      --output "$root/kernel-runtime/attempt-$instrumentation_attempt" || exit $?
+  fi
   local attempt_status=0
   local attempt_token
   attempt_token="$(python -c 'import uuid; print(uuid.uuid4())')"
@@ -74,7 +90,7 @@ if ((instrumentation_status != 0)); then
     timeout 15 adb logcat -b all -d > "$retry_root/first-attempt-logcat.txt" || true
     echo "Recovering Android before the single framework-crash retry"
     bash ".github/scripts/recover-android15-emulator.sh" || exit $?
-    wait_for_system_settle
+    wait_for_system_settle || exit $?
     echo "Retrying instrumentation once after verified Android 15/16 KB runtime crash"
     run_instrumentation || exit $?
   else

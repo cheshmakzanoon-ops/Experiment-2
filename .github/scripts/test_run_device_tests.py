@@ -16,7 +16,8 @@ NATIVE_TEXT = (b'Timestamp: 2026-10-25 00:00:01.123456789+0000\nCmdline: com.art
 
 class DeviceHarnessTest(unittest.TestCase):
     def run_harness(self, expected, gradle_status=0, runtime_mode="default", retry_status=None,
-                    collector_status=None, native_status=None):
+                    collector_status=None, native_status=None, readiness_failure=None,
+                    recovery_readiness_failure=None, kernel_statuses=None):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             scripts = root / '.github/scripts'
@@ -42,7 +43,17 @@ class DeviceHarnessTest(unittest.TestCase):
                 (scripts / 'classify_android15_reference_queue_crash.py').write_text(
                     'import os\nfrom pathlib import Path\n'
                     'with Path(os.environ["CALLS"]).open("a") as log: log.write("classifier\\n")\n')
-                (scripts / 'recover-android15-emulator.sh').write_text('#!/bin/sh\nprintf "recover\\n" >> "$CALLS"\n')
+                (scripts / 'recover-android15-emulator.sh').write_text(
+                    '#!/bin/sh\nprintf "recover\\n" >> "$CALLS"\ntouch "$RUNNER_TEMP/recovered"\n')
+            (scripts / 'verify_emulator_kernel.py').write_text(
+                'import json, os, sys\nfrom pathlib import Path\n'
+                'with Path(os.environ["CALLS"]).open("a") as log: log.write("kernel " + " ".join(sys.argv[1:]) + "\\n")\n'
+                'output = Path(sys.argv[sys.argv.index("--output") + 1])\n'
+                'statuses = json.loads(os.environ["KERNEL_STATUSES"])\n'
+                'status = statuses[min(int(output.name.split("-")[-1]) - 1, len(statuses) - 1)]\n'
+                'output.mkdir(parents=True)\n'
+                '(output / "verification.json").write_text(json.dumps({"status": status}))\n'
+                'raise SystemExit(status)\n')
             commands = root / 'commands'
             commands.mkdir()
             (root / 'fixture-tombstone').write_bytes(NATIVE_TEXT)
@@ -57,6 +68,8 @@ args = sys.argv[1:]
 with Path(os.environ["CALLS"]).open("a") as log:
     log.write(" ".join(args) + "\\n")
 data = Path("fixture-tombstone").read_bytes()
+recovered = (Path(os.environ["RUNNER_TEMP"]) / "recovered").exists()
+readiness_failure = os.environ["RECOVERY_READINESS_FAILURE" if recovered else "READINESS_FAILURE"]
 if any("getconf" in arg for arg in args):
     raise SystemExit(127)
 if args[:3] == ["shell", "am", "start"]:
@@ -64,11 +77,15 @@ if args[:3] == ["shell", "am", "start"]:
 elif args[:3] == ["shell", "am", "wait-for-broadcast-idle"]:
     print("All broadcast queues are idle!")
 elif args[:2] == ["shell", "service"] and len(args) >= 4 and args[2] == "check":
-    print(f"Service {args[3]}: found")
+    print(f"Service {args[3]}: " + ("not found" if readiness_failure == args[3] else "found"))
 elif args == ["shell", "cmd", "package", "list", "packages", "android"]:
+    if readiness_failure == "packages": raise SystemExit(1)
     print("package:android")
 elif args == ["shell", "getprop", "sys.boot_completed"]:
-    print("1")
+    count = Path(os.environ["RUNNER_TEMP"]) / "boot-check-count"
+    checked = int(count.read_text()) if count.exists() else 0
+    count.write_text(str(checked + 1))
+    print("0" if readiness_failure == "boot" or (readiness_failure == "boot-twice" and checked < 2) else "1")
 elif args[:2] == ["shell", "pidof"]:
     print(42)
 elif args[:2] == ["pull", "/sdcard/artflow-window.xml"]:
@@ -145,8 +162,15 @@ if sys.argv[1] == "connectedDebugAndroidTest":
                        RUNNER_TEMP=str(root), CALLS=str(log), GRADLE_STATUS=str(gradle_status),
                        RETRY_STATUS=str(retry_status if retry_status is not None else gradle_status),
                        ART_JIT_MODE=runtime_mode, CAPTURE_STATUS=str(collector_status),
-                       NATIVE_STATUS=str(native_status))
+                       NATIVE_STATUS=str(native_status), READINESS_FAILURE=str(readiness_failure),
+                       RECOVERY_READINESS_FAILURE=str(recovery_readiness_failure),
+                       KERNEL_STATUSES=json.dumps(kernel_statuses))
             env.pop('EXPECTED_PAGE_SIZE', None)
+            env.pop('ARTFLOW_KERNEL_MANIFEST', None)
+            if kernel_statuses is not None:
+                manifest = root / 'kernel-manifest.json'
+                manifest.write_text('{}')
+                env['ARTFLOW_KERNEL_MANIFEST'] = str(manifest)
             if expected is not None:
                 env['EXPECTED_PAGE_SIZE'] = expected
             result = subprocess.run(['bash', str(scripts / SCRIPT.name)], cwd=root, env=env,
@@ -157,6 +181,8 @@ if sys.argv[1] == "connectedDebugAndroidTest":
                                      (root / 'artflow-device/native-tombstones').glob('*/manifest.json')}
             self.native_payloads = {str(path.relative_to(root / 'artflow-device/native-tombstones')): path.read_bytes()
                                     for path in (root / 'artflow-device/native-tombstones').glob('*/files/*')}
+            self.kernel_records = {path.parent.name: json.loads(path.read_text()) for path in
+                                   (root / 'artflow-device/kernel-runtime').glob('*/verification.json')}
             return result, log.read_text() if log.exists() else '', manifests
 
     def test_failed_runtime_configuration_prevents_instrumentation(self):
@@ -171,6 +197,96 @@ if sys.argv[1] == "connectedDebugAndroidTest":
         self.assertIn('-Pandroid.testInstrumentationRunnerArguments.expectedPageSize=4096', calls)
         self.assertNotIn('getconf', calls)
         self.assertIn('assembleBenchmark', calls)
+        self.assertNotIn('kernel --manifest', calls)
+
+    def test_unready_services_fail_closed_before_instrumentation(self):
+        for failed_service in ('boot', 'packages', 'activity', 'settings'):
+            with self.subTest(failed_service=failed_service):
+                result, calls, manifests = self.run_harness('16384', readiness_failure=failed_service)
+                self.assertEqual(1, result.returncode, result.stderr)
+                self.assertIn('did not become ready', result.stderr)
+                self.assertEqual(45, calls.count('shell getprop sys.boot_completed\n'))
+                self.assertNotIn('connectedDebugAndroidTest', calls)
+                self.assertNotIn('assembleBenchmark', calls)
+                self.assertNotIn('shell am wait-for-broadcast-idle', calls)
+                self.assertEqual({}, manifests)
+                self.assertIn('logcat', calls)
+
+    def test_transient_boot_readiness_waits_then_runs_the_suite(self):
+        result, calls, _ = self.run_harness('16384', readiness_failure='boot-twice')
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(3, calls.count('shell getprop sys.boot_completed\n'))
+        self.assertIn('connectedDebugAndroidTest', calls)
+
+    def test_readiness_command_cannot_report_success_after_the_deadline(self):
+        # Advance Bash's clock inside a foreground command, without waiting in real time.
+        # All readiness probes succeed, but their combined completion is too late.
+        function = 'wait_for_system_settle() {' + SCRIPT.read_text().split(
+            'wait_for_system_settle() {', 1)[1].split('\n}\n', 1)[0] + '\n}\n'
+        probe = function + '''
+timeout() {
+  if [[ "$*" == '10 adb shell getprop sys.boot_completed' ]]; then
+    echo 1
+  elif [[ "$*" == '15 adb shell cmd package list packages android' ]]; then
+    SECONDS=1000
+  else
+    echo 'Service: found'
+  fi
+}
+sleep() { :; }
+SECONDS=0
+wait_for_system_settle
+'''
+        result = subprocess.run(['bash', '-c', probe], capture_output=True, text=True, timeout=3)
+        self.assertEqual(1, result.returncode, result.stderr)
+        self.assertIn('did not become ready', result.stderr)
+
+    def test_unready_recovery_cannot_start_a_second_instrumentation(self):
+        result, calls, manifests = self.run_harness('16384', gradle_status=37, runtime_mode='disabled',
+                                                  retry_status=0, recovery_readiness_failure='settings')
+        self.assertEqual(1, result.returncode, result.stderr)
+        self.assertEqual(1, calls.count('connectedDebugAndroidTest'))
+        self.assertEqual(1, calls.count('recover\n'))
+        self.assertEqual({'attempt-1'}, set(manifests))
+        self.assertEqual(37, manifests['attempt-1']['instrumentationStatus'])
+        self.assertNotIn('assembleBenchmark', calls)
+
+    def test_kernel_preflight_failure_stops_before_instrumentation_and_classifier(self):
+        result, calls, manifests = self.run_harness('16384', gradle_status=37, runtime_mode='disabled',
+                                                  retry_status=0, kernel_statuses=(31,))
+        self.assertEqual(31, result.returncode, result.stderr)
+        self.assertNotIn('connectedDebugAndroidTest', calls)
+        self.assertNotIn('classifier', calls)
+        self.assertNotIn('recover\n', calls)
+        self.assertNotIn('assembleBenchmark', calls)
+        self.assertEqual({}, manifests)
+        self.assertEqual({'attempt-1': {'status': 31}}, self.kernel_records)
+        self.assertIn('logcat', calls)
+
+    def test_kernel_is_verified_after_readiness_for_each_invocation(self):
+        result, calls, manifests = self.run_harness('16384', gradle_status=37, runtime_mode='disabled',
+                                                  retry_status=0, kernel_statuses=(0, 0))
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(2, calls.count('kernel --manifest'))
+        self.assertLess(calls.index('shell am wait-for-broadcast-idle'), calls.index('kernel --manifest'))
+        self.assertLess(calls.index('kernel --manifest'), calls.index('connectedDebugAndroidTest'))
+        self.assertLess(calls.index('recover\n'), calls.rindex('shell am wait-for-broadcast-idle'))
+        self.assertLess(calls.rindex('shell am wait-for-broadcast-idle'), calls.rindex('kernel --manifest'))
+        self.assertLess(calls.rindex('kernel --manifest'), calls.rindex('connectedDebugAndroidTest'))
+        self.assertEqual({'attempt-1', 'attempt-2'}, set(self.kernel_records))
+        self.assertEqual({'attempt-1', 'attempt-2'}, set(manifests))
+
+    def test_failed_kernel_recheck_preserves_first_failure_and_prevents_retry(self):
+        result, calls, manifests = self.run_harness('16384', gradle_status=37, runtime_mode='disabled',
+                                                  retry_status=0, kernel_statuses=(0, 41))
+        self.assertEqual(41, result.returncode, result.stderr)
+        self.assertEqual(1, calls.count('connectedDebugAndroidTest'))
+        self.assertEqual(1, calls.count('recover\n'))
+        self.assertEqual(1, calls.count('classifier\n'))
+        self.assertEqual({'attempt-1'}, set(manifests))
+        self.assertEqual(37, manifests['attempt-1']['instrumentationStatus'])
+        self.assertEqual({'attempt-1': {'status': 0}, 'attempt-2': {'status': 41}}, self.kernel_records)
+        self.assertNotIn('assembleBenchmark', calls)
 
     def test_instrumentation_evidence_is_captured_before_replacing_the_app(self):
         result, calls, manifests = self.run_harness('4096')

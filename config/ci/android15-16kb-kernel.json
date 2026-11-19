@@ -1,0 +1,12 @@
+{
+  "package": "system-images;android-36;google_apis_ps16k;x86_64",
+  "url": "https://dl.google.com/android/repository/sys-img/google_apis/x86_64-ps16k-36_r07.zip",
+  "archive_bytes": 1849428145,
+  "archive_sha1": "dd783282e84bf475a02eba6777c79fc5695e1583",
+  "member": "x86_64/kernel-ranchu",
+  "kernel_sha256": "3f2c91f26b27e7c3a6f4a158383d7fb9a4cc87a2c321fc3ad77dc833b9e61a86",
+  "kernel_bytes": 20489216,
+  "kernel_release": "6.6.66-android15-8-gd0c43a640eab-ab13812146",
+  "expected_api": 35,
+  "expected_fingerprint": "google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys"
+}
