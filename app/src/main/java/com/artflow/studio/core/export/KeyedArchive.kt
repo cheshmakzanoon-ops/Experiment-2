@@ -18,7 +18,17 @@ object BinaryPlist {
 
     fun isBinaryPlist(bytes: ByteArray): Boolean = bytes.size > MAGIC.size && MAGIC.indices.all { bytes[it] == MAGIC[it] }
 
-    fun read(bytes: ByteArray): Any? {
+    fun read(bytes: ByteArray): Any? = read(bytes, decodedByteLimit())
+
+    /**
+     * Bounds decoded payload plus conservative object/container estimates, charging repeated
+     * references separately. Callers must also admit the already-owned encoded input and other work.
+     */
+    fun read(
+        bytes: ByteArray,
+        maxDecodedBytes: Long,
+    ): Any? {
+        require(maxDecodedBytes in 1..decodedByteLimit()) { "Invalid property-list allocation limit" }
         require(bytes.size >= MAGIC.size + TRAILER && isBinaryPlist(bytes)) { "This is not a binary property list" }
         val trailer = bytes.size - TRAILER
         val offsetSize = bytes[trailer + 6].toInt() and 0xFF
@@ -28,9 +38,26 @@ object BinaryPlist {
         val table = number(bytes, trailer + 24, 8)
         require(offsetSize in 1..8 && refSize in 1..8 && count in 1..MAX_OBJECTS && top in 0 until count) { DAMAGED }
         require(table in MAGIC.size.toLong()..trailer.toLong() && count <= (trailer - table) / offsetSize) { DAMAGED }
-        val offsets = IntArray(count.toInt()) { index -> number(bytes, (table + index.toLong() * offsetSize).toInt(), offsetSize).toInt() }
-        require(offsets.all { it in MAGIC.size until trailer }) { DAMAGED }
-        return Reader(bytes, offsets, refSize).read(top.toInt(), 0)
+        val budget = DecodedBudget(maxDecodedBytes)
+        budget.claim(OBJECT_BYTES + count * Int.SIZE_BYTES)
+        val offsets =
+            IntArray(count.toInt()) { index ->
+                val offset = number(bytes, (table + index.toLong() * offsetSize).toInt(), offsetSize)
+                require(offset in MAGIC.size.toLong() until table) { DAMAGED }
+                offset.toInt()
+            }
+        return Reader(bytes, offsets, refSize, budget).read(top.toInt(), 0)
+    }
+
+    private fun decodedByteLimit(): Long = minOf(MAX_DECODED_BYTES, Runtime.getRuntime().maxMemory() / 8)
+
+    private class DecodedBudget(
+        private var remaining: Long,
+    ) {
+        fun claim(bytes: Long) {
+            require(bytes >= 0 && bytes <= remaining) { "The property list needs too much decoded memory" }
+            remaining -= bytes
+        }
     }
 
     /**
@@ -195,6 +222,7 @@ object BinaryPlist {
         val bytes: ByteArray,
         val offsets: IntArray,
         val refSize: Int,
+        val budget: DecodedBudget,
     ) {
         private var reads = 0
 
@@ -205,6 +233,9 @@ object BinaryPlist {
             require(index in offsets.indices && depth < MAX_DEPTH) { DAMAGED }
             // Shared references make the graph a DAG whose expansion can be exponential in its depth.
             require(++reads <= MAX_READS) { DAMAGED }
+            // Charge every visit, even if a different object index aliases the same byte offset.
+            // This also reserves object/array headers and boxed scalar overhead conservatively.
+            budget.claim(OBJECT_BYTES)
             var at = offsets[index]
             val marker = bytes[at++].toInt() and 0xFF
             val kind = marker ushr 4
@@ -256,25 +287,47 @@ object BinaryPlist {
             require(length in 0L..remaining) { DAMAGED }
             val n = length.toInt()
             return when (kind) {
-                0x4 -> slice(at, n)
-                0x5 -> String(slice(at, n), Charsets.ISO_8859_1)
+                0x4 -> {
+                    budget.claim(length)
+                    slice(at, n)
+                }
+                0x5 -> {
+                    budget.claim(length * STRING_CHARACTER_BYTES)
+                    String(bytes, at, n, Charsets.ISO_8859_1)
+                }
                 0x6 -> {
                     require(length * 2L <= remaining) { DAMAGED }
-                    String(slice(at, n * 2), Charsets.UTF_16BE)
+                    budget.claim(length * STRING_CHARACTER_BYTES)
+                    String(bytes, at, n * 2, Charsets.UTF_16BE)
                 }
                 0xA, 0xC -> {
                     require(length * refSize.toLong() <= remaining) { DAMAGED }
+                    budget.claim(length * REFERENCE_BYTES)
                     List(n) { read(ref(at + it * refSize), depth + 1) }
                 }
                 0xD -> {
                     require(length * 2L * refSize <= remaining) { DAMAGED }
-                    (0 until n).associate { i ->
-                        read(ref(at + i * refSize), depth + 1).toString() to read(ref(at + (n + i) * refSize), depth + 1)
-                    }
+                    budget.claim(length * DICTIONARY_ENTRY_BYTES)
+                    dictionary(at, n, depth)
                 }
                 else -> null
             }
         }
+
+        private fun dictionary(
+            at: Int,
+            size: Int,
+            depth: Int,
+        ): Map<String, Any?> =
+            buildMap(size) {
+                for (i in 0 until size) {
+                    // Property-list dictionaries require string keys. Coercing a nested
+                    // container to text would allocate outside the decoded-string budget.
+                    val key = read(ref(at + i * refSize), depth + 1)
+                    require(key is String) { DAMAGED }
+                    put(key, read(ref(at + (size + i) * refSize), depth + 1))
+                }
+            }
 
         private fun ref(at: Int): Int {
             val value = number(bytes, at, refSize)
@@ -321,6 +374,13 @@ object BinaryPlist {
     private const val MAX_OBJECTS = 4_000_000L
     private const val MAX_DEPTH = 64
     private const val MAX_READS = 200_000
+    private const val MAX_DECODED_BYTES = 64L * 1024 * 1024
+    private const val OBJECT_BYTES = 64L
+    private const val REFERENCE_BYTES = 8L
+
+    // Reserve both decoder scratch characters and the retained string's UTF-16 storage.
+    private const val STRING_CHARACTER_BYTES = 4L
+    private const val DICTIONARY_ENTRY_BYTES = 64L
     private const val MAX_NUMBER = 16
     private const val DAMAGED = "The property list is damaged"
 }
@@ -355,7 +415,17 @@ class KeyedArchive(
         }
 
     /** An NSArray's (or NSSet's) members, resolved. */
-    fun array(value: Any?): List<Any?> = (map(value)?.get("NS.objects") as? List<*>).orEmpty().map(::resolve)
+    fun array(value: Any?): List<Any?> = array(value, Int.MAX_VALUE)
+
+    /** Refuses oversized arrays before allocating their resolved copy. */
+    fun array(
+        value: Any?,
+        maxItems: Int,
+    ): List<Any?> {
+        val items = (map(value)?.get("NS.objects") as? List<*>).orEmpty()
+        require(maxItems >= 0 && items.size <= maxItems) { "The keyed archive contains too many items" }
+        return items.map(::resolve)
+    }
 
     fun data(value: Any?): ByteArray? =
         when (val resolved = resolve(value)) {

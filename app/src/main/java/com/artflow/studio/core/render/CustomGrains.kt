@@ -2,7 +2,6 @@ package com.artflow.studio.core.render
 
 import com.artflow.studio.core.pixels.Channels
 import com.artflow.studio.core.pixels.PixelBuffer
-import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
@@ -16,14 +15,14 @@ object CustomGrains {
     const val TILE = 256
     const val PREFIX = "custom-"
     private val ID = Regex("custom-[0-9a-f]{1,32}")
-    private val tiles = ConcurrentHashMap<String, Tile>()
+    internal val registry = GrainRegistry()
 
     class Tile(
         val size: Int,
         val values: ByteArray,
     ) {
         init {
-            require(size > 0 && values.size == size * size) { "A grain tile is square" }
+            require(size > 0 && values.size.toLong() == size.toLong() * size) { "A grain tile is square" }
         }
 
         fun at(
@@ -60,7 +59,7 @@ object CustomGrains {
         tile: Tile,
     ) {
         require(isCustom(id)) { "Invalid grain identity" }
-        tiles[id] = tile
+        registry.register(id, tile)
     }
 
     /** Import publication must not replace a tile that another artwork already uses. */
@@ -69,18 +68,18 @@ object CustomGrains {
         tile: Tile,
     ): Tile? {
         require(isCustom(id)) { "Invalid grain identity" }
-        return tiles.putIfAbsent(id, tile)
+        return registry.registerIfAbsent(id, tile)
     }
 
     /** Remove only the provisional tile owned by a failed import, never a later replacement. */
     internal fun removeIfSame(
         id: String,
         tile: Tile,
-    ): Boolean = tiles.remove(id, tile)
+    ): Boolean = registry.removeIfSame(id, tile)
 
-    fun get(id: String?): Tile? = id?.let(tiles::get)
+    fun get(id: String?): Tile? = registry.get(id)
 
-    fun ids(): List<String> = tiles.keys.sorted()
+    fun ids(): List<String> = registry.ids()
 
     /** A stable identity for the tile's contents, so importing the same photo twice reuses it. */
     fun idFor(tile: Tile): String {

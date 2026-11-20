@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.FileProvider
 import com.artflow.studio.R
+import com.artflow.studio.data.export.importFailureMessage
 import com.artflow.studio.data.local.BrushArchives
 import com.artflow.studio.data.local.BrushImports
 import com.artflow.studio.data.local.BrushShareFiles
@@ -49,18 +50,20 @@ internal fun BrushFileButtons(
         rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
             if (uri == null) return@rememberLauncherForActivityResult
             scope.launch {
-                val brushes =
-                    withContext(Dispatchers.IO) {
-                        runCatching {
-                            val bytes = context.contentResolver.openInputStream(uri)?.use { BrushArchives.readInput(it) }
-                            requireNotNull(bytes) { "Unreadable brush file" }
-                            BrushImports.read(context, bytes)
-                        }.getOrNull()
-                    }
-                if (brushes == null) {
-                    onFailure(context.getString(R.string.brushfilebuttons_not_a_brush_file))
-                } else {
-                    latestControls.importAll(brushes)
+                val failure =
+                    runCatching {
+                        val bytes =
+                            withContext(Dispatchers.IO) {
+                                requireNotNull(context.contentResolver.openInputStream(uri)?.use { BrushArchives.readInput(it) }) {
+                                    "Unreadable brush file"
+                                }
+                            }
+                        requireNotNull(BrushImports.importInto(context, bytes, latestControls.importAll)) {
+                            context.getString(R.string.brushfilebuttons_not_a_brush_file)
+                        }
+                    }.exceptionOrNull()
+                if (failure != null) {
+                    onFailure(importFailureMessage(failure, context.getString(R.string.brushfilebuttons_not_a_brush_file)))
                 }
             }
         }

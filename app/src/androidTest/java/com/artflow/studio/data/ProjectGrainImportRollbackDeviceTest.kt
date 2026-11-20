@@ -51,6 +51,8 @@ class ProjectGrainImportRollbackDeviceTest {
         val context =
             object : ContextWrapper(application) {
                 override fun getFilesDir(): File = File(directory, "target").apply { mkdirs() }
+
+                override fun getCacheDir(): File = File(directory, "staging").apply { mkdirs() }
             }
         grainDir = GrainStorage.directory(context.filesDir)
         storage = ProjectStorage(context)
@@ -70,7 +72,17 @@ class ProjectGrainImportRollbackDeviceTest {
     @Test
     fun cancelledDatabasePublicationRollsBackNewGrainsAndCanBeRetried() = runBlocking { verifyRollback(cancel = true) }
 
-    private suspend fun verifyRollback(cancel: Boolean) {
+    @Test
+    fun failedByteArrayImportPublicationRollsBackGrainsAndStagedInput() = runBlocking { verifyRollback(cancel = false, fromMemory = true) }
+
+    @Test
+    fun cancelledByteArrayImportPublicationRollsBackGrainsAndStagedInput() =
+        runBlocking { verifyRollback(cancel = true, fromMemory = true) }
+
+    private suspend fun verifyRollback(
+        cancel: Boolean,
+        fromMemory: Boolean = false,
+    ) {
         val existing = newId()
         val added = newId()
         val original = tile(27)
@@ -90,7 +102,8 @@ class ProjectGrainImportRollbackDeviceTest {
                 }
             }
         val repository = ProjectRepositoryImpl(failingDao, storage, database)
-        val failure = runCatching { repository.importPackageFile(source) }.exceptionOrNull()
+        val failure = runCatching { importSource(repository, source, fromMemory) }.exceptionOrNull()
+        assertTrue(File(directory, "staging").listFiles().orEmpty().isEmpty())
         assertTrue(if (cancel) failure is CancellationException else failure is SQLiteException)
         assertTrue(failedId > 0)
         assertTrue(delegate.getAllProjects().first().isEmpty())
@@ -100,13 +113,20 @@ class ProjectGrainImportRollbackDeviceTest {
         assertArrayEquals(original.values, grainFile(existing).readBytes())
         assertSame(original, CustomGrains.get(existing))
 
-        val retried = ProjectRepositoryImpl(delegate, storage, database).importPackageFile(source)
+        val retried = importSource(ProjectRepositoryImpl(delegate, storage, database), source, fromMemory)
         assertEquals(1, delegate.getAllProjects().first().size)
-        assertNotNull(storage.loadDocument(retried.projectId))
+        assertNotNull(storage.loadDocument(retried))
+        assertTrue(File(directory, "staging").listFiles().orEmpty().isEmpty())
         assertArrayEquals(incoming.values, grainFile(added).readBytes())
         assertArrayEquals(incoming.values, requireNotNull(CustomGrains.get(added)).values)
         assertSame(original, CustomGrains.get(existing))
     }
+
+    private suspend fun importSource(
+        repository: ProjectRepositoryImpl,
+        source: File,
+        fromMemory: Boolean,
+    ): Long = if (fromMemory) repository.importPackage(source.readBytes()) else repository.importPackageFile(source).projectId
 
     private fun packageFile(grains: Map<String, CustomGrains.Tile>): File {
         val document =

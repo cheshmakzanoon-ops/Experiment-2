@@ -147,6 +147,26 @@ object BitmapPixelBridge {
         }
     }
 
+    /** A document thumbnail keeps its encoded geometry, with admission before bitmap allocation. */
+    internal fun decodeProcreateThumbnail(
+        bytes: ByteArray,
+        memoryBudgetBytes: Long,
+    ): PixelBuffer? =
+        withImportMemory {
+            val (width, height) = encodedDimensions(bytes) ?: return@withImportMemory null
+            val budget = minOf(memoryBudgetBytes, ImageDecodeBudget.currentBytes())
+            val plan = ImageDecodeBudget.plan(width, height, CanvasOperations.MAX_DIMENSION, budget - bytes.size.toLong() * 3)
+            require(plan.sampleSize == 1) { "The Procreate thumbnail needs too much memory" }
+            val options =
+                BitmapFactory.Options().apply {
+                    inPremultiplied = false
+                    inPreferredConfig = Bitmap.Config.ARGB_8888
+                    inScaled = false
+                }
+            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) ?: return@withImportMemory null
+            importedPixels(bitmap, plan)
+        }
+
     /** Metadata only: model preparation admits every source before allocating the first bitmap. */
     fun encodedDimensions(bytes: ByteArray): Pair<Int, Int>? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }

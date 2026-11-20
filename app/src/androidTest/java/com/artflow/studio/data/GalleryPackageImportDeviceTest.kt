@@ -188,7 +188,7 @@ class GalleryPackageImportDeviceTest {
         assertArrayEquals(rasterBytes, storage.readRaster(id, requireNotNull(document.layers.single().rasterFile)))
         assertArrayEquals(grainBytes, requireNotNull(GrainStorage.fileFor(GrainStorage.directory(context.filesDir), grainId)).readBytes())
         val notice = requireNotNull(PendingImports.takeNotice(id))
-        assertTrue(notice.contains("Missing fonts: UnavailableTestFont"))
+        assertTrue(notice.contains("Fonts need attention: UnavailableTestFont"))
         assertTrue(notice.contains("1 brush texture(s) are missing"))
         assertNull(PendingImports.takeNotice(id))
         assertFalse(File(storage.projectDir(id), "grains").exists())
@@ -197,7 +197,7 @@ class GalleryPackageImportDeviceTest {
     private fun imports(
         say: suspend (String) -> Unit,
         open: (Long) -> Unit,
-    ) = GalleryImports(context, scope, viewModel, say, { error("An artwork is not a brush") }, open)
+    ) = GalleryImports(context, scope, viewModel, say, { _, _ -> error("An artwork is not a brush") }, open)
 
     private suspend fun writeSourcePackage(application: Context): File {
         val sourceContext =

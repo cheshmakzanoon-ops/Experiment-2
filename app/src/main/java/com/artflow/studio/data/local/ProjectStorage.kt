@@ -3,6 +3,7 @@ package com.artflow.studio.data.local
 import android.content.Context
 import com.artflow.studio.core.render.CustomGrains
 import com.artflow.studio.data.export.ArtflowPackage
+import com.artflow.studio.data.export.StagedImport
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -108,6 +109,18 @@ class ProjectStorage
             StorageFileTree.requireUnlinked(file, context.filesDir)
             return file
         }
+
+        /** The byte-array compatibility API uses the same streamed, capacity-checked package import. */
+        internal suspend fun <T> withStagedPackage(
+            bytes: ByteArray,
+            consume: suspend (File) -> T,
+        ): T =
+            withContext(ioDispatcher) {
+                require(bytes.isNotEmpty() && bytes.size <= StagedImport.MAX_PACKAGE_BYTES) {
+                    "This artwork file is empty or too large to import"
+                }
+                StagedImport.use(context.cacheDir, { ByteArrayInputStream(bytes) }, consume = consume)
+            }
 
         // -----------------------------------------------------------------------------------------
         // Document
@@ -406,7 +419,7 @@ class ProjectStorage
             writeAtomically(resolve(projectId, MODEL_NAME)) { it.write(bytes) }
         }
 
-        /** Result of importing an `.artflow` package along with any referenced assets missing on this device. */
+        /** Import result with fonts requiring attention and referenced grains missing on this device. */
         data class ImportedPackageOutcome(
             val document: CanvasDocument,
             val missingFonts: List<String>,
@@ -414,18 +427,12 @@ class ProjectStorage
         )
 
         /** Collects portable font references (no third-party binaries) and custom grain IDs used by [document]. */
-        fun collectDependencies(document: CanvasDocument): ArtflowPackage.Dependencies {
+        fun collectDependencies(
+            document: CanvasDocument,
+            fingerprintFonts: Boolean = true,
+        ): ArtflowPackage.Dependencies {
             val layers = document.resolvedFrames().flatMap { it.layers }
-            val fonts =
-                layers
-                    .mapNotNull { it.textContent?.style?.fontFamily }
-                    .filter { FontLibrary.isImported(it) }
-                    .map { family ->
-                        ArtflowPackage.PackagedFont(
-                            id = FontLibrary.portableId(family) ?: family,
-                            label = FontLibrary.label(family),
-                        )
-                    }.distinctBy { it.id }
+            require(layers.size <= CanvasDocumentCodec.MAX_LAYERS) { "Project has too many layers" }
             val grainIds =
                 layers
                     .flatMap { it.strokes }
@@ -433,8 +440,28 @@ class ProjectStorage
                     .filter { CustomGrains.isCustom(it) }
                     .distinct()
                     .sorted()
+            require(grainIds.size <= ArtflowPackage.MAX_GRAIN_DEPENDENCIES) { "Too many grain dependencies" }
+            val fontFingerprints = FontLibrary.FingerprintSession(context.filesDir)
+            val fonts =
+                importedFontFamilies(document)
+                    .groupBy { FontLibrary.portableId(it) ?: it }
+                    .map { (id, families) ->
+                        ArtflowPackage.PackagedFont(
+                            id = id,
+                            label = FontLibrary.label(families.first()),
+                            sha256 = if (fingerprintFonts) fontFingerprints.sharedFingerprint(families) else null,
+                        )
+                    }
             return ArtflowPackage.Dependencies(fonts = fonts, grainIds = grainIds)
         }
+
+        private fun importedFontFamilies(document: CanvasDocument): List<String> =
+            document
+                .resolvedFrames()
+                .flatMap { it.layers }
+                .mapNotNull { it.textContent?.style?.fontFamily }
+                .filter { FontLibrary.isImported(it) }
+                .distinct()
 
         /** A saved project's files for an `.artflow` package: manifest, layer pixels, previews, and grain/dependency assets. */
         suspend fun packageFiles(projectId: Long): Map<String, ByteArray> =
@@ -545,38 +572,43 @@ class ProjectStorage
             grainImport: GrainStorage.ImportTransaction? = null,
         ): CanvasDocument =
             withContext(ioDispatcher) {
-                val manifest = requireNotNull(files[DOCUMENT_NAME]) { "The artwork has no document" }
-                val destination = ownedPath("projects/$projectId")
-                check(!Files.exists(destination.toPath(), LinkOption.NOFOLLOW_LINKS)) { "The destination already contains project data" }
-                check(destination.mkdirs()) { "Cannot create the imported project directory" }
-                var completed = false
-                try {
-                    val grainEntries = linkedMapOf<String, ByteArray>()
-                    var dependenciesBytes: ByteArray? = null
-                    files.forEach { (relative, bytes) ->
-                        when {
-                            relative == DOCUMENT_NAME -> Unit
-                            relative == ArtflowPackage.DEPENDENCIES -> dependenciesBytes = bytes
-                            relative.startsWith("${ArtflowPackage.GRAINS_DIR}/") -> grainEntries[relative] = bytes
-                            else -> {
-                                val file = resolve(projectId, relative)
-                                file.parentFile?.mkdirs()
-                                writeAtomically(file) { it.write(bytes) }
+                withGrainImport(grainImport) { admittedImport ->
+                    prepareGrainImport(files.keys, admittedImport)
+                    val manifest = requireNotNull(files[DOCUMENT_NAME]) { "The artwork has no document" }
+                    val destination = ownedPath("projects/$projectId")
+                    check(
+                        !Files.exists(destination.toPath(), LinkOption.NOFOLLOW_LINKS),
+                    ) { "The destination already contains project data" }
+                    check(destination.mkdirs()) { "Cannot create the imported project directory" }
+                    var completed = false
+                    try {
+                        val grainEntries = linkedMapOf<String, ByteArray>()
+                        var dependenciesBytes: ByteArray? = null
+                        files.forEach { (relative, bytes) ->
+                            when {
+                                relative == DOCUMENT_NAME -> Unit
+                                relative == ArtflowPackage.DEPENDENCIES -> dependenciesBytes = bytes
+                                relative.startsWith("${ArtflowPackage.GRAINS_DIR}/") -> grainEntries[relative] = bytes
+                                else -> {
+                                    val file = resolve(projectId, relative)
+                                    file.parentFile?.mkdirs()
+                                    writeAtomically(file) { it.write(bytes) }
+                                }
                             }
                         }
-                    }
-                    writeAtomically(documentFile(projectId)) { it.write(manifest) }
-                    val document = decodeDocument(documentFile(projectId), projectId)
-                    referencedFiles(document).forEach { requireNotNull(readRaster(projectId, it)) }
-                    restoreGrainsAndAuditDependencies(dependenciesBytes, grainEntries, document, grainImport)
-                    completed = true
-                    document
-                } finally {
-                    if (!completed) {
-                        try {
-                            StorageFileTree.delete(destination, context.filesDir)
-                        } catch (cleanupFailure: IOException) {
-                            Timber.w(cleanupFailure, "Could not remove an incomplete import")
+                        writeAtomically(documentFile(projectId)) { it.write(manifest) }
+                        val document = decodeDocument(documentFile(projectId), projectId)
+                        referencedFiles(document).forEach { requireNotNull(readRaster(projectId, it)) }
+                        restoreGrainsAndAuditDependencies(dependenciesBytes, grainEntries, document, admittedImport)
+                        completed = true
+                        document
+                    } finally {
+                        if (!completed) {
+                            try {
+                                StorageFileTree.delete(destination, context.filesDir)
+                            } catch (cleanupFailure: IOException) {
+                                Timber.w(cleanupFailure, "Could not remove an incomplete import")
+                            }
                         }
                     }
                 }
@@ -593,53 +625,84 @@ class ProjectStorage
             grainImport: GrainStorage.ImportTransaction? = null,
         ): ImportedPackageOutcome =
             withContext(ioDispatcher) {
-                val manifest = contents.readBytes(DOCUMENT_NAME, documentByteLimit)
-                val destination = ownedPath("projects/$projectId")
-                check(!Files.exists(destination.toPath(), LinkOption.NOFOLLOW_LINKS)) { "The destination already contains project data" }
-                check(destination.mkdirs()) { "Cannot create the imported project directory" }
-                var completed = false
-                try {
-                    val grainEntries = linkedMapOf<String, ByteArray>()
-                    var dependenciesBytes: ByteArray? = null
-                    val grainTileBytes = (CustomGrains.TILE * CustomGrains.TILE).toLong()
-                    contents.entries.forEach { relative ->
-                        when {
-                            relative == DOCUMENT_NAME -> Unit
-                            relative == ArtflowPackage.DEPENDENCIES ->
-                                dependenciesBytes = contents.readBytes(relative, MAX_DOCUMENT_BYTES)
-                            relative.startsWith("${ArtflowPackage.GRAINS_DIR}/") ->
-                                grainEntries[relative] = contents.readBytes(relative, grainTileBytes)
-                            else -> {
-                                val file = resolve(projectId, relative)
-                                file.parentFile?.mkdirs()
-                                val limit = if (relative == MODEL_NAME) MAX_MODEL_BYTES else MAX_RASTER_BYTES
-                                writeAtomically(file) { out -> contents.copyTo(relative, out, limit) }
+                withGrainImport(grainImport) { admittedImport ->
+                    prepareGrainImport(contents.entries, admittedImport)
+                    val manifest = contents.readBytes(DOCUMENT_NAME, documentByteLimit)
+                    val destination = ownedPath("projects/$projectId")
+                    check(
+                        !Files.exists(destination.toPath(), LinkOption.NOFOLLOW_LINKS),
+                    ) { "The destination already contains project data" }
+                    check(destination.mkdirs()) { "Cannot create the imported project directory" }
+                    var completed = false
+                    try {
+                        val grainEntries = linkedMapOf<String, ByteArray>()
+                        var dependenciesBytes: ByteArray? = null
+                        val grainTileBytes = (CustomGrains.TILE * CustomGrains.TILE).toLong()
+                        contents.entries.forEach { relative ->
+                            when {
+                                relative == DOCUMENT_NAME -> Unit
+                                relative == ArtflowPackage.DEPENDENCIES ->
+                                    dependenciesBytes = contents.readBytes(relative, MAX_DOCUMENT_BYTES)
+                                relative.startsWith("${ArtflowPackage.GRAINS_DIR}/") ->
+                                    grainEntries[relative] = contents.readBytes(relative, grainTileBytes)
+                                else -> {
+                                    val file = resolve(projectId, relative)
+                                    file.parentFile?.mkdirs()
+                                    val limit = if (relative == MODEL_NAME) MAX_MODEL_BYTES else MAX_RASTER_BYTES
+                                    writeAtomically(file) { out -> contents.copyTo(relative, out, limit) }
+                                }
                             }
                         }
-                    }
-                    writeAtomically(documentFile(projectId)) { it.write(manifest) }
-                    val document = decodeDocument(documentFile(projectId), projectId)
-                    referencedFiles(document).forEach { requireNotNull(readRaster(projectId, it)) }
-                    val (missingFonts, missingGrains) =
-                        restoreGrainsAndAuditDependencies(dependenciesBytes, grainEntries, document, grainImport)
-                    completed = true
-                    ImportedPackageOutcome(document, missingFonts, missingGrains)
-                } finally {
-                    if (!completed) {
-                        try {
-                            StorageFileTree.delete(destination, context.filesDir)
-                        } catch (cleanupFailure: IOException) {
-                            Timber.w(cleanupFailure, "Could not remove an incomplete import")
+                        writeAtomically(documentFile(projectId)) { it.write(manifest) }
+                        val document = decodeDocument(documentFile(projectId), projectId)
+                        referencedFiles(document).forEach { requireNotNull(readRaster(projectId, it)) }
+                        val (missingFonts, missingGrains) =
+                            restoreGrainsAndAuditDependencies(dependenciesBytes, grainEntries, document, admittedImport)
+                        completed = true
+                        ImportedPackageOutcome(document, missingFonts, missingGrains)
+                    } finally {
+                        if (!completed) {
+                            try {
+                                StorageFileTree.delete(destination, context.filesDir)
+                            } catch (cleanupFailure: IOException) {
+                                Timber.w(cleanupFailure, "Could not remove an incomplete import")
+                            }
                         }
                     }
                 }
             }
 
+        private inline fun <T> withGrainImport(
+            supplied: GrainStorage.ImportTransaction?,
+            block: (GrainStorage.ImportTransaction) -> T,
+        ): T {
+            if (supplied != null) return block(supplied)
+            return GrainStorage.ImportTransaction().use { owned ->
+                block(owned).also { owned.commit() }
+            }
+        }
+
+        /** Reserve the full grain batch before any payload is buffered or project file is published. */
+        private fun prepareGrainImport(
+            paths: Collection<String>,
+            transaction: GrainStorage.ImportTransaction,
+        ) {
+            val ids =
+                paths.filter { it.startsWith("${ArtflowPackage.GRAINS_DIR}/") }.map { path ->
+                    val id = path.removePrefix("${ArtflowPackage.GRAINS_DIR}/").removeSuffix(GrainStorage.EXTENSION)
+                    require(CustomGrains.isCustom(id) && path == ArtflowPackage.grainEntryPath(id)) {
+                        "Invalid brush grain in artwork package: $path"
+                    }
+                    id
+                }
+            transaction.prepare(ids)
+        }
+
         private fun restoreGrainsAndAuditDependencies(
             dependenciesBytes: ByteArray?,
             grainEntries: Map<String, ByteArray>,
             document: CanvasDocument,
-            grainImport: GrainStorage.ImportTransaction?,
+            grainImport: GrainStorage.ImportTransaction,
         ): Pair<List<String>, List<String>> {
             val grainDir = GrainStorage.directory(context.filesDir)
             val expectedGrainLength = CustomGrains.TILE * CustomGrains.TILE
@@ -654,31 +717,38 @@ class ProjectStorage
                         }
                         id to CustomGrains.Tile(CustomGrains.TILE, bytes)
                     }.toMap()
-            val documentDeps = collectDependencies(document)
-            val fonts =
-                ((packagedDeps?.fonts ?: emptyList()) + documentDeps.fonts)
-                    .distinctBy { it.id }
-            val grainIds =
-                ((packagedDeps?.grainIds ?: emptyList()) + documentDeps.grainIds)
-                    .filter { CustomGrains.isCustom(it) }
-                    .distinct()
+            // The receiving device cannot invent the source font's identity for older packages
+            // or references missing from their dependency manifest.
+            val documentDeps = collectDependencies(document, fingerprintFonts = false)
+            val packagedFonts =
+                packagedDeps?.fonts.orEmpty().map { font ->
+                    font.copy(id = FontLibrary.portableId(font.id) ?: font.id)
+                }
+            require(packagedFonts.groupBy { it.id }.values.all { matching -> matching.map { it.sha256 }.distinct().size == 1 }) {
+                "Conflicting font content fingerprints"
+            }
+            val declaredFonts = packagedFonts.associateBy { it.id }
+            val fonts = documentDeps.fonts.map { declaredFonts[it.id] ?: it }
+            val grainIds = documentDeps.grainIds
+            val documentFamilies = importedFontFamilies(document).groupBy { FontLibrary.portableId(it) ?: it }
+            val fontFingerprints = FontLibrary.FingerprintSession(context.filesDir)
             val missingFonts =
                 fonts
-                    .filter { !FontLibrary.exists(it.id, context.filesDir) }
-                    .map { it.label }
-                    .distinct()
+                    .mapNotNull { font ->
+                        val localFingerprint = fontFingerprints.sharedFingerprint(documentFamilies.getValue(font.id))
+                        when {
+                            localFingerprint == null && FontLibrary.exists(font.id, context.filesDir) -> "Unverified font: ${font.label}"
+                            localFingerprint == null -> font.label
+                            font.sha256 == null -> "Unverified font: ${font.label}"
+                            font.sha256 != localFingerprint -> "Different font: ${font.label}"
+                            else -> null
+                        }
+                    }.distinct()
             val missingGrains =
                 grainIds.filter { id ->
                     id !in importedTiles && CustomGrains.get(id) == null && !GrainStorage.exists(grainDir, id)
                 }
-            if (grainImport != null) {
-                grainImport.install(grainDir, importedTiles)
-            } else {
-                GrainStorage.ImportTransaction().use { owned ->
-                    owned.install(grainDir, importedTiles)
-                    owned.commit()
-                }
-            }
+            grainImport.install(grainDir, importedTiles)
             return missingFonts to missingGrains
         }
 

@@ -2,7 +2,9 @@ package com.artflow.studio.presentation.ui.screens.gallery
 
 import android.content.ContentResolver
 import android.content.Context
+import android.database.Cursor
 import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.lifecycle.viewModelScope
 import com.artflow.studio.R
 import com.artflow.studio.core.export.PsdCodec
@@ -10,6 +12,7 @@ import com.artflow.studio.core.pixels.ImportPreparation
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.data.export.PendingImports
 import com.artflow.studio.presentation.ui.viewmodel.MainViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -29,10 +32,12 @@ import kotlinx.coroutines.withContext
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.never
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoInteractions
@@ -42,6 +47,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class GalleryIncomingImportTest {
@@ -200,6 +206,102 @@ class GalleryIncomingImportTest {
             assertTrue(fixture.messages.isEmpty())
         }
 
+    @Test
+    fun blockedDisplayNameQueryLeavesTheGalleryResponsiveAndCancellationKeepsTheNextFileQueued() = metadataCancellation(query = true)
+
+    @Test
+    fun blockedMimeLookupLeavesTheGalleryResponsiveAndCancellationKeepsTheNextFileQueued() = metadataCancellation(query = false)
+
+    @Test
+    fun providerMetadataCancellationPropagatesWithoutReadingOrPublishingTheFile() =
+        runTest {
+            for (query in listOf(true, false)) {
+                val fixture = Fixture(this)
+                val uri = fixture.uri("cancelled.psd", "8BPS".toByteArray())
+                val cancellation = CancellationException("Provider metadata cancelled")
+                if (query) {
+                    `when`(fixture.resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null))
+                        .thenThrow(cancellation)
+                } else {
+                    `when`(fixture.resolver.getType(uri)).thenThrow(cancellation)
+                }
+
+                val failure = runCatching { fixture.imports().open(uri) }.exceptionOrNull()
+
+                assertTrue(failure is CancellationException)
+                assertEquals(cancellation.message, failure?.message)
+                verify(fixture.resolver, never()).openInputStream(uri)
+                verifyNoInteractions(fixture.viewModel)
+                assertTrue(fixture.messages.isEmpty())
+            }
+        }
+
+    private fun metadataCancellation(query: Boolean) =
+        runTest {
+            Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+            val fixture = Fixture(this)
+            val first = fixture.uri("first.psd", "8BPS".toByteArray())
+            val second = fixture.uri("next.bin", ByteArray(64))
+            val entered = CountDownLatch(1)
+            val release = CountDownLatch(1)
+            val callerThread = Thread.currentThread()
+            val providerThread = AtomicReference<Thread>()
+            val cursor = mock(Cursor::class.java)
+            `when`(cursor.moveToFirst()).thenReturn(true)
+            `when`(cursor.getString(0)).thenReturn("first.psd")
+            val awaitProvider = {
+                providerThread.set(Thread.currentThread())
+                entered.countDown()
+                check(release.await(5, TimeUnit.SECONDS)) { "The metadata provider was never released" }
+            }
+            if (query) {
+                `when`(fixture.resolver.query(first, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)).thenAnswer {
+                    awaitProvider()
+                    cursor
+                }
+            } else {
+                `when`(fixture.resolver.getType(first)).thenAnswer {
+                    awaitProvider()
+                    "image/vnd.adobe.photoshop"
+                }
+            }
+            val queue = Channel<Uri>(Channel.UNLIMITED)
+            queue.trySend(first)
+            queue.trySend(second)
+            queue.close()
+            val opened = mutableListOf<Long>()
+            val imports = fixture.imports { opened += it }
+            val collection = launch(Dispatchers.Main) { queue.receiveAsFlow().takeWhile { !imports.open(it) }.collect() }
+            try {
+                runCurrent()
+                withContext(Dispatchers.IO) { assertTrue(entered.await(5, TimeUnit.SECONDS)) }
+                assertNotSame("Provider metadata must not run on the gallery dispatcher", callerThread, providerThread.get())
+                assertFalse(collection.isCompleted)
+                val responsive = AtomicBoolean()
+                launch(Dispatchers.Main) { responsive.set(true) }
+                runCurrent()
+                assertTrue("The gallery must process another UI turn while metadata is blocked", responsive.get())
+                collection.cancel()
+            } finally {
+                release.countDown()
+                try {
+                    collection.join()
+                } finally {
+                    Dispatchers.resetMain()
+                }
+            }
+            assertTrue(collection.isCancelled)
+            assertSame(second, queue.tryReceive().getOrThrow())
+            verify(fixture.resolver, never()).openInputStream(first)
+            if (query) {
+                verify(cursor).close()
+                verify(fixture.resolver, never()).getType(first)
+            }
+            verifyNoInteractions(fixture.viewModel)
+            assertTrue(opened.isEmpty())
+            assertTrue(fixture.messages.isEmpty())
+        }
+
     private class Fixture(
         val scope: CoroutineScope,
     ) {
@@ -224,7 +326,7 @@ class GalleryIncomingImportTest {
             }
 
         fun imports(open: (Long) -> Unit = { error("Unsupported files must not navigate") }) =
-            GalleryImports(context, scope, viewModel, { messages += it }, { error("No brush expected") }, open)
+            GalleryImports(context, scope, viewModel, { messages += it }, { _, _ -> error("No brush expected") }, open)
     }
 
     private companion object {

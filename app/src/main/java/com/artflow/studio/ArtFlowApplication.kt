@@ -1,17 +1,18 @@
 package com.artflow.studio
 
 import android.app.Application
-import com.artflow.studio.data.local.FontLibrary
-import com.artflow.studio.data.local.GrainStorage
+import com.artflow.studio.data.local.BrushAssetStartup
 import dagger.hilt.android.HiltAndroidApp
 import timber.log.Timber
-import kotlin.concurrent.thread
+import javax.inject.Inject
 
 /**
  * Application class for ArtFlow - initializes app-wide dependencies
  */
 @HiltAndroidApp
 class ArtFlowApplication : Application() {
+    @Inject lateinit var brushAssetStartup: BrushAssetStartup
+
     override fun onCreate() {
         super.onCreate()
 
@@ -20,10 +21,8 @@ class ArtFlowApplication : Application() {
             Timber.plant(Timber.DebugTree())
         }
 
-        FontLibrary.configure(filesDir)
-
-        // Imported brush grains are small; load them off the main thread before the first stroke.
-        thread(name = "grain-loader", isDaemon = true) { GrainStorage.loadAll(GrainStorage.directory(filesDir)) }
+        // MainActivity observes this process-owned IO work before enabling dependent UI.
+        brushAssetStartup.start()
 
         Timber.d("ArtFlow Application initialized")
     }

@@ -100,6 +100,38 @@ class ArtflowPackageTest {
         }
     }
 
+    @Test fun fontFingerprintsRoundTripWhileLegacyDependenciesRemainReadable() {
+        val dependencies =
+            ArtflowPackage.Dependencies(
+                fonts = listOf(ArtflowPackage.PackagedFont("font:Display.ttf", "Display", "ab".repeat(32))),
+            )
+        assertEquals(dependencies, ArtflowPackage.decodeDependencies(ArtflowPackage.encodeDependencies(dependencies)))
+        val legacy = """{"fonts":[{"id":"font:Display.ttf","label":"Display"}]}""".toByteArray()
+        assertEquals(
+            ArtflowPackage.Dependencies(fonts = listOf(ArtflowPackage.PackagedFont("font:Display.ttf", "Display"))),
+            ArtflowPackage.decodeDependencies(legacy),
+        )
+    }
+
+    @Test fun malformedFontFingerprintsAreRejectedInDependencyMetadata() {
+        for (digest in listOf("", "a".repeat(63), "a".repeat(65), "g".repeat(64), "A".repeat(64), " ${"a".repeat(64)}")) {
+            val bytes = """{"fonts":[{"id":"font:Display.ttf","label":"Display","sha256":"$digest"}]}""".toByteArray()
+            assertThrows(IllegalArgumentException::class.java) { ArtflowPackage.decodeDependencies(bytes) }
+        }
+    }
+
+    @Test fun conflictingDuplicateFontFingerprintsCannotDependOnManifestOrdering() {
+        val first = """{"id":"font:Display.ttf","label":"Display","sha256":"${"a".repeat(64)}"}"""
+        val different = """{"id":"font:Display.ttf","label":"Display","sha256":"${"b".repeat(64)}"}"""
+        val unknown = """{"id":"font:Display.ttf","label":"Display"}"""
+        for (fonts in listOf("$first,$different", "$different,$first", "$first,$unknown", "$unknown,$first")) {
+            assertThrows(IllegalArgumentException::class.java) {
+                ArtflowPackage.decodeDependencies("""{"fonts":[$fonts]}""".toByteArray())
+            }
+        }
+        assertEquals(2, ArtflowPackage.decodeDependencies("""{"fonts":[$first,$first]}""".toByteArray()).fonts.size)
+    }
+
     @Test fun streamingOpenEnforcesCumulativeSizeLimitAndRejectsCorruptZip() {
         val destination = File(temporary.newFolder("limited"), "big.artflow")
         ArtflowPackage.writeToFile(

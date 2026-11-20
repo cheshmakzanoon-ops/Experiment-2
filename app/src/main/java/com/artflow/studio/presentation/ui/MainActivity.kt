@@ -15,9 +15,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.artflow.studio.R
+import com.artflow.studio.data.local.BrushAssetStartup
 import com.artflow.studio.presentation.ui.theme.ArtFlowTheme
 import com.artflow.studio.presentation.ui.viewmodel.MainViewModel
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 /**
  * The single activity.
@@ -27,11 +29,15 @@ import dagger.hilt.android.AndroidEntryPoint
  */
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    @Inject lateinit var brushAssetStartup: BrushAssetStartup
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // The manifest starts the cold-start window on Theme.ArtFlow.Starting; swap to the real
         // window theme before the first frame so insets, system bars and dialogs are correct.
         setTheme(R.style.Theme_ArtFlow)
         super.onCreate(savedInstanceState)
+        // Also starts the same gate when instrumentation supplies a Hilt test Application.
+        brushAssetStartup.start()
         // Window.Callback is the public interception point; AndroidX's inherited dispatchKeyEvent
         // implementation is library-restricted. Delegate every event the editor does not consume.
         window.callback =
@@ -45,12 +51,19 @@ class MainActivity : ComponentActivity() {
         setContent {
             val viewModel: MainViewModel = hiltViewModel()
             val settings by viewModel.settings.collectAsState()
+            val assetState by brushAssetStartup.state.collectAsState()
             ArtFlowTheme(settings = settings) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
                 ) {
-                    ArtFlowApp(viewModel = viewModel)
+                    BrushAssetGate(
+                        state = assetState,
+                        onRetry = brushAssetStartup::retry,
+                        onContinueWithAvailable = brushAssetStartup::continueWithAvailableAssets,
+                    ) {
+                        ArtFlowApp(viewModel = viewModel)
+                    }
                 }
             }
         }

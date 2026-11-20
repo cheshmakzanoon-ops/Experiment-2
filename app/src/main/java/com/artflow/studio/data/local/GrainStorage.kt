@@ -1,8 +1,11 @@
 package com.artflow.studio.data.local
 
 import com.artflow.studio.core.render.CustomGrains
+import com.artflow.studio.core.render.GrainRegistry
+import kotlinx.coroutines.CancellationException
 import timber.log.Timber
 import java.io.Closeable
+import java.io.DataInputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -15,7 +18,7 @@ object GrainStorage {
     const val EXTENSION = ".grain"
     private val importLock = Any()
     private val pendingFiles = mutableMapOf<File, ImportedFile>()
-    private val pendingTiles = mutableMapOf<String, ImportedTile>()
+    private val pendingTiles = mutableMapOf<Pair<GrainRegistry, String>, ImportedTile>()
 
     private class ImportedFile(
         val file: File,
@@ -47,20 +50,64 @@ object GrainStorage {
                 file.length() == (CustomGrains.TILE * CustomGrains.TILE).toLong()
         } == true
 
-    /** Registers every stored tile; damaged files are skipped. */
-    fun loadAll(directory: File) =
-        synchronized(importLock) {
-            directory.listFiles { file -> file.name.endsWith(EXTENSION) }?.forEach { file ->
-                if (pendingFiles[file.absoluteFile.normalize()]?.retained == false) return@forEach
-                val id = file.name.removeSuffix(EXTENSION)
-                if (!CustomGrains.isCustom(id) || file.length() != (CustomGrains.TILE * CustomGrains.TILE).toLong()) return@forEach
-                try {
-                    CustomGrains.register(id, CustomGrains.Tile(CustomGrains.TILE, file.readBytes()))
-                } catch (error: IOException) {
-                    Timber.w(error, "Skipping unreadable grain %s", id)
-                }
+    /** Startup reports unreadable stored assets; existing best-effort maintenance callers may skip them. */
+    fun loadAll(
+        directory: File,
+        strict: Boolean = false,
+    ) = loadAll(directory, strict, CustomGrains.registry)
+
+    internal fun loadAll(
+        directory: File,
+        strict: Boolean,
+        registry: GrainRegistry,
+    ) = synchronized(importLock) {
+        if (strict) StorageFileTree.requireUnlinked(directory, requireNotNull(directory.parentFile))
+        val stored = directory.listFiles { file -> file.name.endsWith(EXTENSION) }
+        if (stored == null && strict && directory.exists()) throw IOException("Cannot read saved brush assets")
+        loadAvailableTiles(stored.orEmpty(), strict, registry)
+    }
+
+    /** A failed tile must not hide other available brushes when the user explicitly continues. */
+    private fun loadAvailableTiles(
+        stored: Array<out File>,
+        strict: Boolean,
+        registry: GrainRegistry,
+    ) {
+        var failure: Exception? = null
+        stored.forEach { file ->
+            val error = runCatching { loadStoredTile(file, strict, registry) }.exceptionOrNull()
+            if (error != null) {
+                if (error is CancellationException || error !is Exception || !strict) throw error
+                failure = failure ?: error
             }
         }
+        failure?.let { throw it }
+    }
+
+    private fun loadStoredTile(
+        file: File,
+        strict: Boolean,
+        registry: GrainRegistry,
+    ) {
+        if (pendingFiles[file.absoluteFile.normalize()]?.retained == false) return
+        val id = file.name.removeSuffix(EXTENSION)
+        if (!CustomGrains.isCustom(id)) return
+        if (!Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS) ||
+            file.length() != (CustomGrains.TILE * CustomGrains.TILE).toLong()
+        ) {
+            if (strict) throw IOException("Saved brush texture is missing or damaged: $id")
+            return
+        }
+        try {
+            // Reserve before reading, so a full registry cannot keep allocating discarded tiles.
+            registry.reserve(mapOf(id to tileBytes()), bufferedCopies = 2).use { reservation ->
+                reservation.register(id, CustomGrains.Tile(CustomGrains.TILE, readExact(file, tileBytes())))
+            }
+        } catch (error: IOException) {
+            if (strict) throw error
+            Timber.w(error, "Skipping unreadable grain %s", id)
+        }
+    }
 
     /** Stores and registers [tile], returning its identity. */
     fun save(
@@ -77,24 +124,48 @@ object GrainStorage {
         directory: File,
         id: String,
         tile: CustomGrains.Tile,
+    ) = save(directory, id, tile, CustomGrains.registry)
+
+    internal fun save(
+        directory: File,
+        id: String,
+        tile: CustomGrains.Tile,
+        registry: GrainRegistry,
     ) = synchronized(importLock) {
         require(CustomGrains.isCustom(id)) { "Invalid grain identity" }
         val target = File(directory, id + EXTENSION).absoluteFile.normalize()
-        writeTile(target, tile, replace = true)
-        CustomGrains.register(id, tile)
+        registry.reserve(mapOf(id to tile.values.size)).use { reservation ->
+            writeTile(target, tile, replace = true)
+            reservation.register(id, tile)
+        }
         // A brush saved independently now owns any matching provisional import asset as well.
         pendingFiles[target]?.retained = true
-        pendingTiles[id]?.retained = true
+        pendingTiles[registry to id]?.retained = true
     }
 
     /**
      * Owns only newly installed assets until the project's database transaction commits. Shared
      * claims let concurrent imports reuse one tile without a failed import removing another's data.
      */
-    class ImportTransaction : Closeable {
+    class ImportTransaction internal constructor(
+        private val registry: GrainRegistry,
+    ) : Closeable {
+        constructor() : this(CustomGrains.registry)
+
         private val files = linkedSetOf<ImportedFile>()
         private val tiles = linkedSetOf<ImportedTile>()
+        private val reservations = mutableListOf<GrainRegistry.Reservation>()
+        private var prepared: GrainRegistry.Reservation? = null
         private var finished = false
+
+        /** Called before the package reader buffers even the first grain payload. */
+        internal fun prepare(ids: Collection<String>) =
+            synchronized(importLock) {
+                check(!finished && prepared == null) { "The brush texture import is already prepared or finished" }
+                val sizes = ids.associateWith { tileBytes() }
+                require(sizes.size == ids.size) { "Duplicate brush texture identity" }
+                prepared = registry.reserve(sizes, bufferedCopies = 2).also(reservations::add)
+            }
 
         fun install(
             directory: File,
@@ -102,6 +173,10 @@ object GrainStorage {
         ) = synchronized(importLock) {
             check(!finished) { "The grain import has finished" }
             StorageFileTree.requireUnlinked(directory, requireNotNull(directory.parentFile))
+            if (prepared == null) prepare(incoming.keys)
+            val reservation = requireNotNull(prepared)
+            require(incoming.keys == reservation.sizes.keys) { "The admitted brush texture batch changed" }
+            prepared = null
             // Validate the complete batch before the first write or cache registration.
             incoming.forEach { (id, tile) ->
                 require(CustomGrains.isCustom(id) && tile.size == CustomGrains.TILE) { "Invalid brush grain in artwork: $id" }
@@ -109,7 +184,7 @@ object GrainStorage {
                 require(!Files.exists(target.toPath(), LinkOption.NOFOLLOW_LINKS) || matches(target, tile.values)) {
                     "This artwork contains a brush texture that conflicts with an existing texture: $id"
                 }
-                val cached = CustomGrains.get(id)
+                val cached = registry.get(id)
                 require(cached == null || sameTile(cached, tile)) {
                     "This artwork contains a brush texture that conflicts with an existing texture: $id"
                 }
@@ -126,15 +201,15 @@ object GrainStorage {
                 if (claim != null && files.add(claim)) claim.users++
             }
             incoming.forEach { (id, tile) ->
-                val existing = CustomGrains.registerIfAbsent(id, tile)
+                val existing = reservation.registerIfAbsent(id, tile)
                 require(existing == null || sameTile(existing, tile)) {
                     "This artwork contains a brush texture that conflicts with an existing texture: $id"
                 }
                 val claim =
                     if (existing == null) {
-                        ImportedTile(id, tile).also { pendingTiles[id] = it }
+                        ImportedTile(id, tile).also { pendingTiles[registry to id] = it }
                     } else {
-                        pendingTiles[id]?.takeIf { it.tile === existing }
+                        pendingTiles[registry to id]?.takeIf { it.tile === existing }
                     }
                 if (claim != null && tiles.add(claim)) claim.users++
             }
@@ -158,14 +233,19 @@ object GrainStorage {
                 tiles.forEach { claim ->
                     claim.retained = claim.retained || retain
                     if (--claim.users == 0) {
-                        pendingTiles.remove(claim.id, claim)
-                        if (!claim.retained) CustomGrains.removeIfSame(claim.id, claim.tile)
+                        pendingTiles.remove(registry to claim.id, claim)
+                        if (!claim.retained) registry.removeIfSame(claim.id, claim.tile)
                     }
                 }
                 files.clear()
                 tiles.clear()
+                reservations.forEach(GrainRegistry.Reservation::close)
+                reservations.clear()
+                prepared = null
             }
     }
+
+    private fun tileBytes(): Int = CustomGrains.TILE * CustomGrains.TILE
 
     private fun sameTile(
         left: CustomGrains.Tile,
@@ -178,7 +258,19 @@ object GrainStorage {
     ): Boolean =
         Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS) &&
             file.length() == bytes.size.toLong() &&
-            file.readBytes().contentEquals(bytes)
+            readExact(file, bytes.size).contentEquals(bytes)
+
+    /** A file changed after the size check cannot make the reader allocate beyond its admission. */
+    private fun readExact(
+        file: File,
+        size: Int,
+    ): ByteArray =
+        DataInputStream(file.inputStream()).use { input ->
+            ByteArray(size).also { bytes ->
+                input.readFully(bytes)
+                if (input.read() != -1) throw IOException("Saved brush texture changed while reading: ${file.name}")
+            }
+        }
 
     private fun removeImportedFile(claim: ImportedFile) {
         try {

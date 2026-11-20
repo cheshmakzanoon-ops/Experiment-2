@@ -1,7 +1,8 @@
 package com.artflow.studio.data.export
 
+import com.artflow.studio.core.export.ProcreateReadBudget
 import com.artflow.studio.core.export.ProcreateReader
-import com.artflow.studio.core.export.readAtMost
+import com.artflow.studio.core.pixels.ImportPreparation
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -9,6 +10,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import timber.log.Timber
+import java.io.ByteArrayOutputStream
 import java.io.Closeable
 import java.io.File
 import java.io.IOException
@@ -52,7 +54,8 @@ class ProcreateImport private constructor(
 
     private class Entries(
         private val zip: ZipFile,
-    ) : ProcreateReader.Files {
+        private val budget: ProcreateReadBudget,
+    ) : ProcreateReader.BoundedFiles {
         override val names: Collection<String> =
             zip
                 .entries()
@@ -60,18 +63,24 @@ class ProcreateImport private constructor(
                 .map { it.name }
                 .toList()
 
-        override fun read(name: String): ByteArray? {
+        override fun read(name: String): ByteArray? = read(name, budget.entryLimit(name))
+
+        override fun read(
+            name: String,
+            maximumBytes: Long,
+        ): ByteArray? {
+            budget.ensureActive()
             val entry = zip.getEntry(name) ?: return null
-            require(entry.size in 0..MAX_ENTRY_BYTES) { "This Procreate document has an entry too large to read" }
-            // The declared size is checked above, but the bytes actually inflated are what must stay bounded.
-            val bytes = zip.getInputStream(entry).use { it.readAtMost(MAX_ENTRY_BYTES) }
-            require(bytes != null) { "This Procreate document has an entry too large to read" }
+            val limit = minOf(maximumBytes, budget.entryLimit(name))
+            require(entry.size in 0..limit) { "This Procreate document has an entry too large for the available memory" }
+            val bytes = zip.getInputStream(entry).use { input -> readEntry(input, entry.size.toInt(), budget::ensureActive) }
+            budget.ensureActive()
+            require(bytes.size.toLong() == entry.size) { "The Procreate entry's decoded size is damaged" }
             return bytes
         }
     }
 
     companion object {
-        private const val MAX_ENTRY_BYTES = 256L * 1024 * 1024
         private const val MAX_FILE_BYTES = 512L * 1024 * 1024
         private const val MAX_ARCHIVE_ENTRIES = 10_000
         private const val STAGING_PREFIX = "artflow-procreate-import-"
@@ -136,9 +145,39 @@ class ProcreateImport private constructor(
             directory: File,
         ): ProcreateImport = open(input, directory) {}
 
+        /** Tests and constrained callers may only narrow the production opening allowance. */
+        internal fun open(
+            input: InputStream,
+            directory: File,
+            memoryBudgetBytes: Long,
+        ): ProcreateImport = open(input, directory, memoryBudgetBytes) {}
+
         private fun open(
             input: InputStream,
             directory: File,
+            checkActive: () -> Unit,
+        ): ProcreateImport = open(input, directory, null, checkActive)
+
+        private fun open(
+            input: InputStream,
+            directory: File,
+            memoryBudgetBytes: Long?,
+            checkActive: () -> Unit,
+        ): ProcreateImport =
+            ImportPreparation.withAdmission {
+                val budget =
+                    if (memoryBudgetBytes == null) {
+                        ProcreateReadBudget(checkActive = checkActive)
+                    } else {
+                        ProcreateReadBudget(memoryBudgetBytes, checkActive)
+                    }
+                openAdmitted(input, directory, budget, checkActive)
+            }
+
+        private fun openAdmitted(
+            input: InputStream,
+            directory: File,
+            budget: ProcreateReadBudget,
             checkActive: () -> Unit,
         ): ProcreateImport {
             checkActive()
@@ -148,16 +187,46 @@ class ProcreateImport private constructor(
                 runCatching {
                     copyBounded(input, file, checkActive)
                     checkActive()
+                    ProcreateZipIndex.check(file, budget, MAX_ARCHIVE_ENTRIES)
                     val archive = ZipFile(file).also { zip = it }
                     require(archive.size() <= MAX_ARCHIVE_ENTRIES) { "This Procreate document has too many entries" }
-                    val files = Entries(archive)
+                    val files = Entries(archive, budget)
                     require(ProcreateReader.isProcreate(files)) { "That file is not a Procreate document" }
-                    ProcreateImport(file, archive, ProcreateReader.open(files, BitmapPixelBridge::fromEncodedBytes))
+                    val document = ProcreateReader.open(files, budget, BitmapPixelBridge::decodeProcreateThumbnail)
+                    budget.ensureActive()
+                    budget.finishOpening()
+                    ProcreateImport(file, archive, document)
                 }
             val failure = opened.exceptionOrNull() ?: return opened.getOrThrow()
             runCatching { zip?.close() }.exceptionOrNull()?.let(failure::addSuppressed)
             runCatching { releaseStagedFile(file) }.exceptionOrNull()?.let(failure::addSuppressed)
             throw failure
+        }
+
+        /** Exact entry admission bounds stream growth and handles providers that return zero. */
+        private fun readEntry(
+            input: InputStream,
+            maximumBytes: Int,
+            checkActive: () -> Unit,
+        ): ByteArray {
+            val output = ByteArrayOutputStream()
+            val buffer = ByteArray(minOf(8192, maximumBytes + 1))
+            while (true) {
+                checkActive()
+                val count = input.read(buffer, 0, minOf(buffer.size, maximumBytes - output.size() + 1))
+                checkActive()
+                if (count < 0) return output.toByteArray()
+                if (count == 0) {
+                    val value = input.read()
+                    checkActive()
+                    if (value < 0) return output.toByteArray()
+                    require(output.size() < maximumBytes) { "The Procreate entry exceeds its admitted size" }
+                    output.write(value)
+                } else {
+                    require(count <= maximumBytes - output.size()) { "The Procreate entry exceeds its admitted size" }
+                    output.write(buffer, 0, count)
+                }
+            }
         }
 
         private fun copyBounded(
@@ -170,7 +239,7 @@ class ProcreateImport private constructor(
                 var total = 0L
                 while (true) {
                     checkActive()
-                    val count = input.read(buffer)
+                    val count = readCopyChunk(input, buffer, checkActive)
                     if (count < 0) break
                     total += count
                     require(total <= MAX_FILE_BYTES) { "This Procreate document exceeds the maximum file size" }
@@ -178,6 +247,21 @@ class ProcreateImport private constructor(
                 }
                 out.flush()
             }
+        }
+
+        private fun readCopyChunk(
+            input: InputStream,
+            buffer: ByteArray,
+            checkActive: () -> Unit,
+        ): Int {
+            val count = input.read(buffer)
+            checkActive()
+            if (count != 0) return count
+            val value = input.read()
+            checkActive()
+            if (value < 0) return -1
+            buffer[0] = value.toByte()
+            return 1
         }
     }
 }

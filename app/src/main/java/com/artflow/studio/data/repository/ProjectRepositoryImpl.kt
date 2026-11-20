@@ -197,50 +197,8 @@ class ProjectRepositoryImpl
             }
         }
 
-        override suspend fun importPackage(bytes: ByteArray): Long {
-            val contents = withContext(Dispatchers.Default) { ArtflowPackage.read(bytes) }
-            val document = storage.decodePackagedDocument(requireNotNull(contents.files[ArtflowPackage.DOCUMENT]))
-            var importedId: Long? = null
-            var completed = false
-            val grains = GrainStorage.ImportTransaction()
-            try {
-                val id =
-                    database.withTransaction {
-                        val now = System.currentTimeMillis()
-                        val project =
-                            Project(
-                                name = contents.name,
-                                filePath = "",
-                                thumbnailPath = null,
-                                width = document.width,
-                                height = document.height,
-                                dpi = document.dpi,
-                                createdAt = now,
-                                modifiedAt = now,
-                                layerCount = document.layers.size,
-                            )
-                        val newId = insertNewProject(project.toEntity())
-                        check(!withContext(Dispatchers.IO) { storage.projectDirectoryExists(newId) }) {
-                            "The destination already contains project data"
-                        }
-                        importedId = newId
-                        storage.importProject(newId, contents.files, grains)
-                        projectDao.updateProject(
-                            project
-                                .copy(
-                                    id = newId,
-                                    filePath = storage.documentFile(newId).absolutePath,
-                                    thumbnailPath = storage.thumbnailPathIfExists(newId),
-                                ).toEntity(),
-                        )
-                        newId
-                    }
-                completed = true
-                return id
-            } finally {
-                finishImportedPackage(importedId, completed, grains)
-            }
-        }
+        override suspend fun importPackage(bytes: ByteArray): Long =
+            storage.withStagedPackage(bytes) { file -> importPackageFile(file).projectId }
 
         private suspend fun finishImportedPackage(
             projectId: Long?,

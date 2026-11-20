@@ -1,5 +1,6 @@
 package com.artflow.studio.data.export
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
@@ -10,6 +11,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -158,6 +160,139 @@ class StagedImportTest {
                     }
                 }.exceptionOrNull()
             assertEquals("The package is invalid", failure?.message)
+            assertTrue(
+                temporary.root
+                    .listFiles()
+                    .orEmpty()
+                    .isEmpty(),
+            )
+        }
+
+    @Test
+    fun zeroLengthProviderReadsMakeForwardProgressAndRespectTheExactLimit() =
+        runTest {
+            val expected = byteArrayOf(7, 11, 19)
+            var offset = 0
+            var bulkReads = 0
+            val source =
+                object : InputStream() {
+                    override fun read(
+                        buffer: ByteArray,
+                        offset: Int,
+                        length: Int,
+                    ): Int {
+                        check(++bulkReads <= expected.size + 1) { "The staging copy made no progress" }
+                        return 0
+                    }
+
+                    override fun read(): Int = if (offset < expected.size) expected[offset++].toInt() else -1
+                }
+            StagedImport.use(temporary.root, { source }, maxBytes = expected.size.toLong()) { file ->
+                assertArrayEquals(expected, file.readBytes())
+            }
+            assertEquals(expected.size + 1, bulkReads)
+            assertTrue(
+                temporary.root
+                    .listFiles()
+                    .orEmpty()
+                    .isEmpty(),
+            )
+        }
+
+    @Test
+    fun aZeroLengthBulkReadCannotBypassTheSizeLimit() =
+        runTest {
+            var singleReads = 0
+            var consumed = false
+            val source =
+                object : InputStream() {
+                    override fun read(
+                        buffer: ByteArray,
+                        offset: Int,
+                        length: Int,
+                    ): Int = 0
+
+                    override fun read(): Int = if (++singleReads < 5) 1 else error("Read beyond the admission boundary")
+                }
+            val failure =
+                runCatching {
+                    StagedImport.use(temporary.root, { source }, maxBytes = 3) { consumed = true }
+                }.exceptionOrNull()
+            assertTrue(failure is IllegalArgumentException)
+            assertEquals(4, singleReads)
+            assertFalse(consumed)
+            assertTrue(
+                temporary.root
+                    .listFiles()
+                    .orEmpty()
+                    .isEmpty(),
+            )
+        }
+
+    @Test
+    fun cleanupFailureIsSuppressedBehindTheOriginalConsumerFailureOrCancellation() =
+        runTest {
+            listOf(IllegalArgumentException("Invalid package"), CancellationException("Cancelled import")).forEach { primary ->
+                val failure =
+                    runCatching {
+                        StagedImport.use(temporary.root, { ByteArrayInputStream(byteArrayOf(1)) }) { file ->
+                            check(file.delete() && file.mkdir())
+                            File(file, "cleanup-blocker").writeText("Keep this child to reject directory deletion")
+                            throw primary
+                        }
+                    }.exceptionOrNull()
+                assertSame(primary, failure)
+                assertEquals(1, primary.suppressed.size)
+                assertEquals("Cannot remove the temporary import file", primary.suppressed.single().message)
+            }
+        }
+
+    @Test
+    fun cleanupFailureAfterSuccessfulConsumptionStillSurfaces() =
+        runTest {
+            val failure =
+                runCatching {
+                    StagedImport.use(temporary.root, { ByteArrayInputStream(byteArrayOf(1)) }) { file ->
+                        check(file.delete() && file.mkdir())
+                        File(file, "cleanup-blocker").writeText("Keep this child to reject directory deletion")
+                        42
+                    }
+                }.exceptionOrNull()
+            assertTrue(failure is IllegalStateException)
+            assertEquals("Cannot remove the temporary import file", failure?.message)
+        }
+
+    @Test
+    fun cancellationDuringAZeroLengthReadDoesNotRequestAnotherByte() =
+        runTest {
+            lateinit var worker: Job
+            var fallbackReads = 0
+            var consumed = false
+            val input =
+                object : InputStream() {
+                    override fun read(
+                        buffer: ByteArray,
+                        offset: Int,
+                        length: Int,
+                    ): Int {
+                        worker.cancel()
+                        return 0
+                    }
+
+                    override fun read(): Int {
+                        fallbackReads++
+                        return 1
+                    }
+                }
+            worker =
+                launch(start = CoroutineStart.LAZY) {
+                    StagedImport.use(temporary.root, { input }) { consumed = true }
+                }
+            worker.start()
+            worker.join()
+            assertTrue(worker.isCancelled)
+            assertEquals(0, fallbackReads)
+            assertFalse(consumed)
             assertTrue(
                 temporary.root
                     .listFiles()

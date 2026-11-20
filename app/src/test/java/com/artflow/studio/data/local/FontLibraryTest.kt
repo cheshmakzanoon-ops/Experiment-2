@@ -4,6 +4,8 @@ import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -14,6 +16,8 @@ import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
+import java.io.RandomAccessFile
+import java.nio.file.Files
 
 class FontLibraryTest {
     @get:Rule val temporary = TemporaryFolder()
@@ -188,6 +192,41 @@ class FontLibraryTest {
         assertFalse(FontLibrary.exists("font:sub/SerifCustom.ttf"))
         assertNull(FontLibrary.resolveFile("font:../../etc/passwd.ttf"))
         assertNull(FontLibrary.portableId("sans-serif"))
+    }
+
+    @Test
+    fun fingerprintsDistinguishFontContentsAndSupportRestoredLegacyReferences() {
+        FontLibrary.importStream(filesDir, "First.ttf", { ByteArrayInputStream(validSfntBytes(1)) }) { true }
+        FontLibrary.importStream(filesDir, "Second.ttf", { ByteArrayInputStream(validSfntBytes(2)) }) { true }
+        val first = FontLibrary.fingerprint("font:First.ttf", filesDir)
+        assertNotNull(first)
+        assertTrue(requireNotNull(first).matches(Regex("[0-9a-f]{64}")))
+        assertNotEquals(first, FontLibrary.fingerprint("font:Second.ttf", filesDir))
+        assertEquals(first, FontLibrary.fingerprint("file:/old-device/fonts/First.ttf", filesDir))
+        assertNull(FontLibrary.fingerprint("font:Missing.ttf", filesDir))
+        assertNull(FontLibrary.fingerprint("sans-serif", filesDir))
+    }
+
+    @Test
+    fun fingerprintsRejectOversizedEmptyAndUnmanagedFilesWithoutFollowingLinks() {
+        val fonts = File(filesDir, "fonts").apply { mkdirs() }
+        File(fonts, "Empty.ttf").writeBytes(byteArrayOf())
+        RandomAccessFile(File(fonts, "Large.ttf"), "rw").use { it.setLength(21L * 1024 * 1024) }
+        val outside = File(temporary.root, "Outside.ttf").apply { writeBytes(validSfntBytes(1)) }
+        Files.createSymbolicLink(File(fonts, "Linked.ttf").toPath(), outside.toPath())
+        assertNull(FontLibrary.fingerprint("font:Empty.ttf", filesDir))
+        assertNull(FontLibrary.fingerprint("font:Large.ttf", filesDir))
+        assertNull(FontLibrary.fingerprint("font:Linked.ttf", filesDir))
+        assertNull(FontLibrary.fingerprint("file:${outside.absolutePath}", filesDir))
+        assertNull(FontLibrary.fingerprint("font:../Outside.ttf", filesDir))
+    }
+
+    @Test
+    fun fingerprintsRejectALinkedFontLibraryDirectory() {
+        val outside = temporary.newFolder("outside-fonts")
+        File(outside, "Linked.ttf").writeBytes(validSfntBytes(1))
+        Files.createSymbolicLink(File(filesDir, "fonts").toPath(), outside.toPath())
+        assertNull(FontLibrary.fingerprint("font:Linked.ttf", filesDir))
     }
 
     private fun validSfntBytes(seed: Int): ByteArray {

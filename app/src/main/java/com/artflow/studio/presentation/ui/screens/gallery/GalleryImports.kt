@@ -32,6 +32,7 @@ import com.artflow.studio.presentation.ui.viewmodel.MainViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -48,21 +49,28 @@ internal class GalleryImports(
     private val viewModel: MainViewModel,
     /** Tells the user something, for example in a snackbar. */
     private val say: suspend (String) -> Unit,
-    /** Adds [brushes] to the saved brush library. */
-    private val addBrushes: suspend (List<SavedBrush>) -> Unit,
+    /** Adds the brushes and retains their assets at the durable library commit boundary. */
+    private val addBrushes: suspend (List<SavedBrush>, () -> Unit) -> Unit,
     /** Opens an artwork that has just been created. */
     private val openArtwork: (Long) -> Unit,
 ) {
     /** Awaits one complete incoming import; true means the collector must stop for artwork navigation. */
     suspend fun open(uri: Uri): Boolean =
         runCatching {
-            val name = displayName(uri)
-            val head = withContext(Dispatchers.IO) { readHead(uri) }
+            val (name, type, head) =
+                withContext(Dispatchers.IO) {
+                    // Metadata is provider IPC too: a cloud-backed query or MIME lookup must not
+                    // block the gallery dispatcher. Check cancellation between blocking calls.
+                    val name = displayName(uri)
+                    coroutineContext.ensureActive()
+                    val type = optionalMetadata { context.contentResolver.getType(uri) }
+                    coroutineContext.ensureActive()
+                    Triple(name, type, readHead(uri))
+                }
             if (head == null) {
                 say(context.getString(R.string.incoming_file_unreadable))
                 return false
             }
-            val type = runCatching { context.contentResolver.getType(uri) }.getOrNull()
             when (val kind = FileKinds.classify(name, type, head)) {
                 FileKind.IMAGE -> importPhoto(uri)
                 FileKind.PSD -> importPsd(uri)
@@ -343,13 +351,12 @@ internal class GalleryImports(
         }
 
     private suspend fun brushes(bytes: ByteArray) {
-        val found = withContext(Dispatchers.IO) { BrushImports.read(context, bytes) }
-        if (found.isNullOrEmpty()) {
+        val count = BrushImports.importInto(context, bytes, addBrushes)
+        if (count == null) {
             say(context.getString(R.string.brushfilebuttons_not_a_brush_file))
             return
         }
-        addBrushes(found)
-        say(context.getString(R.string.incoming_brushes_added, found.size))
+        say(context.getString(R.string.incoming_brushes_added, count))
     }
 
     private suspend fun palette(
@@ -369,11 +376,18 @@ internal class GalleryImports(
     }
 
     private fun displayName(uri: Uri): String? =
-        runCatching {
+        optionalMetadata {
             context.contentResolver
                 .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
                 ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
-        }.getOrNull() ?: uri.lastPathSegment
+        } ?: uri.lastPathSegment
+
+    /** Missing metadata may fall back to the URI/header; cancellation must stop the import. */
+    private fun <T> optionalMetadata(read: () -> T): T? =
+        runCatching(read)
+            .onFailure { failure ->
+                if (failure is CancellationException || failure !is Exception) throw failure
+            }.getOrNull()
 
     private fun readHead(uri: Uri): ByteArray? =
         runCatching {

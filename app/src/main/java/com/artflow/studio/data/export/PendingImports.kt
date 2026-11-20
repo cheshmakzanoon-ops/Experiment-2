@@ -253,7 +253,7 @@ object PendingImports {
                 missingFonts.distinct().takeIf { it.isNotEmpty() }?.let { names ->
                     val shown = names.take(3).joinToString { it.take(60) }
                     val remainder = if (names.size > 3) " and ${names.size - 3} more" else ""
-                    "Missing fonts: $shown$remainder. Import the original fonts before editing those text layers."
+                    "Fonts need attention: $shown$remainder. Import or choose the original fonts before editing those text layers."
                 },
                 missingGrains.distinct().takeIf { it.isNotEmpty() }?.let {
                     "${it.size} brush texture(s) are missing; restore them before continuing to paint."

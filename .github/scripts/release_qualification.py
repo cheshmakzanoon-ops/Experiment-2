@@ -22,12 +22,14 @@ from summarize_device_results import read_results, read_runtime, source_inventor
 
 CLASSES = {
     "com.artflow.studio.OptimizedBuildContractTest": "Installed variant and non-debuggable manifest",
+    "com.artflow.studio.BrushAssetStartupUiTest": "Asset readiness before first input, retry, and explicit degraded continuation",
     "com.artflow.studio.OptimizedArtworkWorkflowTest": "Real input, UI save, fresh Activity reopen, UI PNG export",
     "com.artflow.studio.ArtworkWorkflowTest": "Editor navigation, layers, recreation and discarded edits",
     "com.artflow.studio.EditorRenderingTest": "Presented GL pixels, context loss and redraw",
     "com.artflow.studio.ExportUiRegressionTest": "Export controls and offline privacy policy",
     "com.artflow.studio.data.PersistenceRegressionTest": "Saved rasters, frames, recovery and storage failures",
     "com.artflow.studio.data.DocumentBoundaryDeviceTest": "Metadata rejection, saved-selection admission and bounded undo/redo with real storage",
+    "com.artflow.studio.data.ProjectGrainImportRollbackDeviceTest": "Native file and byte-array imports preserve database and shared assets on rollback and cancellation",
     "com.artflow.studio.data.DatabaseMigrationDeviceTest": "Production Room upgrades, preserved artwork and recovery, rejected unsafe schemas",
     "com.artflow.studio.data.ExportDeviceTest": "Independent decoding and export/share isolation",
     "com.artflow.studio.NativeLibraryCompatibilityTest": "Real packaged native graphics library load",

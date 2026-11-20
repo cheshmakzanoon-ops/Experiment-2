@@ -1,5 +1,6 @@
 package com.artflow.studio.data.export
 
+import com.artflow.studio.data.local.CanvasDocumentCodec
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.BufferedOutputStream
@@ -24,14 +25,20 @@ import java.util.zip.ZipOutputStream
  * dependencies) in one zip, so it can move to another device and open with everything intact.
  *
  * External font binaries are never bundled automatically so third-party font licenses are respected;
- * instead, `dependencies.json` records referenced font IDs/labels so an importing device can warn if
- * an imported font is missing locally.
+ * instead, `dependencies.json` records referenced font IDs, labels and content fingerprints so an
+ * importing device can warn when the original font is missing, different or cannot be verified.
  */
 object ArtflowPackage {
     const val DOCUMENT = "canvas.artflow"
     const val DEPENDENCIES = "dependencies.json"
     const val GRAINS_DIR = "grains"
     const val MAX_DOCUMENT_BYTES = 32L * 1024 * 1024
+    private const val MAX_ENTRIES = 4_200
+
+    // At most one font per supported layer, and no more grain declarations than package entries.
+    // Count declarations before deduplication so repeated aliases cannot evade these work limits.
+    const val MAX_FONT_DEPENDENCIES = CanvasDocumentCodec.MAX_LAYERS
+    const val MAX_GRAIN_DEPENDENCIES = MAX_ENTRIES
 
     @Serializable
     private data class Marker(
@@ -44,13 +51,26 @@ object ArtflowPackage {
     data class PackagedFont(
         val id: String,
         val label: String,
-    )
+        val sha256: String? = null,
+    ) {
+        init {
+            require(sha256 == null || FONT_DIGEST.matches(sha256)) { "Invalid font content fingerprint" }
+        }
+    }
 
     @Serializable
     data class Dependencies(
         val fonts: List<PackagedFont> = emptyList(),
         val grainIds: List<String> = emptyList(),
-    )
+    ) {
+        init {
+            require(fonts.size <= MAX_FONT_DEPENDENCIES) { "Too many font dependencies" }
+            require(grainIds.size <= MAX_GRAIN_DEPENDENCIES) { "Too many grain dependencies" }
+            require(fonts.groupBy { it.id }.values.all { matching -> matching.map { it.sha256 }.distinct().size == 1 }) {
+                "Conflicting font content fingerprints"
+            }
+        }
+    }
 
     class EntrySource(
         val path: String,
@@ -110,6 +130,8 @@ object ArtflowPackage {
             ignoreUnknownKeys = true
             encodeDefaults = true
         }
+
+    private val FONT_DIGEST = Regex("[0-9a-f]{64}")
 
     fun grainEntryPath(grainId: String): String {
         val candidate = "$GRAINS_DIR/$grainId.grain"
@@ -384,7 +406,6 @@ object ArtflowPackage {
     private const val FORMAT = "artflow-package"
     private const val VERSION = 1
     private const val MARKER = "artflow-package.json"
-    private const val MAX_ENTRIES = 4_200
     private const val MAX_METADATA_BYTES = 1024L * 1024
     private const val MAX_ENTRY_BYTES = 192L * 1024 * 1024
     private const val MAX_TOTAL_BYTES = 768L * 1024 * 1024

@@ -32,6 +32,28 @@ object ProcreateReader {
         fun read(name: String): ByteArray?
     }
 
+    /** File-backed readers enforce the requested allowance before inflating an entry. */
+    interface BoundedFiles : Files {
+        fun read(
+            name: String,
+            maximumBytes: Long,
+        ): ByteArray?
+    }
+
+    private class BudgetedFiles(
+        private val source: Files,
+        private val budget: ProcreateReadBudget,
+    ) : Files {
+        override val names get() = source.names
+
+        override fun read(name: String): ByteArray? {
+            val bytes =
+                if (source is BoundedFiles) source.read(name, budget.entryLimit(name)) else source.read(name)
+            bytes?.let { budget.checkEntry(name, it.size.toLong()) }
+            return bytes
+        }
+    }
+
     sealed interface Node {
         val name: String
         val opacity: Float
@@ -132,8 +154,16 @@ object ProcreateReader {
     fun open(
         files: Files,
         decodeImage: (ByteArray) -> PixelBuffer?,
+    ): Document = open(files, ProcreateReadBudget()) { bytes, _ -> decodeImage(bytes) }
+
+    internal fun open(
+        files: Files,
+        budget: ProcreateReadBudget,
+        decodeImage: (ByteArray, Long) -> PixelBuffer?,
     ): Document {
-        val archive = KeyedArchive(BinaryPlist.read(requireNotNull(files.read(ARCHIVE)) { "This is not a Procreate document" }))
+        val admittedFiles = BudgetedFiles(files, budget)
+        val encoded = requireNotNull(admittedFiles.read(ARCHIVE)) { "This is not a Procreate document" }
+        val archive = KeyedArchive(BinaryPlist.read(encoded, budget.decodedMetadataBytes))
         val document = requireNotNull(archive.root) { "The Procreate document has no description" }
         val descriptorValue = document["colorProfile"]
         val hasProfile = descriptorValue != null && descriptorValue != BinaryPlist.Uid(0) && descriptorValue != "\$null"
@@ -146,20 +176,25 @@ object ProcreateReader {
         val composite = archive.string(archive.map(document["composite"])?.get("UUID"))
         // Refuse oversized canvases before calibration allocates a full-size raster.
         require(CanvasOperations.isSizeSafe(width, height)) { "This Procreate document is too large to open on this device" }
-        val tiles = Tiles(files, width, height, tileSize)
+        budget.requireRaster(width, height, tileSize)
+        val tiles = Tiles(admittedFiles, width, height, tileSize)
         // Native archives keep the tree in unwrappedLayers and a separate flattened layer list.
         // Older ArtFlow exports and independently authored fixtures place their tree in layers.
         val hierarchy = document["unwrappedLayers"]
         val roots = if (archive.map(hierarchy)?.get("NS.objects") is List<*>) hierarchy else document["layers"]
-        val nodes = archive.array(roots).mapNotNull { node(archive, it, 0) }
+        val nodeBudget = NodeBudget()
+        val nodes = archive.array(roots, nodeBudget.remaining).mapNotNull { node(archive, it, 0, nodeBudget) }
         val background =
             archive
                 .data(document["backgroundColor"])
                 ?.takeIf { document["backgroundHidden"] != true }
                 ?.let(::colour)
-        val thumbnail = files.read(THUMBNAIL)?.let(decodeImage)
+        val thumbnail = thumbnail(admittedFiles, budget, decodeImage)
         val sample = composite?.takeIf { tiles.has(it) } ?: tiles.largest()
-        if (thumbnail != null && sample != null) tiles.calibrate(sample, thumbnail, background ?: WHITE, profile)
+        if (thumbnail != null && sample != null) {
+            budget.requireCalibration(width, height, tileSize, thumbnail.pixels.size.toLong() * Int.SIZE_BYTES)
+            tiles.calibrate(sample, thumbnail, background ?: WHITE, profile)
+        }
         val dpi = number(document["SilicaDocumentArchiveDPIKey"])?.roundToInt()?.takeIf { it in 1..MAX_DPI } ?: DEFAULT_DPI
         val animMode = (document["animationPlaybackMode"] as? Number)?.toInt()
         val animFps = (document["animationFramerate"] as? Number)?.toInt()
@@ -187,17 +222,53 @@ object ProcreateReader {
         )
     }
 
+    private fun thumbnail(
+        files: Files,
+        budget: ProcreateReadBudget,
+        decodeImage: (ByteArray, Long) -> PixelBuffer?,
+    ): PixelBuffer? {
+        val bytes = files.read(THUMBNAIL) ?: return null
+        val size = pngDimensions(bytes) ?: return null
+        budget.requireThumbnail(size.first, size.second, bytes.size)
+        val decoded = decodeImage(bytes, budget.thumbnailDecodeBytes) ?: return null
+        require(
+            decoded.width == size.first && decoded.height == size.second,
+        ) { "The Procreate thumbnail decoder returned unexpected dimensions" }
+        return decoded
+    }
+
+    /** Only PNG thumbnails are calibrated; an invalid optional thumbnail is ignored. */
+    private fun pngDimensions(bytes: ByteArray): Pair<Int, Int>? {
+        if (bytes.size < 33 || !PNG_HEADER.indices.all { bytes[it] == PNG_HEADER[it] }) return null
+
+        fun dimension(at: Int): Int = (0 until 4).fold(0) { value, index -> (value shl 8) or (bytes[at + index].toInt() and 0xFF) }
+        return dimension(16) to dimension(20)
+    }
+
+    /** Groups count as document layers too; repeated references consume the same shared limit. */
+    private class NodeBudget {
+        var remaining: Int = MAX_NODES
+            private set
+
+        fun claim() {
+            require(remaining > 0) { "The Procreate document has too many layers or groups" }
+            remaining--
+        }
+    }
+
     private fun node(
         archive: KeyedArchive,
         value: Any?,
         depth: Int,
+        budget: NodeBudget,
     ): Node? {
+        budget.claim()
         val item = archive.map(value) ?: return null
         val name = archive.string(item["name"]).orEmpty()
         val opacity = (number(item["opacity"]) ?: 1.0).toFloat().coerceIn(0f, 1f)
         if (archive.className(item) == "SilicaGroup" || "children" in item) {
             require(depth < MAX_NESTING) { "The Procreate document's groups are nested too deeply" }
-            val children = archive.array(item["children"]).mapNotNull { node(archive, it, depth + 1) }
+            val children = archive.array(item["children"], budget.remaining).mapNotNull { node(archive, it, depth + 1, budget) }
             val visible = (item["isHidden"] as? Boolean ?: item["hidden"] as? Boolean) != true
             val groupBlend =
                 if ("blend" in item || "extendedBlend" in item || "extendedBlend2" in item) {
@@ -641,6 +712,7 @@ object ProcreateReader {
     /** Quarter turns clockwise and mirroring for each of the eight layouts. */
     private val ORIENTATIONS = (0 until 4).flatMap { turns -> listOf(turns to false, turns to true) }
 
+    private val PNG_HEADER = byteArrayOf(137.toByte(), 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82)
     private const val ARCHIVE = "Document.archive"
     private const val THUMBNAIL = "QuickLook/Thumbnail.png"
     private val TILE_NAME = Regex("([^/]+)/(\\d+)~(\\d+)(\\.[A-Za-z0-9]+)?")
@@ -652,6 +724,9 @@ object ProcreateReader {
 
     /** How many groups deep a document may nest; [ProcreateWriter] refuses deeper trees. */
     const val MAX_NESTING = 32
+
+    /** The supported document limit counts pixel layers and groups together. */
+    const val MAX_NODES = 1024
 
     private const val COLOUR_BYTES = 16
     private const val WHITE = -1

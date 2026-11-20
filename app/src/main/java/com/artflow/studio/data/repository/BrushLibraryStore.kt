@@ -167,9 +167,12 @@ class BrushLibraryStore
             mutate { it + brush }
         }
 
-        /** Adds shared brushes as new copies, keeping their names. */
-        suspend fun importAll(brushes: List<SavedBrush>) {
-            mutate { existing -> existing + brushes.map { it.copy(id = UUID.randomUUID().toString(), name = it.name.trim()) } }
+        /** Adds shared brushes as new copies; the non-throwing [onCommitted] retains their provisional assets after the write. */
+        suspend fun importAll(
+            brushes: List<SavedBrush>,
+            onCommitted: () -> Unit = {},
+        ) {
+            mutate(onCommitted) { existing -> existing + brushes.map { it.copy(id = UUID.randomUUID().toString(), name = it.name.trim()) } }
         }
 
         suspend fun rename(
@@ -198,17 +201,23 @@ class BrushLibraryStore
             loaded = true
         }
 
-        private suspend fun mutate(transform: (List<SavedBrush>) -> List<SavedBrush>) {
+        private suspend fun mutate(
+            onCommitted: () -> Unit = {},
+            transform: (List<SavedBrush>) -> List<SavedBrush>,
+        ) {
             mutex.withLock {
                 load()
                 val updated = transform(snapshot.value.toList()).toList()
                 val encoded = withContext(Dispatchers.Default) { BrushLibraryCodec.encode(updated) }
-                if (updated == snapshot.value) return@withLock
                 currentCoroutineContext().ensureActive()
                 // Once the small transaction begins, complete both storage and publication.
                 // A failed write changes neither state nor the previous durable library.
                 withContext(NonCancellable) {
-                    dao.insertSetting(SettingsEntity(key = STORAGE_KEY, value = encoded, category = "brush"))
+                    if (updated != snapshot.value) {
+                        dao.insertSetting(SettingsEntity(key = STORAGE_KEY, value = encoded, category = "brush"))
+                    }
+                    // Retain imported assets before a cancelled caller can roll its ownership back.
+                    onCommitted()
                     snapshot.value = updated
                 }
             }

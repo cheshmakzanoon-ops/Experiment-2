@@ -11,8 +11,10 @@ import java.io.IOException
 import java.io.InputStream
 import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
+import java.nio.file.InvalidPathException
 import java.nio.file.LinkOption
 import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
 
 /**
  * Fonts imported for text layers (Procreate's Import Font). Each font is stored under
@@ -134,6 +136,86 @@ object FontLibrary {
         resolveFile(family, filesDir)?.let { file ->
             Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS)
         } == true
+
+    /**
+     * Content identity for an app-owned font. Never follows a font link or reads a legacy path
+     * outside this library. A missing, unreadable or oversized file has no verifiable identity.
+     */
+    fun fingerprint(
+        family: String,
+        filesDir: File? = configuredFilesDir,
+    ): String? = FingerprintSession(filesDir).fingerprint(family)
+
+    /** One import or export reads each managed font once, even when many legacy aliases refer to it. */
+    internal class FingerprintSession(
+        private val filesDir: File?,
+        private val openStream: (File) -> InputStream = { it.inputStream() },
+    ) {
+        private val fingerprints = mutableMapOf<File, String?>()
+
+        fun fingerprint(family: String): String? {
+            // Validate the original reference before consulting the shared file cache: an outside
+            // legacy path must never inherit the identity of an unrelated local file of the same name.
+            val file = managedFingerprintFile(family, filesDir) ?: return null
+            if (!fingerprints.containsKey(file)) fingerprints[file] = readFingerprint(file, openStream)
+            return fingerprints[file]
+        }
+
+        fun sharedFingerprint(families: List<String>): String? =
+            families
+                .map { fingerprint(it) }
+                .distinct()
+                .singleOrNull()
+    }
+
+    private fun managedFingerprintFile(
+        family: String,
+        filesDir: File?,
+    ): File? {
+        val root = filesDir ?: return null
+        val portable = portableId(family) ?: return null
+        return try {
+            val expected = File(File(root, "fonts"), portable.removePrefix(PREFIX)).absoluteFile
+            val resolved = resolveFile(family, root) ?: return null
+            if (resolved.toPath().toAbsolutePath() != expected.toPath()) return null
+            StorageFileTree.requireUnlinked(expected, root)
+            if (!Files.isRegularFile(expected.toPath(), LinkOption.NOFOLLOW_LINKS) || expected.length() !in 1..MAX_BYTES) return null
+            expected
+        } catch (_: InvalidPathException) {
+            null
+        } catch (_: IOException) {
+            null
+        } catch (_: SecurityException) {
+            null
+        }
+    }
+
+    private fun readFingerprint(
+        file: File,
+        openStream: (File) -> InputStream,
+    ): String? =
+        try {
+            openStream(file).use(::digestFont)
+        } catch (_: IOException) {
+            null
+        } catch (_: SecurityException) {
+            null
+        }
+
+    private fun digestFont(input: InputStream): String? {
+        val digest = MessageDigest.getInstance("SHA-256")
+        val buffer = ByteArray(8192)
+        var total = 0L
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            total += count
+            if (total > MAX_BYTES) return null
+            digest.update(buffer, 0, count)
+        }
+        if (total == 0L) return null
+        return digest.digest().joinToString("") { "%02x".format(it.toInt() and 255) }
+    }
 
     /** The typeface of an imported font, or null when [family] is not one or cannot be read. */
     fun typeface(
