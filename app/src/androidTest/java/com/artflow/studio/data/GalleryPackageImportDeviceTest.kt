@@ -23,6 +23,9 @@ import com.artflow.studio.data.local.database.ArtFlowDatabase
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.data.repository.ProjectRepositoryImpl
 import com.artflow.studio.data.repository.settings.SettingsRepositoryImpl
+import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.Stroke
+import com.artflow.studio.domain.model.brush.StrokePoint
 import com.artflow.studio.domain.model.layer.Layer
 import com.artflow.studio.domain.repository.ProjectRepository
 import com.artflow.studio.presentation.ui.screens.gallery.GalleryImports
@@ -208,6 +211,20 @@ class GalleryPackageImportDeviceTest {
         rasterBytes = BitmapPixelBridge.toPngBytes(PixelBuffer.filled(64, 64, 0xFFAA4400.toInt()))
         val raster = original.writeRaster(7, 1, 1, rasterBytes)
         val text = TextLayerContent("Portable text", TextLayout.TextStyle(fontFamily = "font:UnavailableTestFont.ttf"), -1, 0f, 0f)
+        grainBytes = ByteArray(CustomGrains.TILE * CustomGrains.TILE) { 0x5A }
+        grainId = "custom-" + UUID.randomUUID().toString().replace("-", "")
+        val missingGrain = "custom-" + UUID.randomUUID().toString().replace("-", "")
+        // Notices concern assets the artwork actually uses, not unrelated manifest declarations.
+        val strokes =
+            listOf(grainId, missingGrain).mapIndexed { index, texture ->
+                Stroke(
+                    id = index + 1L,
+                    points = listOf(StrokePoint(0f, 0f), StrokePoint(10f, 10f)),
+                    brushParams = BrushParams(textureId = texture),
+                    layerId = 1L,
+                    color = 0xFFAA4400.toInt(),
+                )
+            }
         original.saveDocument(
             7,
             CanvasDocument(
@@ -217,12 +234,9 @@ class GalleryPackageImportDeviceTest {
                 backgroundColor = -1,
                 activeLayerId = 1,
                 nextLayerId = 2,
-                layers = listOf(Layer(1, "Text", 0, rasterFile = raster, textContent = text)),
+                layers = listOf(Layer(1, "Text", 0, rasterFile = raster, textContent = text, strokes = strokes)),
             ),
         )
-        grainBytes = ByteArray(CustomGrains.TILE * CustomGrains.TILE) { 0x5A }
-        grainId = "custom-" + UUID.randomUUID().toString().replace("-", "")
-        val missingGrain = "custom-" + UUID.randomUUID().toString().replace("-", "")
         val dependencies =
             ArtflowPackage.Dependencies(
                 fonts = listOf(ArtflowPackage.PackagedFont("font:UnavailableTestFont.ttf", "UnavailableTestFont")),
